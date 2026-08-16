@@ -2,8 +2,9 @@
 
 The public program interface has two layers:
 
-1. Six platform groups implemented by the operating system: R4SYS, R4DESK,
-   R4DRAW, R4NET, R4AUDIO and R4DEV.
+1. Six platform groups implemented as built-in Kernel providers: R4SYS,
+   R4DESK, R4DRAW, R4NET, R4AUDIO and R4DEV. They keep versioned `Query:1`
+   imports but have no R4L file or independent installation/update path.
 2. Independent Runtime-R4L libraries such as R4STD, R4IMG and R4FONT, each
    with its own versioned function table.
 
@@ -17,8 +18,9 @@ SDK adds typed facades but does not define a second ABI.
 ## Call path
 
 A module declares imports in `module.R4MF`. The loader resolves every required
-table and enters `R4XStart:1`. SDK startup validates the context and creates
-an `App` view. A normal file read, for example, follows:
+table against built-in Platform APIs or loaded Runtime-R4Ls and enters
+`R4XStart:1`. SDK startup validates the context and creates an `App` view. A
+normal file read, for example, follows:
 
 ```text
 application -> SDK file facade -> R4SYS table -> kernel VFS -> NTFS/FAT32

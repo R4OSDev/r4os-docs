@@ -7,6 +7,9 @@ same high-level relationship as a diagram.
 Platform groups
 ---------------
 
+All six groups are built-in Kernel providers. Their `Query:1` import names
+remain public ABI, but no group is built, installed or updated as an R4L file.
+
 - R4SYS: console, files, programs, services, memory and registry.
 - R4DESK: windows, input, desktop and remote frames.
 - R4DRAW: drawing, fonts, images, surfaces and frame commands.
@@ -17,8 +20,9 @@ Platform groups
 Independent libraries
 ---------------------
 
-R4STD, R4IMG and R4FONT have no platform group ID. Each owns its contract,
-bindings and versioned function tables in its library repository.
+R4STD, R4IMG and R4FONT are file-based Runtime-R4Ls with no platform group ID.
+Each owns its contract, bindings and versioned function tables in its library
+repository and remains independently installable and updatable.
 
 Generated truth
 ---------------

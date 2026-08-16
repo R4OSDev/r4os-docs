@@ -5,6 +5,9 @@ Rechteck-, Text-, Font-, Bild-, Surface- und Present-Funktionen.
 
 Import: R4DRAW:Query:1
 
+Bereitstellung: eingebauter Kernel-Provider; keine R4L-Datei und kein
+eigenstaendiger Installations- oder Updatepfad.
+
 Zig-Context: r4os.r4draw.Context
 
 R4DRAW beschreibt Rendering, R4DESK den Fenster-/Desktop-Lebenszyklus.

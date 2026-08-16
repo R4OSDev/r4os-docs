@@ -6,6 +6,10 @@ Performance- und Hardwarezusammenfassungen.
 
 Import: R4DEV:Query:1
 
+Bereitstellung: eingebauter Kernel-Provider bereits vor dem R4D-/R4P-
+Preload; keine R4L-Datei und kein eigenstaendiger Installations- oder
+Updatepfad.
+
 Zig-Context: r4os.r4dev.Context
 
 R4DEV ist fuer Diagnose und device-nahe Sicht bestimmt. Hardwarebetrieb bleibt

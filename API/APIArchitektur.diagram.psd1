@@ -12,7 +12,7 @@
         @{ Id = 'app_facade'; X = 8; Y = 310; Width = 84; Height = 82; Kind = 'facade'; Lines = @('App-/R4App-Fassade und SDK-Wrapper', 'besitzen das Bundle', 'pruefen Gruppe, Feld und Vertrag') }
         @{ Id = 'r4x_context'; X = 8; Y = 465; Width = 84; Height = 90; Kind = 'abi'; Lines = @('R4XStartContext mit Import-Bundle', 'Kontext ist fuer den Startaufruf borrowed', 'Tabellenzeiger bleiben Kernel-owned') }
         @{ Id = 'r4l_query'; X = 8; Y = 610; Width = 40; Height = 120; Kind = 'loader'; Lines = @('R4LQuery', 'beim Laden', 'loest Gruppen-', 'importe auf', 'kein Laufzeit-', 'Dispatcher') }
-        @{ Id = 'tableless_libraries'; X = 8; Y = 770; Width = 40; Height = 120; Kind = 'library'; Lines = @('Runtime-R4Ls', 'R4STD, R4IMG, R4FONT', 'lokaler Contract', 'eigene API-Tabellen', 'keine Kernel-Gruppe') }
+        @{ Id = 'runtime_libraries'; X = 8; Y = 770; Width = 40; Height = 120; Kind = 'library'; Lines = @('Runtime-R4Ls', 'R4STD, R4IMG, R4FONT', 'lokaler Contract', 'eigene API-Tabellen', 'keine Kernel-Gruppe') }
         @{ Id = 'kernel_tables'; X = 52; Y = 610; Width = 40; Height = 280; Kind = 'table'; Lines = @('6 Kernel-Tabellen', 'R4SYS', 'R4DESK', 'R4DRAW', 'R4NET', 'R4AUDIO', 'R4DEV') }
         @{ Id = 'kernel_providers'; X = 8; Y = 950; Width = 84; Height = 82; Kind = 'kernel'; Lines = @('Sechs typisierte Kernel-Provider', 'direkte Funktionszeiger', 'kein Syscall- oder Dispatch-Zwischenweg') }
         @{ Id = 'kernel_subsystems'; X = 8; Y = 1060; Width = 84; Height = 72; Kind = 'kernel'; Lines = @('Kernel-Subsysteme', 'FS, Desktop, Draw, Network', 'Audio und Device') }

@@ -24,10 +24,14 @@ image.
 Installed system layout
 -----------------------
 
-R4X programs, R4L libraries, R4D drivers and R4P protocol modules are R4M0
-containers. Their target paths are defined by `module.R4MF` and selected by
-the Distribution profile. Typical roots are `C:\R4OS\SOFTWARE`,
-`C:\R4OS\SERVICES`, `C:\R4OS\LIBS`, `C:\R4OS\DRIVERS` and
-`C:\R4OS\PROTOCOLS`.
+R4X programs, independent Runtime-R4L libraries, R4D drivers and R4P protocol
+modules are R4M0 containers. Their target paths are defined by `module.R4MF`
+and selected by the Distribution profile. Typical roots are
+`C:\R4OS\SOFTWARE`, `C:\R4OS\SERVICES`, `C:\R4OS\LIBS`,
+`C:\R4OS\DRIVERS` and `C:\R4OS\PROTOCOLS`.
+
+The six Platform APIs are part of `r4os.elf`, not installed modules. They do
+not appear below `C:\R4OS\LIBS`, in the module inventory or as separate
+Distribution components.
 
 The exact current module set belongs in the inventory, not in this document.

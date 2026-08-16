@@ -6,6 +6,9 @@ virtuellen Programmspeicher, asynchrones I/O, Registry und Bootlog.
 
 Import: R4SYS:Query:1
 
+Bereitstellung: eingebauter Kernel-Provider; keine R4L-Datei und kein
+eigenstaendiger Installations- oder Updatepfad.
+
 Zig-Context: r4os.r4sys.Context
 
 Optionale Felder werden mit ctx.hasFn("feld") geprueft. Die Tabelle ist

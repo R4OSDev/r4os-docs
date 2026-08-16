@@ -14,7 +14,9 @@ resolves packages. Relative or absolute mappings are supported.
 Zig applications initialize `r4os.App`; C applications include
 `<r4os/r4os.h>`. Both consume the same R4XStart context and group tables.
 Optional groups and fields remain explicit; facades do not invent fallback
-handles or second subsystem implementations.
+handles or second subsystem implementations. The six Platform APIs are
+implemented by the Kernel; the SDK neither builds provider R4Ls nor owns an
+independent copy of their implementation.
 
 Independent Runtime-R4Ls keep contract, baseline, implementation, bindings
 and tests in their own library unit. The core SDK provides only the generic

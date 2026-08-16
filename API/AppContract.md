@@ -10,7 +10,8 @@ The canonical layouts and operations come from
 A module selects its app class and imports in `module.R4MF`. R4SYS is required
 for a normal R4X. Desktop, drawing, network, audio and device groups are
 requested only when needed. A facade is available only if its complete
-minimum function set exists.
+minimum function set exists. These six groups are built-in Kernel providers;
+they are not Runtime-R4L files or independently installed components.
 
 Typical Zig access:
 

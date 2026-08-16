@@ -6,6 +6,9 @@ Netzdiagnose.
 
 Import: R4NET:Query:1
 
+Bereitstellung: eingebauter Kernel-Provider; keine R4L-Datei und kein
+eigenstaendiger Installations- oder Updatepfad.
+
 Zig-Context: r4os.r4net.Context
 
 Netzwerkprogramme deklarieren R4NET im Manifest und pruefen optionale Felder

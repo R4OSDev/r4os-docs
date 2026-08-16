@@ -5,6 +5,9 @@ Audio-Service-Streams, MIDI, SID, OPL3 und Synth-/Audiogeraetdiagnose.
 
 Import: R4AUDIO:Query:1
 
+Bereitstellung: eingebauter Kernel-Provider; keine R4L-Datei und kein
+eigenstaendiger Installations- oder Updatepfad.
+
 Zig-Context: r4os.r4audio.Context
 
 Audioprogramme deklarieren R4AUDIO im Manifest. Optionale Felder werden mit

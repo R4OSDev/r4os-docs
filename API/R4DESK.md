@@ -6,6 +6,9 @@ Remote-/Desktop-Frame-Informationen.
 
 Import: R4DESK:Query:1
 
+Bereitstellung: eingebauter Kernel-Provider; keine R4L-Datei und kein
+eigenstaendiger Installations- oder Updatepfad.
+
 Zig-Context: r4os.r4desk.Context
 
 Die Gruppe wird nur im Manifest angefordert, wenn die Anwendung Desktop- oder

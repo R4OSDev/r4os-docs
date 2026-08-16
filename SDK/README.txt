@@ -84,7 +84,7 @@ dem, der die Aenderung macht, im selben Schritt. Optional bettet das Manifest
 Ressourcen in den Container ein: ICON= fuer Programmicons, HELP= fuer das
 Helpfile von NAME /? und RESOURCE=NAME:pfad fuer weitere Dateien; die
 Bauquellen liegen unter Assets/. Details dazu und woertliches Boilerplate:
-Docs/Agents/R4M0-Container.txt.
+Agents/R4M0-Container.txt.
 
 R4SYS ist explizite Basis. Zusaetzliche zentrale IMPORT-Zeilen nennen
 R4DESK, R4DRAW, R4NET, R4AUDIO oder R4DEV. Eine unabhaengige Runtime-R4L

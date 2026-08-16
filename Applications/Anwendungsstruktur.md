@@ -28,7 +28,7 @@ angelegt.
 
 C-Projekte verwenden src/main.c. Assets/ existiert nur, wenn das Modul
 Ressourcen einbettet; die Boilerplate-Formen stehen woertlich in
-`Docs/Agents/R4M0-Container.txt`.
+`Agents/R4M0-Container.txt`.
 
 ## Manifest
 

@@ -1,4 +1,4 @@
-# Third-Party Notices
+﻿# Third-Party Notices
 
 No third-party source code, binary, font, certificate, or other redistributable
 material has been identified in this repository.

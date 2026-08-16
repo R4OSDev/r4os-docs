@@ -1,194 +1,44 @@
-﻿R4U2-Komponenten- und Releasemanifestvertrag
-============================================
+﻿R4U2 component package contract
+================================
 
-Gueltig seit R4OS 0.63.11. Dieses Dokument beschreibt den aktuellen
-Paketvertrag. Die Berichte `SystemUpdater05510.txt` und
-`SystemUpdater05914.txt` dokumentieren weiterhin die Entstehung des VERIFY-
-beziehungsweise Transaktionspfades, sind aber keine Formatwahrheit fuer neu
-erzeugte Pakete.
+R4U2 is the current R4OS update package format. It separates the target R4OS
+release, the package version and the embedded version of every component.
+None of these values is derived from another.
 
+Package structure
+-----------------
 
-Drei getrennte Versionen
-------------------------
+An R4U2 file contains a fixed binary header, a UTF-8 manifest and concatenated
+payloads. Header and manifest bind sizes, payload count, activation class and
+checksums. Each payload has a canonical target, type, size, checksum and
+offset. Versioned components additionally declare kind, name, embedded
+version and activation behavior. Requirements identify a concrete component,
+minimum version and installed/active state.
 
-- `RELEASE` bezeichnet den zentral geplanten R4OS-Release, dem das Paket
-  zugeordnet ist.
-- `PACKAGE_VERSION` versioniert nur die atomare R4U-Paketeinheit.
-- Jede versionierte Komponente traegt ihre eigene eingebettete Version.
+Versioned component kinds are Kernel, R4X, R4L, R4D and R4P. Configuration,
+data and fonts do not receive invented component identities. R4UPack reads
+R4M0 or kernel metadata and rejects a manifest that disagrees with the
+payload, even if package checksums were recomputed.
 
-Keine dieser Versionen wird aus einer anderen abgeleitet. Insbesondere darf
-ein neuer Release einen unveraenderten Kernel mit derselben Kernelversion
-weiterfuehren. Downgrades sind technisch erlaubt; die Veroeffentlichung ist
-Server- und Releasepolicy.
-
-
-Releasemanifest
----------------
-
-`Inventory/Release.json` ist die erzeugte Sollstandswahrheit eines Builds.
-Es bindet `release` an die Profile `slim`, `full` und `test`. Jedes Profil
-enthaelt genau seine erforderlichen Komponenten mit `kind`, `name`,
-kanonischem `target` und `version`. Der Kernel ist immer eine explizite
-Komponente `KERNEL` mit Ziel `/boot/r4os.elf`.
-
-Zur Serververoeffentlichung wird dieses Manifest unveraendert als
-`R4OS-RELEASE-<RELEASE>.JSON` uebertragen. Der Update-Server akzeptiert nur
-Schema 1, exakt die drei Profile, widerspruchsfreie Zaehler, eindeutige
-Komponenten und die zum Dateiinhalt passende Releaseversion. Unbekannte
-Felder oder Profile sind Fehler.
-
-Das lokale `MODULES.JSON` speichert das Imageprofil. Nur die Komponenten des
-lokalen Profils entscheiden, ob ein Release vollstaendig erreicht ist. Eine
-einzelne erfolgreiche Paketinstallation oder ein Teilstand darf die lokale
-Releaseversion nicht vorzeitig aendern.
-
-
-R4U2-Datei
+Activation
 ----------
 
-Eine R4U2-Datei besteht aus dem 64-Byte-Binaerheader, dem UTF-8-Manifest und
-dem verketteten Payloadbereich. Header, Laengen, Payloadzahl, Neustartflag
-sowie FNV-1a-Pruefsummen fuer Manifest, Payloadbereich und Gesamtpaket werden
-von R4UPack erzeugt und von SYSUPD unabhaengig geprueft.
+Only a non-running application-only update may activate live. Kernel,
+libraries, drivers, protocols and services require restart. A package that
+contains Kernel or Runtime-R4L components is a foundation package. Mixed
+packages inherit the strictest class.
 
-Das Manifest beginnt mit:
+Release truth
+-------------
 
-    R4U_MANIFEST=2
-    PACKAGE=<PAKET-ID>
-    PACKAGE_VERSION=<X.Y.Z>
-    RELEASE=<X.Y.Z>
-    TITLE=<ANZEIGETEXT>
-    DESCRIPTION=<ANZEIGETEXT>
-    ACTIVATION=live|restart
-    PRIORITY=normal|foundation
-    PAYLOADS=<ANZAHL>
-    COMPONENTS=<ANZAHL>
-    REQUIRES=<ANZAHL>
-    ABI;R4M0=1;R4L=1;R4D=1;R4P=1;R4XSTART=1;R4U_COMPONENTS=1
+The generated release manifest lists the exact components of Slim, Full and
+Test. The local profile inventory decides whether the complete release has
+been reached; installing one successful package must not update the release
+version early. The publish process uploads immutable packages first and the
+release manifest last.
 
-Danach folgen je nach Paket `PAYLOAD`, `ROLLBACK`, `COMPONENT` und `REQUIRE`:
-
-    PAYLOAD;index=0;name=...;target=...;kind=...;size=...;checksum=...;offset=...;abi=R4M0:1
-    ROLLBACK;target=...;backup=...;strategy=replace
-    COMPONENT;payload=0;kind=R4X;name=APP;target=/R4OS/.../APP.R4X;version=1.2.3;install=live
-    REQUIRE;kind=R4L;name=R4SYS;target=/R4OS/LIBS/R4SYS.R4L;version=0.1.1;state=installed
-
-`TITLE` ist 1 bis 96 Byte, `DESCRIPTION` 1 bis 2048 Byte lang. Beide muessen
-gueltiges UTF-8 und reiner einzeiliger Plain Text ohne NUL, Steuerzeichen
-oder Markupzeichen sein. Ihre Bytes sind Bestandteil der Manifest- und
-Paketpruefsummen.
-
-Der unveraenderliche Serverdateiname eines Pakets lautet
-`<PACKAGE>-<PACKAGE_VERSION>-<RELEASE>.R4U`. Er bindet Paketidentitaet,
-Paketversion und Release sichtbar an genau einen Inhalt. Ein Paket wird
-zuerst publiziert; das zugehoerige Releasemanifest wird als letzter,
-atomarer Freigabeschritt publiziert.
-
-
-Komponenten und Klassen
------------------------
-
-Versioniert sind Kernel, R4X, R4L, R4D und R4P. R4UPack liest Name und
-Version direkt aus der R4M0- beziehungsweise Kernel-ELF-Metadatenquelle und
-bindet sie an das kanonische Inventarziel. SYSUPD liest das enthaltene
-Artefakt erneut und weist abweichende Manifestangaben auch bei neu berechneten
-Paketpruefsummen ab.
-
-Konfiguration, Daten, Fonts und SDK-Dateien erhalten keine erfundene
-Komponentenidentitaet. Ein Paket mit einer solchen Payload braucht mindestens
-eine konkrete `REQUIRE`-Zeile.
-
-- Nur nicht laufende reine R4X-Anwendungen koennen `live` sein.
-- Kernel, R4L, R4D, R4P und Services verlangen `restart`.
-- Kernel und R4L machen das gesamte Paket `foundation`.
-- Fuer ein gemischtes Paket gilt immer die strengste enthaltene Klasse.
-
-`ACTIVATION` und `PRIORITY` sind daher abgeleitete Behauptungen. R4UPack und
-SYSUPD berechnen sie unabhaengig und weisen Widersprueche ab.
-
-Anforderungen beziehen sich immer auf eine konkrete Komponente und eine
-Mindestversion. `installed` prueft das tatsaechlich abgelegte Artefakt;
-`active` ist nur fuer den aktuell laufenden Kernel zulaessig. Ein im selben
-atomaren Paket angebotenes Artefakt kann eine `installed`-Anforderung
-erfuellen.
-
-
-Updatekatalog v2
-----------------
-
-`GET /catalog` und `GET /catalog.json` liefern ausschliesslich Schema 2. Die
-Wurzel enthaelt `schema`, `generated_at` und `releases`. Die Liste enthaelt
-hoechstens den hoechsten gueltigen publizierten Release; historische
-Freigaben bleiben serverseitig unveraendert gespeichert, sind aber kein
-Clientfallback. Der sichtbare Release bindet seine `release`-Version an das
-veroeffentlichte Manifest und die atomaren Pakete, die fuer mindestens eines
-seiner Profile gebraucht werden.
-
-Ein Katalogpaket enthaelt `id`, `package_version`, `title`, `description`,
-`filename`, `size`, `sha256`, `reboot_required`, `activation`, `priority`,
-`install_order`, `components`, `requirements` und `download_url`. Eine
-Komponente enthaelt `kind`, `name`, `target`, `version` und `install`; eine
-Anforderung dieselbe konkrete Identitaet sowie Mindestversion und `state`.
-Ein Paket bleibt dabei genau eine installierbare Einheit. Einzelne Payloads
-oder Komponenten erhalten keinen eigenen Download- oder Installationspunkt.
-
-Der Katalog wird nur aus publizierten, streng validierten R4U2-Dateien und
-publizierten Releasemanifesten abgeleitet. Paketkomponenten muessen exakt in
-mindestens einem Releaseprofil vorkommen; doppelte Komponenten,
-unaufloesbare Anforderungen oder Zyklen sperren den ganzen Katalog. Die
-Installationsreihenfolge ist zuerst topologisch und danach innerhalb der
-gleichzeitig installierbaren Pakete nach abgeleiteter Foundation-Prioritaet.
-Dateinamen, Groesse, SHA-256, Anzeigeinhalt und Klassen kommen ausschliesslich
-aus den verifizierten Dateien. Unbekannte Schemas oder Widersprueche werden
-fail-closed behandelt. Titel und Beschreibung werden als Plain Text
-uebertragen und im ControlCenter HTML-escaped dargestellt. Ein neuer Release
-darf dieselbe Kernelversion wie sein Vorgaenger enthalten.
-
-
-R4UPack
--------
-
-Beispiel fuer eine Anwendung:
-
-    r4upack.exe --output Release/APP.R4U --package APP06311 \
-      --version 1.0.0 --release 0.63.11 \
-      --title "Anwendungsupdate" --description-file Release/DESCRIPTION.TXT \
-      --payload "Code/zig-out/APP.R4X|C:\R4OS\SOFTWARE\APP\APP.R4X|software" \
-      --require "R4L|R4SYS|/R4OS/LIBS/R4SYS.R4L|0.1.1|installed"
-
-`--activation` und `--priority` sind optionale Kontrollbehauptungen, keine
-Umschalter. Stimmen sie nicht mit den enthaltenen Komponenten ueberein,
-schlaegt das Packen fehl. Die alten Optionen `--min-version`,
-`--target-version` und `--reboot` gehoeren nicht zum R4U2-Vertrag.
-
-
-SYSUPD und Journal
-------------------
-
-VERIFY prueft Paketstruktur, Textregeln, Pruefsummen, Zielpfade,
-Komponentenidentitaeten, konkrete Anforderungen und abgeleitete Klassen ohne
-Seiteneffekt. APPLY und RESUME binden die Transaktion an Paketdatei,
-Paketpruefsumme, Manifestpruefsumme, Release, Paketversion,
-Komponentendigest und Payloadfingerabdruecke.
-
-Das Journalformat `R4U_JOURNAL=5` trennt Quellrelease, Zielrelease und
-Paketversion und bindet alle konkreten Komponenten mit Payloadindex, Art,
-Name, Ziel und Version. Nach dem Artefakt-Verify liest die gemeinsame Engine
-diese Identitaeten erneut aus den installierten R4M0- beziehungsweise
-Kernel-ELF-Metadaten. Erst danach aktualisiert sie `MODULES.JSON` als
-internen letzten Journalpayload in der Phase `inventory`. Das beim Build
-eingetragene Profil bleibt dabei unveraendert; auch ein Downgrade uebernimmt
-die exakte installierte Artefaktversion.
-
-Neustartpakete werden in einem dualen Batchjournal `R4U_BATCH=1` gemeinsam
-gebunden, erneut verifiziert, nach Anforderungen und Prioritaet geordnet und
-vor dem Neustart als eine Transaktion committed. Die Releaseversion wird
-erst im Post-Boot-Abschluss gesetzt, nachdem laufender Kernel, installierte
-Artefakte und Inventar den gebundenen Zielstand nachweisen.
-
-`VERSION.R4S` und `MODULES.JSON` sind keine zulaessigen R4U-Payloads. Ein
-Teilpaket bleibt deshalb sichtbar dem Zielrelease zugeordnet, kann den
-Releaseabschluss aber nicht vortaeuschen. Das Terminal-Frontend und spaetere
-Dienste verwenden dieselbe typisierte Engine und besitzen keine eigene
-Inventarschreiblogik. V2-, v3- und v4-Journale bleiben fuer bereits
-unterbrochene historische Transaktionen lesbar.
+SYSUPD validates the entire package before side effects, stages changes,
+uses a durable journal, verifies installed metadata, updates the component
+inventory and completes restart packages only after the next boot proves the
+target state. `VERSION.R4S` and `MODULES.JSON` are engine-owned and are not
+valid package payloads.

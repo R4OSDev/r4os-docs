@@ -1,148 +1,26 @@
-﻿C-ABI fuer R4X
-===============
+﻿R4OS C ABI
+==========
 
-Header
-------
+A C R4X project includes:
 
-Ein C-Projekt bindet ein:
+```c
+#include <r4os/r4os.h>
+```
 
-    #include <r4os/r4os.h>
+The SDK startup code exports `R4XStart:1`, validates the start context and
+calls the C application entry with an initialized `R4App`. Platform groups
+use the same generated layouts and function signatures as Zig.
 
-Der Sammelheader enthaelt ABI-Konstanten, R4M0, R4LQuery, R4XStart und die
-sechs zentralen Gruppenbindungen. Runtime-R4Ls wie R4STD liefern ihren
-C-Header im eigenen Projekt.
+Every optional group or function has an explicit availability check. String
+and buffer lengths are byte lengths. Borrowed pointers remain valid only for
+the operation documented by the Contract; owned resource wrappers must be
+closed, joined, released or reaped exactly once.
 
-Einstieg
---------
+Independent Runtime-R4Ls provide their C header from the library repository.
+A consumer initializes the library-local client from the same R4XStart
+context and requests a minimum table revision. There is no central C table
+for R4STD, R4IMG or R4FONT.
 
-Das C-Buildprofil stellt Startup-Code bereit, exportiert R4XStart Version 1,
-validiert Kontext und App-Profil und ruft:
-
-    int32_t r4_app_main(R4App *app);
-
-Beispiel:
-
-    #include <r4os/r4os.h>
-
-    int32_t r4_app_main(R4App *app) {
-        uint64_t args_len = 0;
-        const uint8_t *args = r4_app_args(app, &args_len);
-        if (args != 0 && args_len != 0) {
-            r4sys_write(&app->system, args, (uint32_t)args_len);
-        }
-        r4sys_write_cstr(&app->system, "\r\n");
-        return 0;
-    }
-
-Der rohe R4XStartContext bleibt fuer Startup-, Loader- und gezielten
-Diagnosecode in den Low-Level-ABI-Headern verfuegbar. Normale Anwendungen erhalten
-ein eigenes R4App-Objekt und initialisieren kein globales Tabellen-Bundle.
-
-R4XStartContext
----------------
-
-`r4xstart_context_valid()` prueft Magic, Major und Mindestgroesse. Ein neuerer
-Minor wird nicht allein wegen seiner Zahl abgelehnt. Die aktuellen Werte und
-Offsets stehen im generierten R4XStart-Contract und in den generierten
-C-Headern.
-
-Gruppentabellen
----------------
-
-    R4SYS
-    R4DESK
-    R4DRAW
-    R4NET
-    R4AUDIO
-    R4DEV
-
-Die Structs in r4xstart.h sind feldgleich zum Kernel und Zig-SDK.
-Reservierte Felder sind 0. Feldreihenfolge, Offsets, Versionen und Groessen
-werden aus ApiContract.json erzeugt und nicht in diesem Handbuch dupliziert.
-
-Capability-Pruefung
--------------------
-
-Vor direktem Tabellenzugriff werden Tabellenzeiger, size bis zum Feld und
-der Funktionszeiger geprueft. Die C-Helfer in den Gruppenheadern bilden diese
-Regel ab. Fehlende Gruppe und fehlendes Feld werden getrennt behandelt.
-
-R4L, zentrale Libraries und unabhaengige Runtime-R4Ls
-------------------------------------------------------
-
-Imports stehen in module.R4MF, zum Beispiel:
-
-    IMPORT=R4SYS:Query:1
-    IMPORT=R4NET:Query:1
-    IMPORT=R4STD:CONFIG_V1:1
-
-Eine unabhaengige Runtime-R4L liefert ihren C-Header selbst. Fuer R4STD bindet
-das Projekt `Code/System/Libraries/R4STD/Bindings/C/r4std.h` ein und
-initialisiert beispielsweise `R4StdConfigV1Client` mit
-`r4std_config_v1_init(app->context, ...)`. `R4App` und `<r4os/r4os.h>`
-enthalten keine R4STD-Fassade.
-
-Fuer R4IMG bindet das Projekt
-`Code/System/Libraries/R4IMG/Bindings/C/r4img.h` ein, deklariert
-
-    IMPORT=R4IMG:API_V1:1
-
-und initialisiert `R4ImgApiV1Client` ueber
-`r4img_api_v1_init(app->context, ...)`. R4FONT verwendet dasselbe Modell mit
-dem lokalen Header `Code/System/Libraries/R4FONT/Bindings/C/r4font.h` und
-`IMPORT=R4FONT:API_V1:1`. Weder `r4os.h` noch `R4App` enthalten eine dieser
-Runtime-R4Ls; eine neue Libraryversion aendert damit den zentralen C-Vertrag
-nicht.
-
-Datei-, Verzeichnis-, Stream- und Registry-Fassade
----------------------------------------------------
-
-`app_storage.h` stellt `R4Console`, `R4Files`, `R4DirectoryIterator`,
-`R4StreamReader`, `R4StreamWriter` und `R4Registry` bereit. Die Sichten werden
-mit `r4_app_console`, `r4_app_files` und `r4_app_registry` aus R4App erzeugt.
-Ergebnisse unterscheiden Bytes, Dateiende, fehlenden Eintrag und Fehler. Alle
-Daten-, Scratch- und Verifikationsbuffer werden vom Aufrufer bereitgestellt.
-Details und Beispiele stehen in `Docs/API/StorageFacade.md`.
-
-Service-, Netzwerk-, Audio- und Geraetefassaden
------------------------------------------------
-
-`app_services.h` und `app_network.h` kapseln ServiceConnection/Endpoint,
-DNS, TCP und UDP. `app_audio.h` stellt den besitzenden, ausschliesslich ueber
-AUDSVC laufenden `R4AudioStream` sowie die getrennte `R4AdvancedAudio`-Sicht
-fuer SID, MIDI und OPL3 bereit. `app_devices.h` liefert Inventar-, Speicher-
-und Performancesichten auf die bestehenden zentralen R4DEV-Payloadtypen.
-Normale C-Verbraucher casten keine rohen Tabellenfelder selbst.
-
-`Docs/API/ZigCParity.json` listet maschinenlesbar die Zig-/C-Signatur-/
-Fassadenvertraege und separat die tatsaechlich ausgefuehrten Cross-Language-
-Fixturefamilien. Details stehen in
-`Docs/API/ServiceNetworkFacade.md` und `Docs/API/AudioDeviceFacade.md`.
-
-Buildprofil
------------
-
-Neue C-Projekte werden mit dem Generator angelegt:
-
-    DevTools/Scripts/New-R4XProject.ps1 -Name MYAPPC -Language c
-
-Gezielter Build:
-
-    DevTools/Scripts/Build.bat -app MYAPPC
-
-Abnahme
--------
-
-    DevTools/Scripts/Build.bat -app CStartSmoke
-    powershell -NoProfile -ExecutionPolicy Bypass -File Tests/Gate/Run-SDKExternalBuild05116.ps1
-    powershell -NoProfile -ExecutionPolicy Bypass -File Tests/Gate/Invoke-CurrentApiContractGate.ps1 -Source
-    powershell -NoProfile -ExecutionPolicy Bypass -File Tests/Gate/Run-StorageFacadeContract05823.ps1
-    powershell -NoProfile -ExecutionPolicy Bypass -File Tests/Gate/Run-AudioDeviceFacadeContract05827.ps1
-
-Quellen
--------
-
-    Code/System/SDK/Shared/C/include/r4os/
-    Code/System/SDK/Shared/C/src/
-    Code/System/SDK/BuildProfiles/R4X_C*.ini
-    Code/System/SDK/Contract/ABI/
+The C headers are generated or checked from `Repositories/Contract/` and
+`Repositories/SDK/Shared/C/`. Normal consumers do not copy these headers into
+their own source tree.

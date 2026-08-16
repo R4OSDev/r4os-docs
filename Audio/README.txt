@@ -1,50 +1,24 @@
 ﻿R4OS Audio
 ==========
 
-Architektur
------------
+R4AUDIO is the public platform group for PCM streams, hardware status and
+synthesizer access. Applications request it through `module.R4MF` and use the
+SDK facade; optional functions are guarded with `hasFn`.
 
-R4AUDIO
-  Oeffentliche Programmsicht fuer PCM, Streams, MIDI, SID, OPL3 und Status.
+Hardware output is provided by loadable R4D drivers such as AC97 and HDA.
+SID, MIDI and OPL3 are separate driver/protocol components. The kernel keeps
+only the common timing, routing and backend mechanisms required by the
+platform contract.
 
-AudioService
-  R4X-Service fuer Stream-Lifecycle, Pufferung und dauerhafte Audioarbeit.
+The normal ownership chain is:
 
-R4D
-  HDA, AC97, SID, MIDI und OPL3 Hardware-/Engine-Treiber.
+```text
+R4X application -> R4AUDIO -> audio service/core -> active R4D backend
+```
 
-R4P
-  MIDI-, SID- und OPL3-Protokollmodule.
+Drivers advertise capabilities and own hardware-specific conversion,
+DMA, interrupts, stop and recovery. Applications must use the announced
+stream format and close every stream they open.
 
-Kernel
-  Audio-Core und technisch notwendige Transport-/Bootgrundlage.
-
-Programme
----------
-
-BEEP und R4Synth sind Anwendungen. AUDIOD und SYNTHD pruefen den Vertrag.
-Programme deklarieren R4AUDIO in module.R4MF und verwenden fuer PCM
-`app.audio()` sowie den besitzenden `AudioStream`. Open, Write, Volume und
-Close laufen ausschliesslich ueber AUDSVC; ein stiller direkter Kernel-
-Fallback existiert nicht. SID, MIDI und OPL3 liegen sichtbar getrennt unter
-`audio.advanced()`. Der rohe R4AUDIO-Kontext ist nur Low-Level-Zugriff.
-
-Capability-Regel
-----------------
-
-Optionale R4AUDIO- und R4DEV-Felder werden mit hasFn geprueft. Fachliche
-Service- und Streamfehler bleiben von fehlender Gruppe/Funktion getrennt.
-Timeout invalidiert einen Stream nicht; erfolgreiches Close tut es. Der
-vollstaendige Entwicklervertrag steht in Docs/API/AudioDeviceFacade.md.
-
-Build und Test
---------------
-
-    DevTools/Scripts/Build.bat -app AudioService
-    DevTools/Scripts/Build.bat -app AudioDiag
-    DevTools/Scripts/Build.bat -norun
-    DevTools/Scripts/Build.bat -test
-    powershell -NoProfile -ExecutionPolicy Bypass -File Tests/Gate/Run-AudioDeviceFacadeContract05827.ps1
-
-Hardware-Sichttests verwenden die dafuer vorgesehenen Audio-TestRunner unter
-Tests/Gate.
+Current modules are listed in `Docs/Inventory/AllModules.json`; diagnostics
+and their tests are listed in the corresponding inventories.

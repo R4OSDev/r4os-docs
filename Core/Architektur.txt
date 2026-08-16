@@ -1,218 +1,38 @@
-﻿R4OS Architektur
-================
+﻿R4OS core architecture
+======================
 
-Systemmodell
+Kernel boundary
+---------------
+
+The kernel owns mechanisms that require privilege or must exist before
+modules can be loaded: early boot, page tables, physical memory, interrupts,
+timers, scheduling, the initial display path and the minimum storage path
+needed to mount the system volume.
+
+Hardware-specific and user-facing policy belongs outside the kernel whenever
+a safe load boundary exists. Applications, services, diagnostics, drivers
+and protocols are independent repositories and R4M0 modules. A loadable
+production path must not retain a silent built-in duplicate.
+
+Boot outline
 ------------
 
-R4OS ist ein single-user, fully trusted Betriebssystem fuer x86_64. Es gibt
-kein Benutzer-, Rechte-, Sandbox- oder Capability-Sicherheitsmodell.
-Validierung dient technischer Stabilitaet.
+1. Limine enters the x86_64 kernel and supplies boot responses.
+2. Architecture, memory, exceptions, interrupts and timers are initialized.
+3. Boot storage and filesystems make the system volume available.
+4. Configuration, preload modules and driver policy are applied.
+5. The module loader resolves platform bridges, libraries, protocols,
+   drivers, services and applications.
+6. The scheduler starts normal runtime workers and the desktop/session path.
 
-Schichten
----------
+Public boundary
+---------------
 
-Kernel
-  Boot, CPU/Interrupts, Scheduler, Speicher, Displaygrundlage, Dateisystem,
-  Storage, Netzwerkgrundlage, Modulloader und die sechs Kernelgruppen.
+Programs never import kernel source. They enter through R4XStart and the six
+versioned platform groups R4SYS, R4DESK, R4DRAW, R4NET, R4AUDIO and R4DEV.
+Independent Runtime-R4Ls expose their own versioned tables. The canonical
+layouts are owned by `Repositories/Contract/`; the SDK provides typed
+facades without becoming a second ABI truth.
 
-R4M0-Module
-  R4X-Programme, R4L-Libraries, R4D-Treiber und R4P-Protokollmodule.
-
-Services
-  Externe R4X-Systemdienste fuer dauerhafte fachliche Laufzeitfunktionen.
-
-Software
-  Desktop, Terminal, Tools, Einstellungen und weitere Anwendungen.
-
-SDK
-  Zig-/C-Bindings, Buildprofile, Templates, Startup und Vertragsquelle.
-
-Bootfolge
----------
-
-Code/Kernel/main.zig initialisiert die fruehen Bootbausteine und uebergibt an
-runtime_boot. Die Bootmodule ordnen CPU, Timer, Driver, Input, Memory,
-Storage, Module, Services, Plattform, Loader, IRQ, Audio, Netzwerk und USB.
-Nach bereitstehendem C:-Pfad werden Konfiguration, Libraries, Treiber,
-Protokolle, Services und der konfigurierte Launcher geladen.
-
-Programme
----------
-
-Ein aktuelles R4X ist R4M0, exportiert R4XStart:1 und importiert
-R4SYS:Query:1. Weitere Gruppen stehen in module.R4MF. Der Loader validiert
-Container, Sections, Imports, Exports, Relocations, Startmetadaten und
-Speicherbereiche.
-
-Der interne Programminstanzzustand ist seit 0.59.7 ressourcenproportional
-aufgeteilt. Ein kleiner `ProgramInstance`-Kern verweist auf gemeinsame
-Runtime-/Process-Payloads und nur bei Bedarf auf Environment-, Console- und
-GUI-Payloads. Console-Ausgabe gehoert der Console-Instanz ab Spawn;
-Environment und GUI-Commands entstehen bedarfsgerecht. GUI-Rasterdaten werden
-als ownergetaggte, dynamisch verkettete Auftragsknoten statt als fester
-Gesamtpuffer gehalten. Der
-GUI-Zustand ist fuer GUI-Klassen eager, fuer gehostete Consolen und andere
-Klassen dagegen lazy ab der ersten GUI-/Fensteroperation.
-Ownerheader und transaktionaler Reverse-Cleanup sichern Spawn-Abbruch, Exit
-und Kill ab. Seit 0.59.8 liegen die Kerne in bedarfsgesteuert wachsenden,
-stabil adressierten 16er-Chunks statt in einer festen 16er-Tabelle. Der
-Speichervertrag steht in `Core/ProgramInstanceStorage.txt`, Registryzustand,
-Pins, Publish und Shrink in `Core/DynamicProgramRegistry.txt`. Seit 0.59.9
-folgen Create, Publish, Run, Exit, Done, Retire und Reap einer monotonen
-Zustandsmaschine. ID plus globale Generation sichern ProcessHandles gegen
-Wiederverwendung; ein dynamischer Completion-Store bewahrt Besitzerresultate,
-waehrend der Deferred-Reaper schwere Ressourcen freigibt. Details stehen in
-`Core/ProgramLifecycle.txt`. Seit 0.59.10 besitzt der Scheduler eine
-dynamische, stabil adressierte Task-Registry; der R4X-Runtimepfad besitzt
-getrennt davon die dynamische ProgramThread-Registry. Waiter, optionaler FPU-
-State, guarded Kernel-Stacks, Stack-Reclaim und die technische
-Fortschrittsreserve sind in `Core/DynamicTaskRegistry.txt` festgelegt.
-
-API-Gruppen
------------
-
-R4SYS
-  Systembasis, Console, Tasks/Threads, Zeit, Dateisystem, Programme, Services,
-  VM, I/O, Registry und Bootlog.
-
-R4DESK
-  Eingabe, Fenster, Controls, Clipboard, Console-Hosts und Desktopzustand.
-
-R4DRAW
-  Raster-, Text-, Font-, Surface- und Present-Funktionen.
-
-R4NET
-  Adapter, Konfiguration, UDP/TCP, DNS, DHCP, ICMP und Netzservices.
-
-R4AUDIO
-  PCM, Audiostreams, MIDI, SID, OPL3 und Audiostatus.
-
-R4DEV
-  Hardware-, Treiber-, Protokoll-, Boot-, Performance- und
-  Programminstanz-Speicher-/Registrydiagnose.
-
-R4STD
-  Unabhaengige Runtime-R4L mit lokalem Contract und getrennten versionierten
-  Tabellen fuer Text, R4S-Settings, Datum, Zeit und Config.
-
-R4IMG
-  Unabhaengige Runtime-R4L mit lokalem Vertrag und versionierter API-Tabelle
-  fuer begrenzte PNG-, JPEG-, BMP- und SVG-Dekodierung.
-
-R4FONT
-  Unabhaengige Runtime-R4L mit lokalem Vertrag und versionierter API-Tabelle
-  fuer begrenzte TTF-, OTF-, WOFF- und WOFF2-Dekodierung.
-
-Consumer pruefen optionale Kernel-Felder mit hasFn. R4STD, R4IMG und R4FONT
-besitzen weder eine zentrale Gruppen-ID noch eine Kernel-Tabelle; ihre eigenen
-Bindings validieren die geladenen API-Tabellen.
-
-Normale Zig-/C-Anwendungen erhalten die zentralen Gruppen ueber das SDK-App-
-Objekt und typisierte Fassaden. Runtime-R4L-Bindings verwenden den geliehenen
-R4XStart-Kontext desselben App-Objekts. Direkter eigener ABI-Zugriff liegt getrennt unter
-`r4os.lowlevel` und ist nur fuer technisch begruendete Startup-, Loader- und
-Diagnosefixtures vorgesehen. `Code/System/SDK/Contract/API/ApiContract.json`
-ist die maschinenlesbare API-/ABI-Quelle der Plattformgruppen. Jede
-unabhaengige Runtime-R4L besitzt zusaetzlich genau ein lokales
-`LibraryContract.json`; generierte ABI-Dateien und Referenzen werden aus der
-jeweils zustaendigen Quelle geprueft, nicht aus diesem Architekturtext.
-
-Module
-------
-
-R4L-Systemlibraries liegen unter Code/System/Libraries. R4D-Projekte liegen
-unter Code/System/Driver, R4P-Projekte unter Code/System/Protocols. Die
-Projektmanifeste definieren Imports, Exports, Contracts, Artefakt und Ziel.
-Nicht bootkritische Hardwarefunktion soll als R4D betrieben werden.
-Protokollklassifikation und -verarbeitung gehoert nach R4P.
-
-Services und Anwendungen
-------------------------
-
-Services liegen unter Code/System/Services und werden ueber SERVICES.R4S
-gestartet. Anwendungen liegen unter Code/System/Software, Diagnostics unter
-Code/System/Diagnostics. Neue fachliche Policy wird nicht in den Kernel
-gelegt, wenn eine externe Struktur existiert.
-
-Speicher und Scheduler
-----------------------
-
-Der Kernel besitzt Physical Memory Manager, Page Tables, virtuellen
-Adressraum, Heap und programmspezifische VM-Regionen. Seit 0.59.10 verwaltet
-der Scheduler Tasks als dynamische, stabil adressierte Objekte. Der Current-
-Task ist ein Objektzeiger; ID plus Generation, Pins und Deferred-Reap sichern
-Taskverweise ueber Yield-, Wait- und IRQ-Grenzen. ProgramThreads gehoeren
-nicht dem Scheduler, sondern der R4X-Runtime. Normale Thread-Lookups erhalten
-unter IRQ-Schutz einen Pin oder eine generationengebundene Join-Lease; nur der
-an den exakten Current-Task gebundene Thread darf dessen bestehende Execution-
-Verankerung nutzen. Es gibt keinen allgemeinen lockfreien, ungepinnten
-ProgramThread-Vertrag. Eine einkompilierte Task- oder Threadzahl ist keine
-Admission-Grenze.
-Das isolierte Programmstack-Fenster wurde dabei von einem auf acht GB
-erweitert; die acht MB Reserve samt Guard pro Thread bleiben unveraendert.
-
-WaitQueues enthalten intrusive, task-eigene Waiter-Knoten. Wake, Timeout,
-Cancel, Kill und Objektabbau entfernen einen Waiter ueber denselben
-exakt-einmaligen Detach-Pfad, bevor der Taskzustand geaendert oder die Queue
-freigegeben wird. Guarded 64-KB-Kernel-Stacks entstehen bei Bedarf; ihr
-unabhaengiger Cache ist auf acht Eintraege begrenzt und wird unter globalem
-Speicherdruck an VM/PMM zurueckgegeben. Vier vorbereitete kritische Task-/
-Stack-Bundles bleiben ausschliesslich fuer Kernel-, I/O-, Netzwerk-, Admin-
-und Reaper-Fortschritt reserviert.
-
-Generationengesicherte Mutex-Owner und Kill-Schutztransaktionen werden pro
-Task exakt gezaehlt. `sync.UnwindGuard` ist dabei ein rekursiver, task-
-gebundener Owner-Lock mit eigener WaitQueue. Er darf fachlich erforderliche
-Scheduler-Waits ueberspannen und serialisiert die FS-Anfrage, den Netzwerk-
-Pollowner und den R4D-Ownerkontext, ohne die strenge Sleep-under-Lock-Diagnose
-eines normalen Mutex zu verfaelschen. `task_context.UnwindToken` ist davon
-getrennt: kein Lock, kein konkurrierender Owner und keine WaitQueue, sondern
-ein temporaerer Kill-Schutzzaehler fuer die aktuelle Tasktransaktion, etwa bei
-Heap-/Reclaim-, Task-, ProgramThread- oder Storage-Teardown. Hard-Kill und
-Reap warten auf beide Arten des vollstaendigen Unwind; die begrenzten Held-
-Lock-Records bleiben reine Diagnose und sind keine Lebenszeitquelle.
-
-Kernelcode bleibt ohne SIMD. R4M0-Module duerfen die konfigurierte AVX2-Basis
-verwenden; nur tatsaechliche SIMD-Tasks erhalten einen exakt dimensionierten,
-64-Byte-ausgerichteten FPU-/XSAVE-State. Reine Kernel-Worker besitzen keinen
-solchen State. Details stehen in `Core/DynamicTaskRegistry.txt`.
-
-Der Kernel-Heap mutiert seine Boundary-Tag-Metadaten weiterhin nie im IRQ-
-Kontext. Ein Reentry-Waechter lehnt parallele/rekursive Mutation ab; ein
-`task_context.UnwindToken` verhindert Hard-Kill, waehrend ein seltener Commit-
-Growth in globalen Reclaim und blockierendes Writeback wechselt.
-Programminstanz-Payloads werden privat vorbereitet und erst in einem
-yield-freien Commitfenster veroeffentlicht.
-
-Display
--------
-
-DisplayManager, Software-Surfaces und Presenter bilden die Displaygrundlage.
-R4DRAW besitzt Zeichenfunktionen, R4DESK Fenster-/Desktopzustand. Der externe
-Desktop R4DESK.R4X ist Host fuer GUI- und Terminalfenster.
-
-Storage und Dateisystem
------------------------
-
-Blockdevices laufen produktiv ueber R4D-Backends. MBR-Probe, Requestschicht,
-Page-Cache und die FS-neutrale VFS-Dispatchschicht liegen im Kernel. Darunter
-haengen zwei Backends: NTFS 3.1 traegt seit 0.60.9 das Systemvolume C:,
-FAT32 die Bootpartition und Datenlaufwerke. R4SYS ist der oeffentliche Datei-
-und Verzeichnisvertrag; Programme sehen das Dateisystem darunter nicht.
-
-Netzwerk und Audio
-------------------
-
-Der Kernel stellt notwendige Netzwerk- und Audiogrundlage bereit. Externe
-R4P-Module klassifizieren Protokolle; Services besitzen dauerhafte
-Netzfunktionen. R4NET und R4AUDIO sind die Programmsichten.
-
-Vertragsquelle
---------------
-
-    Code/System/SDK/Contract/API/ApiContract.json
-    Code/System/SDK/Contract/
-    Code/System/SDK/r4os/abi.zig
-    Code/System/SDK/Shared/C/include/r4os/
-    Docs/SDK/README.txt
-    Docs/API/
+R4OS has no security boundary between trusted modules. Validation and owner
+tracking exist for robustness, not isolation.

@@ -11,65 +11,16 @@ Zig-Context: r4os.r4dev.Context
 R4DEV ist fuer Diagnose und device-nahe Sicht bestimmt. Hardwarebetrieb bleibt
 in Kernel/R4D/R4P. Optionale Felder werden mit hasFn geprueft.
 
-Seit 0.59.7 liefert `program_instance_storage_summary` die versionierte Sicht
-auf Core-, Payload-, Klassen-, Peak-, Fehler- und Quarantaenebilanz der
-Programminstanzen. `program_instance_storage_self_test` fuehrt den begrenzten,
-synchronen Heap-/Ownership-Test aus und meldet Ergebnis, Fallnummern sowie die
-vorherige und nachherige Speicherbilanz; es ist keine frei konfigurierbare
-Fault-Injection-Schnittstelle.
+Program-, Task- und Threadinventare sind geliehene, versionierte Snapshots.
+Eine unvollstaendige oder veraltete Sicht wird nicht als leerer Erfolg
+gemeldet. Diagnosewerte wie Heap-, Storage- oder Performancezaehler sind
+Messwerte und keine fest eingebauten Kapazitaeten.
 
-Seit 0.59.8 meldet `program_registry_summary` die dynamische, stabil
-adressierte Chunkregistry samt Slotzustaenden, Peaks, Admission-Fehlern und
-reihenfolgeunabhaengigen Diagnosehashes des Live-ID-/Adressbestands.
-`program_registry_self_test` besitzt weiterhin `arm_next_growth` und `reset`:
-Growth-Arming verlangt die explizite Bootoption
-`OPTION PROGRAMREGISTRY selftest=yes`, gilt fuer genau einen erforderlichen
-Chunk-Growth und wird vom Growthpfad konsumiert. Reset ist bedingungslos und
-idempotent; ein zweites Arm wird als busy abgelehnt. Der Aufruf ist kein
-allgemeiner Heap-Fault-Schalter.
-
-Seit 0.59.9 bleiben die v3-Slots `program_registry_summary` und
-`program_registry_self_test` mit ihren v1-Payloads bei exakt 160/64 Byte
-binaer eingefroren. R4DEV v4 haengt stattdessen
-`program_registry_summary_v2` und `program_registry_self_test_v2` an. Deren
-getrennte Version-2-Typen besitzen einen feld-, offset- und typgleichen
-v1-Praefix und erweitern die Summary um Generation, Completion-, Retire- und
-Historyzaehler sowie den Selftest um die Operationen
-`arm_lifecycle_failure`, `signal_reaper` und `force_next_id`. Diese drei
-Operationen werden nur mit `OPTION PROGRAMLIFECYCLE selftest=yes` akzeptiert.
-Die Lifecycle-Fehlerinjektion ist ein synchronisiertes One-shot fuer eine der
-13 dokumentierten Spawn-/Exit-/Retire-Phasen; `force_next_id` beeinflusst nur
-die naechste ID-Suche und niemals die globale Generation. Die Schnittstelle
-ist ausschliesslich fuer deterministische Abnahmebilder bestimmt. Das Feld
-`operation` sowie die zugehoerigen INOUT-Parameter muessen vor dem
-Provideraufruf erhalten bleiben. Die Legacy-Slots schreiben niemals ueber
-ihre 160 beziehungsweise 64 Byte hinaus.
-
-Die oeffentlichen SDK-Namen bleiben ebenfalls source-kompatibel: Zig
-`programRegistrySummary`, `programRegistrySelfTest` und
-`PerformanceView.programRegistry` sowie C `r4_program_registry_summary` und
-`r4_program_registry_self_test` verwenden weiterhin die v1-Typen und die
-Slots 29/30. Die Slots 31/32 sind nur ueber die expliziten Zig-Namen
-`programRegistrySummaryV2`, `programRegistrySelfTestV2`,
-`PerformanceView.programRegistryV2` beziehungsweise die C-Namen
-`r4_program_registry_summary_v2` und `r4_program_registry_self_test_v2`
-erreichbar. Namen mit dem Suffix `Legacy` sind reine Aliase der alten
-v1-Fassaden.
-
-Seit 0.59.12 liefert `execution_inventory_summary` im weiterhin 160 Byte
-grossen `ProgramInventorySummary` zusaetzlich die punktuelle Kernel-Heap-
-Bilanz. `heap_active_blocks` ist ein `u32` bei Offset 148;
-`heap_used_bytes` ist ein `u64` bei Offset 152. Die Felder sind Messwerte des
-gemeinsamen Kernel-Heaps, keine Programmkapazitaet und keine per Owner
-aufgeteilte Speicherbilanz. Ein Abnahmewerkzeug darf sie zusammen mit den
-Program-/Task-/Thread- und Completionzaehlern fuer einen warmen Snapshot
-vergleichen. Exakte programmgebundene Ressourcen muessen ueber die
-Ownerinventare gebunden werden; die globale Heapbilanz darf nur innerhalb
-einer ausdruecklich dokumentierten Infrastrukturhuelle bewertet werden. Der
-0.59.12-Abschlussstress begrenzt diese auf acht ownerlose Admin-Tasks und
-insgesamt 512 KiB Heap-/Speicherabweichung. Wie bei der uebrigen geliehenen
-R4DEV-Sicht muss der Aufrufer die optionale Funktion zuerst mit `hasFn`
-pruefen.
+Registry- und Lifecycle-Selftests sind begrenzte Abnahmefunktionen. Sie werden
+nur mit den zugehoerigen Testoptionen freigegeben und sind keine allgemeine
+Fault-Injection-Schnittstelle. Fixed-layout-Kompatibilitaetstypen bleiben
+binaer eingefroren; neue Telemetrie verwendet append-only Nachfolgetypen und
+neue Slots.
 
 <!-- R4OS-APIREF:BEGIN R4DEV (generiert von ApiContractGen aus ApiContract.json - NICHT von Hand editieren) -->
 ## Tabellen-Referenz R4DEV (generiert)

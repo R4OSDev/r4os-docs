@@ -1,190 +1,31 @@
-﻿R4X-Programme
-=============
+﻿R4X application model
+=====================
 
-Rolle
------
+R4X is the executable program kind of R4OS. A current R4X file is an R4M0
+container with code, data, imports, exports, metadata and optional resources.
+The formal container and manifest contracts are owned by
+`Repositories/Contract/`.
 
-R4X ist das ausfuehrbare Programmformat von R4OS. Ein R4X ist ein
-R4M0-Modul fuer x86_64 und wird vom Kernelloader als eigene Programminstanz
-geladen.
-
-Aktueller Startvertrag
-----------------------
-
-Ein R4X besitzt:
-
-- ModuleKind R4X;
-- Export R4XStart Version 1;
-- Import R4SYS:Query:1;
-- Metadaten r4x.start=r4xstart, r4x.entry=R4XStart und
-  r4x.context=R4XStartContext;
-- zusaetzliche Imports ausschliesslich aus module.R4MF.
-
-Der Loader validiert Container, Sections, Imports, Exports, Relocations,
-Startmetadaten, Speicherbereiche und Tabellen, bevor der Einstieg aufgerufen
-wird.
-
-R4XStartContext
----------------
-
-Der R4XStart-Kontext enthaelt ABI-Kennung, Instanz-ID, Programmklasse,
-Programmweg, Argumente, Importliste, Exit-/Close-/Yield-Helfer und reservierte
-Felder. Version, Mindestgroesse, Feldlayout und Reservierungsregeln stehen im
-generierten Abschnitt des R4XStart-Contracts und werden zwischen Kernel, Zig
-und C bytegenau geprueft.
-
-Der normale Zig-/C-App-Startup des SDK prueft den Kontext und uebergibt ein
-eigenes App-Objekt. Direkter Kontextzugriff ist Low-Level-ABI unter
-r4os.lowlevel; C verwendet dafuer R4XStartContext aus r4xstart.h.
-
-Import-Bundle
--------------
-
-R4SYS ist die Basis. module.R4MF kann folgende Gruppen importieren:
-
-    R4DESK:Query:1
-    R4DRAW:Query:1
-    R4NET:Query:1
-    R4AUDIO:Query:1
-    R4DEV:Query:1
-
-Die sechs Kernelgruppen liefern Tabellen. Unabhaengige Runtime-R4Ls werden
-ueber libraryeigene Funktionstabellen importiert, beispielsweise:
-
-    R4STD:SETTINGS_V1:1
-    R4STD:CONFIG_V1:1
-    R4IMG:API_V1:1
-    R4FONT:API_V1:1
-
-Solche Imports besitzen keine zentrale Gruppen-ID und werden ueber das zur
-Library gehoerende Binding aus dem R4XStart-Kontext aufgeloest.
-
-Zig-App-Muster
---------------
-
-    const r4os = @import("r4os");
-
-    pub fn r4_app_main(app: *r4os.App) i32 {
-        if (app.devices()) |dev| if (dev.hasFn("hardware_summary")) {
-            // optionale aktuelle Faehigkeit nutzen
-        };
-        app.system().println("R4X laeuft");
-        return 0;
-    }
-
-C-App-Muster
-------------
-
-    #include <r4os/r4os.h>
-
-    int32_t r4_app_main(R4App *app) {
-        r4sys_write_cstr(&app->system, "R4X laeuft\r\n");
-        return 0;
-    }
-
-Programmklassen
----------------
-
-Die SDK-Profile console, desktop und service bilden auf die R4M0-Klassen
-console, gui und service ab. Console/Service verlangen R4SYS; Desktop
-verlangt R4SYS, R4DESK und R4DRAW. Benoetigte Gruppen muessen im Manifest
-stehen; optionale Gruppen werden nicht still erzeugt.
-
-Interner Instanzspeicher
-------------------------
-
-Seit 0.59.7 ist der interne Speicher proportional zur Programmklasse. Jede
-Instanz erhaelt einen kleinen Kern sowie Runtime- und Process-Payload. Console
-erhaelt zusaetzlich Eingabe-/State- und einen spawn-owned 16-KB-Ausgabepuffer;
-GUI erhaelt seinen Event-/Fensterzustand beim Spawn und den Commandpuffer erst
-bei tatsaechlicher Nutzung. Rasterauftraege erhalten jeweils einen
-ownergetaggten, variabel grossen Knoten; ein XRGB-Auftrag bleibt auf 128x128
-Pixel begrenzt, die verkettete Gesamtmenge eines Frames besitzt jedoch keinen
-fest reservierten Rasterpuffer mehr. Console- und
-Service-Instanzen erwerben auch den GUI-Zustand erst dann, wenn sie wirklich
-eine GUI-/Fensteroperation nutzen; das umfasst insbesondere gehostete
-Console-Fenster. Reine Services und Consolen bezahlen keine unbenutzten
-GUI-Payloads. Eine nicht geerbte Umgebung entsteht erst beim ersten
-erfolgreichen Setzen einer Variable.
-
-Alle Payloads tragen Instanz-ID, Art und Groesse im Ownerheader. Startfehler,
-Exit und Kill geben sie in umgekehrter Erwerbsreihenfolge frei. Heap- und
-Registry-Mutationen laufen im Taskkontext ohne Yield; ein IRQ-Pfad allokiert
-keine Programmpayloads. Details, Budgets und Telemetriesemantik stehen in
-`../Core/ProgramInstanceStorage.txt`. Seit 0.59.8 liegen die Kerne in
-stabil adressierten, dynamisch wachsenden 16er-Chunks. Zustands-, Pin-,
-Publish-, Shrink- und OOM-Vertrag stehen in
-`../Core/DynamicProgramRegistry.txt`. Seit 0.59.9 trennt der Lifecycle die
-laufende Instanz, das generationengebundene Besitzerergebnis und den
-ueberschreibbaren Diagnosering. Der Deferred-Retire-/Completion-Vertrag steht
-in `../Core/ProgramLifecycle.txt`.
-
-Seit 0.59.10 besitzen der Main-Task und alle Zusatzthreads keine feste Task-/
-Threadslot-Grenze mehr. Der Scheduler besitzt die stabil adressierte Task-
-Registry; der R4X-Runtimepfad besitzt getrennt davon die ProgramThread-
-Registry. Task und `ProgramThread` werden jeweils mit ID plus Generation
-gebunden. Normale Thread-Lookups halten einen IRQ-atomar erworbenen Pin, Join
-eine generationengebundene Single-Owner-Lease. Nur der ProgramThread des
-exakten Current-Tasks darf dessen vorhandene Execution-Verankerung nutzen; es
-gibt keinen allgemeinen lockfreien, ungepinnten Threadverweis.
-
-Ein Threadstart kann weiterhin an einer konkreten Task-Metadaten-, Stack-,
-FPU- oder sonstigen Speicherallokation scheitern; er scheitert aber nicht an
-einer einkompilierten Tabellenlaenge. Der Waiter-Knoten ist in `Task`
-eingebettet und wird nicht separat allokiert. Ein nicht detached vorgefundener
-Waiter ist eine Invarianten-/Admissionverletzung und wird als `busy`, nicht als
-OOM gemeldet. Waiterabbau, guarded Kernel-Stacks, SIMD-State und die technische
-Fortschrittsreserve stehen in `../Core/DynamicTaskRegistry.txt`.
-
-Der 0.59.12-Abschlussvertrag prueft diese dynamische Grenze mit 128 gleichzeitig
-lebenden Rootprogrammen aus Console-, GUI- und Serviceklassen. 26
-Kindprogramme und 26 zusaetzliche ProgramThreads erhoehen die gemessene Welle
-auf 154 Programme sowie 180 programmgebundene Tasks und Threads. Danach folgen
-im schnellen QEMU-Lauf eine Bootrunde mit 1.000 realen gemischten
-Lebenszyklen und 2.000 Tick finaler Settle-Frist. Der optionale Diagnosemodus
-`-Full` verlangt bei explizitem Aufruf mindestens drei Bootrunden mit je 10.000
-Zyklen und 10.000 Tick Settle-Frist; das Hostmodell bleibt bei 10.000.
-Kontrollierte Program- und Task-Admission-OOMs muessen vor dem Publish
-vollstaendig zurueckrollen; danach muss normale Admission wieder funktionieren.
-Wiederholte Boots und Full-Laeufe sind optionale Tiefendiagnosen und keine
-Abschlussblocker. Die Zahl 128 ist eine Testuntergrenze, keine R4X-
-Slotkapazitaet.
-
-Lebenszyklus
-------------
-
-- Start: Loader erzeugt Instanz, Speicher und Import-Bundle.
-- Lauf: Programm nutzt nur gelieferte Gruppenfelder.
-- Close: should_close oder gruppenspezifische Events signalisieren Schliessen.
-- Exit: Rueckgabecode/Exit-Helfer schreibt genau eine Completion und reiht den
-  sicheren Ressourcenabbau ein.
-- Wait/Reap: Ein Handle aus ID plus globaler Generation beobachtet und
-  konsumiert das Besitzerergebnis, ohne eine neue Instanz mit wiederverwendeter
-  ID treffen zu koennen.
-- Diagnose: ProgramStatus und der davon getrennte Exit-Ring bleiben
-  Kernelzustand; Ring-Wrap verliert keine ungereapte Completion.
-
-`ProgramStatus` und `ProgramInstanceInfo` behalten ihr bisheriges
-fixed-layout ABI. Neue Speicherdetails werden getrennt ueber optionale
-R4DEV-Funktionen gemeldet und nicht in die vorhandenen VM-/Stackfelder
-hineingedeutet.
-
-Build und Image
----------------
-
-    DevTools/Scripts/Build.bat -app NAME
-    DevTools/Scripts/Build.bat -apps
-    DevTools/Scripts/Build.bat -norun
-    DevTools/Scripts/Build.bat -test
-
-Der Build erzeugt das R4M0-Artefakt. Der Imagepfad sammelt es ueber die
-aktuelle Projekt-/Image-Konfiguration ein und fuehrt den dynamischen
-R4XStart-Artefaktaudit aus.
-
-Vertrag
+Startup
 -------
 
-    Code/System/SDK/Contract/ABI/R4M0.txt
-    Code/System/SDK/Contract/ABI/R4XStart.txt
-    Code/System/SDK/Contract/ABI/R4LQuery.txt
-    Code/System/SDK/Contract/API/Groups.txt
+Every program exports `R4XStart:1` and imports `R4SYS:Query:1`. Additional
+platform groups are declared in `module.R4MF`. Independent Runtime-R4Ls are
+imported by module name, table name and minimum revision. The loader resolves
+all required imports before entering the program.
+
+The Zig and C SDK startup code validates the context and exposes typed
+facades. Optional table fields must be checked with `hasFn`; missing groups
+or fields remain explicit errors.
+
+Ownership
+---------
+
+Programs own their heap objects, resources, tasks, threads and open handles.
+The kernel keeps stable, generation-checked identities and performs ordered
+cleanup on normal exit or termination. Application code must not retain
+borrowed buffers beyond the operation that supplied them.
+
+Console and GUI programs use the same R4X container. Their app class,
+entry mode and image placement are manifest properties rather than separate
+binary formats.

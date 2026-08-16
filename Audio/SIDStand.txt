@@ -1,108 +1,18 @@
-﻿R4OS SID-Stand 0.4
-==================
+﻿SID in R4OS
+============
 
-Einordnung
-----------
+SID support is split into independent components:
 
-Der SID-Pfad in R4OS ist eine eigene Implementierung. R4OS uebernimmt keine
-fremde SID-Engine und keinen Emulatorcode. Als Orientierung dienen
-dokumentierte Hardware-Eigenschaften des MOS 6581/8580, sichtbare
-Registereffekte und Hoervergleiche mit bekannten Aufnahmen oder Host-Playern.
+- `Repositories/Drivers/SID/` owns the loadable SID engine and its runtime
+  state.
+- `Repositories/Protocols/AudioSid/` owns the SID protocol role.
+- `Repositories/Apps/R4Synth/` is the normal player and consumer.
+- R4AUDIO exposes the public operations required by applications.
 
-In 0.4 ist SID noch kein perfekter C64-Ersatz, aber kein Platzhalter mehr:
-R4Synth kann PSID/RSID-Dateien erkennen, Metadaten anzeigen, C64-Playercode
-ueber einen nativen 6502/6510-Core ausfuehren und PCM ueber HDA ausgeben.
+There is no productive second SID implementation in the kernel. The driver
+owns register state, model selection, playback frames and cleanup. Protocol
+parsing and application presentation remain outside the driver.
 
-Seit 0.15.6 ist der SID-Register-/I/O-Vertrag in `SID.R4P` mit Rolle
-`audio.sid` verfuegbar. Der R4P-Pfad validiert 8580/6581-Modellauswahl,
-klassifiziert Registerwrites und spiegelt SID-I/O-Adressen. Seit 0.45.23
-besitzt `SID.R4D` die C64-Laufzeit, SID-Dateidaten, Renderer-Logik und
-PCM-Ausgabe. Seit 0.45.24 ist die alte Kerneldatei `Code/src/audio/sid.zig`
-entfernt; der Kernel haelt nur noch R4AUDIO-/SynthEngine-/R4P-Bruecken.
-
-
-Was in 0.4 funktioniert
------------------------
-
-- R4Synth erkennt PSID/RSID am Header und zeigt Format, Version, Load-,
-  Init- und Play-Adresse, Songanzahl, Startsong, Speed-Word, Titel, Autor und
-  Released-Feld.
-- SID-Daten werden in einen 64-KB-C64-Speicher geladen.
-- Init- und Play-Routinen laufen ueber einen nativen 6502/6510-Core.
-- Der Core unterstuetzt die offiziellen 6502-Basisbefehle, Decimal-ADC/SBC
-  und haeufige inoffizielle NOP-Varianten.
-- Der SID-Registerbereich $D400-$D7FF ist als 32-Byte-Spiegelung angebunden.
-- Drei Stimmen mit Frequenz, Pulsweite, Gate, ADSR, Dreieck, Saegezahn, Puls,
-  Noise, Sync und Ringmod sind vorhanden.
-- OSC3/ENV3-Reads ($D41B/$D41C) liefern Werte aus dem nativen Core.
-- POTX/POTY und offene SID-Read-Spiegel liefern stabile offene Werte 0xFF.
-- Eine minimale VIC-/CIA-Umgebung beantwortet Raster-, IRQ- und Timerreads,
-  CIA-Portreads und Spiegeladressen.
-- PAL-Playback rendert 960 Stereo-Samples pro 50-Hz-Frame bei 48 kHz.
-- Filter, Voice-Routing, Voice3-Off, Master-Volume und 6581/8580-Modellwahl
-  sind im SID-Mixer vorhanden.
-- D418-Volume-Aenderungen erzeugen einen ersten DAC-/Digi-Anteil.
-- Externe Diagnose zeigt Detailwerte fuer CPU, C64-Runtime, Renderpfad,
-  Filter, Mixer, D418, OSC3/ENV3, POT, VIC/CIA und letzten I/O-Zugriff.
-  Der Kernel-AUDIO-Status zeigt nur noch Bridge- und `SID.R4D`-Statuswerte.
-
-
-Bekannte Grenzen
-----------------
-
-- Die Filtermodellierung ist bewusst einfach: ein digitaler 12-dB-State-
-  Variable-Filter, keine vollstaendige analoge 6581/8580-Nachbildung.
-- 6581/8580 sind hoerbar und diagnostisch unterscheidbar, aber noch keine
-  chipgenaue Modellreihe mit Exemplarstreuung.
-- D418-Digis sind nur als erster Volume-DAC-/Klickanteil modelliert. Volle
-  hochfrequente Sample-Wiedergabe ueber D418 bleibt eine bekannte Grenze.
-- Illegal Opcodes sind nicht vollstaendig emuliert. Haeufige NOP-Fuellbytes
-  werden toleriert; andere illegale Opcodes muessen bei Bedarf konkret
-  nachgezogen werden.
-- Die C64-Laufzeit ist minimal und fuer SID-Player gedacht, nicht fuer
-  vollstaendige C64-Programme.
-- CIA/VIC-Timing ist nicht cycle-akkurat. Raster und Timer reichen fuer viele
-  Player als Orientierung, ersetzen aber keine echte C64-Maschine.
-- RSID-Dateien, die stark auf echte C64-Hardware, IRQs oder komplexe
-  Betriebssystemumgebung setzen, koennen weiterhin auffallen oder blockieren.
-- Die Testmatrix enthaelt aktuell Spellbound.sid und Commando.sid als
-  Pflichtdateien; eine dritte echte PSID/RSID-Datei ist fuer die finale
-  Regressionsbasis noch zu ergaenzen.
-
-
-Manuelle Regressionsrunde
--------------------------
-
-Vor groesseren Audio-/SID-Aenderungen:
-
-    VER
-    AUDIO
-    C:
-    CD TEMP
-    SYNTH TADA.WAV
-    SYNTH WESTWORLD.MID
-    SYNTH SPELLBOUND.SID
-    SYNTH COMMANDO.SID
-    AUDIO
-
-Erwartung:
-- WAV spielt und beendet sauber.
-- MIDI spielt ueber OPL3 und beendet sauber.
-- SID-Dateien starten in R4Synth, reagieren auf P/Q und hinterlassen nach Q
-  kein weiterlaufendes Playback.
-- AUDIO zeigt keine Backend-Fehler.
-- SID zeigt keine unerwarteten unsupported-opcodes oder Step-Limits.
-- Clipping-Zaehler duerfen bei lauten Stellen auffallen, sollen aber nicht
-  dauerhaft explodieren.
-
-
-Weitere Arbeit nach 0.4
------------------------
-
-- Dritte SID-Regressionsdatei ergaenzen und Ergebnis in
-  Docs/Audio/SIDTestmatrix.txt festhalten.
-- Filter und 6581/8580-Modell anhand echter Referenzstuecke weiter
-  nachstimmen.
-- D418-Digi-Wiedergabe ausbauen, falls reale SID-Dateien sie brauchen.
-- Illegal Opcodes nur dann erweitern, wenn eine konkrete Testdatei sie
-  benoetigt.
+The current implementation targets the documented 6581/8580 behavior needed
+by R4Synth. Hardware-faithful analog behavior is not promised; deterministic
+software output and a clean component boundary take priority.

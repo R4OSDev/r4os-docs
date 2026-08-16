@@ -1,0 +1,179 @@
+﻿R4X Memory V2 - SDK- und Migrationsplan 0.53.1
+==============================================
+
+Zweck
+-----
+
+Dieses Dokument beschreibt, wie SDK, R4L-Bindings, Templates und
+mitgelieferte R4X-Software vom AppHeap-V1-Modell auf VM V2 wechseln sollen.
+Die technische Core-Entscheidung steht in:
+
+    Docs/Core/R4XVirtualMemoryV2_0531.txt
+
+Grundregel
+----------
+
+Der Umzug ist endgueltig. Es gibt keinen produktiven Fallback von VM V2 auf
+AppHeap V1 und keinen dauerhaften Wrapper von `mem_alloc(u32)` auf die neue
+VM-API.
+
+Sobald die Gesamtmigration abgeschlossen ist, gilt fuer produktive R4X-
+Artefakte:
+
+- VM V2 ist der einzige Speichervertrag.
+- alte Memory-ABI-Artefakte werden sichtbar abgelehnt.
+- alle mitgelieferten Programme, Services, Diagnosen, Templates und
+  Toolchain-Komponenten sind neu gebaut.
+- AppHeap-V1-Diagnosen werden ersetzt oder als ausdruecklich alte,
+  nichtproduktive Negativ-/Historienprobe markiert.
+
+Aktueller SDK-Stand
+-------------------
+
+Der heutige SDK-Pfad ist noch AppHeap V1:
+
+- `Code/System/SDK/r4os/r4sys.zig:15-23` liest aus `R4XStartContext.runtime` einen
+  ProgramApi-Pointer.
+- `Code/System/SDK/r4os/r4sys.zig:581-606` reicht `supportsAppMemory`,
+  `memAlloc`, `memFree`, `memRealloc`, `memStats`, `memLargestFree` und
+  `allocator()` nur an `program.Context` weiter.
+- `Code/System/SDK/r4os/program.zig:201-219` begrenzt Allocations und Reallocations
+  auf `u32`.
+- `Code/System/SDK/r4os/program.zig:242-245` baut `std.mem.Allocator` aus der
+  Kernel-seitigen AppHeap-VTable.
+- `Code/System/SDK/r4os/abi.zig:3467-3472` beschreibt die alten ProgramApi-Slots.
+- `Code/System/SDK/Shared/C/include/r4os/r4xstart.h:25-26` enthaelt noch
+  `app_heap_base` und `app_heap_size`.
+
+Zielbild fuer SDK V2
+--------------------
+
+Das SDK bekommt zwei sichtbare Ebenen:
+
+1. VM-Region-API
+
+   Eine schmale R4SYS/R4L-Bindung fuer grosse virtuelle Regionen:
+
+   - `vmReserve`
+   - `vmCommit`
+   - `vmDecommit`
+   - `vmRelease`
+   - `vmQuery`
+   - spaeter `vmProtect`
+
+   Alle Groessen, Offsets und Laengen sind `u64`/`usize`-faehig. Region-
+   Handles und Diagnosewerte sind breit genug fuer grosse Adressraeume.
+
+2. Allocator V2
+
+   Ein SDK-/R4STD-Allocator nutzt VM-Regionen intern:
+
+   - kleine Allocations laufen ueber SDK-eigene Arenen, Pages, Freilisten oder
+     aehnliche Userland-Strukturen.
+   - grosse Allocations bekommen eigene VM-Regionen oder grosse Region-
+     Teilbereiche.
+   - freie grosse Bereiche koennen decommitted werden.
+   - Fragmentierung, Peak, OOM und grosse Regionen werden im SDK
+     diagnostizierbar.
+
+Der Kernel sieht dadurch normale App-Allocations nicht mehr als einzelne
+AppHeap-Bloecke. Er sieht Regionen, Commit, Resident, Faults und Owner.
+
+Migrationsphasen
+----------------
+
+0.53.2:
+
+- SDK bekommt noch keine produktive VM-V2-API.
+- Diagnosen duerfen die neue Region-Registry ueber Memory-Snapshot sichtbar
+  machen.
+- Keine AppHeap-Grenzen als Zwischenloesung erhoehen.
+
+0.53.3:
+
+- R4SYS/R4L-Contract fuer VM V2 festschreiben.
+- Zig-Bindings in `Code/System/SDK/r4os` anlegen.
+- C-Header unter `Code/System/SDK/Shared/C/include/r4os/` ergaenzen.
+- Buildprofile und Templates bekommen das neue Memory-ABI-Metadatum.
+- Neue Diagnose fuer Reserve/Commit/Decommit/Release bauen.
+
+0.53.4:
+
+- SDK-Tests pruefen Demand-Commit und Page-Fault-Verhalten ueber die VM-API.
+- Fehlerpfade fuer uncommitted, owner mismatch, table full und OOM sichtbar
+  machen.
+
+0.53.5:
+
+- `ctx.allocator()` liefert Allocator V2.
+- `memAlloc`, `memFree`, `memRealloc`, `memStats` und `memLargestFree` werden
+  aus neuen SDK-Quellen entfernt oder als compile-time inkompatibel markiert.
+- Zig- und C-Templates nutzen den neuen Allocator.
+- APPHEAPD/MEMSUITE bekommen VM-V2-Nachfolger.
+
+0.53.6:
+
+- alle mitgelieferten R4X-Programme, Services, Diagnosen und R4CODE-
+  Komponenten werden auf VM V2 neu gebaut.
+- Loader lehnt alte Memory-ABI-Artefakte sichtbar ab.
+- ProgramApi-AppHeap-Slots werden aus dem produktiven Zielpfad entfernt.
+- AppHeap-V1-Allocator-VTable wird nicht mehr fuer normale R4X-Programme
+  bereitgestellt.
+
+Artefakt-Metadaten
+------------------
+
+Neue Builds sollen ein klares Memory-ABI-Metadatum tragen. Zielname:
+
+    r4x.memory_abi=vm2
+
+Der genaue R4M0-Metadatenschluessel wird in 0.53.3 im Contract
+festgeschrieben. Die Regel fuer 0.53.1 lautet bereits:
+
+- Ohne VM-V2-Metadatum kein produktiver Abschluss von 0.53.6.
+- Keine stille Annahme, dass ein altes R4X schon irgendwie passt.
+- Negative Loader-Diagnose fuer alte Memory-ABI gehoert zur Abnahme.
+
+Programmiermodell
+-----------------
+
+Normale Anwendungen sollen nach der Migration nur noch den SDK-Allocator
+nutzen:
+
+    var allocator = ctx.allocator();
+
+Grosse Anwendungen duerfen zusaetzlich bewusst VM-Regionen reservieren:
+
+    const region = try ctx.sys.vmReserve(size, alignment, flags, "cache");
+    try ctx.sys.vmCommit(region.id, 0, initial_commit, .{});
+
+Das ist fuer Browser-artige Prozesse, Buildtools, grosse Caches, Editor-
+Buffer und grosse Datei-/Netzwerkpuffer gedacht.
+
+Nicht jede Anwendung soll selbst eine Heap-Strategie bauen. Die VM-API ist
+fuer grosse bewusste Regionen; der normale dynamische Speicher gehoert in den
+Allocator V2.
+
+Diagnose
+--------
+
+Die alten AppHeap-Diagnosen bleiben nicht als produktiver Fallback bestehen.
+Sie werden ersetzt durch:
+
+- VM-Reserve-Diagnose
+- VM-Commit-/Decommit-Diagnose
+- Demand-Zero-/Fault-Diagnose
+- Allocator-V2-Diagnose
+- Fragmentierungs- und Peak-Diagnose
+- Cleanup-nach-Exit/Kill-Diagnose
+- Multi-GB-Reserve-Test
+
+Abnahme fuer die SDK-Seite
+--------------------------
+
+- Alle SDK-Bindings bilden denselben Contract ab.
+- Zig- und C-Templates bauen mit VM-V2-Metadatum.
+- `ctx.allocator()` nutzt keinen AppHeap-V1-Wrapper.
+- Mitgelieferte Software laesst sich geschlossen neu bauen.
+- Alte Memory-ABI wird sichtbar abgelehnt.
+- Kein produktiver Codepfad ruft nach 0.53.6 noch `mem_alloc(u32)` auf.

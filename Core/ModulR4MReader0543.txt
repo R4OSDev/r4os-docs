@@ -1,0 +1,83 @@
+﻿R4M0-Range-Reader 0.54.3
+========================
+
+Ziel
+----
+0.54.3 trennt die Modul-Probe von der Voll-Datei-Pufferung. R4OS kann
+R4M0-Header, Metadaten und einzelne Exportnamen jetzt ueber gezielte
+Range-Reads lesen, ohne die komplette Moduldatei in einen temporaeren
+Loader-Puffer zu laden.
+
+Neuer gemeinsamer Reader
+------------------------
+`Code/src/kernel/module_r4m.zig` ist der gemeinsame, kleine Reader fuer
+R4M0-Probe-Daten:
+- `readHeader` liest und validiert den 64-Byte-R4M0-Header.
+- `readMetadata` liest nur den Metadata-Bereich.
+- `metadataValue`, `metadataContains`, `metadataIterator` und
+  `firstMetadataItem` kapseln die NUL-getrennte Metadata-Auswertung.
+- `hasExport` liest Export-Records und die dazugehoerigen Namen per
+  begrenztem Range-Read.
+
+Der Reader nutzt `module_file.readRange/readExact` und damit dieselbe
+Loader-Dateizugriffsschicht wie 0.54.1/0.54.2. Er fuehrt keine neue Policy,
+keinen zweiten Loader und keinen Fallback ein.
+
+Migrierte Probe-Pfade
+---------------------
+R4X:
+- `classifyProgramFile` nutzt den Range-Reader fuer Header,
+  Startcontract-Export und Metadaten.
+- Startcontract und Memory-Contract werden vor dem eigentlichen Image-Load
+  ueber Range-Reads ermittelt.
+- Der normale R4X-Image-Load nutzt bis 0.54.4 weiter den benannten
+  `r4x-module-file-buffer`, aber nicht mehr fuer Klassifizierung oder
+  Contract-Ermittlung.
+
+R4D:
+- `discoverEntry` prueft R4D-Header und R4D-Metadaten per Range-Reader,
+  bevor der eigentliche Treiber-Image-Load startet.
+
+R4P:
+- `loadModuleForEntry` liest Protokoll-Metadaten per Range-Reader.
+- Doppelte Rollen werden vor einem Voll-Datei-Temp-Puffer erkannt und
+  uebersprungen.
+- Der anschliessende R4P-Image-Load bekommt die bereits gelesenen Metadaten
+  und kopiert sie wie in 0.54.2 in feste Modulfelder.
+
+R4L:
+- `collectPendingLibrary` liest Header und ersten Metadata-Eintrag per
+  Range-Reader.
+- Bereits geladene Libraries werden vor dem Pending-Vollpuffer uebersprungen.
+- Der Pending-Vollpuffer bleibt fuer den Resolver bis 0.54.5 noetig.
+
+Grenzen
+-------
+0.54.3 entfernt nicht den Vollpuffer fuer den finalen Image-Load. Das ist
+Absicht:
+- R4X-Sections direkt ins Zielimage: 0.54.4.
+- R4L/R4D/R4P streamingfaehiger Image-Load: 0.54.5.
+
+Der Abschluss von 0.54.3 ist deshalb: keine Voll-Datei-Pufferung in
+Klassifizierungs-, Startcontract-, Memory-Contract- und Metadata-Probe-
+Pfaden. Image-Laden selbst bleibt fuer die Folgestufen sichtbar offen.
+
+Diagnose
+--------
+MEMSUITE meldet bei Pagerstress-Page-Out-Fehlern jetzt die konkreten
+Page-I/O-Felder: Status, Blocker, Flags, I/O-Status/-Bytes, erwartete und
+aktuelle Generation, Slot-Zahlen sowie Backing-Slot und Backing-Offset.
+Damit bleiben Loader-/Pager-Wechselwirkungen auswertbar, ohne den Test zu
+entschaerfen oder einen zweiten Fehlerpfad einzubauen.
+
+Abnahme
+-------
+- `DevTools/Scripts/Build.bat -norun`
+- `DevTools/Scripts/Build.bat -test`
+- `DevTools/Scripts/Build.bat -testonly` als direkter Reproduktionslauf mit
+  vorhandenem Testimage.
+- QEMU-Log mit `R4OS V0.54.3`, `LOADERD result: OK`,
+  `DRVDIAG result: OK`, `PERFDIAG result: OK`, `STORDIAG result: OK`,
+  `MEMSUITE pagerstress result: OK` und `pageOuts=27`.
+- Code-Suche zeigt keinen `readFullToTempRange`-Aufruf im
+  R4X-Klassifizierungs-/Contract-Probe-Pfad.

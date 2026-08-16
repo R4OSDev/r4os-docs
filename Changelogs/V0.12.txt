@@ -1,0 +1,402 @@
+﻿# R4OS Roadmap
+
+Leitbild fuer Version 0.12.X: Netzwerk ohne Kaefig
+===================================================
+
+R4OS 0.12.X bringt Netzwerksupport in das System, ohne den Charakter von R4OS
+zu verlieren. Netzwerk ist fuer R4OS zuerst Verbindung und Freiheit: Programme,
+Treiber und Services sollen einfach miteinander, mit alten Maschinen, mit QEMU
+und spaeter mit echten PCs sprechen koennen.
+
+Grundsaetze:
+- Einfachheit: Kleine, nachvollziehbare Schichten statt grosser Blackbox.
+- Keine unnoetige Sicherheit: R4OS bleibt single-user und fully trusted. Es gibt keine User, Permissions, Sandboxes, Capability-Checks oder Firewalls als Systemprinzip. Validierung bleibt Crash-Vermeidung, keine Security-Policy.
+- Modernitaet: Net-Core, R4D-Treiber, Device Manager, ProgramApi, R4Desk/R4Config, DHCP, DNS und TCP sollen zusammenpassen.
+- Kompatibilitaet: Alte Hardware und alte Protokolle bleiben ausdruecklich Ziel: COM, PCI, RTL8139, IPv4, ARP, ICMP, UDP, DHCP, DNS und einfaches TCP.
+
+Verbindliche Entscheidungen fuer 0.12.X:
+- RTL8139 ist der erste echte Netzwerkadapter.
+- Zielpfad ist ein SDK-basierter RTL8139.R4D als normaler R4D-NetBackend-Treiber.
+- IPv4 kommt vor IPv6; TLS/HTTPS, Firewall, NAT und POSIX-Socket-Vollausbau sind keine 0.12.X-Ziele.
+- Tests muessen reproduzierbar in QEMU oder mit lokalen Helfern laufen und duerfen nicht vom oeffentlichen Internet abhaengen.
+- COM1 bleibt Debug-/Log-Kanal; Serial-Link nutzt spaeter COM2 oder eine explizite Alternative.
+- IPC bleibt trusted Single-User-Kommunikation ohne Berechtigungsmodell.
+
+
+Version 0.12.0
+--------------
+
+Status: Erledigt
+
+Ziel:
+- QEMU kann R4OS mit optionalem Netzwerkadapter starten.
+- Netzwerkhardware erscheint strukturiert in HARDWARE, DEVICES, DEVMGR und CHIPSET.
+
+Offene Punkte:
+- Keine.
+
+Abnahme:
+- Build.bat -test -profile modern-q35 -storage ahci -net rtl8139 bootet ohne Crash-Marker.
+- Build.bat -test -profile modern-q35 -storage nvme-boot -net rtl8139 bootet ohne Storage-Rueckfall.
+- -net none schleppt keine Default-NIC ein.
+- legacy-pc -net rtl8139 zeigt den Adapter als Legacy-PCI-Geraet.
+
+Erledigt:
+- Build-Script um -net none und -net rtl8139 erweitert.
+- QEMU-User-Network fuer RTL8139 definiert.
+- PCI/PCIe-Inventar erkennt class 0x02/subclass 0x00 inklusive Vendor/Device, BARs, IRQ-Line/Pin und Busadresse.
+- HARDWARE, DEVICES, DEVMGR und CHIPSET zeigen den Realtek/QEMU-RTL8139-Kandidaten konsistent.
+- Build-/Test-Dokumentation beschreibt die ersten Netzwerkprofile.
+
+Notizen:
+- Diese Stufe ist Hardware- und Profilgrundlage, noch kein Paketverkehr.
+
+
+Version 0.12.1
+--------------
+
+Status: Erledigt
+
+Ziel:
+- Kernel-Net-Core als gemeinsames Fundament fuer Adapter, Ethernet, Protokolle, Serial-Link, IPC, Diagnosen und Anwendungen.
+
+Offene Punkte:
+- Keine.
+
+Abnahme:
+- NET/NETINFO/NETSTAT laufen ohne NIC sauber.
+- Mit RTL8139-Profil widersprechen NET, HARDWARE, DEVICES und DEVMGR einander nicht.
+- Bestehende Diagnosen wie AUDIO, BLOCK, DRIVES, DEVICES und HARDWARE bleiben stabil.
+
+Erledigt:
+- Code/src/net/ als Kernel-Netzwerkbereich angelegt.
+- Net-Core mit Adapter-Registry, Paketpool, TX-Vertrag und Diagnoseausgaben umgesetzt.
+- NET, NETINFO und NETSTAT als R4DOS-/COMMAND-Kommandos verdrahtet.
+- Ethernet-II-Grundschicht vorbereitet.
+- Device Inventory zeigt Netzwerkadapter und NetBackends strukturiert an.
+
+Notizen:
+- Net-Core ist Infrastruktur, keine Sicherheitsgrenze.
+
+
+Version 0.12.2
+--------------
+
+Status: Erledigt
+
+Ziel:
+- R4D-Netzwerktreiber bekommen genug DriverApi-Unterbau, um echte PCI-Netzwerkhardware sauber anzubinden.
+- register_net_backend ist ein echter Vertrag statt eines Platzhalters.
+
+Offene Punkte:
+- Keine.
+
+Abnahme:
+- SDK-R4D-Treiber koennen DMA, PCI, MMIO, IRQ und NetBackend-Vertrag nutzen.
+- LOAD/UNLOAD bleibt stabil und raeumt Owner-Ressourcen auf.
+- SID, OPL3, MIDI und EXAMPLE bleiben mit der neuen DriverApi lauffaehig.
+
+Erledigt:
+- DriverApi v3 konkretisiert register_net_backend mit NetBackend-Descriptor, MAC, MTU, Flags, Context, transmit, poll, shutdown und status.
+- DriverApi v4 fuehrt DmaBuffer-basierte alloc_dma_region/free_dma_region ein.
+- DriverApi v5 stellt PCI-Geraetezaehlung, pci_device_at, pci_find_by_class, Config32, BAR-Lesen und Bus Mastering bereit.
+- DriverApi v6 fuehrt irq_register, irq_unregister und irq_stats samt kleinem IRQ-Router ein.
+- DriverApi v7 fuehrt pci_map_bar fuer PCI-MMIO-BARs ein.
+- DriverApi v8 fuehrt 16/32-bit Port-I/O ein: port_inw/outw/inl/outl.
+- DriverApi v9 fuehrt net_receive_frame ein, damit R4D-Netztreiber RX-Frames in den Net-Core einspeisen koennen.
+- R4XBuilder und SDK spiegeln die DriverApi-Versionen.
+- Runtime-R4D-Loader kopiert Modulnamen stabil vor Init und kann EXAMPLE deterministisch laden/entladen.
+- DriverApi trackt DMA-Regionen, IRQ-Handler und R4D-NetBackends pro Runtime-Owner.
+- UNLOAD fuehrt cleanupOwner() aus; offene DMA-/IRQ-/NetBackend-Ressourcen werden automatisch geloest.
+- Net-Core unterstuetzt unregister(index) fuer R4D-NetBackend-Cleanup inklusive Adapterindex-Kompaktion.
+- Physical Frame Allocator reserviert Frame 0, damit DMA nie physische Adresse 0 erhaelt.
+- EXAMPLE.R4D prueft DMA, PCI-Netzklasse, BAR1-MMIO und IRQ-Smoke; der Unload-Test meldet cleanup owner=7 irq=1 dma=1 net=0.
+
+Notizen:
+- Alle neuen DriverApi-Felder wurden hinten angehaengt. Bestehende Slots bleiben stabil.
+- R4D-Funktionspointer duerfen keine Relocations voraussetzen; statische Pointertabellen auf Datenliterale bleiben zu vermeiden.
+
+
+Version 0.12.3
+--------------
+
+Status: Erledigt
+
+Ziel:
+- RTL8139.R4D existiert als erster echter Netzwerk-Backend-Treiber.
+- Der Treiber erkennt den QEMU-RTL8139, initialisiert ihn und registriert ihn im Net-Core.
+
+Offene Punkte:
+- Keine.
+
+Abnahme:
+- DRIVER=RTL8139 laedt den Treiber im QEMU-Netzwerkprofil automatisch.
+- DRIVERS zeigt RTL8139 als r4d/net AKTIV.
+- NET zeigt Adaptername, MAC-Adresse, MTU, Linkstatus und Zaehler.
+- DEVICES/DEVMGR zeigen denselben Adapter als active-netbackend.
+- Mehrere Boots mit -net rtl8139 bleiben ohne CPU EXCEPTION, GPF, PANIC und FATAL.
+
+Erledigt:
+- Code/Driver/RTL8139 als SDK-basiertes R4D-Projekt angelegt.
+- Code/build.zig baut RTL8139.R4D nach Code/zig-out.
+- CONFIG.R4S laedt DRIVER=RTL8139.
+- Lokaler Image-Build kopiert RTL8139.R4D nach /sys/drivers/rtl8139.r4d.
+- Builtin-Autoprobe wurde aus dem Bootpfad entfernt; der normale Pfad ist R4D.
+- RTL8139.R4D erkennt Realtek 10EC:8139 per PCI/PCIe, liest BAR0, aktiviert I/O und Bus Mastering, setzt Reset/Wake, liest MAC, richtet RX/TX-DMA ein und registriert ein NetBackend.
+- Shutdown maskiert Interrupts, stoppt RX/TX und gibt DMA ueber DriverApi frei.
+- QEMU-Abnahme modern-q35/AHCI/RTL8139: runtime load RTL8139 [OK], DRIVERS zeigt RTL8139 r4d/net AKTIV, DEVMGR zeigt active-netbackend.
+
+Notizen:
+- Der Treiber nutzt zunaechst Polling. IRQ-Bindung fuer PCI-INTx bleibt Optimierung/Folgepunkt, nicht Blocker fuer 0.12.3.
+
+
+Version 0.12.4
+--------------
+
+Status: Erledigt
+
+Ziel:
+- R4OS kann echte Ethernet-II-Frames ueber RTL8139 senden und empfangen.
+- Der Weg von R4D-Treiber zu Net-Core und Diagnose ist stabil genug fuer Protokolle.
+
+Offene Punkte:
+- Keine.
+
+Abnahme:
+- ARPTEST sendet ueber RTL8139 und empfaengt die Gateway-Reply.
+- NET-Zaehler steigen nachvollziehbar fuer RX/TX.
+- Unerwartete oder kaputte Frames werden gezaehlt und verworfen, nicht gecrasht.
+
+Erledigt:
+- RTL8139.R4D nutzt TX-Slots und 8K-RX-Ring ueber DMA.
+- DriverApi v9 verbindet R4D-RX mit net.receiveFrame().
+- Net-Core verarbeitet Ethernet-II synchron fuer ARP, IPv4 und Diagnosen.
+- Promiscuous Mode ist nicht Standard; Physical Match und Broadcast reichen fuer den Bring-up.
+- QEMU-Abnahme: ARPTEST gateway: ok, ARP rep_rx=1, Ethernet rx/tx steigen, keine Crash-Marker.
+
+Notizen:
+- Diese Stufe beweist den harten Pfad: RTL8139.R4D DMA TX/RX -> Net-Core -> Ethernet-II -> ARP.
+
+
+Version 0.12.5
+--------------
+
+Status: Erledigt
+
+Ziel:
+- IPv4-Basis, ARP und ICMP Echo funktionieren ueber RTL8139.R4D.
+- Ein Entwickler kann im QEMU-Netz nachvollziehbar pingen.
+
+Offene Punkte:
+- Keine.
+
+Abnahme:
+- Statische IPv4-Konfiguration wird aus CONFIG.R4S oder Defaults uebernommen.
+- ARP Request und Reply werden sichtbar gezaehlt.
+- ICMP Echo Request wird als IPv4-Paket ueber RTL8139 gesendet.
+- PING 10.0.2.2 meldet ok im QEMU-User-Network.
+- ICMPSELFTEST prueft eingehenden Echo Request und ausgehende Echo Reply.
+
+Erledigt:
+- Code/src/net/config.zig zentralisiert IP, Maske, Gateway und DNS.
+- CONFIG.R4S unterstuetzt OPTION NET ip=..., mask=..., gateway=... und dns=....
+- ARP-Cache mit TTL, ARPTEST und ARPFLUSH implementiert.
+- IPv4-Minimalschicht mit Header-Building, Parser, Checksumme, Laengenpruefung, Ziel-IP-Pruefung und Fragment-Ablehnung implementiert.
+- ICMP Echo Request TX und Echo Reply fuer eingehende Requests implementiert.
+- PINGTEST und PING <IPv4> nutzen ARP-Cache und Gateway-Next-Hop.
+- QEMU-Abnahme modern-q35/AHCI/RTL8139: ARPTEST gateway: ok, PINGTEST gateway: ok, PING 10.0.2.2: ok, ICMPSELFTEST inbound echo: ok.
+
+Notizen:
+- Das ist bewusst noch kein UDP/DHCP/DNS/TCP. Statische IPv4 ist der stabile Sockel fuer die naechsten Stufen.
+
+
+Version 0.12.6
+--------------
+
+Status: Erledigt
+
+Ziel:
+- Serial ueber COM wird als eigener Netzwerk-/Message-Link vorbereitet, ohne COM1-Debug zu zerstoeren.
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- COM1 bleibt reservierter Debug-/Logging-Kanal.
+- COM2 wird als Link-Port 0x02F8 verwendet und per UART-Scratch-Register auf Anwesenheit geprueft.
+- 16550-Port-Helfer koennen neben TX nun auch RX-Data-Ready und getc() abfragen.
+- Code/src/net/serial_link.zig implementiert den ersten R4SL-Framevertrag: Magic R4SL, Version 1, Typ, Laenge, Sum16-Checksumme und maximal 256 Byte Payload.
+- R4SL kennt TYPE_DIAG=1 und TYPE_MESSAGE=2; TYPE_MESSAGE landet in einer kleinen Serial-Message-Inbox als Vorstufe zum IPC-Pfad.
+- SERIALLINK/SERIALNET Diagnosekommandos zeigen Port, Framing, TX/RX-Zaehler, Message-Zaehler, Fehlerzaehler und trusted Policy.
+- SERIALLINK SEND text sendet ein TYPE_MESSAGE-Frame; SERIALLINK INBOX zeigt die letzte empfangene Host-Message.
+- SERIALLINK TEST fuehrt einen deterministischen Parser-Selftest aus, ohne COM1 zu beruehren.
+- SERIALLINK HOSTTEST fuehrt einen echten Host-Handshake ueber COM2 aus: Gast sendet R4OS-HOST-READY, Host antwortet HOST-R4SL-HELLO, Gast bestaetigt R4OS-HOST-ACK.
+- Code/BuildTools/SerialLinkHost ist ein Zig-Hosttool fuer die TCP-Serial-Abnahme gegen QEMU-COM2.
+- Standard-Abnahme modern-q35/AHCI/RTL8139: SERIALLINK selftest: ok, COM2 present=no sauber erkannt, bad_magic=0, checksum=0, overflow=0, timeout=0; PING 10.0.2.2 bleibt ok.
+- QEMU-COM2-Abnahme ist ueber `-qemu-args "-serial null"` dokumentiert und getestet.
+- COM2-Abnahme modern-q35/AHCI/RTL8139 mit `-serial null`: present=yes, initialized=yes, TX frames=1, RX frames=1, skipped=0, bad_magic=0, checksum=0, overflow=0, timeout=0; PING 10.0.2.2 bleibt ok.
+- Host-/Socket-Abnahme modern-q35/AHCI/RTL8139 mit `-serial tcp:127.0.0.1:44126,server,nowait`: hosttool ready/hello/ack ok, SERIALLINK hosttest: ok, TX frames=3, RX frames=2, loopback=1, host=1, R4SL-Fehler=0, PING 10.0.2.2 bleibt ok.
+- Host-Message- und Fehlerabnahme mit `--inject-errors --message HOST-IPC-MSG`: bad_magic=1, bad_length=1, checksum=1, msg=1, Last message HOST-IPC-MSG, PING 10.0.2.2 bleibt ok.
+- Timeout-Negativabnahme mit `-serial null` und SERIALLINK HOSTTEST: hosttest failed, timeout=1, error=host-timeout, danach bleibt PING 10.0.2.2 ok.
+
+Notizen:
+- Das Standard-QEMU-Profil stellt keinen zweiten UART bereit. Das ist sauber sichtbar statt als RX-Rauschen fehlinterpretiert.
+- `-serial null` beweist COM2-Erkennung, isolierten TX-Pfad und den Timeout-Zaehler; `-serial tcp:...` beweist echten Host-Gegenpart.
+- Overflow bleibt ein defensiver Parser-Guard: extern ueberlange Frames werden bereits als bad_length abgefangen, bevor ein Pufferueberlauf entstehen kann.
+- Serial-Link ist trusted IPC/Transport, keine Security-Grenze.
+
+Version 0.12.7
+--------------
+
+Status: Erledigt
+
+Ziel:
+- IPC-Grundlage fuer Netzwerkdienste und Anwendungen schaffen.
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- IPC-Modell festgelegt: trusted Mailbox/Message-Queue statt POSIX-Sockets als erster Schritt.
+- Feste technische Limits definiert: 16 Channels, 8 Nachrichten Queue-Tiefe, 128 Byte pro Message.
+- Code/src/kernel/ipc.zig implementiert open/send/recv/poll/close, Summary-Zaehler und Channel 1 als Echo-Smoke.
+- Kernel-API exportiert ipcOpen/ipcSend/ipcRecv/ipcPoll/ipcClose fuer interne Services und spaetere Syscall-Pfade.
+- ProgramApi wurde auf v50 erweitert: ipc_open, ipc_send, ipc_recv, ipc_poll, ipc_close und ipc_summary.
+- SDK-Wrapper in Code/SDK/r4os/program.zig ergaenzen ipcOpen/ipcSend/ipcRecv/ipcPoll/ipcClose/ipcSummary.
+- IPC/IPCSTAT Diagnosekommando zeigt Modell, Limits, Zaehler und aktive Channels.
+- IPCTEST prueft den Echo-Pfad deterministisch.
+- IPC SEND text und IPC RECV pruefen Queue-Push/Pop manuell ueber Channel 1.
+- Abnahme modern-q35/AHCI/RTL8139: IPC zeigt channels=16 queue_depth=8 message_bytes=128; IPCTEST echo: ok; IPC SEND/RECV liefert R4IPC-MSG; PING 10.0.2.2 bleibt ok.
+
+Notizen:
+- IPC bleibt fully trusted. Validierung verhindert kaputte Laengen und Queue-Korruption, nicht unberechtigten Zugriff.
+- Diese Stufe ist bewusst kein Socket-Modell. UDP/TCP duerfen spaeter auf IPC-Diensten aufbauen, muessen aber nicht wie POSIX aussehen.
+
+Version 0.12.8
+--------------
+
+Status: Erledigt
+
+Ziel:
+- UDP, DHCP und DNS-Grundlagen funktionieren reproduzierbar.
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Code/src/net/udp.zig implementiert UDP-Header-Building, Parser und IPv4-Pseudoheader-Checksumme.
+- UDP-Port-Dispatch-Zaehler fuer DHCP und DNS sind im Net-Core sichtbar.
+- Code/src/net/dhcp.zig implementiert den DHCP-Minimalpfad Discover, Offer, Request und Ack inklusive Lease-Status.
+- Statische IP bleibt Fallback; DHCP setzt zunaechst nur den Lease-Status fuer die Abnahme und ersetzt die Boot-Konfiguration noch nicht dauerhaft.
+- Code/src/net/dns.zig implementiert DNS A-Record Query und Response-Parser fuer einen lokalen deterministischen Test.
+- NET-Diagnose zeigt UDP-, DHCP- und DNS-Status inklusive Lease/IP, DNS-Antwort und Selftest-Zaehlern.
+- UDPTEST prueft UDP-Checksumme und Parser.
+- DHCPTEST prueft Discover/Offer/Request/Ack mit synthetischem QEMU-User-Network-Offer fuer 10.0.2.15.
+- DNSTEST prueft A-Record Query/Response mit synthetischer Antwort 10.0.2.2.
+- Abnahme modern-q35/AHCI/RTL8139: UDPTEST checksum/parser: ok; DHCPTEST discover/offer/request/ack: ok; DNSTEST A query/response: ok; NET zeigt UDP self=1, DHCP bound=yes, DNS a=1; PING 10.0.2.2 bleibt ok.
+
+Notizen:
+- UDP/DHCP/DNS kommen vor TCP, weil sie kleine klare Abnahmen liefern und TCP-Tests erleichtern.
+- Diese Stufe ist reproduzierbar und synthetisch. Live-DHCP/DNS gegen QEMU-User-Network kann spaeter auf denselben Parsern und Buildern aufsetzen.
+
+Version 0.12.9
+--------------
+
+Status: Erledigt
+
+Ziel:
+- TCP funktioniert fuer kleine, nachvollziehbare Verbindungen.
+- Anwendungen bekommen eine einfache Netzwerk-API, ohne sofort POSIX-Sockets nachzubauen.
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Code/src/net/tcp.zig implementiert eine kleine TCP-Minimalschicht mit Zustandsmodell closed/syn_sent/established/fin_wait.
+- SYN/SYN-ACK/ACK und FIN werden fuer den deterministischen Clientpfad nachvollziehbar gezaehlt.
+- RST, Checksum-Fehler, letzte Flags und Fehlerstatus sind in der Diagnose sichtbar.
+- Sequenz- und ACK-Felder werden im Segment-Builder/Parser behandelt.
+- TCP-Checksumme inklusive IPv4-Pseudoheader wird gebaut und geprueft.
+- Pro Verbindung gibt es einen kleinen 256-Byte-RX-Puffer; maximal 4 gleichzeitige Verbindungen sind vorbereitet.
+- Client-Verbindungen sind ueber net.tcpConnect/tcpWrite/tcpRead/tcpClose verfuegbar.
+- Listen/Accept bleibt bewusst vorbereitet, aber nicht als echter Serverpfad behauptet.
+- ProgramApi v51 ergaenzt tcp_connect, tcp_write, tcp_read, tcp_close, tcp_summary und tcp_connection.
+- SDK-Wrapper ergaenzen tcpConnect, tcpWrite, tcpRead, tcpClose, tcpSummary und tcpConnection.
+- Kernel-API bietet tcpConnect/tcpWrite/tcpRead/tcpClose als interne Vorstufe fuer Services.
+- TCP/TCPSTAT zeigt den TCP-Status ueber die normale NET-Diagnose.
+- TCPTEST prueft Handshake, Echo, Segment-Checksumme und Close deterministisch.
+- TCP ECHO text fuehrt einen kleinen Client-/Echo-Smoke gegen den lokalen TCP-Minimalpfad aus.
+- Abnahme modern-q35/AHCI/RTL8139 mit COM2-Nullsink: TCPTEST handshake/echo/close: ok; TCP echo 10.0.2.2:80: ok reply=R4TCP-ROADMAP; TCP zeigt active=0/4, buf=256, syn=2, synack=2, ack=2, data_tx=2, data_rx=2, fin=2, csum=0, self=1; PING 10.0.2.2 bleibt ok.
+
+Notizen:
+- TCP muss in 0.12.X nicht schnell sein. Es muss ehrlich, debugbar und stabil sein.
+- Der aktuelle TCP-Pfad ist eine deterministische Grundlage fuer kleine Clientverbindungen und API-Abnahmen. Echte Live-TCP-Verbindungen gegen externe Hosts, Retransmit-Timer mit Zeitbasis sowie Listen/Accept-Server folgen nach dem stabilen 0.12-Abschluss.
+
+
+Version 0.12.10
+---------------
+
+Status: Erledigt
+
+Ziel:
+- Netzwerk wird fuer Entwickler und Nutzer sichtbar rund: Tools, Device Manager, R4Config-Konzept, Dokumentation und Abschlussabnahme.
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- NET/NETINFO/NETSTAT zeigen nun neben Net-Core auch die begleitenden Serial-Link- und IPC-Statusbloecke.
+- Net-Core-Diagnose enthaelt Adapter, Link, MAC, Ethernet-II, ARP, IPv4, ICMP, UDP, DHCP, DNS, TCP und Fehlerzaehler.
+- Device Inventory erzeugt fuer NetBackends dynamische Notizen mit MAC, lokaler IP, Gateway, Konfigurationsquelle, RX/TX und Fehlern.
+- Device Manager zeigt Netzwerk-Records im Detailbereich mit Network-Zeile und trusted Policy.
+- R4Config enthaelt ein erstes Netzwerk-Konfigurationskonzept fuer C:\CONFIG.R4S, OPTION NET, DHCP-Folgepfad und Serial-Link COM2.
+- Docs/Network/README.txt angelegt mit Leitbild, Architektur, Net-Core, RTL8139.R4D, QEMU, Serial-Link, IPC, IPv4/UDP/TCP, ProgramApi, Abnahme und Grenzen.
+- Docs/Deployment/BuildUndTest.txt, Docs/Deployment/V0.12-Abschluss.txt, Docs/Drivers/README.txt, Docs/Drivers/TreiberStand.txt, Docs/SDK/README.txt und Docs/README.txt aktualisiert.
+- Abschlussdokument fuer 0.12.X erstellt.
+- 0.13.X-Folgepunkte dokumentiert: NE2000/E1000/VirtIO-Net, Live-DHCP/DNS, echtes TCP Listen/Accept, Host-Verbindungen, Dateitransfer/Remote-Shell, spaeter IPv6/TLS.
+
+Notizen:
+- 0.12.X ist erst abgeschlossen, wenn Netzwerk nicht nur bootet, sondern als R4OS-Subsystem benutzbar, diagnostizierbar und dokumentiert ist.
+- Dieser Punkt ist erfuellt; die Roadmap bleibt lokal als aktiver Abschlussstand stehen, bis sie ausdruecklich archiviert/aufgeraeumt werden soll.
+
+
+Definition of Done fuer 0.12.X
+===============================
+
+0.12.X gilt als abgeschlossen, wenn alle folgenden Punkte erfuellt sind:
+
+- QEMU kann R4OS mit RTL8139 reproduzierbar starten.
+- RTL8139.R4D ist im Image vorhanden und als R4D-Netzwerktreiber aktiv.
+- HARDWARE, DEVICES, DEVMGR, DRIVERS und NET zeigen konsistente Netzwerkdaten.
+- Ethernet-II RX/TX funktioniert ueber RTL8139.R4D.
+- ARP, IPv4 und ICMP Echo sind abgenommen.
+- Serial-over-COM ist als eigener Link abgenommen, ohne COM1-Debug zu brechen.
+- IPC-Grundlage ist vorhanden und fuer Netzwerkdienste nutzbar.
+- UDP, DHCP und DNS funktionieren in einem reproduzierbaren QEMU-/Host-Szenario.
+- TCP funktioniert fuer mindestens eine kleine lokale Clientverbindung und hat Diagnose fuer Status und Fehler.
+- Alle Netzwerkabnahmen laufen ohne CPU EXCEPTION, General Protection Fault, PANIC und FATAL.
+- Die Dokumentation beschreibt Architektur, Build/Test, Treiber, API, Diagnosen, Grenzen und naechste Schritte.
+
+Bewusste Nicht-Ziele fuer 0.12.X
+================================
+
+- Kein Sicherheitsmodell, keine Firewall, keine User-/Permission-Logik.
+- Kein IPv6.
+- Kein TLS/HTTPS.
+- Kein VirtIO-Net ohne vorherigen VirtIO-Core.
+- Kein Performanceversprechen fuer TCP.
+- Kein vollstaendiger POSIX-Socket-Nachbau.
+- Kein zweiter NIC-Treiber, solange RTL8139 und TCP/IP nicht stabil sind.
+- Kein oeffentliches Internet als Pflicht fuer Tests.
+- Kein Netzwerk-Dateisystem als Teil von 0.12.X.
+
+
+Naechste Roadmap-Kandidaten fuer 0.13.X
+=======================================
+
+- VirtIO-Core als Grundlage fuer VirtIO-Net und weitere moderne VirtIO-Geraete.
+- Alternativ oder zusaetzlich: NE2000 fuer sehr alte Kompatibilitaet und E1000 fuer breitere QEMU-/PC-Tests.
+- Live-DHCP und Live-DNS gegen QEMU-User-Network statt nur deterministischer Parser-/Builder-Smokes.
+- TCP Listen/Accept, echte Host-Verbindungen, Retransmit-Timer mit Zeitbasis und bessere Pufferung.
+- Ein kleines trusted Netzwerktool: Dateiuebertragung, Remote-Shell oder R4OS-zu-R4OS-Link.
+- IPv6 und TLS erst nach stabiler IPv4/TCP-Grundlage.

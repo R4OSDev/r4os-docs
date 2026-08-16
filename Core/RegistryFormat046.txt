@@ -1,0 +1,465 @@
+﻿R4OS Registry-Format 0.46
+=========================
+
+Stand: 0.46.1
+
+Dieses Dokument beschreibt den ersten technischen Dateivertrag fuer R4OS-
+Registry-Hives. Es ist die Grundlage fuer Parser, Writer, `REG.R4X`,
+`REGEDIT.R4X`, SDK-Helfer und spaetere R4SYS-/R4L-APIs.
+
+R4R1 ist kein Datenbankformat und kein Sicherheitsmodell. Es ist ein kleines
+R4OS-eigenes Hive-Format fuer baumfoermige Keys und typisierte Values.
+
+
+Dateien
+-------
+
+Registry-Hives liegen kanonisch unter:
+
+    C:\R4OS\REGISTRY\
+
+Produktiver Hive:
+
+    SYSTEM.R4R    -> R4_LOCAL_MACHINE / R4LM
+
+Die vier getrennten Hives dieses 0.46er-Entwurfs (SYSTEM, SOFTWARE,
+DESKTOP, USER) wurden in 0.48 zugunsten eines einzelnen Hives verworfen.
+Der Dateivertrag R4R1 unten gilt unveraendert; nur die Aufteilung nicht.
+
+Die langen Rootnamen sind fuer Dokumentation, Import/Export und UI lesbar.
+Die kurzen Rootnamen sind die bevorzugten Pfade fuer Tools und Programme.
+
+Beispiele:
+
+    R4LM\System\Services\TIMESVC\Start
+    R4SW\Classes\.TXT\DefaultApp
+    R4DT\R4Desk\TaskbarClock
+    R4CU\Apps\Notepad\RecentFiles
+
+
+Grundregeln
+-----------
+
+- Alle Zahlen sind little-endian.
+- Alle Offsets sind Datei-Offsets ab Dateianfang, ausser wo ausdruecklich
+  "relativ zum Heap" steht.
+- `u8`, `u16`, `u32` und `u64` haben feste Breiten.
+- Strings in Tabellen sind Bytebereiche im String-Heap, nicht zwingend
+  NUL-terminiert.
+- Pfadvergleiche sind ASCII-case-insensitive.
+- Writer sollen kanonische R4OS-Rootnamen und stabile Komponentenschreibung
+  ausgeben.
+- Reservierte Felder muessen 0 sein.
+- Unbekannte Pflichtfelder oder unbekannte Flags werden abgelehnt.
+
+R4R1 ist zuerst auf einfache, robuste Voll-Datei-Updates ausgelegt. In-place-
+Mutation, Free-Lists und Journaling bleiben spaetere Erweiterungen.
+
+
+Header
+------
+
+Magic:
+
+    R4R1
+
+Header-Groesse:
+
+    96 Bytes
+
+Layout:
+
+Offset  Groesse  Bedeutung
+0       4        Magic: "R4R1"
+4       2        Formatversion: 1
+6       2        Header-Groesse: 96
+8       2        Endian: 1 = little-endian
+10      2        Hive-Kind
+12      4        Flags, v1: 0
+16      8        Dateigroesse in Bytes
+24      8        Generation, bei jedem erfolgreichen Write erhoeht
+32      4        Key-Tabelle-Offset
+36      4        Key-Anzahl
+40      4        Value-Tabelle-Offset, 0 wenn keine Values
+44      4        Value-Anzahl
+48      4        String-Heap-Offset
+52      4        String-Heap-Groesse
+56      4        Data-Heap-Offset, 0 wenn keine Daten
+60      4        Data-Heap-Groesse
+64      4        Free-Tabelle-Offset, v1: 0
+68      4        Free-Eintrag-Anzahl, v1: 0
+72      4        Checksum-Typ, v1: 0 oder 1
+76      4        Checksum-Wert
+80      16       reserviert, 0
+
+
+Hive-Kind
+---------
+
+Hive-Kind ist ein u16:
+
+1
+  SYSTEM.R4R, Root `R4LM`.
+
+2
+  SOFTWARE.R4R, Root `R4SW`.
+
+3
+  DESKTOP.R4R, Root `R4DT`.
+
+4
+  USER.R4R, Root `R4CU`.
+
+Andere Werte sind in R4R1 ungueltig.
+
+
+Checksum
+--------
+
+Checksum-Typ:
+
+0
+  Keine Checksum. Parser validieren nur Header, Tabellen, Bounds und Records.
+
+1
+  `sum32`: 32-bit Summe aller Dateibytes, wobei die vier Bytes des
+  Checksum-Werts im Header beim Rechnen als 0 gelten.
+
+Ein R4R1-Parser muss Typ 0 akzeptieren. Typ 1 soll akzeptiert werden, sobald
+der Parser die Summe implementiert. Andere Typen sind ungueltig.
+
+Eine falsche Checksum ist ein Formatfehler. Sie ist keine Security-Funktion,
+sondern ein einfacher Schutz gegen offensichtliche kaputte Dateien.
+
+
+Key-Tabelle
+-----------
+
+Die Key-Tabelle besteht aus `Key-Anzahl` Eintraegen zu je 32 Bytes.
+Key-Index 0 ist immer der Root-Key der Hive.
+
+KeyRecord:
+
+Offset  Groesse  Bedeutung
+0       4        Parent-Key-Index, Root: 0xffffffff
+4       4        Name-Offset im String-Heap
+8       2        Name-Laenge in Bytes
+10      2        Flags, v1: 0
+12      4        First-Value-Index, 0xffffffff wenn keine Values
+16      4        Value-Anzahl
+20      4        First-Child-Key-Index, 0xffffffff wenn keine Child-Keys
+24      4        Child-Key-Anzahl
+28      4        reserviert, 0
+
+Root-Key:
+- Index 0.
+- Parent-Key-Index ist `0xffffffff`.
+- Name-Laenge ist 0.
+- Name-Offset ist 0.
+- Der sichtbare Rootname kommt aus dem Hive-Kind, nicht aus dem Root-Key.
+
+Child-Keys eines Keys muessen in der Key-Tabelle zusammenhaengend liegen:
+
+    first_child_index <= child_index < first_child_index + child_count
+
+Dasselbe gilt fuer Values eines Keys in der Value-Tabelle. Diese Regel macht
+Enumeration ohne komplexe Baeume oder Hash-Tabellen moeglich.
+
+Empfohlene Sortierung:
+- Root zuerst.
+- Eltern vor Kindern.
+- Child-Keys eines Parents ASCII-case-insensitive nach Name sortiert.
+- Values eines Keys ASCII-case-insensitive nach Name sortiert.
+
+Ein Parser darf nicht von Sortierung abhaengen, muss aber die angegebenen
+Bereiche und Parent-Beziehungen validieren.
+
+
+Value-Tabelle
+-------------
+
+Die Value-Tabelle besteht aus `Value-Anzahl` Eintraegen zu je 32 Bytes.
+
+ValueRecord:
+
+Offset  Groesse  Bedeutung
+0       4        Owner-Key-Index
+4       4        Name-Offset im String-Heap
+8       2        Name-Laenge in Bytes
+10      2        Value-Typ
+12      4        Flags, v1: 0
+16      4        Data-Offset relativ zum Data-Heap
+20      4        Data-Laenge in Bytes
+24      8        reserviert, 0
+
+Default-Values sind erlaubt. Sie verwenden Name-Laenge 0 und Name-Offset 0.
+Pro Key darf es hoechstens einen Default-Value geben.
+
+
+Value-Typen
+-----------
+
+Value-Typ ist ein u16:
+
+1
+  `string`: UTF-8-/ASCII-Text ohne zwingenden NUL-Abschluss.
+
+2
+  `u32`: genau 4 Bytes little-endian.
+
+3
+  `u64`: genau 8 Bytes little-endian.
+
+4
+  `bool`: genau 1 Byte, 0 = false, 1 = true.
+
+5
+  `binary`: rohe Bytes.
+
+6
+  `multi_string`: Liste von Strings.
+
+Andere Typen sind in R4R1 ungueltig.
+
+`string` soll fuer normale R4OS-Pfade und Optionen genutzt werden.
+`binary` ist fuer kleine strukturierte Bloecke gedacht, nicht fuer grosse
+Dateien. Grosse Daten gehoeren weiter in eigene Dateien.
+
+
+Multi-String
+------------
+
+`multi_string` ist kein Windows-Format. R4OS nutzt einen expliziten kleinen
+Container:
+
+Offset  Groesse  Bedeutung
+0       4        String-Anzahl
+4       ...      Wiederholt: u16 Byte-Laenge, danach Stringbytes
+
+Die einzelnen Strings sind UTF-8-/ASCII-Bytebereiche ohne NUL-Abschluss.
+Ein Parser muss pruefen, dass die Summe der Laengen exakt in die
+Data-Laenge passt.
+
+
+String-Heap
+-----------
+
+Der String-Heap enthaelt Key- und Value-Namen als rohe Bytes.
+
+Regeln:
+- Ein Name darf leer sein, wenn der jeweilige Record das ausdruecklich
+  erlaubt.
+- Normale Key-Komponenten duerfen 1 bis 63 Bytes lang sein.
+- Value-Namen duerfen 1 bis 63 Bytes lang sein.
+- Erlaubt sind druckbare ASCII-Zeichen ausser `\`, `/`, `=`, NUL und
+  Control-Zeichen.
+- Case-insensitive Duplikate unter demselben Parent-Key sind ungueltig.
+- Case-insensitive Duplikate von Value-Namen unter demselben Key sind
+  ungueltig.
+
+R4R1 speichert Namen ohne Root-Praefix. Rootnamen wie `R4LM` entstehen aus
+dem Hive-Kind.
+
+
+Data-Heap
+---------
+
+Der Data-Heap enthaelt alle Value-Daten. `Data-Offset` in ValueRecords ist
+relativ zum Beginn des Data-Heaps.
+
+Regeln:
+- `Data-Offset + Data-Laenge` muss innerhalb des Data-Heaps liegen.
+- `Data-Laenge` muss zum Value-Typ passen.
+- Mehrere Values duerfen in R4R1 nicht auf denselben Datenbereich zeigen.
+- Datenbereiche sollen 1-Byte-ausgerichtet sein; Writer duerfen fuer
+  Lesbarkeit 4-Byte-Ausrichtung verwenden.
+
+
+Pfadmodell
+----------
+
+Pfadtrenner:
+
+    \  bevorzugt
+    /  fuer Tools akzeptiert
+
+Kanonische Rootnamen:
+
+    R4_LOCAL_MACHINE  oder R4LM
+    R4_SOFTWARE       oder R4SW
+    R4_DESKTOP        oder R4DT
+    R4_CURRENT_USER   oder R4CU
+
+Rootnamen sind ASCII-case-insensitive. Export und UI sollen die kurzen Namen
+verwenden, wenn kein langer Name ausdruecklich gewuenscht ist.
+
+Beispiel:
+
+    R4LM\System\Drivers\HDA\Enabled
+
+entspricht:
+
+    Hive: SYSTEM.R4R
+    Root: R4LM
+    Keys: System -> Drivers -> HDA
+    Value: Enabled
+
+APIs trennen Key-Pfad und Value-Name. Console-Tools duerfen als Komfort einen
+vollen Pfad mit letztem Segment als Value-Name akzeptieren, muessen das aber
+sichtbar dokumentieren.
+
+
+Import-/Exportformat
+--------------------
+
+R4R1-Hives sind binaer. Fuer Reparatur, Tests, Changelogs und manuelle
+Bearbeitung gibt es ein Textformat.
+
+Kopf:
+
+    R4REG_FORMAT=1
+
+Abschnitt:
+
+    [R4LM\System\Services\TIMESVC]
+
+Value-Zeilen:
+
+    Start:u32=2
+    Enabled:bool=true
+    Path:string="C:\\SYS\\SERVICES\\TIMESVC.R4X"
+    Blob:binary=DE AD BE EF
+
+Kurzform fuer Strings:
+
+    DisplayName="Time Service"
+
+Kommentare:
+
+    ; Kommentar
+    # Kommentar
+
+Leere Zeilen sind erlaubt.
+
+Escapes in Strings:
+- `\\`
+- `\"`
+- `\n`
+- `\r`
+- `\t`
+- `\xHH`
+
+Zahlen:
+- dezimal, z.B. `42`
+- hexadezimal, z.B. `0x2a`
+
+Bool:
+- `true`, `false`
+- `1`, `0`
+
+Binary:
+- Hex-Bytes mit optionalen Leerzeichen.
+- Eine gerade Anzahl Hex-Ziffern ist Pflicht.
+
+Multi-String:
+
+    SearchPath:multi_string=("C:\\BIN","C:\\SYS\\TOOLS")
+
+Ein Import muss erst die ganze Datei parsen und validieren. Erst danach darf
+er eine Hive schreiben.
+
+
+Schreibstrategie
+----------------
+
+R4R1 schreibt in Version 1 keine In-place-Aenderungen.
+
+Empfohlener Ablauf:
+1. Neue Hive vollstaendig im Speicher oder in einer neuen Datei erzeugen.
+2. Nach `NAME.TMP` schreiben.
+3. `NAME.TMP` erneut lesen und validieren.
+4. Existierende `NAME.R4R` nach `NAME.BAK` sichern.
+5. `NAME.TMP` nach `NAME.R4R` umbenennen.
+6. Bei Fehler `NAME.BAK` sichtbar als Recovery-Quelle behalten.
+
+Auf FAT32 ist das kein modernes Transaktionssystem. Es ist aber fuer 0.46.X
+ein robuster, nachvollziehbarer Schreibpfad, der kaputte Halbschreibungen
+leichter reparierbar macht.
+
+Die Header-Generation wird bei jedem erfolgreichen Write um 1 erhoeht.
+
+
+Parser-Validierung
+------------------
+
+Ein R4R1-Parser muss ablehnen:
+- Datei kleiner als 96 Bytes.
+- falsche Magic.
+- Formatversion ungleich 1.
+- Header-Groesse ungleich 96.
+- Endian ungleich 1.
+- unbekannter Hive-Kind.
+- Flags ungleich 0.
+- Dateigroesse im Header passt nicht zur echten Dateigroesse.
+- unbekannter Checksum-Typ.
+- falsche Checksum bei Checksum-Typ 1.
+- reservierte Felder ungleich 0.
+- Tabellenoffsets oder Groessen ausserhalb der Datei.
+- Integer-Ueberlauf bei Offset+Groesse-Rechnungen.
+- Key-Anzahl 0.
+- fehlender oder ungueltiger Root-Key.
+- Parent-Key-Index ausserhalb der Key-Tabelle.
+- Child- oder Value-Bereiche ausserhalb der Tabellen.
+- Parent-/Child-Beziehungen passen nicht zusammen.
+- Key- oder Value-Namen ausserhalb des String-Heaps.
+- Name-Laengen oder Zeichen ungueltig.
+- doppelte Key-Namen unter demselben Parent.
+- doppelte Value-Namen unter demselben Key.
+- unbekannter Value-Typ.
+- Value-Daten ausserhalb des Data-Heaps.
+- Data-Laenge passt nicht zum Value-Typ.
+- reservierte Value-/Key-Flags ungleich 0.
+
+Ein kaputter Hive darf Boot, Desktop oder Shell nicht zerstoeren. Verbraucher
+muessen sichtbare Fehler melden und Defaults oder Backup-/Recovery-Pfade
+nutzen, wenn der jeweilige Besitzer das vorsieht.
+
+
+Versionierung
+-------------
+
+R4R1 ist Version 1.
+
+Kompatibilitaetsregeln:
+- Neue Pflichtfelder brauchen eine neue Formatversion.
+- Neue optionale Features muessen ueber Flags oder neue Checksum-/Record-
+  Typen erkennbar sein.
+- Ein R4R1-Parser muss unbekannte Flags ablehnen.
+- Writer sollen moeglichst einfache R4R1-Dateien erzeugen, bis echte
+  Erweiterungen gebraucht werden.
+
+
+Aktuelle Grenzen
+----------------
+
+- Kein Journaling.
+- Keine In-place-Free-List.
+- Keine Kompression.
+- Keine Verschluesselung.
+- Keine ACLs oder Permissions.
+- Keine Windows-Kompatibilitaetsnamen.
+- Keine SQL- oder SQLite-Basis.
+- Keine Pflicht, fruehe Bootwerte sofort aus der Registry zu lesen.
+
+
+Abnahme fuer 0.46.1
+-------------------
+
+0.46.1 gilt als abgeschlossen, wenn:
+- `R4R1`-Header, Tabellen, String-Heap und Data-Heap dokumentiert sind.
+- Rootnamen und Hive-Zuordnung dokumentiert sind.
+- Value-Typen und Datenlaengen dokumentiert sind.
+- Import-/Export-Textformat dokumentiert ist.
+- Schreibstrategie mit TMP/BAK dokumentiert ist.
+- Parser-Ablehnungsfaelle dokumentiert sind.
+- Roadmap und Dokumentationsindex auf dieses Formatdokument verweisen.

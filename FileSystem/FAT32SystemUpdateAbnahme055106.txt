@@ -1,0 +1,82 @@
+﻿FAT32 Systemupdate-Abnahme 0.55.10.6
+====================================
+
+Ziel
+----
+
+0.55.10.6 prueft den groessten aktuellen Praxisfall fuer FAT32, SSHD und
+R4SYS: ein kernelgrosses `.R4U`-Paket wird per SFTP in die Update-Inbox
+geschrieben, danach von `SYSUPD.R4X` verifiziert, angewendet, per Journal
+sichtbar gemacht und nach Reboot erneut bestaetigt.
+
+Die sichtbare R4OS-Version bleibt im FAT32-Sonderstrang unveraendert bei
+`KERNEL_VERSION=0.55.10`. Die Testpakete setzen nur innerhalb des Test-Images
+eine Zielversion `0.55.11-APPLY`, um den Apply- und Rebootpfad pruefbar zu
+machen.
+
+Abnahme
+-------
+
+Ausgefuehrte Befehle:
+
+```
+DevTools/Scripts/Build.bat -testimage
+powershell -NoProfile -ExecutionPolicy Bypass -File Tests/Runtime/Run-SysUpdApplyLiveTest05511.ps1 -TimeoutSeconds 900 -SftpTimeoutSeconds 900 -LiveUploadStatus
+DevTools/Zig/zig.exe run Tests/Policy/CheckSysUpd05511.zig
+```
+
+Der Livetest erzeugt das Testpaket per `R4UPack`, startet QEMU headless,
+wartet auf den SSHD-Endpoint, laedt das Paket per Windows-OpenSSH-SFTP nach
+`C:\R4OS\UPDATE\INBOX`, prueft den Transferstatus, ruft `SYSUPD VERIFY`,
+`SYSUPD APPLY`, `SYSUPD STATUS`, `TYPE C:\R4OS\CONFIG\VERSION.R4S`, rebootet
+und prueft Status und Version nach dem Neustart erneut.
+
+Ergebnis
+--------
+
+Loglauf:
+
+- `DevTools/Logs/qemu-test-sysupd05511-20260623-011356.log`
+- `DevTools/Logs/qemu-test-sysupd05511-20260623-011356.sftp.err`
+
+Paket:
+
+- `CORE05511.R4U`
+- Payload-Groesse: 14.215.633 Byte
+- Gueltiges Paket, inkompatibles Paket und korruptes Paket werden im
+  Host-Pakettest erzeugt.
+
+Livetest-Ergebnis:
+
+- SFTP-Upload des grossen Pakets: OK.
+- `SYSUPD VERIFY C:\R4OS\UPDATE\INBOX\CORE05511.R4U`: OK.
+- `SYSUPD APPLY C:\R4OS\UPDATE\INBOX\CORE05511.R4U`: OK.
+- `SYSUPD STATUS` nach Apply: `journal state=applied`.
+- Versionsdatei nach Apply: `KERNEL_VERSION=0.55.11-APPLY`.
+- Reboot: OK.
+- `SYSUPD STATUS` nach Reboot: `journal state=applied`.
+- Versionsdatei nach Reboot: `KERNEL_VERSION=0.55.11-APPLY`.
+
+Harness-Nachhaertung
+--------------------
+
+`Run-SysUpdApplyLiveTest05511.ps1` kann waehrend des grossen Uploads einen
+Live-Status abfragen. Diese Abfrage ist bewusst best-effort und zeitlich kurz
+begrenzt, damit ein Diagnose-SSH, der waehrend eines aktiven Uploads keine
+Antwort mehr zum Host transportiert, nicht den eigentlichen SFTP-Upload
+abbricht. Die harte Abnahme bleibt der abgeschlossene Upload plus
+`SYSUPD VERIFY/APPLY` und Rebootpruefung.
+
+Bewertung
+---------
+
+Der endgueltige Systemdatei-Updatepfad ist damit erstmals mit einem
+kernelgrossen Paket ueber den normalen SSHD/SFTP/R4SYS/FAT32-Pfad
+nachgewiesen. Die Optimierungen beseitigen den unmittelbaren Connectivity-
+Blocker.
+
+Der Pfad ist trotzdem noch nicht "fertig analysiert": Die Uploadzeit ist fuer
+14 MB noch deutlich zu hoch. 0.55.10.7 bleibt deshalb als vollstaendige
+FAT32-Analyse wichtig, um FAT-Suche, Cluster-Walks, FAT-Kopien, SFTP-Windowing
+und QEMU-Einfluss systematisch zu bewerten, statt nur den jetzt bestandenen
+Sonderfall abzuhaken.

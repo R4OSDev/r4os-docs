@@ -1,0 +1,75 @@
+﻿UPDSVC Update All und Neustartabschluss 0.63.20
+================================================
+
+`UPDATE.R4X` sendet `Update All` zusammen mit der Job-ID der angezeigten
+Suche. UPDSVC akzeptiert nur den noch aktuellen Suchsnapshot. Die Liste und
+ihre durch den Katalog vorgegebene topologische Reihenfolge bleiben damit
+waehrend des gesamten Auftrags unveraendert.
+
+Ablauf
+-------
+
+1. UPDSVC laedt alle noch offenen R4U-Pakete seriell in die Inbox und prueft
+   jeweils Groesse und SHA-256 gegen den Katalog.
+2. Die gemeinsame `system_update_engine` verifiziert danach jedes komplette
+   R4U samt Manifest, Signatur und Payloads. Vor Ende dieser Phase wird kein
+   installiertes Ziel veraendert.
+3. Erst danach ruft UPDSVC fuer jedes Paket in Planreihenfolge `Engine.stage`
+   auf. Sicher live installierbare R4X-Pakete werden direkt angewendet. Alle
+   anderen Pakete landen im gemeinsamen, persistenten Neustartbatch.
+
+Es gibt nie zwei parallele Installationen. Der erste Fehler beendet den
+Auftrag, markiert genau den fehlerhaften Eintrag und laesst spaetere Eintraege
+fuer `Update All` unveraendert. Bereits heruntergeladene, installierte oder
+gestagte Eintraege werden beim erneuten Versuch wiederverwendet.
+
+Releaseabschluss
+----------------
+
+Bei einem reinen Live-Release liest UPDSVC nach der Queue `MODULES.JSON`
+erneut und baut denselben Katalogplan gegen den erreichten Zielstand. Nur wenn
+kein Paket und keine Neustartabweichung mehr offen ist, bestaetigt
+`Engine.confirmLiveRelease` die Releaseversion journalisiert in `VERSION.R4S`.
+
+Seit der realen Einzelpaketabnahme nach 0.63.23 gilt derselbe Abschluss auch
+fuer den Paketbutton: Nur ein bytegenau an den aktuellen Suchsnapshot
+gebundener Inbox-Download darf nach erfolgreichem Live-Install den Zielstand
+neu pruefen und den Release bestaetigen. Bleibt zwischen Artefaktcommit und
+dieser zweiten Journaltransaktion eine Crashluecke, erkennt eine spaetere
+Suche den bereits vollstaendig erreichten Live-Zielstand und holt die
+Bestaetigung nach. Ein administrativ uebergebener Pfad ohne Suchbindung
+veraendert `VERSION.R4S` nie.
+
+Enthaelt die Queue einen Neustartbatch, zeigt UPDATE.R4X erst nach dessen
+vollstaendiger Vorbereitung `Restart R4OS`. Der Klick sendet einen eigenen,
+snapshotgebundenen Restart-Auftrag. `Engine.commitBatch` verifiziert und
+ordnet alle Pakete erneut, commitet den gesamten Batch atomar und rebootet
+nur nach Erfolg. Ohne Klick bleibt der Batch gestagt; ein Commitfehler
+rebootet nicht.
+
+Dieselbe Freigabe gilt seit 0.63.26 fuer einzeln betaetigte Paketbuttons:
+UPDSVC prueft nach jedem erfolgreichen Stage den gesamten gebundenen
+Suchsnapshot. Solange noch ein Eintrag offen ist, bleibt der sichtbare Stand
+`Staged`. Sind alle Eintraege live installiert oder im gemeinsamen Batch,
+liefert der Dienst `Pending restart`, bindet den Restart-Auftrag an genau
+diesen Suchjob und UPDATE.R4X zeigt den Button. Der auf Hardware entdeckte
+Zwischenstand, in dem ein vollstaendiger Einzelbatch ohne Button gestagt
+blieb, ist damit geschlossen.
+
+Nach dem Boot ruft der automatisch gestartete UPDSVC `Engine.resumeBatch`
+auf, sobald die Engine einen Post-Boot-Abschluss verlangt. Erst die
+erfolgreiche Pruefung des laufenden Kernels, aller Artefakte und
+`MODULES.JSON` setzt `VERSION.R4S` auf den Zielrelease.
+
+Desktopintegration
+------------------
+
+`R4OS Update` ist in `MENU.R4S` und im eingebauten Desktop-Fallback der erste
+oberste Startmenueeintrag vor `Programs`. UPDATE.R4X und UPDSVC gehoeren zum
+Slim-Image; UPDSVC ist in `SERVICES.R4S` auf Autostart gesetzt. UPDATE.R4X
+traegt ein eingebettetes Programmicon und ein Helpfile fuer `UPDATE /?`.
+
+Die isolierte End-to-End-Abnahme 0.63.21 weist den echten Mehrpaketablauf mit
+Live-Update, Abhaengigkeiten, Foundation-Batch, explizitem Neustart,
+Post-Boot-Inventar und anschliessend leerer Suche nach. Details stehen in
+`Docs/Tests/UpdateEndToEnd06321.txt`.

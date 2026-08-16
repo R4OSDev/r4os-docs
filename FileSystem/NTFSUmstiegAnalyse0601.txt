@@ -1,0 +1,309 @@
+﻿NTFS-Umstieg 0.60.X - Analyse und Umbauplan (0.60.1)
+====================================================
+
+Auftrag
+-------
+
+0.60.X stellt das R4OS-Systemvolume von FAT32 auf NTFS um. Vorgaben:
+
+- NTFS wird sauber und so vollstaendig wie moeglich ausgearbeitet.
+- FAT32 wird NICHT entfernt: Es bleibt als optionales Dateisystem fuer
+  weitere Platten nutzbar (wie unter Windows).
+- Weitere Dateisystemformate sollen spaeter unterstuetzt werden koennen.
+  Daraus folgt: Der Umstieg beginnt mit einer echten Dateisystem-
+  Abstraktion (VFS), nicht mit einem zweiten Sonderpfad neben FAT32.
+
+Referenzmaterial liegt unter Reference/FileSystem/NTFS/ (ntfsdoc.pdf,
+ntfs-3g-layout.h, linux-ntfs3-ntfs.h, NTFSStrukturUebersicht.txt).
+
+
+1. Ist-Stand (0.59-Abschluss)
+-----------------------------
+
+Schichten von unten nach oben:
+
+- storage/block.zig: Blockdevice-Registry mit Request-Queue/Worker,
+  sektorbasiert, tombstone-sicher (0.59.10). FS-neutral, bleibt.
+- fs/page_cache.zig: 4-KB-Seiten-Sektorcache (readSector(s),
+  writeSector, writeSectorsDirect, flushDevice/flushAll,
+  invalidate*, reclaimPayloadFrames). FS-neutral, bleibt. NTFS setzt
+  direkt darauf auf; Cluster->Sektoren ist triviale Multiplikation.
+- storage/mbr.zig: MBR-Scan pro Blockdevice. Kennt Partitionstyp 0x07
+  bereits als "NTFS/exFAT" und mountet dann einen Laufwerksbuchstaben
+  mit drive.Kind.ntfs, aber OHNE Dateisystem dahinter (reiner
+  Platzhalter). GPT: nur Erkennung des protective MBR, kein Parsing.
+  Die Systemvolume-Erkennung (systemVolumeScore: BOOT/R4OS.ELF,
+  LIMINE.CONF, CONFIG.R4S, R4OS-Verzeichnisse) ist FAT32-gebunden.
+- fs/drive.zig: Laufwerkstabelle A..Z mit Kind (none/ram/fat32/ntfs),
+  Role (system/data/ram), block_device_index und CWD (uppercased,
+  MAX_PATH=128). Kind.ntfs existiert als Enum-Platzhalter. "ram" ist
+  in Wahrheit ein Blockdevice-Bus (block.Bus.ram), kein eigenes
+  Dateisystem-Backend - das einzige echte FS-Backend ist FAT32.
+- fs/request.zig: FS-Request-Gate (UnwindGuard "fs-request") plus
+  Statistik. Die Operation-Kinds (drive_info, file_read/_at, file_write
+  /_at, append, stream_*, dir_*, file_info, delete, rename, copy, move,
+  loader_read, config_read/write, file_replace_atomic) sind bereits
+  FS-NEUTRAL formuliert - gute Vorlage fuer den VFS-Vertrag.
+- fs/fat/fat32.zig (3111 Zeilen): der einzige Dateisystemtreiber.
+  Eigene Mount-Tabelle pro Laufwerksbuchstabe (setMountedForDrive/
+  mountedForDrive). API-Vokabular ist FAT32-spezifisch: u32-Cluster als
+  Verzeichnis-Handle (resolvePath -> Cluster), Entry mit first_cluster,
+  8.3+LFN, DOS-Zeitstempel (u16 date/time), AppendCache, Extent-Cache,
+  replaceFileAtomic als update-only Ownership-Transfer im selben
+  Verzeichnis.
+
+Direktverdrahtung des FAT32-Vokabulars (fat32.* Aufrufstellen):
+
+  program/r4sys.zig                      77  (gesamte Datei-API)
+  kernel/system_update_recovery_boot.zig 30  (SYSUPD-Recovery)
+  storage/mbr.zig                        10  (Mount + Systemerkennung)
+  program/r4d.zig                         8
+  program/r4x.zig                         7  (Loader liest R4X/R4L)
+  kernel/storage_boot.zig                 6  (D:-Layoutpolitik)
+  kernel/modules.zig                      6
+  program/r4net.zig                       6
+  program/r4p.zig                         6
+  kernel/boot_config.zig                  4
+  kernel/module_file.zig                  4
+  program/r4dev.zig                       1  (Telemetrie)
+
+Muster ueberall identisch: fat32.mountedForDrive(letter) ->
+resolvePath/resolveEntry -> Operation mit Cluster/Entry. Es gibt KEIN
+VFS; der Umbau ist eine mechanische, aber breite Umstellung.
+
+Oberhalb des Kernels:
+
+- R4X-Programme sind ueber die R4SYS-API entkoppelt, ABER: Explorer
+  prueft app-seitig hart auf drive_info.kind == fat32 und lehnt andere
+  Laufwerke als Browserziel ab. SYSINFO/FSDIAG zeigen FAT32-Telemetrie
+  (R4DEV-Slots mit fat_reads, alloc_search_steps usw.).
+- Host-Tooling: Code/BuildTools/ImageCreator baut MBR + genau EINE
+  aktive FAT32-Partition (LFN-faehig, feste Layout-Konstanten,
+  Partitionsstart Sektor 2048). Kein Multi-Partition-Support, kein
+  NTFS.
+- Bootpfad: Limine 12 liest ausschliesslich FAT12/16/32 und ISO9660.
+  Limine kann NICHT von NTFS booten (verifiziert am Limine-12-README).
+- SYSUPD/0.59.14: duale gepruefsummte Journale als DATEIEN, atomarer
+  Transfer ueber fat32.replaceFileAtomic, generationgebundene
+  FAT-8.3-Stage-/Backupnamen. Recovery-Boot laeuft direkt auf fat32.
+- Vertraege: Textvertrag 127-Byte-Pfade/63-Byte-FAT-Komponenten;
+  ApiContract kennt FAT32-bezogene Telemetrie-Payloads; Entry-Zeiten
+  sind DOS-Format (u16 date/time).
+
+
+2. Grundsatzentscheidungen (vom User bestaetigt am 2026-07-20)
+--------------------------------------------------------------
+
+E1  Boot-Layout wie Windows: Limine bootet nicht von NTFS, also
+    bekommt das Image zwei Partitionen: Partition 1 = kleine
+    FAT32-Bootpartition (Limine, LIMINE.CONF, R4OS.ELF; analog zur
+    EFI-Systempartition), Partition 2 = NTFS-Systemvolume C:.
+    Die Bootpartition bekommt KEINEN Laufwerksbuchstaben im
+    Normalbetrieb (oder einen spaeten Diagnosebuchstaben - offen).
+    Folge: Kernel-Updates via SYSUPD muessen die Bootpartition als
+    eigenes Ziel kennen (R4U-Zielpfade, siehe U6).
+
+E2  NTFS-Zielversion 3.1, Kompatibilitaetsmassstab Windows:
+    Von R4OS formatierte/beschriebene Volumes muessen chkdsk fehlerfrei
+    passieren und unter Windows voll benutzbar sein; Windows-Volumes
+    muessen von R4OS les- und beschreibbar sein.
+
+E3  Kein $LogFile-Journaling: R4OS haelt das Journal leer/clean
+    (mkntfs-/ntfs-3g-Praxis), setzt das Volume-Dirty-Flag vor Writes
+    und loescht es bei sauberem Shutdown. Konsistenz kommt aus fester
+    Schreibreihenfolge + Flush-Disziplin (Nutzdaten -> MFT -> Index ->
+    Bitmaps -> Flush). Die SYSUPD-Atomik liegt bereits eine Ebene
+    hoeher (eigene duale Journale) und bleibt unveraendert gueltig.
+
+E4  Namensstrategie: 8.3-taugliche Namen als Namespace Win32+DOS,
+    laengere Namen nur Win32 ohne DOS-Kurznamen (Windows-Praxis auf
+    Datenvolumes, ntfs-3g-Praxis). Der R4OS-Pfadvertrag (127/63) bleibt
+    unveraendert; laengere Namen auf Fremdvolumes sind sichtbare
+    Fehler/Skips, nie stille Kuerzung.
+
+E5  Kein Sicherheitsmodell: Beim Formatieren werden die
+    Standard-Security-Deskriptoren in $Secure angelegt (mkntfs-Umfang);
+    jede von R4OS erzeugte Datei referenziert eine feste
+    Standard-security_id. Keine Rechtepruefung beim Zugriff (Leitbild).
+
+E6  Feature-Umfang: Lesen so vollstaendig wie moeglich (inkl. Sparse,
+    LZNT1-Kompression, ADS, Hard Links, $ATTRIBUTE_LIST); Schreiben
+    erzeugt nur unkomprimierte, normale Dateien/Verzeichnisse.
+    Reparse-Points, EFS und USN werden sichtbar erkannt/abgelehnt,
+    nie still falsch gelesen. Kein USN-/Quota-Schreiben.
+
+E7  GPT bleibt ausserhalb von 0.60.X: MBR mit Typ 0x07 reicht
+    technisch vollstaendig. GPT + weitere Dateisysteme (exFAT, ext*)
+    sind 0.61+-Kandidaten auf Basis des neuen VFS.
+
+E8  VFS-Schnitt zuerst und verhaltensneutral: Erst wird FAT32
+    unveraendert hinter eine FS-neutrale Schnittstelle gezogen (alle
+    Gates gruen, Null Verhaltensaenderung), dann kommt NTFS als zweite
+    Implementierung dazu. Der VFS-Vertrag orientiert sich am
+    vorhandenen fs/request.zig-Operationsvokabular; Verzeichnis-
+    Handles werden FS-neutral (opaque NodeRef statt u32-Cluster).
+
+E9  Geteilter NTFS-Strukturkern: On-Disk-Strukturen, Runlist-Codec,
+    Fixups, Collation und Formatlogik entstehen als eigenstaendige
+    Zig-Quelle ohne Kernel-Abhaengigkeiten, nutzbar vom Kernel-Treiber
+    UND von den Hosttools (ImageCreator/NtfsVerify) - eine Wahrheit,
+    kein Duplikat (Vorbild: module_manifest.zig).
+
+E10 Ablageform weiterer Dateisysteme (User-Entscheid 2026-07-20):
+    Bootkritische Dateisysteme (NTFS fuer C:, FAT32 fuer Boot-
+    partition/Datenplatten) bleiben built-in im Kernel hinter dem VFS
+    (bestehende Bootpfad-Regel; Henne-Ei: Module liegen auf C:).
+    Weitere Dateisysteme (exFAT, ext*, ISO9660, ...) werden ab 0.61+
+    als ladbare R4D-Treiber unter Code/System/Driver/ ausgelegt -
+    NICHT als R4P-Protokolle (Dateisysteme sind schwergewichtig:
+    Mount-Zustand, Cache-/Flush-Disziplin, FS-Request-Gate). Dafuer
+    braucht die DriverApi spaeter einen eigenen FS-Vertragsabschnitt
+    (Block-I/O ueber Page-Cache, Heap, VFS-Registrierung "wer erkennt
+    dieses Volume?") statt PCI/IRQ/DMA; der MBR-Scan fragt dann die
+    VFS-Registry, und ein Rescan-/MOUNT-Pfad erlaubt nachtraegliches
+    Einhaengen. Fuer 0.60.X aendert das nichts; das VFS aus 0.60.2
+    ist die Voraussetzung.
+
+
+3. Umbaubereiche
+----------------
+
+U1  VFS-Schicht (Kernel): FS-neutrale Volume-/Node-Schnittstelle
+    (mount/unmount, resolve, dir-iterate, read/write/append, create/
+    delete/rename/mkdir/rmdir, attributes, times, replace_atomic,
+    flush, volume-info). Umstellung aller 12 Kernel-Verbraucher.
+    Groesster Einzelposten: r4sys.zig (77 Stellen) und
+    system_update_recovery_boot.zig (30 Stellen).
+    Zeitstempel werden im VFS-Vertrag FS-neutral (UTC-Sekunden o.ae.);
+    FAT32 liefert DOS-Zeiten konvertiert, NTFS FILETIME konvertiert.
+
+U2  NTFS-Strukturkern (geteilt, E9): Parser/Writer fuer Boot-Sektor,
+    FILE-Records, Fixups, Attribut-Header, Runlists, $FILE_NAME,
+    Index-Strukturen, $UpCase-Collation, UTF-16<->ASCII/UTF-8.
+    Hostmodell-Gates mit Fixture-Images und Property-Tests
+    (Runlist-Roundtrip, Fixup-Roundtrip, Collation).
+
+U3  Kernel-NTFS-Treiber lesend: Mount aus MBR-Scan, $MFT-Bootstrap,
+    Pfadaufloesung ueber $I30-B+Baum (case-insensitive via $UpCase),
+    Verzeichnis-Iteration, Dateien lesen (Runlists, fragmentiert,
+    $ATTRIBUTE_LIST, initialized_size/Sparse), Fixup-sicheres
+    Cache-Verhalten. Danach schreibend (zwei Stufen, siehe Plan):
+    Cluster-/MFT-Allokation, Datenpfad, Index-Insert/-Delete mit
+    Splits, mkdir/rmdir/rename, resident->non-resident-Uebergang,
+    MFT-/$MFTMirr-Pflege, Dirty-Flag, Flush-Ordnung.
+
+U4  Host-Tooling: ImageCreator lernt Multi-Partition-Layouts und
+    einen NTFS-3.1-Formatter+Writer (alle Metadateien, $AttrDef,
+    $UpCase, $Secure-Standarddeskriptoren, $LogFile 0xFF). Neues
+    Pruefwerkzeug NtfsVerify (Host) validiert Images strukturell;
+    chkdsk-Abnahme auf echtem Windows als manueller/optionaler
+    Abnahmeschritt (chkdsk/Mount-DiskImage brauchen Adminrechte,
+    daher kein Pflicht-Buildgate).
+
+U5  Boot-/Systemumstieg: Imagelayout Boot-FAT32 + System-NTFS (E1),
+    Systemvolume-Erkennung fuer NTFS (Score-Logik FS-neutral),
+    storage_boot-D:-Layoutpolitik VFS-basiert, Produktions- und
+    Testimage, TestInjection-Overlay auf NTFS, alle Runtime-Gates.
+
+U6  SYSUPD auf NTFS: replace_atomic als VFS-Operation mit
+    NTFS-Implementierung (Rename-basierter Ownership-Transfer),
+    Recovery-Boot FS-neutral, Stage-/Backupnamensvertrag von
+    "FAT-8.3-generationgebunden" auf FS-neutral kurze Namen (bleiben
+    8.3-tauglich -> Namespace 3, kein neues Risiko), R4U-Zielpfade
+    fuer Bootpartition (Kernel/LIMINE.CONF) definieren.
+
+U7  Apps/Telemetrie/Vertraege: Explorer-kind-Check FS-neutral
+    (system/data-Rolle statt kind==fat32), R4DEV-Telemetrie um
+    NTFS-Sichten ergaenzen (FAT32-Slots bleiben fuer FAT32-Platten),
+    ApiContract-Erweiterungen append-only, Doku (DateisystemUndStorage,
+    SupportedHardware, API-Referenzen).
+
+U8  Tests/Gates (Projektstil): pro Unterversion ein Hostvertragsgate
+    (Run-*Contract060*.ps1) vor Kernel-/App-Builds plus gezielte
+    QEMU-Runtime-Runner; am Phasenende gebuendeltes Build.bat -test/
+    -norun. Fixture-Wahrheit: von Windows formatierte/beschriebene
+    Referenzimages (einmalig per Admin-PowerShell-Script erzeugt,
+    eingecheckt als komprimierte Fixtures) + eigene Formatter-Images.
+
+
+4. Risiken und Gegenmassnahmen
+------------------------------
+
+R1  Index-B+Baum-Schreibpfad (Splits, Loeschen) ist der technisch
+    schwierigste Teil. Gegenmassnahme: eigene Unterversion, nur
+    dokumentierte einfache Strategien (ntfs-3g-Semantik), massive
+    Hostmodell-Property-Tests gegen NtfsVerify + chkdsk-Stichproben.
+R2  Torn Writes ohne Journal. Gegenmassnahme: feste dokumentierte
+    Schreibreihenfolge pro Operation (E3), Dirty-Flag, Crash-Tests im
+    Hostmodell (Abbruch nach jedem Schreibschritt -> Volume bleibt
+    chkdsk-reparierbar ohne Datenverlust an fremden Dateien).
+R3  Fixups vs. Sektor-Cache: gefixte Puffer duerfen nie roh auf Disk.
+    Gegenmassnahme: Fixup-Anwendung ausschliesslich im Record-Layer
+    des Strukturkerns, Gate-Testfamilie dafuer.
+R4  Breite des VFS-Schnitts (165 Aufrufstellen). Gegenmassnahme:
+    verhaltensneutrale eigene Unterversion mit vollem Gate-Bestand als
+    Abnahme, keine gleichzeitige Funktionsaenderung.
+R5  chkdsk-Abnahme braucht Adminrechte/echtes Windows. Gegenmassnahme:
+    NtfsVerify als Pflichtgate, chkdsk als dokumentierter manueller
+    Abnahmeschritt in den betroffenen Unterversionen.
+R6  Speicherverhalten im Kernel (Runlists, Attribute-Lists,
+    Index-Pfade sind dynamisch). Gegenmassnahme: dokumentierte harte
+    Grenzen + Fehlerklassen statt unbegrenzter Allokation
+    (ressourcenproportional, wie ProgramInstance-Leitlinien).
+
+
+5. Unterversionsplan (Entwurf fuer die Abstimmung)
+--------------------------------------------------
+
+0.60.1  Analyse, Referenzmaterial, Umbauplan (dieses Dokument).
+0.60.2  VFS-Schnitt: FS-neutrale Schnittstelle, FAT32 dahinter,
+        alle Kernel-Verbraucher umgestellt, verhaltensneutral,
+        kompletter Gate-Bestand gruen.
+0.60.3  NTFS-Strukturkern (geteilte Quelle, E9) + Windows-
+        Referenzfixtures + Hostmodell-Parser-/Roundtrip-Gate.
+0.60.4  Kernel-NTFS read-only: NTFS-Datenplatte (z.B. E:) in QEMU
+        mounten, Lookup/Dir/Read vollstaendig inkl. fragmentierter
+        Dateien und $ATTRIBUTE_LIST; Runtime-Probe liest
+        checksum-geprueft von einem Windows-Fixture-Volume.
+0.60.5  ImageCreator: Multi-Partition + NTFS-Formatter/Writer +
+        NtfsVerify-Hostgate (+ manueller chkdsk-Nachweis).
+0.60.6  NTFS-Write Phase 1: Datenpfad (write/append/truncate/create/
+        delete einfacher Fall), $Bitmap-/MFT-Allokation, Dirty-Flag,
+        Flush-Ordnung, $MFTMirr-Pflege.
+0.60.7  NTFS-Write Phase 2: Index-B+Baum-Insert/-Delete mit Splits,
+        mkdir/rmdir/rename, resident->non-resident, MFT-Wachstum,
+        Fragmentierungs-Stress.
+0.60.8  Atomic Replace + SYSUPD auf NTFS: VFS-replace_atomic,
+        FS-neutraler Recovery-Boot, R4U-Ziele inkl. Bootpartition,
+        kompletter 0.59.14-Vertragsnachweis auf NTFS.
+0.60.9  Systemumstieg: Boot-FAT32 + NTFS-C:-Imagelayout, Erkennung,
+        Produktions-/Testimage, alle Runtime-Gates auf NTFS,
+        Explorer/Telemetrie/Doku FS-neutral; FAT32 als Datenplatte
+        im Mischbetrieb abgenommen.
+0.60.10 Fremdvolume-Vollstaendigkeit: LZNT1- und Sparse-Read, ADS,
+        Hard Links, lange Namen sichtbar, Reparse sichtbar abgelehnt;
+        Windows-beschriebene Volumes als Testmatrix.
+0.60.11 Haertung und Abschluss: Crash-/Dirty-Matrix, Churn-Stress,
+        chkdsk-Kompatibilitaetsnachweis-Suite, Hardware-Abnahme,
+        Doku-Abschluss, Roadmap aufraeumen.
+
+Entschiedene Diskussionspunkte (User-Entscheid 2026-07-20):
+
+D1  Bootpartition: 128 MB, OHNE Laufwerksbuchstaben (Windows-ESP-
+    Modell). SYSUPD-Zielsyntax fuer Kernel-/Limine-Updates wird in
+    0.60.8 definiert.
+D2  Windows-Fixture-Erzeugung: Claude erzeugt die Referenzimages
+    selbst mit erhoehten Rechten (Admin-PowerShell-Script, das Script
+    wird eingecheckt). Die erzeugten Fixtures werden komprimiert
+    EINGECHECKT (Zielort-Vorschlag: Code/System/SDK/Tests/
+    NtfsFixtures/; Reference/ ist seit 2026-07-20 komplett gitignored
+    und scheidet als Ablage aus).
+D3  Reihenfolge: Read zuerst - 0.60.4 liest Windows-Fixtures,
+    0.60.5 baut den Formatter.
+D4  Hardware: QEMU-only bis einschliesslich 0.60.10; der Lenovo wird
+    erst in der Abschluss-Unterversion 0.60.11 gebootet.
+D5  D:/data.img bleibt FAT32 als dauerhafter Mischbetrieb-Beleg.
+
+Der Unterversionszuschnitt 0.60.2-0.60.11 wurde am 2026-07-20 im
+Einzeldurchgang (jede Unterversion einzeln vorgestellt) vom User
+vollstaendig bestaetigt. 0.60.1 ist damit abgeschlossen.

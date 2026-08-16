@@ -1,0 +1,83 @@
+﻿UPDSVC-Paketdownload, Resume und Integritaet 0.63.18
+===================================================
+
+UPDSVC laedt ein Paket ausschliesslich aus einem zuvor validierten
+Suchsnapshot. Operation 3 erhaelt dazu die Job-ID der Suche und den stabilen
+Ergebnisindex. Paketname, URL, Groesse und Hash werden nicht vom Aufrufer
+uebernommen, sondern aus genau diesem Suchergebnis in einen persistenten
+Downloadsatz kopiert.
+
+
+Dateien und Sichtbarkeit
+------------------------
+
+Unvollstaendige Daten liegen unter
+
+    C:\R4OS\UPDATE\INBOX\<8-HEX>.TMP
+
+Der private 8.3-Name wird deterministisch als FNV-1a-32 des finalen
+Dateinamens gebildet. Ein waehrend der atomaren Veroeffentlichung benoetigter
+Sicherungsname verwendet denselben Stamm mit `.BAK`. Beide Namen sind reine
+Implementierungsdetails; der sichtbare finale Name bleibt unveraendert
+`<PAKET>.R4U`.
+
+Der zugehoerige Satz liegt in
+
+    C:\R4OS\UPDATE\STAGED\UPDSVC-DOWNLOAD.R4S
+
+Er bindet Suchjob, Ergebnisindex, Paketidentitaet, Release, Dateiname,
+HTTPS-URL, erwartete Groesse, SHA-256, Zustand und Fortschritt. Der finale
+Name `C:\R4OS\UPDATE\INBOX\<PAKET>.R4U` wird niemals direkt beschrieben.
+
+
+Resume
+------
+
+Bei vorhandenem, passenden Downloadsatz ist die reale Laenge der privaten
+TMP-Stagedatei
+die Resume-Wahrheit. Eine Laenge zwischen null und der Sollgroesse erzeugt
+genau einen HTTP-Range-Start am vorhandenen Offset. Der gemeinsame
+Webtransport darf innerhalb dieses Auftrags seine einmalige dokumentierte
+Lesefehler-Wiederaufnahme nutzen; jede Fortsetzung bleibt durch Content-Range
+und Gesamtgroesse an dasselbe Objekt gebunden.
+
+Ist die TMP-Stagedatei groesser als das Katalogobjekt oder widerspricht die
+Serverantwort dem erwarteten Bereich, wird der Teilstand verworfen. Ein
+Netzabbruch oder expliziter Abbruch behaelt dagegen einen noch plausiblen
+Teilstand. Fortschritt wird waehrend des Downloads im Servicezustand und in
+regelmaessigen persistenten Checkpoints festgehalten; nach einem
+Dienstneustart rekonstruiert der einzige Worker einen unterbrochenen
+durablen Download automatisch.
+
+
+Integritaet und Veroeffentlichung
+--------------------------------
+
+Vor der Veroeffentlichung prueft UPDSVC die exakte Dateilaenge und berechnet
+SHA-256 streaming ueber die TMP-Stagedatei. Zusaetzlich wird hinter der
+Sollgroesse gelesen, damit eine zu lange Datei nicht denselben Pruefpfad
+erreicht. Beschaedigte, zu kurze, zu lange oder serverseitig gewechselte
+Pakete erhalten nie einen finalen Namen.
+
+Nur eine erfolgreiche Pruefung darf die TMP-Stagedatei durch die Storage-Fassade
+im selben Verzeichnis atomar und create-only auf den finalen `.R4U`-Namen
+veroeffentlichen. Ein vorhandenes finales Paket wird nur dann als
+`Downloaded` uebernommen, wenn Groesse und SHA-256 erneut stimmen; es wird
+nicht still ueberschrieben. Redirect-Ziele bleiben auf dieselbe HTTPS-Origin
+wie der Katalog begrenzt. Nach einer internen Range-Wiederaufnahme darf der
+gemeinsame Webtransport abschliessend HTTP 200 oder 206 melden; seine strikte
+Content-Range-, Offset- und Gesamtgroessenpruefung bleibt dafuer massgeblich.
+
+
+Zustaende und Abnahme
+---------------------
+
+Ergebnisse liefern pro Paket `Available`, `Downloading`, `Downloaded` oder
+`Failed`, den Fehlercode und `progress_current/progress_total`. Eine neue
+Suche erkennt bereits atomar veroeffentlichte Pakete in der Inbox erneut.
+
+Das Dauergate unterbricht ein deterministisches 11-MB-Fixture an mehreren
+Bytegrenzen, serialisiert und rekonstruiert den Downloadsatz und verlangt
+nach der Fortsetzung bytegleiche Daten und den Katalog-SHA-256. Separate
+Negativfixtures lehnen korrupte, kurze und lange Objekte ab. Wirevertrag,
+Coordinator-Neustart und atomare Laufzeitmarker werden ebenfalls geprueft.

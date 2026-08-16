@@ -1,0 +1,827 @@
+﻿Leitbild 0.54.X: Moderne Modul-Ladepipeline
+
+R4OS soll R4X-, R4L-, R4D- und R4P-Module langfristig ohne grosse
+zusammenhaengende Kernel-Heap-Dateipuffer laden. Die bereits gepushte
+R4X-Stabilisierung mit temp_kernel-Virtual-Range-Puffer ist die Vorarbeit,
+aber nicht der Endzustand.
+
+Ziel der 0.54.X-Reihe:
+- Keine produktiven Modul-Loader duerfen komplette Moduldateien ueber den
+  Kernel-Heap puffern.
+- R4X, R4L, R4D und R4P nutzen eine gemeinsame Ladearchitektur statt
+  voneinander abweichender Einzellogik.
+- Header, Tabellen und Metadaten werden gezielt per Range-Reads gelesen.
+- Nutzlast-Sections werden direkt in ihre Zielbereiche geladen oder als
+  file-backed/lazy ladefaehige Bereiche vorbereitet.
+- Nach der Migration bleiben keine alten Voll-Datei-Fallbacks uebrig.
+- In den Kernel kommt nur, was fuer Speicherabbildung, Page-Fault-nahe
+  Ladepfade und Loader-Konsistenz technisch zwingend ist. Diagnose,
+  Stress-Tests, Auswertung und Bedienung bleiben in Diagnostics, DevTools
+  oder vorhandenen Anwendungen.
+- Bestehende Kernel-/API-/Treiber-/Protokoll-Strukturen werden genutzt, wo
+  sie den Zielpfad tragen koennen. Neue Kernelmechanik braucht eine klare
+  technische Begruendung im Audit.
+- Jede Unterversion braucht einen echten Migrationsschnitt: alte produktive
+  Pfade werden entfernt oder als offen markiert, aber nicht still als
+  Fallback weiterbetrieben.
+- Der temp_kernel-Vollpuffer ist nur eine stabile Zwischenstufe fuer den
+  aktuellen Fehler. Er darf nicht als langfristiger Loader-Standard gelten.
+- File-backed/lazy Laden wird nur dann produktiv, wenn es vollstaendig
+  durchgezogen und getestet ist. Halb aktivierte Page-Fault- oder
+  Fallback-Pfade sind kein akzeptierter Abschluss.
+
+Versionnummer: 0.54.0
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- `Docs/Core/ModulLoaderAudit0540.txt` erfasst die produktiven R4X-, R4L-,
+  R4D-, R4P- und Preload-Ladepfade inklusive betroffener Dateien/Funktionen.
+- Voll-Datei-Pufferung, Kernel-Heap-Abhaengigkeiten, doppelte Parserpfade,
+  unklare Cleanup-Stellen und Legacy-Fallbacks sind als Ist-Zustand
+  dokumentiert.
+- Gemeinsamer Zielvertrag fuer Modulquelle, R4M-Reader, Tabellenphase,
+  Section-Plan, Zielmapping, Diagnose und Cleanup ist festgelegt.
+- Kernel-Grenze ist formuliert: Kernel nur fuer laufzeitkritische Loader-,
+  Mapping-, Ownership-, Commit/Release-, Resolver- und spaetere Fault-Hook-
+  Mechanik; Audits, Generatoren, Stresstests und Formatpruefung bleiben
+  ausserhalb des produktiven Boot-/Runtime-Pfads.
+- No-Fallback-Matrix klassifiziert alle alten Ladepfade mit Besitzer,
+  Problem, Zielpfad, Loeschpunkt und Abnahme.
+Abnahme:
+- Roadmap- und Audit-Ergebnis nennen alle betroffenen Dateien/Funktionen:
+  `Docs/Core/ModulLoaderAudit0540.txt`.
+- Zielarchitektur fuer R4X/R4L/R4D/R4P ist vor dem Umsetzungsstart
+  eindeutig beschrieben.
+- Audit enthaelt eine No-Fallback-Matrix mit Besitzer, Zielpfad, Loeschpunkt
+  und Abnahme fuer jeden alten Ladepfad.
+- Dokumentationsindex verweist auf das Audit.
+- `DevTools/Scripts/Build.bat -norun`
+- `DevTools/Scripts/Build.bat -test` mit `TEST OK`.
+Notizen:
+- Der vorherige R4X-temp_kernel-Puffer wird als Uebergangsstufe behandelt,
+  nicht als endgueltige Architektur.
+- 0.54.0 startet bewusst keinen produktiven Loader-Umbau. Die Umsetzung
+  beginnt mit 0.54.1 auf Basis des gemeinsamen Zielvertrags.
+
+Versionnummer: 0.54.1
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- `Code/src/kernel/module_file.zig` als kleiner gemeinsamer Loader-Helfer
+  eingefuehrt.
+- `module_file.readRange(...)` und `readExact(...)` kapseln Loader-Reads
+  ueber vorhandenes `fat32.readFileRange(...)` und `fs_request`.
+- `module_file.readFullToTempRange(...)` kapselt Reserve/Commit/Release fuer
+  temporaere `temp_kernel`-Virtual-Range-Puffer inklusive Fehlerzaehlern.
+- R4X-Startcontract- und Image-Ladepfad nutzen direkt den gemeinsamen Helfer.
+- Private R4X-Helfer `readProgramModuleFile(...)`,
+  `freeProgramModuleFile(...)` und der lokale `ProgramModuleFile`-Typ wurden
+  entfernt.
+- R4X-Vollpufferung nutzt nicht mehr `fat32.readFile(...)`, sondern den
+  gemeinsamen Range-Read-Unterbau.
+- `Docs/Core/ModulDateizugriff0541.txt` dokumentiert Vertrag, Grenzen,
+  Cleanup-Regeln und Folgearbeit.
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun`
+- `DevTools/Scripts/Build.bat -test` mit `TEST OK`.
+- QEMU-Log ohne `Program module file allocation failed`; sichtbare Version
+  `R4OS V0.54.1`.
+- Code-Suche zeigt keine R4X-Programmlader-Vollpufferung ueber
+  `kernel_heap` oder private Dateipuffer-Helfer mehr.
+Notizen:
+- Diese Stufe stabilisiert den gemeinsamen Unterbau, ohne schon Streaming
+  zu erzwingen.
+- Der temporaere Vollpuffer bleibt als bewusst benannte Uebergangsfunktion
+  in `module_file.zig`; sein R4X-Normalpfad-Loeschpunkt bleibt 0.54.4.
+
+Versionnummer: 0.54.2
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- R4D-Discovery, `loadPath` und Runtime-Load nutzen
+  `module_file.readFullToTempRange` statt privater Kernel-Heap-Dateipuffer.
+- R4P-Discovery nutzt `module_file.readFullToTempRange`; Protokoll-Metadaten
+  werden in feste Modulfelder kopiert, damit Temp-Puffer nach dem Load
+  freigegeben werden koennen.
+- R4L-Pending-Libraries besitzen einen `module_file.TempBuffer`, der nach
+  Resolverabschluss zentral ueber `freePendingLibraries` freigegeben wird.
+- Der tote R4L-Einzelladepfad `loadLibraryEntry` wurde entfernt.
+- R4D- und R4P-Loader importieren den Kernel-Heap nicht mehr fuer
+  Moduldateien.
+- Keine Builtin-, Legacy- oder privaten ReadFile-Fallbacks wurden neu
+  eingefuehrt.
+- `Docs/Core/ModulDateizugriff0542.txt` dokumentiert Besitz, Cleanup,
+  No-Fallback-Grenze und Folgeschnitte.
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` mit Erfolg.
+- `DevTools/Scripts/Build.bat -test` mit `TEST OK`.
+- R4D/R4P/R4L-Diagnosemarker aus bestehendem Modul-Smoke bleiben gruen.
+- Code-Suche zeigt keinen separaten R4D/R4P/R4L-Voll-Dateipuffer ueber
+  `heap.alloc(entry.size)` oder gleichwertige private Loader-Allokation.
+Notizen:
+- 0.54.2 beendet die alten Kernel-Heap-Vollpuffer fuer R4D/R4P/R4L.
+- Gemeinsame Header-/Tabellen-/Metadata-Reader bleiben der geplante
+  Folgeschnitt 0.54.3; Streaming-Images fuer R4L/R4D/R4P bleiben 0.54.5.
+
+Versionnummer: 0.54.3
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- `Code/src/kernel/module_r4m.zig` als gemeinsamer R4M0-Range-Reader
+  eingefuehrt.
+- `readHeader`, `readMetadata`, Metadata-Iterator/-Value/-Contains und
+  bounded `hasExport` lesen nur benoetigte Dateibereiche ueber
+  `module_file.readRange/readExact`.
+- R4X-Klassifizierung sowie Startcontract- und Memory-Contract-Ermittlung
+  laufen ueber den Range-Reader statt ueber den R4X-Vollpuffer.
+- R4D-Discovery prueft Header und R4D-Metadaten vor dem Image-Load ueber
+  den gemeinsamen Reader.
+- R4P-Discovery liest Protokoll-Metadaten vor dem Vollpuffer; doppelte Rollen
+  werden ohne Voll-Datei-Puffer uebersprungen.
+- R4L-Discovery liest Header und Modulname-Metadaten vor dem Pending-Puffer;
+  bereits geladene Libraries werden ohne Voll-Datei-Puffer uebersprungen.
+- MEMSUITE gibt bei Pagerstress-Page-Out-Fehlern jetzt Status, Blocker,
+  Flags, I/O-Bytes, Generation und Slot-Zahlen aus, damit Loader-/Pager-
+  Wechselwirkungen hart diagnostizierbar bleiben.
+- `Docs/Core/ModulR4MReader0543.txt` dokumentiert Ziel, Grenzen und
+  Folgeschnitte.
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` mit Erfolg.
+- `DevTools/Scripts/Build.bat -test` mit `TEST OK`.
+- Zusaetzlich `DevTools/Scripts/Build.bat -testonly` mit `TEST OK`.
+- QEMU-Log mit `R4OS V0.54.3`, `LOADERD result: OK`,
+  `DRVDIAG result: OK`, `PERFDIAG result: OK`, `STORDIAG result: OK`,
+  `MEMSUITE pagerstress result: OK` und `pageOuts=27`.
+- Keine Voll-Datei-Pufferung in R4X-Klassifizierungs-/Contract-Probe; R4D,
+  R4P und R4L nutzen den gemeinsamen Header-/Metadata-Reader vor dem
+  eigentlichen Image-Load.
+Notizen:
+- Der finale R4X-Image-Load bleibt bewusst Aufgabe von 0.54.4.
+- R4L/R4D/R4P-Streaming-Images bleiben bewusst Aufgabe von 0.54.5.
+
+Versionnummer: 0.54.4
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- R4X-Sections werden direkt per `module_file.readExact(...)` in das finale
+  `ProgramImage` geladen.
+- R4M0-Section-, Export-, Import-, Entry- und Relocation-Records werden ueber
+  den gemeinsamen Range-Reader gelesen.
+- Startcontract- und Memory-Contract-Probe bleiben Range-basiert.
+- BSS/Zero-Fill und Zielsection-Layout bleiben erhalten; das Program-Image
+  wird vor dem Section-Load genullt.
+- Fehlerpfade geben das bereits reservierte Program-Image frei, bevor der
+  Start abbricht.
+- Der normale R4X-Startpfad nutzt keinen `r4x-module-file-buffer` und keinen
+  `module_file.readFullToTempRange(...)` mehr.
+- Alte Byte-Slice-Helfer fuer R4X-Startcontract, Metadaten, Import-/Export-,
+  Entry- und Relocation-Lesen wurden aus `r4x.zig` entfernt.
+- `Docs/Core/ModulR4XStreaming0544.txt` dokumentiert Ziel, No-Fallback-Grenze
+  und Abnahme.
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` mit Erfolg.
+- `DevTools/Scripts/Build.bat -test` mit `TEST OK`.
+- QEMU-Log mit `R4OS V0.54.4`, `LOADERD result: OK`,
+  `DRVDIAG result: OK`, `PERFDIAG result: OK`, `STORDIAG result: OK` und
+  `MEMSUITE pagerstress result: OK`.
+- Code-Suche bestaetigt, dass normale R4X-Starts keine komplette Moduldatei
+  mehr in einen temporaeren Vollpuffer lesen.
+Notizen:
+- Ab hier ist der temp_kernel-Vollpuffer fuer normale R4X-Starts entfernt,
+  nicht nur umgangen.
+
+Versionnummer: 0.54.5
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- `modules.loadResolvedFile(...)` als produktiver Disk-Entry-Point fuer R4L,
+  R4D und R4P eingefuehrt.
+- R4L-Pending-Libraries speichern nur noch `FileSource`, Dateigroesse,
+  Header, Pfad und Modulnamen; der alte komplette Pending-Dateipuffer ist
+  entfernt.
+- R4L-Importauflösung, KernelProvider-Policy, Section-Load, Relocations und
+  Export-Fill lesen R4M0-Records ueber den gemeinsamen Range-Reader.
+- R4D-Discovery, `LOAD`/Runtime-Pfad und Driver-Descriptor-Aufbau nutzen
+  `loadResolvedFile(...)` statt kompletter `readFullToTempRange(...)`-
+  Moduldateien.
+- R4P-Discovery liest nur Header/Metadaten; die eigentlichen R4P-Images
+  werden direkt aus der Datei ins finale Modulimage geladen.
+- R4D- und R4P-Metadaten werden beim Probe in eigene kleine Info-Strukturen
+  kopiert, damit keine Slices aus kurzlebigen Metadata-Puffern in Registry-
+  oder Descriptor-Pfade gelangen.
+- `module_r4m.readSectionRecord(...)` liefert den Section-Namen mit, damit
+  R4L/R4D/R4P keinen eigenen Section-Parser behalten muessen.
+- Preload-Bytes bleiben als eigener Nicht-Disk-Pfad ueber
+  `loadResolvedBytes(...)`; das ist kein produktiver Disk-Fallback.
+- Alte R4L/R4D/R4P-Vollpuffer-Namen und Release-Pfade sind aus den
+  produktiven Diskloadern entfernt.
+- `Docs/Core/ModulR4LDR4PStreaming0545.txt` dokumentiert Ziel,
+  No-Fallback-Grenze, Preload-Grenze und Abnahme.
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` mit Erfolg.
+- `DevTools/Scripts/Build.bat -test` mit `TEST OK`.
+- QEMU-Log mit `R4OS V0.54.5`, `LOADERD result: OK`,
+  `DRVDIAG result: OK`, `PERFDIAG result: OK`, `STORDIAG result: OK` und
+  `MEMSUITE pagerstress result: OK`.
+- Code-Suche findet keine produktive `readFullToTempRange(...)`-Nutzung und
+  keine alten R4L/R4D/R4P-Modulbuffer-Namen in `modules.zig`, `r4d.zig` oder
+  `r4p.zig`.
+- Preload-Bytepfade bleiben sichtbar getrennt und werden nicht als
+  Disk-Fallback genutzt.
+Notizen:
+- Bootkritische Builtins bleiben unberuehrt, solange sie technisch fuer den
+  Bootpfad noetig sind. Nicht bootkritische Fallbacks werden nicht neu
+  eingefuehrt.
+- 0.54.5 beendet die Voll-Datei-Puffer fuer produktive R4L/R4D/R4P-
+  Diskmodule. Loader-Speicherdruck und groessere synthetische Modulstresstests
+  bleiben bewusst 0.54.6/0.54.7.
+
+Versionnummer: 0.54.6
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- `module_file.Stats` zaehlt aktive Loader-Dateipuffer, reserved/committed
+  Bytes, Peaks, Full-/Range-Reads, Reserve-/Commit-/Read-/Short-/Release-
+  Fehler sowie Loader-Commit-Pressure-Reclaim.
+- `module_file.readFullToTempRange(...)` prueft vor dem Commit freie PMM-
+  Frames und nutzt bei Bedarf den vorhandenen globalen Reclaim mit Reason
+  `loader_commit`; bei weiterem Mangel wird deterministisch abgebrochen und
+  der reservierte Range bereinigt.
+- R4DEV/SDK stehen auf ProgramApi v143 mit
+  `performance_flag_loader_memory_ready`,
+  `supportsLoaderMemoryDiagnostics()` und append-only
+  `ProgramPerformanceSummary`-Feldern fuer Loader-Speicherdruck.
+- `LOADERD.R4X` prueft den v143-Loader-Memory-Snapshot: aktive Puffer=0,
+  reserved=0, committed=0, Range-Reads>0, Full-Reads=0 und Fehler=0.
+- `PERFDIAG.R4X` verlangt ProgramApi v143, den Loader-Memory-Ready-Flag,
+  dieselben Kernwerte und schreibt eine `LoaderMemory:`-Baseline.
+- `Docs/Core/ModulLoaderSpeicherdruck0546.txt`, R4DEV-/SDK-/Contract- und
+  Diagnose-Dokumentation beschreiben Vertrag, Besitzgrenzen und
+  No-Fallback-Regeln.
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun`
+- `DevTools/Scripts/Build.bat -test` mit `TEST OK`.
+- QEMU-Log mit `R4OS V0.54.6`, `Loader memory snapshot: OK`,
+  `LoaderMemory: active=0 reserved=0 committed=0`, `LOADERD result: OK` und
+  `PERFDIAG result: OK`.
+- Fehlerfaelle im Vollpufferpfad liefern konkrete `[MODFILE]`-Phasen und
+  R4DEV-Zaehler statt generischer Allocation-Meldungen.
+Notizen:
+- Keine neue Policy im Kernel; nur technische Stabilitaet und Sichtbarkeit.
+- Groessere synthetische Modulstress- und Defektdatei-Tests bleiben 0.54.7.
+
+Versionnummer: 0.54.7
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- Grosse synthetische Loader-Stressmodule `LSTRX.R4X`, `LSTRL.R4L`,
+  `LSTRD.R4D` und `LSTRP.R4P` werden im zentralen Build aus generierten
+  Bytes erzeugt und ueber den normalen Image-Pfad ausgeliefert.
+- `LSTRX.R4X` importiert zusaetzlich `R4STD:Query:1`, damit der R4XStart-Pfad
+  mehrere echte R4L-Gruppenimporte aufloesen muss; `LSTRL.R4L` wird separat
+  als grosses R4L-Artefakt validiert.
+- `LSTRD.R4D` prueft den produktiven R4D-Discovery-/Metadata-Probe-Pfad fuer
+  grosse R4D-Dateien, ohne eine neue Kernel- oder Userland-Lade-API zu
+  erfinden.
+- `LSTRP.R4P` registriert `misc.loaderstress` als aktives Raw-R4P-Fixture und
+  beantwortet Dispatch.
+- LOADERD prueft Dateigroesse, Section-Payload, Header-/Table-/Metadata-
+  Ranges, Import-/Export-Strings, R4P-Status/Dispatch und vier parallele
+  `LSTRX.R4X`-Starts.
+- Die LOADERD-Abnahme erzwingt den finalen Range-Read-Zielpfad: Range-Reads
+  muessen steigen, `loader_file_full_reads` darf durch den Stress nicht
+  steigen.
+- `Docs/Core/ModulLoaderStress0547.txt` und
+  `DevTools/Scripts/TestScripts/LoaderStress0547.txt` dokumentieren
+  automatische und manuelle Desktop-Abnahme.
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` mit Erfolg.
+- `DevTools/Scripts/Build.bat -test` mit `TEST OK`.
+- Zusaetzlicher Loader-Stress ohne `Program module`, R4D-, R4P- oder
+  R4L-Allokationsfehler.
+- Stress-Log enthaelt Marker fuer R4X, R4L, R4D und R4P ueber den neuen
+  Loader-Zielpfad.
+Notizen:
+- Diese Stufe soll sicherstellen, dass der Umbau nicht nur fuer kleine
+  Module, sondern auch fuer groessere Anwendungen belastbar ist.
+- Wiederholte Explorer-/Paint-/R4Code-Starts bleiben als manueller Desktop-
+  Sichttest dokumentiert. Der automatische Smoke deckt den Loaderpfad ueber
+  LOADERD ab und steuert keine sichtbaren User-Testfenster.
+
+Versionnummer: 0.54.8
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- `Docs/Core/ModulFileBackedGate0548.txt` dokumentiert die harte
+  Entscheidung: file-backed/lazy R4X-Code-/ReadOnly-Sections werden in
+  0.54.X nicht produktiv aktiviert.
+- Der aktuelle R4X-Program-Image-Pfad bleibt bewusst der voll migrierte
+  Streaming-Loader: Range-Reads fuer Header/Tabellen/Relocations und direkter
+  Section-Load in das finale Image.
+- Technischer Grund belegt: `handleDemandFault(...)` ist aktuell auf
+  `.r4x_vm`/`.virtual_range` begrenzt, waehrend `ProgramImage` als
+  `.program_image` eager committed wird.
+- Backing-Store, page-genaue Section-Rechte, Relocation-Dirtiness, Cleanup
+  und Diagnose reichen noch nicht fuer einen belastbaren Program-Image-Pager.
+- Kein Runtime-Schalter, Metadatenflag, Diagnose-Bypass oder versteckter
+  Fallback fuer file-backed R4X-Images wurde eingefuehrt.
+- `DevTools/Scripts/TestScripts/FileBackedGate0548.txt` haelt die statische
+  Suchabnahme und Smoke-Marker fest.
+Abnahme:
+- Entscheidung dokumentiert, inklusive technischer Gruende:
+  `Docs/Core/ModulFileBackedGate0548.txt`.
+- Code-Suche bestaetigt: kein versteckter Runtime-Pfad fuer lazy
+  R4X-Program-Images, kein `.program_image`-Demand-Fault-Pfad und keine
+  produktive Voll-Datei-Fallback-Nutzung fuer R4X/R4L/R4D/R4P-Diskmodule.
+- `DevTools/Scripts/Build.bat -norun` mit Erfolg.
+- `DevTools/Scripts/Build.bat -test` mit `TEST OK`.
+- QEMU-Log mit `R4OS V0.54.8`, `LOADERD result: OK`,
+  `Loader stress parallel R4X starts: OK` und ohne Anstieg von
+  `loader_file_full_reads` im Loader-Stress.
+Notizen:
+- Diese Unterversion bleibt bewusst ein Qualitaetsgate: entweder ein
+  vollstaendiger Program-Image-Pager in einer spaeteren Roadmap oder gar kein
+  file-backed R4X-Codepfad.
+
+Versionnummer: 0.54.9
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- Der tote gemeinsame Voll-Datei-Helfer `module_file.readFullToTempRange(...)`
+  sowie `FullReadRequest`, `TempBuffer`, Release-/Commit-/Pressure-Hilfen und
+  zugehoerige temp_kernel-Imports wurden aus `Code/src/kernel/module_file.zig`
+  entfernt.
+- Der produktive Diskpfad bleibt eindeutig: `module_file.readRange/readExact`,
+  `module_r4m` fuer R4M0-Records, R4X-Streaming direkt ins Program-Image und
+  `modules.loadResolvedFile(...)` fuer R4L/R4D/R4P.
+- Tote private R4D-Bytes-Loader fuer Disk-aehnliche Pfade wurden entfernt;
+  der verbleibende R4D-Bytes-Load ist der explizite `PRELOAD:\`-Pfad.
+- R4DEV-v143-Loader-Memory-Felder bleiben als No-Fallback-Gate erhalten:
+  aktive Loader-Dateipuffer, reserved/committed Bytes und Full-Reads muessen
+  im produktiven Diskpfad null bleiben.
+- `Docs/Core/ModulLoaderAbschluss0549.txt` dokumentiert Abschluss,
+  Preload-Grenze, No-Fallback-Audit und verbleibende Nicht-Ziele.
+- `Docs/API/R4DEV.md`, `Docs/Diagnostics/README.txt`,
+  `Code/Contract/README.txt`, `Docs/Core/Architektur.txt` und
+  `Docs/README.txt` wurden auf den 0.54.9-Abschlussstand gebracht.
+- `DevTools/Scripts/TestScripts/LoaderNoFallback0549.txt` dokumentiert
+  automatische und statische Abschlussabnahme.
+Abnahme:
+- Code-Suche bestaetigt: keine produktive Nutzung von
+  `readFullToTempRange`, `FullReadRequest`, `TempBuffer`,
+  `r4x-module-file-buffer` oder alten Moduldatei-Allokationsmeldungen im
+  Code.
+- Code-Suche bestaetigt: Diskmodule nutzen Range-Reads, `module_r4m` und
+  `loadResolvedFile(...)`; `loadResolvedBytes(...)` bleibt nur fuer
+  Preload-/Nicht-Disk-Quellen sichtbar.
+- Code-Suche bestaetigt: keine privaten R4D-Disk-Bytes-Loader wie
+  `loadRuntimeBytes(...)`, `loadBytes(...)` oder
+  `loadR4MDriverBytesRuntime(...)`.
+- `DevTools/Scripts/Build.bat -norun` mit Erfolg.
+- `DevTools/Scripts/Build.bat -test` mit `TEST OK`.
+- QEMU-Log mit `R4OS V0.54.9`, `LOADERD result: OK`,
+  `Loader stress parallel R4X starts: OK`, `fullReads=0` und
+  `PERFDIAG result: OK`.
+- No-Fallback-Audit bestaetigt, dass kein alter Loader ueber Kompatibilitaet,
+  Legacy-Namen, stille Retries oder Diagnoseausnahmen produktiv erreichbar ist.
+Notizen:
+- 0.54.X ist damit als moderne Modul-Ladepipeline abgeschlossen. File-backed
+  Program-Images bleiben nach 0.54.8 bewusst draussen und brauchen spaeter
+  eine eigene, vollstaendige Architekturarbeit.
+
+Versionnummer: 0.54.10
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- Desktop cached erfolgreich dekodierte `.ICO`-Dateien pro Pfad und
+  Zielgroesse in einem festen Prozesscache.
+- Desktop-Icons und Quick-Launch-Icons lesen Icondateien nach dem ersten
+  erfolgreichen Decode nicht mehr bei Hover-, Fokus- oder Partial-Redraws.
+- Fehlschlaege werden nicht dauerhaft gecached, damit ein spaeter verfuegbarer
+  Iconpfad sich noch erholen kann.
+- Der Fix bleibt vollstaendig in der Desktop-Anwendung; Kernel, Treiber,
+  Loader und Filesystem erhalten keinen neuen UI-spezifischen Sonderpfad.
+- `Docs/Desktop/DesktopStand.txt` und `Docs/Desktop/IconFormat.txt`
+  dokumentieren den Iconcache.
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` mit Erfolg.
+- `DevTools/Scripts/Build.bat -test` mit `TEST OK`.
+- Sichtbare Version `R4OS V0.54.10`.
+- Code-Suche bestaetigt: Desktop-Hover-Rendering nutzt den Iconcache statt
+  pro Redraw `fileRead(...)` und ICO-Parsing auszufuehren.
+Notizen:
+- Diese Unterversion ist ein gezielter Desktop-Hotfix nach dem 0.54.9-
+  Loader-Abschluss. Sie erweitert die abgeschlossene Modul-Ladepipeline nicht
+  um neue Loader-Arbeit.
+
+Versionnummer: 0.54.11
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- Tote Scheduler-Task-Slots geben ihre Kernel-Stacks ueber
+  `task.releaseDead(...)` frei, bevor sie wiederverwendet werden.
+- `createKernelTask(...)` recycelt dead/unused Slots ohne alten Stack-Leak und
+  rollt neu angehaengte Slots bei Stack-Alloc-Fehlern zurueck.
+- R4X-Reap-/Thread-Cleanup ruft die Task-Freigabe fuer zugehoerige
+  nicht-aktuelle Program-Tasks auf.
+- Desktop reapt `done` Programminstanzen in `syncProgramWindows(...)` sofort,
+  entkoppelt das Fenster lokal und schliesst es sichtbar.
+- LOADERD prueft beim Loader-Stress jetzt `Loader stress task cleanup`.
+- PERFDIAG zeigt `dead=...` in der Task-Zeile und bewertet die Task-
+  Runtime-Baseline nur fuer aktive ready/running/blocked Slots.
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` mit Erfolg.
+- `DevTools/Scripts/Build.bat -test` mit `TEST OK`.
+- QEMU-Log mit `R4OS V0.54.11`, `Loader stress task cleanup: OK`,
+  `LOADERD result: OK`, `PERFDIAG result: OK` und ohne
+  `Program task create failed`.
+Notizen:
+- Der Fix erweitert nicht `MAX_TASKS`; die Ursache wird durch
+  deterministisches Reap/Release behandelt.
+- Der Desktop-Hotfix bleibt in Anwendung/R4SYS-Lifecycle und erzeugt keinen
+  neuen Kernel-UI-Sonderpfad.
+
+Versionnummer: 0.54.12
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- Explorer schreibt beim Oeffnen einer Datei per Dateizuordnung keine
+  Recent-Documents mehr vor dem Host-Launch. Der Start von Notepad fuer
+  `CONFIG.R4S` wird dadurch nicht mehr durch Explorer-seitige Registry-
+  Mutationen blockiert.
+- Notepad laedt Initial-Argumente weiter direkt beim Start, verbucht den
+  Recent-Documents-Eintrag aber erst nach einem ersten Render/Yield.
+- `r4os.recent_documents.addOpenedFile(...)` vermeidet doppelte Front-
+  Eintraege und schreibt Registry-Werte nur noch bei echten Aenderungen.
+- Ueberzaehlige MRU-Slots werden nur bis zum bisher bekannten Count bereinigt
+  statt pauschal alle Slots zu loeschen.
+- Der Fix bleibt vollstaendig in Explorer, Notepad und SDK-Helfer; Kernel,
+  Loader, Treiber und Dateisystem erhalten keinen neuen Spezialpfad.
+- `Docs/API/Readme.txt`, `Docs/Desktop/DesktopStand.txt` und
+  `Docs/README.txt` dokumentieren den aktualisierten Recent-Documents-
+  Vertrag.
+Abnahme:
+- `DevTools/Zig/zig.exe test Code/SDK/r4os/recent_documents.zig` mit Erfolg.
+- `DevTools/Scripts/Build.bat -norun` mit Erfolg.
+- `DevTools/Scripts/Build.bat -test` mit `TEST OK`.
+- QEMU-Log mit `R4OS V0.54.12`, `LOADERD result: OK`,
+  `PERFDIAG result: OK` und ohne `Program task create failed` oder
+  `Program module file allocation failed`.
+Notizen:
+- Ursache fuer den langsamen Explorer->Notepad-Open war nicht die kleine
+  `CONFIG.R4S`, sondern synchroner Shell-/Recent-Documents-Registryaufwand im
+  sichtbaren Launch-Pfad.
+- Diese Stufe erzeugt keine Kompatibilitaets-Fallbacks und keine neue
+  Kernel-Policy; sie reduziert Arbeit im bestehenden Userland-/SDK-Vertrag.
+
+Versionnummer: 0.54.13
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- Bootscreen-Bildvertrag in `Docs/Core/BootscreenAsset05413.txt`
+  dokumentiert.
+- Asset-Ablage in `Code/Assets/Bootscreen/README.txt` vorbereitet, ohne schon
+  ein Test-BMP einzufuehren.
+- Statisches Gate
+  `DevTools/Scripts/TestScripts/CheckBootscreenAsset05413.zig` fuer
+  Asset-Vertrag, Boot-Aufloesung und Kernel-Grenzen ergaenzt.
+- Verbindliche BMP-Quelle festgelegt:
+  `Code/Assets/Bootscreen/BOOTSCREEN.BMP`, `1280x720`, unkomprimiert,
+  24-bpp oder 32-bpp, ohne Palette und ohne BMP-Kompression.
+- Internes Build-Artefakt als simples `R4B0`-Format geplant:
+  Magic/Version/Breite/Hoehe/Format plus rohe `0x00RRGGBB`-Pixel.
+- Fortschrittsbalken bleibt dynamisches Kernel-Overlay und wird nicht Teil des
+  BMPs.
+- Kernel-Grenze festgelegt: kein Runtime-Dateizugriff, kein BMP-/PNG-Decoder,
+  keine Registry-, Service-, R4X-, Heap- oder Allocator-Abhaengigkeit fuer den
+  Bootscreen-Hintergrund.
+Abnahme:
+- `DevTools/Zig/zig.exe run
+  DevTools/Scripts/TestScripts/CheckBootscreenAsset05413.zig`.
+- `DevTools/Scripts/Build.bat -norun`.
+- `DevTools/Scripts/Build.bat -test`.
+- QEMU-Log mit `R4OS V0.54.13`, `LOADERD result: OK`,
+  `PERFDIAG result: OK` und ohne `Program task create failed` oder
+  `Program module file allocation failed`.
+Notizen:
+- Diese Stufe ist nur Vertrag und Dokumentation. Der bestehende
+  Code-Bootscreen bleibt bis zur R4B-Integration aktiv.
+- Keine Bootzeit-Abhaengigkeit auf Dateisystem, Registry, R4X, Services,
+  Heap, Allocator oder BMP-/PNG-Decoder.
+
+Versionnummer: 0.54.14
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- `DevTools/Scripts/ConvertBootscreenBmp.zig` als Host-Konverter ergaenzt.
+- Konverter erzeugt `Code/Assets/Bootscreen/Generated/BOOTSCREEN.R4B` im
+  `R4B0`-Format mit 32-Byte-Header und rohen `0x00RRGGBB`-Pixeln.
+- Konverter akzeptiert exakt `1280x720`, unkomprimierte 24-bpp- oder 32-bpp-
+  BMPs und lehnt andere Groessen, Paletten, Kompression und andere BPP-Werte
+  ab.
+- `DevTools/Scripts/Build.bat` ruft den Konverter vor dem Kernel-Build auf.
+- `Generated/BOOTSCREEN.R4B` ist als Build-Artefakt von Git ausgeschlossen.
+- Solange das echte `BOOTSCREEN.BMP` erst in 0.54.16 kommt, laeuft der
+  Build-Schritt mit `--allow-missing`: Er erzeugt dann kein R4B und entfernt
+  ein eventuell altes generiertes R4B.
+- Pipeline-Doku in `Docs/Core/BootscreenPipeline05414.txt` ergaenzt und
+  `Docs/Deployment/BuildUndTest.txt` aktualisiert.
+- Statisches Gate
+  `DevTools/Scripts/TestScripts/CheckBootscreenAsset05414.zig` ergaenzt.
+Abnahme:
+- `DevTools/Zig/zig.exe test DevTools/Scripts/ConvertBootscreenBmp.zig`.
+- `DevTools/Zig/zig.exe run
+  DevTools/Scripts/TestScripts/CheckBootscreenAsset05414.zig`.
+- `DevTools/Zig/zig.exe run DevTools/Scripts/ConvertBootscreenBmp.zig -- --input
+  Code/Assets/Bootscreen/BOOTSCREEN.BMP --output
+  Code/Assets/Bootscreen/Generated/BOOTSCREEN.R4B --allow-missing`.
+- `DevTools/Scripts/Build.bat -norun`.
+- `DevTools/Scripts/Build.bat -test`.
+- QEMU-Log mit `R4OS V0.54.14`, `LOADERD result: OK`,
+  `PERFDIAG result: OK` und ohne `Program task create failed` oder
+  `Program module file allocation failed`.
+Notizen:
+- Das R4B-Artefakt ist build-time Input fuer den Kernel, kein Runtime-File.
+- Der BMP-Parser ist bewusst Hostcode. Er wird nicht in den Kernel und nicht in
+  den Bootpfad importiert.
+- Das ist eine Pipeline-Zwischenstufe, kein Bild-Fallback: Der Kernel nutzt das
+  R4B in 0.54.14 noch nicht produktiv.
+
+Versionnummer: 0.54.15
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- Kernel-R4B-Formatvertrag in
+  `Code/src/kernel/bootscreen_r4b_format.zig` abgebildet:
+  `R4B0`, Version 1, Headergroesse 32, `1280x720`, Pixelformat 1 und rohe
+  `0x00RRGGBB`-Pixel.
+- Kernel-R4B-Zeichenschicht in `Code/src/kernel/bootscreen_r4b.zig`
+  vorbereitet.
+- `Code/src/kernel/bootscreen.zig` importiert den Renderer und stellt
+  `renderPreparedR4B(...)` fuer den finalen Umschaltpunkt bereit.
+- Der normale Bootscreen-Hintergrund bleibt in dieser Stufe noch aktiv, damit
+  kein fehlendes `BOOTSCREEN.BMP` erzwungen wird.
+- Der Fortschrittsbalken bleibt unveraendert dynamisches Overlay ueber
+  `drawProgress(...)`.
+- Dokumentation in `Docs/Core/BootscreenRenderer05415.txt` ergaenzt und in
+  `Docs/README.txt` verlinkt.
+- Statisches Gate
+  `DevTools/Scripts/TestScripts/CheckBootscreenAsset05415.zig` ergaenzt.
+Abnahme:
+- `DevTools/Zig/zig.exe test Code/src/kernel/bootscreen_r4b_format.zig`.
+- `DevTools/Zig/zig.exe run
+  DevTools/Scripts/TestScripts/CheckBootscreenAsset05415.zig`.
+- `DevTools/Zig/zig.exe run
+  DevTools/Scripts/TestScripts/CheckBootscreenSplash05026.zig`.
+- `DevTools/Zig/zig.exe run
+  DevTools/Scripts/TestScripts/CheckBootscreenClosure05027.zig`.
+- `DevTools/Scripts/Build.bat -norun`.
+- `DevTools/Scripts/Build.bat -test`.
+- QEMU-Log mit `R4OS V0.54.15`, `LOADERD result: OK`,
+  `PERFDIAG result: OK` und ohne `Program task create failed` oder
+  `Program module file allocation failed`.
+Notizen:
+- Diese Stufe darf keinen zweiten Bildpfad einfuehren, der spaeter als
+  Kompatibilitaets-Fallback liegen bleibt.
+- Die produktive Umschaltung und Entfernung des alten Hintergrundpfads bleibt
+  bewusst in 0.54.16, weil dort erst das echte Test-BMP ins Repository kommt
+  und `Build.bat --allow-missing` geschlossen wird.
+
+Versionnummer: 0.54.16
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- Echtes `1280x720`-BMP unter `Code/Assets/Bootscreen/BOOTSCREEN.BMP`
+  aufgenommen.
+- `Build.bat` von `--allow-missing` auf verpflichtende BMP-zu-R4B-
+  Konvertierung umgestellt.
+- Produktiver Bootscreen-Pfad bettet
+  `Code/src/kernel/generated/BOOTSCREEN.R4B` per `@embedFile` ein; diese Datei
+  ist die Build-Kopie von
+  `Code/Assets/Bootscreen/Generated/BOOTSCREEN.R4B`.
+- Alte prozedurale Hintergrundgrafik, Wordmark-/Glyphpfad und Font-
+  Abhaengigkeit aus dem produktiven Bootscreen-Hintergrund entfernt.
+- Dynamischer Fortschrittsbalken bleibt Kernel-Overlay ueber dem Bild.
+- Endgueltige No-Fallback-Pruefung in
+  `DevTools/Scripts/TestScripts/CheckBootscreenAsset05416.zig` ergaenzt.
+- Finale Austausch-/Build-Doku in `Docs/Core/BootscreenFinal05416.txt`,
+  `Code/Assets/Bootscreen/README.txt` und
+  `Code/Assets/Bootscreen/Generated/README.txt` aktualisiert.
+Abnahme:
+- Ein echtes `1280x720`-BMP liegt unter
+  `Code/Assets/Bootscreen/BOOTSCREEN.BMP` und wird vom normalen Build in das
+  R4B-Artefakt konvertiert.
+- `DevTools/Zig/zig.exe test DevTools/Scripts/ConvertBootscreenBmp.zig`.
+- `DevTools/Zig/zig.exe test Code/src/kernel/bootscreen_r4b_format.zig`.
+- `DevTools/Zig/zig.exe run DevTools/Scripts/ConvertBootscreenBmp.zig -- --input
+  Code/Assets/Bootscreen/BOOTSCREEN.BMP --output
+  Code/Assets/Bootscreen/Generated/BOOTSCREEN.R4B`.
+- `DevTools/Zig/zig.exe run
+  DevTools/Scripts/TestScripts/CheckBootscreenAsset05416.zig`.
+- `DevTools/Scripts/Build.bat -norun` und `DevTools/Scripts/Build.bat -test`
+  laufen erfolgreich.
+- QEMU-Testlog enthaelt `R4OS V0.54.16`, `LOADERD result: OK` und
+  `PERFDIAG result: OK`.
+- Code-Suche bestaetigt: kein alter prozeduraler Hintergrund-Fallback, kein
+  BMP-Decoder im Kernel und kein Runtime-Dateizugriff fuer den Bootscreen.
+Notizen:
+- Diese Unterversion ist bewusst die Test-/Austauschstufe: Danach soll ein
+  anderes extern erzeugtes `1280x720`-BMP ohne Codeaenderung vor dem Build
+  eingesetzt werden koennen.
+- Der sichtbare `-gui`-Check bleibt ein manueller User-Sichttest. Codex nimmt
+  diese Stufe technisch per Konverter, Build, headless QEMU und No-Fallback-
+  Gate ab, ohne ein sichtbares QEMU-Fenster zu starten.
+
+Versionnummer: 0.54.17
+Status: Erledigt
+Offene Punkte:
+- Keine in dieser Analyse-Unterversion. Folgearbeit ist als 0.54.18 bis
+  0.54.20 eingeplant.
+Erledigt:
+- Analyse-Unterversion angelegt.
+- Alle vorhandenen SSH-/SFTP-Livetests gegen den aktuellen Stand gestartet.
+- Hostseitige Startgrenze festgehalten: direkte `.ps1`-Ausfuehrung ist durch
+  Execution-Policy blockiert; `powershell.exe -NoProfile -ExecutionPolicy
+  Bypass -File ...` funktioniert.
+- `Run-SshBannerLiveTest.ps1` erreicht SSHD und liest
+  `SSH-2.0-R4OS_SSHD_0.52.9`; der Test erwartet aber noch hart `0.52.8` und
+  ist damit als stale Testgate erkannt.
+- OpenSSH-Transport, Login, Session und SFTP brechen aktuell vor KEX mit
+  `kex_exchange_identification: Connection closed by remote host` ab.
+- R4OS-Logs bestaetigen: RTL8139, TCPSVC und SSHD laufen, Portweiterleitung
+  und Service-Start sind nicht der Primaerfehler.
+- SSHD-Status grenzt den Bruch auf den Service-Session-Worker-/Scratch-Pfad
+  ein: `worker_started`, aber kein `newkeys`; in Wiederholungslaeufen
+  `last_exit=-20` und `last=scratch`.
+- Analyse in `Docs/Network/SshLiveAnalyse05417.txt` dokumentiert.
+- Zentrale Netzwerk-/SSHD-Dokumentation um den aktuellen 0.54.17-Befund
+  ergaenzt.
+Abnahme:
+- `powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+  DevTools/Scripts/TestScripts/Run-SshBannerLiveTest.ps1` ausgefuehrt.
+  Ergebnis: Dienst erreichbar, Banner gelesen, Testgate wegen erwarteter
+  Altversion `0.52.8` fehlgeschlagen.
+- `powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+  DevTools/Scripts/TestScripts/Run-SshTransportLiveTest.ps1` ausgefuehrt.
+  Ergebnis: reproduzierbarer OpenSSH-Abbruch vor KEX.
+- `powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+  DevTools/Scripts/TestScripts/Run-SshLoginLiveTest.ps1` ausgefuehrt.
+  Ergebnis: gleicher Transportabbruch vor Auth.
+- `powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+  DevTools/Scripts/TestScripts/Run-SshSessionLiveTest.ps1` ausgefuehrt.
+  Ergebnis: gleicher Transportabbruch vor Shell/Exec.
+- `powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+  DevTools/Scripts/TestScripts/Run-SftpLiveTest.ps1` ausgefuehrt.
+  Ergebnis: SFTP scheitert als Folge des Transportabbruchs.
+- Logs gegen alte erfolgreiche OpenSSH-Abnahme vom 14.06.2026 verglichen.
+Notizen:
+- Testziel war zuerst Analyse, nicht sofortige Symptombehandlung.
+- Die Tests nutzen `TestInjection/`, QEMU user networking, RTL8139 und
+  Host-Portweiterleitung auf `127.0.0.1:10022`.
+- Wahrscheinlicher Regressionsschnitt ist der 0.53.44-Umbau auf
+  Service-Session-Worker: Accept funktioniert, aber Worker-Scratch ist nicht
+  belastbar genug fuer den aktuellen OpenSSH-Pfad.
+- Es wird kein synchroner SSHD-Altpfad und kein Kernel-SSH-Fallback
+  reaktiviert. Der Fix gehoert in SSHD/SDK-/VM-Nutzung und Diagnose.
+
+Versionnummer: 0.54.18
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- SSHD-Session-Scratch in den Mainloop-/Slot-Besitz verlegt. Worker erhalten
+  nur noch einen vorbereiteten `SessionBuffers`-Zeiger und allokieren/freigeben
+  die grossen SSH-/SFTP-/SCP-Puffer nicht mehr selbst.
+- Slot-Scratch wird fuer die erlaubten Sessions vorgewarmt, vor jeder Session
+  zurueckgesetzt, nach erfolgreichem Join wieder als bereit markiert und bei
+  Service-Ende nur fuer nicht mehr laufende Slots freigegeben.
+- Fehlende Worker-Puffer melden jetzt `scratch-missing`; echte Client-
+  Annahmen ohne Scratch werden geschlossen, bevor ein Worker gestartet wird.
+- `SERVMAN STATUS SSHD` zeigt Scratch-Diagnose ueber `scratch=<ready>/<in_use>`,
+  `scratch_alloc` und `scratch_fail`.
+- `Run-SshTransportLiveTest.ps1` wartet auf den SSHD-Endpoint statt nur auf
+  einen beliebigen TCPSVC-Listenstatus.
+- OpenSSH-Transport wieder bis Banner, KEXINIT, NEWKEYS, Service-Accept und
+  erwartete Auth-Ablehnung hergestellt.
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` erfolgreich.
+- `powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+  DevTools/Scripts/TestScripts/Run-SshTransportLiveTest.ps1` erfolgreich.
+- Abnahmelog:
+  `DevTools/Logs/qemu-test-sshd-transport-20260621-170257.log`.
+- OpenSSH-Log:
+  `DevTools/Logs/qemu-test-sshd-transport-20260621-170257.ssh.err`.
+- SSHD-Status vor Clientlauf zeigt `scratch=1/0 scratch_alloc=1` und kein
+  `last=scratch`; OpenSSH-Log zeigt `SSH2_MSG_KEXINIT sent/received`,
+  `SSH2_MSG_NEWKEYS sent/received`, `SSH2_MSG_SERVICE_ACCEPT received` und
+  `Authentications that can continue: password`.
+- Logs ohne `kex_exchange_identification`, `Program task create failed`,
+  `Program module file allocation failed`, `PANIC`, Page Fault oder General
+  Protection Fault.
+Notizen:
+- Kein Kernel-Sonderpfad, keine SSHD-Synchron-Fallbackroute, keine stille
+  Erhoehung willkuerlicher Limits als alleinige Reparatur.
+- `scratch_fail` bleibt ein sichtbarer Warmup-/Retry-Zaehler. Entscheidend fuer
+  die Transportabnahme ist, dass vor Accept ein fertiger Slot-Scratch vorhanden
+  ist und der Worker nicht mehr auf seinem eigenen Allokatorpfad scheitert.
+
+Versionnummer: 0.54.19
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- `SshTestDiagnostics.ps1` als gemeinsame Host-Harness-Diagnose fuer SSHD
+  angelegt.
+- `Run-SshBannerLiveTest.ps1` prueft versionstolerant
+  `SSH-2.0-R4OS_SSHD_<major>.<minor>.<patch>` statt einer alten festen
+  SSHD-Version.
+- SSH-/SFTP-/SCP-Livetests warten auf `Endpoint: SSHD OK port=22` statt auf
+  generisches Service- oder TCP-Listen-Sichtbarwerden.
+- Fehlertexte enthalten Logpfade, QEMU-err, relevante stdout-/stderr-Artefakte,
+  letzten SSHD-Endpoint und Marker fuer Transport, Worker/Scratch,
+  Task-/Module-Allocation und Crashpfade.
+- `Docs/Network/SshHostTests05419.txt` dokumentiert Skriptaufrufe sowie direkte
+  OpenSSH-, SFTP- und SCP-Befehle fuer manuelle Hosttests ohne
+  PowerShell-Harness.
+Abnahme:
+- PowerShell-Syntax aller SSH-/SFTP-/SCP-Harnesses und der gemeinsamen
+  Diagnosehilfe geprueft.
+- `Run-SshBannerLiveTest.ps1` besteht gegen das aktuelle SSHD-Banner.
+- `Run-SshTransportLiveTest.ps1` besteht weiter bis KEXINIT, NEWKEYS,
+  Service-Accept und erwarteter Auth-Ablehnung.
+- Abnahmelogs:
+  `DevTools/Logs/qemu-test-sshd-banner-20260621-171003.log`,
+  `DevTools/Logs/qemu-test-sshd-transport-20260621-171019.log`,
+  `DevTools/Logs/qemu-test-sshd-transport-20260621-171019.ssh.err`.
+- Transport-/Login-/Session-/SFTP-/SCP-Tests geben bei Fehlern die relevanten
+  Logpfade und SSHD-Endpoint-Befunde aus.
+- Dokumentation nennt die funktionierende Host-Startform mit
+  `powershell.exe -NoProfile -ExecutionPolicy Bypass -File ...` und den
+  direkten OpenSSH-Befehl fuer manuelle Tests.
+Notizen:
+- Diese Stufe ist Test- und Bedienwerkzeug-Haertung, kein zweiter SSHD-Pfad.
+- Die fachliche Vollabnahme von Login, Session, SFTP und SCP bleibt bewusst in
+  0.54.20.
+
+Versionnummer: 0.54.20
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- Die komplette SSH-/SFTP-/SCP-Kette nach 0.54.18 und 0.54.19 erneut live
+  ueber Windows OpenSSH abgenommen.
+- `SERVMAN STATUS SSHD` bildet aktive Worker-Statistiken jetzt ueber einen
+  kurzlebigen Snapshot ab, damit laufende Sessions ihre Auth-, Shell-/Exec-,
+  SFTP-/SCP- und Byte-Zaehler sichtbar machen.
+- Der SSHD-Shell-/Exec-Close-Pfad nutzt einen abschliessenden Console-Drain
+  mit kurzem Client-Flush-Fenster, damit groessere Remote-Exec-Ausgaben wie
+  `SERVMAN STATUS SSHD` vor Exitstatus, EOF und Channel-Close vollstaendig
+  beim OpenSSH-Client ankommen.
+- Die gemeinsame Host-Harness-Diagnose wertet Worker-Fehlerzaehler nur noch
+  bei echten Nonzero-Werten rot; `scratch_fail` bleibt ein sichtbarer
+  Warmup-/Retry-Zaehler, harte Scratch-Fehler bleiben `last=scratch` und
+  `scratch-missing`.
+- `Docs/Network/SshFullChain05420.txt` dokumentiert Tests, Logs, Zaehler,
+  Fehlergrenzen und die verbleibende 64-KB-Streaming-Grenze.
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun`
+- `Run-SshLoginLiveTest.ps1` erfolgreich:
+  `DevTools/Logs/qemu-test-sshd-login-20260621-172052.log`.
+- `Run-SshSessionLiveTest.ps1` erfolgreich:
+  `DevTools/Logs/qemu-test-sshd-session-20260621-171927.log`.
+- `Run-SftpLiveTest.ps1` erfolgreich:
+  `DevTools/Logs/qemu-test-sftp-20260621-171956.log`.
+- `Run-ScpLiveTest.ps1` erfolgreich:
+  `DevTools/Logs/qemu-test-scp-20260621-172026.log`.
+- SSHD-Status zeigt Auth, Shell/Exec, SFTP/SCP, Channel-Bytes und Worker-
+  Zaehler passend; `worker_spawn_fail=0` und `worker_join_err=0`.
+- Frische Abnahmelogs ohne `kex_exchange_identification`,
+  `Program task create failed`, `Program module file allocation failed`,
+  `[CRASH]`, `PANIC`, Page Fault, General Protection Fault, `last=scratch`,
+  `scratch-missing`, Connection reset oder reset by peer.
+Notizen:
+- SFTP und SCP sind wieder fachlich abgenommen: SFTP mit 40 KB Upload/
+  Ruecklesen/Bytevergleich, SCP mit klassischem `scp -O` Download, 32-KB-
+  Upload, Rueckdownload und Bytevergleich.
+- Die 64-KB-Grenze fuer monolithische SFTP-/SCP-Transfers bleibt als
+  bewusste Folgegrenze dokumentiert. Wenn groessere produktive Transfers
+  Ziel werden, braucht das eine eigene Streaming-/Backpressure-Unterversion
+  statt einer blossen Limit-Erhoehung.
+- Kein Kernel-SSH-/SFTP-/SCP-Pfad, kein alter synchroner SSHD-Fallback.

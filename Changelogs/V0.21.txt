@@ -1,0 +1,781 @@
+﻿# Leitbild 0.21.X
+R4OS 0.21.X macht aus der in 0.20.X geglaetteten API-Struktur ein echtes,
+sprachneutrales und relocationsfaehiges Modulsystem. R4SYS, R4DESK, R4DRAW,
+R4NET, R4AUDIO und R4DEV bleiben das API-Modell; R4L-Dateien sind die
+technische Verpackung dieser API-Gruppen, nicht ein zweites API-System daneben.
+
+Der Schwerpunkt liegt nicht auf Security, Sandboxing oder Berechtigungen,
+sondern auf Loader-Reife: klare Sections, nachvollziehbare Imports und
+Exports, Relocations, stabile append-only Schnittstellen, saubere
+Dependency-Aufloesung, robuste Fehlerbilder und ein Diagnosebild, das jedes
+geladene Modul sichtbar macht.
+
+0.21.X macht bewusst keine halben Sachen. Alte Flat-Binary-Startvertraege,
+direkte Kernel-API-Tabellen fuer Programme und Sonderpfade fuer Legacy-Module
+duerfen nur als temporaere Migrationshilfe innerhalb dieser Roadmap existieren.
+Am Ende von 0.21.X sind die mitgelieferten R4X-, R4D- und R4P-Module auf den
+neuen Modulcontainer, R4L-Imports und den Import-/Export-Resolver umgestellt.
+Der Legacy-Pfad ist dann kein Kompatibilitaetsversprechen mehr.
+
+## Modulmodell
+Alle dateibasierten Module sollen langfristig denselben R4OS-Modulcontainer
+verwenden. Der Modultyp bestimmt nur Rolle, Entry Points und erlaubte
+Lebensdauer:
+- R4X: ausfuehrbares Programm.
+- R4L: Library/API-Modul, exportiert Funktionen und optional Daten, startet
+  nicht als eigenstaendiges Programm.
+- R4D: Treiber, initialisiert sich ueber DriverInit und registriert Backends.
+- R4P: Protokollmodul, initialisiert sich ueber ProtocolInit und registriert
+  Protokollrollen.
+- KernelProvider: kernelinterner Provider, sichtbar in Diagnosen, aber nicht
+  als normales R4L fuer Programme importierbar.
+- KernelModule: reservierte Modulkategorie fuer spaetere echte Kernel-Module,
+  damit das System spaeter ohne neues Grundformat erweitert werden kann.
+
+R4L ist das R4OS-Format fuer Libraries und API-Module. R4SYS.R4L,
+R4DESK.R4L, R4DRAW.R4L, R4NET.R4L, R4AUDIO.R4L und R4DEV.R4L sind am Ende
+dieser Roadmap echte Dateien im System, nicht nur Kernel-interne
+Funktionszeigertabellen.
+
+R4L ist bewusst sprachneutral. Die Libraries gehoeren zur R4OS-ABI, nicht zu
+Zig, C oder einer bestimmten Toolchain. Zig-SDK, spaetere C-Header,
+Assembler-Helfer und andere Sprachbindungen sollen dieselben R4L-Exports
+nutzen koennen. Compiler muessen langfristig nur Objektcode und passende
+ABI-Aufrufe liefern; R4OS-Builder/Linker erzeugen daraus R4X-, R4D-, R4P-
+oder R4L-Module mit Imports auf diese gemeinsame Binaerschnittstelle.
+
+## Kernel-Anbindung
+Echte R4L-Dateien muessen Kernel-Funktionen nutzen koennen, ohne dass
+Programme wieder direkt an Kernel-Funktionszeigertabellen haengen. Dafuer
+wird ein kernelinterner Provider als Teil des Modulsystems vorgesehen:
+- Arbeitstitel: R4KERNEL oder R4CORE.
+- Er ist in der Modul-/Provider-Diagnose sichtbar.
+- Er ist kein oeffentliches API-Modul fuer normale Programme.
+- R4SYS.R4L, R4DESK.R4L, R4DRAW.R4L, R4NET.R4L, R4AUDIO.R4L und R4DEV.R4L
+  duerfen diesen Provider als Implementierungsschicht verwenden.
+- R4X-, R4D- und R4P-Module importieren regulaer die oeffentlichen R4L-API-
+  Gruppen, nicht direkt den Kernel-Provider.
+
+Damit bleibt die Architektur spaeter erweiterbar: weitere R4L-Libraries,
+Treiber, Protokolle und spaetere KernelModule koennen ueber denselben
+Resolver, dieselbe Modul-Liste und dieselben Diagnosen sichtbar werden.
+
+## Speicher- und Lifetime-Regeln
+Der erste stabile Zielzustand bleibt DOS-artig einfach:
+- Zentrale API-R4L-Dateien werden beim Boot geladen.
+- R4L-, R4D- und R4P-Systemmodule bleiben in 0.21.X dauerhaft im Speicher.
+- Es gibt in 0.21.X kein regulaeres Unload und kein Refcounting als
+  Betriebsmodell.
+- Code, rodata, data und bss werden getrennt behandelt.
+- BSS wird beim Laden genullt.
+- Modulbereiche werden page-aligned abgelegt.
+- Datenbereiche bleiben beschreibbar.
+- Codebereiche duerfen optional read-only markiert werden, nicht als
+  Security-Policy, sondern als Schutz gegen kaputte Schreibfehler.
+
+## Relocation-Grundsatz
+R4OS soll nicht versuchen, sofort jeden denkbaren x86_64-/ELF-Relocation-Typ
+zu unterstuetzen. Stattdessen definiert 0.21.X eine kleine, dokumentierte
+Menge von R4OS-Relocation-Typen, die der Builder aus den tatsaechlich
+benoetigten Zig-/LLVM-Objektinformationen erzeugt. Alles andere wird vom
+Builder oder Loader mit klarer Fehlermeldung abgelehnt.
+
+Mindestens betrachtet werden:
+- absolute 64-Bit-Adressen fuer Daten, Tabellen und Funktionspointer.
+- RIP-relative Code-/Datenreferenzen, wenn sie vom erzeugten Code gebraucht
+  werden.
+- Basis-relative Fixups fuer geladene Modulimages.
+- Import-Slots fuer Funktionen oder Daten aus anderen Modulen.
+- Relocations fuer globale Variablen, Strings, SDK-Tabellen und
+  vtable-aehnliche Strukturen.
+
+## Abnahme-Grundsatz
+Jede Unterversion bekommt eine headless Abnahme. Standard ist:
+- `DevTools/Scripts/Build.bat -norun` fuer reine Build-Abnahme.
+- `DevTools/Scripts/Build.bat -test` fuer Boot-/Smoke-Abnahme.
+- TestInjection/ darf fuer AUTOEXEC.BAT und Testdaten angepasst werden.
+- Testlaeufe muessen mit Exitcode 0 und `TEST OK` enden.
+- Negative Tests duerfen erwartete Fehler erzeugen, muessen diese aber
+  eindeutig als erwartete Loader-/Resolver-Fehler melden.
+- Fuer wiederholte Abnahmen ohne neues Image darf `DevTools/Scripts/Build.bat
+  -testonly` genutzt werden.
+
+## Migrationsumfang
+Die Roadmap deckt die zentral gebauten externen Module aus Docs/Software.md
+und Code/build.zig ab:
+- 34 R4X-Programme inklusive COMMAND.R4X, DESK.R4X, CALC.R4X und Diagnostics.
+- 5 R4D-Treiber: EXAMPLE.R4D, RTL8139.R4D, SID.R4D, OPL3.R4D und MIDI.R4D.
+- 20 R4P-Protokolle inklusive BADDEP.R4P als erwarteter Negativtest.
+- 6 neue API-R4L-Dateien: R4SYS.R4L, R4DESK.R4L, R4DRAW.R4L, R4NET.R4L,
+  R4AUDIO.R4L und R4DEV.R4L.
+
+Version 0.21.0
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Abnahmen:
+- `DevTools/Scripts/Build.bat -norun` laeuft erfolgreich.
+- Headless Pruefscript unter DevTools/Scripts/TestScripts/ vergleicht
+  Docs/Software.md, Code/build.zig und Roadmap.txt: alle 59 bestehenden
+  R4X-/R4D-/R4P-Artefakte sind einer Migrationsphase zugeordnet.
+- Dokumentationspruefung bestaetigt: R4L ist sprachneutral beschrieben und
+  KernelProvider ist nicht als oeffentliches App-API markiert.
+
+Erledigt:
+- Modulformat-Leitbild fuer R4OS festgelegt: Header, Magic, Version,
+  ModuleKind, Flags, Entry Points, Section-Tabelle und Metadaten.
+- Gemeinsame Begriffe fuer R4X-, R4L-, R4D-, R4P-, KernelProvider- und
+  spaetere KernelModule-Klassen definiert.
+- R4L als Library-/API-Modultyp festgelegt.
+- R4L als sprachneutrale R4OS-ABI-Schicht dokumentiert, nicht als
+  Zig-spezifisches SDK-Format.
+- ABI-Grundlagen fuer R4L festgehalten: Calling Convention,
+  Integer-/Pointer-Groessen, Handle-Regeln, String-Konventionen,
+  Struct-Layout, Alignment und Fehlerwerte.
+- Section-Modell dokumentiert: .text, .rodata, .data, .bss, Import-Tabelle,
+  Export-Tabelle, Relocation-Tabelle und Debug-/Diagnosemetadaten.
+- KernelProvider-Konzept definiert: sichtbarer interner Provider fuer
+  R4L-Implementierungen, aber kein oeffentlicher Programmvertrag.
+- R4L-API-Gruppen als Zielzustand festgehalten: R4SYS.R4L, R4DESK.R4L,
+  R4DRAW.R4L, R4NET.R4L, R4AUDIO.R4L und R4DEV.R4L.
+- Migrationsmatrix fuer alle R4X-, R4D- und R4P-Artefakte aus
+  Docs/Software.md in Docs/Software.md vorbereitet.
+- Diagnose-Anforderungen fuer Modul-Liste definiert: Name, Kind, Provider,
+  Basisadresse, Groesse, Sections, Imports, Exports, Relocations und Status.
+- Headless Pruefscript DevTools/Scripts/TestScripts/CheckRoadmap021.zig
+  ergaenzt.
+
+Notizen:
+- Diese Version ist die Vertrags- und Dokumentationsbasis fuer die folgenden
+  technischen Schritte.
+- Bestehende Flat-Binaries duerfen hier noch existieren, sind aber nur
+  Migrationsbestand.
+- Zentrale Version in Code/src/version.zig wurde auf 0.21.0 gesetzt.
+
+Version 0.21.1
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Abnahmen:
+- `DevTools/Scripts/Build.bat -norun` laeuft erfolgreich.
+- Headless Builder-Test erzeugt mindestens je ein Testartefakt fuer R4X,
+  R4L, R4D und R4P im neuen Containerformat.
+- Headless Builder-Test baut ein Zig-ELF-Objekt und verpackt dessen Sections
+  als R4L-Artefakt.
+- Host-Pruefscript liest die erzeugten Artefakte und bestaetigt Magic,
+  ModuleKind, Version, Section-Tabelle, Entry Points und Bounds.
+- Negativtest: ein absichtlich beschaedigter Header wird vom Pruefmodus mit
+  klarem Fehler abgelehnt.
+
+Erledigt:
+- R4XBuilder um experimentellen R4M0-Containerpfad erweitert, der R4X, R4L,
+  R4D und R4P ueber denselben Header-/Section-/Entry-/Import-/Export-Pfad
+  erzeugen kann.
+- R4M0-Modulheader, Section-Tabelle, Entry-Tabelle, Import-Tabelle,
+  Export-Tabelle und Meta-/Stringbereich geschrieben.
+- R4L-Dateien mit Header, Sections, Export-Tabelle und Init-Einstieg als
+  Builder-Artefakt erzeugbar gemacht.
+- ELF-/Objektdatei-Eingang `--elf`/`--object` ergaenzt: `.text`,
+  `.rodata`, `.data` und `.bss` werden als R4M0-Sections uebernommen.
+- R4X-, R4D- und R4P-Artefakte im neuen R4M0-Containerformat erzeugbar
+  gemacht, ohne sie schon regulaer booten zu muessen.
+- Toolchain-neutrale Import-/Export-Metadaten fuer R4M0 definiert:
+  R4OS-Symbolnamen, Modulnamen, Mindestversionen und Flags.
+- Hostseitigen R4XBuilder-Pruefmodus `--inspect` ergaenzt: Header,
+  ModuleKind, Section-Limits, Entry-Points, Imports und Exports werden
+  validiert und angezeigt.
+- Alte Flat-Binary-Erzeugung bleibt sichtbar der normale Legacy-Buildpfad,
+  waehrend R4M0 bewusst ueber `--r4m` oder `--r4l` aktiviert wird.
+- Headless Pruefscript DevTools/Scripts/TestScripts/CheckR4MBuilder021.zig
+  ergaenzt.
+
+Notizen:
+- R4L-Dateien duerfen weiterhin mit Zig gebaut werden, muessen aber als
+  ABI-Dateien verstanden werden, die spaeter auch C- und andere Compiler
+  bedienen.
+- Zentrale Version in Code/src/version.zig wurde auf 0.21.1 gesetzt.
+
+Version 0.21.2
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Abnahmen:
+- `DevTools/Scripts/Build.bat -norun` laeuft erfolgreich.
+- `DevTools/Scripts/Build.bat -test` bootet headless und endet mit `TEST OK`.
+- Test-AUTOEXEC prueft, dass mindestens ein R4L-Testmodul als echte Datei
+  geladen und in der Modul-Liste angezeigt wird.
+- Test-AUTOEXEC prueft, dass BSS-Daten im geladenen Testmodul genullt sind.
+- Test-AUTOEXEC prueft, dass der KernelProvider in der Diagnose sichtbar ist,
+  aber nicht als normales App-Importziel gemeldet wird.
+
+Erledigt:
+- Kernel-Modulregistry `Code/src/kernel/modules.zig` eingefuehrt: zentrale
+  Liste fuer KernelProvider, R4L und vorbereitete Modularten R4X, R4D, R4P
+  sowie spaetere KernelModule.
+- KernelProvider als builtin Provider registriert und in der Diagnose mit
+  `app_import=no` sichtbar gemacht.
+- Loader-Pfad fuer R4M0-/R4L-Dateien aus `/sys/libs` implementiert.
+- `.text`, `.rodata`, `.data` und `.bss` werden sectionweise in ein
+  page-aligned Modulimage geladen.
+- BSS wird vor der Registrierung genullt und vom `MODULETEST` geprueft.
+- Modul-Lifetime fuer 0.21.X festgelegt: geladene R4L-/Systemmodule bleiben
+  dauerhaft geladen, regulaeres Unload gibt es hier noch nicht.
+- Build-Helfer `addR4LRaw` ergaenzt und `TEST021.R4L` als echtes R4L-
+  Testartefakt nach `/sys/libs/test021.r4l` ins Image gelegt.
+- COMMAND-Diagnosen `MODULES` und `MODULETEST` ergaenzt.
+- Test-AUTOEXEC fuehrt `MODULES` und `MODULETEST` aus; der headless Log zeigt
+  TEST021, KernelProvider, Section-Adressen und `MODULETEST result: OK`.
+
+Notizen:
+- Dieser Schritt soll noch ohne vollstaendige Import-/Export-Aufloesung
+  nutzbar sein, damit Section-Layout und Speicherabbild zuerst stabil werden.
+- Zentrale Version in Code/src/version.zig wurde auf 0.21.2 gesetzt.
+
+Version 0.21.3
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Abnahmen:
+- `DevTools/Scripts/Build.bat -norun` laeuft erfolgreich.
+- `DevTools/Scripts/Build.bat -test` bootet headless und endet mit `TEST OK`.
+- Testmodul nutzt globale Variable, String, Funktionspointer und Tabelle;
+  Test-AUTOEXEC prueft zur Laufzeit, dass alle Werte nach Relocation korrekt
+  erreichbar sind.
+- Negativtest mit unbekanntem Relocation-Typ liefert einen erwarteten
+  Loader-Fehler und keinen Crash.
+- LOADERD oder ein Testkommando zeigt Anzahl und Typen der Relocations fuer
+  ein Testmodul an.
+
+Erledigt:
+- R4M0-Relocation-Tabelle festgelegt: 24-Byte-Eintraege mit Typ,
+  Patch-Section, Patch-Offset, Ziel-Section, Ziel-Offset und signed Addend.
+- Relocation-Typen ABS64, REL32, BASE_REL64 und vorbereiteter IMPORT_SLOT64
+  im Builder, Inspector und Kernel-Loader definiert.
+- R4XBuilder um `--rodata`, `--data` und `--reloc` fuer rohe R4M0-
+  Testartefakte erweitert.
+- Inspector validiert Relocation-Tabellen und zeigt Typzaehler an.
+- Kernel-Loader wendet ABS64-, REL32- und BASE_REL64-Relocations vor der
+  Registrierung an.
+- Fehlerfaelle fuer unbekannte Relocation-Typen, ungueltige Sections,
+  Patch-/Zielbereiche ausserhalb des Moduls und unaufgeloeste Import-Slots
+  kontrolliert behandelt.
+- `TEST021.R4L` prueft globale Daten, Stringreferenz, Funktionspointer,
+  Tabellenpointer, REL32 und BASE_REL64 zur Bootzeit.
+- `BADREL.R4L` prueft den Negativfall mit unbekanntem Relocation-Typ ohne
+  Systemcrash.
+- `MODULES` und `MODULETEST` zeigen beziehungsweise pruefen Relocationanzahl
+  und Typen.
+- `DevTools/Scripts/TestScripts/CheckR4MBuilder021.zig` deckt nun auch ein
+  R4L-Artefakt mit Relocation-Tabelle ab.
+- `DevTools/Scripts/Build.bat -norun` und `DevTools/Scripts/Build.bat -test`
+  laufen erfolgreich.
+
+Notizen:
+- Dies ist einer der haertesten technischen Kerne von 0.21.X.
+- Die Relocation-Liste soll klein, dokumentiert und durch Tests gedeckt sein.
+- Version in Code/src/version.zig steht auf 0.21.3.
+
+Version 0.21.4
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Abnahmen:
+- `DevTools/Scripts/Build.bat -norun` laeuft erfolgreich.
+- `DevTools/Scripts/Build.bat -test` bootet headless und endet mit `TEST OK`.
+- Positivtest: APP-Testmodul importiert Funktion aus LIB-Testmodul und ruft
+  sie erfolgreich ueber den Resolver auf.
+- Positivtest: R4L-Testmodul importiert ein anderes R4L-Testmodul.
+- Negativtest: fehlendes Modul wird sauber gemeldet.
+- Negativtest: zyklische Dependency wird erkannt und blockiert.
+- Negativtest: Versionsanforderung an Export wird bei zu alter Version
+  sauber abgelehnt.
+
+Erledigt:
+- R4M0-Import-Eintraege nutzen Modulname, Symbolname, Mindestversion und
+  Flags.
+- R4M0-Export-Eintraege nutzen R4OS-Symbolnamen, Section/Offset und
+  Exportversion.
+- R4XBuilder unterstuetzt `--import MOD:SYMBOL[:MIN_VERSION[:FLAGS]]` und
+  `--export SYMBOL:OFFSET[:VERSION]`.
+- `IMPORT_SLOT64` nutzt den Relocation-Zielindex als Importindex und patcht
+  die Laufzeitadresse des gefundenen Exports.
+- Kernel-Loader sammelt R4L-Dateien unter `C:\SYS\LIBS` und laedt sie
+  rekursiv in Abhaengigkeitsreihenfolge.
+- Resolver erkennt fehlende Module, fehlende Symbole, zu alte
+  Exportversionen, zyklische Abhaengigkeiten, doppelte Anbieter und
+  unaufgeloeste Import-Slots kontrolliert.
+- Resolver-Status, Importzahl/aufgeloeste Importzahl, Exportnamen,
+  Exportversionen, Exportadressen und Fehlerzaehler sind in `MODULES`
+  sichtbar.
+- Positivtest `APP021.R4L` importiert `LIB021:LibValue:1`, bekommt einen
+  Import-Slot gepatcht und ruft den exportierten Stub erfolgreich auf.
+- Positivtest `USER021.R4L` prueft denselben Pfad als R4L-zu-R4L-
+  Abhaengigkeit.
+- Negativtests `MISS021.R4L`, `CYCLEA.R4L`/`CYCLEB.R4L` und `VERBAD.R4L`
+  pruefen fehlendes Modul, Zyklus und Versionsablehnung.
+- `DevTools/Scripts/TestScripts/CheckR4MBuilder021.zig` deckt Importversion,
+  Exportversion und `IMPORT_SLOT64` im R4M0-Artefakt ab.
+- `DevTools/Scripts/Build.bat -norun` und `DevTools/Scripts/Build.bat -test`
+  laufen erfolgreich.
+
+Notizen:
+- R4SYS, R4DESK, R4DRAW, R4NET, R4AUDIO und R4DEV sind kanonische
+  R4L-Export-Gruppen.
+- Kernel-backed Provider sind nur Migrations- und Implementierungsschicht,
+  kein Endzustand fuer Programm-Imports.
+- Version in Code/src/version.zig steht auf 0.21.4.
+
+Version 0.21.5
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Abnahmen:
+- `DevTools/Scripts/Build.bat -norun` laeuft erfolgreich.
+- `DevTools/Scripts/Build.bat -test` bootet headless und endet mit `TEST OK`.
+- Test-AUTOEXEC prueft, dass alle sechs R4L-Dateien vom Datentraeger geladen
+  und in der Modul-Liste als R4L angezeigt werden.
+- ABI-Conformance-Test laeuft headless und bestaetigt Struct-Layout,
+  String-Konventionen, Handle-Werte und Fehlerwerte.
+- ABI-Snapshot wird erzeugt oder dokumentiert: Exportnamen, Exportversionen,
+  Struct-Groessen, Alignments und Calling Convention sind fuer die Migration
+  fixiert.
+- Negativtest: ein normales R4X-Testmodul darf den KernelProvider nicht als
+  regulaeren Import nutzen; der Fehler wird sauber gemeldet.
+- Diagnose zeigt R4L-Dateien, ihre Exports und den KernelProvider getrennt.
+
+Erledigt:
+- KernelProvider-Bruecke implementiert: der builtin Provider exportiert
+  `KernelPing` Version 1 als internen Testexport fuer System-R4L-Dateien.
+- Resolver-Policy ergaenzt: direkte KernelProvider-Imports sind nur fuer
+  R4SYS, R4DESK, R4DRAW, R4NET, R4AUDIO und R4DEV erlaubt.
+- Negativtest `BADKAPP.R4X` erzeugt einen erwarteten Provider-Policy-Fehler,
+  wenn ein normales R4X-Modul den KernelProvider direkt importiert.
+- R4SYS.R4L, R4DESK.R4L, R4DRAW.R4L, R4NET.R4L, R4AUDIO.R4L und R4DEV.R4L
+  werden als echte R4M0-/R4L-Dateien gebaut und nach `C:\SYS\LIBS` gelegt.
+- Alle sechs API-R4L-Dateien exportieren `Query` Version 1 als
+  Interface-Tabelle mit Magic `"R4L1"`, ABI-Version, Groesse, Gruppen-ID und
+  gepatchtem KernelProvider-Importslot.
+- R4XBuilder kann Exporte gezielt auf benannte Sections legen, zum Beispiel
+  `Query:.data:0:1`; dadurch koennen Datenexports sprachneutral beschrieben
+  werden.
+- SDK-Build-Helfer um generischen R4M-Rohartefaktpfad fuer R4X/R4L/R4D/R4P
+  mit Imports, Exports und Relocations erweitert.
+- `Code/SDK/r4os/abi.zig` enthaelt R4L-ABI-Konstanten,
+  API-Gruppen-IDs, `R4LQuery` und `R4LABISnapshot`.
+- `ABI021.R4L` als ABI-Conformance-Modul gebaut und im Boot-Test geladen.
+  Es prueft Magic, Version, Struct-Groesse, Pointergroesse, Handle,
+  Fehlerwert und relocated Stringpointer.
+- C-Header-Zielpfad in `Docs/SDK/CABI.txt` dokumentiert.
+- `Docs/Core/Modulsystem.txt`, `Docs/Core/Architektur.txt`,
+  `Docs/API/Readme.txt` und `Docs/SDK/README.txt` auf den 0.21.5-Stand
+  aktualisiert.
+- `DevTools/Scripts/TestScripts/CheckR4MBuilder021.zig` deckt Exportversion,
+  Importversion, benannte Export-Sections und `IMPORT_SLOT64` ab.
+- `DevTools/Scripts/Build.bat -norun`, `DevTools/Scripts/Build.bat -test`,
+  `CheckR4MBuilder021.zig` und `CheckRoadmap021.zig` laufen erfolgreich.
+
+Notizen:
+- Dies ist der Punkt, an dem die API sichtbar von Kernel-Tabelle zu
+  dateibasierter R4L-Schicht kippt.
+- Version in Code/src/version.zig steht auf 0.21.5.
+
+Version 0.21.6
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Abnahmen:
+- `DevTools/Scripts/Build.bat -norun` laeuft erfolgreich.
+- `DevTools/Scripts/Build.bat -test` bootet headless und endet mit `TEST OK`.
+- `MODULETEST` bestaetigt alle 5 R4D-Modulcontracts:
+  `R4D_EXAMPLE`, `R4D_RTL8139`, `R4D_SID`, `R4D_OPL3` und `R4D_MIDI`.
+- `MODULETEST` bestaetigt alle 20 R4P-Modulcontracts inklusive
+  `R4P_SMOKE`, `R4P_CONF`, `R4P_BADDEP`, Netzwerk-, USB- und Audio-
+  Protokollen.
+- Bootlog meldet `R4D modules discovered=5`.
+- Bootlog meldet `R4P modules discovered=20 active=19`.
+- `BADDEP.R4P` liefert den erwarteten Missing-Dependency-Status `-5`.
+- `CONF.R4P` wird nach der aktiven Rolle `misc.smoke` aufgeloest.
+- `LOADERD.R4X` validiert `EXAMPLE.R4D` und `SMOKE.R4P` als R4M0-
+  Container vom Datentraeger.
+- `R4PTEST` endet mit `R4PTEST result: OK`.
+- `DevTools/Scripts/TestScripts/CheckR4MBuilder021.zig` laeuft erfolgreich.
+- `DevTools/Scripts/TestScripts/CheckRoadmap021.zig` laeuft erfolgreich.
+
+Erledigt:
+- SDK-Build-Helfer `addR4D` erzeugt regulaere R4M0-Module mit
+  ModuleKind `r4d`, Modulnamen `R4D_<NAME>`, Import `R4DEV:Query:1`,
+  Exporten `DriverInit`/`DriverShutdown` und R4D-Metadaten.
+- SDK-Build-Helfer `addR4P` erzeugt regulaere R4M0-Module mit
+  ModuleKind `r4p`, Modulnamen `R4P_<NAME>`, Import `R4DEV:Query:1`,
+  Protocol-Exporten und R4P-Metadaten fuer Name, Rolle, Kategorie und
+  Dependencies.
+- Kernel-Modulsystem kann R4M0-Bytes aus R4D-/R4P-Pfaden mit bereits
+  aufgeloesten Imports laden und Exportadressen fuer Runtime-Entrypoints
+  bereitstellen.
+- `Code/src/main.zig` scannt R4D-Module nach den API-R4L-Dateien, damit die
+  Treiber vor dem Boot-Plan in der Modulregistry sichtbar sind.
+- R4D-Loader scannt `/sys/drivers`, laedt alle 5 R4D-Dateien in die
+  Modulregistry und trennt Modul-Erkennung von Driver-Init.
+- Runtime-R4D-Init nutzt die exportierten `DriverInit`-/`DriverShutdown`-
+  Adressen aus dem geladenen R4M0-Image.
+- R4P-Loader scannt `/sys/protocols`, laedt alle 20 Protokolldateien in die
+  Modulregistry und liest Rolle, Kategorie und Dependencies aus R4M0-
+  Metadaten.
+- R4P-Resolver nutzt die neuen Metadaten-Dependencies; `BADDEP.R4P` bleibt
+  gueltiges Modul, aber erwartungsgemaess blockierte Protokollrolle.
+- R4P-Dispatch nutzt den exportierten `ProtocolDispatch`-Entrypoint aus dem
+  Modulimage.
+- `MODULES` zeigt R4D- und R4P-Module mit Kind, Import-/Exportzahlen,
+  Resolverstatus, Basisadresse, Sections und Pfad.
+- `MODULETEST` deckt die R4D-/R4P-Modulcontracts ab.
+- `LOADERD.R4X` wurde auf R4M0-R4D-/R4P-Header erweitert.
+- `R4PTEST` prueft R4M0-Negativfaelle fuer kurze Header, falsche Magic und zu
+  viele Dependency-Metadaten.
+- `Docs/Core/Modulsystem.txt`, `Docs/Core/Architektur.txt`,
+  `Docs/Drivers/R4DFormat.txt`, `Docs/Protocols/R4PFormat.txt`,
+  `Docs/Protocols/README.txt`, `Docs/SDK/README.txt` und `Docs/Software.md`
+  auf den 0.21.6-Stand aktualisiert.
+
+Notizen:
+- Diese Unterversion migriert zuerst die systemnahen Module, weil Treiber und
+  Protokolle Resolver, Init-Vertraege und Dependency-Reihenfolge am staerksten
+  pruefen.
+- Die R4D-/R4P-Dateiendungen bleiben erhalten; geaendert wurde der technische
+  Containervertrag dahinter.
+- Version in Code/src/version.zig steht auf 0.21.6.
+
+Version 0.21.7
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Abnahmen:
+- `DevTools/Scripts/Build.bat -norun` laeuft erfolgreich.
+- `DevTools/Scripts/Build.bat -test` bootet headless und endet mit `TEST OK`.
+- Test-AUTOEXEC startet COMMAND.R4X ueber den neuen R4X-Ladepfad.
+- Test-AUTOEXEC ruft eine repraesentative Konsolensuite auf: FSDIAG.R4X,
+  LOADERD.R4X, APPHEAPD.R4X, MEMSUITE.R4X, IPCONFIG.R4X und SYNTHD.R4X.
+- LOADERD bestaetigt fuer mindestens ein R4X, ein R4L, ein R4D und ein R4P:
+  Header, Sections, Imports, Exports und Relocations sind lesbar.
+- Headless Artefakt-Scan bestaetigt, dass alle 13 R4DOS-/Shell-Programme und
+  alle 10 Diagnoseprogramme im neuen Containerformat gebaut wurden.
+
+Erledigt:
+- SDK-Build-Helfer `addR4X` kann R4X-Dateien als regulaere R4M0-Module mit
+  ModuleKind `r4x`, App-Class-Flags, Import `R4SYS:Query:1`, Export
+  `ProgramStart` und R4X-Metadaten erzeugen.
+- Zentrale Build-Liste erzeugt alle Console-R4X-Artefakte mit App-Class
+  `console` als R4M0-Container; GUI-R4X bleiben fuer 0.21.8 bewusst noch im
+  Legacy-Pfad.
+- R4X-Kernel-Ladepfad liest jetzt neben Legacy-R4X0 auch R4M0-R4X:
+  Header, Sections, Entry-Tabelle, Import-Tabelle und Relocations werden
+  validiert beziehungsweise angewendet.
+- R4M0-R4X-Imports werden beim Programmstart gegen die Modulregistry
+  aufgeloest; fehlende R4L-Exporte brechen den Start kontrolliert ab.
+- R4M0-R4X-ProgramImages werden sectionweise in page-aligned Speicher
+  geladen, BSS wird genullt und `ABS64`, `REL32`, `BASE_REL64` sowie
+  `IMPORT_SLOT64` sind im R4X-Ladepfad vorbereitet.
+- R4DOS-/Shell-Programme migriert: COMMAND.R4X, BEEP.R4X, R4CONFIG.R4X,
+  IPCONFIG.R4X, DHCP.R4X, DNSLOOKUP.R4X, NETCAT.R4X, TCPECHO.R4X,
+  HTTPGET.R4X, SEND.R4X, RECV.R4X, PING.R4X und SYNTH.R4X.
+- Diagnoseprogramme migriert: FSDIAG.R4X, AUDIOD.R4X, CLIPD.R4X,
+  SYNTHD.R4X, INPUTD.R4X, LOADERD.R4X, STACKD.R4X, APPHEAPD.R4X,
+  CLEANUPD.R4X und MEMSUITE.R4X.
+- `LOADERD.R4X` validiert jetzt je ein R4X, R4L, R4D und R4P als
+  R4M0-Container inklusive Header, Sections, Imports, Exports, Relocation-
+  Tabelle, Entry-Tabelle und Metadaten.
+- `DevTools/Scripts/TestScripts/CheckR4XConsole021.zig` ergaenzt:
+  der Host-Scan prueft alle 13 Shell-/Console-Programme und alle 10
+  Diagnostics auf R4M0, ModuleKind `r4x`, Console-Flag, Imports, Exports,
+  Entry und Metadaten.
+- Test-AUTOEXEC erweitert: FSDIAG.R4X, LOADERD.R4X, APPHEAPD.R4X,
+  MEMSUITE.R4X, IPCONFIG.R4X und SYNTHD.R4X laufen im headless Smoke ueber
+  den neuen R4X-Ladepfad.
+- `Docs/Core/Modulsystem.txt`, `Docs/Applications/R4X.txt`,
+  `Docs/SDK/README.txt` und `Docs/Software.md` auf den 0.21.7-Stand
+  aktualisiert.
+- `DevTools/Scripts/Build.bat -norun`, `DevTools/Scripts/Build.bat -test`
+  und `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckR4XConsole021.zig`
+  laufen erfolgreich.
+
+Notizen:
+- Diese Unterversion zieht die klassischen DOS-/Konsolenwerkzeuge und
+  Diagnoseprogramme nach, damit die technische Basis ohne Desktop-Abhaengigkeit
+  breit getestet wird.
+- COMMAND.R4X startet nun als R4M0-R4X ueber den neuen Loader und deklariert
+  seinen R4SYS-Import. Die alte ProgramApi-Startbruecke ist damit nicht mehr
+  der Dateiformatvertrag, bleibt aber als Runtime-Kompatibilitaet bis zum
+  Legacy-Ausbau in 0.21.10 sichtbar.
+- Code/Software/NetConf ist kein zentral gebautes Artefakt in Code/build.zig
+  und bleibt deshalb ausserhalb der 0.21.7-Migrationszaehlung; massgeblich
+  bleibt Docs/Software.md.
+- Version in Code/src/version.zig steht auf 0.21.7.
+
+Version 0.21.8
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Abnahmen:
+- `DevTools/Scripts/Build.bat -norun` laeuft erfolgreich.
+- `DevTools/Scripts/Build.bat -test` bootet headless und endet mit `TEST OK`.
+- Test-AUTOEXEC startet DESK.R4X in einem headless Smoke-Modus oder ueber
+  einen Desktop-Testpfad ohne sichtbares QEMU-Fenster.
+- Test-AUTOEXEC startet mindestens EXAMPLE.R4X, NOTEPAD.R4X, CALC.R4X,
+  R4FILES.R4X, DEVMGR.R4X und NETCFG.R4X ueber den neuen R4X-Vertrag.
+- Headless Artefakt-Scan bestaetigt, dass alle 11 R4Desk-/GUI-Programme im
+  neuen Containerformat gebaut wurden.
+- Headless Artefakt-Scan zeigt, dass gehostete Apps ihre R4DESK/R4DRAW-
+  Imports ueber echte R4L-Dateien bekommen.
+
+Erledigt:
+- SDK-Build-Helfer `addR4X` kann zusaetzliche R4L-Imports fuer R4M0-R4X-
+  Programme schreiben; `R4SYS:Query:1` bleibt der gemeinsame Basisimport.
+- Zentrale Build-Liste erzeugt alle GUI-R4X-Artefakte als R4M0-Container mit
+  App-Class `gui`, `ProgramStart`-Export und R4X-Metadaten.
+- Desktop-Host migriert: DESK.R4X importiert R4SYS, R4DESK und R4DRAW ueber
+  R4L und startet als R4M0-R4X.
+- SDK-/GUI-Referenz migriert: EXAMPLE.R4X importiert R4SYS, R4DESK, R4DRAW,
+  R4NET, R4AUDIO und R4DEV.
+- Gehostete Standard-Apps migriert: NOTEPAD.R4X, PAINT.R4X, CALC.R4X,
+  CLOCK.R4X, TIMESET.R4X, R4FILES.R4X, MEMVIEW.R4X, DEVMGR.R4X und
+  NETCFG.R4X.
+- MEMVIEW.R4X und DEVMGR.R4X deklarieren R4DEV, NETCFG.R4X deklariert R4NET;
+  einfache gehostete Apps deklarieren R4DESK/R4DRAW.
+- R4Desk-Smoke `/SMOKE-R4X` erweitert: R4Desk startet headless, hostet
+  R4CONFIG.R4X als Console-App und startet R4FILES.R4X, NOTEPAD.R4X,
+  PAINT.R4X, MEMVIEW.R4X, DEVMGR.R4X, NETCFG.R4X, EXAMPLE.R4X, CALC.R4X,
+  CLOCK.R4X und TIMESET.R4X als GUI-Apps.
+- `DevTools/Scripts/TestScripts/CheckR4XGui021.zig` ergaenzt: prueft alle 11
+  R4Desk-/GUI-Programme auf R4M0, GUI-Flag, Entry, Importtabelle, Export,
+  Metadaten und erwartete R4L-Imports.
+- `Docs/Core/Modulsystem.txt`, `Docs/Core/Architektur.txt`,
+  `Docs/Applications/R4X.txt`, `Docs/Desktop/R4DeskStand.txt`,
+  `Docs/SDK/README.txt` und `Docs/Software.md` auf den 0.21.8-Stand
+  aktualisiert.
+- Abnahmen erfolgreich: `DevTools/Scripts/Build.bat -norun`,
+  `DevTools/Scripts/Build.bat -test`,
+  `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckRoadmap021.zig`,
+  `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckR4XConsole021.zig`
+  und `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckR4XGui021.zig`.
+
+Notizen:
+- CALC.R4X gehoert ausdruecklich zu dieser Migration und darf nicht als
+  kleine Demo-App durch das Raster fallen.
+- Die alte ProgramApi-Startbruecke ist ab 0.21.10 kein Build-, Dateiformat-
+  oder Loadervertrag mehr. Der Vertrag aller mitgelieferten R4X-Programme ist
+  R4M0 mit R4L-Imports.
+- Version in Code/src/version.zig steht auf 0.21.8.
+
+Version 0.21.9
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Abnahmen:
+- `DevTools/Scripts/Build.bat -norun` laeuft erfolgreich.
+- `DevTools/Scripts/Build.bat -test` bootet headless und endet mit `TEST OK`.
+- Headless Audit-Script parst Docs/Software.md und bestaetigt exakt:
+  34 R4X-Programme, 5 R4D-Treiber und 20 R4P-Protokolle.
+- Headless Artefakt-Scan bestaetigt fuer alle 59 gelisteten Artefakte:
+  neues Modulformat, kein Legacy-Header, kein alter API-Tabellen-Startvertrag.
+- Headless Import-Scan bestaetigt: alle regulaeren Artefakte nutzen R4L-
+  Imports; kein normales R4X/R4D/R4P importiert direkt den KernelProvider.
+- BADDEP.R4P ist der einzige erwartete Dependency-Fehler und wird als
+  EXPECTED_NEGATIVE gefuehrt.
+- Audit bricht mit Fehler ab, wenn Docs/Software.md, Code/build.zig und die
+  erzeugten Artefakte auseinanderlaufen.
+
+Erledigt:
+- Vollstaendiger Migrations-Audit fuer alle Artefakte aus Docs/Software.md
+  umgesetzt.
+- Neues Hostscript `DevTools/Scripts/TestScripts/CheckModuleMigration021.zig`
+  ergaenzt. Es parst Docs/Software.md als verbindliches Inventar und gleicht
+  jedes Artefakt gegen Code/build.zig, DevTools/Scripts/Build.bat und
+  Code/zig-out ab.
+- Das Audit-Script gibt pro Artefakt maschinenlesbar `MIGRATED`,
+  `EXPECTED_NEGATIVE` oder `FAILED` aus.
+- R4X-Vollstaendigkeit geprueft: alle 34 R4X-Artefakte aus Docs/Software.md
+  sind R4M0, besitzen R4L-Imports, gueltige Tabellen und den
+  `ProgramStart`-Export.
+- R4D-Vollstaendigkeit geprueft: EXAMPLE.R4D, RTL8139.R4D, SID.R4D,
+  OPL3.R4D und MIDI.R4D sind R4M0, importieren R4DEV und exportieren
+  DriverInit/DriverShutdown.
+- R4P-Vollstaendigkeit geprueft: alle 20 R4P-Artefakte sind R4M0,
+  importieren R4DEV und exportieren die Protocol-Entrypoints: SMOKE.R4P,
+  CONF.R4P, BADDEP.R4P, EXAMPLE.R4P, NETETH.R4P, NETARP.R4P,
+  NETIPV4.R4P, NETUDP.R4P, NETICMP.R4P, NETDHCP.R4P, NETDNS.R4P,
+  NETTCP.R4P, NETR4SL.R4P, HIDREPORT.R4P, USBHID.R4P, USBBOT.R4P,
+  USBSCSI.R4P, MIDI.R4P, OPL3.R4P und SID.R4P.
+- BADDEP.R4P ist der einzige `EXPECTED_NEGATIVE`-Status. Das Artefakt selbst
+  ist gueltiges R4M0-R4P, bleibt aber erwarteter Dependency-Negativtest wegen
+  `r4p.dep=misc.missing_dependency`.
+- Audit bestaetigt: kein Docs/Software.md-Artefakt nutzt Legacy-Magic
+  `R4X0`, `R4D0` oder `R4P0`; kein normales R4X/R4D/R4P importiert direkt
+  den KernelProvider.
+- `Docs/Core/ModulMigrationAudit021.txt` ergaenzt und
+  `Docs/Core/Modulsystem.txt`, `Docs/Core/Architektur.txt`,
+  `Docs/Software.md` und `Docs/README.txt` aktualisiert.
+- Abnahmen erfolgreich: `DevTools/Scripts/Build.bat -norun`,
+  `DevTools/Scripts/Build.bat -test`,
+  `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckRoadmap021.zig`,
+  `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckR4XConsole021.zig`,
+  `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckR4XGui021.zig`
+  und `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckModuleMigration021.zig`.
+
+Notizen:
+- Diese Unterversion ist der harte Vollstaendigkeits-Gate vor dem
+  Legacy-Ausbau.
+- Legacy wird erst in 0.21.10 entfernt, wenn dieser Audit gruen ist.
+- Version in Code/src/version.zig steht auf 0.21.9.
+
+Version 0.21.10
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Abnahmen:
+- `DevTools/Scripts/Build.bat -norun` laeuft erfolgreich.
+- `DevTools/Scripts/Build.bat -test` bootet headless und endet mit `TEST OK`.
+- Ergebnis des 0.21.9-Migrations-Audits liegt vor und ist gruen.
+- Headless Artefakt-Scan bestaetigt: keine mitgelieferte R4X-, R4D- oder
+  R4P-Datei nutzt den alten Flat-Binary-Header.
+- Negativtest mit bewusst altem Flat-Binary-Artefakt wird vom Loader sauber
+  abgelehnt und als erwarteter Fehler protokolliert.
+- Test-AUTOEXEC prueft, dass alle regulaeren Programme, Treiber und
+  Protokolle weiterhin ueber den neuen Pfad starten bzw. registrieren.
+
+Erledigt:
+- R4X-Loader akzeptiert regulaer nur noch R4M0-R4X; alte `R4X0`-Dateien
+  werden mit `Legacy module format not supported` abgelehnt.
+- R4D-Loader akzeptiert regulaer nur noch R4M0-R4D; alte `R4D0`-Dateien
+  werden sichtbar als Legacy-Format abgelehnt.
+- R4P-Loader/Modulregistry akzeptieren regulaer nur noch R4M0-R4P; der alte
+  `R4P0`-Parserpfad ist aus dem normalen Laufzeitpfad entfernt.
+- R4XBuilder erzeugt keine alten R4X0-/R4D0-/R4P0-Artefakte mehr. Direkte
+  Legacy-Aufrufe ohne `--r4m` und `--inspect` auf alte Magics brechen mit
+  einem sichtbaren Legacy-Fehler ab.
+- SDK-Build-Helfer und zentraler Build erzwingen R4M0 fuer alle mitgelieferten
+  R4X-/R4D-/R4P-Artefakte.
+- `LEGACYTEST` als headless Boot-Negativtest ergaenzt; OLDLEG.R4X,
+  OLDLEG.R4D und OLDLEG.R4P sind bewusst alte Testproben.
+- `DevTools/Scripts/TestScripts/CheckLegacyRemoval021.zig` prueft hostseitig
+  Builder-, SDK-, Loader- und Test-Overlay-Gates.
+- Docs/Software.md, Docs/Core/Modulsystem.txt, Docs/Applications/R4X.txt,
+  Docs/Drivers/R4DFormat.txt, Docs/Protocols/R4PFormat.txt,
+  Docs/API/Readme.txt, Docs/SDK/README.txt und
+  Docs/Deployment/BuildUndTest.txt beschreiben den neuen Standard.
+- Zentrale Version in Code/src/version.zig steht auf 0.21.10.
+
+Notizen:
+- Ab dieser Version ist Legacy nicht mehr Betriebsmodell.
+- Der finale Test in 0.21.11 darf erst beginnen, wenn der Legacy-Ausbau gruen
+  ist.
+
+Version 0.21.11
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Abnahmen:
+- `DevTools/Scripts/Build.bat -norun` laeuft erfolgreich.
+- `DevTools/Scripts/Build.bat -test` laeuft als finaler headless Volltest
+  mit Exitcode 0 und `TEST OK`.
+- `DevTools/Scripts/Build.bat -testonly` laeuft danach mindestens einmal
+  erfolgreich gegen dasselbe Test-Image.
+- Finaler Test bestaetigt: 6 R4L-Dateien, 34 R4X-Programme, 5 R4D-Treiber
+  und 20 R4P-Protokolle sind im neuen Format vorhanden oder erwartungsgemaess
+  als Negativtest markiert.
+- Finaler Test bestaetigt: R4X/R4D/R4P nutzen R4L-Imports; normale Module
+  importieren nicht direkt den KernelProvider.
+- Finaler Test bestaetigt: Moduldiagnose zeigt KernelProvider, R4L, R4X, R4D
+  und R4P mit Imports, Exports, Relocations und Status.
+- Finaler Test bestaetigt: Legacy-Flat-Binary wird abgelehnt und kein
+  mitgeliefertes Modul haengt am alten API-Tabellen-Startvertrag.
+
+Erledigt:
+- Finales Host-Gate `DevTools/Scripts/TestScripts/CheckFinalModules021.zig`
+  ergaenzt. Es prueft Bootlog, Image-Liste, R4L-Dateien und alle Artefakte
+  aus Docs/Software.md als gemeinsamen 0.21.X-Abschluss.
+- Alle sechs API-Gruppen werden als echte R4L-Binaerdateien gebaut,
+  ausgeliefert und im Bootpfad geladen: R4SYS.R4L, R4DESK.R4L, R4DRAW.R4L,
+  R4NET.R4L, R4AUDIO.R4L und R4DEV.R4L.
+- Finales Gate bestaetigt exakt 6 R4L-Dateien, 34 R4X-Programme, 5
+  R4D-Treiber und 20 R4P-Protokolle im neuen R4M0-/R4L-Modell.
+- Finales Gate bestaetigt: normale R4X/R4D/R4P importieren R4L-Dateien und
+  nicht direkt den KernelProvider; die KernelProvider-Grenze bleibt sichtbar
+  und ist nur fuer API-R4L vorgesehen.
+- Finales Gate bestaetigt: Moduldiagnose zeigt KernelProvider, R4L, R4X, R4D
+  und R4P mit Imports, Exports, Relocations und Status.
+- Finales Gate bestaetigt: Legacy-Flat-Binaries werden abgelehnt und der alte
+  API-Tabellen-Startvertrag ist fuer mitgelieferte Artefakte entfernt.
+- `Docs/Core/Modulabschluss021.txt` ergaenzt und
+  `Docs/Core/Modulsystem.txt`, `Docs/Software.md`,
+  `Docs/Deployment/BuildUndTest.txt` sowie `Docs/README.txt` auf den
+  Abschlussstand gebracht.
+- Zentrale Version in Code/src/version.zig steht auf 0.21.11.
+- Abnahmen erfolgreich: `DevTools/Scripts/Build.bat -norun`,
+  `DevTools/Scripts/Build.bat -test`,
+  `DevTools/Scripts/Build.bat -testonly`,
+  `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckRoadmap021.zig`,
+  `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckR4XConsole021.zig`,
+  `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckR4XGui021.zig`,
+  `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckModuleMigration021.zig`,
+  `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckLegacyRemoval021.zig`
+  und `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckFinalModules021.zig`.
+
+Notizen:
+- Das ist der Abnahmepunkt fuer 0.21.X: Die API ist nicht mehr nur eine
+  Kernel-Tabelle, sondern wird als R4L-Binaermodul-Schicht geladen.
+- Der Abschluss gilt nur als erreicht, wenn R4L als sprachneutraler
+  ABI-Vertrag dokumentiert ist und nicht an eine einzelne Compiler-Sprache
+  gebunden bleibt.
+- Der Abschluss gilt ebenfalls nur als erreicht, wenn die mitgelieferten
+  Programme, Treiber und Protokolle nicht mehr vom alten Flat-Binary- und
+  API-Tabellen-Startvertrag abhaengen.
+- 0.21.X ist damit als Modulsystem-Roadmap abgeschlossen: erst API-Gruppen,
+  dann Query-/Interface-Tabellen, dann Relocation-faehiger Loader, dann echte
+  R4L/R4X/R4D/R4P-Binaermodule ohne Legacy-Betriebsmodell.

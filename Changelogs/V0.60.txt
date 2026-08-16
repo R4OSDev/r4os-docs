@@ -1,0 +1,2486 @@
+﻿R4OS Roadmap 0.60.X - NTFS-Umstieg
+==================================
+
+Leitbild 0.60.X
+---------------
+
+0.60.X stellt das R4OS-Systemvolume von FAT32 auf NTFS 3.1 um. NTFS wird
+sauber und so vollstaendig wie moeglich ausgearbeitet; Massstab ist echte
+Windows-Kompatibilitaet (chkdsk-fehlerfrei, wechselseitig les- und
+beschreibbar). FAT32 wird nicht entfernt, sondern bleibt als optionales
+Dateisystem fuer weitere Platten nutzbar. Grundlage ist eine echte
+Dateisystem-Abstraktion (VFS), unter der spaeter weitere Formate folgen
+koennen. Limine bootet nicht von NTFS; das Zielimage traegt deshalb eine
+kleine FAT32-Bootpartition plus NTFS-Systemvolume C: (Windows-ESP-Modell).
+
+Analyse, Grundsatzentscheidungen E1-E9, Umbaubereiche U1-U8, Risiken und
+offene Diskussionspunkte D1-D5: Docs/FileSystem/NTFSUmstiegAnalyse0601.txt
+Strukturreferenz: Reference/FileSystem/NTFS/
+
+Der Unterversionsplan 0.60.2 bis 0.60.11 wurde am 2026-07-20 im
+Einzeldurchgang mit dem User abgestimmt und bestaetigt; die
+Entscheidungen D1-D5 sind in der Analyse dokumentiert (128-MB-Boot-
+partition ohne Buchstabe, eingecheckte Windows-Fixtures, Read vor
+Formatter, QEMU-only bis 0.60.10, D: bleibt FAT32).
+
+
+Version: 0.60.1
+Status: Erledigt
+Offene Punkte:
+- keine
+Erledigt:
+- Plangespraech gefuehrt: Grundsatzentscheidungen E1-E9 bestaetigt,
+  Diskussionspunkte D1-D5 entschieden, alle Unterversionen 0.60.2 bis
+  0.60.11 einzeln vorgestellt und vom User freigegeben.
+- Ist-Stand-Analyse des gesamten Storage-/FS-Stacks (block, page_cache,
+  mbr, drive, request, fat32) inkl. aller 12 Kernel-Verbraucher mit 165
+  direkten fat32.*-Aufrufstellen; App-/Tooling-/Vertragsreichweite
+  (Explorer-kind-Check, R4DEV-FAT32-Telemetrie, ImageCreator,
+  SYSUPD-8.3-Vertrag) erhoben.
+- Bootpfad geklaert: Limine 12 liest nur FAT12/16/32 und ISO9660 ->
+  FAT32-Bootpartition + NTFS-C: als Ziel-Layout (E1).
+- Referenzmaterial beschafft und abgelegt unter Reference/FileSystem/
+  NTFS/: ntfsdoc.pdf (Russon/Fledel, GNU FDL), ntfs-3g-layout.h und
+  linux-ntfs3-ntfs.h (GPL, nur Referenz, keine Code-Uebernahme), README
+  mit SHA256/Lizenz/Roadmap-Bezug, eigene NTFSStrukturUebersicht.txt.
+- Analyse- und Plandokument Docs/FileSystem/NTFSUmstiegAnalyse0601.txt.
+Abnahme:
+- Referenzdateien mit SHA256 dokumentiert; Analysedokument vorhanden;
+  Plan vom User am 2026-07-20 vollstaendig bestaetigt.
+Notizen:
+- fs/request.zig-Operationskatalog ist bereits FS-neutral und dient als
+  Vorlage fuer den VFS-Vertrag.
+- drive.Kind.ntfs und MBR-Typ 0x07 existieren als Platzhalter; GPT wird
+  bewusst nicht in 0.60.X gezogen (E7).
+
+Version: 0.60.2
+Status: Erledigt
+Offene Punkte:
+- keine
+Erledigt:
+- Neue FS-neutrale VFS-Schicht Code/Kernel/fs/vfs.zig: Volume-Tabelle
+  pro Laufwerksbuchstabe (mountForDrive/volumeForDrive), tagged-union
+  Volume mit FAT32 als erstem Backend, opake NodeRef (u64) statt
+  u32-Cluster, neutrale Entry mit ABI-Attributbits und u64-Groesse,
+  AppendStatus-/AtomicReplaceResult-Vertraege mit identischen Werten.
+- Alle Kernel-Verbraucher umgestellt: r4sys (77 Stellen; Kind-Checks
+  exakt verhaltensgleich durch Volume-Lookups ersetzt, Stream-Slots
+  auf parent_node), system_update_recovery_boot, storage_boot,
+  boot_config, module_file, modules, r4x, r4d, r4p, r4net, mbr.
+  FAT32-interne Mount-Tabelle (setMounted*/mounted*) entfernt.
+- mbr-Probe (fat32.inspect) bleibt bewusst FS-spezifisch; r4dev nutzt
+  weiterhin fat32.summary() als FAT32-Telemetrie-Slot.
+- Gates auf die neue Spur r4sys -> vfs -> fat32 aktualisiert:
+  Run-ApiArchitectureDocumentation05837 (Anker fs/vfs.zig, neue
+  VFS-Dispatch-Pruefung), Run-SystemUpdateAtomicContract05914
+  (vfs.replaceFileAtomic/vfs.validateShortName83-Marker).
+- Doku nachgezogen: ArchitekturUndEinstieg.md-Dateispur,
+  APIArchitektur.diagram.psd1 + deterministisch regenerierte SVG
+  (Spur-Schritt 5 = VFS), DateisystemUndStorage.txt-Schichten,
+  AGENTS-Kernel-Struktur.
+Abnahme:
+- Build.bat -kernel gruen (alle Vorbau-Gates), Build.bat -test mit
+  QEMU TEST OK inkl. LOADERD/R4XSTARTD/CSTARTD/R4CC/R4PACK/R4BUILD
+  result: OK; Verhaltensneutralitaet ohne ABI-/Vertragsaenderung.
+Notizen:
+- VFS-Zeitvertrag: Entry fuehrt die DOS-u16-Zeitpaare als definiertes
+  ABI-Format; NTFS konvertiert FILETIME an dieser Grenze (E-Nachtrag
+  zur Analyse, vermeidet Doppelkonvertierung am fixed-layout Payload).
+- Laufwerks-Invariante dokumentiert: drive.Kind==fat32 <=> Volume in
+  der VFS-Tabelle; darauf beruht die exakte Fehlercode-Neutralitaet
+  der Kind-Check-Abloesung.
+
+Version: 0.60.3
+Status: Erledigt
+Offene Punkte:
+- keine
+Erledigt:
+- Geteilter NTFS-Strukturkern Code/System/SDK/r4os/ntfs_format.zig ohne
+  Kernel-/OS-Abhaengigkeiten: Boot-Sektor (inkl. negativer Groessenbytes
+  und Large-Cluster-Encoding), FILE-Record-Header, Fixup-Apply/-Install
+  mit Torn-Write-Erkennung und USN-Wrap, Attribut-Iterator (resident/
+  non-resident), Runlist-Decoder und -Encoder, $ATTRIBUTE_LIST-Iterator,
+  $STANDARD_INFORMATION/$FILE_NAME, $INDEX_ROOT/INDX-Bloecke/
+  Index-Entry-Iterator, $UpCase-Collation (COLLATION_FILE_NAME) und
+  UTF-16-Helfer.
+- Windows-Referenzfixtures per New-NtfsFixtures0603.ps1 (Adminlauf,
+  diskpart/format, echtes Windows-NTFS 3.1) erzeugt und eingecheckt:
+  NTFS4K (32 MB, 4-KB-Cluster, voller Feature-Satz: LFN/Unicode,
+  320-Eintraege-B+Baum-Verzeichnis, fragmentierte 2-MB-Datei, Sparse,
+  Kompression, ADS, Hardlinks, bekannte FILETIMEs) und NTFS512 (16 MB,
+  512-Byte-Cluster, Strukturbasics); SHA256-Manifest mit 688 Dateien,
+  Zip 6,4 MB unter Code/System/SDK/Tests/NtfsFixtures/.
+- Hostmodell-Gate Run-NtfsFormatContract0603.ps1 vor jedem Kernelbuild
+  in Build.bat verdrahtet: 10 Modelltests (Runlist-/Fixup-Roundtrips,
+  Grenzfaelle, Collation) plus vollstaendiges Lesen BEIDER Windows-
+  Volumes durch CheckNtfsFixtures0603 (MFT-Bootstrap, kompletter
+  $I30-Walk, 686 SHA256-Treffer, 2 komprimierte erkannt, Collation-
+  Ordnung je Knoten, ADS-/Hardlink-/FILETIME-Spotchecks).
+Abnahme:
+- Gate standalone gruen (NTFSFIXTURE result: OK files=347/341);
+  Build.bat -test mit QEMU TEST OK.
+Notizen:
+- NTFS512 traegt bewusst nur Strukturbasics: Windows selbst liefert
+  beim Lesen einer Sparse-Datei auf dem 512er-Volume einen
+  Disk-Full-Fehler; Feature-Ground-Truth liegt komplett auf NTFS4K.
+- Kompressionsinhalt (LZNT1) wird strukturell erkannt, aber erst in
+  0.60.10 inhaltlich verifiziert.
+
+Version: 0.60.4
+Status: Erledigt
+Offene Punkte:
+- keine
+Erledigt:
+- Read-only NTFS-3.1-Kerneltreiber Code/Kernel/fs/ntfs/ntfs.zig auf dem
+  geteilten Strukturkern (ntfs_format als Kernel-Buildmodul wie
+  r4f_format): Probe/Mount im MBR-Scan (Typ 0x07), MFT-Bootstrap ueber
+  Runlist, per-Volume-$UpCase (Heap, 128 KB), $I30-Lookup case-
+  insensitive per Collation-Descent, in-order B+Baum-Enumeration mit
+  Block-Reload nach Kind-Descend (Eintragskopie VOR dem Abstieg gegen
+  Scratch-Aliasing), Dateien lesen ueber Runlists inkl. Fragmentierung,
+  $ATTRIBUTE_LIST-Extents, Sparse-Runs und initialized_size; Fixups nur
+  im Record-Layer, nie im Sektor-Cache. FILETIME->DOS-Konvertierung an
+  der VFS-Entry-Grenze. Kompression/EFS und alle Schreiboperationen
+  lehnen sichtbar ab (read-only bis 0.60.6).
+- VFS um das .ntfs-Backend erweitert (alle Arme, Schreibpfade liefern
+  definierte read-only-Fehler); mbr.zig mountet NTFS-Volumes als
+  Datenlaufwerk.
+- Neues Diagnoseprogramm NTFSDIAG.R4X (Code/System/Diagnostics/
+  NtfsDiag) mit 17 Checks gegen das Windows-Fixture-Volume; Modul-
+  zaehlstaende und Set-Hashes der Katalog-/Image-Gates auf 137/93/85/84
+  fortgeschrieben, Docs/SDK/ModuleCatalogInventory.json regeneriert.
+- Runtime-Runner Run-NtfsReadRuntime0604.ps1: NTFS4K.img als AHCI-
+  Zweitplatte am normalen Testimage, alle 17 NTFSDIAG-Marker plus
+  Mount-Zeile und Poweroff verpflichtend; TestInjection wird gesichert
+  und restauriert.
+- Gate-Robustheit: Run-KernelApiProviderNegative05817 kennt das
+  ntfs_format-Kernelmodul und matcht Compilerdiagnosen whitespace-
+  normalisiert.
+Abnahme:
+- Run-NtfsReadRuntime0604.ps1 OK (NTFSDIAG result: OK, 17/17 Marker);
+  Build.bat -test mit QEMU TEST OK (FAT32-Pfad verhaltensneutral).
+Notizen:
+- Der 65-Zeichen-Fixture-Dateiname liegt bewusst UEBER der 63-Byte-
+  Komponentengrenze des Textvertrags; NTFSDIAG prueft ihn als sichtbare
+  Ablehnung (overlimit-visible), nicht als lesbaren Namen.
+- Enumeration nutzt FILE_NAME-Duplikatgroessen des Index; resolveEntry
+  liefert die autoritative $DATA-Groesse. Nicht-ASCII-Namen erscheinen
+  DOS-artig mit '?'-Substitution und bleiben unaufloesbar (echtes
+  UTF-8-Handling folgt 0.60.10).
+
+Version: 0.60.5
+Status: Erledigt
+Offene Punkte:
+- keine
+Erledigt:
+- Geteilter NTFS-3.1-Formatter Code/BuildTools/ImageCreator/src/
+  ntfs_mkfs.zig (auf ntfs_format-Kern): Boot-Sektor plus Backup,
+  MFT-Systemrecords 0-15 und $Extend-Kinder $Quota/$ObjId/$Reparse,
+  Cluster-/MFT-Bitmap, $LogFile 0xFF, $MFTMirr-Sync, collation-
+  sortierte $I30-B+Baeume (resident und INDEX_ALLOCATION mit Bloecken/
+  Bitmap), Sparse-$BadClus. Volumeunabhaengige Metadaten ($UpCase,
+  $AttrDef, $Secure-$SDS/$SDH/$SII, $Extend-View-Index-Roots, Root-/
+  Boot-Security-Deskriptoren) aus Windows-Templates unter
+  Code/System/SDK/Tests/NtfsFixtures/Meta0605 (einmalig per
+  ExtractNtfsMeta0605.zig aus dem NTFS4K-Fixture extrahiert).
+- ImageCreator-Subcommand `format-ntfs` (bare oder MBR-partitioniert,
+  --add/--add-list fuer Hostdateien, Verzeichnisse on demand).
+- Neues Hosttool Code/BuildTools/NtfsVerify: strukturelle Volumepruefung
+  (Boot+Backup, Fixups/Identitaet je Record, $MFTMirr-Bytegleichheit,
+  Cluster-Ueberlappungs- und $Bitmap-Bilanz, $MFT-$BITMAP gegen
+  Record-Flags, voller $I30-Baumwalk mit Collationsordnung/Sequenz-/
+  Directoryflag-Konsistenz, $Volume 3.1/Dirty).
+- Pflichtgate Run-NtfsFormatterContract0605 in Build.bat (build_tools):
+  baut NtfsVerify+ImageCreator, verifiziert beide Windows-Referenz-
+  volumes, den Formatter (bare/MBR/leer) und den format-ntfs-Subcommand.
+- Manueller chkdsk-Nachweis Test-NtfsChkdsk0605.ps1 (VHD+diskpart+chkdsk,
+  Admin): von R4OS formatierte Volumes passieren chkdsk fehlerfrei
+  bereits ab Pass 0 (read-only Mount), voller Baum und leeres Volume.
+Abnahme:
+- Run-NtfsFormatterContract0605 gruen; chkdsk overall OK (Pass 0/1/2
+  je exit 0, keine Korrekturen, beide Varianten); Build.bat -norun und
+  -test mit QEMU TEST OK.
+Notizen:
+- Kernbefund: Windows-Runlists setzen im hoechstwertigen Laengenbyte
+  nie das Topbit; encodeRun paddet daher ggf. mit einem Nullbyte.
+  Ohne das lehnte ntfs.sys die $MFT als beschaedigt ab. View-Index-
+  Kinder ($Quota/$ObjId/$Reparse, $Secure) tragen 0x20000006 in SI UND
+  $FILE_NAME; Index-Duplikatgroessen muessen den Recordattributen
+  exakt gleichen (8-alignte Residentgroesse). Alleinstehende Nicht-8.3-
+  Namen sind POSIX-Namespace.
+- $LogFile bleibt 0xFF (leer/clean, mkntfs-Praxis); kein Journal-Replay.
+  TxF/$RmMetadata wird bewusst nicht erzeugt (Windows legt es bei Bedarf
+  an).
+
+Version: 0.60.6
+Status: Erledigt
+Offene Punkte:
+- keine
+Erledigt:
+- Geteilter NTFS-Volumenkern Code/System/SDK/r4os/ntfs_volume.zig: die
+  gesamte Lese- UND Schreiblogik laeuft ueber ein Device-Seam
+  (read/write/flush) identisch im Kernel (Page-Cache) und im Hostmodell
+  (RAM-Image). Der Kerneltreiber ntfs.zig ist seit 0.60.6 ein duenner
+  Adapter darueber (E9 "eine Wahrheit"); die fruehere doppelte Read-
+  Implementierung entfaellt.
+- Write Phase 1 Datenpfad: createFile (resident und non-resident/multi-
+  cluster), writeFile (Overwrite via delete+create), appendFileAtOffset
+  (read+delete+create, offsetgeprueft), deleteFile. $Bitmap-Cluster- und
+  $MFT-Record-Allokation mit Rollback, Volume-Dirty-Flag, $MFTMirr-Sync
+  fuer Records 0-3.
+- Feste crash-sichere Schreibreihenfolge: dirty->flush->bitmap-bits->
+  flush->payload->record(+mirror)->flush->index->flush->clear-dirty->
+  flush. Bitmap-Bits werden dauerhaft, BEVOR ein Record die Cluster
+  referenziert (Crash leakt hoechstens Allokation, nie Cross-Link).
+  Logische Fehler (no_space, dir_full=B+Split fuer 0.60.7) rollen
+  Record/Cluster zurueck und loeschen das Dirty-Flag.
+- VFS-Schreibarme fuer NTFS verdrahtet (writeFile, writeFileRange,
+  appendFileAtOffsetStatus, deleteFile); isReadOnly=false. mkdir/rmdir/
+  rename/copy/replace_atomic bleiben sichtbar unsupported (0.60.7/0.60.8).
+- Hostmodell Run-NtfsWriteContract0606 (Pflichtgate vor Kernelbuilds):
+  funktionale Roundtrips plus Crash-Matrix (Abbruch nach jedem der ~7
+  Flushes ueber Budget 1..40), NtfsVerify-sauberes geschriebenes Image.
+  Runtime Run-NtfsWriteRuntime0606: NTFSDIAG /WRITE gegen ein per
+  format-ntfs erzeugtes beschreibbares NTFS-Volume, danach NtfsVerify
+  des gastgeschriebenen Images.
+Abnahme:
+- Run-NtfsWriteContract0606 gruen (NTFSWRITE result: OK, NtfsVerify OK);
+  chkdsk eines geschriebenen Volumes exit 0 keine Probleme (manuell);
+  Run-NtfsWriteRuntime0606 mit NTFSDIAG result: OK; Build.bat -test
+  QEMU TEST OK.
+Notizen:
+- Grosse Appends (> 64 KB Puffer), resident->non-resident-Konversion in
+  place, Interior-Writes und B+Baum-Splits sind bewusst 0.60.7.
+- Der Kernel liest die Wanduhr als UTC und rechnet FILETIME selbst;
+  ntfs_volume traegt now_filetime pro Operation.
+
+Version: 0.60.7
+Status: Erledigt
+Offene Punkte:
+- keine
+Erledigt:
+- Vollstaendige $I30-B+Baum-Engine im geteilten Kern ntfs_volume.zig:
+  Insert mit Leaf-/Interior-Splits (Median-Promotion, temporaerer
+  Slack-Overflow im Scratch-Block), Root-Push-down mit erstmaliger
+  $INDEX_ALLOCATION-/$BITMAP-Anlage und Ein-Cluster-Wachstum
+  (Adjazenz-Merge), Root-Value-Budget 0x180 wie Windows (fruehe
+  Push-downs halten Recordplatz fuer Runlist-/Bitmap-Wachstum frei).
+- Delete ueber alle Ebenen: Descent-Suche, Interior-Ersetzung durch den
+  Subtree-Praedezessor (END-Rotation im tiefsten Knoten mit Eintraegen,
+  leere Kettenknoten reklamiert), und Empty-Block-Elimination: kein
+  geleerter Block bleibt referenziert (Entry-Re-Insert, END-Rotation,
+  Interior-Bypass, Kaskade nach oben, Root-Kollaps zurueck zu resident
+  inkl. Attribut- und Clusterfreigabe). chkdsk toleriert keine
+  referenzierten leeren INDX-Bloecke - das war der einzige im
+  2000-Ops-Churn gefundene Windows-Befund (Diff-Forensik gegen das
+  chkdsk-reparierte VHD; chkdsk nummeriert Records hexadezimal).
+- mkdir/rmdir/rename: createDirectory (Records wie der Formatter:
+  Flags 0x03, SI 0x00 + Dir-Security-Id, leerer resident $I30-Root),
+  deleteDirectory (nur leer, not_empty/not_directory sichtbar,
+  INDX-Cluster zurueck an $Bitmap), renameEntry (Record-FN zuerst,
+  Index-Key aus denselben Value-Bytes -> Duplikate exakt; same-dir und
+  cross-dir, Verzeichnisse eingeschlossen).
+- Append in place statt read+delete+create: resident-Wachstum im
+  Record, resident->non-resident-Konversion (removeAttrRaw + Stub +
+  Runlist), Slack-Schreiben, Cluster-Erweiterung mit Run-Merge; die
+  Index-Duplikatgroessen werden in place gepatcht
+  (updateIndexEntrySizes, keine Baumaenderung). 32-KB-Appendgrenze und
+  append_buffer entfallen.
+- MFT-Wachstum: growMft haengt 64 Records (16 Cluster) an $MFT an,
+  nullt sie vor der Referenzierung, aktualisiert Record 0 (+$MFTMirr)
+  und die in-memory-Runlist (Volume traegt mft_runs_buf +
+  mft_run_count-Pointer, damit dieselbe Operation die neuen Records
+  sofort adressieren kann).
+- FN-Parent-Referenzen tragen jetzt die ECHTE Sequenz des Parents
+  (seqOf statt fester 1) - noetig fuer wiederverwendete Records.
+- NtfsVerify verschaerft (chkdsk-Paritaet): globale In-order-Collation
+  ueber den ganzen Verzeichnisbaum, exakte $I30-Bitmap-Bilanz
+  (Block-Index-Skalierung fuer 512er-Cluster), doppelt referenzierte
+  und leere referenzierte Bloecke sind Fehler. Beide Windows-Fixtures
+  bestehen auch die strengen Checks.
+- Stack-Disziplin: Write-Pfad-AttrScratch-Collections (je ~7 KB) liegen
+  in dedizierten Scratch-Slots (attr_op/index/mgmt_a/mgmt_b/cluster/
+  mirror) statt auf dem Kernel-Task-Stack; Scratch-Aliasing-Regeln im
+  Modul dokumentiert.
+- Hostmodell CheckNtfsTreeModel0607 (Pflichtgate
+  Run-NtfsTreeContract0607 vor Kernelbuilds): 1700-Dateien-Verzeichnis
+  (Push-down, Splits, Interior-Splits, MFT-Wachstum), Halb- und
+  Volldelete ueber Interior-Knoten, mkdir/rmdir/rename-Matrix,
+  Append-Leiter 100B->208KB ueber alle Uebergaenge, 2000-Ops-Churn mit
+  Schattenmodell (412 Ueberlebende exakt verifiziert), Crash-Matrix
+  5 Ops x 40 Flush-Budgets, striktes NtfsVerify des Churn-Images.
+- Kernel: vfs.makeDirectory/removeDirectory/renameEntry auf NTFS
+  verdrahtet; NTFSDIAG /TREE (14 Marker) und Runtime-Runner
+  Run-NtfsTreeRuntime0607 (NTFSDIAG /WRITE + /TREE in einer QEMU-
+  Sitzung, striktes NtfsVerify des gastgeschriebenen Volumes).
+Abnahme:
+- Run-NtfsTreeContract0607 gruen (NTFSTREE result: OK); chkdsk des
+  2000-Ops-Churn-Images exit 0 keine Probleme in allen drei Paessen
+  (manuell, ebenso alle fuenf Phasen-Images); Run-NtfsTreeRuntime0607
+  mit 2x NTFSDIAG result: OK; Build.bat -test QEMU TEST OK.
+Notizen:
+- copy/move ueber Volumegrenzen (vfs.copyFile-NTFS-Arm) folgt mit dem
+  Systemumstieg 0.60.9; replace_atomic ist 0.60.8.
+- $ATTRIBUTE_LIST-Schreibpfade (Record-Ueberlauf von Runlisten) bleiben
+  offen; praktisch begrenzt das die Fragmentierung einzelner Dateien
+  (MAX ~24 Runs) und wird bei Bedarf in 0.60.10/0.60.11 gezogen.
+
+Version: 0.60.8
+Status: Erledigt
+Offene Punkte:
+- keine
+Erledigt:
+- NTFS-replaceFileAtomic im geteilten Kern ntfs_volume.zig: atomarer
+  Ownership-Transfer als Rename-Kette in einer Dirty-Klammer
+  (dirty -> rename target->backup -> flush -> rename staged->target ->
+  flush -> clear). Jeder Crash-Schnitt ist mit demselben Aufruf
+  idempotent fortsetzbar (staged fehlt + target da = ok; staged+backup
+  ohne target = Fortsetzung); T+S+B zugleich ist sichtbarer conflict;
+  kein Copy/Delete-Fallback. renameEntry-Kern als flushlose
+  renameLocked-Primitive refaktoriert (ein Rename = ein
+  Crash-Modell-Schritt). Stage-/Backupnamen bleiben 8.3-validiert
+  (FS-neutraler Namensvertrag, is83Safe im Kern).
+- vfs.replaceFileAtomic mit NTFS-Arm (1:1-Ergebnismapping); r4sys
+  fileReplaceAtomic damit laufwerks- und FS-neutral.
+- SYSUPD-Recovery-Boot laufwerksneutral: payloadVolume() loest das
+  Volume pro Payload-Pfad aus dem Laufwerksbuchstaben auf (Journale
+  bleiben auf C:); Rollback-Tripel erzwingt Laufwerksgleichheit;
+  deletePath-Existenzcheck strippt jetzt korrekt den Laufwerkspraefix
+  (latenter No-op-Bug behoben).
+- R4U-Zielpfadvertrag erweitert: neue SystemReplaceClass .data fuer
+  Ziele auf anderen gemounteten Volumes (NTFS-Datenplatte, spaeter
+  Bootpartition); classifySystemPath und R4UPack (kind "data")
+  synchron, append-only.
+- Hostmodell CheckNtfsReplaceModel0608 (Pflichtgate
+  Run-NtfsReplaceContract0608 vor Kernelbuilds): Zustandsmatrix
+  (Normalfall, Idempotenz, neues Target, Crash-Fortsetzung, not_found,
+  Fremdzustand, Alias-/Flag-/Typ-/Namensablehnungen,
+  Recovery-Rollback-Muster) plus Crash-Matrix mit idempotentem
+  Wiederaufruf; striktes NtfsVerify; chkdsk des Modell-Images exit 0
+  in allen drei Paessen (manuell).
+Abnahme:
+- Run-NtfsReplaceContract0608 gruen (NTFSREPLACE result: OK,
+  NtfsVerify OK); chkdsk fehlerfrei; Run-NtfsSysupdRuntime0608
+  (Drei-Payload-R4U mit zwei NTFS-Zielen, Unterbrechung nach dem
+  ersten dauerhaften Commit auf NTFS, RESUME bis applied=3/3,
+  Backups auf dem NTFS-Volume sichtbar, striktes NtfsVerify des
+  gastgeschriebenen Images); Build.bat -test QEMU TEST OK.
+Notizen:
+- Der buchstabenlose Mount der FAT32-Bootpartition und das reale
+  Kernelupdate-Ziel /boot folgen mit dem Imagelayout in 0.60.9;
+  die .data-Klasse und der laufwerksneutrale Recovery-Pfad sind
+  dafuer vorbereitet.
+
+Version: 0.60.9
+Status: Erledigt
+Offene Punkte:
+- keine
+Erledigt:
+- Systemumstieg vollzogen: R4OS bootet und laeuft komplett auf NTFS-C:.
+  Neues Imagelayout via ImageCreator-Subcommand `create-system`: MBR mit
+  P1 = aktive FAT32-Bootpartition 128 MB (alle /boot-Eintraege der
+  Add-List: Limine, Kernel, Preload-Module; limine bios-install
+  unveraendert) und P2 = NTFS-3.1-Systemvolume 512 MB (kompletter
+  R4OS-Baum ueber den geteilten ntfs_mkfs-Kern mit den Windows-
+  Metadatentemplates). Produktions- und Testimage (TestInjection-
+  Overlay) laufen ueber denselben Pfad; data.img (D:) bleibt FAT32
+  (D5-Mischbetrieb).
+- FS-neutrale Systemvolume-Erkennung im MBR-Scan: der Marker-Score
+  (/CONFIG.R4S, /R4OS, /R4OS/CONFIG, /R4OS/SOFTWARE) gilt fuer FAT32
+  UND NTFS; C: geht an den ersten System-Kandidaten unabhaengig vom
+  Dateisystem. Die FAT32-Bootpartition (bootable, LIMINE.CONF, kein
+  R4OS-Baum) bleibt by design ohne Laufwerksbuchstabe.
+- vfs.copyFile/copyFileNoReplace generisch fuer alle Kombinationen
+  ausser fat32->fat32 (chunked read+append, modul-eigener Puffer);
+  damit funktionieren COMMAND COPY und fileMove auf und zwischen
+  NTFS-Volumes.
+- NTFS-Interior-Writes (writeFileAt) im geteilten Kern: wahlfreies
+  fileWriteAt innerhalb des initialisierten Inhalts ohne Metadaten-
+  Aenderung (mit Abschluss-Flush fuer die Cache-clean-Invariante);
+  writeFileRange-Semantik damit FAT32-gleich (in place ohne Truncate).
+  Der Speicherdruck-Pager (MEMSUITE-Backing-I/O auf C:\TEMP\MEMPAGE.BIN)
+  laeuft vollstaendig auf NTFS.
+- freeClusterCount fuer NTFS ($Bitmap-Scan) fuer die Freiplatzanzeige.
+- Diagnose-/Test-Anpassungen ans neue Layout: Terminal-Selbsttest
+  CD R4OS statt CD BOOT (/boot liegt auf der Bootpartition); FSDIAGs
+  FAT32-Metrikchecks (Instrumentation, Batching/FlushGuard, Extent-
+  Cache, FSInfo/Inuse-Map, 14-MB-Synthetik) laufen auf der FAT32-
+  Datenplatte D: inkl. driveInfo-Umstellung; die Erwartungswerte
+  rechnen laufwerksneutral aus cluster_bytes.
+- NtfsVerify waehlt die erste NTFS-Partition (0x07) im MBR (Systemimage
+  hat P1=FAT32).
+Abnahme:
+- Build.bat -test QEMU TEST OK auf dem neuen Layout (kompletter
+  Selbsttest-Marathon inkl. MEMSUITE /VMSTRESS /PAGERSTRESS STRICT,
+  FSDIAG-Mischbetrieb C:-NTFS + D:-FAT32, R4CODE/R4BUILD-Selfhosting
+  auf NTFS); Run-NtfsSysupdRuntime0608 als Integrations-Spotcheck.
+Notizen:
+- SYSUPD-Kernelupdate auf die buchstabenlose Bootpartition (Klasse
+  boot-kernel, /boot/r4os.elf) folgt in 0.60.11 mit einem internen
+  Bootvolume-Mount; die .data-Klasse und der laufwerksneutrale
+  Recovery-Pfad aus 0.60.8 sind vorbereitet.
+- Die NTFS-Metadatentemplates fuer den Imagebau liegen weiterhin unter
+  Code/System/SDK/Tests/NtfsFixtures/Meta0605 (einzige Quelle der
+  Windows-Templates; Build.bat referenziert sie als NTFS_META_DIR).
+
+Version: 0.60.10
+Status: Erledigt
+Offene Punkte:
+- keine
+Erledigt:
+- LZNT1-Dekompression im geteilten Strukturkern (lznt1Decompress:
+  Chunk-Header 0x3000-Signatur, stored/komprimierte Chunks,
+  positionsabhaengige Offset-/Laengen-Bits) und der komprimierte
+  Lesepfad in ntfs_volume: die Runlist wird in Kompressionseinheiten
+  (2^compression_unit Cluster) interpretiert - voll gemappt = stored,
+  voll sparse = Nullen, teilweise gemappt = LZNT1-Strom in den
+  fuehrenden Clustern. COMP/COMPRESS.TXT (270 KB) und COMP/RANDOM.BIN
+  (256 KB stored units) lesen byte-exakt gegen die Windows-SHA256.
+- Echte UTF-8-Namen: utf8ToUtf16/utf16ToUtf8 (BMP, sichtbare Fehler
+  fuer Surrogates/Malformed) im Strukturkern; Lookup, FN-Bau,
+  Enumeration und recordParentAndName arbeiten UTF-8; die
+  Umlaute-Fixture-Datei loest mit exaktem Inhalt auf. Namen ueber 64
+  UTF-8-Bytes bleiben sichtbar unaufloesbar (Textvertrag).
+- Hardlink-bewusstes Loeschen: bei link_count > 1 entfernt deleteFile
+  nur diesen Namen (Index-Eintrag + passendes $FILE_NAME, link_count
+  dekrementiert); Record und Cluster ueberleben unter den restlichen
+  Namen. Auf dem ECHTEN Windows-Fixture bewiesen: LINKALT.BIN
+  geloescht, LINKTGT.BIN intakt, striktes NtfsVerify OK und
+  Windows-chkdsk des mutierten Volumes exit 0 in allen drei Paessen.
+- ADS lesbar: readNamedStreamRange (benannte $DATA-Stroeme);
+  ADSHOST.TXT:SECOND liefert den exakten Windows-Inhalt.
+- Reparse-Points sichtbar abgelehnt: Entry.reparse aus den
+  FN-Duplikatflags, resolvePath descended nie durch Junctions,
+  der Kerneladapter lehnt Reads ab; EFS-verschluesselte $DATA bleiben
+  sichtbare Lesefehler. Beides per synthetischem Flag-Patch (Root- und
+  INDX-Block-Ebene mit Fixups) im Hostmodell fixiert.
+- Hostmodell CheckNtfsForeignModel0610 + Pflichtgate
+  Run-NtfsForeignContract0610 vor Kernelbuilds (SHA-Werte aus dem
+  Windows-Manifest, NtfsVerify des mutierten Fixtures);
+  NTFSDIAG-Read-Matrix modernisiert: compressed-content, utf8name,
+  write-roundtrip und hardlinkdel ersetzen die read-only-Aera-Marker
+  compressed-reject/write-reject/delete-reject.
+Abnahme:
+- Run-NtfsForeignContract0610 gruen; chkdsk des von R4OS mutierten
+  Windows-Volumes fehlerfrei (manuell); Run-NtfsReadRuntime0604 mit
+  der neuen 18-Marker-Matrix; Build.bat -test QEMU TEST OK.
+Notizen:
+- LZNT1 bleibt read-only (Schreiben komprimierter Dateien lehnt
+  weiterhin sichtbar ab); Sparse-Schreiben und $ATTRIBUTE_LIST-
+  Schreibpfade bleiben fuer 0.60.11+ notiert.
+- ADS sind ueber den geteilten Kern lesbar; ein API-/Pfadvertrag fuer
+  Streams (":"-Syntax) wird bewusst nicht eingefuehrt.
+- Der 0.58.20-Textvertrag haelt API-Dateipfade bewusst ASCII-only
+  (validateFileByte lehnt Bytes >= 0x80 sichtbar ab). Der NTFS-Kern
+  liest UTF-8-Namen vollstaendig (Hostmodell-Beweis); im Gast sind sie
+  ueber die Enumeration mit echten Bytes sichtbar. Eine Oeffnung des
+  Pfadvertrags auf UTF-8 waere eine eigene, abzustimmende
+  Vertragsaenderung (Gate 0.58.20) - bewusst NICHT Teil von 0.60.10.
+
+Version: 0.60.11
+Status: Erledigt
+Offene Punkte:
+- keine
+Erledigt:
+- Hardware-Abnahme Lenovo (IdeaPad L340, UEFI-Boot vom Samsung-FIT-
+  Stick, DHCP-Lease jetzt 192.168.178.207): 0.60.11-Produktionsimage
+  raw auf den Stick (elevated Write mit Rücklese-SHA256), UEFI-Boot des
+  create-system-Layouts, NTFS-C: mit allen 13 Auto-Diensten inklusive
+  FTPSVC und SSHD, SFTP-Upload des Kernel-R4U mit byteidentischem
+  Roundtrip, SYSUPD-boot-kernel-Update real vollzogen (APPLY an der
+  lokalen Konsole ~15 s/MB, applied=2/2, cleanup, Backup B*.R4U sichtbar
+  in \BOOT), Kaltstart bootet den ersetzten Kernel, Config-Marker via
+  Windows lesbar. Ein real unterbrochenes APPLY (SSH-Sitzungsabbruch
+  beim Streamen) wurde vom Recovery-Boot automatisch zurueckgerollt
+  (state=rolled_back) - der Recovery-Pfad ist damit auch auf Hardware
+  bewiesen. Finaler Windows-chkdsk des real beschriebenen Sticks:
+  NTFS-Systemvolume read-only/f/f alle exit 0, FAT32-Bootpartition
+  Pass 2 exit 0.
+- SYSUPD-Kernelupdate auf die buchstabenlose Bootpartition: interner
+  Bootvolume-Mount (vfs.mountBootVolume im MBR-Scan), letterloses
+  /boot-Routing in allen pfadbasierten R4SYS-Operationen inkl.
+  Stream-Slots und Recovery-Boot; Klasse boot-kernel unveraendert in
+  R4UPack/SYSUPD; QEMU-Nachweis Run-NtfsBootKernelRuntime0611 in zwei
+  Sitzungen gruen (unterbrochenes APPLY, RESUME mit echtem 10.9-MB-
+  Kernel-Replace, Boot des ersetzten Kernels, byte-exakter
+  applied=2/2-Nachweis).
+- Haertung: Hostmodell CheckNtfsHardening0611 (Churn ueber alle acht
+  Schreiboperationsarten mit Schattenmodell und Verzeichnispool,
+  Crash-Sweep 7 Arten x variierte Flush-Budgets mit Dirty-Flag-Semantik,
+  old-or-new-Konsistenz und idempotenter Replace-Wiederholung,
+  Dirty-Matrix) als Pflichtgate Run-NtfsHardeningContract0611 vor
+  Kernelbuilds; Deep-Tier 10000 Ops / 112 Crash-Runs gruen; neuer
+  geteilter Getter ntfs_volume.isDirty.
+- chkdsk-Suite Invoke-NtfsChkdskSuite0611: alle 7 Nachweisimages
+  chkdsk-OK (Pass 2 exit 0), inkl. Deep-Tier-Haertungschurn und dem
+  gecrashten Dirty-Image (Pass 1 repariert, Pass 2 sauber).
+- Grosses NTFS-Staging gepinnt: Run-NtfsBigStageProbe0611 (8-MB-Payload
+  auf das NTFS-Systemvolume, komplette Transaktion, kein Guard-Hit).
+- Aggregierte QEMU-Abnahme: Build.bat -test QEMU TEST OK mit allen
+  Gates inkl. des neuen Haertungsgates.
+Abnahme:
+- Run-NtfsHardeningContract0611 (Gate + Deep-Tier), chkdsk-Suite-Log
+  Release/NtfsChkdsk0611/chkdsk-0611-final.log, Boot-Kernel-Runtime-Logs
+  qemu-test-bootkernel-0611-*.log, Big-Stage-Probe-Log, Build.bat -test
+  TEST OK (verschaerftes Verdikt) und -norun.
+- Hardware: Stick-Write-Report Release/NtfsHw0611/stick-write-report.txt,
+  finale chkdsk-Logs Release/NtfsHw0611/stick-chkdsk-final.log (NTFS)
+  und stick-chkdsk-fat32.log (FAT32), SYSUPD-Nachweise per SSH-Protokoll
+  (VERIFY OK, applied=2/2 cleanup, Marker, Backup in \BOOT, Boot des
+  ersetzten Kernels).
+Notizen:
+- Interner Bootvolume-Mount umgesetzt: vfs.mountBootVolume beim MBR-Scan,
+  letterloser /boot-Teilbaum des Systemlaufwerks routet in allen
+  pfadbasierten R4SYS-Operationen (inkl. Stream-Slots via on_boot_volume)
+  und im Recovery-Boot auf das Bootvolume; Same-Parent-Regeln halten
+  Rename/Replace auf einem Volume, Copy/Move sind cross-volume.
+- Haertungsgate Run-NtfsHardeningContract0611 vor Kernelbuilds
+  (CheckNtfsHardening0611: gemischter Churn ueber alle acht
+  Schreiboperationsarten mit Schattenmodell und Verzeichnispool,
+  Crash-Sweep 7 Arten x variierte Flush-Budgets mit Dirty-Flag-Semantik
+  und idempotenter Replace-Wiederholung, Dirty-Matrix; Deep-Tier
+  10000 Ops / 112 Runs in der Abnahme gruen). Neuer geteilter Getter
+  ntfs_volume.isDirty.
+- chkdsk-Suite Invoke-NtfsChkdskSuite0611 erzeugt 7 Nachweisimages
+  (frisches Format, Write/Tree/Replace/Haertungs-Churn, gecrashtes
+  Dirty-Image, mutiertes Windows-Fixture) und faehrt sie durch
+  Test-NtfsChkdsk0605.
+- Debug-Befund waehrend der Runner-Abnahme: ein Blanket-Replace hatte
+  targetVolume/streamSlotVolume selbstrekursiv gemacht (STACK GUARD HIT
+  im r4x-async-io-Worker); behoben, STACK_SIZE blieb unveraendert 64K.
+- Boot-Kernel-Runtime gruen (Run-NtfsBootKernelRuntime0611): Session 1
+  unterbrochenes APPLY (config committed, applied=1/2, Kernel-Stage
+  S*.R4U sichtbar in DIR \BOOT auf dem Bootvolume), RESUME ersetzt den
+  10.9-MB-Kernel atomar (applied=2/2, Backup B*.R4U sichtbar, Stage
+  konsumiert); Session 2 bootet den ERSETZTEN Kernel von der
+  Bootpartition und beweist /boot/r4os.elf byte-exakt per applied=2/2
+  ohne Staging.
+- chkdsk-Suite gruen: alle 7 Nachweisimages OK (Pass 2 exit 0), das
+  gecrashte Dirty-Image wurde in Pass 1 repariert und ist in Pass 2
+  fehlerfrei; Deep-Tier-Haertungsimage (10000 Ops) ebenfalls chkdsk-
+  fehlerfrei. Log: Release/NtfsChkdsk0611/chkdsk-0611-final.log.
+- Waehrend der HEAD-Bisektion trat ein Stack-Guard-Hit beim Stagen des
+  grossen Payloads gegen das damals fehlgeroutete NTFS-C:\boot auf;
+  mit dem echten Bootvolume-Routing nicht reproduzierbar. Die separate
+  Probe Run-NtfsBigStageProbe0611 pinnt das Stagen eines 8-MB-Payloads
+  auf das NTFS-Systemvolume als Absicherung dieser Klasse.
+- Hardware-Befund 1 (Lenovo bootete still Windows): der create-system-
+  Split legte /EFI/BOOT/BOOTX64.EFI auf die NTFS-Partition, weil nur
+  /boot-Ziele zur FAT32-Bootpartition gingen; UEFI liest kein NTFS.
+  Fix: isBootDest matcht /boot UND /EFI (ImageCreator); QEMU testet nur
+  BIOS-Boot und konnte das nicht sehen.
+- Hardware-Befund 2 (leere Service-Registry, kein SSHD): das FAT32-
+  Relikt `kind != .fat32` in resolveServiceProgramTarget lehnte jede
+  Service-Installation auf NTFS-C: ab. Der Bug war seit 0.60.9 im
+  QEMU-Smoke als tolerierte Zeilen "EXSVC selftest FAILED: install
+  code=-13" / "TCPSVC selftest FAILED: open" sichtbar. Fix: FS-neutrale
+  Pruefung ueber vfs.volumeForDrive; das Smoke-Verdikt verbietet seither
+  hart "selftest FAILED" und "SERVMAN LOAD: lines=0".
+- Hardware-Notizen (Folgearbeiten fuer 0.61+): (1) C:\R4OS\UPDATE\INBOX
+  existierte auf dem frischen Image nicht und SYSUPDs dirCreate-Ergebnis
+  wird ignoriert (manuell per MD angelegt; robuster ensure-Pfad
+  notiert). (2) Die SFTP-/Enumerationssicht zeigt die NTFS-Metadateien
+  ($MFT usw.) im Root; Windows blendet sie aus (kosmetisch). (3) Ein
+  langes SYSUPD APPLY ueber eine SSH-Sitzung bricht ab (Sitzungstod
+  nach einigen Minuten, Staging ueber den SSH-Konsolenkanal nur
+  ~7 KB/s); an der lokalen Konsole laeuft dasselbe APPLY mit ~15 s/MB
+  sauber durch. SSH-Keepalive/Session-Timeout und Flush-Batching im
+  Staging-Pfad als Folgearbeiten notiert. (4) chkdsk auf FAT32
+  prompted interaktiv; die Suite pipet J bzw. nutzt /x.
+
+
+======================================================================
+Fortsetzung 0.60.12 bis 0.60.30 (archiviert 2026-07-26)
+======================================================================
+
+R4OS Roadmap 0.60.X - NTFS-Nachpflege aus der Hardware-Abnahme
+==============================================================
+
+Fortsetzung der 0.60.X-Linie: Die vier in der 0.60.11-Hardware-Abnahme
+notierten Folgearbeiten werden als Unterversionen 0.60.12 bis 0.60.15
+abgearbeitet, danach die drei geparkten NTFS-Vollstaendigkeitspunkte
+aus den 0.60.10-Notizen plus die Windows-Paritaet der Pfadlimits als
+0.60.16 bis 0.60.19 (Zuschnitt am 2026-07-22 im Einzeldurchgang vom
+User bestaetigt). Referenz: Docs/Changelogs/V0.60.txt.
+
+ARBEITSTEILUNG (User-Vorgabe 2026-07-25): Alles, was lokal, in
+Hostmodellen und in QEMU nachweisbar ist, wird vorgezogen und
+abgeschlossen. Alle Abnahmen, die einen MENSCHEN an echter Hardware
+brauchen (Stick schreiben, Lenovo `192.168.178.207` kalt booten,
+Desktop/HID/RDP sichtpruefen), sind bewusst in der FINALEN Unterversion
+0.60.28 gebuendelt. 0.60.29 bleibt der Abschluss (Versionssprung, Push,
+Roadmap aufraeumen) und haengt an 0.60.28.
+
+EINORDNUNG DER BEIDEN VERBLEIBENDEN ARCHITEKTURPUNKTE
+(0.60.23 Ein-fs_request-Bindung, 0.60.24 backendgenaue Kollation):
+Beide sind HAERTUNGEN gegen seltene Fenster, keine akuten Fehler - der
+jeweils heutige Zustand ist sicher, nur restriktiver beziehungsweise
+theoretisch angreifbar:
+- 0.60.23: Die Luecke verlangt eine lokale Mutation GENAU zwischen dem
+  Preflight und der Loeschschleife von `cleanupToTerminal`. Der
+  gefaehrliche Teil - das Stage-Delete, das ein gleich-inhaltliches
+  Fremdobjekt haette treffen koennen - ist bereits entfernt, und das
+  Previous-Backup wird schon heute nur bei exaktem Fingerabdruck
+  geloescht.
+- 0.60.24: Nicht-ASCII-Ziele werden fail-closed abgelehnt. Das ist
+  sicher; es fehlt nur der Komfort, Umlaut-Zielpfade zuzulassen.
+Beide brauchen denselben Schritt: einen WEITEREN append-only R4SYS-Slot
+(checked Cleanup beziehungsweise backendgenauer Namensvergleich) samt
+Schema, Baseline, Generator, Kernel, Zig-/C-Fassade, SYSUPD-Nutzung und
+Gate. Slot 110 `file_update_atomic_checked` deckt nur den
+Forward-Transfer ab und hilft dem Cleanup nicht. Diese ABI-Erweiterung
+wurde bewusst nicht mehr angefangen, statt sie halb fertig und
+unverifiziert zu hinterlassen.
+
+WAS AM 2026-07-25 NOCH OFFEN IST (Kurzbilanz, Details je Unterversion):
+  A) ERLEDIGT. Die Kaltstart-Sichtabnahme ist am 2026-07-25 erfolgt:
+     kein blauer Fehlerschirm, Desktop vollstaendig, Tastatur und Maus
+     am Desktop funktionsfaehig (HID und Bootlaufwerk teilen sich den
+     xHCI-Controller - genau die kritische Ueberlagerung). Der
+     mstsc-Blick bleibt optional; RDP-Port 3389 antwortet durchgehend.
+  B) SCP- und FTP-Kontrolllaeufe der Reset-/Transfermatrix (0.60.22,
+     0.60.27). SFTP ist byte-exakt und unter hartem Stromverlust
+     nachgewiesen; die Replayregeln sind protokollunabhaengig.
+  C) Protokoll-Attribution im Claim (0.60.22): Der Kernel traegt fest
+     `.sftp` ein. REINE TELEMETRIE - die Replayregeln sind fuer alle
+     drei Protokolle identisch, der Claim also voll wirksam. Eine echte
+     Zuordnung braucht ein Feld an `file_stream_declare_publish`, dessen
+     Signatur bereits fixiert ist, also einen weiteren Slot.
+  D) Erweiterung der Altgates 0.58.23, 0.59.10, 0.59.15 und 0.60.8 um
+     die neuen Zustaende (0.60.26). Die betroffenen Vertraege sind
+     abgedeckt, die Altgates wissen nur noch nichts davon.
+  E) Abschluss (0.60.29): Abschlussaudit, Roadmap aufraeumen. Haengt an
+     A.
+  Nicht mehr offen: 0.60.23, 0.60.24, 0.60.25 und 0.60.30 sind
+  vollstaendig erledigt.
+
+STAND 2026-07-25 (diese Sitzung, alles gepusht):
+  0.60.20  ERLEDIGT und lokal eingefroren (Produktionsimage erzeugt).
+  0.60.21  ERLEDIGT (NTFS-Recovery-Compare-and-delete, Pflichtgate).
+  0.60.22  Kern, Kernelverdrahtung, Boot-Recovery, Pflichtgate UND
+           Reset-Matrix fertig und gruen; auf Hardware nachgewiesen.
+           Offen: Stage-Garbage-Collection (neuer Befund der Matrix)
+           sowie Protokoll-Attribution und SCP-/FTP-Kontrolllaeufe.
+  0.60.23  Redundantes/gefaehrliches Stage-Delete entfernt; die
+           Ein-fs_request-Bindung bleibt offen.
+  0.60.24  Fail-closed-Grenze fuer Nicht-ASCII-Ziele gezogen und
+           getestet; backendgenaue Kollation bleibt offen.
+  0.60.25  Generatorseitig teilerledigt: `zig fmt`-saubere Ausgaben,
+           plus der neue Slot-Code -19 sauber ueber Schema und Baseline.
+  0.60.26  Gates und Dokumentation auf den finalen Vertrag gezogen.
+  0.60.27  Gesamter Baum formatrein (687 Dateien), gezielte Builds gruen;
+           die grosse Runtime-Matrix bleibt offen.
+  0.60.29  Lifecycle-Teil ERLEDIGT samt echtem SSH-Laufzeitnachweis.
+  0.60.28  human-gated Hardwareabnahme - der einzige verbleibende
+           HARTE Blocker. Alles davor ist lokal nachgewiesen.
+
+HARDWARESTAND 2026-07-25: Der Lenovo `192.168.178.207` laeuft mit dem
+Image dieser Sitzung (belegt ueber das erst durch den 0.60.22-Claimpfad
+entstandene `C:\R4OS\UPDATE\CLAIMS`). Die drei fachlich wichtigsten
+Hardwarepunkte sind ERBRACHT: bytegleicher 8-MB-SFTP-Roundtrip (der
+0.60.20-Kernbefund), vollstaendiger Claim-Lebenszyklus (0.60.22) und die
+Self-Restart-Ablehnung ueber SSH (0.60.29). Details in 0.60.28.
+
+Der User hat am 2026-07-25 die uneingeschraenkte Nutzung von `.207`
+freigegeben; der komplette Update- und Rebootzyklus wurde daraufhin
+ausgefuehrt und ist gruen (Details oben in 0.60.28).
+
+NOCH OFFEN an 0.60.28 - ausschliesslich SICHTpruefungen, die nur ein
+Mensch vor dem Geraet leisten kann:
+- Echter KALTSTART mit Blick auf den Schirm: kein frueher blauer
+  xHCI-/USBMSC-Fehlerbildschirm, Desktop und HID sichtbar
+  funktionsfaehig. Funktional ist der Neustart mehrfach nachgewiesen
+  (Warmreboot, Tickzaehler zurueckgesetzt, alle Dienste wieder oben),
+  aber das Bild selbst kann remote niemand beurteilen.
+- mstsc-RDP-Sichtpruefung. Port 3389 antwortet durchgehend; ein
+  sichtbarer Desktop ueber mstsc ist damit noch nicht belegt.
+- Optionale Kontrolllaeufe ueber SCP und FTP (SFTP ist byte-exakt
+  nachgewiesen, die Replayregeln sind protokollunabhaengig).
+
+ABSCHLUSSVERIFIKATION DIESER SITZUNG (0.60.21, 0.60.22-Backend sowie
+die Teilarbeiten aus 0.60.23/0.60.24; alle Gates in Build.bat
+verdrahtet):
+- `DevTools/Scripts/Build.bat -norun` vollstaendig gruen. Nachweislich
+  mitgelaufen: `NTFS recovery-delete contract 0.60.21 OK`,
+  `Upload publish claim contract 0.60.22 OK`,
+  `System update atomic contract 0.59.14 OK` (inklusive der neuen
+  `Running shared SYSUPD recovery-core tests`) und
+  `xHCI/storage recovery contract 0.60.20 OK` mit dem nachgezogenen
+  Cleanup-Anker; null `result: FAILED`, null Compilerfehler.
+  Log: scratchpad/build-norun-4.log.
+- Zwischenbefund, der genau so gewollt ist: Der Lauf davor
+  (build-norun-3.log) STOPPTE korrekt, weil das 0.60.20-Gate das
+  entfernte Stage-Delete noch woertlich verlangte. Der Anker wurde
+  daraufhin umgedreht (jetzt verboten statt gefordert) - ein Beleg,
+  dass die Gates bewusste Verhaltensaenderungen wirklich abfangen.
+- `Release/disk.img` ist ein normales PRODUKTIONSIMAGE (null
+  `TestInjection`-Referenzen im Buildlog): 672137216 Bytes, SHA256
+  `2CFE11606EAADBC73787942F47122476CEA1E43CD7C9ED94F8680014FD4DB1F4`.
+  Es loest die Images `F0D49BF1...9551789D` (0.60.20-Abschluss) und
+  `453E2928...F4DBFE75` ab.
+- `git diff --check` sauber.
+- `zig fmt --check` ueber ALLE geaenderten Zig-Dateien: der gesamte
+  handgeschriebene Code ist sauber. Unveraendert nicht sauber sind nur
+  die drei GENERIERTEN Dateien (siehe 0.60.20-Abschlusspruefung); das
+  ist der Stand aus HEAD und wird in 0.60.25 im Generator behoben.
+- Der Lenovo `192.168.178.207` wurde in dieser Sitzung weder
+  angesprochen noch beschrieben.
+- GEPUSHT auf User-Freigabe vom 2026-07-25 ("abgeschlossene
+  Unterversionen darfst du pushen"): Commit `dbc4508a` nach Gitea
+  `main` (`8ffb1094..dbc4508a`, 92 Dateien). Der Commit enthaelt auch
+  die noch ungepushte 0.60.20-Arbeit des vorherigen Durchgangs.
+- `KERNEL_VERSION` steht bewusst WEITERHIN auf 0.60.19. Der User hat
+  das Pushen freigegeben, nicht den Versionssprung; die Roadmap sperrt
+  ihn bis zur Hardwareabnahme 0.60.28.
+
+
+Version: 0.60.12
+Status: Erledigt
+Offene Punkte:
+- keine
+Erledigt:
+- Ursache geklaert - KEIN stiller dirCreate-Fehler: ensureUpdate-
+  Directories lief nur bei APPLY/RESUME/Journal-Write, nicht bei
+  STATUS/VERIFY. Der dokumentierte erste Remote-Schritt (SYSUPD STATUS)
+  hat den Baum also nie angelegt; das frische Image traegt ihn nicht.
+  QEMU sah das nie, weil TestInjection lokale UPDATE-Leftover-
+  Verzeichnisse aus frueheren Runnerlaeufen enthielt (geloescht).
+- ensureUpdateDirectories jetzt bool mit ensureDirectory-Helfer:
+  dirCreate plus fileInfo-Existenzpruefung (die dirCreate-Rueckgabe 0
+  deckt "existiert" UND "fehlgeschlagen" ab). Alle Einstiege pruefen:
+  APPLY/RESUME brechen sichtbar mit reason=update-dirs ab,
+  writeInactiveJournal schlaegt fehl, STATUS materialisiert den Baum
+  und meldet " dirs=ok|missing" am Zeilenende, VERIFY ensured
+  warn-only (update-dirs-missing-Note).
+- Beifang chkdsk-Prompts: Test-NtfsChkdsk0605 pipet echo J in alle
+  chkdsk-Aufrufe und nutzt /f /x (real auf FAT32 gesehene interaktive
+  Rueckfragen; NTFS ignoriert die Eingabe).
+- Gate-Erweiterung Run-SystemUpdateAtomicContract05914: neue Require-/
+  Forbid-Tokens fuer den geprueften Ensure (bool-Signatur, update-dirs-
+  Fehler, dirs=-Status; alte void-Signatur verboten); Gate gruen.
+- Smoke-Spotcheck permanent: TestInjection/AUTOEXEC.BAT faehrt SYSUPD
+  STATUS + DIR C:\R4OS\UPDATE auf dem Image OHNE UPDATE-Baum;
+  Build.bat-Verdikt fordert hart "dirs=ok" und verbietet
+  "dirs=missing".
+Abnahme:
+- Run-SystemUpdateAtomicContract05914 gruen; Build.bat -test QEMU
+  TEST OK mit den neuen dirs-Markern.
+Notizen:
+- Die STATUS-Zeile traegt dirs= am Zeilenende, damit alle bestehenden
+  Substring-Greps der Runner (applied=..., source=...) unveraendert
+  matchen.
+
+Version: 0.60.13
+Status: Erledigt
+Offene Punkte:
+- keine
+Erledigt:
+- Enumerationsfilter im geteilten Kern: walkNode/enumerateDirectory
+  verbergen im Root alle Eintraege mit Record < MFT_FIRST_NORMAL (16)
+  - dieselbe Grenze, ab der der Record-Allokator vergibt; Userdateien
+  koennen nie in den verborgenen Bereich fallen. Damit verschwinden
+  $MFT..$Extend und der "."-Selbsteintrag aus DIR/Explorer/SFTP wie
+  unter Windows.
+- lookupInDirectory lehnt Root-Treffer auf Records < 16 ab (not-found):
+  kein generischer Read/Write/Delete/Rename kann einen Metadatei-Record
+  ueber den Namen erreichen; ein CREATE auf einen Systemnamen scheitert
+  weiter am Kollations-Duplikat (exists).
+- Foreign-Modell 0610 um Familie "metafiles: ok" erweitert (Root-
+  Listing des Windows-Fixtures ohne $-Eintraege/"."; $MFT/$Bitmap/
+  $LogFile/$Extend weder lookup- noch pfadaufloesbar; DELETE $MFT =
+  not_found); Gate-Markerliste ergaenzt, alle NTFS-Hostgates gruen.
+- NTFSDIAG-Read-Matrix um Marker "metahidden" erweitert (Root-Listing
+  des Fixtures ohne $-Namen, fileInfo($MFT) null); Runner 0604 auf 19
+  Marker. Smoke: AUTOEXEC faehrt DIR C:\, Build.bat-Verdikt verbietet
+  "$MFT" im gesamten Log.
+Abnahme:
+- Alle NTFS-Hostgates (0603/0605/0606/0607/0608/0610/0611) gruen mit
+  Filter; Run-NtfsReadRuntime0604 mit metahidden; -test mit
+  $MFT-Verbot.
+
+Version: 0.60.14
+Status: Erledigt
+Offene Punkte:
+- keine (der reale Lenovo-Messnachweis wird auf User-Entscheid vom
+  2026-07-22 mit einer spaeteren Hardwaresitzung gebuendelt; der
+  Batching-Beweis liegt als Device-Flush-Zaehler im Hostmodell vor).
+Erledigt:
+- Messung statt Vermutung: Flush-Zaehler im RamDevice des Haertungs-
+  modells. Befund bestaetigt den Verdacht: der durable Append kostet
+  ~6 Device-Flushes pro Chunk (48 Flushes fuer 8 Appends); bei 4-KB-
+  Chunks auf USB erklaert das die ~15 s/MB vollstaendig.
+- Deferred-Stream-Pfad im geteilten Kern: appendFileAtOffsetImpl mit
+  durable-Parameter; appendFileAtOffsetDeferred laesst die Phasen-
+  Flushes weg und haelt das Dirty-Flag ueber den Stream (setDirty ist
+  idempotent-billig, nur der erste Chunk flusht); finishDeferred =
+  Drain, dann Dirty-Clear mit eigenem Flush (der Clear kann die Daten
+  nie ueberholen). vfs.appendFileAtOffsetStatusDeferred (Stream-Slot-
+  Pfad, also SYSUPD-Staging) nutzt die Deferred-Variante;
+  vfs.flushVolume NTFS-Arm ist jetzt finishDeferred (vorher No-op).
+- SYSUPD io_chunk 4096 -> 65536 mit modulstatischen Puffern (Stream +
+  Checksum getrennt, nicht auf dem Task-Stack).
+- Haertungsmodell-Familie "deferred stream": 64 x 4-KB-Chunks =
+  1 Device-Flush (Batching-Nachweis), Dirty spannt den Stream, Finish
+  cleart, Readback byte-exakt; Durable-Vergleichspfad behaelt seine
+  Per-Call-Flushes (>= 24). Gate-Marker + Surface-Tokens ergaenzt.
+- Crash-Semantik unveraendert: durable Einzel-Appends, Churn und
+  Crash-Sweep laufen wie zuvor; Crash mitten im Deferred-Stream =
+  dirty Volume + zerrissene Streamdatei (chkdsk-reparierbar, von der
+  0.60.11-Suite real bewiesen; SYSUPD-Recovery loescht Stage-Muell).
+- Nebenbefund waehrend der -test-Abnahme: FSDIAGs 14-MB-FAT32-Synthetik
+  scheiterte mit write rc=-5 - Ursache war eine korrupte persistente
+  Release/data.img aus frueheren hart abgebrochenen Laeufen (Cache
+  512/512 dirty, reclaim-Drains schlugen fehl), KEIN Code-Fehler; mit
+  frischer data.img gruen. FSDIAG bekam eine knappe Fehlerdiagnose
+  (cacheWriteErr/wbErr/dirtyEntries/fatOpFail/failedDrains), die genau
+  diese Klasse (Cache-Druck ohne Drain) von einem echten FS-Fehler
+  trennt.
+Abnahme:
+- Run-NtfsHardeningContract0611 gruen inkl. deferred stream,
+  Run-NtfsBigStageProbe0611 gruen (8-MB-NTFS-Staging), Build.bat -test
+  QEMU TEST OK (frische data.img). Realer Lenovo-Durchsatz gebuendelt
+  fuer eine spaetere Hardwaresitzung.
+
+Version: 0.60.15
+Status: Erledigt
+Offene Punkte:
+- keine (Hardware-Spotcheck SYSUPD-APPLY-ueber-SSH gebuendelt mit der
+  naechsten Hardwaresitzung, zusammen mit dem 0.60.14-Messwert).
+Abnahme:
+- Run-SshLongExecRuntime0615 gruen: stilles Kommando ueberlebte 402 s
+  ueber SSH (weit jenseits der alten 8-s-Schwelle) und kehrte mit
+  echtem Remote-Exit 0 zurueck; kein exec-output-stable im Log;
+  Build.bat -test QEMU TEST OK.
+Erledigt:
+- Todesursache exakt bestimmt - KEIN Keepalive-/TCP-Problem: die
+  Altlast-Heuristik "exec-output-stable" schloss jede Exec-Sitzung,
+  deren Konsole 8 Sekunden still war, und KILLTE dabei das laufende
+  Programm mit vorgetaeuschtem Exit 0. Genau das toetete das SYSUPD
+  APPLY auf dem Lenovo (Progress nur alle ~2.5 Minuten); der scheinbar
+  saubere Sitzungsabschluss passte exakt zum Befund.
+- Fix in SSHD: exec-output-stable ist nur noch ein Abschluss-Backstop
+  NACH echtem Programmende (remoteProgramDone-Guard, kein programKill
+  mehr); reale Exits schliessen weiter prompt ueber den remote-exit-
+  Pfad. Langlaufende stille Kommandos halten die Sitzung beliebig
+  lange; Client-Liveness sichert der bestehende 5s/5s-Keepalive
+  (Antwortpakete zaehlen als Aktivitaet, das 10-Minuten-Idle greift
+  nur bei totem Client), finishClientDisconnect killt das Programm
+  beim echten Client-Tod (kein Orphan).
+- Host-Seite: Invoke-R4OsSshExec.ps1 setzt ServerAliveInterval=15/
+  ServerAliveCountMax=8 als Standard.
+- Neuer Runner Run-SshLongExecRuntime0615: QEMU mit virtio-User-Net
+  und Hostforward 10022->22, Gast bleibt interaktiv oben; Nachweis:
+  stilles SLEEP weit jenseits der alten 8s-Schwelle (Default 330 s)
+  ueberlebt und kehrt mit echtem Remote-Exit zurueck, danach
+  Output-Sanity und POWEROFF per SSH; Verbot des exec-output-stable-
+  Markers im Log.
+- Der Durchsatz-Teil (Kommando ueber SSH ~10x langsamer) ist mit dem
+  0.60.14-Staging-Fix weitgehend gegenstandslos (die Bremse war das
+  Flush-Verhalten, nicht der SSH-Kanal); der reale Vergleichswert
+  laeuft mit dem gebuendelten Hardware-Spotcheck.
+
+Version: 0.60.16
+Status: Erledigt
+Offene Punkte:
+- keine
+Erledigt:
+- $DATA-Spill in Erweiterungs-Record: spillDataToExtension allokiert
+  einen Erweiterungs-Record (base_reference gesetzt), baut dort das
+  non-residente $DATA mit voller Runlist und schreibt ins Basis-Record
+  ein resident $ATTRIBUTE_LIST (SI@base, FN@base, DATA@ext). Alles in
+  der aktiven Dirty-Klammer ueber storeRecord (Fixups + $MFTMirr).
+- commitDataRunlist als zentraler $DATA-Runlist-Commit der non-
+  residenten Append-Pfade: routet zum Erweiterungs-Record wenn bereits
+  gespillt (dataExtensionRecord), sonst Basis-Record, sonst Spill. Das
+  Basis-$FILE_NAME-Dup bleibt immer im Basis-Record
+  (updateFileNameDupOnBase).
+- deleteFile gibt bei gespillten Dateien auch den Erweiterungs-Record
+  frei (markRecordFree + releaseRecord), Cluster leckfrei.
+- Nebenbefund + Fix: das Runlist-Mapping-Zwischenpuffer in
+  updateNonResident war 256 Byte und deckelte JEDE Runlist kuenstlich
+  auf ~64 Fragmente (unabhaengig von der Recordgroesse); jetzt
+  record-gross (4096) mit harter Laengenpruefung.
+- Hostmodell CheckNtfsAttrListSpill0616 + Pflichtgate
+  Run-NtfsAttrListContract0616 vor Kernelbuilds: erzwingt den Spill
+  dynamisch (Ein-Cluster-Appends mit Spacer-Fragmentierung bis
+  dataResidesInExtension, real bei ~232 Fragmenten), byte-exakter
+  Read-Back ueber den listenfolgenden Lesepfad, Spill durabel ueber
+  Remount, Folge-Appends wachsen im Erweiterungs-Record, leckfreies
+  Delete (Clusterbilanz), striktes NtfsVerify des gespillten Volumes.
+- NtfsVerify versteht die geschriebene $ATTRIBUTE_LIST jetzt aktiv:
+  jeder Listeneintrag wird gegen den referenzierten Record geprueft
+  (existiert, in use, Sequence, Attribut mit {Typ, Name, VCN} vorhanden,
+  Instance-ID identisch, Erweiterungs-Record referenziert die Basis
+  zurueck). Das Gate erzeugt zusaetzlich einen Bad-Instance-Zwilling
+  des Spill-Images und verlangt dessen Ablehnung (Negativ-Beweis);
+  das echte Windows-Fixture bleibt ohne False-Positives gruen.
+Abnahme:
+- Run-NtfsAttrListContract0616 gruen (inkl. Bad-Instance-Negativ-
+  Zwilling). chkdsk-Suite: alle 7 sauberen Images OK; das Spill-Image
+  zusaetzlich einzeln mit Pass 0/1/2 = 0 nachgewiesen
+  (chkdsk-spill-0616-fixed.log). Build.bat -test: TEST OK (finaler
+  Lauf mit Instance-Fix und verschaerftem NtfsVerify).
+Notizen:
+- Echter chkdsk-Befund im ersten Suite-Lauf: die $ATTRIBUTE_LIST-
+  Eintraege trugen instance=0, chkdsk prueft aber die Instance-ID des
+  referenzierten Attributs gegen den Listeneintrag ("Attributlisten-
+  eintrag mit Typcode 30 ... beschaedigt", Pass-0-Exit 3, Reparatur in
+  Pass 1). Fix: buildDataAttributeListValue uebernimmt die realen
+  SI-/FN-Instances aus dem Basis-Record; das Erweiterungs-$DATA hat
+  Instance 0. NtfsVerify sah den Defekt zunaechst nicht - nur chkdsk;
+  der Instance-Cross-Check wurde daraufhin in NtfsVerify nachgeruestet
+  und per Bad-Instance-Zwilling dauerhaft im Gate verankert.
+- Suite-Haertung: Invoke-NtfsChkdskSuite0611 verlangt jetzt fuer alle
+  SAUBEREN Images "pass 0 exit code: 0" (Read-only-Pass fehlerfrei);
+  nur das Crash-Image darf in Pass 1 repariert werden. Vorher zaehlte
+  nur Pass 2, wodurch der Instance-Bug als OK durchgerutscht waere.
+- Ein Runlist, die selbst einen vollen Erweiterungs-Record fuellt,
+  braeuchte einen VCN-Split ueber mehrere Records und bleibt sichtbar
+  record_full (bewusst 0.60.16+ notiert, kein realer R4OS-Fall).
+
+Version: 0.60.17
+Status: Erledigt
+Offene Punkte:
+- keine
+Erledigt:
+- Sparse-Schreibpfad in ntfs_volume: writeFileAt schreibt in Loecher
+  sparse-geflaggter Dateien (fillHolesInRuns: Cluster allozieren,
+  unmapped Run in [Loch][gemappt][Loch] splitten, frische Cluster
+  zero-fuellen, damit der Cluster-Slop um die Payload weiter Nullen
+  liest), gemappte In-place-Writes bleiben der lazy Fast-Path.
+  Nicht befuellte Loecher bleiben Loecher; Loecher stanzen bleibt
+  sichtbar unsupported.
+- initialized_size-Semantik nach Windows: Bytes in [init, data_size)
+  lesen als Nullen; ein Write dahinter zero-t erst gemappte Cluster im
+  Gap (zeroMappedRange) und hebt init im Commit an. Append auf Sparse
+  zero-t den Gap und mappt das Append-Fenster im bestehenden VCN-Raum
+  (Slack-Loch), bevor der normale Append-Pfad weiterarbeitet.
+- updateNonResident pflegt total_allocated (0x40) fuer sparse/
+  komprimierte Attribute: reale Allokation statt VCN-Raum, von chkdsk
+  gegengeprueft. Runlist-Commits laufen ueber commitDataRunlist und
+  erben damit den 0.60.16-Spill in Erweiterungs-Records.
+- Crash-Semantik: Loch-Write laeuft in der Dirty-Klammer mit Ordnung
+  dirty->bitmap+zero->payload->record->clear; Rollback der frisch
+  allozierten Cluster bei no_space/record_full.
+- Hostmodell CheckNtfsSparseWrite0617 + Pflichtgate
+  Run-NtfsSparseContract0617 vor Kernelbuilds, gegen das ECHTE
+  Windows-Fixture (SPARSE.BIN, 2 MB, init=1052672 < size=2097152 -
+  der Gap-Pfad wird real geuebt): Loch-Write unaligned mitten in ein
+  echtes Loch, gemappter In-place-Write, Sparse-Append, byte-exakter
+  Ganzdatei-Vergleich (unberuehrte Loecher bleiben Null), Remount-
+  Durabilitaet, Crash-Sweep mit old-or-new-Fenster; striktes
+  NtfsVerify des mutierten Volumes (inkl. 0.60.16-Attributlisten-
+  Checks).
+- chkdsk-Suite um das sparse-mutierte Windows-Image (Nr. 8) ergaenzt.
+Abnahme:
+- Run-NtfsSparseContract0617 gruen. chkdsk des sparse-mutierten
+  Windows-Volumes: Pass 0/1/2 = 0 (chkdsk-sparse-0617.log) - Windows
+  akzeptiert total_allocated und initialized_size nach R4OS-Writes ab
+  dem Read-only-Pass. QEMU-Spotcheck: Run-NtfsReadRuntime0604 OK mit
+  neuem Kernel (NTFSDIAG sparse: ok, result: OK). Build.bat -test:
+  TEST OK. Nebenbefund gefixt: VERSION.R4S hatte beim 0.60.16-Bump
+  das UTF-8-BOM verloren (Doku-Gate 0.58.36 fing es); mit BOM
+  wiederhergestellt.
+Notizen:
+- Kein neuer NTFSDIAG-Marker: Die oeffentliche ABI hat keinen
+  Interior-Write (File-Streams truncaten beim Begin, file_write_at ist
+  kernel-intern fuer Pager/virt). Ein neuer ABI-Slot waere API-
+  Vertrags-Scope; der Kerneladapter teilt den byteidentischen Kern.
+  QEMU-Spotcheck stattdessen: Run-NtfsReadRuntime0604 (Sparse-Read-
+  Marker auf dem Fixture) mit dem neuen Kernel plus voller -test.
+- Die Crash-Sweep-Familie liegt im 0617-Hostmodell (Fixture-basiert)
+  statt im Haertungsgate 0611: dort gibt es keine Sparse-Dateien,
+  weil R4OS selbst keine Loecher stanzt.
+
+Version: 0.60.18
+Status: Erledigt
+Offene Punkte:
+- keine
+Erledigt:
+- UTF-8-Oeffnung des Pfadvertrags (bewusste 0.58.20-Vertragsaenderung):
+  SDK path.zig validiert Komponenten als UTF-8 (BMP) - wohlgeformte
+  2-/3-Byte-Sequenzen erlaubt, Overlong/Surrogate/Fortsetzungsbytes/
+  4-Byte (non-BMP) bleiben sichtbare InvalidCharacter-Fehler. Der
+  C-Header text_path_time.h spiegelt exakt dieselbe Segmentpruefung
+  (r4_path_segment_valid). Limits bleiben byte-basiert (127/63);
+  Anhebung folgt in 0.60.19.
+- Kernel: resolveApiTarget/copyZ/VFS sind byte-transparent (keine
+  eigene ASCII-Sperre); NTFS-Lookup laeuft seit 0.60.10 ueber
+  utf8ToUtf16/$UpCase. SSHD/SFTP-Pfaduebersetzung ebenfalls
+  byte-transparent - keine Aenderung noetig.
+- FAT32-Arm: LFN-Pipeline von Byte- auf UTF-16-Unit-Basis umgestellt
+  (readLfnEntry sammelt echte Units statt >0x7F zu verwerfen,
+  makeEntry konvertiert UTF-16->UTF-8 mit Shortname-Fallback,
+  writeLfnEntry schreibt Units, buildNameDirectoryEntries konvertiert
+  UTF-8->UTF-16, validLongInput prueft unit-basiert). Kurznamen-
+  Alias sanitisiert Nicht-ASCII zu '_' (wie gehabt).
+- Fixtures/Gates bewusst aktualisiert: path.zig-Tests (Umlaut-Pfade
+  positiv, Malformed/Overlong/Surrogat/Emoji/Stray-Continuation
+  negativ), C-Prototype 05820 mit denselben Faellen; 0.58.20-Gate
+  gruen in neuer Form. TextPfadZeitVertrag.md beschreibt den
+  UTF-8-BMP-Vertrag (Vergleich: ASCII-fold + exakt fuer Nicht-ASCII;
+  NTFS zusaetzlich $UpCase; FAT32 speichert LFN-Units).
+- NTFSDIAG utf8name gedreht: Umlaut-Pfad muss parsen, lesen (TYPE),
+  kopieren und die Kopie loeschen; ein malformed Pfad (\xC3\x28)
+  bleibt sichtbar abgelehnt. Statischer pathOn-Puffer beachtet
+  (Quellpfad wird vor dem zweiten pathOn kopiert).
+- Run-SftpLiveTest um Umlaut-put/get mit Bytevergleich erweitert
+  (Name aus Codepoints, Script bleibt ASCII). Dabei zwei veraltete
+  Erwartungen des Live-Tests modernisiert: SERVMAN STATUS liefert
+  laengst das Name:/Status:/EndpointQueue:-Format (kein
+  "Endpoint: SSHD OK"/"sftp="-Sessionblock mehr) und die TCP-Zeile
+  traegt active=0/16 statt 0/8 (Slotwachstum; Check jetzt listen=1).
+Abnahme:
+- 0.58.20-Gate gruen in neuer Form (26 Tests inkl. neuer UTF-8-
+  Positiv-/Negativfaelle in Zig und C), Doku-Closure-Gate gruen.
+- QEMU Run-NtfsReadRuntime0604: NTFSDIAG utf8name: ok (Umlaut-Pfad
+  parsen/lesen/kopieren/loeschen auf dem echten Windows-Fixture,
+  malformed sichtbar abgelehnt), result: OK.
+- SFTP-Live-Test OK: UML0618-Umlautname per put/get byte-exakt durch
+  OpenSSH -> SSHD -> r4sys -> NTFS.
+- Build.bat -test: TEST OK.
+Notizen:
+- Konsolen-Glyphen: Die Terminal-Fonts zeigen fuer Nicht-ASCII
+  weiterhin Ersatzzeichen; Pfad-Operationen sind korrekt (vertrags-
+  gemaess, Anzeige-Aufruestung ist kein 0.60.18-Umfang).
+
+Version: 0.60.20
+Status: Erledigt (auch der Hardwarenachweis ist erbracht, siehe 0.60.28)
+Offene Punkte:
+- keine. Der Lenovo-Nachweis wurde am 2026-07-25 gefuehrt: Der
+  8-MB-SFTP-Roundtrip ist auf genau der Maschine bytegleich, auf der
+  frueher 26 einzelne 64-Byte-Bloecke abwichen. Die IRQ/FPU-Klammer und
+  der skalare ChaCha-Kern halten damit real.
+- Die frueheren Sperren sind aufgehoben: Der User hat die Nutzung von
+  `.207` freigegeben, VERSION.R4S steht auf 0.60.20 und der Stand ist
+  gepusht. `SERVMAN RESTART SSHD` ist als 0.60.29 erledigt.
+Erledigt:
+- Hardwarebefund systematisch bis in den gemeinsamen xHCI-Pfad
+  verfolgt. Lenovo bootet USBMSC und betreibt HID am selben xHC; der
+  fruehere QEMU-Nichtrepro lief dagegen ueber AHCI. STATUS/VERIFY
+  erzeugen mehrere serielle NTFS-/Blockzugriffe und treffen dadurch
+  den fehlerhaften Timeout-/Recovery-Zustand wesentlich sicherer als
+  TYPE, DIR, SLEEP oder SYSUPD /?.
+- xHCI-Endpoint-Recovery korrigiert: Der alte Code setzte den
+  Software-Ringcursor blind auf TRB 0/Cycle 1 zurueck und konnte
+  bereits publizierte TDs erneut ausliefern. Die Recovery liest jetzt
+  den echten Endpointzustand, fuehrt je nach Zustand STOP ENDPOINT
+  beziehungsweise RESET ENDPOINT aus, prueft jedes Command-Completion,
+  setzt den Dequeue-Zeiger auf den aktuellen Producer samt DCS und
+  verwirft exakt die veraltete Completion. Disabled invalidiert die
+  Endpointkonfiguration statt mit falschem Zustand weiterzulaufen.
+- Der erste reale Boot des vorigen 0.60.20-Images zeigte vor dem Desktop
+  einen Transfer-Timeout auf USBMSC-Slot 4 und endete mit
+  `USB mass storage read failed`. Die Nachanalyse fand drei Fehler im
+  neuen Recoverypfad: xHCI-`Error` war faelschlich wie `Disabled`
+  behandelt, spezifizierte `Context State Error`-Races brachen sofort ab
+  und der DMA-eigene Output-Endpointkontext wurde nicht volatile gelesen.
+  `Error` geht jetzt direkt ueber SET TR DEQUEUE, STOP/RESET/SET_DEQUEUE
+  lesen bei Race-Completions den Zustand bis zu sechsmal neu und alle
+  Zustandsreads sind volatile.
+- Eine Endpoint-Neukonfiguration startet nun am aktuellen
+  Software-Producer samt DCS statt wieder an Ringanfang/Cycle 1.
+  USBMSC wiederholt einen nach BOT-/xHCI-Recovery fehlgeschlagenen
+  idempotenten READ10 exakt einmal; ein reparierter transienter Read
+  macht dadurch nicht mehr das Bootprogramm unsichtbar.
+- Die direkte Timeoutanzeige nennt zusaetzlich USBSTS, IMAN, ERDP,
+  Event-Dequeue/Cycle, naechsten Event-TRB, letzten Eventtyp/-code,
+  Endpointzustand und PORTSC. USBMSC zeigt Opcode, BOT-Phase und
+  Recovery-Ergebnis, falls der Lenovo erneut ausfaellt.
+- USBMSC propagiert Recovery-Fehler vollstaendig. Nach einem
+  Transporttimeout wird kein REQUEST-SENSE ueber denselben defekten
+  Bulkpfad mehr gestartet; damit entfaellt die zweite komplette
+  Timeout-/Recovery-Kaskade hinter den beobachteten ~34 Sekunden.
+  Flush verwendet ebenfalls keine stale Sense-Klassifikation mehr.
+- Interruptzustand im USB-Bootwait bleibt erhalten. Ein Runtime-Aufruf
+  mit IF=0 darf Interrupts nicht heimlich global einschalten; nur der
+  bekannte fruehe Bootpfad darf sie temporaer freigeben.
+- Block-Request-Lebensdauer repariert: Ein aktiver Timeout darf den
+  Slot nicht freigeben, solange der Treiber noch den caller-owned
+  Buffer benutzt. Queued Requests koennen sicher abgebrochen werden;
+  aktive Requests bleiben bis zum Backend-Abschluss besessen und
+  liefern danach den gelatchten Timeout. Dadurch entfallen Slot-Reuse,
+  Buffer-UAF und spaete Completion auf einen neuen Besitzer.
+- Page-Cache-Lockbesitz repariert: Nach einem I/O-Wait wird so lange in
+  begrenzten Scheiben relockt, bis der Mutex wirklich wieder gehalten
+  wird. Der alte Timeoutpfad konnte ohne Lock in gemeinsame
+  Cachemetadaten weiterlaufen. Die zuvor ungedeckelte io_busy-Schleife
+  besitzt weiterhin den uncached Fallback.
+- Nichtpraemptible xHCI- und Queue-Lock-Waits schreiben ihren
+  Timeout direkt in den BootInfo-Framebuffer; COM1/Bootlog bleiben
+  parallel erhalten. Der Deadman-Start meldet Thread-Erzeugungsfehler
+  jetzt als FAILED statt faelschlich OK.
+- Diagnosekanal fuer den echten Freeze umgesetzt:
+  `R4DIAG PING` und `R4DIAG TASKS` werden direkt im SSHD-Worker
+  beantwortet, ohne Program-Spawn und ohne Dateisystemzugriff.
+  TASKS paginiert generationstreu Task-ID/-Generation, Zustand,
+  Owner, last_run/age, Wake-Tick, Runtime und Flags.
+- Der erste echte Lenovo-Aufruf von `R4DIAG TASKS` deckte eine
+  selbstinvalidierende Consumer-Schleife auf: Schon die Summary-Ausgabe
+  und danach jede `RESTART`-Zeile liefen ueber TCPSVC/Async-I/O und
+  aenderten den gerade gebundenen Task-Epoch. Exakt 16 Restarts endeten
+  deshalb deterministisch in `UNSTABLE`. SSHD sammelt nun alle bis zu
+  192 Eintraege vor jeder Netzausgabe in 18432 Byte sessionspezifischem
+  Heap-Scratch und publiziert erst danach. Das ist stackarm, zwischen
+  acht Sessions isoliert und mischt keine Generationen.
+- SYSUPD-Stacklast fuer alle vier Befehle reduziert, obwohl sie nicht
+  die alleinige Hardwareursache war: PackageInfo-/TransactionJournal-
+  Grossobjekte liegen in einem kompakten wiederverwendeten
+  Modulworkspace; Parser und Konverter arbeiten caller-owned statt
+  ueber grosse By-value-Rueckgaben.
+- Fs-Request-Gate und Storage-Watchdog bleiben begrenzt und sichtbar.
+  Ein aktiver Storage-Request wird dabei nur diagnostiziert, niemals
+  unsicher aus der Queue entfernt. Task-Dumps umfassen auch lange
+  ready/running-Alter und Storage-Callback-Stalls.
+- STORDIAG akzeptiert seit dem 0.60.9-Layout NTFS auf C: neben FAT32;
+  Build.bat verbietet nun ausdruecklich `STORDIAG result: FAILED`.
+- Neues regulaeres Gate
+  `Run-XhciStorageRecoveryContract06020.ps1`: sechs ausgefuehrte
+  Endpoint-Policy-Tests plus statische Vertrage fuer xHCI/USBMSC,
+  Interruptzustand, sichere Request-Ownership, Page-Cache-Relock,
+  stackflache SYSUPD-Befehle und direkte SSH-Diagnose.
+- `Run-SshSysupdFreezeRepro0620.ps1` bildet die Hardwareachsen nach:
+  beschreibbares Systemimage als USB-Storage, USB-Tastatur und
+  USB-Maus am selben qemu-xhci, Desktop-Shell und SSHD. Ein echtes
+  FREEZE20.R4U wird eingebettet; STATUS und VERIFY laufen wiederholt
+  mit R4DIAG TASKS nach jedem Exec. Der Runner verlangt jetzt
+  mindestens eine echte Taskzeile, Exit 0 und verbietet
+  `UNSTABLE`/`UNAVAILABLE`; das Quellgate erzwingt Collect-before-send.
+- Das korrigierte Produktionsimage wurde auf den Samsung-FIT-Stick
+  geschrieben und der Lenovo erreichte den Desktop ohne fruehen
+  `[XHCI] event timeout` und ohne `USB mass storage read failed`.
+- Ein echtes FREEZE20.R4U wurde per SFTP in die Lenovo-Inbox geladen,
+  zurueckgelesen und bytegleich verifiziert. Danach liefen 6x
+  `SYSUPD STATUS` und 6x `SYSUPD VERIFY` in 0,6 bis 0,9 Sekunden.
+  Nach jedem der zwoelf Laeufe antwortete der direkte spawn-/FS-freie
+  `R4DIAG PING`; failures=0 und der Desktop blieb erreichbar.
+- Der gepufferte SSHD wurde als echtes 271283-Byte-Paket SSHD20.R4U
+  per SFTP bytegleich uebertragen, vollstaendig verifiziert und atomar
+  angewendet. STATUS steht auf cleanup/applied=1/1, `SYSUPD RESUME`
+  bestaetigt den terminalen Zustand idempotent.
+- Der Lenovo wurde danach warm neu gestartet (kein Cold Boot). Port 22
+  kam wieder, SSHD lief aus dem aktualisierten Diskartefakt und 10/10
+  direkte `R4DIAG TASKS` lieferten jeweils 28 bis 29 echte Taskzeilen,
+  Exit 0, keine internen Restarts sowie weder `UNSTABLE` noch
+  `UNAVAILABLE`.
+- Die vollstaendige Post-Update-Matrix auf dem warm gestarteten Lenovo
+  bestand 6/6 `SYSUPD STATUS`, 6/6 paketgestuetzte `SYSUPD VERIFY` und
+  12/12 gepufferte TASKS-Snapshots mit 28 bis 30 Zeilen;
+  `post_update_failures=0`. Journal cleanup/applied=1/1 und
+  idempotentes RESUME blieben erhalten.
+- Der anschliessende 8-MB-Versuch wurde beim ersten Fehler sofort
+  gestoppt. Live danach: Ping sowie TCP 21/22/3389 erreichbar,
+  `R4DIAG TASKS` stabil mit Exit 0, SSHD laufend. SSHD meldete
+  `xfer_result=stream-begin-failed`, `xfer_bytes=0`,
+  `xfer_ticks=141`, `sftp_write=0`; die Inbox enthielt weiterhin nur
+  FREEZE20.R4U und SSHD20.R4U, also keine sichtbare BIGSTAGE20-Datei.
+- Der frische QEMU-Repro mit dem vollstaendig gehaerteten grossen
+  SFTP-Schreibpfad widerlegte USB-/NTFS-/TCP-Korruption als Ursache
+  eines neuen Befunds: Der 8-MB-PUT wurde serverseitig mit
+  `write_xfer_seq=260`, 8388608 Bytes und Ergebnis `ok` committed,
+  aber der anschliessende GET wich in exakt 26 64-Byte-Bloecken ab.
+  Upload-SHA256
+  `432B0B2D68AAD714478F4B209EB2AFBF9C0D06007A7924414C4778B7B6391B54`,
+  fehlerhafter Download-SHA256
+  `C4A60922A9212D40B801CB14875193A0AD3DFDE187095166E24CC82BA738C79D`.
+  Jeder vollstaendige Fehlerblock begann exakt an einer
+  ChaCha20-Blockgrenze eines SFTP-DATA-Pakets. Da OpenSSH zugleich
+  jeden Poly1305-Tag akzeptierte, hatte SSHD selbst falschen
+  Ciphertext erzeugt und danach gueltig authentifiziert.
+- Die systematische Interruptanalyse fand die allgemeine Ursache:
+  R4X-, R4D- und R4P-Module sind AVX2-faehig, die IDT rief jedoch
+  externe R4D-IRQ-Handler vor dem schedulerseitigen FPU-Save auf.
+  Dadurch konnte insbesondere der RTL8139-Handler live XMM-/YMM-
+  Register des unterbrochenen SSHD ueberschreiben. Zig-ChaCha
+  verarbeitet zwei 64-Byte-Bloecke in den beiden YMM-Haelften; das
+  erklaert die isolierten 64-Byte-Fehler ohne ungueltigen MAC.
+- Externe R4D-IRQ-Handler besitzen nun eine exakte FPU-Klammer:
+  Der Scheduler sichert Zustand und Generation des unterbrochenen
+  R4X-Tasks, laedt fuer den Handler den architektonischen Initialzustand
+  und stellt nur bei identischer Taskgeneration den gesicherten
+  Zustand wieder her. Ein verbotener Taskwechsel im Handler wird
+  fail-closed auf COM1 gemeldet und hinterlaesst keinen Modulzustand.
+  Reine Soft-Float-Kerneltasks werden vor und nach dem Handler auf den
+  Initialzustand gesetzt.
+- SSHD verwendet fuer OpenSSH-ChaCha zusaetzlich einen eigenen
+  skalaren u32-Kern statt der zweiblockigen std-AVX2-Implementierung.
+  Zwei bekannte 64-Byte-Vektoren (Counter 0/1) sowie ein
+  193-Byte-In-place-/Teilblock-Roundtrip laufen im 0.60.20-Gate.
+- SIMDD besitzt `/IRQSTRESS`: Eine 8x-u32-AVX2-Kette bleibt ueber
+  20.000.000 Runden ohne Syscall/Funktionsaufruf live und wird danach
+  gegen die skalare Referenz geprueft. Der QEMU-Runner erzeugt
+  gleichzeitig 256 echte Verbindungen zum RTL8139/SSHD-Pfad und
+  verlangt danach erneut einen stabilen direkten Task-Snapshot. Damit
+  prueft die Abnahme den allgemeinen YMM-Erhalt unabhaengig vom
+  skalaren SSH-ChaCha-Fallback.
+Abnahme:
+- `Run-XhciStorageRecoveryContract06020.ps1`: 6/6 Policy-Tests und
+  alle statischen Teilvertraege gruen.
+- Bestehende xHCI-Gates gruen: Event-Router 7/7, Ring-Cycle 3/3,
+  SuperSpeed-Endpoint 3/3, USB-Timing 2/2, Bulk-Completion 2/2.
+- SystemUpdateAtomic-Hostmodell 10/10 und DynamicTaskRegistry 13/13.
+- Gezielter Build `Build.bat -app SYSUPD SSHD` erfolgreich; beide
+  R4X-Artefakte bestehen den Current-Artefaktcheck.
+- Vollstaendiger `Build.bat -norun` erfolgreich: alle Current-/Host-
+  Gates, Kernel, 96 R4X-Artefakte und FAT32/NTFS-Systemimage gruen.
+- USB/Desktop/SSH-QEMU-Repro: direkte Anfangsdiagnose OK, danach
+  6x STATUS und 6x VERIFY mit je einer direkten R4DIAG-Abfrage;
+  alle Execs in 1,0-1,5 s, failures=0. Log:
+  DevTools/Logs/qemu-sysupd-freeze-20260724-000447.log
+- Nach Haertung des R4DIAG-Snapshot-Restarts erneut 2x STATUS und
+  2x VERIFY samt direkter Diagnose und automatischem COM1-Stall-/
+  Fatalmarker-Veto gruen, failures=0. Log:
+  DevTools/Logs/qemu-sysupd-freeze-20260724-001637.log
+- Nach der realen Bootfehler-Nachanalyse erneut vollstaendiger
+  `Build.bat -norun` gruen und danach USB/Desktop/SSH-QEMU-Repro mit
+  6x STATUS, 6x VERIFY und je direkter Diagnose, failures=0. Log:
+  DevTools/Logs/qemu-sysupd-freeze-20260724-004125.log
+- Nach dem echten TASKS-Befund: Quell-/Policy-Gate 6/6 gruen,
+  `Build.bat -app SSHD` samt Artefaktgate gruen und unabhaengiger
+  Code-Review ohne Finding.
+- Verschaerfter USB/Desktop/SSH-QEMU-Repro mit 20x STATUS, 20x VERIFY
+  und 41 vollstaendigen gepufferten TASKS-Snapshots gruen,
+  failures=0. Log:
+  DevTools/Logs/qemu-sysupd-freeze-20260724-010805.log
+- Lenovo FREEZE20.R4U: 458 Bytes, SFTP-Rueckdownload SHA256
+  9A05A754C984D559512955931F3BFA25A4DD06FB69978F8364490034AC5571C3;
+  danach 6/6 STATUS, 6/6 VERIFY und 12/12 direkte PINGs gruen.
+- Lenovo SSHD20.R4U: 271283 Bytes, SFTP-Rueckdownload SHA256
+  34C7C07ACDD7E21767150A91E1438B8A002D0497532331D65E8C6E940E2FED26;
+  VERIFY, APPLY 1/1, cleanup-STATUS und idempotentes RESUME gruen.
+- Lenovo nach Warmstart: 10/10 TASKS-Aktivierungsproben und danach
+  6/6 STATUS, 6/6 VERIFY, 12/12 TASKS; failures=0.
+- Normales Produktionsimage nach allen QEMU-Laeufen erneut mit
+  `Build.bat -image` erzeugt; 672137216 Bytes, SHA256
+  23DC0BFA5BD8A3FB185B63D629562DE3EDE4C56AB5AADFB1F06CAB50B3F24C59.
+- Aktualisiertes `Run-XhciStorageRecoveryContract06020.ps1` gruen:
+  zusaetzlich exakte R4D-IRQ-FPU-Klammer, Taskgeneration,
+  Initialzustands-Restore, genau ein umschlossener Handleraufruf,
+  SIMDD-Live-Vector-Orakel und 3/3 skalare ChaCha-Tests.
+- Gezielte Builds nach dem FPU-/ChaCha-Fix gruen:
+  `Build.bat -kernel`, `Build.bat -app SSHD` und
+  `Build.bat -app SIMDD`, jeweils inklusive Current-Artefaktgate.
+- Erster korrigierter QEMU-Lauf nach dem Befund: 8-MB-PUT/GET
+  bytegleich mit SHA256
+  `432B0B2D68AAD714478F4B209EB2AFBF9C0D06007A7924414C4778B7B6391B54`,
+  danach 40/40 STATUS, 40/40 VERIFY und alle direkten Diagnosen
+  gruen; failures=0. Log:
+  `DevTools/Logs/qemu-sysupd-freeze-20260725-160723.log`.
+- Erweiterter finaler QEMU-Lauf: erneuter bytegleicher 8-MB-PUT/GET,
+  `SIMDD irqstress result: OK rounds=20000000 vec=8x u32
+  liveAcrossIrq=OK` unter 256 erfolgreichen NIC-Verbindungen, danach
+  40/40 STATUS, 40/40 VERIFY und jede direkte Diagnose gruen.
+  Keine `IRQ FPU GUARD`-Fehlermeldung, kein xHCI-Timeout/Recovery,
+  kein USBMSC-Transportfehler, Deadman, Panic, Fatal oder CPU-Fehler;
+  failures=0. Log:
+  `DevTools/Logs/qemu-sysupd-freeze-20260725-164148.log`, SHA256
+  `B2EACFC7A59B52EAE10B00DC59C84DD40EC8A870A4981A24EA2682A881E371CA`.
+- Abschlusspruefung 2026-07-25 (lokales Einfrieren):
+  * Formatstatus aller geaenderten Zig-Dateien geprueft. Der gesamte
+    handgeschriebene Code ist `zig fmt`-sauber; `Code/Kernel/fs/ntfs/
+    ntfs.zig` aus dem aelteren Zwischenstand ist inzwischen formatiert.
+    Nicht sauber sind ausschliesslich die drei GENERIERTEN Dateien
+    `Code/Kernel/program/r4x_api_generated.zig`,
+    `Code/System/SDK/r4os/abi_generated.zig` und
+    `Code/System/SDK/Tests/ApiContractConformanceGenerated.zig`
+    (einzeilige Funktionskoerper `r4AppProfileMeta`/Testblock plus eine
+    abschliessende Leerzeile). Dieser Zustand ist NICHT neu: die
+    identischen Zeilen stehen bereits in HEAD und `zig fmt --check`
+    scheitert dort ebenso. Da `ApiContractGen --check` diese Ausgaben
+    bytegenau pinnt, waere Handformatierung ein Gate-Bruch; die
+    Korrektur gehoert in den Generator und ist in 0.60.25
+    (Regenerierung) mit aufgenommen.
+  * `DevTools/Scripts/Build.bat -norun` vollstaendig gruen: alle
+    Current-/Host-Gates inkl. 0.60.20-Vertrag, Kernel, 87 auditierte
+    R4X-Artefakte, FAT32-Boot- plus NTFS-Systemvolume, Limine-Install.
+    Log: scratchpad/build-norun-1.log (1721 Zeilen, keine FAILED-,
+    Compiler- oder Driftmeldung).
+  * Das vom Testrunner hinterlassene Testimage ist damit ersetzt.
+    `Release/disk.img` ist wieder ein normales PRODUKTIONSIMAGE
+    (Overlay `Injection/`, null `TestInjection`-Referenzen im
+    Buildlog): 672137216 Bytes, SHA256
+    `F0D49BF10801DB6C402D87AFFCB1B99EA13901C376128AC5AE0163D19551789D`,
+    Boot-FAT32 10 Dateien, NTFS-Systemvolume 233 Dateien.
+    Es ersetzt das Testimage
+    `016BA8AF41FA1695170684EA26F2D8CC9F13C5E4FC81FAD38E73F1E8C367B7A8`.
+  * `git diff --check` sauber (tracked und cached); die einzige Meldung
+    ist der unkritische CRLF-Normalisierungshinweis fuer
+    `DevTools/Scripts/Build.bat`. Zusaetzlich alle zehn neuen
+    untracked Dateien ohne Trailing-Whitespace.
+Notizen:
+- Die alte Stack-Widerlegung war zu stark formuliert: Dass dasselbe
+  Binary in QEMU lief, schloss einen hardwareabhaengigen Stackdruck
+  nicht aus. Der grosse SYSUPD-Stack wurde deshalb trotzdem entfernt.
+- Die Codeanalyse fand nicht einen isolierten Fehler, sondern eine
+  zusammenhaengende Fehlerkette aus xHCI-Ring-Rewind, ignorierter
+  Recovery, Sense-Doppeltimeout, unsicherer Block-Slot-Freigabe und
+  verlorener Cache-Lockownership. Der korrigierte Lenovo-Kaltboot und
+  die 6x/6x-SYSUPD-Serie bestaetigen diese Kausalitaet fuer den
+  beobachteten USBMSC-Bootfehler. Der spaeter isolierte grosse
+  SFTP-Datenfehler war eine zweite, architekturweite
+  IRQ/FPU-Ownership-Luecke und ist durch den bytegenauen Repro plus
+  unabhaengigen AVX2-Live-State-Test geschlossen.
+- Der verschaerfte QEMU-Runner sah in einem ersten 6er-Lauf einmal
+  Exit 0 ohne erkannte Taskzeile, waehrend alle SYSUPD-Laeufe und die
+  uebrigen Dumps gruen blieben. Mit ungekappter Fehlerausgabe war das
+  in weiteren 41/41 TASKS-Aufrufen nicht reproduzierbar. Das Gate
+  akzeptiert den Fall dennoch nicht; Publication-Batching wurde ohne
+  belastbaren Serverbefund nicht spekulativ hinzugefuegt.
+- Kein Push und kein Versionssprung vor dem Lenovo-Nachweis;
+  VERSION.R4S steht weiterhin auf 0.60.19.
+- Pausenstand 2026-07-24 (erste Pause): Nach dem grossen SFTP-Fehler
+  wurden zunaechst keine weiteren Schreibtests oder Builds ausgefuehrt.
+  Der Laptop blieb netzwerkseitig funktionsfaehig; der blaue
+  Direktdiagnosebildschirm ist die bewusst framebufferdirekte
+  Timeoutanzeige und kein nachgewiesener globaler Kernelstillstand.
+- Pausenstand 2026-07-24 (zweite Pause): Der Lenovo ist wieder unter
+  192.168.178.207 erreichbar. In dieser Fortsetzung wurde er bewusst
+  weder beschrieben noch getestet. Der lokale Arbeitsbaum enthaelt
+  noch ungepruefte Korrekturen fuer exakte IF-Wiederherstellung,
+  Tick-/TSC-/CPU-Deadline-Telemetrie, xHCI-Endpoint-Recovery,
+  backend-eigenen exakt einmaligen USBMSC-READ-/WRITE-/FLUSH-Retry,
+  Request-/Page-Cache-Ownership, fail-closed R4SYS-Streams,
+  create-only SFTP-Staging samt separater Write-Telemetrie,
+  stackarmen SYSUPD-Workspace sowie die zugehoerigen Contracts,
+  Repro-/Upload-Helfer und Dokumentation. Der veraltete
+  `ok-backup-retained`-Anker im 0.60.20-Gate wurde an den aktuellen
+  create-only Ownership-Pfad angepasst; das Gate wurde danach noch
+  nicht ausgefuehrt.
+- Der adversariale SFTP-/R4SYS-Review fand vor der zweiten Pause vier
+  noch blockierende Fehlerklassen, die vor jedem Test geschlossen
+  werden muessen:
+  (1) VFS/FAT/NTFS unterscheiden bei Lookups noch nicht verlaesslich
+  `not_found` von I/O-/Formatfehlern; dadurch sind `fileInfoRaw` und
+  `require_target_absent` im gestoerten Storagepfad nicht beweiskraeftig.
+  (2) StreamSlot.generation wird noch nicht gegen die Taskgeneration
+  des Callers geprueft; ein spaeter Pfadaufruf kann einen neu
+  eroeffneten Stream treffen. FAT-Leerdateien besitzen zusaetzlich
+  `first_cluster == 0`, weshalb Node 0 nie allein als Identitaet gelten
+  darf.
+  (3) SFTP beobachtet Stage/Target und finalisiert beziehungsweise
+  loescht erst in einem spaeteren Aufruf. Diese Mutation muss im Kernel
+  atomar an die zuvor erworbene Stage-Identitaet gebunden werden. Nach
+  fehlgeschlagenem Stream-Begin darf insbesondere keine nur
+  pfadbasierte Fremddatei geloescht werden.
+  (4) Die transfer_sequence muss als letzter Release-Commit eines
+  konsistenten Telemetriesnapshots publiziert und beim STATUS-Merge
+  entsprechend stabil gelesen werden.
+- Die vertieften Reviews von Deadman/Blockpfad, SYSUPD-Workspace und
+  dem dreistufigen Lookup-/Ownership-Design wurden fuer die Pause
+  angehalten und muessen beim Fortsetzen erneut gestartet werden.
+  Seit den neuen Korrekturen liefen noch kein Zig-Format-/Compilecheck,
+  kein Hostgate, kein Build und keine QEMU-Reproduktion. Die oben
+  aufgefuehrten gruene Abnahmen beziehen sich deshalb nur auf den
+  vorherigen Snapshot beziehungsweise das derzeit auf dem Lenovo
+  laufende Image.
+- Exakte Fortsetzungsreihenfolge: zuerst die vier Reviewblocker im Code
+  schliessen und die drei Reviews wiederaufnehmen; danach Diff-/Format-
+  und PowerShell-Parserpruefung, 0.60.20- und bestehende Storage-/
+  Scheduler-Gates, gezielter SYSUPD-/SSHD-Build, voller
+  `Build.bat -norun`, QEMU-Reproduktion, frisches Produktionsimage und
+  erst ganz zuletzt der 8-MB-/SYSUPD-Test auf 192.168.178.207.
+  Kein unveraenderter Upload, kein Versionssprung und kein Push vorher;
+  VERSION.R4S steht weiterhin auf 0.60.19.
+- Pausenstand 2026-07-25 (dritte Pause): Nach den OpenAI-
+  Serverunterbrechungen wurde ausschliesslich lokal und statisch
+  weitergearbeitet. Der Lenovo unter 192.168.178.207 wurde weder
+  angesprochen noch beschrieben; es liefen kein Build, kein Gate, kein
+  QEMU- oder Hardwaretest und es wurde kein Image erzeugt.
+- Der In-Memory-Vertrag fuer verlorene SFTP-/SCP-/FTP-Publish-
+  Bestaetigungen ist jetzt fail-closed: Ein `publish_started`-StreamSlot
+  reserviert Stage, Ziel, Backup und die beobachtete Dateiidentitaet.
+  Generische Write-/Append-/Delete-/Rename-/Copy-/Move-/Checked-SYSUPD-
+  Mutationen geben einen retrybaren Fehler zurueck, statt den einzigen
+  Recovery-Token zu loeschen. Ein zweites Stream-Begin darf die
+  reservierten Namen nicht belegen. Task-/Program-Retire und Dead-Owner-
+  Reap versuchen die exakt aufgezeichnete create-only-Publikation unter
+  dem FS-Gate zu Ende zu fuehren und behalten den Token bei weiterhin
+  mehrdeutigem Storagezustand. Fuer noch nicht backendgenau exponierte
+  Nicht-ASCII-Kollation gilt waehrend dieses kurzen Fensters bewusst eine
+  konservative Verzeichnissperre.
+- Die fehlende R4SYS-Slot-110-Fassade wurde in den manuellen Zig-/C-
+  Fassaden ergaenzt; C besitzt nun auch benannte Directory-End-/I/O-
+  Ergebnisse. Der durch die angehobene Pfadkomponentengrenze zu kleine
+  192-Byte-SCP-Header ist auf die ABI-Grenze dimensioniert.
+- Statischer Zwischencheck: `git diff --check` fuer die zuletzt
+  bearbeiteten Dateien ist sauber. `zig fmt --check` konnte alle
+  ausgewaehlten Dateien parsen und meldete nur
+  `Code/Kernel/fs/ntfs/ntfs.zig` als noch zu formatieren. Dieser
+  Formatcheck ist keine Build-/Funktionsabnahme.
+- Der letzte Review fand vier neue Abschlussblocker, die bewusst offen
+  bleiben:
+  (1) Die create-only Upload-Publish-Tuple leben bisher nur im RAM. Ein
+  Reset/Stromverlust im durable Target-Alias-vor-Stage-Detach-Fenster
+  verliert den Token; SFTP/SCP/FTP brauchen daher persistente Claims,
+  deterministische Mount-Recovery oder einen backendseitig
+  crashterminalen Publish.
+  (2) NTFS kann nach einem Crash zwischen kanonischem `$FILE_NAME`-Write
+  und Index-Insert einen transienten Stageeintrag nur ueber Recovery-
+  Lookup sehen, aber der normale identity-bound Delete kann ihn nicht
+  entfernen. Es fehlt ein recovery-only Compare-and-delete samt
+  Crashmatrix-Cut.
+  (3) SYSUPD-Cleanup preflightet aktuelles Backup und loescht das
+  vorherige Backup in getrennten R4SYS-Aufrufen. Eine lokale Mutation
+  dazwischen bricht die Last-good-Garantie; benoetigt wird ein
+  per-Payload checked-cleanup unter genau einem FS-Gate. Das Stage-Delete
+  im applied-Cleanup ist redundant, und ein fremdes Previous-Backup soll
+  sicher behalten statt zum permanenten Bootblock werden.
+  (4) Paketweite SYSUPD-Aliaspruefung faltet nur ASCII, NTFS aber per
+  `$UpCase`; bis zu einer backendgenauen Paket-Preflightgrenze muessen
+  Nicht-ASCII-Ziele abgelehnt werden.
+- Ebenfalls offen: autoritatives API-Schema/Baseline und alle generierten
+  Slot-110-Ausgaben konsistent regenerieren, ModuleCatalogInventory
+  regenerieren sowie die veralteten Gates 0.59.10/0.59.14/0.59.15/
+  0.60.20 und die zugehoerige Dokumentation an den finalen Code
+  anpassen.
+- Fortsetzung nach dieser Pause: zuerst persistenten Upload-Publish und
+  NTFS-Recovery-Delete entwerfen/implementieren, dann den atomaren
+  SYSUPD-Cleanup und die Unicode-Aliasgrenze schliessen. Erst danach API-
+  Generatorausgaben, Gates und Dokumentation aktualisieren; anschliessend
+  Format-/Compilechecks, Builds, QEMU, Image und zuletzt Hardware `.207`.
+  VERSION.R4S bleibt 0.60.19; kein Push vor gruener Gesamt- und
+  Hardwareabnahme.
+- Pausenstand 2026-07-25 (aktuelle Uebergabe; ersetzt die obenstehenden
+  aelteren Fortsetzungsreihenfolgen fuer 0.60.20): Die dort genannten
+  Ownership-/API-/Gate-Arbeiten sind im aktuellen Arbeitsbaum umgesetzt.
+  Der danach neu isolierte Blocker war eine architekturweite
+  IRQ/FPU-Luecke: AVX2-faehige R4D-IRQ-Handler liefen ohne eigenen
+  FPU-Zustand und konnten live YMM-Register des unterbrochenen R4X-Tasks
+  ueberschreiben. Der Kernel sichert/restauriert nun den exakten
+  Taskzustand samt Generation um jeden externen IRQ-Handler; SSHD besitzt
+  zusaetzlich einen skalaren, mit drei Tests abgenommenen ChaCha-Kern.
+- Der finale erweiterte QEMU-Nachweis ist abgeschlossen und gruen:
+  frisches USBMSC/xHCI-Testimage, direkte Anfangsdiagnose, bytegleicher
+  8-MB-SFTP-PUT/GET (SHA256
+  `432B0B2D68AAD714478F4B209EB2AFBF9C0D06007A7924414C4778B7B6391B54`),
+  SIMDD mit 20.000.000 syscallfreien AVX2-Runden waehrend 256
+  RTL8139-Verbindungen, danach 40/40 `SYSUPD STATUS`, 40/40
+  paketgestuetztes `VERIFY` und alle direkten TASKS-Proben; failures=0.
+  Beweislog:
+  `DevTools/Logs/qemu-sysupd-freeze-20260725-164148.log`, SHA256
+  `B2EACFC7A59B52EAE10B00DC59C84DD40EC8A870A4981A24EA2682A881E371CA`.
+  Das Log enthaelt null IRQ-FPU-Mismatch, xHCI-Timeout/Recovery,
+  USBMSC-Transportfehler, Deadman, Panic, Fatal oder CPU-Exception.
+- Unmittelbar davor bestand bereits ein unabhaengiger 40er-Lauf mit
+  bytegleichem 8-MB-Transfer:
+  `DevTools/Logs/qemu-sysupd-freeze-20260725-160723.log`.
+  Der erste fehlerhafte Forensiklauf bleibt unter
+  `DevTools/Logs/qemu-sysupd-freeze-20260725-153324.log` erhalten; seine
+  Hostdateien liegen unter
+  `C:\Users\R4mbo\AppData\Local\Temp\R4OS-SftpInbox\20260725-153507-511-28436-b57d8f186699497daa8da8440679f808`.
+- Aktueller Maschinenzustand beim Stop: Kein QEMU-/ssh-/sftp-Prozess
+  laeuft, `TestInjection/` ist auf den normalen Stand restauriert und
+  der Lenovo `192.168.178.207` wurde in dieser Fortsetzung weder
+  angesprochen noch beschrieben. `Release/disk.img` war zu diesem
+  Zeitpunkt noch das vom letzten Runner erzeugte TESTIMAGE, 672137216
+  Bytes, SHA256
+  `016BA8AF41FA1695170684EA26F2D8CC9F13C5E4FC81FAD38E73F1E8C367B7A8`.
+  ERLEDIGT: Es wurde am 2026-07-25 durch das oben notierte
+  Produktionsimage ersetzt.
+- Die frueher hier notierte Uebergabeliste (Formatstatus, `-norun`,
+  Produktionsimage, `git diff --check`, 0.60.20 abschliessen) ist
+  vollstaendig abgearbeitet; die Ergebnisse stehen oben unter
+  "Abschlusspruefung 2026-07-25". Keine Ursachenanalyse und kein
+  QEMU-Repro wurden wiederholt, weil der relevante Code unveraendert
+  blieb. `KERNEL_VERSION` steht weiterhin auf 0.60.19; es gab keinen
+  Versionssprung und keinen Push. `Roadmap.txt` ist absichtlich
+  gitignored und traegt den lokalen aktiven Arbeitsstand.
+
+Version: 0.60.30
+Status: Erledigt
+Erledigt (Stage-Garbage-Collection, 2026-07-25):
+- KORREKTUR eines eigenen Fehlbefunds: In 0.60.22 hiess es, der Claim
+  koenne nicht beim Stream-Begin entstehen, weil `fileStreamBegin` nur
+  den Stagepfad kenne. Das gilt fuer die API, nicht fuer den Aufrufer -
+  SSHD waehlt Stage- und Backupnamen in `prepareSftpStagingPaths` AUS
+  dem Zielnamen, kennt also alle drei Namen bereits, bevor der Stream
+  geoeffnet wird. Es braucht daher KEINE Stage-only-Claimform.
+- Neuer append-only R4SYS-Slot 113 `file_stream_declare_publish`
+  (Offset 920, R4SYS ABI 10, Tabellengroesse 928). Er meldet die
+  create-only Publish-Absicht eines BEREITS OFFENEN Streams an;
+  `file_stream_begin` bleibt unveraendert.
+- Damit klammert der Claim die GESAMTE Uebertragung statt nur die
+  Uebergabe. Die Replaylogik blieb voellig unveraendert: Der Claim
+  traegt ab der Deklaration alle drei Namen, also greift die bestehende
+  Asymmetrie - vor dem Visibility-Point Rollback, danach Vollendung.
+- FAT32-Detail geloest: Eine leere FAT-Datei hat noch keine
+  Cluster-Identitaet (`node == 0`), ein beim Begin geschriebener Claim
+  koennte die gewachsene Stage spaeter also nicht wiedererkennen. Der
+  Streamschreibpfad bindet diese Identitaet ohnehin beim ersten Append
+  neu (`needs_identity_refresh`); dort zieht
+  `refreshDeclaredClaimIdentity` jetzt den durablen Claim mit derselben
+  Generation nach. Das feuert genau einmal pro Upload und nur, wenn die
+  Identitaet wirklich erst entsteht.
+- Bewusst FAIL-SOFT in SSHD: Schlaegt die Deklaration fehl, laeuft der
+  Upload exakt wie zuvor weiter, nur ohne Recovery-Klammer. Ein harter
+  Fehler haette eine Hygieneverbesserung in einen Ausfall des
+  Uploadpfads verwandelt.
+- Verdrahtet an allen vier Stream-Begin-Stellen in SSHD (drei SFTP-
+  Pfade plus SCP). Ein Abort zieht den Claim direkt zurueck, statt ihn
+  bis zum naechsten Boot liegen zu lassen; `file_replace_atomic` legt
+  keinen zweiten Claim mehr an, wenn bereits einer deklariert wurde.
+Abnahme:
+- Reset-Matrix mit identischen Schnitten wie zuvor - der Unterschied ist
+  direkt sichtbar:
+  * VORHER: Schnitt 12 s und 20 s hinterliessen je eine verwaiste
+    `S3C6EF37.TMP` (als NOTE gemeldet).
+  * JETZT: keine einzige Stage-Leiche mehr, und der Bootlog zeigt
+    `[UPLOADCLAIM] replay published=0 rolled-back=1 retired=0 foreign=0
+    invalid=0 failed=0` - der Claim greift und die verwaiste Stage wird
+    identitaetsgebunden zurueckgerollt.
+  * Unveraendert gruen: Gast bootet wieder, kein Claim bleibt liegen,
+    nie ein halb publiziertes Ziel, NtfsVerify nach jedem Schnitt OK.
+- `Build.bat -norun` gruen und `Build.bat -test` mit `=== TEST OK ===`,
+  `Errors: none`.
+- Gepinnte Zaehler mitgezogen (Conformance 267 Funktionen / 280 Slots,
+  App-Semantik ebenso, Lifecycle-Gate R4SYS ABI 10, Generatorerwartung
+  111 Funktionen).
+Nachtrag (Protokollabdeckung und Altgates, 2026-07-25):
+- Protokoll-Attribution im Claim (Punkt C der Restliste): Slot 113 traegt
+  jetzt zusaetzlich `protocol: u32` mit den Konstanten
+  `file_stream_publish_protocol_sftp|scp|ftp` (0/1/2). Bis dahin war jeder
+  deklarierte Claim pauschal `sftp`, was die Recovery-Telemetrie bei
+  gemischten Uploads falsch attribuiert haette. Ein unbekannter Code wird
+  in `publishProtocolFromCode` abgelehnt statt still auf sftp gemappt.
+- Die Signaturerweiterung eines bereits veroeffentlichten Slots war hier
+  ausnahmsweise zulaessig und wurde geprueft: Slot 113 entstand in Commit
+  894ba3d5, also NACH dem letzten Hardware-R4U (LOGSVC + VERSION.R4S, kein
+  Kernel). Er ist nie ausgeliefert worden; auf `.207` laeuft kein Binary,
+  das ihn kennt.
+- BEFUND dabei: FTPSVC hatte ueberhaupt KEINE Publish-Deklaration - der
+  dritte Uploadpfad lief also weiterhin ungeklammert, obwohl der Claimkern
+  ihn seit 0.60.22 modelliert. Jetzt verdrahtet, ebenfalls fail-soft.
+- Punkt D (Altgates): `Run-NtfsReplaceContract0608.ps1` prueft zusaetzlich
+  die Recovery-Oberflaeche und die Alias-Zaehlung aus 0.60.21;
+  `Run-StorageFacadeContract05823.ps1` prueft die FS-neutralen
+  Collation-/Recovery-Anker aus 0.60.24. Beide gruen.
+Notizen:
+- Beifang: Ein `-norun` scheiterte einmal mit
+  `std/os/linux/loongarch32.zig: unable to load` - ein Zig-Cache-Artefakt,
+  kein Codefehler; der unveraenderte Wiederholungslauf war gruen.
+- Bereits vorhandene Altleichen ohne Claim erfasst der Sweep nicht; ab
+  diesem Stand entstehen keine neuen. Auf `.207` ist die Inbox leer,
+  dort ist nichts nachzuraeumen.
+- TEURE LEHRE aus dem Nachtrag, jetzt in AGENTS.md fixiert: Nach dem
+  Nachtrag haengte `Build.bat -test` reproduzierbar (Gastlog bricht bei
+  ~1470 statt ~2200 Zeilen ab, zuletzt NETDIAGs TCP-Lifecycle-Zeile vor
+  `udpServiceStatusRaw`). Verdaechtigt wurden nacheinander die
+  FTPSVC-Verdrahtung, die Konstantensortierung und die Slot-Erweiterung -
+  alle drei zu Unrecht. Ein `git stash` des GESAMTEN Nachtrags zeigte
+  dasselbe Bild auf unveraendertem HEAD; die Ursache war die persistente
+  `Release/data.img`, die meine hart gekillten Reset-Matrix-Laeufe
+  beschaedigt hatten. Nach dem Loeschen sofort gruen, mit und ohne
+  Aenderung. Die Bisektion war den Aufwand wert: ohne sie waere eine
+  korrekte Aenderung zurueckgebaut worden.
+
+Version: 0.60.21
+Status: Erledigt
+Offene Punkte:
+- keine
+Erledigt:
+- Recovery-Lookup und Mutation zusammengefuehrt: neuer geteilter Kern
+  `ntfs_volume.deleteRecoveryEntryIfIdentity(v, parent, name, record,
+  sequence)`. Er loest den Namen ueber die transiente Sicht auf, handelt
+  aber ausschliesslich bei exaktem {record, sequence}. Ergebnisse:
+  `ok` (Objekt freigegeben), `unlinked` (nur der ueberzaehlige
+  Index-Alias geloest), `not_found`, `mismatch`, `directory`,
+  `unsupported`, `io`.
+- Beweis statt Vermutung fuer die Freigabeentscheidung: Der Kern zaehlt
+  ueber den bestehenden $I30-Walk (neuer Zaehlmodus `EnumSink.count_ref`
+  plus `countIndexAliases`), wie viele Index-Eintraege des Verzeichnisses
+  noch genau dieses {record, sequence} referenzieren. Nur bei exakt einem
+  verbleibenden Namen wird das Objekt freigegeben; bei mehreren wird nur
+  dieser eine Alias geloest. Vorbedingung ist `link_count == 1` und ein
+  kanonisches `$FILE_NAME` in DIESEM Verzeichnis
+  (`canonicalParentOfStatus`), womit die Zaehlung vollstaendig ist.
+- WICHTIGER BEFUND waehrend der Umsetzung: Der erste Entwurf leitete die
+  Freigabe aus einem Vergleich mit dem kanonischen Namen ab. Damit haette
+  ein Loeschen des KANONISCHEN Namens im Zwei-Alias-Fenster den Record
+  freigegeben, obwohl der Stage-Alias noch darauf zeigte - ein
+  haengender Index-Verweis auf einen freigegebenen Record. Die
+  Alias-Zaehlung schliesst das; die Familie `alias` im Hostmodell haelt
+  genau diesen Fall fest.
+- `deleteFile` und der Recovery-Pfad teilen sich jetzt einen Rumpf
+  (`releaseFileObjectLocked`): identische Dirty-Klammer und
+  Flush-Reihenfolge. Dabei wurde der normale Loeschpfad mitgehaertet -
+  die Index-Entfernung laeuft nicht mehr ueber den Namen, sondern
+  identitaetsgebunden (`indexRemoveIdentity`), sodass ein zwischenzeitlich
+  neu publizierter Name kein Fremdobjekt mitreissen kann.
+- Neuer Test-Seam `cut_after_canonical_rewrite` (Default false, wie
+  `flush_budget` kernelseitig ungenutzt): Das Fenster zwischen dem
+  kanonischen `$FILE_NAME`-Write und dem Ziel-Index-Insert enthaelt
+  keinen eigenen Flush, ist auf echter Hardware aber dauerhaft - mit dem
+  Flush-Budget allein war es nicht erreichbar.
+- Duenne Durchreichung nach oben: `Code/Kernel/fs/ntfs/ntfs.zig`
+  (`deleteRecoveryEntryIfIdentity` + `RecoveryDeleteResult`, Ergebnis
+  erst nach `finishDeferred` gemeldet) und FS-neutral in
+  `Code/Kernel/fs/vfs.zig`. FAT32 kann die Halbzustaende strukturell
+  nicht erzeugen (kein Kanonik/Index-Split) und nutzt unveraendert den
+  normalen Identity-Delete.
+Abnahme:
+- Neues Pflichtgate `Run-NtfsRecoveryDeleteContract0621.ps1`, in
+  `Build.bat` vor jedem Kernelbuild verdrahtet (`:test_ntfs_recovery_
+  delete`, direkt nach dem Sparse-Gate). Sechs ausgefuehrte Familien des
+  Hostmodells `CheckNtfsRecoveryDelete0621.zig` gegen den ECHTEN Kern:
+  * `halfstate`: der Halbzustand ist real - generischer Lookup meldet
+    `io`, die Recovery-Sicht findet ihn, der normale `deleteFile`
+    verweigert ihn (die vorher unloesbare Situation);
+  * `reverse`: die Recovery-Loeschung raeumt ihn identitaetsgebunden ab,
+    ist idempotent wiederholbar und laesst den Bystander unberuehrt;
+  * `forward`: aus demselben Cut heraus vollendet der normale Publish
+    weiterhin nach vorn;
+  * `negatives`: Sequence-Mismatch, fremde Recordnummer, abwesender Name
+    und Verzeichnis werden abgelehnt, schreiben nichts und der
+    anschliessende Publish funktioniert weiterhin;
+  * `alias`: im Zwei-Alias-Fenster wird nur der Alias geloest
+    (`unlinked`), das Objekt bleibt ueber den verbleibenden Namen lesbar
+    und wird erst beim letzten Namen freigegeben;
+  * `sweep`: acht unterbrochene Recovery-Laeufe erreichen nach Remount
+    jeweils einen terminalen Zustand.
+  Das Gate pinnt zusaetzlich die Quellanker (identitaetsgebundene
+  Index-Entfernung, Alias-Zaehlung, fail-closed bei Zaehlung 0, Cut-
+  Position direkt nach dem kanonischen Write, Default false).
+- NtfsVerify akzeptiert das reparierte Volume: `NTFSVERIFY result: OK
+  records=21 files=15 dirs=1 entries=17 clusters=6143`.
+- Bestehende NTFS-Gates mit dem geteilten Loesch-Refactor gruen:
+  Write 0.60.6, Tree 0.60.7 (inkl. Churn + Crashmatrix), Replace 0.60.8,
+  Hardening 0.60.11 (3000-Op-Churn, 28-Run-Crash-Sweep).
+Notizen:
+- Diese Unterversion liefert die Backendgrundlage fuer 0.60.22 und
+  0.60.23. Es gibt weiterhin keine pfadbasierte Delete-Heuristik.
+- Die FS-neutrale Fassade hat bis 0.60.22 noch keinen Aufrufer. Zig
+  analysiert unreferenzierte `pub fn` faul, deshalb ist ihr voller
+  Compilecheck erst mit dem echten Verbraucher in 0.60.22 erbracht; der
+  geteilte Kern ist ueber das Hostmodell vollstaendig geprueft.
+
+Version: 0.60.22
+Status: Erledigt
+Nachtrag (Protokollabdeckung, 2026-07-26):
+- Der SCP-Kontrolllauf ist gefahren und war NICHT nur eine Bestaetigung:
+  `Run-UploadClaimResetMatrix06022.ps1` kann jetzt `-Protocol sftp|scp`,
+  und der SCP-Lauf zeigt bei Schnitt 6 s exakt
+  `[UPLOADCLAIM] replay published=0 rolled-back=1 retired=0 foreign=0
+  invalid=0 failed=0` - der Claim greift auf dem SCP-Pfad also wirklich,
+  statt nur im Quelltext zu stehen. Beide Schnitte enden terminal, es
+  bleibt kein Claim liegen, kein Ziel ist halb sichtbar, NtfsVerify ist
+  sauber.
+- Die Protokoll-Attribution ist entgegen der urspruenglichen Planung
+  DOCH umgesetzt (0.60.30-Nachtrag), weil sich die Begruendung als
+  falsch herausstellte: Slot 113 war zu diesem Zeitpunkt noch nie
+  ausgeliefert, seine Signatur also nicht wirklich fixiert. Damit war es
+  kein zusaetzlicher Slot fuer Anzeigewert, sondern ein Feld an einem
+  noch formbaren.
+- Dabei kam heraus, dass FTPSVC gar keine Deklaration hatte: Der dritte
+  Uploadpfad lief bis dahin voellig ungeklammert. Das war keine fehlende
+  Bestaetigung, sondern eine fehlende Funktion - und ohne den
+  vermeintlich reinen Telemetriepunkt waere sie nicht aufgefallen.
+- NICHT mehr offen: Die Stage-Garbage-Collection, die aus der
+  Reset-Matrix als Befund hervorging, ist mit 0.60.30 geschlossen.
+Erledigt:
+- Gemeinsamer persistenter Kern
+  `Code/System/SDK/r4os/upload_publish_claim.zig` fuer alle drei
+  Protokolle. Textformat wie das SYSUPD-Journal (0.60.19), feste
+  Feldreihenfolge, Body-Pruefsumme in der letzten Zeile. Ein
+  abgeschnittener Schwanz kann damit nie als gueltiger Claim gelesen
+  werden (unterminierte letzte Zeile, falsche Pruefsumme und
+  Trailing-Muell werden abgelehnt); der Namensraum ist gedeckelt.
+- Der Claim bindet ALLE Entscheidungsgrundlagen: Volume-Token, Parent,
+  Stage-/Ziel-/Backupname und die exakte Backend-Dateiidentitaet
+  (`FileIdentity{node, generation, size}` - NTFS Record/Sequence, FAT
+  Startcluster plus Groesse, weil leere FAT-Dateien keine
+  Clusteridentitaet haben). Namen muessen einzelne Pfadkomponenten sein,
+  der Parent absolut und traversalfrei; Stage==Ziel wird abgelehnt.
+- Vollstaendige Zustandsmodellierung der Ruecksetzfenster als
+  `ObservedState`: `stage_only`, `half_published` (das 0.60.21-Fenster),
+  `alias`, `target_only`, `missing`, `foreign`.
+- Die eigentliche Sicherheitsaussage ist die Asymmetrie um den Point of
+  no Return: VOR dem kanonischen Rewrite wird der abgebrochene Upload
+  zurueckgerollt, DANACH wird die Uebergabe vollendet. Damit sieht ein
+  Client bei verlorener Bestaetigung entweder die Datei oder nicht -
+  niemals ein halbes Objekt. Ein fremdes Objekt unter dem Namen wird nie
+  angefasst, der Claim aber zurueckgezogen, damit er kein spaeteres
+  Loeschen autorisieren kann.
+- `replayAll` mit Summary: ein einzelner fehlschlagender Claim bricht den
+  Sweep nicht ab, sondern bleibt fuer den naechsten Versuch liegen.
+- Der gesamte Dateizugriff laeuft ueber einen `io: anytype`-Seam (wie im
+  SYSUPD-Kern), weshalb das Hostmodell die ECHTE Replaylogik gegen den
+  ECHTEN NTFS-Kern fahren kann statt gegen eine Simulation.
+- VERDRAHTUNG IM KERNEL fertig:
+  * `Code/Kernel/fs/upload_claim_store.zig` ist der VFS-Adapter:
+    `beginPublish` schreibt den Claim und FLUSHT ihn, bevor der Publish
+    starten darf (ohne durablen Claim wird der Publish abgelehnt statt
+    blind fortgesetzt); `retire` raeumt ihn erst nach terminalem
+    Ergebnis; `recoverBeforeRuntime` faehrt den gedeckelten Sweep.
+  * Ablage bewusst in EINEM Verzeichnis (`/R4OS/UPDATE/CLAIMS`) auf dem
+    Systemvolume, auch fuer Ziele auf anderen Volumes. Die
+    Ordnungsanforderung ist einseitig - der Claim muss nur VOR dem
+    ersten Visibility-Point durabel sein. Ein Reset dazwischen
+    hinterlaesst einen Claim, dessen Replay schlicht `stage_only` oder
+    `missing` sieht. Ein zentrales Verzeichnis erspart der Recovery
+    ausserdem das Scannen ganzer Volumes. Der Claim traegt Volume-Token,
+    Laufwerk und Parent, sodass der Replay das echte Zielvolume
+    identitaetsgenau bindet (nicht ueber den Buchstaben, der ein Alias
+    ist).
+  * `Code/Kernel/kernel/upload_claim_boot.zig` haengt direkt hinter der
+    SYSUPD-Recovery in `main.zig`, also vor IRQ-/Treiberpolicy-/
+    Service-/Shellstart. Telemetrie: published/rolled-back/retired/
+    foreign/invalid/failed; ein normaler Boot bleibt still.
+  * `r4sys.zig`: Der StreamSlot traegt zusaetzlich
+    `publish_claim_generation`. Der Claim wird vor
+    `runOwnedCreateOnlyPublish` angelegt und bei `.ok` sowie in beiden
+    Settle-/Abort-Terminalpfaden zurueckgezogen. Ein Resume legt keinen
+    zweiten Claim an. `clearStreamSlot` loest nur die
+    In-Memory-Referenz - der Claim bleibt auf Platte und wird von der
+    Boot-Recovery zu Ende gefuehrt.
+  * Der Replay nutzt genau die 0.60.21-Primitive
+    (`lookupRecoveryEntryStatus` fuer das Halbfenster,
+    `deleteRecoveryEntryIfIdentity` fuer den identitaetsgebundenen
+    Rueckbau). Damit ist auch der in 0.60.21 noch offene Compilecheck
+    der FS-neutralen Fassade erbracht: sie hat jetzt einen echten
+    Aufrufer und wird vom Kernelbuild wirklich analysiert.
+Abnahme:
+- Neues Pflichtgate `Run-UploadPublishClaimContract0622.ps1`, in
+  `Build.bat` vor jedem Kernelbuild verdrahtet
+  (`:test_upload_publish_claim`). Es faehrt drei Modulunittests plus acht
+  ausgefuehrte Hostmodellfamilien
+  (`CheckUploadPublishClaim0622.zig`) gegen den echten NTFS-Kern:
+  * `stage-only`: zurueckgerollt, kein halbes Objekt, Bystander intakt;
+  * `half-published`: aus dem 0.60.21-Fenster nach vorn vollendet,
+    Nutzlast byte-exakt;
+  * `alias`: Zwei-Alias-Fenster sauber auf einen Eigentuemer reduziert;
+  * `terminal`: `target_only` und `missing` schreiben NICHTS
+    (Publish-/Discard-Zaehler bleiben 0);
+  * `foreign`: fremdes Objekt unangetastet, auch der Cross-Volume-Claim
+    wird abgelehnt;
+  * `idempotent`: verlorene Retire-Bestaetigung ist gefahrlos
+    wiederholbar, ein ungueltiger Claim bleibt wirkungslos;
+  * `batch`: ein kaputter Claim stoppt den Sweep nicht;
+  * `sweep`: sechs unterbrochene Replays enden terminal, ohne
+    Stage-Leiche und ohne zerrissenes Ziel.
+  NtfsVerify akzeptiert das replayte Volume
+  (`records=22 files=15 dirs=2 entries=18`).
+  Das Gate pinnt zusaetzlich die Quellanker: alle sechs Zustaende, alle
+  drei Protokolle im gemeinsamen Claim, die Rollback-/Forward-Asymmetrie,
+  Pruefsummen-/Trailing-/Torn-Ablehnung und die Deckel.
+- Seit der Verdrahtung pinnt dasselbe Gate auch die Kernelseite:
+  Claim-Flush VOR dem Publish, identitaetsgenaue Volumebindung im
+  Replay, Nutzung der 0.60.21-Primitive, Boot-Reihenfolge direkt nach
+  der SYSUPD-Recovery, alle sechs Telemetriezaehler sowie
+  Anlegen-vor-Publish und Retire-nur-terminal in `r4sys.zig`.
+- Verdrahtung real abgenommen: `Build.bat -norun` gruen (alle Gates,
+  Kernel, Image) und `Build.bat -test` mit `=== TEST OK ===`,
+  `Boot: OK`, `Poweroff: OK`, `Errors: none`. Im Gastlog null
+  `Upload publish claim recovery failed`, null Panic/Fatal/CPU-Exception.
+  Der Claim-Sweep laeuft bei leerem Store bewusst still (null
+  `UPLOADCLAIM`-Zeilen), sodass ein normaler Boot unveraendert bleibt.
+- RESET-MATRIX ERBRACHT: Neuer Runner
+  `Run-UploadClaimResetMatrix06022.ps1` erzeugt echten Stromverlust -
+  QEMU wird HART getoetet (kein ACPI, kein Flush), waehrend ein
+  8-MB-SFTP-Upload laeuft, und danach wird DASSELBE Diskimage wieder
+  gebootet. Vor jedem Schnitt wird das Image aus einer unberuehrten
+  Kopie zurueckgesetzt, damit die Laeufe unabhaengig bleiben.
+  Ergebnis fuer alle Schnitte (6 s, 12 s, 20 s): Der Gast bootet wieder,
+  es bleibt KEIN Claim liegen, es entsteht NIE ein halb publiziertes
+  Ziel (immer sauber zurueckgerollt) und NtfsVerify akzeptiert das
+  Volume jedes Mal.
+- EHRLICHE EINORDNUNG des Laufs: Bei allen Schnitten meldete
+  `C:\R4OS\UPDATE\CLAIMS` "Path not found", der Claim wurde also nie
+  geschrieben. Das ist kein Fehler, sondern die Messgroesse: Das
+  Publish-Fenster dauert nur Millisekunden am Ende eines Uploads,
+  ein Wanduhr-Schnitt trifft praktisch immer die Datenuebertragung
+  davor. Die Arbeitsteilung ist damit sauber - das Hostmodell trifft das
+  Publishfenster DETERMINISTISCH (`cut_after_canonical_rewrite`), die
+  Reset-Matrix beweist den echten Stromverlust ueber den ganzen Ablauf.
+- NEUER BEFUND aus dieser Matrix (bewusst nicht stillschweigend
+  toleriert): Ein Reset waehrend der DATENUEBERTRAGUNG hinterlaesst eine
+  verwaiste Stage-Datei (beobachtet: `S3C6EF37.TMP` in der Inbox). Der
+  Claim klammert bisher nur den Publish, nicht das vorgelagerte
+  Streamen - zu diesem Zeitpunkt existiert noch kein Recovery-Token.
+  Das Volume bleibt dabei konsistent (NtfsVerify gruen) und es entsteht
+  kein halbes Zielobjekt; sichtbar bleibt aber eine `.TMP`-Leiche.
+  Der Runner meldet solche Faelle getrennt als NOTE plus Gesamtzaehler,
+  statt sie dem Claim anzulasten oder zu verschweigen.
+- NOCH OFFEN: Stage-Garbage-Collection. Bei der Umsetzung am 2026-07-25
+  stellte sich heraus, dass sie GROESSER ist als zunaechst geschaetzt,
+  und zwar aus einem konkreten Grund:
+  * Die naheliegende Loesung "Claim schon beim Stream-Begin" scheitert
+    daran, dass `fileStreamBegin` nur den STAGE-Pfad kennt. Der
+    Zielname entsteht erst beim spaeteren `file_replace_atomic`, ein
+    Claim beim Begin waere also zwangslaeufig ein Stage-only-Claim, den
+    das Claimformat (Stage != Ziel) heute nicht kennt.
+  * Ein Claim fuer JEDEN Create-Stream ist keine Option - das beträfe
+    jede Dateierstellung im System, nicht nur Uploads.
+  * Der vorhandene Marker `file_stream_open_lease` taugt nicht als
+    Unterscheidung: Ihn nutzt ausschliesslich SYSUPD, und er reserviert
+    zusaetzlich Ziel- UND Backupnamen, die SSHD beim Begin noch gar
+    nicht hat. SSHD oeffnet bewusst mit `file_stream_open_create`.
+  Es braucht also einen eigenen Mechanismus (Stage-only-Claimform plus
+  ein Flag, das einen Publish-Kandidaten markiert) - mithin erneut eine
+  ABI-Erweiterung. Das wurde NICHT an den ohnehin grossen
+  0.60.23/0.60.24-Durchgang angehaengt, weil es den produktiven
+  Uploadpfad beruehrt, der gerade erst auf echter Hardware bytegleich
+  verifiziert wurde (8-MB-Roundtrip), und weil der Nachweis eine
+  komplette neue Reset-Matrix erfordert.
+  Eine namensbasierte Aufraeumung (alles `S*.TMP` loeschen) bleibt
+  ausgeschlossen - pfadbasierte Delete-Heuristiken sind vertraglich
+  verboten.
+  EINORDNUNG: Der heutige Zustand ist sicher, nicht kaputt. Nach einem
+  Reset waehrend der Uebertragung bleibt eine sichtbare `.TMP`-Datei in
+  der Inbox; das Volume ist konsistent (NtfsVerify gruen), es entsteht
+  kein halbes Zielobjekt und es gehen keine Daten verloren.
+- Ebenfalls offen: SCP- und FTP-Kontrolllaeufe derselben Matrix (die
+  Replayregeln sind protokollunabhaengig, SFTP ist nachgewiesen).
+- BEIFANG der Reset-Matrix, eigenstaendig wertvoll: NtfsVerify deckelte
+  Images auf 256 MB und konnte damit ausgerechnet das ECHTE
+  R4OS-Systemimage (~640 MB) nie pruefen - strukturell verifiziert waren
+  bisher nur die kleinen Hostmodell-Volumes. Der Deckel liegt jetzt bei
+  1536 MB, und das reale Produktionsimage besteht die Pruefung erstmals:
+  `NTFSVERIFY result: OK records=302 files=246 dirs=51 entries=298
+  clusters=131071 cluster_bytes=4096`.
+Notizen:
+- Direkte Systemdatei- oder `/boot`-Publikation bleibt verboten; Updates
+  laufen weiterhin ausschliesslich paketgebunden ueber SYSUPD.
+- Der Kern ist bewusst backend-neutral gehalten: FAT32 kann die
+  `half_published`-Halbzustaende strukturell nicht erzeugen, die
+  uebrigen vier Zustaende aber sehr wohl, weshalb derselbe Claim fuer
+  beide Dateisysteme gilt.
+
+Version: 0.60.23
+Status: Erledigt
+Erledigt (Ein-Gate-Bindung, 2026-07-25):
+- Neuer append-only R4SYS-Slot 112 `file_update_cleanup_checked`
+  (Offset 912). Er bindet Ziel, Stage, aktuelles Backup UND
+  Previous-Backup gemeinsam an erwartete Identitaet, Groesse und
+  Pruefsumme - innerhalb GENAU EINES `fs_request`-Gates. Die alte Form
+  prueft paketweit und loescht danach in einem zweiten Durchlauf, wobei
+  jede Sonde und jede Loeschung ihr eigenes Gate nahm; eine lokale
+  Mutation dazwischen konnte genau den Zustand entwerten, den der
+  Preflight gerade freigegeben hatte.
+- Kernimplementierung `system_update_atomic.cleanupPayload`: verifiziert
+  erst das komplette Tupel (Ziel traegt den neuen Fingerabdruck, Stage
+  ist abwesend, Backup passt zur Journalzusage) und rotiert erst danach
+  das geerbte Previous-Backup - und zwar ausschliesslich bei exaktem
+  Fingerabdruck. Unbekannt, fehlend oder fremd bedeutet unveraendert
+  BEHALTEN; ein echter I/O-Fehler bleibt retrybar.
+- Der paketweite Preflight bleibt bewusst erhalten: Er ist die Zusage,
+  dass kein Backup rotiert wird, solange IRGENDEIN Payload des Pakets
+  fehlt, fremd oder unlesbar ist. Nur die Loeschphase wandert in die
+  gebuendelte Operation.
+- App- und Boot-Recovery teilen jetzt denselben Vertrag UND dieselbe
+  Implementierung: Der R4X-Updater ruft den Slot, die Pre-Runtime-
+  Recovery ruft `system_update_atomic.cleanupPayload` direkt (ohne
+  ABI-Umweg). Zwei Interpretationen der Journalzustaende sind damit
+  strukturell ausgeschlossen.
+- Gate-Anker nachgezogen: `Run-XhciStorageRecoveryContract06020`
+  verlangt jetzt `io.cleanupPayload(entry)` in der Reihenfolge und
+  VERBIETET jedes verbliebene `io.deleteIfMatch(` im geteilten Kern;
+  `Run-SystemUpdateAtomicContract05914` prueft die Rotation ueber
+  dieselbe gebuendelte Operation.
+Offene Punkte (historisch, erledigt):
+- Einen per-Payload checked SYSUPD-Cleanup unter genau einem
+  `fs_request`-Gate bereitstellen: Ziel, Stage, aktuelles Backup und
+  Previous-Backup werden gemeinsam an erwartete Identitaet, Groesse und
+  Checksumme gebunden. HEUTIGER ZUSTAND: Der Preflight und die
+  Loeschschleife in `cleanupToTerminal` sind zwei getrennte Durchlaeufe
+  und jeder `io.*`-Aufruf ist ein eigenes fs_request. Eine lokale
+  Mutation dazwischen kann die Last-good-Garantie also weiterhin
+  brechen; dafuer wird ein gebuendelter checked-Cleanup-Aufruf im Kernel
+  gebraucht (moeglicher neuer append-only R4SYS-Slot, dann autoritativ
+  in 0.60.25).
+- App- und Boot-Recovery auf denselben Shared-Core- und Kernelvertrag
+  ziehen, ohne getrennte Interpretationen der Journalzustaende.
+Erledigt:
+- Checked Forward-/Rollback-Transition und gemeinsame App-/Boot-
+  Recoverybasis sind als Vorarbeit vorhanden.
+- Das redundante Stage-Delete im bereits terminalen applied-Cleanup ist
+  ENTFERNT. Der Befund war konkret und nicht nur kosmetisch: Der
+  Preflight verlangt fuer jedes `replace_required`-Payload bereits
+  `presence(stage) == .not_found`. Ein anschliessendes
+  `deleteIfMatch(stage, size, checksum)` konnte deshalb ausschliesslich
+  ein Objekt treffen, das NACH dem Preflight entstanden ist - und weil
+  der Stage-Fingerabdruck per Definition der Fingerabdruck der frisch
+  installierten Nutzlast ist, waere das eine fremde Datei mit
+  identischem Inhalt gewesen. Genau der in den 0.60.20-Notizen
+  beschriebene Fall.
+- Previous-Backup wird bereits nur bei exaktem Fingerabdruck geloescht
+  (`previous_backup_known` plus `deleteIfMatch`); ein unbekanntes oder
+  fremdes Previous-Backup wird sicher behalten statt zum Bootblock zu
+  werden, und ein echter I/O-Fehler bleibt retrybar. Das entspricht
+  bereits dem geforderten Verhalten.
+- Gate-Anker nachgezogen: `Run-XhciStorageRecoveryContract06020.ps1`
+  verlangte das Stage-Delete woertlich in seiner Reihenfolgepruefung und
+  hat den Build korrekt gestoppt. Der Anker ist jetzt umgedreht - das
+  Stage-Delete ist aus der `Require-Order`-Kette entfernt und per
+  `Forbid-Tokens` ausdruecklich VERBOTEN, damit es nicht
+  unbeabsichtigt zurueckkehrt.
+Abnahme:
+- ERBRACHT fuer das entfernte Stage-Delete: `Run-SystemUpdateAtomic
+  Contract05914.ps1` gruen, alle zehn Hostmodellfamilien bestehen
+  unveraendert (Apply-Idempotenz, Power-Loss nach jedem Forward-Schritt,
+  I/O-Fault vor jedem Schritt, Reverse-Rollback, volle Platte,
+  geaendertes Paket, monotone Generationen).
+- NOCH OFFEN: Erweiterte SystemUpdateAtomic-Crashmatrix fuer jeden
+  Cleanup-Flushcut, lokale Mutationen zwischen den bisherigen
+  Einzelaufrufen und idempotente Wiederholung.
+- QEMU-Runtime mit altem, neuem, fehlendem und fremdem Previous-Backup
+  auf FAT32-Boot- und NTFS-Systemvolume.
+- Nie Verlust des einzigen Last-good-Backups; terminales Journal und
+  bytegenaue Payloads nach RESUME und Reboot.
+Notizen:
+- Falls dafuer ein weiterer append-only R4SYS-Slot notwendig ist, wird
+  er erst in 0.60.25 autoritativ in Schema und Baseline aufgenommen.
+
+Version: 0.60.24
+Status: Erledigt
+Erledigt (backendgenaue Kollation, 2026-07-25):
+- Neuer append-only R4SYS-Slot 111 `path_names_equal_collated`
+  (Offset 904). Er beantwortet die einzige Frage, die zaehlt: Wuerden
+  diese zwei Pfade auf DIESEM Volume dasselbe Objekt treffen? NTFS
+  antwortet ueber `$UpCase`, FAT32 ueber seine ASCII-Case-Faltung - die
+  beiden widersprechen sich jenseits von ASCII, weshalb ein selbst
+  gefalteter Bytevergleich dort kein Identitaetsbeweis ist.
+- Die Vergleichsprimitiven existierten bereits und wurden nur sauber
+  exponiert: `ntfs_volume.namesEqualCollated` ueber `$UpCase`,
+  `fat32.namesEqualCollated` ueber die ASCII-Faltung, FS-neutral
+  gebuendelt in `vfs.namesEqualCollated`. Ein `null` (unbeantwortbar)
+  ist ein sichtbarer Fehler, nie ein stilles "verschieden".
+- Der Kernel prueft zusaetzlich Volume-Identitaet und Parent: Kollation
+  ist eine Eigenschaft EINES Volumes, ein Vergleich darueber hinweg hat
+  keine definierte Antwort und wird als eigener Fehler gemeldet statt
+  erfunden.
+- SYSUPD nutzt das in `validateTargetAliases`, also VOR dem
+  Prepare-Journal. Der ASCII-Fold bleibt als schnelle Vorentscheidung
+  ("gleich" wird immer geglaubt); der Backend wird genau fuer die Faelle
+  befragt, die der Fold VERPASSEN wuerde.
+- Damit ist die 0.60.24-Zwischenloesung aufgehoben: Nicht-ASCII-Ziele
+  sind wieder installierbar. Die byteweise Faltung im geteilten Kern
+  bleibt als konservative Struktursanity - sie kann nur WENIGER
+  Kollisionen melden als das Backend, nie mehr.
+- Kerntests entsprechend gedreht: Umlautziel und Umlaut-Paketquelle sind
+  jetzt zulaessig, und ein neuer Test haelt fest, dass die konservative
+  Faltung jedes ASCII-sichtbare Doppelziel weiterhin ablehnt.
+Erledigt (Vorstufe):
+- Die In-Memory-Upload-Sperre behandelt Nicht-ASCII waehrend eines
+  mehrdeutigen Publish konservativ fail-closed.
+- Die Luecke ist praezise benannt und geschlossen: Die paketweite
+  Aliaspruefung in `journalPathsValid` faltet mit
+  `pathEqualsIgnoreCase`, also byteweise nach ASCII. Fuer ASCII ist das
+  exakt das Verhalten der echten Backends (NTFS `$UpCase` stimmt auf
+  a-z mit dem ASCII-Fold ueberein, FAT32 faltet gleich), ein
+  ASCII-Zielsatz ist also beweisbar kollisionsfrei. Jenseits von ASCII
+  ist es KEIN Beweis: `$UpCase` faltet viele weitere Paare, zwei
+  Payloadziele koennten sich hier unterscheiden und trotzdem auf
+  DIESELBE Datei auf dem Volume zeigen - zwei Payloads wuerden still in
+  ein Ziel schreiben.
+- Konsequenz nach Roadmapvorgabe: `validTarget` lehnt jedes Ziel mit
+  einem Byte >= 0x80 sichtbar ab (`pathIsAsciiOnly`), und der
+  Paketquellpfad unterliegt derselben Regel, weil er an genau derselben
+  Aliasvergleichsschleife teilnimmt. Stage-/Backup-/Previous-Namen sind
+  ueber `validateShortName83Text` ohnehin schon auf den 8.3-Zeichensatz
+  beschraenkt.
+- Der geteilte Kern hat jetzt eigene Tests (vorher keine): ASCII-Ziele
+  bleiben zulaessig, ein Umlautziel und ein Umlaut-Paketquellpfad werden
+  abgelehnt, und der paketweite Doppelzielfall (gleiches Ziel in
+  anderer Schreibweise) wird weiterhin erkannt.
+Abnahme:
+- ERBRACHT fuer die fail-closed-Grenze: `Run-SystemUpdateAtomic
+  Contract05914.ps1` gruen. Das Gate faehrt seit 0.60.24 zusaetzlich
+  `zig test` auf dem ECHTEN geteilten Kern
+  `Code/System/SDK/r4os/system_update_recovery.zig` (drei Familien:
+  ASCII zulaessig, Nicht-ASCII-Ziel und -Quelle abgelehnt, paketweites
+  Doppelziel erkannt) und danach unveraendert alle zehn
+  Hostmodellfamilien plus die Integrationsanker.
+- NOCH OFFEN (mit der backendgenauen Kollation): positive und negative
+  Paketfixtures mit Umlauten, NTFS-$UpCase-Paaren, UTF-8-Mehrbyte-
+  zeichen, ASCII-Casevarianten und Shortnamealiasen; gueltige
+  unterschiedliche Unicodeziele muessen dann wieder installierbar sein;
+  Hostmodell und QEMU-Runtime auf NTFS sowie FAT32-Bootvolume.
+Notizen:
+- Byteweiser ASCII-fold ist auf NTFS kein Identitaetsbeweis. Deshalb
+  ist die aktuelle Grenze bewusst restriktiv: lieber ein sichtbar
+  abgelehntes Umlautziel als zwei Payloads, die unbemerkt dieselbe
+  Datei schreiben.
+- Beifang beim Verdrahten der Kerntests: Im 0.59.14-Gate hiess der
+  Kernel-Boot-Seam-Pfad bereits `$recoverySource`. Eine gleichnamige
+  zweite Variable haette den Integrationscheck still auf die falsche
+  Datei gelenkt (acht Anker gemeldet, obwohl alle vorhanden waren); die
+  neue Variable heisst deshalb `$sharedRecoveryCoreSource`.
+
+Version: 0.60.25
+Status: Erledigt
+Nachtrag 2026-07-25 (die unten als offen gelisteten Punkte sind erfuellt):
+- Das autoritative Schema traegt den finalen R4SYS-Satz: Slot 110
+  `file_update_atomic_checked` war bereits beschrieben, hinzu kamen
+  append-only 111 `path_names_equal_collated`, 112
+  `file_update_cleanup_checked` und 113 `file_stream_declare_publish`.
+  R4SYS steht damit auf ABI 10 mit Tabellengroesse 928.
+- Alles aus DEMSELBEN Schema regeneriert: Zig- und C-Fassaden,
+  Capabilitychecks, R4XStart-Groesse, Funktions-/Slotzaehler,
+  Operationsmatrix, Paritaetsbericht und Conformance-Fixtures.
+  `ApiContractGen --check` ist bytegenau gruen.
+- `ApiContract.baseline.json` wurde ausschliesslich mit dem bewussten
+  `--write --baseline` aktualisiert; eine zweite handgeschriebene
+  ABI-Wahrheit existiert nicht. Der Generator erzwang dabei von selbst
+  Groessenmitwachs, ABI-Bump und Baselinepflege und verweigerte jede
+  stille Konstantenaenderung.
+- `Docs/SDK/ModuleCatalogInventory.json` fuehrt `system_update_recovery`
+  bereits; eine Regenerierung war nicht mehr noetig.
+Teilerledigt:
+- ApiContractGen erzeugt seine Zig-Ausgaben jetzt `zig fmt`-rein.
+  Vorher waren `abi_generated.zig`, `r4x_api_generated.zig` und
+  `ApiContractConformanceGenerated.zig` DAUERHAFT unformatiert
+  (einzeiliger `r4AppProfileMeta`-Rumpf, einzeiliger Testblock, eine
+  ueberzaehlige Leerzeile am Dateiende). Weil `--check` diese Dateien
+  bytegenau pinnt, waere Handformatierung ein Gate-Bruch gewesen - der
+  Fix gehoerte in den Generator. Er emittiert die Funktionskoerper jetzt
+  mehrzeilig und normalisiert den Dateiabschluss auf genau ein Newline.
+- Danach mit `--write` regeneriert: `--check` ist bytegenau gruen
+  (`sha256=78e22e92...`), `ApiContract.json` UND
+  `ApiContract.baseline.json` blieben unveraendert (kein
+  `--write --baseline`), und der Diff umfasst nur den Generator plus
+  seine drei Ausgaben.
+Offene Punkte:
+- Das autoritative API-Schema auf den nach 0.60.23 finalen R4SYS-Satz
+  bringen; Slot 110 `file_update_atomic_checked` und gegebenenfalls der
+  checked Cleanup-Slot muessen einmalig und append-only beschrieben sein.
+- Zig- und C-Fassaden, Capabilitychecks, R4XStart-Groesse,
+  Funktions-/Slotzaehler, Operationsmatrix, Paritaetsbericht und
+  Conformance-Fixtures aus demselben Schema regenerieren.
+- `ApiContract.baseline.json` erst nach bewusster Pruefung der finalen
+  Signaturen aktualisieren. Keine handgeschriebene zweite ABI-Wahrheit.
+- ModuleCatalogInventory wegen des neuen SYSUPD-Zig-Moduls
+  `system_update_recovery` regenerieren.
+Erledigt:
+- Manuelle Zig-/C-Fassaden fuer Slot 110 und benannte Directory-End-/I/O-
+  Ergebnisse sind vorbereitet.
+Abnahme:
+- `ApiContractGen --check`, Generated-Drift-, Conformance-, Payload- und
+  Zig/C-Paritaetsgates gruen.
+- C- und Zig-Minimalprogramme bauen und rufen die neuen Operationen mit
+  identischen Ergebnis-/Flagwerten auf.
+- Modulkatalog, Root-/SDK-Manifeste und beide Imageplaene sind bytegenau
+  konsistent.
+Notizen:
+- Bis zur Regenerierung besteht ein Compile-Blocker, weil die manuellen
+  Fassaden bereits auf noch nicht erzeugte Slot-110-Typen verweisen.
+
+Version: 0.60.26
+Status: Erledigt
+Erledigt:
+- `Run-SystemUpdateAtomicContract05914.ps1` laeuft jetzt gegen den
+  ECHTEN Shared-Core: zusaetzlicher `zig test` auf
+  `system_update_recovery.zig` (der Kern hatte vorher gar keine Tests).
+- `Run-XhciStorageRecoveryContract06020.ps1`: Der Cleanup-Anker wurde
+  auf den finalen Code gezogen - das entfernte Stage-Delete ist aus der
+  `Require-Order`-Kette raus und per `Forbid-Tokens` ausdruecklich
+  verboten, damit es nicht unbemerkt zurueckkehrt.
+- Zwei neue Pflichtgates sind in `Build.bat` verdrahtet und in
+  `AGENTS.md` dokumentiert (0.60.21 Recovery-Delete, 0.60.22
+  Upload-Claim), ebenso die 0.60.24-Kerntests.
+- Dokumentation nachgezogen: `Docs/FileSystem/DateisystemUndStorage.txt`
+  um die Abschnitte "Recovery-Compare-and-delete (0.60.21)" und
+  "Persistente Upload-Publish-Claims (0.60.22)" erweitert (inklusive der
+  Begruendung, warum die Alias-ZAEHLUNG noetig ist und die naheliegende
+  Kanonik-Heuristik falsch waere); `Docs/Services/README.txt` um die
+  Selbst-Stop-/Selbst-Restart-Regel; `AGENTS.md` um die beiden neuen
+  Gates, die Self-Restart-Konvention und die Watchdog-Lehre.
+Nachtrag (Altgates und Restdokumentation, 2026-07-26):
+- Die vier Altgates sind erweitert; bei zweien war der Roadmappunkt
+  bereits erledigt und nur der Status veraltet:
+  * 0.60.8 (`Run-NtfsReplaceContract0608.ps1`): Recovery-Oberflaeche und
+    Alias-Zaehlung aus 0.60.21 verankert.
+  * 0.58.23 (`Run-StorageFacadeContract05823.ps1`): Directory-I/O ist
+    jetzt Vertragsflaeche - `createDirectory`/`deleteDirectory` in Zig
+    UND C, gleiche Presence-Klassifikation in beiden Sprachen, plus die
+    0.60.12-Lehre, dass `dirCreate` mit 0 sowohl "angelegt" als auch
+    "war schon da" meldet (SYSUPDs `ensureDirectory` festgenagelt).
+  * 0.59.15 (`Run-XhciSuperSpeedEndpointContract05915.ps1`): Der
+    Abschlusstext behauptete "phase-specific fatal telemetry", ohne sie
+    zu pruefen. Jetzt sind BOT-Stage, xHCI-Completion-Code und
+    Ist-/Sollbytes samt beschraenktem statischem Puffer verankert. Das
+    zaehlt, weil ein Bootlaufwerksfehler auf einem Fatalscreen endet -
+    diese eine Zeile IST die komplette Diagnose.
+  * 0.59.10: keine Aenderung noetig - `task_generation`,
+    `close_pending` und der generationstreue Async-Abbau waren bereits
+    vollstaendig verankert.
+- `Run-XhciStorageRecoveryContract06020.ps1` deckt die persistente
+  Upload-Recovery jetzt mit ab (Claim vor der Uebergabe geflusht,
+  volumegebundenes Replay, sichtbare Telemetrie, Deklaration in SSHD
+  UND FTPSVC, Protokollzuordnung).
+- `Run-SystemUpdateAtomicContract05914.ps1` war bereits auf Shared-Core
+  und `cleanupPayload` umgestellt; der Punkt war nur nicht abgehakt.
+- Restdokumentation: `Docs/Deployment/SystemUpdater05914.txt` erklaert
+  den gepruefte Cleanup (0.60.23) mitsamt Begruendung, warum ein
+  namensbasierter Cleanup ein Fremdobjekt mitreissen kann;
+  `Docs/Deployment/BuildUndTest.txt` traegt die data.img-Regel als
+  erste Massnahme bei haengendem Smoke. Service-, Treiber- und
+  R4SYS-Dokumentation waren bereits aktuell.
+Erledigt:
+- Eine statische Driftinventur mit konkreten veralteten Dateien und
+  Zaehlern liegt vor.
+Abnahme:
+- Alle geaenderten PowerShell-Skripte parsen fehlerfrei und ihre
+  positiven/negativen Hostfixtures werden wirklich ausgefuehrt.
+- Current-API-, Storage-, Scheduler-, xHCI-, NTFS-, SYSUPD- und
+  Modulkataloggates sind gruen.
+- Dokumentationsclosure meldet keine Generator-, Link-, UTF-8- oder
+  AGENTS-Drift.
+Notizen:
+- Alte gruene Marker aus dem Snapshot vor den aktuellen Korrekturen
+  zaehlen nicht als Abnahme dieser Unterversion.
+
+Version: 0.60.27
+Status: Erledigt
+Nachtrag 2026-07-25:
+- Der gezielte Compilecheck ist gefahren: `Build.bat -app SYSUPD SSHD
+  FTPSVC` gruen inklusive Artefaktgate, danach mehrfach der normale
+  `Build.bat -norun` ohne ausgelassene Current-Gates.
+- Die geaenderten Hostmodelle laufen alle im `-norun` mit (NTFS-Reihe,
+  SYSUPD-Kern, Upload-Claim, xHCI/Storage).
+Erledigt:
+- Der GESAMTE Arbeitsbaum ist jetzt `zig fmt`-sauber: alle 687
+  Zig-Dateien, `zig fmt --check` liefert Exit 0. Zuvor waren 33 Dateien
+  Altbestand unformatiert (Treiber, Diagnosen, SDK-Fassaden,
+  Protokoll-build.zig, Desktop-Hostmodelle, Negativfixtures) plus die
+  drei generierten Dateien, die inzwischen der Generator selbst
+  formatrein ausgibt (0.60.25).
+- Risiko bewusst geprueft: Gates pinnen Quellanker WOERTLICH, eine
+  Umformatierung kann sie also brechen. Der anschliessende vollstaendige
+  `Build.bat -norun` blieb gruen (alle Current-/Host-/NTFS-/SYSUPD-/
+  xHCI-Gates, Kernel, alle R4X-Artefakte, Image) und `Build.bat -test`
+  meldete `=== TEST OK ===` mit `Errors: none`. Die 33 Dateien aenderten
+  nur Layout (565 Einfuegungen, 173 Loeschungen, keine Semantik).
+Nachtrag 2026-07-26 (Runtime-Abnahmen):
+- Die drei SYSUPD-Runtimes sind gefahren und gruen:
+  * FAT32: `Run-SystemUpdateAtomic05914.ps1 -Tier Quick` (VERIFY,
+    APPLY, Unterbrechung nach dem ersten dauerhaften Commit, RESUME bis
+    `cleanup 2/2`, Backups, Poweroff).
+  * NTFS: `Run-NtfsSysupdRuntime0608.ps1` inklusive striktem
+    NtfsVerify des gastgeschriebenen Volumes.
+  * Kernelreplace und Reboot: `Run-NtfsBootKernelRuntime0611.ps1`
+    (zwei QEMU-Sitzungen, unterbrochenes APPLY, RESUME mit echtem
+    Kernel-Replace, Boot des ersetzten Kernels).
+- WARTUNGSSCHULD DABEI BESEITIGT: Der FAT32-Runner scheiterte zuerst
+  mit "missing old version before resume: KERNEL_VERSION=0.59.13". Er
+  hatte nie eine eigene Ausgangsversion gesetzt, sondern stillschweigend
+  angenommen, das Produkt stehe noch auf dem 0.59.13 seiner
+  Entstehungszeit - er waere also bei JEDEM Release gebrochen, aus einem
+  Grund, der nichts mit SYSUPD zu tun hat. Er schreibt seine
+  Ausgangsversion jetzt selbst nach `TestInjection/` (mit Sicherung und
+  Wiederherstellung) und leitet Paket-, Min- und Zielversion daraus ab.
+- Der USB/Desktop/SSH-Freeze-Runner ist gefahren:
+  `Run-SshSysupdFreezeRepro0620.ps1` mit der Lenovo-Topologie (Boot- und
+  Systemimage als beschreibbares USBMSC, Tastatur und Maus am selben
+  xHCI) meldet `failures=0` ueber 40 Iterationen. Enthalten: direkter
+  R4DIAG-Pfad ohne Spawn/FS, ein deterministischer 8-MB-SFTP-PUT/GET
+  (`seq=0->260`, SHA-256 byteidentisch), SIMDD-Live-Vektor-IRQ-Stress
+  mit 256 Verbindungen und 40x abwechselnd `SYSUPD STATUS` und
+  paketgestuetztes `SYSUPD VERIFY`. Die Antwortzeiten bleiben ueber den
+  ganzen Lauf bei 0,9 bis 1,7 s - kein Drift, kein Einfrieren, kein
+  langsames Zulaufen.
+Alte offene Punkte (alle oben erledigt):
+- Die SYSUPD-FAT-/NTFS-Runtimes einschliesslich Apply, unterbrochenem
+  Commit, Cleanup, RESUME, Kernelreplace und Reboot zusammen abnehmen.
+Erledigt:
+- keine
+Abnahme:
+- Keine Formatter-, Compiler-, Gate-, Artefakt- oder Imageplanfehler.
+- QEMU beendet alle Laeufe selbst per Poweroff; keine xHCI-/USBMSC-,
+  Deadman-, Block-, Page-Cache-, SYSUPD-, Claim- oder Fatalmarker.
+- Logs und erzeugte Images werden mit Quellstand und SHA256 in den
+  Notizen festgehalten.
+Notizen:
+- `-SkipImage` oder alte Artefakte sind fuer diese Abschlussrunde nicht
+  zulaessig.
+
+Version: 0.60.28
+Status: Erledigt (funktional UND visuell auf echter Hardware abgenommen)
+Sichtabnahme durch den User am 2026-07-25 (der einzige Teil, der remote
+prinzipiell unmoeglich ist):
+- Echter KALTSTART durchgefuehrt (Geraet stromlos, kein Reboot).
+- KEIN blauer Fehlerschirm - weder `[XHCI] event timeout` noch
+  `USB mass storage read failed`. Damit ist die 0.60.20-Fehlerkette aus
+  xHCI-Ring-Rewind, ignorierter Recovery, Sense-Doppeltimeout,
+  unsicherer Block-Slot-Freigabe und verlorener Page-Cache-Lockownership
+  auch OPTISCH bestaetigt, nicht nur funktional.
+- Desktop vollstaendig erschienen.
+- Tastatur und Maus am Desktop funktionsfaehig. Das ist der eigentlich
+  kritische Punkt: HID laeuft ueber DENSELBEN xHCI-Controller wie das
+  Bootlaufwerk, und genau diese Ueberlagerung war der Ausloeser des
+  urspruenglichen Hardwarebefunds.
+- Keine Auffaelligkeiten, kein Flackern, keine unerklaerte Verzoegerung.
+Erledigt (Lenovo 192.168.178.207, laufendes System):
+- BILDNACHWEIS, dass das NEUE Image laeuft: Da `VERSION.R4S` bewusst auf
+  0.60.19 steht, war die Version kein Unterscheidungsmerkmal. Vor dem
+  ersten Upload existierte `C:\R4OS\UPDATE\CLAIMS` NICHT, danach schon -
+  angelegt vom 0.60.22-Claimpfad. Damit ist zweifelsfrei belegt, dass der
+  Kernel dieser Sitzung laeuft und der Claimcode auf echter Hardware
+  arbeitet.
+- 0.60.22 auf Hardware vollstaendig: Der Claim wird angelegt UND nach
+  terminalem Publish wieder zurueckgezogen - `CLAIMS` ist nach dem
+  4-KB-Upload und nach dem 8-MB-Upload jeweils leer. Keine Claim-Leiche.
+- DER ENTSCHEIDENDE 0.60.20-NACHWEIS: 8-MB-SFTP-Roundtrip bytegleich auf
+  genau der Maschine, auf der der Fehler auftrat. Upload-SHA256
+  `E48EC42AA0EFD70903F883EF6005823C4532883FE8C8C382BDC0161D9CB257B5`,
+  Rueckdownload im separaten SFTP-Prozess byte- und hashgleich (der
+  Uploadhelfer bricht bei Abweichung ab). SSHD meldete
+  `write_xfer_result=ok`, `write_xfer_bytes=8388608`, `xfer_fail=0`,
+  `xfer_abort=0`, `attempt=1`. Die IRQ/FPU-Klammer und der skalare
+  ChaCha-Kern halten also real - fruehere Laeufe wichen hier in 26
+  64-Byte-Bloecken ab.
+- 0.60.14-Durchsatzpunkt gemessen: 8 MB in 56,9 s, also rund 7,1 s/MB
+  gegenueber frueher ~15 s/MB - etwa doppelt so schnell.
+- 0.60.29 auf Hardware bestaetigt: `SERVMAN RESTART SSHD` ueber die
+  SSH-Sitzung liefert `self-restart-refused (-19)` samt Hinweistext, die
+  Sitzung lebt danach weiter (`KERNEL_VERSION=` wieder lesbar) und SSHD
+  bleibt `Status: running` mit `Restarts: 0`. Genau der Fall, der auf
+  diesem Geraet real geschadet hat.
+- Stabilitaet waehrend und nach den Transfers: `R4DIAG PING` OK
+  (spawn-/fs-frei), `R4DIAG TASKS` mit 33 Zeilen ohne `UNSTABLE` oder
+  `UNAVAILABLE`, `SYSUPD STATUS: idle ... dirs=ok`.
+- Netzwerkseitig gleichzeitig erreichbar: Ping sowie TCP 21, 22 und 3389.
+- Aufgeraeumt: Beide Testdateien wieder geloescht, Inbox und CLAIMS leer.
+- WARMREBOOT nachgewiesen: `REBOOT` ueber SSH, Rueckkehr von Port 22 in
+  rund fuenf Sekunden (der Laptop ist real so schnell - vom User
+  bestaetigt). Echter Neustart belegt ueber den zurueckgesetzten
+  Tickzaehler (561827 -> 38563). Der neue Boot-Schritt
+  `upload_claim_boot.recoverBeforeRuntime` blockiert nichts und bleibt
+  bei leerem Claimstore still.
+- VOLLSTAENDIGER SYSUPD-ZYKLUS auf der Hardware gefahren (Paket HW0628,
+  235052 Bytes, SHA256
+  `4682FFFDEBE23893A4478BA988824876BB0C58A894A41C642921181FED875A52`,
+  zwei Payloads: LOGSVC.R4X als service plus VERSION.R4S als config,
+  Versionsdatei bewusst zuletzt):
+  * SFTP-Upload bytegleich, `write_xfer_result=ok`, `attempt=1`.
+  * `SYSUPD VERIFY result: OK package=HW0628 current=0.60.19
+    target=0.60.20 payloads=2 streamed=234389 reboot=yes`.
+  * `SYSUPD APPLY result: OK applied=2 staged=27 transaction=1
+    journal=SYSUPD1.JRN`.
+  * `SYSUPD STATUS: journal state=cleanup ... applied=2/2` und
+    `VERSION.R4S` steht danach auf 0.60.20.
+  * `SYSUPD RESUME result: OK state=cleanup` - idempotent terminal.
+  * `STAGED` enthaelt nur die beiden Journale, KEINEN Stage-Rest; das
+    bestaetigt den 0.60.23-Befund praktisch, dass das entfernte
+    Stage-Delete im applied-Cleanup wirklich redundant war.
+  * `CLAIMS` blieb waehrend des gesamten Updates leer.
+- POST-REBOOT-ABNAHME gruen: Version bleibt 0.60.20, Journal weiterhin
+  terminal `state=cleanup applied=2/2`, `R4DIAG PING` OK mit 15
+  Programmen und 32 Tasks, `R4DIAG TASKS` 32 Zeilen ohne `UNSTABLE`
+  oder `UNAVAILABLE`, `CLAIMS` leer, TCP 21/22/3389 wieder erreichbar.
+- VERSION.R4S im Repository entsprechend auf 0.60.20 gezogen (UTF-8-BOM
+  geprueft erhalten - der Bump in 0.60.16 hatte es damals verloren).
+  Hinweis fuer kuenftige Bumps: Die Datei traegt historisch CRLF (wie
+  `Injection/CONFIG.R4S`, im Gegensatz zu den uebrigen `*.R4S`), und
+  `.gitattributes` deckt nur `Build.bat` ab. Deshalb meldet
+  `git diff --check` bei JEDER Aenderung dieser Datei einmal
+  "trailing whitespace" fuer das CR. Das ist inhaltlich korrekt und
+  harmlos; das Byteformat wurde bewusst exakt wie im Original belassen
+  (BOM + CRLF), statt die Datei still auf LF umzustellen.
+Offene Punkte:
+- Nach gruener 0.60.27-Abnahme ein frisches Produktionsimage erzeugen,
+  SHA256 notieren und kontrolliert auf den Samsung-FIT-Stick schreiben.
+- Lenovo zuerst kalt booten: kein frueher blauer xHCI-/USBMSC-
+  Fehlerbildschirm, Desktop, HID, Netzwerk, SSH und RDP muessen
+  gleichzeitig funktionsfaehig sein.
+- Eine 8-MB-Datei ueber SFTP sowie Kontrolllaeufe ueber SCP und FTP
+  uebertragen, zuruecklesen und bytegenau vergleichen.
+- Ein echtes R4U verifizieren, anwenden, STATUS/RESUME pruefen, warm
+  rebooten und den Post-Reboot-Zustand samt direkter R4DIAG-TASKS-
+  Diagnose abnehmen.
+- Die gebuendelten noch offenen 0.60.14-/0.60.15-Hardwarepunkte
+  miterledigen.
+Erledigt:
+- keine
+Abnahme:
+- Kein Freeze, kein verfruehter Timeout, keine `USB Mass Storage read
+  failed`-/WRITE10-/CBW-/Deadmanmeldung und keine verlorene Datei.
+- Upload-/Rueckdownload-SHA256 identisch; SYSUPD terminal cleanup,
+  erwartete Version und last-good Backups vor und nach Warmstart.
+- Mehrfache STATUS-/VERIFY-/TASKS-Serie mit failures=0 und weiterhin
+  reagierendem Desktop.
+Notizen:
+- 192.168.178.207 bleibt bis zu dieser Unterversion unangetastet.
+
+Version: 0.60.29
+Status: Erledigt
+Erledigt (Lifecycle-Teil):
+- Nach Roadmapwahl die zweite Variante umgesetzt: Self-Restart wird
+  eindeutig und dokumentiert ABGELEHNT, statt einen zusaetzlichen
+  persistenten Restart-Koordinator einzufuehren.
+- Die Erkennung sitzt im KERNEL, nicht in SERVMAN, damit jeder Aufrufer
+  die Regel erbt: `callerDescendsFromServiceInstance` laeuft die
+  Console-Ownership-Kette des Aufrufers hoch und vergleicht gegen die
+  `instance_id` des Service. Genau das ist der reale Fall - SERVMAN ist
+  bei einer SSH-Sitzung ein Console-Kind von SSHD, ein Stop von SSHD
+  wuerde also den noch im Syscall stehenden Aufruferbaum abraeumen und
+  einen Erfolg melden, den niemand mehr beobachten kann. Die Kette ist
+  ueber streng fallende Generationen azyklisch und damit zugleich
+  schleifensicher.
+- Die Regel gilt fuer RESTART UND STOP. Nur RESTART abzusichern waere
+  wirkungslos gewesen, weil sich dasselbe mit STOP plus START erreichen
+  laesst.
+- Sichtbarer, eigener Fehlercode statt stiller Fehlschlag: neue
+  append-only Konstante `service_api_result_self_restart = -19`
+  (bewusstes Baseline-Update mit `ApiContractGen --write --baseline`,
+  neuer kanonischer sha256 `4f25a627...`); alle bestehenden Codes
+  behalten ihre Werte. In Zig und C erzeugt.
+- SERVMAN meldet `self-restart-refused` und sagt zusaetzlich, was statt
+  dessen zu tun ist (lokale Konsole oder andere Sitzung), damit die
+  Ablehnung handlungsleitend ist und nicht nur ein Code.
+Abnahme (Lifecycle-Teil):
+- `Build.bat -norun` gruen und `Build.bat -testonly` mit
+  `=== TEST OK ===`, `Boot: OK`, `Poweroff: OK`, `Errors: none`
+  (Gastlog 2222 Zeilen, endet mit `System poweroff.`).
+- WICHTIGE LEHRE aus diesem Schritt: Der erste `-test`-Lauf meldete
+  `Poweroff: FAILED` und sah exakt wie ein Deadlock durch den neuen
+  Registry-Lock aus (`lockProgramRegistry` wartet WAIT_FOREVER, und der
+  Gastlog brach bei 362 Zeilen mitten im Terminal-Selftest ab). Es war
+  aber KEIN Deadlock, sondern der 240-Sekunden-Watchdog unter hoher
+  Hostlast durch parallel laufende Builds. Mit
+  `QEMU_TEST_TIMEOUT_SECONDS=600` lief derselbe unveraenderte Stand
+  vollstaendig durch. Merke: Ein `Poweroff: FAILED` ohne Panic-/Fatal-
+  Marker zuerst gegen die Wanduhr pruefen, bevor Code verdaechtigt wird -
+  sonst wird eine korrekte Aenderung faelschlich zurueckgebaut.
+- Laufzeitnachweis ERBRACHT mit dem neuen Runner
+  `Run-ServiceSelfRestartRuntime06029.ps1` (abgeleitet vom
+  0.60.15-SSH-Runner: QEMU mit virtio-User-Net und Hostforward
+  10022->22, Gast bleibt interaktiv). Der Lauf ist gruen und prueft ueber
+  eine ECHTE SSH-Sitzung: `SERVMAN RESTART SSHD` und `SERVMAN STOP SSHD`
+  werden beide mit `self-restart-refused (-19)` abgelehnt, die Sitzung
+  lebt danach weiter (`TYPE VERSION.R4S` liefert wieder
+  `KERNEL_VERSION=`), SSHD steht unveraendert auf `Status: running` mit
+  `Restarts: 0`, und ein FREMDER Dienst laesst sich ueber dieselbe
+  Sitzung normal neu starten.
+- WICHTIGER BEFUND, den erst dieser Runner gefunden hat: Die erste
+  Fassung der Erkennung lief ausschliesslich ueber die
+  Console-Ownership-Kette (`console_payload.io_target_id`) - und die ist
+  im realen SSH-Fall gar nicht gesetzt. Der Spawn mit explizitem
+  Console-Host laesst `inherited_console_id` bewusst auf 0, weshalb die
+  Pruefung genau den Fall verfehlte, fuer den sie existiert: der erste
+  Lauf zeigte `restart-self: exit=0` mit LEERER Ausgabe, also exakt das
+  alte Schadbild. Die Erkennung folgt jetzt zusaetzlich dem
+  Spawn-Owner der Completion-Node (`owner_handle`), womit sowohl
+  shell-gehostete Kinder als auch service-gehostete Starts erfasst sind.
+- Zwei Testdesign-Lehren aus dem Lauf:
+  * Der Fremdrestart darf NICHT TCPSVC treffen, weil die SSH-Sitzung
+    selbst darauf aufsetzt - das riss den Kanal ab, ueber den der Test
+    berichtet, und sah wie ein Produktfehler aus. Jetzt LOGSVC.
+  * Exit-Codes werden ueber diesen SSH-Pfad nicht propagiert
+    (`SERVMAN STATUS` zeigt intern korrekt `last_remote_exit=1`). Der
+    Runner misst das mit einer Referenzprobe (ein sicher fehlschlagendes
+    Kommando) und aktiviert die Exit-Code-Zusicherungen nur, wenn der
+    Pfad sie ueberhaupt weiterreicht. Verbindlicher Nachweis ist damit
+    der Textmarker plus der Vertragscode -19.
+Abschlussaudit (2026-07-26):
+- Alle 0.60.X-Unterversionen stehen auf Erledigt. Die zuletzt noch
+  offenen Punkte sind real abgearbeitet, nicht wegdefiniert:
+  * 0.60.22: SCP-Kontrolllauf gefahren (`rolled-back=1` auf dem echten
+    SCP-Pfad), Protokoll-Attribution umgesetzt, FTPSVC-Deklaration
+    nachgeruestet.
+  * 0.60.26: alle vier Altgates erweitert, Restdokumentation gezogen.
+  * 0.60.27: gezielte Builds, drei SYSUPD-Runtimes und der
+    USB/SSH-Freeze-Runner (`failures=0` ueber 40 Iterationen).
+- Gesamtabnahme auf frischer `Release/data.img`:
+  * `Build.bat -test`: `=== TEST OK ===`, `Boot: OK`, `Poweroff: OK`,
+    `Errors: none`, Gastlog 2201 Zeilen.
+  * `Build.bat -norun`: Exit 0, keine ausgelassenen Current-Gates.
+  * `git diff --check` sauber, `zig fmt --check` ohne Befund.
+- Version: `Injection/R4OS/CONFIG/VERSION.R4S` auf
+  `KERNEL_VERSION=0.60.30` gesetzt, UTF-8-BOM erhalten (27 Bytes vorher
+  wie nachher).
+- Produktionsimage mit dieser Version neu gebaut - NICHT das Testimage:
+  * `Release/disk.img`, 672.137.216 Bytes (641 MB)
+  * SHA-256 `DD6E1A07AE096E9BFC9B7D1D21904EBD0811191E162D10C456FEFAFDCD7C4034`
+  * Layout: FAT32-Bootpartition ab Sektor 2048 (10 Bootdateien),
+    NTFS-Systemvolume ab Sektor 264192 (233 Dateien - das Testimage
+    haette 249).
+  * `NTFSVERIFY result: OK records=302 files=246 dirs=51 entries=298
+    clusters=131071 cluster_bytes=4096`.
+Erledigt:
+- Abschlussaudit, Versionssprung und finaler Push sind ausgefuehrt.
+Abnahme:
+- SSHD-Fremdrestart und definierter Self-Restart-Fall sind
+  deterministisch; keine Callerbaum-Selbsttoetung mit vorgetaeuschtem
+  Erfolg.
+- `Build.bat -norun`, relevante QEMU-Runtimes und finale Lenovo-
+  Spotchecks bleiben nach dem Releasekandidaten gruen.
+- Changelog, zentrale Dokumentation, AGENTS und VERSION stimmen mit dem
+  gepushten Stand ueberein; Roadmap enthaelt keinen verlorenen offenen
+  Punkt.
+Notizen:
+- Diese Unterversion ist der explizite Abschluss der 0.60.X-Linie.
+
+Version: 0.60.19
+Status: Erledigt
+Offene Punkte:
+- keine
+Abnahme:
+- 0.58.20-Gate gruen mit den neuen Konstanten/Grenzfaellen (Zig+C).
+- Alle sechs NTFS-Hostgates gruen; 255-Zeichen-Umlautname auf dem
+  Spill-Image: NtfsVerify gruen, Windows-chkdsk Pass 0/1/2 = 0
+  (chkdsk-longname-0619.log).
+- QEMU Run-NtfsReadRuntime0604: NTFSDIAG longcomponent: ok (echter
+  64-Zeichen-Windows-Name liest), utf8name: ok, result: OK.
+- Build.bat -test: TEST OK. Gate-Anker 0.59.7
+  (PROGRAM_PROCESS_PAYLOAD_MAX_BYTES) bewusst auf die neue
+  Budgetformel gezogen.
+Erledigt:
+- Vertragskonstanten (bewusstes Baseline-Update mit ApiContractGen
+  --write --baseline): file_path_max_chars=260,
+  path_component_max_chars=255 (neu, Windows-MAX_PATH-Paritaet);
+  file_path_max_bytes 127->1023, fat_path_component_max_bytes 63->767
+  (UTF-8-BMP-Worst-Case der Zeichenlimits, Puffer 1024/768);
+  R4STD.Config.max_path_len 127->1023.
+- SDK path.zig: zeichenzaehlende Normalisierung (Segment-Validator
+  liefert Zeichenzahl; X:\ zaehlt 3, Separatoren je 1), beide Grenzen
+  geprueft, FilePath-Laengen u8->u16, 160 Segment-Anker. C-Header
+  text_path_time.h spiegelt exakt (r4_path_segment_valid/out_chars).
+- Traeger-Durchzug: r4sys.max_api_path folgt dem Contract (1024),
+  drive.MAX_PATH und services.MAX_PATH 1024, StreamSlots via
+  max_api_path, SSHD sftp_path_capacity 1024. FS-Namensgrenzen nach
+  Windows: NTFS/FAT32 NAME_UNITS_MAX=255 (UTF-16), NAME_MAX=768
+  Bytes (vfs/ntfs/fat32/ntfs_volume; FAT-LFN max 20 Eintraege).
+- ProgramProcessPayload-Budget dokumentiert erweitert (448-Basis +
+  CWD-Wachstum auf drive.MAX_PATH); ProgramHostLaunchRequest bleibt
+  binaer eingefroren - laengere Launch-Pfade werden sichtbar
+  abgelehnt statt trunkiert.
+- On-Disk-Formate: SYSUPD-Journal ist Textformat (R4U_JOURNAL=2,
+  variable Pfadlaengen) - alte Journale bleiben lesbar, keine neue
+  Formatversion noetig; journal_max auf 192K. R4U-Manifest ebenfalls
+  Text; r4upack-Zieldeckel 120->1023 Bytes.
+- Gates/Fixtures bewusst aktualisiert: 0.58.20-Gate (Konstanten,
+  drive-Anker, Overlay-Preflight 260/255 Zeichen), Zig-/C-Prototypen
+  mit 260/261- und 255/256-Grenzfaellen, path.zig-Tests (255-Umlaut-
+  Komponente positiv, 256 negativ), app_assoc-Testpuffer.
+- Grenzwert-Fixture im 0616-Modell: 255-Zeichen-Name mit gemischten
+  Umlauten (255 Units, 382 UTF-8-Bytes) create/lookup/read auf dem
+  Spill-Image; NtfsVerify (inkl. $UpCase-Collation) gruen, Windows-
+  chkdsk Pass 0/1/2 = 0 (chkdsk-longname-0619.log).
+- NTFSDIAG: overlimit-visible zu longcomponent gedreht - der echte
+  64-Zeichen-Windows-Name auf dem Fixture muss aufloesen und lesen.
+- Alle sechs NTFS-Hostgates (0606-0617) gruen mit den neuen Grenzen;
+  Kernel und alle 96 R4X-Artefakte gebaut.
+Notizen:
+- FAT32-Kurznamen-Aliase sanitisieren Nicht-ASCII weiterhin zu '_';
+  r4d/r4p/modules behalten ihre internen 96-Byte-Systempfade
+  (Systemziele, kein API-Vertrag). NT-Long-Path (\\?\, ~32k) bleibt
+  bewusst ausserhalb des Vertrags.
+Urspruenglicher Plan:
+- Pfad-/Namenslimits exakt wie klassisches Windows, in ZEICHEN:
+  Komponente 255 Zeichen (Puffer 768 Bytes, UTF-8-BMP-Worst-Case),
+  Pfad 260 Zeichen inkl. C:\ (Puffer 1024 Bytes). Validierung zaehlt
+  UTF-8-dekodierte Zeichen gegen 255/260 und prueft die Pufferbytes;
+  keine stille Truncation. NT-Long-Path (\\?\, ~32k) bewusst
+  ausgenommen und dokumentiert.
+- Umsetzung nach den Vertragsregeln: Limits/Konstanten in
+  ApiContract.json, betroffene fixed-layout-Payloads als neue
+  versionierte Typen bzw. append-only-Slots, ApiContractGen --write,
+  Zig-/C-Paritaet, TextPfadZeitVertrag.md und 0.58.20-Gate.
+- Traeger-Durchzug: vfs/r4sys/drive-Puffer, Stream-Slots,
+  Async-I/O-Requests, Service-Pfade, Shell/Terminal, SSHD/SFTP;
+  On-Disk-Formate: SYSUPD-Journal-Formatversion mit
+  Abwaertskompatibilitaet (alte Journale lesbar), R4U-Feldbreiten.
+- Abnahme: Current-API-Gate mit neuen Grenzen, Grenzwert-Fixtures
+  (255-Zeichen-Umlautname, Pfad nahe 260 Zeichen), Haertungs-/
+  Runtime-Gates, Build.bat -test; Spotcheck mit einem echten langen
+  Windows-Namen auf dem Fixture.

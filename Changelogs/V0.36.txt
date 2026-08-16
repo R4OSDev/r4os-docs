@@ -1,0 +1,136 @@
+﻿*** Kernel Refactor Roadmap Leitbild ***
+In dieser Roadmap befassen wir uns im Verlauf mehrerer großer Versionen mit der säuberung des Kernels.
+Aktuell wurden viele Funktionen nach 
+kernelold.zig ausgelagert und in src/old/ verschoben.
+Wir holen die nach und nach zurück in main.zig, kontrollieren dabei aber alles.
+Was aus dem Kernel raus kann soll in Software, Treiber und Protokolle untergebracht werden.
+Im Zuge dieses Refactor ist auch die Dokumentation zu aktualisieren und pflegen.
+
+Grundsatz fuer alle Unterversionen:
+- Keine halben Umbauten: Eine Unterversion ist erst erledigt, wenn Code, Imports, Doku, Version und Abnahme zusammenpassen.
+- Keine stillen Doppelpfade: Wenn eine Initialisierung nach `main.zig` wandert, darf sie nicht weiterhin produktiv in `kernelold.zig` laufen.
+- Boot-kritische Pfade muessen konservativ behandelt werden. Was fuer Boot, `C:\`, Speicher, Interrupts oder fruehe Ausgabe noetig ist, bleibt built-in, bis ein stabiler Ersatz existiert.
+- Kernel-Verschlankung ist ein ausdrueckliches Ziel. Fallbacks und parallele Built-in-Pfade werden nur genutzt, wenn sie fuer Boot-Stabilitaet, Migration oder echte Abnahme noetig sind.
+- Nicht bootkritische Treiber sollen nach erfolgreicher R4D-Auslagerung aus dem Kernel entfernt werden, statt dauerhaft als Built-in-Fallback liegen zu bleiben.
+- Jeder Umzug braucht klare Modulgrenzen: Boot-Schicht, Runtime-Core, Treiber, API und Diagnose duerfen nicht unkontrolliert vermischt werden.
+- Jede neue Boot-Schicht braucht eine klare Zustands- und Fehlersemantik: entweder erfolgreich initialisiert, sauber uebersprungen oder fatal beendet. Stilles Weiterlaufen nach kaputten Pflichtpfaden ist kein erledigter Zustand.
+- `kernelold.zig` darf waehrend der Migration nur noch als Legacy-Bruecke dienen. Neu umgezogene Initialisierungen muessen aus `kernelold.zig` verschwinden oder dort explizit als bereits initialisierter Zustand konsumiert werden.
+- Zwischenversionen duerfen lauffaehig klein sein, aber nicht fachlich halb: Keine Unterversion wird abgeschlossen, wenn Besitzgrenzen, Boot-Reihenfolge oder Abhaengigkeiten noch absichtlich unklar bleiben.
+- Vor jedem Abschluss wird gezielt nach Rest-Imports, Doppelaufrufen und verdeckten Abhaengigkeiten gesucht. Gefundene Altlasten werden entweder beseitigt oder in der Roadmap als bewusster Folgepunkt notiert.
+- Jede abgeschlossene Unterversion erhoeht `Injection/sys/CONFIG/VERSION.R4S` auf die passende Version und wird danach gepusht.
+- Mindestens `DevTools/Scripts/Build.bat -norun` gehoert zu jeder Code-Unterversion. Bei Boot-, IRQ-, Input-, Storage-, USB- oder R4D-Aenderungen gehoert `DevTools/Scripts/Build.bat -test` dazu.
+- GUI-/Hardware-nahe Punkte bekommen zusaetzlich eine klare manuelle Sichtabnahme durch den User, wenn QEMU-Smoke allein nicht reicht.
+
+-------------------------------------------
+Ab hier beginnen die Versionen und ab hier darf auch bereinigt werden.
+Das Refactor Leitbild muss bei einer Roadmap Bereinigung stehen bleiben
+-------------------------------------------
+
+Rahmen fuer 0.36.X:
+- APIC, IOAPIC, HPET, PIC/PIT-Fallback und Timer-Core bleiben Kernel-Boot-Core. Keine Auslagerung nach Software, R4D-Treiber oder R4P-Protokoll in dieser Roadmap.
+- Jede Unterversion muss einen vollstaendigen Besitzschnitt liefern. Eine reine Verschiebung von Aufrufen ohne Statusmodell, Fallback-/Rollback-Semantik, Doku und Rest-Import-Audit gilt nicht als erledigt.
+- `kernelold.zig` darf nach einer abgeschlossenen Unterversion nur noch klar benannte Legacy-Verbraucher enthalten. Ungeplante Direktimporte auf die gerade umgezogene Schicht blockieren den Abschluss.
+- QEMU-Smoke ist fuer jede Unterversion Pflicht, weil IRQ und Timer Bootgrundlagen sind.
+
+Version 0.36.0
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Neue Boot-Schicht `Code/src/kernel/platform_irq_boot.zig` fuer APIC-/IOAPIC-/HPET-Grundinitialisierung angelegt.
+- `main.zig` startet `platform_irq_boot` nach Plattform-, Storage- und Loader-Zustand und vor `kernelold.kmain()`.
+- Der Bereich bleibt vollstaendig Kernel-Core; es wurde nichts nach Software, R4D oder R4P ausgelagert.
+- `platform_irq_boot` verbraucht den vorbereiteten ACPI-Zustand aus `platform_boot` und bricht sichtbar fatal ab, wenn dieser Zustand fehlt.
+- Aus `kernelold.zig` umgezogen:
+  `lapic.initFromAcpi(acpi_info)`, `ioapic.initFromAcpi(acpi_info)`,
+  `hpet.initFromAcpi(acpi_info)`, `ioapic.activateLegacyRoutes()` und das
+  zugehoerige `pic.maskAll()`.
+- `platform_irq_boot` besitzt ein Statusmodell fuer Initialisierung,
+  LAPIC-Status, IOAPIC-Routing, HPET-Sichtbarkeit/-Initialisierung,
+  PIC-Fallback-Grund und PIC-Maskierung.
+- Der Aufruf ist idempotent; ein zweiter Start erzeugt keinen zweiten produktiven APIC-/IOAPIC-/HPET-Initpfad.
+- `kernelold.zig` initialisiert APIC, IOAPIC und HPET nicht mehr produktiv selbst.
+- `lapic`- und `pic`-Direktimporte wurden aus `kernelold.zig` entfernt.
+- Verbleibende `ioapic`-/`hpet`-Nutzung in `kernelold.zig` ist im Code als Timer-Handoff-Verbraucher fuer 0.36.1 dokumentiert.
+- Fehler und Fallbacks bleiben sichtbar; der QEMU-Smoke zeigt `Platform IRQ [IOAPIC]`.
+- Dokumentation in `Docs/Core/KernelBereinigung.txt` und `Docs/Core/Architektur.txt` aktualisiert.
+- `Injection/sys/CONFIG/VERSION.R4S` wurde auf `KERNEL_VERSION=0.36.0` gesetzt.
+- Abnahme mit `DevTools/Scripts/Build.bat -norun` und `DevTools/Scripts/Build.bat -test` erfolgreich; QEMU meldet `TEST OK`.
+
+Notizen:
+- Moderner Timer-Handoff bleibt bewusst noch im Legacy-Pfad, ist aber nur Verbraucher des vorbereiteten IOAPIC-/HPET-Zustands und gehoert zu 0.36.1.
+- USB-HID, Audio, Netzwerk, Driver-Policy, R4P, Task/Scheduler und Launcher werden in dieser Unterversion nicht bewegt.
+
+Version 0.36.1
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Moderner Timer-Handoff aus `kernelold.zig` in `platform_irq_boot` umgezogen.
+- Der Timer-Handoff bleibt Kernel-Core; es wurde nichts nach Software, R4D oder R4P ausgelagert.
+- Aus `kernelold.zig` herausgezogen:
+  `activateHpetTimerIfPossible()`, `activateLapicTimerIfPossible()` und
+  `validateActiveTimerTicks()`.
+- Reihenfolge bleibt: HPET als bevorzugtes periodisches Backend,
+  LAPIC-Timer als Fallback, PIT als sichere letzte Basis.
+- `platform_irq_boot` haelt den Timer-Handoff als strukturiertes Ergebnis fest:
+  aktives Backend, angeforderte Frequenz, validierte Tickzahl,
+  Fallback-Grund und PIT-IRQ0-Maskierung.
+- Timer-Abnahme prueft echte Ticks unter kurzzeitig aktivierten Interrupts und faellt bei Fehlschlag auf PIT zurueck.
+- IOAPIC-PIT-Maskierung wird nur beim erfolgreichen LAPIC-Uebergang gesetzt; bei Fehlschlag wird die Route wieder freigegeben.
+- HPET- und LAPIC-Fehlversuche stellen vor dem PIT-Fallback ihren Zustand ueber `timer.fallbackToPit()` zurueck.
+- `kernelold.zig` fuehrt keinen produktiven aktiven Timer-Backend-Wechsel mehr aus.
+- Nicht mehr genutzte Legacy-Helfer `waitForTimerTicks()` und `readKeyboardForTicks()` wurden entfernt.
+- `kernelold.zig` enthaelt keine unerklaerten `timer`-/`ioapic`-/`hpet`-Direktimporte mehr.
+- Dokumentation zu Timer-Core, HPET/LAPIC/PIT-Fallback und Boot-Reihenfolge aktualisiert.
+- `Injection/sys/CONFIG/VERSION.R4S` wurde auf `KERNEL_VERSION=0.36.1` gesetzt.
+- Abnahme mit `DevTools/Scripts/Build.bat -norun` und `DevTools/Scripts/Build.bat -test` erfolgreich; QEMU-Log zeigt den aktiven Timerpfad und `TEST OK`.
+
+Notizen:
+- `kernelold.zig` verbraucht fuer 0.36.2 nur noch den vorbereiteten Plattform-/IRQ-Zustand fuer `irq_status.initFromAcpi(acpi_info)` und `time_core.logStatus()`.
+- Netzwerk-DHCP und Scheduler duerfen den Timer-Core nur verbrauchen, aber nicht Teil dieses Umzugs werden.
+
+Version 0.36.2
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- IRQ-/Timer-Statusabschluss aus `kernelold.zig` in die neue Boot-Schicht gezogen:
+  `irq_status.initFromAcpi(acpi_info)` und `time_core.logStatus()`.
+- Auch dieser Abschluss bleibt Kernel-Core; es wurde nichts nach Software,
+  R4D oder R4P ausgelagert.
+- `platform_irq_boot` erzeugt den finalen Status nach APIC/IOAPIC/HPET und
+  Timer-Handoff und bietet ihn als bereits initialisierten Zustand an.
+- Der Status bleibt ueber `platform_irq_boot.status()` fuer spaetere
+  Diagnose-Verbraucher lesbar, ohne dass diese APIC/IOAPIC/HPET oder Timer
+  erneut initialisieren.
+- Bootlog- und sichtbare Statusmeldungen unterscheiden weiterhin zwischen
+  IOAPIC/PIC-Fallback und HPET/LAPIC/PIT; der QEMU-Smoke zeigt
+  `Platform IRQ [IOAPIC]` und `Timer [HPET]`.
+- `kernelold.zig` initialisiert `irq_status` und `time_core` fuer diesen
+  Bootabschluss nicht mehr direkt.
+- Rest-Import-Pruefung auf `lapic`, `ioapic`, `hpet`, `pic`, `irq_status`,
+  `time_core` und Timer-Handoff-Helfer in `kernelold.zig` ohne Treffer.
+- Keine produktiven Doppelpfade oder absichtlich ungeklaerten Besitzgrenzen im
+  APIC-/IOAPIC-/HPET-/Timer-Abschnitt.
+- Dokumentation in `Docs/Core/KernelBereinigung.txt`,
+  `Docs/Core/Architektur.txt` und `Docs/SupportedHardware.txt` aktualisiert.
+- `Injection/sys/CONFIG/VERSION.R4S` wurde auf `KERNEL_VERSION=0.36.2` gesetzt.
+- Abnahme mit `DevTools/Scripts/Build.bat -norun` und
+  `DevTools/Scripts/Build.bat -test` erfolgreich; QEMU meldet `TEST OK`.
+
+Notizen:
+- 0.36.2 schliesst den APIC-/IOAPIC-/HPET-/Timer-Umzug ab. Danach sollen Audio, Netzwerk, USB-HID, Driver-Policy, R4P, Task/Scheduler und Launcher weiterhin die naechsten chronologischen Kandidaten bleiben.
+- Eine Website-Dokumentation ausserhalb dieses Repos wird nur nach ausdruecklicher User-Aufforderung angepasst.

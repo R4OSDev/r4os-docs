@@ -1,0 +1,118 @@
+﻿0.54.19 SSH-Host-Testwerkzeuge
+==============================
+
+Ziel
+----
+
+0.54.19 haertet die Host-Testwerkzeuge fuer SSHD. Die Aenderung betrifft nur
+die Windows-Host-Harnesses unter `Tests/Gate/` und die
+Dokumentation. SSHD bleibt ein normaler R4X-Dienst ueber TCPSVC; es gibt
+keinen Kernel-SSH-Pfad, keinen synchronen SSHD-Fallback und keinen zweiten
+TCP-Bypass.
+
+Readiness-Vertrag
+-----------------
+
+Die SSH-/SFTP-/SCP-Livetests warten jetzt auf den konkreten SSHD-Endpoint:
+
+    Endpoint: SSHD OK port=22
+
+Das ersetzt alte Gates, die bereits bei sichtbarem Service-Status oder
+generischem TCP-Listen loslaufen konnten. Damit startet OpenSSH erst, wenn
+SSHD seinen eigenen Endpoint und die serviceinterne Diagnose sichtbar gesund
+meldet.
+
+Banner-Vertrag
+--------------
+
+`Run-SshBannerLiveTest.ps1` pinnt nicht mehr auf eine alte SSHD-Version. Der
+erwartete Banner ist jetzt versionstolerant:
+
+    SSH-2.0-R4OS_SSHD_<major>.<minor>.<patch>
+
+Damit prueft der Test weiter den R4OS-SSHD-Vertrag, ohne nach einer legitimen
+SSHD-Versionserhoehung stale zu werden.
+
+Fehlerdiagnose
+--------------
+
+Die SSH-Hosttests laden `SshTestDiagnostics.ps1`. Fehlermeldungen enthalten
+dadurch neben den normalen OpenSSH-/SFTP-/SCP-Traces auch:
+
+- QEMU-Logpfad
+- QEMU-err-Pfad
+- relevante stdout-/stderr-Artefakte
+- letzten `Endpoint: SSHD OK ...`-Snapshot
+- bekannte Fehler-Marker
+
+Erkannte Marker sind unter anderem:
+
+- `kex_exchange_identification`
+- `Program task create failed`
+- `Program module file allocation failed`
+- `[CRASH]`, `PANIC`, Page Fault, General Protection
+- `last=scratch`, `scratch-missing`
+- `worker_spawn_fail>0`, `worker_join_err>0`
+- Connection reset/closed
+
+Das soll bei roten Tests direkt zeigen, ob wir ein Transportproblem, ein
+Worker-/Scratch-Problem, ein Task-/Module-Allocation-Problem oder einen
+allgemeinen Crash sehen.
+
+Skriptaufrufe vom Host
+---------------------
+
+Vom Repository-Root:
+
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File Tests\Runtime\Run-SshBannerLiveTest.ps1
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File Tests\Runtime\Run-SshTransportLiveTest.ps1
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File Tests\Runtime\Run-SshLoginLiveTest.ps1
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File Tests\Runtime\Run-SshSessionLiveTest.ps1
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File Tests\Runtime\Run-SftpLiveTest.ps1
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File Tests\Runtime\Run-ScpLiveTest.ps1
+
+Die Skripte bauen ihr Testimage selbst, starten QEMU headless mit
+`127.0.0.1:10022 -> 10.0.2.15:22`, setzen ein minimales SERVICES.R4S und
+raeumen TestInjection danach wieder auf.
+
+Manuelle OpenSSH-Befehle
+------------------------
+
+Voraussetzung ist ein laufendes R4OS-QEMU mit Hostforwarding
+`127.0.0.1:10022 -> 10.0.2.15:22`, z.B. ueber den GUI-/Manuellstart mit SSH-
+Forwarding. Diese Befehle sind direkte Host-Aufrufe, kein PowerShell-Test-
+Harness.
+
+Transport ohne Passwortabfrage:
+
+    ssh.exe -vvv -p 10022 -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o GlobalKnownHostsFile=NUL -o PreferredAuthentications=none -o PubkeyAuthentication=no -o PasswordAuthentication=no -o KbdInteractiveAuthentication=no -o NumberOfPasswordPrompts=0 r4os@127.0.0.1
+
+Interaktiver Login:
+
+    ssh.exe -vvv -p 10022 -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o GlobalKnownHostsFile=NUL -o PreferredAuthentications=password -o PubkeyAuthentication=no -o KbdInteractiveAuthentication=no r4os@127.0.0.1
+
+Zugangsdaten:
+
+    Benutzer: r4os
+    Passwort: rosebud
+
+Remote-Kommando:
+
+    ssh.exe -vvv -T -p 10022 -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o GlobalKnownHostsFile=NUL -o PreferredAuthentications=password -o PubkeyAuthentication=no -o KbdInteractiveAuthentication=no r4os@127.0.0.1 "SERVMAN STATUS SSHD"
+
+SFTP:
+
+    sftp.exe -vvv -P 10022 -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o GlobalKnownHostsFile=NUL -o PreferredAuthentications=password -o PubkeyAuthentication=no -o KbdInteractiveAuthentication=no r4os@127.0.0.1
+
+Klassischer SCP-Download:
+
+    scp.exe -O -vvv -P 10022 -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o GlobalKnownHostsFile=NUL -o PreferredAuthentications=password -o PubkeyAuthentication=no -o KbdInteractiveAuthentication=no r4os@127.0.0.1:/C/R4OS/CONFIG/VERSION.R4S VERSION.R4S
+
+Abnahme 0.54.19
+---------------
+
+- PowerShell-Syntax aller SSH-/SFTP-/SCP-Harnesses geprueft.
+- `Run-SshBannerLiveTest.ps1` muss mit dem aktuellen SSHD-Banner bestehen.
+- `Run-SshTransportLiveTest.ps1` muss weiterhin KEXINIT, NEWKEYS,
+  Service-Accept und die erwartete Auth-Ablehnung erreichen.
+- Vollstaendige Login-/Session-/SFTP-/SCP-Fachabnahme folgt in 0.54.20.

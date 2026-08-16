@@ -1,0 +1,998 @@
+﻿# Leitbild 0.22.X
+
+R4OS fuehrt Dienste als eigene Laufzeitklasse ein und baut darauf eine
+belastbare Systemverwaltungs-Schicht fuer Standard-Apps und Explorer-
+Workflows auf.
+
+Ein Dienst ist ein registriertes R4X-Programm, das dauerhaft oder bei Bedarf
+im Hintergrund laeuft, eigenen Zustand halten darf, ueber Lifecycle und Status
+verwaltet wird und optional API-/IPC-Endpunkte anbietet.
+
+`SERVICES.R4X` und der SERVICE-Befehl zeigen nur echte registrierte Dienste.
+Kernelinterne Programme, Protokolle, Treiber und eingebaute Funktionen werden
+nicht als Dienste getarnt. Sie koennen spaeter gezielt in echte R4X-Dienste
+ueberfuehrt werden.
+
+R4OS bleibt single-user und fully trusted. Die Dienstverwaltung ist kein
+Sicherheits- oder Rechtemodell, sondern ein DOS-/Windows-98-artiger
+Struktur-, Start- und Diagnosevertrag.
+
+0.22.X gilt nicht als abgeschlossen, solange nur Prototypen vorhanden sind.
+Jede neue Systemfunktion braucht einen dokumentierten Vertrag, stabile
+Fallbacks, sichtbare Fehlerpfade, passende Headless-/GUI-Abnahmen und eine
+Build-/Smoke-Abnahme. GUI-Funktionen muessen in R4Desk benutzbar sein, ohne
+Textueberlaeufe, kaputte Fokuspfade oder verlorene Zustandsaenderungen.
+
+Die Version gliedert sich in vier Phasen:
+- 0.22.0 bis 0.22.6: Dienst-Unterbau und Referenzdienst.
+- 0.22.7 bis 0.22.15: Migration geeigneter Systemfunktionen zu echten
+  R4X-Diensten.
+- 0.22.16 bis 0.22.20: Standard-Apps und Dateizuordnungen.
+- 0.22.21 bis 0.22.22: Explorer und gemeinsame Abschluss-Haertung.
+
+
+Version 0.22.0
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Dienstbegriff in Docs/ definiert: Dienst, Anwendung, Treiber und Protokoll
+  sind sauber voneinander abgegrenzt.
+- Zielstruktur fuer Dienste festgelegt, inklusive Standardpfad
+  `C:\SYS\SERVICES\*.R4X`.
+- Dokumentiert, dass `SERVICES.R4X` nur registrierte R4X-Dienste auflistet.
+- Erste Service-Registry im Kernel vorbereitet, ohne Kernel-Handler als
+  Dienste einzutragen.
+- Diagnose- und Statusfelder fuer echte Dienste entworfen und implementiert:
+  Name, Pfad, Status, Startart, Instanz-ID, Exit-Code, Fehlertext.
+- Abnahme: Docs/ beschreiben den Dienstvertrag; `SVCREGTEST` prueft
+  leere/ungueltige Eintraege, Nicht-R4X-Pfade, Duplikate, Statuswechsel,
+  deaktivierte Dienste und Deregistrierung. `Build.bat -norun` und
+  `Build.bat -test` liefen erfolgreich; der QEMU-Smoke zeigt `SVCREG` mit
+  leerer echter Service-Registry und `SVCREGTEST service registry: ok`.
+
+Notizen:
+- Kernelinterne Net-IPC-Handler wie `net.dhcp`, `net.dns`, `net.tcp` und
+  `net.udp` bleiben vorerst Kernel-/Subsystemfunktionen.
+- Die spaetere Migration solcher Funktionen soll auf den neuen Dienstvertrag
+  aufsetzen, aber nicht als Abkuerzung in 0.22.0 vorweggenommen werden.
+
+
+Version 0.22.1
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+
+Erledigt:
+- R4X-App-Klasse `service` einfuehren, neben `console`, `gui` und `auto`.
+- R4XBuilder um `--app-class service` erweitern.
+- SDK-Build-Helfer fuer Service-R4X vorbereiten.
+- R4X-Loader und Programminstanzen so erweitern, dass Service-Programme ohne
+  sichtbaren Console- oder GUI-Host laufen koennen.
+- Programminstanz-Diagnosen um Service-Klasse und Service-Zuordnung
+  erweitern.
+- Abnahme: R4XBuilder-Inspect zeigt `r4x.class=service`, ein Loader-
+  Negativtest lehnt ungueltige Service-Flags ab, und `SVCAPPD.R4X /SELFTEST`
+  zeigt per Programstatus/ProgramInstance eine Service-Instanz ohne Fenster-/
+  Console-Host. `Build.bat -norun` und `Build.bat -test` liefen erfolgreich;
+  der QEMU-Smoke zeigt `R4OS V0.22.1`, `R4X loader selftest [OK]`,
+  `SVCAPPD instance role=background class=service hostless=ok` und
+  `SVCAPPD result: OK`.
+
+Notizen:
+- R4X bleibt das Programmformat fuer Dienste. Es wird kein eigenes
+  Dienst-Binaerformat fuer 0.22.X eingefuehrt.
+
+
+Version 0.22.2
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+
+Erledigt:
+- Persistente Dienstkonfiguration unter `C:\SYS\CONFIG\SERVICES.R4S`
+  eingefuehrt.
+- Format fuer registrierte Dienste definiert: Name, Pfad, Argumente,
+  Startart, Enabled/Disabled und optionale Beschreibung.
+- Parser und Writer fuer `SERVICES.R4S` bereitgestellt, inklusive UTF-8-BOM,
+  DOS-Zeilenenden, Kommentarzeilen, kaputten Eintraegen und Duplikatzaehlern.
+- Bootpfad laedt `SERVICES.R4S` nach dem Mounten von C:; fehlende Datei
+  erzeugt eine leere Registry statt eines Bootfehlers.
+- SERVICE-Befehl fuer `INSTALL`, `REMOVE`, `ENABLE`, `DISABLE`, `LIST`,
+  `STATUS`, `RELOAD` und `SELFTEST` vorbereitet.
+- Registrierung und De-Registrierung gelten nur fuer echte R4X-
+  Serviceprogramme; `SERVICE INSTALL` lehnt Console-, GUI- und Legacy-Auto-
+  R4X ab.
+- Abnahme: `SERVICE SELFTEST` prueft Parser-/Writer-Roundtrips fuer leere,
+  kaputte und doppelte `SERVICES.R4S`-Eintraege. Der QEMU-Smoke installiert
+  `SVCAPPD`, zeigt Status, schreibt `C:\SYS\CONFIG\SERVICES.R4S`, prueft
+  Disable/Enable, entfernt den Dienst wieder und endet mit leerer Registry.
+  `Build.bat -norun` und `Build.bat -test` liefen erfolgreich.
+
+Notizen:
+- `CONFIG.R4S` bleibt fuer Boot, Treiber und Shell. `SERVICES.R4S` ist die
+  User-Space-nahe Dienstliste.
+
+
+Version 0.22.3
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+
+Erledigt:
+- Lifecycle fuer registrierte R4X-Dienste implementiert: `SERVICE START`,
+  `SERVICE STOP` und `SERVICE RESTART`.
+- Dienststatus wird gefuehrt und sichtbar gemacht: `stopped`, `starting`,
+  `running`, `stopping`, `failed`, `disabled`.
+- Autostart-Dienste aus `C:\SYS\CONFIG\SERVICES.R4S` starten nach dem
+  Scheduler-Start automatisch.
+- Exit-Code, Start-Tick, Laufzeit-Ticks, Restart-Zaehler und letzter Fehler
+  werden in der Service-Registry gepflegt.
+- Stop nutzt zuerst eine saubere Program-Lifecycle-Anfrage
+  `program_request_close`; wenn ein Dienst nicht beendet, folgt ein
+  kontrollierter Kill-Fallback mit Fehlerstatus.
+- `SERVICE REMOVE` und `SERVICE DISABLE` behandeln laufende Dienste
+  kontrolliert: Remove verweigert aktive Dienste, Disable stoppt sie zuerst.
+- R4X-Programmlaufzeit liefert Snapshots laufender Instanzen sowie eine kleine
+  Exit-History, damit der Service-Manager beendete Dienste sauber reapen kann.
+- Abnahme: QEMU-Smoke laedt zwei Testdienste aus `SERVICES.R4S`, startet
+  `SVCAPPD` per Autostart, stoppt, startet und restartet ihn, prueft
+  `restarts=1`, erzeugt mit `BADSTART` einen absichtlich fehlschlagenden
+  Dienststart und entfernt danach beide Dienste. `Build.bat -norun` und
+  `Build.bat -test` liefen erfolgreich; der Smoke zeigt
+  `SERVICES.R4S loaded entries=2`, `[SVC] autostart SVCAPPD instance=1`,
+  `SERVICE restarted: SVCAPPD restarts=1`, `SERVICE start failed: path invalid
+  or not service R4X` und `TEST OK`.
+
+Notizen:
+- Crash-Vermeidung und kaputte Parameter duerfen validiert werden; das bleibt
+  technische Stabilitaet, keine Security-Policy.
+- Der Lifecycle ist noch ein Manager-/Programmlaufzeit-Vertrag. Der
+  eigentliche Service-API-/IPC-Vertrag fuer Requests, Handles und Endpunkte
+  folgt in 0.22.4.
+
+
+Version 0.22.4
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+
+Erledigt:
+- Service-API fuer registrierte R4X-Dienste eingefuehrt: `service_info`,
+  `service_status`, `service_open`, `service_close`, `service_call` sowie
+  Dienstseitenfunktionen fuer Endpunkt-Register, Poll, Receive, Reply und
+  Unregister.
+- Laufende Dienste koennen fuer ihren registrierten Namen einen Endpunkt
+  anmelden; Clients oeffnen Dienste per Name und erhalten ein stabiles
+  Handle fuer die aktuelle Endpunkt-Lebensdauer.
+- Request/Response-Vertrag festgelegt: `RSVC`-Header Version 1 mit Operation,
+  Request-ID, Client-ID, Flags, Payload-Laenge und Status.
+- Payload-Grenze, Fehlercodes und Statusflags definiert: unbekannte Dienste,
+  nicht laufende Dienste, fehlende Endpunkte, zu grosse Payloads, zu kleine
+  Puffer, volle Endpunkte, Timeouts und unbekannte Operationen.
+- ProgramApi und SDK auf Version 78 erweitert, inklusive R4SYS-Wrappern fuer
+  Service-Clients und Dienst-Endpunkte.
+- `SVCAPPD.R4X` erweitert: `/HOLD /ENDPOINT` registriert einen Service-
+  Endpunkt, `/APITEST` prueft Open-by-Name, Echo, unbekannte Operation,
+  unbekannte Dienstnamen, zu grosse Payloads und zu kleine Antwortpuffer.
+- `SERVICE SELFTEST` prueft zusaetzlich Endpunkt-Register/Unregister, Status,
+  Open-by-Name, Request/Response und die wichtigsten Negativpfade.
+- Dokumentation aktualisiert: `Docs/Services/README.txt`, R4X-App-Klasse,
+  R4DOS/SERVICE-Befehl, Architektur, Diagnostics und Software-Inventar.
+- Abnahme: `Build.bat -norun` und `Build.bat -test` liefen erfolgreich; der
+  QEMU-Smoke zeigt `R4OS V0.22.4`, `SERVICE selftest: ok`,
+  `SVCAPPD endpoint handle=1`, `SVCAPPD service api result: OK` und
+  `TEST OK`.
+
+Notizen:
+- Der Service-Manager verwaltet Dienste als voll vertraute Komponenten.
+  Handles und Namen sind Strukturhilfen, keine Zugriffsrechte.
+- Der Service-API-Vertrag ist bewusst getrennt von den bestehenden
+  kernelinternen Net-IPC-Handlern. Diese werden erst als Dienste sichtbar,
+  wenn sie spaeter in echte registrierte R4X-Dienste ueberfuehrt werden.
+
+
+Version 0.22.5
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+
+Erledigt:
+- R4X-Management-API auf ProgramApi-Version 79 angehoben:
+  `service_detail`, `service_detail_by_name`, `service_start`,
+  `service_stop`, `service_restart`, `service_set_start_mode`,
+  `service_install` und `service_remove`.
+- `SERVICES.R4X` als R4Desk-GUI gebaut und nach `C:\BIN\SERVICES.R4X`
+  ins Image aufgenommen.
+- Dienste werden aus der echten Service-Registry enumeriert; angezeigt werden
+  Name, Status, Startart, Instanz, Restart-Zaehler, Pfad, Argumente und
+  letzter Fehler.
+- GUI-Aktionen fuer Start, Stop, Restart, Enable, Auto, Disable, Install,
+  Remove und Refresh umgesetzt.
+- Headless-Kommandos fuer `SERVICES /LIST`, `START`, `STOP`, `RESTART`,
+  `ENABLE`, `AUTO`, `DISABLE`, `REMOVE`, `INSTALL` und `/SELFTEST`
+  bereitgestellt.
+- R4Desk-Settings-Menue um `Services` erweitert.
+- Abnahme: `SERVICES.R4X /SELFTEST` installiert temporaer `SVCTEMP`, startet,
+  restartet, stoppt, deaktiviert, aktiviert und entfernt ihn wieder.
+- R4Desk-R4X-Smoke prueft `C:\BIN\SERVICES.R4X` und startet die GUI.
+- `Build.bat -norun` und `Build.bat -test` bestanden. QEMU-Logmarker:
+  `SERVICES selftest: OK`, `Services window: ... ok` und
+  `R4DESK R4X smoke result: OK`.
+
+Notizen:
+- `SERVICES.R4X` zeigt keine Kernel-Subsysteme, keine R4P-Protokolle und keine
+  R4D-Treiber, solange diese nicht als echte R4X-Dienste registriert sind.
+- Shell-Befehl und GUI nutzen dieselbe Registry- und `SERVICES.R4S`-Schicht.
+
+
+Version 0.22.6
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+
+Erledigt:
+- Beispiel-Dienst `EXSVC.R4X` unter `Code/Software/ExampleService/`
+  angelegt und als R4X-Service-Klasse gebaut.
+- `EXSVC.R4X` wird nach `C:\SYS\SERVICES\EXSVC.R4X` ins Image kopiert.
+- Beispielregistrierung fuer `EXSVC` in
+  `C:\SYS\CONFIG\SERVICES.R4S` vorbereitet.
+- `EXSVC.R4X` demonstriert hostlosen Service-Lifecycle, Endpunkt-
+  Registrierung, Poll/Receive/Reply, Echo-Operation, Status-Operation und
+  sauberes Beenden ueber `program_should_close`.
+- Diagnosekommandos `/PING` und `/SELFTEST` umgesetzt.
+- `SERVICE START`, `SERVICE RESTART`, `SERVICE STOP`, `SERVICES.R4X` und
+  Service-API-Smoke gegen `EXSVC.R4X` geprueft.
+- SDK-Service-Manager-Wrapper ergaenzt, damit R4X-Programme die
+  Management-API sauber erkennen koennen.
+- Abnahme: `Build.bat -norun` und `Build.bat -test` liefen erfolgreich.
+  QEMU-Logmarker: `R4OS V0.22.6`, `SERVICE started: EXSVC`,
+  `EXSVC ping: OK`, `SERVICE restarted: EXSVC`, `SERVICE stopped: EXSVC`,
+  `EXSVC selftest: OK`, `SERVICES selftest: OK` und
+  `R4DESK R4X smoke result: OK`.
+
+Notizen:
+- `EXSVC.R4X` ist der Referenzdienst fuer spaetere Migrationen von
+  Kernelfunktionen, Protokoll-Frontends und dauerhaft laufenden
+  Hintergrundkomponenten.
+
+
+Version 0.22.7
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+
+Erledigt:
+- Clipboard-Service `CLIPSVC.R4X` unter `Code/Software/ClipboardService/`
+  angelegt und als echte R4X-Service-Klasse gebaut.
+- `CLIPSVC.R4X` wird nach `C:\SYS\SERVICES\CLIPSVC.R4X` ins Image kopiert
+  und in `SERVICES.R4S` als Autostart-Dienst registriert.
+- Clipboard-Zustand in den Dienst verschoben: Write, Read, Info, Clear und
+  Revision laufen ueber einen Service-Endpunkt.
+- Bestehende ProgramApi-Clipboard-Funktionen bleiben kompatibel und leiten
+  zuerst an `CLIPSVC.R4X` weiter; der alte Kernel-lokale Clipboard-Puffer
+  bleibt als Fallback fuer fruehe oder fehlerhafte Startpfade erhalten.
+- Service-Payload-Grenze auf 4096 Bytes angehoben, damit der bestehende
+  Clipboard-Textvertrag mit 4095 Nutzbytes ohne Chunking erhalten bleibt.
+- `CLIPD.R4X` als Diagnoseprogramm erhalten und erweitert: Es verlangt jetzt
+  `CLIPSVC.R4X`, prueft die ProgramApi-Route und liest direkt ueber den
+  Service zurueck.
+- `SERVICES.R4X` und SERVICE-Befehl koennen `CLIPSVC.R4X` als normalen Dienst
+  anzeigen, starten, stoppen und neu starten.
+- Abnahme: `Build.bat -norun` und `Build.bat -test` liefen erfolgreich.
+  QEMU-Logmarker: `R4OS V0.22.7`, `SERVICES.R4S loaded entries=4`,
+  `[SVC] autostart CLIPSVC`, `CLIPSVC ping: OK`,
+  `SERVICE restarted: CLIPSVC`, `CLIPD service=CLIPSVC`, `CLIPD OK`,
+  `CLIPSVC selftest: OK`, `EXSVC selftest: OK` und
+  `R4DESK R4X smoke result: OK`.
+
+Notizen:
+- Clipboard ist der bewusst kleine erste Migrationskandidat: wenig
+  Hardwareabhaengigkeit, klarer Zustand, klare API.
+
+
+Version 0.22.8
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+
+Erledigt:
+- DNS-Service `DNSSVC.R4X` als echten R4X-Dienst unter
+  `C:\SYS\SERVICES\DNSSVC.R4X` gebaut und als Autostart-Dienst registriert.
+- Dienstendpunkt `DNSSVC` implementiert: Status, A-Record-Aufloesung ueber den
+  konfigurierten DNS-Server und A-Record-Aufloesung ueber einen expliziten
+  IPv4-DNS-Server.
+- Resolverzustand, A-Record-Cache, TTLs, negativer Cache, Zaehler und letzter
+  Fehler als Dienstzustand umgesetzt.
+- `NETDNS.R4P` bleibt Parser-/Builder-Protokoll; DNSSVC nutzt ProgramApi-
+  NetConfig und UDP fuer den realen Netzwerkpfad.
+- SDK-DNS-Helfer binden Clients an den neuen Dienstpfad an: `netResolveA`,
+  `netDnsResolveServiceResult`, `netDnsResolveServerServiceResult` und
+  `netDnsServiceStatusRaw` versuchen zuerst `DNSSVC` und fallen nur bei
+  fehlendem Dienst auf den alten kernelinternen `net.dns`-IPC-Pfad zurueck.
+- Dadurch nutzen `DNSLOOKUP.R4X`, `PING.R4X`, `HTTPGET.R4X`, `NETCAT.R4X`,
+  `SEND.R4X` und `RECV.R4X` den Dienstpfad ohne eigene Sonderlogik.
+- R4X-/Task-Grenzen fuer reale Autostart-Dienste erhoeht: 16 R4X-
+  Instanzslots, 32 Scheduler-Tasks und 16 ProgramInstance-Snapshots in R4Desk,
+  damit Dienste und gehostete Apps parallel belastbar sichtbar bleiben.
+- Dokumentation aktualisiert: Dienste, R4NET, SDK, R4X-Anwendungen, R4DOS,
+  Architektur, README und Software-Inventar.
+- Abnahme: `DNSSVC.R4X /PING` und `/SELFTEST` pruefen Status, Cache-Hit,
+  TTL-Ablauf, NXDOMAIN, kaputte Antworten, negativen Cache, expliziten
+  No-Server-Pfad und unbekannte Operationen. Der QEMU-Smoke prueft
+  `SERVICE STATUS DNSSVC`, `DNSLOOKUP example.invalid 0.0.0.0` und den
+  R4Desk-R4X-Smoke unter aktiven Autostart-Diensten. `Build.bat -norun` und
+  `Build.bat -test` liefen erfolgreich; der Log zeigt `DNSSVC ping: OK`,
+  `DNSSVC selftest: OK`, `DNS resolve example.invalid: no-server` und
+  `R4DESK R4X smoke result: OK`.
+
+Notizen:
+- DNS eignet sich gut als zweiter Dienst, weil Cache und Status natuerlich
+  zustandsbehaftet sind, aber der Hardwarebezug indirekt bleibt.
+
+
+Version 0.22.9
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+
+Erledigt:
+- DHCP-Service `DHCPSVC.R4X` als echten R4X-Dienst unter
+  `C:\SYS\SERVICES\DHCPSVC.R4X` gebaut und als Autostart-Dienst registriert.
+- Dienstendpunkt `DHCPSVC` implementiert: Textstatus, strukturierter
+  `NetServiceDhcpStatus`, Acquire/Renew/Release als Textoperation und
+  strukturierte `NetServiceDhcpResult`-Operation.
+- Lease-Zustand des Dienstvertrags umfasst Bound/Pending/DNS-Flags, XID,
+  Client-/Server-/Gateway-/DNS-IP, Lease-/Renew-/Rebind-Zeiten, abgeleitete
+  Elapsed/Remaining/Renew-in/Rebind-in-Werte, Retry-/Timeout-/Release-
+  Zaehler und letzten Fehler.
+- `NETDHCP.R4P` bleibt Parser-/Builder-Protokoll fuer DHCP Discover, Request,
+  Offer, Ack und Nak. DHCPSVC nutzt in 0.22.9 die direkte DHCP-ProgramApi als
+  stabile Uebergangskante und vermeidet SDK-Service-Rekursion.
+- SDK-DHCP-Helfer binden Clients an den neuen Dienstpfad an:
+  `netDhcpAcquireService`, `netDhcpRenewService`,
+  `netDhcpReleaseService`, `netDhcpServiceActionResult`,
+  `netDhcpServiceStatus` und `netDhcpServiceStatusRaw` versuchen zuerst
+  `DHCPSVC` und fallen nur bei fehlendem Dienst auf den alten kernelinternen
+  `net.dhcp`-IPC-Pfad zurueck.
+- `DHCP.R4X` war bereits service-first; `IPCONFIG.R4X` nutzt nun ebenfalls
+  den Servicepfad fuer `/ALL`, `/RENEW` und `/RELEASE`. `NETCFG.R4X` bleibt
+  NetConfig-Frontend ohne eigene DHCP-Aktion und zeigt die vom Dienst/Kernel
+  angewendete Konfiguration ueber `netConfigGet`.
+- Autostart- und Dienstneustart-Pfad sind verdrahtet. Bei einem Neustart
+  liest DHCPSVC den aktuellen DHCP-Snapshot neu ein; Lease-Restzeiten werden
+  aus dem Dienstlaufzeitpunkt abgeleitet, solange der Kernel noch die
+  direkte DHCP-ProgramApi als Uebergangskante bereitstellt.
+- Dokumentation aktualisiert: Dienste, R4NET, SDK, R4X-Anwendungen, R4DOS,
+  Architektur, README und Software-Inventar.
+- Abnahme: `DHCPSVC.R4X /PING` und `/SELFTEST` pruefen Status, strukturierten
+  DHCP-Servicevertrag, Textstatus und unbekannte Operationen ohne externen
+  DHCP-Server. Der QEMU-Smoke prueft `SERVICE STATUS DHCPSVC`,
+  `DHCPSVC.R4X /PING`, `DHCPSVC.R4X /SELFTEST`, `DHCP STATUS` und den
+  R4Desk-R4X-Smoke unter aktiven Autostart-Diensten. `Build.bat -norun`,
+  `Build.bat -test`, `CheckRoadmap021.zig`, `CheckModuleMigration021.zig`
+  und `CheckFinalModules021.zig` liefen erfolgreich; der Log zeigt
+  `DHCPSVC ping: OK`, `DHCPSVC selftest: OK`, `DHCP status` und
+  `R4DESK R4X smoke result: OK`.
+
+Notizen:
+- DHCP ist service-typisch, aber wegen Lease- und Link-Lifecycle schwerer als
+  DNS. Deshalb folgt es nach `DNSSVC.R4X`.
+- Ein echter User-Network-/TAP-Smoke fuer erfolgreiche Acquire/Renew/Release-
+  Leases bleibt als erweiterte Netzwerkabnahme sinnvoll. Die Standardabnahme
+  laeuft bewusst mit `-nic none` und prueft daher den Dienstvertrag ohne
+  externen DHCP-Server.
+
+
+Version 0.22.10
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+
+Erledigt:
+- Time-Service `TIMESVC.R4X` als echte R4X-Service-App gebaut und unter
+  `C:\SYS\SERVICES\TIMESVC.R4X` ausgeliefert.
+- Standardregistrierung in `SERVICES.R4S` als `start=auto` eingerichtet,
+  sodass `SERVICES.R4X` und der `SERVICE`-Befehl nur den echten Dienst sehen.
+- Dienstvertrag fuer Status, Reload und Set-Config eingefuehrt:
+  sichtbare Uhrzeit, UTC-/Lokal-Sekunden, Zeitzonen-ID, Label, Offset,
+  Standard-/DST-Offset, Konfigurationsflags, Revision, Zaehler und letzter
+  Fehler.
+- `C:\SYS\CONFIG\TIME.R4S` an den Dienstvertrag angebunden: fehlende Datei
+  wird als UTC-Default behandelt, kaputte Datei als UTC mit Fehlerflag,
+  gueltige Auswahl wird kanonisch geschrieben.
+- RTC, Timer-Core und monotone Zeitbasis bleiben Kernel-/Plattformfunktionen;
+  `TIMESVC.R4X` kapselt nur die benutzersichtbare Zeit- und
+  Einstellungslogik.
+- `CLOCK.R4X` liest sichtbare Uhrzeit und Zeitzonenlabel zuerst ueber
+  `TIMESVC.R4X`; der direkte `TIME.R4S`-/`r4os.time`-Pfad bleibt Fallback.
+- `TIMESET.R4X` laedt und speichert die Zeitzone zuerst ueber `TIMESVC.R4X`;
+  der direkte Datei-Writer bleibt Fallback.
+- SDK/R4SYS-Helfer fuer `timeServiceStatus`, `timeServiceReload`,
+  `timeServiceSetTimezone` und `timeServiceSetConfig` ergaenzt.
+- Abnahme umgesetzt: `TIMESVC.R4X /SELFTEST` prueft fehlende und kaputte
+  `TIME.R4S`, UTC-Default, Europe/Berlin Sommer-/Winter-Offset, Set-Config,
+  Reload und unbekannte Operationen.
+- Abnahme umgesetzt: `CLOCK.R4X /SELFTEST` prueft die sichtbare
+  Clock-Anzeige aus dem TIMESVC-Status.
+- Abnahme umgesetzt: `TIMESET.R4X /SELFTEST` prueft Speichern ueber TIMESVC
+  und Persistenz in `TIME.R4S`.
+
+Notizen:
+- `TIMESVC.R4X` ersetzt nicht die harte Zeitbasis des Kernels, sondern die
+  User-sichtbare Zeit- und Einstellungslogik.
+- Alarme und Netzwerkzeit bleiben bewusst vorbereitete Dienstzustandsfelder
+  fuer spaetere Versionen; 0.22.10 schliesst zuerst den belastbaren
+  Zeitzonen-/Clock-/Settings-Vertrag.
+
+
+Version 0.22.11
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+
+Erledigt:
+- Audio-/Mixer-Service `AUDSVC.R4X` als echte R4X-Service-App unter
+  `C:\SYS\SERVICES\AUDSVC.R4X` gebaut und als Autostart-Dienst registriert.
+- Streamverwaltung, Mixerzustand, globale Lautstaerke, Sessions und
+  Diagnosezaehler als Dienstzustand modelliert.
+- HDA/AC97 bleiben Audio-Hardwaretreiber, SID/OPL3/MIDI bleiben
+  Synth-Engines beziehungsweise Protokoll-/Backend-Bausteine.
+- `BEEP.R4X`, `SYNTH.R4X` und `AUDIOD.R4X` nutzen den AUDSVC-Vertrag zuerst
+  und behalten den direkten Audio-ProgramApi-Pfad als Fallback.
+- Geklaert: Im Kernel-Audio-Core bleiben Ringpuffer, Backend-Registry,
+  IRQ-/DMA-nahe Arbeit, Hardware-Backend-Ausgabe und Synth-Durchstiche.
+- SDK erweitert: `AudioServiceStatus`, Stream-/Volume-Requests,
+  `AudioServiceStreamResult` sowie R4SYS-/R4AUDIO-Helfer fuer Status,
+  Master-Volume, Stream-Open/Write/SetVolume/Close.
+- Abnahme umgesetzt: `AUDSVC.R4X /PING` und `/SELFTEST` pruefen Status,
+  Master-Volume, Stream-Open/Write/SetVolume/Close, Restart mit offenem
+  Stream, Cleanup nach Restart und unbekannte Operationen.
+- Abnahme umgesetzt: `AUDIOD.R4X`, `BEEP.R4X /SELFTEST`,
+  `SYNTH.R4X /SELFTEST` und `SYNTHD.R4X` pruefen Clientvertrag und
+  Synth-Regression im Boot-Smoke.
+
+Notizen:
+- Falls spaeter ein engerer reiner Mixername besser passt, kann
+  `MIXSVC.R4X` aus `AUDSVC.R4X` heraus getrennt werden.
+- `AUDSVC.R4X` ersetzt nicht den Kernel-Audio-Core, sondern kapselt den
+  benutzbaren PCM-/Mixer-Vertrag als Dienst.
+
+
+Version 0.22.12
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+
+Erledigt:
+- Serial-Link-Service `R4SLSVC.R4X` als echten registrierten R4X-
+  Autostart-Dienst unter `C:\SYS\SERVICES` umgesetzt.
+- ProgramApi v80 um schmale Serial-Link-Primitiven erweitert:
+  Status, Poll, Send-Message, Selftest, Hosttest und Inbox.
+- COM2/UART-Zugriff bleibt Kernelnaehe; `R4SLSVC.R4X` kapselt darueber
+  Link-Status, Service-Inbox, Service-Outbox, Queue-Cleanup und
+  Request/Response-Endpunkt.
+- `NETR4SL.R4P` bleibt R4SL-Framing- und Parser-/Builder-Protokoll.
+- `SERIALLINK` bleibt als Kernel-nahe Fallback-/Vergleichsdiagnose erhalten.
+- Service-Stop und Restart leeren offene Link-Queues kontrolliert und
+  zaehlen abgebrochene Queue-Eintraege.
+- Abnahme: `SERVICE STATUS R4SLSVC`, `R4SLSVC.R4X /PING`,
+  `R4SLSVC.R4X /SELFTEST`, Build `-norun` und QEMU-Smoke `-test` laufen
+  erfolgreich.
+
+Notizen:
+- R4SL ist ein guter Kandidat fuer dauerhaft laufende Hintergrundkommunikation
+  ohne direkt sichtbare Benutzeroberflaeche.
+- Der erste Stand migriert den benutzbaren Dienstzustand, nicht den UART-
+  Treiber selbst. Echte COM2-Hosttests bleiben weiter ueber die bestehende
+  `SERIALLINK HOSTTEST`-/SerialLinkHost-Abnahme moeglich.
+
+
+Version 0.22.13
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+
+Erledigt:
+- TCP-Service `TCPSVC.R4X` als echten registrierten Autostart-R4X-Dienst unter
+  `C:\SYS\SERVICES\TCPSVC.R4X` gebaut.
+- Dienstendpunkt `TCPSVC` implementiert: Status, strukturierte
+  Connect/Write/Read/Poll/Close/Abort-Operationen, Listen/Accept/AcceptRead
+  und CloseListen.
+- Serviceeigene Frontend-Handles eingefuehrt. Clients sehen TCPSVC-Handles;
+  der Dienst uebersetzt intern auf den vorhandenen kernelinternen
+  `net.tcp`-IPC-Backendpfad und schuetzt Handles/Listener per Service-
+  Client-ID vor versehentlichem Fremdzugriff.
+- Listener-Tracking und Restart-Cleanup umgesetzt. Beim Stop/Restart schliesst
+  TCPSVC offene serviceeigene Handles und Listener, damit Ports nach einem
+  Restart erneut belegbar sind.
+- `NETTCP.R4P` bleibt Segment-Parser, Builder und Checksum-/Statuslogik.
+- SDK-Migration umgesetzt: `tcpServiceStatusRaw`, `tcpServiceResult` und die
+  TCP-Service-Helfer von `NETCAT.R4X`, `TCPECHO.R4X`, `HTTPGET.R4X`,
+  `SEND.R4X` und `RECV.R4X` versuchen zuerst `TCPSVC` und fallen nur bei
+  fehlendem Dienst/Endpunkt auf den alten `net.tcp`-IPC-Pfad zurueck.
+- Abnahme umgesetzt: `TCPSVC.R4X /PING` und `/SELFTEST` pruefen Status,
+  Textstatus, unbekannte Operationen, Listen/CloseListen, Restart-Cleanup
+  eines offenen Listeners und unbekannte Handle-Fehler. Der QEMU-Smoke prueft
+  `SERVICE STATUS TCPSVC`, `TCPSVC.R4X /PING` und `TCPSVC.R4X /SELFTEST`.
+- Abnahmen bestanden: `Build.bat -norun`, `Build.bat -test`,
+  `CheckRoadmap021.zig`, `CheckModuleMigration021.zig` und
+  `CheckFinalModules021.zig`. Der finale Smoke zeigt `TCPSVC ping: OK`,
+  `TCPSVC selftest: OK` und keine CPU-Exception.
+
+Notizen:
+- TCP bleibt fachlich ein schwerer Dienst. In 0.22.13 liegt der
+  laufzeitverwaltete Servicezustand in TCPSVC; der TCP-Kern und die
+  Segmentlogik bleiben noch bewusst in Kernel/NETTCP.R4P. Damit ist der
+  Clientvertrag stabil migriert, ohne die Paket-/Timerlogik in demselben
+  Schritt zu riskant umzubauen.
+- Der Selftest enthaelt bewusst einen unbekannten Handle-Fehlerpfad. Dabei
+  wurde ein R4X-sensibler Default-String-Slice im Frontend-Handle-Lookup
+  entfernt und durch einen expliziten Laufzeit-Rueckgabewert ersetzt.
+
+
+Version 0.22.14
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+
+Erledigt:
+- UDP-Service/Broker `UDPSVC.R4X` als echten registrierten Autostart-R4X-
+  Dienst unter `C:\SYS\SERVICES\UDPSVC.R4X` gebaut.
+- Dienstendpunkt `UDPSVC` implementiert: Status, strukturierte Bind-,
+  SendTo-, Recv- und Close-Operationen sowie Textstatus/Textoperationen.
+- Serviceeigene Frontend-Handles eingefuehrt. Clients sehen UDPSVC-Handles;
+  der alte Kernel-/IPC-Handle aus `net.udp` bleibt internes Backenddetail.
+- Portbindungen, Duplicate-Port-Fehler, Owner-Mismatch, Would-Block,
+  SendTo-/Recv-Diagnose, Close und Restart-Cleanup als Dienstressourcen
+  modelliert.
+- `NETUDP.R4P` bleibt UDP-Parser, Datagramm-Builder und Checksummlogik.
+  `UDPSVC.R4X` kapselt nur Laufzeit, Socket-Broker, Lifecycle und API-
+  Endpunkt.
+- SDK-Servicepfad erweitert: `udpServiceStatusRaw`, `udpServiceResult`,
+  `udpBindService`, `udpSendToService`, `udpRecvFromService`,
+  `udpRecvFromServiceResult`, `udpRecvFromWaitService` und
+  `udpCloseService` versuchen zuerst `UDPSVC` und fallen bei fehlendem
+  Dienst-/IPC-Pfad auf den alten `net.udp`-Pfad zurueck.
+- Normale SDK-UDP-Wrapper `udpBind`, `udpSendTo`, `udpRecvFrom`,
+  `udpRecvFromWait`, `udpClose` und `udpStatus` nutzen ebenfalls den
+  Servicepfad zuerst; R4X-UDP-Clients wie `DNSSVC.R4X`/`DNSLOOKUP.R4X`
+  laufen damit automatisch ueber den Broker, sobald er aktiv ist.
+- Standardregistrierung in `Injection/sys/CONFIG/SERVICES.R4S` und
+  `TestInjection/sys/CONFIG/SERVICES.R4S` als `start=auto` eingerichtet.
+- Abnahme umgesetzt: `UDPSVC.R4X /PING` und `/SELFTEST` pruefen Service-API,
+  Status, Textstatus, unbekannte Operationen, Bind, Duplicate-Port,
+  Recv-Would-Block, SendTo-Vertragsdaten, Close, Restart-Cleanup eines
+  offenen Sockets und unbekannte Handle-Fehler.
+- QEMU-Autostart-Smoke erweitert um `SERVICE STATUS UDPSVC`,
+  `UDPSVC.R4X /PING` und `UDPSVC.R4X /SELFTEST`.
+- Dokumentation in `Docs/Services/README.txt`, `Docs/API/R4NET.md`,
+  `Docs/SDK/README.txt`, `Docs/Network/README.txt` und `Docs/Software.md`
+  aktualisiert.
+- Zentrale Version auf `0.22.14` erhoeht.
+- Abnahmen bestanden: `DevTools/Scripts/Build.bat -norun` und
+  `DevTools/Scripts/Build.bat -test`. Der Smoke zeigt `UDPSVC ping: OK`,
+  `UDPSVC selftest: OK` und keine CPU-Exception.
+
+Notizen:
+- `UDPSVC.R4X` ist sinnvoll, wenn UDP-Sockets wirklich laufzeitverwaltete
+  Systemressourcen werden. Der reine UDP-Parser bleibt immer R4P.
+- DHCPs kernelinterner Lease-Pfad bleibt zunaechst ueber `DHCPSVC.R4X` und
+  den bestehenden `net.dhcp`-Backendpfad gekapselt. Neue R4X-UDP-Clients und
+  DNS laufen service-first ueber `UDPSVC`; tiefere DHCP-UDP-Entkopplung kann
+  spaeter folgen, ohne `NETUDP.R4P` in einen Dienst zu verwandeln.
+
+
+Version 0.22.15
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Desktop-/Window-Service `WINSVC.R4X` als echten registrierten
+  Autostart-R4X-Dienst unter `C:\SYS\SERVICES\WINSVC.R4X` gebaut und in
+  `SERVICES.R4S` registriert.
+- Dienstendpunkt `WINSVC` implementiert: Textstatus, strukturierter Status,
+  Snapshot mit bis zu 16 Window-Records und Operationen fuer Register,
+  Update, Focus, Minimize, Restore, Maximize, Close, Remove,
+  Stale-Sweep und Restart-Cleanup.
+- Stage-1-Window-Record definiert: Window-ID, Program-Instance-ID, Titel,
+  Launch-Pfad, App-Klasse, Zustand, Bounds, Normal-Bounds, Fokus und Z-Order.
+- `DESK.R4X` bleibt sichtbare Windows-98-nahe Shell und Compositor, spiegelt
+  aber gehostete Console- und GUI-Fenster beim Start, bei Fokuswechseln,
+  Minimize/Restore/Maximize, Close, Remove, Drag, Resize und Titel-/
+  Mindestgroessenaenderungen nach WINSVC.
+- Launches aus Startmenue, Run, Desktop-Verknuepfungen, Time-Menue und
+  Host-Launch-Requests laufen weiter ueber die vorhandenen DESK-Launchpfade,
+  registrieren den Window-Record aber direkt danach beim Dienst.
+- R4Desk loescht WINSVC-Zustand beim Start, liest fuer den Tasks-Pfad einen
+  WINSVC-Snapshot und prueft im R4Desk-R4X-Smoke, dass ein sichtbares
+  `R4FILES.R4X`-Fenster im Dienststatus auftaucht.
+- `DESK.R4X` selbst bleibt keine Service-App und erscheint nur als sichtbare
+  Shell/Client, nicht als registrierter Dienst.
+- Abnahme umgesetzt: `WINSVC.R4X /PING` und `/SELFTEST` pruefen Service-API,
+  Status, Snapshot, Register, Update, Focus, Minimize, Restore, Maximize,
+  Close, Remove, unbekannte Operationen und Restart-Cleanup per
+  Service-Neustart.
+- QEMU-Autostart-Smoke erweitert um `SERVICE STATUS WINSVC`,
+  `WINSVC.R4X /PING`, `WINSVC.R4X /SELFTEST` und
+  `WINSVC mirror R4Files: ok`.
+- Version auf `0.22.15` angehoben.
+- Abnahmen erfolgreich: `DevTools/Scripts/Build.bat -norun`,
+  `DevTools/Scripts/Build.bat -test`,
+  `CheckRoadmap021.zig`, `CheckModuleMigration021.zig` und
+  `CheckFinalModules021.zig`. Der finale Stand zeigt 71 Artefakte:
+  46 R4X, 5 R4D und 20 R4P.
+
+Notizen:
+- Vergleich zu Windows 98: `DESK.R4X` entspricht eher Explorer.exe
+  (sichtbare Shell), waehrend `WINSVC.R4X` die R4OS-Grenze fuer USER-/Window-
+  Zustand bildet. Das ist kein Sicherheitsmodell, sondern eine saubere
+  Strukturgrenze gegen einen monolithischen Desktop.
+- Stage 1 verschiebt bewusst noch nicht Compositing, Low-Level-Input oder
+  App-Client-Rendering in den Dienst. WINSVC ist Zustandsschicht und
+  Lifecycle-Broker; die Pixel bleiben bei DESK.
+
+
+Version 0.22.16
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Konzept fuer Standard-Apps und Dateizuordnungen in
+  `Docs/Applications/StandardApps.txt` dokumentiert.
+- Kanonische Konfigurationsdatei `C:\SYS\CONFIG\ASSOC.R4S` festgelegt und als
+  zentraler SDK-Settings-Pfad aufgenommen.
+- Schema `APPASSOC` definiert: `APP.<ID>.*` fuer registrierte Apps,
+  `EXT.<EXT>.*` fuer Dateiendungen, Launch-Policy, Typanzeige,
+  Listenpraefix, Sortierrang und Argumenttemplate.
+- `%1` als Dateipfad-Platzhalter im Argumenttemplate festgelegt.
+- Festgelegt, dass `.R4X`-Dateien nicht ueber Standard-Apps laufen, sondern
+  weiter den direkten Programmstartpfad beziehungsweise R4Desk-
+  Host-Launch-Request nutzen.
+- Bestehende harte R4Files-Zuordnungen als verbindliche Defaults aufgenommen:
+  TXT/R4S/BAT/LOG/MD/INI/CFG zu Notepad, BMP zu Paint und WAV/MID/SID zu
+  R4Synth.
+- Fallback- und Fehlerverhalten definiert: fehlende oder kaputte
+  `ASSOC.R4S`, unbekannte App-ID, fehlendes Zielprogramm, ungueltige Policy,
+  fehlendes `%1` und unbekannte Dateitypen.
+- Querverweise in Docs/README.txt, Docs/SDK/README.txt,
+  Docs/Desktop/R4DeskStand.txt, Docs/FileSystem/DateisystemUndStorage.txt,
+  Docs/Applications/R4X.txt und Docs/Software.md aktualisiert.
+- Host-Abnahme `DevTools/Scripts/TestScripts/CheckDefaultApps022.zig`
+  angelegt. Sie prueft den `ASSOC.R4S`-/`APPASSOC`-Vertrag, die Defaults
+  gegen `Code/Software/R4Files/src/associations.zig`, die direkte `.R4X`-
+  Ausnahme und die Dokumentations-Querverweise.
+- Zentrale Version auf `0.22.16` angehoben.
+- Abnahmen erfolgreich: `DevTools\Zig\zig.exe test
+  Code\SDK\r4os\settings.zig`, `CheckDefaultApps022.zig`,
+  `DevTools/Scripts/Build.bat -norun`, `DevTools/Scripts/Build.bat -test`,
+  `CheckRoadmap021.zig`, `CheckModuleMigration021.zig` und
+  `CheckFinalModules021.zig`. Der Boot-Smoke zeigt `R4OS V0.22.16` und
+  endet mit `TEST OK`.
+
+Notizen:
+- Standard-Apps sind fuer 0.22.X eine System-Settings-Funktion, kein Dienst.
+  Die Konfiguration bleibt menschenlesbar und DOS-/Windows-98-nah.
+- Die eigentliche Parser-/Writer-Schicht bleibt bewusst fuer 0.22.17
+  reserviert, damit der Vertrag erst belastbar feststeht und danach sauber im
+  SDK umgesetzt wird.
+
+
+Version 0.22.17
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- SDK-Modul `Code/SDK/r4os/app_assoc.zig` eingefuehrt und ueber
+  `Code/SDK/r4os.zig` als `r4os.app_assoc` exportiert.
+- Parser fuer `ASSOC.R4S` auf Basis von `r4os.settings` implementiert:
+  `APP.<ID>.TITLE`, `APP.<ID>.PATH`, `APP.<ID>.POLICY`,
+  `APP.<ID>.ARGS`, `EXT.<EXT>.APP`, `TYPE`, `SHORT`, `PREFIX` und `RANK`.
+- Writer fuer kanonische `ASSOC.R4S`-Dateien mit Header
+  `R4S_FORMAT=1` und `SCHEMA=APPASSOC` implementiert.
+- Eingebaute Defaults fuer Notepad, Paint und R4Synth im SDK hinterlegt:
+  TXT/R4S/BAT/LOG/MD/INI/CFG, BMP sowie WAV/MID/SID.
+- `Config.resolvePath()` eingefuehrt: liefert fuer `.R4X` den direkten
+  Programmstartpfad und fuer bekannte Dateitypen App-Pfad, Launch-Policy,
+  expandierte Argumente, Typnamen, Listenpraefix und Sortierrang.
+- `%1`-Expansion als eigener Helfer `expandArgs()` umgesetzt, inklusive
+  Fehlerpfad fuer fehlenden Platzhalter oder zu kleine Ausgabepuffer.
+- Robuste Fallbacks umgesetzt: fehlende, leere oder teilweise kaputte
+  `ASSOC.R4S` behalten die Defaults; ungueltige App-IDs, kaputte Keys,
+  ungueltige Policies, Nicht-R4X-Zielpfade und fehlende Zielprogramme
+  brechen die Aufloesung nicht global.
+- Host-/Unit-Tests im Modul decken Defaults, Lesen, Schreiben, Roundtrip,
+  Case-Insensitive-Endungen, `%1`-Expansion, ungueltige App-IDs, fehlende
+  Zielprogramme, kaputte Zeilen und direkte `.R4X`-Starts ab.
+- `CheckDefaultApps022.zig` erweitert, sodass Doku, SDK-Export,
+  `app_assoc.zig`, Roadmap und Versionsstand gemeinsam geprueft werden.
+- Dokumentation aktualisiert: StandardApps, SDK, README, R4DeskStand,
+  R4X-Anwendungen und Software-Inventar.
+- Zentrale Version auf `0.22.17` angehoben.
+- Abnahmen erfolgreich: `DevTools\Zig\zig.exe test
+  Code\SDK\r4os\app_assoc.zig`, `DevTools/Scripts/Build.bat -norun`,
+  `DevTools/Scripts/Build.bat -test` mit `TEST OK`,
+  `CheckDefaultApps022.zig`, `CheckRoadmap021.zig`,
+  `CheckModuleMigration021.zig` und `CheckFinalModules021.zig`.
+
+Notizen:
+- Beispiel-Backend:
+  `APP.NOTEPAD.PATH=/bin/notepad.r4x`,
+  `APP.NOTEPAD.POLICY=gui`,
+  `APP.NOTEPAD.ARGS=%1`,
+  `EXT.TXT.APP=NOTEPAD`.
+- 0.22.17 verdrahtet noch keinen produktiven R4Files-Ladepfad. Die App nutzt
+  ihre lokalen Defaults bis 0.22.18, damit die Backend-Schicht vorher isoliert
+  belastbar ist.
+
+
+Version 0.22.18
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- R4Files von der lokalen Drei-App-Tabelle auf `r4os.app_assoc` umgestellt.
+- `C:\SYS\CONFIG\ASSOC.R4S` wird beim Start geladen; fehlende, leere oder
+  teilweise kaputte Dateien behalten die SDK-Defaults.
+- Open nutzt `Config.resolvePath()` fuer TXT/BMP/WAV/MID/SID und andere
+  registrierte Endungen; `.R4X` bleibt direkter Programmstart mit Policy
+  `auto` und leerem Argument.
+- Open-With zeigt die registrierten nutzbaren Apps aus dem Backend und waehlt
+  fuer bekannte Dateitypen die Standard-App aus `ASSOC.R4S` vor.
+- Typanzeige, Listenpraefix und Sortierrang der Dateiliste werden aus dem
+  zentralen Zuordnungsvertrag abgeleitet.
+- `src/associations.zig` als R4Files-spezifische Bridge auf das SDK-Backend
+  umgebaut und mit Hosttests fuer Defaults, Overrides, kaputte Konfiguration
+  und direkte `.R4X`-Starts versehen.
+- `R4FILES.R4X /SELFTEST` eingefuehrt und in `TestInjection/AUTOEXEC.BAT`
+  aufgenommen; der Test prueft TXT/BMP/WAV-Aufloesung, unbekannte Dateien,
+  direkte `.R4X`-Starts und die Open-With-App-Liste.
+- Doku aktualisiert: StandardApps, R4Files README, README, R4DeskStand,
+  R4X-Anwendungen, FileSystem und Software-Inventar.
+- Zentrale Version auf `0.22.18` angehoben.
+- Abnahmen erfolgreich: `DevTools\Scripts\TestScripts\R4FilesAssociationTests.bat`,
+  `DevTools\Zig\zig.exe test Code\SDK\r4os\app_assoc.zig`,
+  `DevTools/Scripts/Build.bat -norun`, `DevTools/Scripts/Build.bat -test`
+  mit `TEST OK` und Boot-Log-Nachweis `R4FILES selftest: OK`.
+
+Notizen:
+- R4Files bleibt der erste echte Nutzer der Standard-App-Konfiguration.
+  Unbekannte Dateien sollen weiterhin den Open-With-Pfad anbieten.
+
+
+Version 0.22.19
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- GUI-App `APPDEF.R4X` fuer Standard-Apps gebaut und als gehostete
+  R4Desk-GUI-App unter `C:\BIN\APPDEF.R4X` ausgeliefert.
+- Dateityp-Liste zeigt Endung, Beschreibung, aktuelle Standard-App und
+  Zielpfad.
+- Detailbereich zeigt App-Titel, App-ID, Pfad, Policy, Argumenttemplate,
+  Prefix und Typinformationen.
+- Aktionen `Change...`, `Add Type`, `Remove`, `Reset`, `OK` und `Cancel`
+  umgesetzt. `Change...` waehlt zunaechst aus den in `ASSOC.R4S`
+  registrierten Apps.
+- Schreibpfad fuer `ASSOC.R4S` validiert alle sichtbaren Dateitypen, schreibt
+  kanonisch ueber `r4os.app_assoc`, liest die Datei zur Verifikation zurueck
+  und rollt bei Schreib-/Verifikationsfehlern auf den vorherigen Stand zurueck.
+- `Cancel` beendet ohne Dateischreibpfad; `Reset` bleibt bis `OK` eine reine
+  In-Memory-Aenderung.
+- `APPDEF.R4X /SELFTEST` eingefuehrt und in `TestInjection/AUTOEXEC.BAT`
+  aufgenommen. Der Test prueft Laden, Aendern, Add/Remove, Reset, Cancel ohne
+  Schreibeffekt, OK mit Schreibeffekt, sichtbare Fehlermeldung bei
+  ungueltigem Ziel und Schreibfehlerstatus.
+- R4Desk `/SMOKE-R4X` erweitert: `APPDEF.R4X` wird gefunden, als gehostete
+  GUI-App gestartet und geschlossen.
+- Doku aktualisiert: StandardApps, README, R4X-Anwendungen, R4DeskStand,
+  FileSystem und Software-Inventar.
+- Zentrale Version auf `0.22.19` angehoben.
+- Abnahmen erfolgreich: `DevTools\Zig\zig.exe test Code\SDK\r4os\app_assoc.zig`,
+  `DevTools\Scripts\TestScripts\R4FilesAssociationTests.bat`,
+  `DevTools/Scripts/Build.bat -norun`, `DevTools/Scripts/Build.bat -test`
+  mit `TEST OK`, Boot-Log-Nachweis `APPDEF selftest: OK` und
+  `R4DESK R4X smoke result: OK`, `CheckDefaultApps022.zig`,
+  `CheckR4XGui021.zig`, `CheckRoadmap021.zig`,
+  `CheckModuleMigration021.zig` und `CheckFinalModules021.zig`.
+
+Notizen:
+- `Change...` soll zunaechst aus den in `ASSOC.R4S` registrierten Apps
+  auswaehlen. Ein freier `Browse...`-Pfad kann spaeter folgen.
+
+
+Version 0.22.20
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+
+Erledigt:
+- `APPDEF.R4X` in R4Desk unter `Settings -> Default Apps` eingebunden.
+- Settings-Flyout technisch vervollstaendigt: `Default Apps` und der bereits
+  dokumentierte `Services`-Eintrag haben eigene UI-Targets, MENU.R4S-
+  Parserpfade und Dispatch-Pfade.
+- Default-Datei `Injection/sys/CONFIG/ASSOC.R4S` vorbereitet und mit dem
+  kanonischen `APPASSOC`-Defaultstand fuer Notepad, Paint und R4Synth
+  ausgeliefert.
+- Docs/ fuer Standard-Apps, `ASSOC.R4S`, R4Files-Integration,
+  `APPDEF.R4X` und R4Desk-Startmenue aktualisiert.
+- Headless-Selftests fuer Parser, R4Files-Launch-Aufloesung und APPDEF-
+  Schreibpfad weitergefuehrt.
+- GUI-Smoke fuer `APPDEF.R4X` geschaerft: R4Desk prueft jetzt den direkten
+  Start und den Start ueber `Settings -> Default Apps`.
+- Abnahme: `Settings/Default Apps menu launch: ok`, Default-Datei aus
+  `Injection/sys/CONFIG/ASSOC.R4S` im Image, APPDEF-Single-Instance-Refocus,
+  R4Files/APPDEF-Selftests und QEMU-Smoke.
+- Version auf `0.22.20` erhoeht.
+
+Abnahmen / Tests:
+- `DevTools\Zig\zig.exe test Code\SDK\r4os\app_assoc.zig`
+- `DevTools\Scripts\TestScripts\R4FilesAssociationTests.bat`
+- `DevTools\Zig\zig.exe run DevTools\Scripts\TestScripts\CheckDefaultApps022.zig`
+- `DevTools\Zig\zig.exe run DevTools\Scripts\TestScripts\CheckR4XGui021.zig`
+- `DevTools\Zig\zig.exe run DevTools\Scripts\TestScripts\CheckRoadmap021.zig`
+- `DevTools\Zig\zig.exe run DevTools\Scripts\TestScripts\CheckModuleMigration021.zig`
+- `DevTools\Scripts\Build.bat -norun`
+- `DevTools\Scripts\Build.bat -test`
+- `DevTools\Zig\zig.exe run DevTools\Scripts\TestScripts\CheckFinalModules021.zig`
+
+Notizen:
+- Diese Unterversion schliesst die Standard-App-Verwaltung ab. Danach koennen
+  Shell-`OPEN`, R4Desk-Launch-Broker oder spaeter `WINSVC.R4X` denselben
+  Zuordnungsvertrag nutzen.
+
+
+Version 0.22.21
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `EXPLORER.R4X` als gehostete GUI-App unter `Code/Software/Explorer/`
+  erstellt und als `C:\BIN\EXPLORER.R4X` ins Image eingebunden.
+- Explorer als Alternative zu `R4FILES.R4X` eingeordnet: R4Files bleibt der
+  kompakte bestehende Dateimanager, Explorer bildet die Windows-98-naehere
+  Ordner-/Computer-Oberflaeche.
+- Computer-Root als unterste Ebene umgesetzt. Die Ansicht listet gemountete
+  Laufwerke wie `C:` und `D:` als grosse Laufwerksicons; Doppelklick oder
+  Enter oeffnet die jeweilige Laufwerkswurzel.
+- Desktop-Verknuepfung `Computer` in `DESKTOP.R4S` und in den R4Desk-Defaults
+  ergaenzt. Der Shortcut startet `EXPLORER.R4X`.
+- Klassische Menubar umgesetzt: `Datei`, `Bearbeiten`, `Ansicht`,
+  `Wechseln zu`, `Favoriten`, `?`.
+- Win98-nahe Toolbar/NavBar umgesetzt: `Zurueck`, `Vorwaerts`, `Aufwaerts`,
+  `Ausschneiden`, `Kopieren`, `Einfuegen`, `Loeschen`. `Rueckgaengig` bleibt
+  fuer diesen ersten Explorer-Stand bewusst ausgespart.
+- Adresszeile und grosse Iconansicht umgesetzt. Ordner, Dateien und Laufwerke
+  nutzen stabile Icon-Zellen mit Auswahlrahmen, Tastaturauswahl,
+  Doppelklick-Handling und Scrollpfad.
+- Navigation belastbar verdrahtet: Zurueck-/Vorwaerts-History, Aufwaerts,
+  Computer-Root, Laufwerkswechsel, Ordnerwechsel, Refresh und Statusmeldungen
+  fuer nicht anwendbare Aktionen.
+- Dateioperationen fuer Ausschneiden, Kopieren, Einfuegen und Loeschen ueber
+  die vorhandene ProgramApi angebunden. Computer-Root sperrt destruktive oder
+  dort sinnlose Dateiaktionen sichtbar.
+- `ASSOC.R4S`/`r4os.app_assoc` angebunden, damit Datei-Oeffnen und Open-With
+  denselben Standard-App-Vertrag wie R4Files nutzen.
+- R4Desk behandelt `EXPLORER.R4X` als Single-Instance-GUI-App, damit erneute
+  Starts den bestehenden Explorer fokussieren/restaurieren.
+- Abnahme vorbereitet: `EXPLORER.R4X /SELFTEST` prueft Standard-App-
+  Aufloesung, Computer-/Laufwerksbasis, Icon-Layout-Konstanten und
+  Copy/Move/Delete-Dateioperationen.
+- R4Desk-`/SMOKE-R4X` erweitert: direkter Explorer-Start, WINSVC-Spiegelung,
+  Desktop-Shortcut `Computer` und Single-Instance-Refokus werden geprueft.
+- Version auf `0.22.21` erhoeht.
+
+Notizen:
+- Designvorbild ist Windows 98 Explorer im einfachen Ordnerfenster. R4Files
+  bleibt als bestehender kompakter Dateimanager erhalten.
+- Der linke Explorer-Bereich bleibt fuer spaetere Praezisierung offen. 0.22.21
+  schliesst bewusst die belastbare rechte Icon-/Computer-Ansicht ab.
+
+
+Version 0.22.22
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Gemeinsames 0.22.X-Abschlussgate fuer Dienste, Standard-Apps und Explorer
+  eingefuehrt.
+- Neues Zusatzgate `DevTools/Scripts/TestScripts/CheckRelease022.zig`
+  angelegt. Es prueft Version, Roadmap, Software-Inventar, zentrale Docs,
+  `SERVICES.R4S`, `ASSOC.R4S`, `DESKTOP.R4S`, `MENU.R4S`, Test-AUTOEXEC,
+  Image-Eintraege und Boot-Smoke-Marker.
+- Alle neuen Konfigurationsdateien in die Abnahme aufgenommen:
+  `Injection/sys/CONFIG/SERVICES.R4S`,
+  `TestInjection/sys/CONFIG/SERVICES.R4S`,
+  `Injection/sys/CONFIG/ASSOC.R4S`, `Injection/R4DESK/DESKTOP.R4S` und
+  `Injection/R4DESK/MENU.R4S`.
+- Alle neuen R4X-Artefakte bleiben im Software-Inventar erfasst:
+  `SERVICES.R4X`, `EXSVC.R4X`, `CLIPSVC.R4X`, `DNSSVC.R4X`, `DHCPSVC.R4X`,
+  `TIMESVC.R4X`, `AUDSVC.R4X`, `R4SLSVC.R4X`, `TCPSVC.R4X`, `UDPSVC.R4X`,
+  `WINSVC.R4X`, `APPDEF.R4X` und `EXPLORER.R4X`.
+- Regression fuer bestehende Apps im Abschlussgate abgesichert: QEMU-Smoke und
+  R4Desk-`/SMOKE-R4X` pruefen weiter `R4FILES.R4X`, `DESK.R4X`,
+  `NOTEPAD.R4X`, `PAINT.R4X`, `SYNTH.R4X`, `NETCFG.R4X`, `DEVMGR.R4X`,
+  `MEMVIEW.R4X`, Diagnostics und die neuen Verwaltungs-Apps.
+- Fehler- und Recovery-Pfade im Gate sichtbar gemacht: fehlende/kaputte
+  Standard-App-Konfigurationen, ungueltige Zielprogramme, APPDEF-
+  Schreibfehlerstatus, direkte `.R4X`-Starts, ungueltiger Service-Start,
+  doppelte Service-Eintraege, Disable/Enable, Remove, Restart-Cleanup und
+  Service-Selftests.
+- Bestehende Host-Abnahmen auf 0.22.22 nachgezogen:
+  `CheckDefaultApps022.zig`, `CheckFinalModules021.zig` und
+  `CheckRoadmap021.zig`.
+- Abschlussabnahmen definiert und ausgefuehrt: `Build.bat -norun`,
+  `Build.bat -test`, `CheckR4XGui021.zig`, `CheckRoadmap021.zig`,
+  `CheckModuleMigration021.zig`, `CheckDefaultApps022.zig`,
+  `CheckFinalModules021.zig`, `CheckRelease022.zig`,
+  `R4FilesAssociationTests.bat`, SDK-/Desktop-Unit-Tests.
+- Zentrale Version in `Code/src/version.zig` auf `0.22.22` erhoeht.
+
+Notizen:
+- 0.22.X wird erst als rund betrachtet, wenn die neuen Verwaltungsfunktionen
+  im normalen R4Desk-Workflow benutzbar sind und die alten Werkzeuge weiterhin
+  verlaesslich laufen.
+- Dieses Gate ist bewusst kein neues Feature, sondern die Belastbarkeitsmarke
+  fuer die komplette 0.22.X-Schicht.

@@ -1,0 +1,246 @@
+﻿*** Kernel Refactor Roadmap Leitbild ***
+In dieser Roadmap befassen wir uns im Verlauf mehrerer großer Versionen mit der säuberung des Kernels.
+Aktuell wurden viele Funktionen nach
+kernelold.zig ausgelagert und in src/old/ verschoben.
+Wir holen die nach und nach zurück in main.zig, kontrollieren dabei aber alles.
+Was aus dem Kernel raus kann soll in Software, Treiber und Protokolle untergebracht werden.
+Im Zuge dieses Refactor ist auch die Dokumentation zu aktualisieren und pflegen.
+
+Grundsatz fuer alle Unterversionen:
+- Keine halben Umbauten: Eine Unterversion ist erst erledigt, wenn Code, Imports, Doku, Version und Abnahme zusammenpassen.
+- Keine stillen Doppelpfade: Wenn eine Initialisierung nach `main.zig` wandert, darf sie nicht weiterhin produktiv in `kernelold.zig` laufen.
+- Boot-kritische Pfade muessen konservativ behandelt werden. Was fuer Boot, `C:\`, Speicher, Interrupts oder fruehe Ausgabe noetig ist, bleibt built-in, bis ein stabiler Ersatz existiert.
+- Kernel-Verschlankung ist ein ausdrueckliches Ziel. Fallbacks und parallele Built-in-Pfade werden nur genutzt, wenn sie fuer Boot-Stabilitaet, Migration oder echte Abnahme noetig sind.
+- Nicht bootkritische Treiber sollen nach erfolgreicher R4D-Auslagerung aus dem Kernel entfernt werden, statt dauerhaft als Built-in-Fallback liegen zu bleiben.
+- Jeder Umzug braucht klare Modulgrenzen: Boot-Schicht, Runtime-Core, Treiber, API und Diagnose duerfen nicht unkontrolliert vermischt werden.
+- Jede neue Boot-Schicht braucht eine klare Zustands- und Fehlersemantik: entweder erfolgreich initialisiert, sauber uebersprungen oder fatal beendet. Stilles Weiterlaufen nach kaputten Pflichtpfaden ist kein erledigter Zustand.
+- `kernelold.zig` darf waehrend der Migration nur noch als Legacy-Bruecke dienen. Neu umgezogene Initialisierungen muessen aus `kernelold.zig` verschwinden oder dort explizit als bereits initialisierter Zustand konsumiert werden.
+- Zwischenversionen duerfen lauffaehig klein sein, aber nicht fachlich halb: Keine Unterversion wird abgeschlossen, wenn Besitzgrenzen, Boot-Reihenfolge oder Abhaengigkeiten noch absichtlich unklar bleiben.
+- Eine Unterversion darf bewusst nur Vertrag, Diagnose oder Probe liefern,
+  wenn sie klar als nicht-produktiver Ersatz gekennzeichnet ist. Produktive
+  Umschaltung und Entfernen des Altpfads passieren erst nach echter
+  Funktionsabnahme.
+- Jede Pruefung endet mit einer Entscheidung. Ein Punkt bleibt offen, bis das
+  Ergebnis in Code, Doku oder als konkret versionierter Folgepunkt festgehalten
+  ist.
+- Testluecken werden vor dem Abschluss geschlossen. Vorhandene Testskripte
+  werden namentlich genutzt; wenn keines den neuen Vertrag abdeckt, gehoert
+  ein gezieltes Testskript zur Unterversion.
+- Diagnose-Altpfade duerfen nicht still im normalen Produktivpfad erreichbar
+  bleiben. Sie brauchen einen expliziten Diagnose-/Kompatibilitaetsvertrag,
+  sichtbare Statusausgabe und eine eigene Abnahme.
+- Vor jedem Abschluss wird gezielt nach Rest-Imports, Doppelaufrufen und verdeckten Abhaengigkeiten gesucht. Gefundene Altlasten werden entweder beseitigt oder in der Roadmap als bewusster Folgepunkt notiert.
+- Jede abgeschlossene Unterversion erhoeht `Injection/sys/CONFIG/VERSION.R4S` auf die passende Version und wird danach gepusht.
+- Mindestens `DevTools/Scripts/Build.bat -norun` gehoert zu jeder Code-Unterversion. Bei Boot-, IRQ-, Input-, Storage-, USB- oder R4D-Aenderungen gehoert `DevTools/Scripts/Build.bat -test` dazu.
+- GUI-/Hardware-nahe Punkte bekommen zusaetzlich eine klare manuelle Sichtabnahme durch den User, wenn QEMU-Smoke allein nicht reicht.
+
+-------------------------------------------
+Ab hier beginnen die Versionen und ab hier darf auch bereinigt werden.
+Das Refactor Leitbild muss bei einer Roadmap Bereinigung stehen bleiben
+-------------------------------------------
+
+Rahmen fuer 0.40.X
+-------------------------------------------
+Ziel ist der naechste chronologische Besitzschnitt nach `audio_boot`: die
+fruehe Netzwerk-/IPC-Basis aus `kernelold.kmain()`. Der Block bleibt bewusst
+eng gefasst, damit keine spaeteren Bootphasen vermischt werden.
+
+Umfang:
+- `memory_boot.dumpBlockSummary()` als verbleibende Prelude-Diagnose aus
+  `kernelold.kmain()` herausziehen.
+- Fruehe Netzwerk-/IPC-Initialisierung in eine neue Kernel-Boot-Orchestrierung
+  ueberfuehren: `net_core.init()`, `serial_link.init()`, `ipc.init()`,
+  `net_ipc_services.init()` und `net_config.applyBootConfig(loaded_config)`.
+- `net_config.applyBootConfig(...)` bleibt nach `net_core.init()`, weil
+  `net_core.init()` den Netzwerkzustand initialisiert/zuruecksetzt.
+- Der neue Bootschnitt dokumentiert und meldet seinen Status eindeutig
+  (Core, Boot-Konfiguration, Serial-Link, IPC, Netzwerk-IPC-Services).
+
+Nicht Umfang:
+- USB-HID-Boot, Driver-Plan/R4D-Policy, Driver-Registry-Dump, R4P-Start,
+  Task-/Scheduler-Start, DHCP-Boot-Acquire und Launcher-Start bleiben in
+  spaeteren chronologischen Schnitten.
+- Es wird kein Netzwerktreiber in den Kernel zurueckverlagert. Hardwarepfade
+  wie RTL8139 bleiben produktiv als R4D.
+
+0.40.X gilt erst als belastbar abgeschlossen, wenn:
+- `kernelold.kmain()` keine fruehen Netzwerk-/IPC-Initialisierer mehr besitzt.
+- Jede verbleibende Netzwerk-Nutzung in `kernelold.zig` namentlich als
+  spaeterer chronologischer Folgepunkt eingeordnet ist.
+- `kernel/network_boot.zig` eine eindeutige Init-Reihenfolge, Idempotenz und
+  Statusabfrage besitzt.
+- Loader-Config-Fehler, fehlender Adapter, fehlende COM2 und normaler Boot ohne
+  Netzwerkkarte sichtbar und stabil behandelt werden.
+- Mindestens `DevTools/Scripts/Build.bat -norun`,
+  `DevTools/Scripts/Build.bat -test`,
+  `DevTools/Scripts/TestScripts/Run-NetEnvironmentTest.ps1` und
+  `DevTools/Scripts/TestScripts/Run-NetIpcServiceTest.ps1` erfolgreich
+  ausgefuehrt oder durch dokumentiert passendere 0.40-spezifische Smokes
+  ersetzt wurden.
+
+Version 0.40.0
+-------------------------------------------
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `memory_boot.dumpBlockSummary()` aus `kernelold.kmain()` entfernt und in
+  `main.zig` direkt nach erfolgreichem `memory_boot.initCore()` angebunden.
+- `Code/src/kernel/network_boot.zig` als neuen Bootschnitt angelegt, ohne
+  produktive Netzwerk-/IPC-Initialisierung umzuziehen.
+- Statusmodell fuer den Bootschnitt festgelegt: nicht initialisiert,
+  Contract bereit, Core bereit, Boot-Konfiguration angewendet, Serial-Link
+  bereit, IPC bereit, Netzwerk-IPC-Services bereit und failed.
+- Idempotenter Vertrag umgesetzt: `prepareContract()` markiert nur den
+  Vertragszustand und erzeugt keine zweite Initialisierung, keine
+  Config-Anwendung und keine IPC-Service-Registrierung.
+- Sichtbarer Bootstatus `Network boot [contract]` im Standard-Smoke
+  nachgewiesen.
+- Legacy-Grenze festgehalten: `kernelold.zig` besitzt fuer 0.40.0 weiterhin
+  die produktive fruehe Netzwerk-/IPC-Initialisierung und die spaete DHCP-
+  Nutzung.
+- Doku aktualisiert: `Docs/Core/KernelBereinigung.txt`,
+  `Docs/Core/Architektur.txt` und `Docs/README.txt`.
+- Sichtbare Kernel-Version auf 0.40.0 gesetzt.
+- Abnahme erfolgreich:
+  `git diff --check`,
+  `DevTools/Scripts/Build.bat -norun`,
+  `DevTools/Scripts/Build.bat -test`.
+
+Notizen:
+0.40.0 ist der Vertragsschnitt. Der produktive Netzwerk-/IPC-Umzug bleibt
+vollstaendig fuer 0.40.1 vorgesehen; es gibt keine halb umgeschalteten Init-
+Aufrufe.
+
+Version 0.40.1
+-------------------------------------------
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Produktive fruehe Netzwerk-/IPC-Initialisierung in
+  `kernel/network_boot.zig` uebernommen.
+- `main.zig` ruft nach `audio_boot.init()` nun `network_boot.init()` auf.
+- Der Bootschnitt initialisiert in eindeutiger Reihenfolge:
+  `net_core.init()`, danach `net_config.applyBootConfig(loaded_config)`,
+  danach `serial_link.init()`, `ipc.init()` und `net_ipc_services.init()`.
+- `network_boot.status()` fuehrt neben den Phasen auch Adapteranzahl,
+  Serial-Link-Praesenz, Config-Quelle, ungueltige Config-Optionen und eine
+  Begruendung fuer Diagnose- und Folgeschritte.
+- Doppelte Initialisierung wird durch den idempotenten Status verhindert;
+  ein zweiter `network_boot.init()`-Aufruf gibt den bestehenden fertigen
+  Zustand zurueck.
+- Fehlende Loader-Initialisierung oder fehlende Loader-Config beendet den
+  Netzwerk-Bootschnitt fatal, statt still mit Defaults weiterzulaufen.
+- `kernelold.kmain()` besitzt keine direkten fruehen Init-Aufrufe und keine
+  direkten Imports mehr fuer Serial-Link, IPC oder Net-IPC-Services.
+- `kernelold.zig` nutzt `net_config` und `net_core` nur noch fuer den spaeteren
+  DHCP-Boot-Acquire; dieser bleibt ein chronologischer Folgepunkt ausserhalb
+  des fruehen 0.40.1-Bootschnitts.
+- Per Suche belegt, dass `net_core.init()`, `serial_link.init()`,
+  `ipc.init()`, `net_ipc_services.init()` und
+  `net_config.applyBootConfig(...)` nur noch im neuen Bootschnitt liegen.
+- Standard-Bootpfad ohne produktive Netzwerkkarte und mit vorhandener
+  `NET`-Konfiguration aus `TestInjection/CONFIG.R4S` abgenommen.
+- Doku aktualisiert: `Docs/Core/KernelBereinigung.txt`,
+  `Docs/Core/Architektur.txt` und `Docs/README.txt`.
+- Sichtbare Kernel-Version auf 0.40.1 gesetzt.
+- Abnahme erfolgreich:
+  `DevTools/Scripts/Build.bat -norun`,
+  `DevTools/Scripts/Build.bat -test`.
+
+Notizen:
+0.40.1 ist der produktive Besitzwechsel fuer die fruehe Netzwerk-/IPC-Basis.
+USB-HID, Driver-Policy/R4D, R4P-Start, Task/Scheduler, DHCP-Boot-Acquire und
+Launcher bleiben bewusst ausserhalb dieser Unterversion.
+
+Version 0.40.2
+-------------------------------------------
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Netzwerk-/IPC-Bootstatus als eigenen `[NETBOOT]`-Bootlog-Vertrag
+  festgelegt: Core, Boot-Config, Serial-Link, IPC, Net-IPC-Services und ein
+  Gesamtsnapshot mit Phase, Adapteranzahl, Serial-Link-Praesenz,
+  Config-Quelle, ungueltigen Config-Optionen und Begruendung.
+- `network_boot.dumpStatus()` als Diagnoseausgabe ergaenzt, ohne neue
+  produktive Netzwerk-Policy oder neue Initialisierungspfade einzufuehren.
+- Fatalpfade schreiben `[NETBOOT][FATAL] reason=...` in den Bootlog, bevor der
+  sichtbare Boot fatal stoppt.
+- Neues gezieltes TestScript
+  `DevTools/Scripts/TestScripts/Run-NetBootStatusTest.ps1` angelegt. Es prueft
+  statisch die 0.40.1-Besitzgrenze, startet einen seriellen Boot-Smoke und
+  validiert die sichtbare `NETBOOT`-Statuszeile inklusive fehlendem Adapter
+  und fehlender COM2.
+- Abschlussaudit fuer die 0.40.1-Besitzgrenze durchgefuehrt: keine direkten
+  fruehen Init-Aufrufe und keine Restimporte fuer Serial-Link, IPC oder
+  Net-IPC-Services in `kernelold.zig`; keine doppelte Config-Anwendung.
+- Verbleibende Netzwerk-Nutzung in `kernelold.zig` bestaetigt und als spaeter
+  DHCP-Boot-Acquire eingeordnet.
+- Netzwerk-/IPC-/Serial-Link-Smokes namentlich zugeordnet und ausgefuehrt:
+  `Run-NetBootStatusTest.ps1` fuer Besitzgrenze, sichtbare `NETBOOT`-Zeile
+  und Standardpfad ohne Netzwerkkarte/COM2 sowie
+  `Run-NetEnvironmentTest.ps1` fuer den produktiven R4X-/SDK-Pfad ueber
+  `R4CONFIG NETTEST` und `IPCONFIG /ALL`.
+- Alte COMMAND-Built-in-Smokes wie `NETENVTEST`, `NETSVC` und `NETBPTEST`
+  wurden nicht als 0.40-Gate verwendet; die produktive Shell besitzt diese
+  Legacy-Diagnosen nicht mehr. Die passende Nachfolge bleibt die separate
+  NETDIAG-/R4NET-Test-Harness-Migration, nicht der fruehe Bootschnitt.
+- Doku aktualisiert: `Docs/Core/KernelBereinigung.txt`,
+  `Docs/Core/Architektur.txt`, `Docs/Network/README.txt` und
+  `Docs/README.txt`.
+- Sichtbare Kernel-Version auf 0.40.2 gesetzt.
+- Abnahme erfolgreich:
+  `git diff --check`,
+  `DevTools/Scripts/Build.bat -norun`,
+  `DevTools/Scripts/Build.bat -test`,
+  `DevTools/Scripts/TestScripts/Run-NetBootStatusTest.ps1`,
+  `DevTools/Scripts/TestScripts/Run-NetEnvironmentTest.ps1`.
+
+Notizen:
+0.40.2 ist der Haertungs- und Nachweisstand fuer den Netzwerk-/IPC-Bootschnitt.
+0.40.3 bleibt das Abschlussaudit fuer die ganze 0.40.X-Reihe.
+
+Version 0.40.3
+-------------------------------------------
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Abschlussaudit fuer 0.40.X durchgefuehrt: `main.zig` startet
+  `network_boot.init()` nach `audio_boot.init()` und vor `kernelold.kmain()`;
+  `kernelold.zig` besitzt keine fruehen Netzwerk-/IPC-Initialisierer mehr.
+- Besitzgrenze maschinell gehaertet: `Run-NetBootStatusTest.ps1` prueft
+  `main.zig`, `network_boot.zig` und `kernelold.zig` statisch auf den
+  0.40-Vertrag, einschliesslich genau einem Core-/Config-/Serial-/IPC-Init
+  im Bootschnitt und ohne doppelte Config-Anwendung.
+- Statusverluste geschlossen: `[NETBOOT]`-Bootlog-Vertrag, kompakte
+  sichtbare Statuszeile, Fatalstatus und `network_boot.dumpStatus()` sind
+  im Audit verankert.
+- Verbleibende Netzwerk-Nutzung in `kernelold.zig` ist namentlich nur noch
+  der bewusst spaetere DHCP-Boot-Acquire und kein frueher Netzwerk-/IPC-
+  Initialisierungspfad.
+- Dokumentation unter `Docs/` aktualisiert: Kernel-Bereinigung, Architektur,
+  Netzwerk-README und zentrale README beschreiben 0.40.X als abgeschlossen.
+- Alle 0.40.0- bis 0.40.2-Punkte sind erledigt; alte COMMAND-Built-in-
+  Netzwerk-Smokes bleiben als separater NETDIAG-/R4NET-Test-Harness-
+  Folgepunkt ausserhalb von 0.40.X eingeordnet.
+- Sichtbare Kernel-Version auf 0.40.3 gesetzt.
+- Finale Abnahme: `git diff --check`, `DevTools/Scripts/Build.bat -norun`,
+  `DevTools/Scripts/Build.bat -test`, `Run-NetBootStatusTest.ps1` und
+  `Run-NetEnvironmentTest.ps1`.
+- Nach erfolgreicher Abnahme pushen.
+
+Notizen:
+0.40.X ist damit abgeschlossen. DHCP-Boot-Acquire, USB-HID, Driver-Plan,
+R4P, Scheduler und Launcher bleiben bewusst ausserhalb dieses Blocks. Sie
+werden danach neu und chronologisch geplant.

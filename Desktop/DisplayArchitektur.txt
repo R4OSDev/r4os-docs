@@ -1,0 +1,86 @@
+﻿R4OS Display-Architektur
+=========================
+
+Schichten
+---------
+
+BootDisplay
+  Fruehe Ausgabe auf dem Limine-Framebuffer.
+
+DisplayManager
+  Aktives Backend, sichtbare Flaeche und Copy/Present-Grundlage.
+
+SoftwareSurface
+  XRGB32-Speicherflaeche fuer Komposition.
+
+Presenter
+  Vertrag zum Veroeffentlichen fertiger Bereiche.
+
+R4DRAW
+  Oeffentliche Zeichen-, Font-, Bild-, Surface- und Present-Funktionen.
+
+R4DESK
+  Fenster-, Desktop-, Event- und Hostzustand.
+
+R4DESK.R4X
+  Externe Desktopkomposition und Fensterverwaltung.
+
+Pixelvertrag
+------------
+
+Softwareflaechen verwenden XRGB32. Pitch, Breite, Hoehe, Clipping und
+Quell-/Zielrechtecke werden technisch validiert. Present kopiert nur fertige
+Pixelbereiche zum aktiven Backend.
+
+Eigentuemerschaft
+-----------------
+
+Anwendungen zeichnen ueber R4DRAW in ihre vorgesehenen Ziele. Der Desktop
+entscheidet ueber Fensterposition, Damage, Z-Order und sichtbares Present.
+Fruehe Kernel-/Fatal-/Bootausgabe bleibt eine getrennte BootDisplay-Aufgabe.
+
+Framebuffer-Konsole seit 0.59.4
+--------------------------------
+
+Die fruehe/raw Framebuffer-Konsole fuehrt nach einem eigenen `clear` oder
+`clearFramed` ein begrenztes RAM-Zellraster mit Glyph und den wirksamen
+Vorder-/Hintergrundfarben. Ein Zeilenscroll verschiebt dieses Raster und
+schreibt den Textbereich streng zeilenweise neu; der sichtbare PAT-WC-/GPU-
+Framebuffer wird im Normalpfad nicht mehr zurueckgelesen. Splash-Rendering
+und User-Session-Handoff invalidieren das Raster, weil ab dann ein externer
+Displaypfad die Pixel besitzt.
+
+Ist das Raster wegen externer Pixel, Geometriewechsel oder Zelllimit nicht
+autoritativ, bleibt die bisherige Pixel-Semantik erhalten. Der Fallback
+verschiebt die Region ueber ausgerichtete volatile 64-/32-Bit-Zugriffe und
+nutzt Bytes nur fuer Alignmentreste. Ausgerichtete 32-bpp-Einzelpixel werden
+ebenfalls mit genau einem volatile `u32` geschrieben.
+
+Remote Frames
+-------------
+
+R4DESK stellt aktuelle Desktop-/Remote-Frame-Informationen bereit. RDPSVC
+liest fertige Frames und liefert Eingabe ueber den R4DESK-Vertrag zurueck.
+Remote-Transport ist kein zweiter Display-Owner.
+
+Seit 0.59.6 bindet RDPSVC die Sitzung vor Demand Active an die tatsaechliche
+Remote-Frame-Breite und -Hoehe. Dieselbe Geometrie begrenzt Vollbildstreifen,
+Dirty-/Cursorrechtecke und absolute Mauseingaben. Ein Geometriewechsel waehrend
+der Sitzung wird sichtbar nach LOGSVC geschrieben und beendet die Sitzung
+kontrolliert, statt Rechtecke mit veralteten Grenzen zu senden. Der Sender
+liest pro 256-Pixel-Kachel; die Display-/Remote-Frame-Groesse bestimmt daher
+keinen grossen RDPSVC-Zeilenpuffer mehr.
+
+Capability-Regel
+----------------
+
+Optionale R4DRAW-/R4DESK-Felder werden mit hasFn geprueft. Tabellenversionen
+allein geben keine Funktion frei.
+
+Abnahme
+-------
+
+    Tests/Gate/Run-ConsoleScrollPerformanceContract0594.ps1
+    DevTools/Scripts/Build.bat -app DisplayDiag
+    DevTools/Scripts/Build.bat -app Desktop
+    DevTools/Scripts/Build.bat -norun

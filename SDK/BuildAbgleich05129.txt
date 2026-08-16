@@ -1,0 +1,100 @@
+﻿Build-Abgleich 0.51.29
+======================
+
+Ziel
+----
+0.51.29 gleicht den internen R4OS-Build mit der ueberarbeiteten SDK-
+Struktur ab. Der interne Image-Build darf weiter als lokale Gesamt-
+Orchestrierung existieren, aber die Einzelmodul-Buildwahrheit fuer R4X,
+R4X-C, R4D und R4P soll aus dem SDK-Profil kommen.
+
+Massgebliche Quellen
+--------------------
+- `Code/System/SDK/Contract/` ist die fachliche und binaere Vertragsquelle fuer ABI und
+  API.
+- `Code/System/SDK/r4os/build.zig` ist die Buildprofil-Implementierung fuer
+  externe und interne R4OS-Module.
+- `Code/build.zig` ist der Kernel-Build plus expliziter Dev-Aggregate fuer
+  Image- und Smoke-Abnahmen.
+- `DevTools/Scripts/Build.bat` baut das Gesamtimage und startet Tests. Es ist
+  kein zweiter Ort fuer R4X-/R4D-/R4P-Buildregeln.
+- R4CodePad soll dieselben SDK-Profile und dieselben Contract-/SDK-Pfade
+  verwenden, statt eigene ABI- oder Linkprofile zu besitzen.
+
+Umsetzung
+---------
+- `Code/build.zig` initialisiert den lokalen Dev-Aggregate ueber
+  `r4os_build.Sdk.init`.
+- Der gemeinsam genutzte R4XBuilder kommt aus diesem SDK-Profil.
+- R4X-Zig-Programme laufen im Dev-Aggregate ueber `Sdk.addR4XStart`.
+- R4X-C-Programme laufen im Dev-Aggregate ueber `Sdk.addR4XStartC`.
+- R4X-Services laufen ueber `Sdk.addR4XService`.
+- R4D-Treiber laufen ueber `Sdk.addR4D`.
+- R4P-Protokolle laufen ueber `Sdk.addR4P`.
+- Der interne Build benutzt damit dieselben zentralen Werte fuer
+  `SDK/r4os.zig`, `SDK/r4os/linker/r4os_module.ld`,
+  `SDK/Shared/C/include`, `SDK/Shared/C/src/r4xstart_startup.c`,
+  R4XBuilder, R4XStart, Imports und R4M0-Packaging wie externe SDK-
+  Projektbuilds.
+
+Ergebnis des Audits
+-------------------
+- Die produktiven App-/Diagnostic-/Service-/Driver-/Protocol-Helfer in
+  `Code/build.zig` enthalten keine eigenen harten Kopien mehr von
+  SDK-Modulpfad, Linker-Script, C-Headerpfad, C-Startup oder R4XBuilder.
+- Diese Pfade stehen im internen Dev-Aggregate nur noch zentral im kleinen
+  `devSdkProfile`-Adapter, der die repo-lokalen SDK-Pfade an das normale
+  SDK-Profil bindet.
+- `Code/build.zig` enthaelt weiterhin eine handgepflegte Liste der lokalen
+  Module. Diese Liste ist eine Dev-/Image-Orchestrierung, nicht die
+  langfristige Projektwahrheit. Langfristig sollen fertige Artefakte und
+  `module.R4MF`-Manifeste eingesammelt werden.
+- `DevTools/Scripts/Build.bat` bleibt der Gesamtimage- und Test-Orchestrator.
+  Es ruft weiterhin den Code-Aggregate fuer das Standardimage auf, weil das
+  Image heute noch alle Standardartefakte gesammelt braucht. Die eigentliche
+  R4X-/R4D-/R4P-Baulogik liegt dabei aber im SDK-Profil.
+- R4M0-Negativ-/Konformitaetsfixtures bleiben bewusst niedrigstufig. Sie
+  pruefen Container-, Loader- und ABI-Faelle und sind keine Vorlage fuer neue
+  Anwendungen. Seit 0.55.2 sind produktive R4L-API-Gruppen echte Projekte
+  unter `Code/System/Libraries/<Name>/` und nicht mehr Teil dieses
+  Fixture-Sonderpfads.
+
+Isolierte Sonderpfade
+---------------------
+Folgende Pfade bleiben absichtlich nicht auf die normalen SDK-Appprofile
+umgestellt:
+
+- Historische R4L-/R4M0-Fixtures fuer Loader-, ABI-, Import-/Export- und
+  Relocation-Tests. Produktive R4L-Rohmodule wie R4SYS, R4DESK, R4DRAW,
+  R4NET, R4AUDIO, R4DEV und R4STD gehoeren seit 0.55.2 nach
+  `Code/System/Libraries/<Name>/`.
+- `System/SDK/Tests/ModuleFixtures/R4M021/*` und alte API1-/Bad-Import-Fixtures. Sie testen
+  Annahme, Ablehnung, Relocations, Imports, Exports und Loader-Diagnosen.
+- R4M0-Rohmodule mit bewusst kaputten Metadaten oder Abhaengigkeiten. Sie
+  duerfen nicht in Templates, R4CodePad-Beispiele oder normale App-
+  Projektstrukturen wandern.
+
+R4CodePad-Bezug
+---------------
+R4CodePad soll fuer die ersten Projektarten dieselbe Begriffs- und
+Buildstruktur verwenden:
+
+- `R4X_Zig` nutzt R4XStart, `SDK/r4os.zig`, das SDK-Linkprofil,
+  R4L-Imports und R4XBuilder.
+- `R4X_C` nutzt dieselben R4XStart-/R4L-/R4M0-Werte plus
+  `SDK/Shared/C/include` und `SDK/Shared/C/src/r4xstart_startup.c`.
+- Die IDE-Konfiguration darf Pfade wie SDK-Root, R4XBuilder, Deploy-Ziel,
+  Runner und Build.bat enthalten. Sie darf daraus aber keine zweite ABI-
+  Wahrheit machen.
+
+Empfehlungen
+------------
+- Neue App-/Diagnostic-/Service-/Driver-/Protocol-Builds sollen keine direkten
+  Aufrufe von `addR4XWithOptions`, `addR4DWithOptions` oder `addR4PWithOptions`
+  in `Code/build.zig` erhalten, wenn ein SDK-Profilpfad passt.
+- Die handgepflegte Dev-Aggregate-Liste sollte spaeter durch Manifest- oder
+  Projekt-Sammlung ersetzt werden.
+- Negative Loader-Fixtures sollten unter Test-/Conformance-Kontexten bleiben
+  und in Doku/Checks klar als nicht produktiv markiert sein.
+- Falls weitere repo-lokale Standardwerte noetig werden, sollten sie in einem
+  kleinen SDK-Hostprofil oder Adapter landen, nicht verteilt in App-Helfern.

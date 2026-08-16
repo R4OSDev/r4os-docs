@@ -1,0 +1,117 @@
+﻿R4OS 0.53.32 - Page-I/O-Lifecycle-Besitz ohne automatische Eviction
+====================================================================
+
+Ziel
+----
+
+0.53.32 verbindet die Backing-Store-Slot-Tabelle mit den produktiven
+R4X-VM-/Programmlifecycle-Grenzen, ohne schon automatische Eviction,
+Page-Fault-I/O, Swap oder einen globalen Pager einzufuehren.
+
+Die Version beseitigt die wichtigste Besitzluecke aus 0.53.31: Slots sind
+nicht mehr nur an eine freie Diagnose-Owner-ID gebunden. Jeder Slot traegt
+nun ein Owner-Kind:
+
+- Diagnose
+- R4X-Instanz
+- VM-Region
+- spaeterer Pager
+
+ABI-Stand
+---------
+
+ProgramApi v128 ersetzt die v127-Signaturen von
+`memory_backing_store_slot_probe(...)` und `memory_page_io_probe(...)`
+vollstaendig. Es gibt keinen Fallback auf v127; mitgelieferte Programme
+werden neu gebaut.
+
+Aktuelle Slot-Signatur:
+
+`memory_backing_store_slot_probe(path, backing_bytes, operation,
+requested_slots, reservation_id, owner_kind, owner_id, region_id, flags,
+out)`
+
+Aktuelle Page-I/O-Signatur:
+
+`memory_page_io_probe(path, backing_bytes, operation, region_id,
+region_offset, reservation_id, slot_index, page_count, owner_kind, owner_id,
+expected_generation, page, flags, out)`
+
+Neue Felder:
+
+- `owner_kind` in Slot- und Page-I/O-Proben
+- `region_id` in Slot-Proben
+- `memory_backing_store_slot_last_owner_kind`
+- `memory_backing_store_slot_last_region_id`
+- `memory_backing_store_slot_lifecycle_cleanup_count`
+- `memory_backing_store_slot_lifecycle_released_ranges`
+- `memory_backing_store_slot_lifecycle_released_slots`
+- `memory_page_io_owner_kind`
+
+Lifecycle-Regeln
+----------------
+
+`vmRelease(region_id)` gibt regionengebundene VM-Region-Slots frei und
+raeumt auch R4X-Instanz-Slots, die explizit an dieselbe Region gebunden sind.
+Ungebundene R4X-Instanz-Slots bleiben dabei erhalten.
+
+Program-Ende, Kill und Loader-Fehler rufen den R4X-Owner-Cleanup auf. Dieser
+raeumt alle R4X-Instanz- und VM-Region-Slots desselben Programminstanz-Owners.
+Diagnose-Slots und spaetere Pager-Slots werden dadurch nicht geloescht.
+
+Kernel-Besitzgrenze
+-------------------
+
+Im Kernel bleibt nur die technische Mechanik: Slot-Tabelle,
+Owner-Kind-/Owner-/Region-Match, Lifecycle-Cleanup und Zaehler. Es gibt keine
+neue Pager-Policy, keine Opferauswahl, keinen Hintergrundworker und keinen
+zweiten Storagepfad.
+
+Page-I/O nutzt weiterhin den vorhandenen R4SYS-/FAT32-/Storage-Pfad. Die
+Lifecycle-Aenderung entscheidet nur, wem Slot-Metadaten gehoeren und wann sie
+freigegeben werden.
+
+Diagnose
+--------
+
+PERFDIAG prueft den neuen Vertrag sichtbar:
+
+- Diagnose-Slot wird reserviert und darf durch VM-Release nicht verschwinden.
+- VM-regionengebundener Slot wird beim `vmRelease` freigegeben.
+- Regionengebundener R4X-Instanz-Slot wird beim `vmRelease` freigegeben.
+- Ungebundener R4X-Instanz-Slot bleibt nach `vmRelease` erhalten und wird
+  explizit freigegeben.
+- Ein Release auf den bereits per Lifecycle gereinigten VM-Slot liefert
+  `reservation_not_found`.
+- Lifecycle-Cleanup-Zaehler steigen fuer Ranges und Slots.
+
+MEMSUITE und STORDIAG nutzen die v128-Signaturen mit Diagnose-Owner-Kind,
+bleiben aber bewusst auf expliziten Diagnosepfaden.
+
+Nicht-Ziele
+-----------
+
+0.53.32 fuehrt weiterhin nicht ein:
+
+- automatische Eviction,
+- Page-Fault-getriebenes Page-In,
+- Memory-Pressure-getriebenes Page-Out,
+- globale Pager-Policy,
+- Swap-/Pagefile-Autostart,
+- eigenen Block-I/O-Pfad neben R4SYS/FAT32/Storage.
+
+Abnahme
+-------
+
+Erwartete sichtbare Linien im Smoke-Test:
+
+- `R4DEV performance snapshot v128: OK`
+- `Backing slots lifecycle diagnostic: OK`
+- `Backing slots lifecycle VM slot: OK`
+- `Backing slots lifecycle bound instance: OK`
+- `Backing slots lifecycle unbound instance: OK`
+- `Backing slots lifecycle cleanup: OK`
+- `Backing slots lifecycle final: OK`
+- `Page I/O page out retry: OK`
+- `Page I/O page in: OK`
+- `TEST OK`

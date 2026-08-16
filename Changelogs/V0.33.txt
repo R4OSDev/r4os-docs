@@ -1,0 +1,289 @@
+﻿Archivierte Roadmap: 0.33.X - Module- und Service-Registry-Boot
+=====================================================================
+
+Version 0.33.X - Module- und Service-Registry aus kernelold.zig herausziehen
+-------------------------------------------
+
+Status: Erledigt
+
+Leitbild:
+Nach Bootloader, BootInfo, BootDisplay, CPU, Timer, Driver Registry, Input und
+Memory-Boot ist der naechste chronologische Kernelbereich die fruehe
+Registrierungsbasis fuer Kernel-Module und Kernel-Services. Ziel ist ein
+kleiner, belastbarer Schnitt: `main.zig` startet die leeren Registries
+sichtbar und nachvollziehbar, waehrend `kernelold.zig` danach nicht mehr fuer
+diese fruehe Initialisierung verantwortlich ist.
+
+0.33.X ist bewusst keine Loader-, Dateisystem- oder Service-Manager-Migration.
+Die Registries werden nur vorbereitet. Alles, was `C:`, FAT32, R4X/R4D/R4P,
+CONFIG, Scheduler oder Shell-/Desktop-Runtime braucht, bleibt in dieser Version
+ausserhalb des neuen fruehen Bootpfads.
+
+Aktueller Bestand vor 0.33.X:
+- `kernelold.kmain()` ruft sehr frueh `modules.init()` auf und gibt danach
+  `Module registry [OK]` aus.
+- `modules.init()` setzt die Module-Registry zurueck und registriert den
+  KernelProvider als eingebauten Provider. Dieser Schritt braucht noch kein
+  `C:`, keine FAT32-Dateien und keinen R4X/R4D/R4P-Loader.
+- `modules.loadSystemLibraries()` laeuft deutlich spaeter und scannt
+  Systembibliotheken aus dem Dateisystem. Dieser Schritt braucht `C:` und
+  gehoert nicht in `module_boot.init()`.
+- `kernelold.kmain()` ruft sehr frueh `services.init()` auf und gibt danach
+  `Service registry [OK]` aus.
+- `services.init()` setzt Service-Eintraege, Endpoint-Tabelle und Message-
+  Queue-Zustand zurueck. Dieser Schritt braucht noch kein `C:` und noch keine
+  `SERVICES.R4S`.
+- `services.loadConfigFromDisk()` laeuft deutlich spaeter und liest
+  `C:\SYS\CONFIG\SERVICES.R4S`. Dieser Schritt braucht Dateisystem und bleibt
+  bis 0.34.X bewusst ausserhalb des fruehen Service-Boots.
+- `command_runtime.autostartServices()` laeuft noch spaeter nach Runtime-
+  Vorbereitung und gehoert weder in 0.33.X noch in einen fruehen Kernel-Boot-
+  Schritt.
+
+Qualitaetsziel:
+0.33.X soll `main.zig` chronologisch weiter vervollstaendigen, ohne einen
+zweiten versteckten Init-Pfad oder einen zu fruehen Loader-Pfad einzubauen.
+Nach Abschluss ist klar sichtbar:
+- Memory-Boot ist fertig.
+- Danach werden Module Registry und Service Registry als Kernel-Grundlage
+  initialisiert.
+- Danach uebernimmt `kernelold.kmain()` weiterhin die noch nicht migrierten
+  spaeteren Altbereiche.
+
+Die neuen Bootmodule duerfen nur Orchestrierung enthalten. Fachlogik bleibt in
+den bestehenden Registry-Modulen, bis diese spaeter gezielt verschoben oder
+aufgeteilt werden. Falls eine Registry-Funktion beim Umzug ploetzlich
+Dateisystem, Loader oder Scheduler braucht, ist das ein Stoppsignal und gehoert
+nicht in 0.33.X.
+
+Nicht-Ziel:
+In 0.33.X werden keine Programme, R4X-Loader, R4D-Loader, R4P-Loader,
+Systembibliotheken, RAM-Drive-, Drive-, Storage-, FAT32-, CONFIG-, Scheduler-,
+Desktop-, COMMAND- oder Service-Manager-Pfade aus `kernelold.zig` gezogen.
+Diese Bereiche haengen an spaeteren Bootphasen und bekommen eigene Versionen.
+Ebenfalls nicht Ziel ist das Auslagern der Service-Policy; das beginnt erst in
+0.34.X.
+
+Aufraeumziel:
+Nach Abschluss von 0.33.X enthaelt `kernelold.zig` keine produktiven
+Direktaufrufe mehr fuer `modules.init()` und `services.init()`. Der sichtbare
+Bootstatus fuer Module Registry und Service Registry bleibt erhalten. Die
+spateren Aufrufe `modules.loadSystemLibraries()`, `modules.dumpStatus()`,
+`services.loadConfigFromDisk()` und servicebezogene Runtime-/Autostart-Pfade
+bleiben bis zu ihren eigenen Migrationen bewusst an ihrer bisherigen spaeteren
+Position.
+
+Zielpfade:
+- `Code/src/kernel/module_boot.zig`: fruehe Module-Registry-Orchestrierung.
+- `Code/src/kernel/service_boot.zig`: fruehe Service-Registry-/Endpoint-
+  Orchestrierung.
+- `Code/src/main.zig`: importiert beide Bootmodule direkt und ruft sie nach
+  `memory_boot.initCore()` auf.
+- `Code/src/kernelold.zig`: verliert nur die fruehen Init-Aufrufe, behaelt aber
+  spaetere Loader-/Runtime-Aufrufe, solange diese noch nicht migriert sind.
+
+Verbindliche Migrationsregeln:
+- Kein doppelter Init-Pfad: Module Registry und Service Registry werden genau
+  einmal im Bootpfad initialisiert.
+- Keine Loader-Vermischung: `module_boot.init()` darf nicht
+  `modules.loadSystemLibraries()`, R4M/R4L/R4D/R4P-Loader oder FAT32-Scanning
+  starten.
+- Keine Service-Policy-Vermischung: `service_boot.init()` darf nicht
+  `services.loadConfigFromDisk()`, `SERVICES.R4S`-Parsing, Autostart oder
+  Service-Manager-Policy starten.
+- Keine stillen Seiteneffekte im Import: Neue Bootmodule initialisieren nichts
+  beim Import, sondern nur ueber explizite `init()`-Aufrufe.
+- BootStatus-/Bootlog-Ausgaben duerfen umgeordnet werden, aber nicht verloren
+  gehen.
+- Fehlerpfade muessen bootnah bleiben: Wenn ein frueher Registry-Init spaeter
+  fehlschlagen kann, muss der Fehler sichtbar und deterministisch behandelt
+  werden.
+- Verschobene Orchestrierung darf keine neuen Abhaengigkeiten auf `old/`
+  vergroessern, ausser auf die bewusst noch dort liegende Registry-Fachlogik.
+
+Definition of Done fuer 0.33.X:
+- `main.zig` startet Module Registry und Service Registry nach Memory-Boot und
+  vor `kernelold.kmain()`.
+- `kernelold.zig` enthaelt keinen produktiven Module-/Service-Registry-Init
+  mehr.
+- Die Bootausgabe zeigt weiterhin `Module registry [OK]` und
+  `Service registry [OK]` oder gleichwertige kurze Statuszeilen.
+- `modules.loadSystemLibraries()` und `services.loadConfigFromDisk()` bleiben
+  an spaeterer Stelle und werden nicht versehentlich zu frueh ausgefuehrt.
+- R4OS bootet im Smoke-Test weiterhin bis zum automatischen Testabschluss.
+- Doku nennt die neue Startreihenfolge und erklaert, warum Loader,
+  `SERVICES.R4S` und Autostart nicht Teil von 0.33.X sind.
+
+Version 0.33.0 - Module-/Service-Boot planen und Grenzen festlegen
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Aktuellen Module-/Service-Init in `kernelold.zig` analysiert.
+- Festgestellt: `kernelold.kmain()` ruft direkt nach dem Memory-Boot noch
+  `modules.init()` auf und gibt danach `Module registry [OK]` aus.
+- Festgestellt: `modules.init()` setzt die Module-Registry, Resolver-Fehler-
+  Zaehler und den KernelProvider zurueck. Dieser fruehe Schritt braucht kein
+  `C:`, kein FAT32, keinen R4X/R4D/R4P-Loader und keine Systembibliotheken.
+- Festgestellt: `modules.loadSystemLibraries()` scannt spaeter
+  `C:\SYS\LIBS` ueber FAT32, nutzt Heap/File-I/O und darf deshalb nicht in
+  `module_boot.init()` wandern.
+- Festgestellt: `modules.dumpStatus()` ist Diagnose nach dem Library-Scan und
+  bleibt bis zu einer eigenen Diagnose-/Loader-Migration spaeter.
+- Festgestellt: `kernelold.kmain()` ruft direkt nach `modules.init()` noch
+  `services.init()` auf und gibt danach `Service registry [OK]` aus.
+- Festgestellt: `services.init()` setzt Service-Eintraege, Endpoint-Tabelle,
+  Message Queues und Handle-/Request-Zaehler zurueck. Dieser fruehe Schritt
+  braucht kein `C:` und keine `SERVICES.R4S`.
+- Festgestellt: `services.loadConfigFromDisk()` ruft intern erneut
+  `services.init()` auf, liest `C:\SYS\CONFIG\SERVICES.R4S` ueber FAT32 und
+  gehoert damit nicht in 0.33.X, sondern in die spaetere 0.34.X-Service-
+  Manager-Auslagerung.
+- Festgestellt: `command_runtime.autostartServices()` laeuft erst nach Task-
+  und Scheduler-Start und bleibt ausdruecklich ausserhalb von 0.33.X.
+- Zielmodule festgelegt: `Code/src/kernel/module_boot.zig` und
+  `Code/src/kernel/service_boot.zig`.
+- Erlaubte 0.33.X-Abhaengigkeit festgelegt: Die neuen Bootmodule duerfen nur
+  die bestehende Registry-Fachlogik und `kernel/log.zig` fuer kurze
+  Statusausgaben nutzen.
+- Stoppsignal fuer 0.33.X festgelegt: FAT32, `C:`, Loader, Config, Scheduler,
+  Runtime, Shell Launcher oder Service-Autostart in den neuen Bootmodulen
+  waeren zu frueh und muessen draussen bleiben.
+
+Abnahme:
+- Roadmap beschreibt Ziel, Grenzen, Ist-Zustand und Nicht-Ziele eindeutig.
+- Die spaeten Dateisystem-/Loader-/Autostart-Funktionen sind namentlich als
+  Nicht-Bestandteil von 0.33.X dokumentiert.
+- Keine Code-Aenderung in dieser Unterversion, ausser Roadmap und Version.
+- Version steht auf `KERNEL_VERSION=0.33.0`.
+- Push ist erfolgt.
+
+Version 0.33.1 - Module Registry nach module_boot.zig ziehen
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Neues Bootmodul `Code/src/kernel/module_boot.zig` angelegt.
+- `module_boot.init()` als schmalen Orchestrator gebaut: genau
+  `modules.init()` plus sichtbare Bootstatus-Ausgabe.
+- `main.zig` importiert `module_boot.zig` direkt und ruft es nach
+  `memory_boot.initCore()` und vor `kernelold.kmain()` auf.
+- Fruehen `modules.init()`-Aufruf und zugehoerige Statusausgabe aus
+  `kernelold.zig` entfernt.
+- Spaetere Module-Pfade bewusst nicht mitgezogen:
+  `modules.loadSystemLibraries()`, `modules.dumpStatus()`, R4M/R4L/R4D/R4P-
+  Loader und Runtime-Pfade bleiben an ihrer spaeteren Position.
+- `module_boot.init()` nutzt kein Dateisystem und startet keinen Library-Scan.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` laeuft erfolgreich.
+- `DevTools/Scripts/Build.bat -test` laeuft erfolgreich mit `TEST OK`.
+- Module Registry wird genau einmal initialisiert.
+- `kernelold.zig` enthaelt keinen produktiven `modules.init()`-Aufruf mehr.
+- `module_boot.init()` ruft nicht `modules.loadSystemLibraries()` und nutzt
+  kein Dateisystem.
+- Sichtbare Bootausgabe fuer Module Registry bleibt erhalten.
+- Version steht auf `KERNEL_VERSION=0.33.1`.
+- Push ist erfolgt.
+
+Version 0.33.2 - Service Registry nach service_boot.zig ziehen
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Neues Bootmodul `Code/src/kernel/service_boot.zig` angelegt.
+- `service_boot.init()` als schmalen Orchestrator gebaut: genau
+  `services.init()` plus sichtbare Bootstatus-Ausgabe.
+- `main.zig` importiert `service_boot.zig` direkt und ruft es nach
+  `module_boot.init()` und vor `kernelold.kmain()` auf.
+- Fruehen `services.init()`-Aufruf und zugehoerige Statusausgabe aus
+  `kernelold.zig` entfernt.
+- Spaetere Service-Pfade bewusst nicht mitgezogen: Service Config, Service
+  Runtime, externe Services und Autostart bleiben an ihrer spaeteren Position.
+- Versteckten Doppel-Init entschärft: `services.loadConfigFromDisk()` setzt den
+  Registry-/Endpoint-Zustand fuer den Config-Ladevorgang weiter zurueck, ruft
+  aber nicht mehr den fruehen `services.init()`-Bootpfad erneut auf.
+- `service_boot.init()` liest nicht `SERVICES.R4S`, startet keine Services und
+  nutzt kein Dateisystem.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` laeuft erfolgreich.
+- `DevTools/Scripts/Build.bat -test` laeuft erfolgreich mit `TEST OK`.
+- `services.init()` wird im Bootpfad genau einmal ueber `service_boot.init()`
+  aufgerufen.
+- `kernelold.zig` enthaelt keinen produktiven `services.init()`-Aufruf mehr.
+- `service_boot.init()` liest nicht `SERVICES.R4S`, startet keine Services und
+  nutzt kein Dateisystem.
+- Sichtbare Bootausgabe fuer Service Registry bleibt erhalten.
+- Version steht auf `KERNEL_VERSION=0.33.2`.
+- Push ist erfolgt.
+
+Version 0.33.3 - Doppelpfad- und Reihenfolge-Abnahme schaerfen
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Boot-Reihenfolge gegen die 0.33.X-Grenze abgeglichen.
+- Bestaetigt: `main.zig` ruft nach `memory_boot.initCore()` zuerst
+  `module_boot.init()` und danach `service_boot.init()` auf.
+- Bestaetigt: Beide Bootmodule laufen vor `kernelold.kmain()` und gehoeren
+  damit sichtbar zum chronologischen Kernelstart.
+- Bestaetigt: `kernelold.zig` enthaelt keine produktiven fruehen Direktaufrufe
+  von `modules.init()` oder `services.init()` mehr.
+- Bestaetigt: Spaete Module-/Loader-Pfade bleiben spaeter:
+  `modules.loadSystemLibraries()`, `r4d.discoverAll()` und
+  `modules.dumpStatus()` laufen weiterhin nach Storage.
+- Bestaetigt: Spaete Service-Config bleibt spaeter:
+  `services.loadConfigFromDisk()` laeuft weiterhin erst nach Storage und nutzt
+  nicht den fruehen `service_boot.init()`-Pfad.
+- Bestaetigt: Service-Autostart bleibt spaeter und laeuft erst nach Task- und
+  Scheduler-Start.
+- Keine zusaetzliche Bootlog-/BootStatus-Glaettung noetig; die kurzen
+  sichtbaren Statuszeilen bleiben erhalten.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` laeuft erfolgreich.
+- `DevTools/Scripts/Build.bat -test` laeuft erfolgreich mit `TEST OK`.
+- Im Bootpfad existiert kein zweiter produktiver Registry-Init.
+- Loader-, CONFIG- und Autostart-Funktionen laufen nicht frueher als vor 0.33.X.
+- Version steht auf `KERNEL_VERSION=0.33.3`.
+- Push ist erfolgt.
+
+Version 0.33.4 - Dokumentation und Abschluss
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `Docs/Core/KernelBereinigung.txt` um den 0.33.X-Stand ergaenzt.
+- Dokumentiert: `module_boot.zig` und `service_boot.zig` sind nur fruehe
+  Registry-Orchestrierung.
+- Dokumentiert: `module_boot.zig` startet keinen Library-Scan, keinen Loader
+  und nutzt kein Dateisystem.
+- Dokumentiert: `service_boot.zig` liest keine `SERVICES.R4S`, startet keine
+  Services und nutzt kein Dateisystem.
+- Dokumentiert: Loader, R4D/R4X/R4P, RAM-Drive, Storage, CONFIG, Scheduler,
+  Service Config und Autostart bleiben spaetere Kandidaten.
+- `AGENTS.md` Kernel-Struktur lokal um `module_boot.zig` und
+  `service_boot.zig` ergaenzt.
+- Website-`kernel.md` bewusst nicht angepasst, weil dafuer keine separate
+  User-Freigabe in dieser Unterversion erteilt wurde.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -test` laeuft erfolgreich.
+- Doku beschreibt `module_boot.zig` und `service_boot.zig` kurz und korrekt.
+- Doku beschreibt die klare Grenze zwischen frueher Registry und spaeterem
+  Loader-/Service-Manager-Pfad.
+- Roadmap-Unterversionen sind abgeschlossen und koennen spaeter archiviert
+  werden.
+- Version steht auf `KERNEL_VERSION=0.33.4`.
+- Push ist erfolgt.

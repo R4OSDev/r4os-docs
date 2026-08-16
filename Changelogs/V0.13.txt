@@ -1,0 +1,489 @@
+﻿# R4OS Roadmap
+
+Leitbild 0.13.X
+-------------------------------------------
+
+R4OS 0.13.X bereitet den ersten Hardwaredeploy auf echter x86_64-Hardware vor.
+Das Ziel ist ein bootfaehiger USB-Stick fuer ein Lenovo L340-15API, auf dem R4OS
+bis zum Desktop startet, den Device Manager oeffnen kann, Diagnoseinformationen
+sammelt und kontrolliert wieder beendet werden kann.
+
+Der Fokus liegt nicht auf kompletter Laptop-Unterstuetzung, sondern auf einem
+robusten Minimalpfad:
+- UEFI/USB-Boot ueber Limine
+- Framebuffer-Ausgabe
+- Tastaturbedienung
+- USB-HID fuer Tastatur und einfache Maus
+- Speicher-, ACPI-, PCI/PCIe- und Timer-Stabilitaet
+- Massenspeicher-Erkennung fuer USB-Stick und interne Laufwerke
+- aussagekraeftige Diagnose- und Fallback-Pfade fuer echte Hardware
+- R4Desk mit Device Manager als sichtbares Ziel fuer den ersten erfolgreichen Boot
+- Fuer den Desktop-Hardwareboot wird der echte USB/xHCI-/USB-Mass-Storage-Pfad bevorzugt; ein Initrd-/RAM-Systemimage bleibt nur Fallback, nicht Hauptweg
+
+Arbeitsregel fuer 0.13.X:
+- Keine reine "detected"-Implementierung gilt als abgeschlossen, wenn das Ziel eigentlich ein nutzbarer Treiberpfad ist. Diagnose-only darf ein Zwischenstand sein, bleibt dann aber als solcher markiert.
+- Jeder neue Hardwarepfad bekommt Diagnose, Fehlerstatus, Timeout-/Recovery-Verhalten, Device-Inventory/Device-Manager-Sicht, Shell-Kommando oder bestehende Diagnoseintegration, QEMU-Abnahme und Dokumentation.
+- Bootkritische Storage-Pfade duerfen im Kernel-Core starten, muessen aber so modular gebaut werden, dass spaetere R4D-Treiber daraus entstehen koennen.
+- ProgramApi, DriverApi, SDK, R4X-/R4D-Header und R4XBuilder gehoeren zur Roadmap, wenn ein neuer Vertrag gebraucht wird. Neue ABI-Funktionen werden nur hinten angehaengt, Versionsnummern werden erhoeht, SDK-Wrapper und Smoke-/Diagnosetests werden mitgezogen.
+- Neue R4X-Diagnoseprogramme, GUI-Werkzeuge und R4D-Treiber sollen den vorhandenen SDK-Pfad unter `Code\SDK\r4os` verwenden; ad-hoc-ABI-Zugriffe werden nur akzeptiert, wenn daraus direkt eine SDK-Erweiterung entsteht.
+- Bestehende Platzhalter zaehlen nicht als erledigte Vertraege. Insbesondere `register_storage_backend` in der DriverApi ist aktuell kein echter Blockdevice-Backend-Vertrag.
+
+Bekannte Zielhardware:
+- Lenovo L340-15API
+- AMD Ryzen 5 3500U, 4 Kerne
+- AMD Radeon RX Vega 8
+- AMD SoC-Plattform
+- Lenovo PSREF nennt 2x USB 3.1 Gen 1, 1x USB-C 3.1 Gen 1, HDMI 1.4b und Gigabit Ethernet
+- Secure Boot kann deaktiviert werden
+- Legacy/CSM-Boot ist vorhanden
+- Im konkreten Testgeraet ist eine 2.5" SSD verbaut, daher ist SATA/AHCI der erwartete interne Storage-Pfad
+- Erster echter PCIe-Befund: MCFG base=0x00000000F8000000, Segment 0, Busse 0..63, 29 Funktionen gespeichert
+- AHCI: 5:0.0 vid=0x1022 did=0x7901 class=0x01 sub=0x06 if=0x01
+- NVMe: 1:0.0 vid=0x8086 did=0xF1A8 class=0x01 sub=0x08 if=0x02
+- Ethernet: 3:0.0 vid=0x10EC did=0x8168 class=0x02 sub=0x00 if=0x00
+- WLAN/weiterer Netzwerk-Kandidat laut DEVICES: vid=0x168C did=0x0042 class=0x02 sub=0x80
+- Display: vid=0x1002 did=0x15D8; HDA: vid=0x1002 did=0x15DE und vid=0x1022 did=0x15E3
+
+Bekannter Architekturstand:
+- ProgramApi v51 ist aktiv.
+- DriverApi v9 ist aktiv.
+- Native Program- und Treibercontainer sind im aktuellen Code `R4X` und `R4D`.
+- `Docs\Applications\R4X.txt` ist die massgebliche R4X-/ProgramApi-Doku fuer externe Programme, Anwendungsklassen, Header, ProgramApi-Versionen und SDK-Buildweg.
+- `Docs\SDK\README.txt` ist die massgebliche SDK-Doku fuer R4X-Programme, R4D-Treiber, ProgramApi-/DriverApi-Wrapper und ABI-Erweiterungsregeln.
+- R4D-Treiber werden ueber `Code\SDK\r4os` und R4XBuilder gebaut; neue Treiber sollen diesen Weg verwenden.
+- Boot-Storage ist ein Sonderfall: Treiberdateien liegen auf C:, daher muss der erste Zugriff auf den USB-Bootstick als Kernel-Bootpfad oder als vorab verfuegbarer Bootloader-/Kernel-Pfad existieren, bevor normale R4D-Treiber von C: geladen werden koennen.
+
+Noch zu klaerende Hardwaredetails:
+- Primaerer Bootmodus fuer 0.13.X: Legacy/CSM. UEFI bleibt vorbereitet, ist fuer den 0.13.X-Abschluss aber kein Blocker.
+- USB-Controller/xHCI: AMD 1022:15E5, SUBSYS 381217AA, class=0x0C sub=0x03 if=0x30
+- Eingabegeraete: interne Tastatur via PS/2-kompatiblem Controller oder USB-HID?
+- Touchpad: PS/2/I2C/USB, fuer 0.13.X optional
+- Netzwerk-Chip fuer RJ-45: Realtek RTL8168/8111-Familie vid=0x10EC did=0x8168
+- Audio: fuer ersten Boot optional
+
+Treiberprioritaet fuer die Zielhardware:
+- Pflicht fuer 0.13.X: xHCI, USB-HID und USB Mass Storage.
+- USB-HID wird als echtes 0.13.X-Pflichtziel fuer Tastatur und einfache Maus umgesetzt. Referenzen: `Reference\USB\usb-hid-1.11.pdf` und `Reference\USB\usb-hid-usage-tables-1.5.pdf`.
+- USB Mass Storage bleibt Pflicht, weil ohne diesen Pfad der USB-Bootstick nach Kernelstart nicht als C: verfuegbar ist.
+- Validieren statt neu bauen: AHCI fuer die interne 2.5" SSD, NVMe als gefundener Zusatzpfad, HDA als vorhandener Audio-Pfad und bootfb als Display-Fallback.
+- Aus 0.13.X bewusst herausgenommen: RTL8168/8111, Netzwerk-Remote-Debug und Remote-Kernel-Update. Diese Themen werden erst in einer spaeteren Roadmap neu priorisiert.
+- Fuer 0.13.X nicht sinnvoll als Treiberziel: WLAN `168C:0042`, native AMD-Vega-Grafik, I2C-/Touchpad-Spezialpfade, SMBus und Akku/EC. Diese Themen erzeugen viel Treiberflaeche, bringen aber den ersten Desktop+Device-Manager-Boot kaum naeher.
+
+Version 0.13.0
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Version 0.12.X abgeschlossen.
+- Roadmap fuer 0.13.X neu begonnen.
+- Hardwaredeploy-Anforderungen fuer Lenovo L340-15API konkretisiert.
+- Bootpfad fuer echten USB-Stick definiert: rohes FAT32/MBR-Image mit Limine-BIOS und UEFI-Removable-Media-Pfad; Legacy/CSM bleibt Fallback.
+- Bestehender QEMU-Testpfad wurde um moderne Q35-/AHCI-/NVMe-/USB-Profile erweitert und spaeter als 0.13.8-USB-Gate ausgebaut.
+- Diagnoseplan fuer den ersten echten Boot festgelegt: Bildschirm, Device Manager, Shell-Kommandos, Crashmarker, `C:\Temp\HWREPORT.TXT` und Stick-Logs, sobald C: verfuegbar ist.
+- Device Manager als Hardware-Erfassungswerkzeug fuer PCI-/PCIe-/USB-/Storage-IDs eingeplant.
+- Erfolgskriterien fuer den ersten Hardwareboot definiert: R4Desk startet, C: ist der Bootstick oder ein dokumentierter Systemdatentraeger, Device Manager zeigt Hardware-IDs, Diagnose kann gespeichert/exportiert werden.
+- Reihenfolge der 0.13.X-Arbeitsschritte festgelegt: Bootimage, Bootdiagnose, xHCI/USB-Core, USB-HID, USB-Mass-Storage, QEMU-USB-Reife, Freigabe, Hardwaretest.
+- Secure Boot kann fuer Tests deaktiviert werden.
+- Legacy/CSM-Boot ist vorhanden.
+- Konkreter interner Storage ist 2.5" SSD statt NVMe.
+- Ziel fuer den ersten echten Hardwareboot auf Desktop plus Device Manager festgelegt.
+
+Notizen:
+- Die bekannten groben Laptopdaten reichen fuer die erste Roadmap-Planung, aber nicht fuer eine treffsichere Treiberliste.
+- Fuer den ersten echten Boot sind USB-Boot, ACPI, PCIe, Framebuffer, Tastatur und AHCI wichtiger als Audio, WLAN oder GPU-Beschleunigung.
+- Weil der Laptop vermutlich keinen echten COM-Port hat, duerfen Hardwarediagnosen nicht von Serial-Logs abhaengen.
+- Minimalerfolg fuer den ersten Lenovo-Test ist "R4Desk startet und Device Manager zeigt die Hardwareliste inklusive PCI-/PCIe-IDs".
+- Eine reine Bootdiagnose bleibt als Fallback sinnvoll, wenn Desktop oder Eingabe auf echter Hardware noch scheitern.
+
+Version 0.13.1
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- USB-Stick-Bootimage erzeugt und dokumentiert.
+- Normales `Code\disk.img` um Limine-x86_64-UEFI-Removable-Media-Pfad `/EFI/BOOT/BOOTX64.EFI` erweitert.
+- Limine-UEFI-Bootpfad neben dem bisherigen BIOS/QEMU-Pfad vorbereitet; echte Lenovo-UEFI-Abnahme bleibt Hardwaretest in 0.13.10.
+- BIOS/Legacy-Pfad mit `limine.exe bios-install` bleibt parallel erhalten.
+- Legacy/CSM-USB-Boot als pragmatischer erster Fallback unterstuetzt und auf Lenovo bis R4DOS/R4Desk beobachtet.
+- `DevTools\Scripts\Build.bat -norun` ist der Hardwaredeploy-Modus fuer ein USB-taugliches Image ohne QEMU-Start.
+- `DevTools\Scripts\Build.bat -norun` erzeugt das BIOS+UEFI-Kandidatenimage erfolgreich.
+- Byte-Pruefung im erzeugten Image findet `EFI`, `BOOTX64 EFI` und `limine.conf`.
+- `DevTools\Scripts\Build.bat -test -test-shell desktop -profile modern-q35 -storage ahci` bleibt nach der EFI-Ergaenzung gruen.
+- `Docs\Deployment\HardwareDeploy-0.13.txt` als erste USB-Flash- und Laptop-Testcheckliste angelegt.
+- USB-Flashen mit Balena Etcher/Rufus und BIOS-/UEFI-Einstellungen dokumentiert.
+- Sicherheitsregel dokumentiert: Codex schreibt das Image nicht selbst auf USB-Datentraeger; der User flasht manuell.
+- Hardwaredeploy-Image enthaelt standardmaessig R4Desk und Device Manager.
+
+Notizen:
+- Ziel ist ein reproduzierbares Image, das nicht nur in QEMU, sondern auch als echter USB-Stick sinnvoll bootbar ist.
+- Wenn R4OS ein rohes Disk-Image mit MBR/GPT und FAT32 erzeugt, ist Balena Etcher meist der direktere Schreibweg; Rufus ist trotzdem als Fallback nuetzlich, wenn es das Image als DD/rohes Image schreiben kann.
+- Sicherheitsregel: Codex schreibt das Image nicht selbst auf USB-Datentraeger; der User uebernimmt das manuelle Flashen mit Balena Etcher oder Rufus.
+
+Version 0.13.2
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- ACPI-/PCIe-Diagnosen fuer echte Hardware ausgebaut und in `PCIE`, `DEVICES`, Device Inventory und Device Manager sichtbar gemacht.
+- Device-Inventory-Ausgaben fuer unbekannte AMD-SoC-Geraete verbessert: Vendor, Device, Class, Subclass und ProgIF bleiben direkt erfassbar, auch wenn kein Spezialtreiber gebunden ist.
+- PCI-/PCIe-IDs fuer Vendor, Device, Class, Subclass und ProgIF wurden auf Lenovo direkt aus R4OS erfasst.
+- Device Manager fuer den ersten Hardwareboot als bevorzugte Diagnoseoberflaeche abgesichert.
+- Device Manager bleibt SDK-basierte R4X-App und nutzt strukturierte ProgramApi-/Device-Inventory-Daten statt Textausgaben zu parsen.
+- Device Manager um `Export`-Button und Taste `E` fuer Hardware-Report nach `C:\Temp\HWREPORT.TXT` erweitert.
+- ProgramApi v51 traegt die benoetigten Device-Inventory-Strukturen fuer den aktuellen Device-Manager-Pfad.
+- `DevTools\Zig\zig.exe build` in `Code\` baut den erweiterten Device Manager.
+- `DevTools\Scripts\Build.bat -test -test-shell desktop -profile modern-q35 -storage ahci` bleibt gruen.
+- Framebuffer-, Timer-/Interrupt- und Memory-Map-Pfade bleiben als reale Hardwarebeobachtung in 0.13.10, blockieren 0.13.2 aber nicht mehr.
+
+Notizen:
+- Der erste Hardwareboot soll bei Problemen moeglichst nicht einfach schwarz bleiben, sondern sichtbar melden, an welchem Schritt er haengt.
+- Der Export-Button wird erst im GUI-/Laptop-Test praktisch geklickt; der Headless-Smoke prueft Build und Desktop-Start.
+
+Version 0.13.3
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- USB/xHCI-Architektur festgelegt: eigener Hostcontroller, USB-Core, HID und MSC/BOT mit Blockdevice-Anbindung statt Logik in `main.zig`.
+- Kernelmodule geplant und spaeter umgesetzt: `drivers/usb/xhci.zig`, `drivers/usb/core.zig`, `drivers/usb/hid.zig`, `drivers/usb/msc.zig` und Integration in `storage/block.zig`.
+- Entscheidung dokumentiert: Der erste USB-Bootstick-Pfad startet builtin, weil C: ohne USB-Storage noch nicht verfuegbar ist; spaetere R4D-Ausbaubarkeit bleibt Architekturziel.
+- ProgramApi v51 und DriverApi v9 gegen den USB-Plan geprueft: Device Inventory reicht fuer 0.13.X, eine ProgramApi v52 wurde fuer den bisherigen USB-/Device-Manager-Pfad nicht benoetigt.
+- DriverApi-Ausbau geprueft: ein echter Storage-/Blockdevice-Backend-Vertrag bleibt ein spaeterer sauberer DriverApi-v10-Punkt statt 0.13.X-Abschlussblocker.
+- ABI-/SDK-Regeln fuer kuenftige Erweiterungen festgehalten: SDK-Wrapper, Kernel-Tabelle, R4X-/R4D-Doku, R4XBuilder und Smoke-/Diagnosepfad muessen mitgezogen werden.
+- USB-Diagnose laeuft fuer 0.13.X primaer ueber Shell-Kommandos `USB`, `XHCI`, `INPUT`, `BLOCK`, `DRIVES`, `USBREGRESS`, `USBMSCTEST` und `USBGATE`; separate R4X-Diagnostics bleiben optional.
+- R4X/R4D-Formatgrenzen geklaert: R4X bleibt Programmpfad mit ProgramApi, R4D bleibt Treiberpfad mit DriverApi, gemeinsame Strukturen gehoeren in SDK/ABI-Doku.
+- Definition of Done fuer USB/xHCI festgelegt und in 0.13.8 angewendet: Diagnoseausgabe, Fehlerzaehler, QEMU-Test, Device-Inventory-Sicht und dokumentierte Grenzen.
+- xHCI-Hardware-ID aus Windows ermittelt: `PCI\VEN_1022&DEV_15E5&SUBSYS_381217AA&REV_00`, `CC_0C0330`.
+- USB-/xHCI-/Mass-Storage-Referenzen unter `Reference\USB\` abgelegt und in `Reference\USB\README.txt` dokumentiert.
+- Architekturstand geprueft: ProgramApi v51, DriverApi v9, R4X/R4D-Container und SDK/R4XBuilder sind die relevanten bestehenden Vertraege.
+- Mit dem Program-/App-Format ist R4X gemeint; fuer 0.13.X gibt es keinen zusaetzlichen Formatpfad.
+
+Notizen:
+- Der USB-Bootpfad wird nicht als lose Speziallogik in `main.zig` umgesetzt. Er soll wie AHCI/NVMe einen eigenen Status, ein eigenes Diagnosekommando und eine Blockdevice-Integration bekommen.
+- Ein spaeterer USBXHCI.R4D ist sinnvoll, aber fuer den allerersten Zugriff auf C: nicht ausreichend, solange R4D-Dateien erst von C: geladen werden.
+- `register_storage_backend` existiert in der DriverApi, registriert aktuell aber kein echtes Blockdevice. Fuer echte Storage-R4D-Treiber braucht es einen sauberen neuen Vertrag.
+- USB-HID ist fester Bestandteil von 0.13.X: erst Boot-Protocol-Tastatur, danach einfache Maus. PS/2 bleibt kompatibler Parallelpfad.
+- USB-Mass-Storage hat Vorrang vor Initrd, damit der echte Stick spaeter nicht nur Bootmedium, sondern normales R4OS-Laufwerk ist.
+- Die lokal abgelegten Specs decken xHCI, USB 2.0/3.2 und USB Mass Storage BOT ab. T10 SPC/SBC fuer die SCSI-Kommandodetails muessen bei Bedarf separat ueber die T10-Draft-Seite bezogen werden, weil der primaere Zugriff dort ueber Guest-Access laeuft.
+
+Version 0.13.4
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- xHCI-Controller per PCIe class=0x0C/sub=0x03/prog_if=0x30 gefunden und in der PCIe-Zusammenfassung mit `xhci_count` und `first_xhci` sichtbar gemacht.
+- Builtin-Basisdriver `drivers/usb/xhci.zig` angelegt: BAR0/BAR1, 32/64-Bit-MMIO, PCI Command Register, MMIO-Mapping und Fehlerzaehler werden erfasst.
+- PCI Command Register setzt gezielt Memory Space und Bus Mastering; vorher/nachher wird im `XHCI`-/`USB`-Status ausgegeben.
+- xHCI-Capability-Register werden gelesen: CAPLENGTH, HCIVERSION, HCSPARAMS1/2/3, HCCPARAMS1/2, DBOFF und RTSOFF.
+- Operational-/Runtime-Basis wird berechnet; USBSTS, USBCMD, PAGESIZE, CONFIG, DNCTRL, Interrupter-0-Register und die ersten Root-Hub-Portregister werden ausgegeben.
+- BIOS/OS-Ownership-Handoff ueber Extended Capabilities wird diagnostiziert; Systeme ohne Legacy-Capability laufen ohne Hänger weiter.
+- Shell-Kommandos `XHCI` und `USB` zeigen Registerstatus, Portstatus, Handoff-Status, Zielcontrollerdaten und Fehler-/Timeoutzaehler.
+- Device Inventory, Device Manager, `HARDWARE` und `CHIPSET` erkennen xHCI als USB-Controller und zeigen den Builtin-Treiberstatus.
+- QEMU-Abnahme mit `modern-q35`, AHCI-Storage und `qemu-xhci` bestanden; Device Manager meldet `xHCI USB controller`, Treiber `XHCI`, Status `diagnostic-mmio-active`.
+- Lenovo-L340-15API-Abnahme im Legacy-Boot bestanden: R4DOS startet auf `X:\`, `PCIE` findet `First xHCI: 4:0.3 vid=0x1022 did=0x15E5 class=0x0C sub=0x03 if=0x30`, `XHCI` mappt MMIO `0x00000000D0500000`, HCIVERSION `0x0110`, 64 Slots, 10 Ports, 8 Interrupter, Handoff `not-needed`, `failures=0 timeouts=0`.
+- xHCI-Operational-/Runtime-Werte beim Controller-Init plausibilisiert; korrigierter Lenovo-Hardwarebefund `USBSTS=0x00001009` wurde statt der unscharf gelesenen `0xFF1F0000` festgehalten.
+- QEMU-Testprofile fuer xHCI und USB wurden spaeter fest im Build-Script ergaenzt; der reine xHCI-Pfad ist im `xhci`-USB-Profil abnehmbar.
+
+Notizen:
+- 0.13.4 ist erst erledigt, wenn QEMU und Lenovo denselben Diagnosepfad ohne Panic erreichen und der Controllerstatus aus R4OS heraus lesbar ist.
+- Letzte QEMU-Abnahme: `DevTools\Scripts\Build.bat -test -profile modern-q35 -storage ahci -qemu-args "-device qemu-xhci,id=r4xhci"`; Ergebnis: Exitcode 0, XHCI in Treiberregistry aktiv, Device Manager ohne Unknown-xHCI, `XHCI`-Kommando mit `failures=0 timeouts=0`.
+- Lenovo-Portbefund mit eingesteckter USB-Maus und Bootstick: Ports 1, 5, 7 und 10 melden `ccs=1`; Port 10 meldet `speed=4`, die anderen sichtbaren Connects `speed=1`. Das ist ein guter Startpunkt fuer 0.13.5 Root-Hub-Portreset und Device-Enumeration.
+- Erster Hardwarebefund: R4OS landet in R4DOS statt R4Desk, weil C: und D: nicht vorhanden sind.
+- Wahrscheinliche Ursache: Bootloader kann Kernel vom USB-Stick laden, aber R4OS hat nach Kernelstart noch keinen USB/xHCI-/USB-Mass-Storage-Pfad, um den Bootstick als C: zu mounten.
+- Technischer Entscheid: Weg 2 gewaehlt. R4OS soll den echten USB/xHCI-/USB-Mass-Storage-Pfad implementieren; ein bootloader-geladener RAM-Systemdatentraeger/Initrd-Pfad wird fuer 0.13.X nicht als Hauptweg verfolgt.
+
+Version 0.13.5
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- xHCI-Controller-Init implementiert: Controller Halt, Reset, DCBAA, Command Ring, Event Ring, ERST/Interrupter 0, Max Device Slots und Run.
+- DMA-/Ring-Allokationen kapseln feste 4-KB-Frames mit physischer und virtueller Adresse; DCBAA, Command Ring, Event Ring, ERST und optionale Scratchpads sind im `XHCI`-Status sichtbar.
+- Command Ring und Event Ring laufen polling-basiert; `Enable Slot` liefert in QEMU Completion Code 1 und Slot 1.
+- TRB-/Ring-Diagnose erfasst Commands, Events, Stale Events, Ring-Full, Timeouts, letzte Completion und Slot-ID.
+- Root-Hub-Portstatus bleibt sichtbar und wurde nach Controller-Run neu gelesen.
+- Port Reset fuer verbundene, noch nicht enabled Ports implementiert. QEMU-Abnahme mit `usb-kbd`: Port 5 von `ccs=1 ped=0` auf `ccs=1 ped=1`, `reset=ok/enabled-or-complete`.
+- Device Inventory und Device Manager zeigen xHCI bei laufendem Controller als `controller-running` mit Hinweis auf aktive Command-/Event-Ringe.
+- USB-Device-Addressing fuer das erste erkannte Device implementiert: Input Context, Slot Context, Endpoint-0-Context, Device Context, Address Device Command und DCBAA-Slot-Eintrag.
+- Erster Control-Transfer auf Endpoint 0 implementiert: `GET_DESCRIPTOR(Device)` liest 18 Bytes in einen DMA-Puffer. QEMU `usb-kbd` liefert `usb=0x0200`, class `0x00:0x00:0x00`, `mps0=64`, `vid=0x0627`, `pid=0x0001`.
+- Configuration-Descriptor-Lesen zweistufig implementiert: erst 9-Byte-Header, dann kompletter Descriptor nach `wTotalLength`.
+- Interface- und Endpointdeskriptoren werden aus der ersten Konfiguration geparst. QEMU `usb-kbd` liefert `config total=34`, `value=1`, `attrs=0xA0`, `maxpwr=100mA`, ein HID-Boot-Keyboard-Interface `class=0x03:0x01:0x01` und Interrupt-IN-Endpoint `0x81` mit `mps=8`, `interval=7`.
+- QEMU-Abnahme mit xHCI und Descriptor-lesbarem USB-Device bestanden; Device Manager meldet `xHCI controller running; first USB configuration parsed`.
+- Erste String-Descriptor-Basis implementiert: LANGID 0 wird gelesen, danach Manufacturer/Product/Serial als ASCII-Diagnose mit `?`-Fallback fuer Nicht-ASCII.
+- Feste aktuelle xHCI-First-Pass-Limits sind im `XHCI`-Status sichtbar: ein erstes Device, `configs=1`, `interfaces=8`, `endpoints=16`, `ports-tracked=16`.
+- `drivers/usb/core.zig` als kleine USB-Core-Registry mit festen Limits angelegt: `devices=8`, `configs=1`, `interfaces=8`, `endpoints=16`.
+- Das Shellkommando `USB` zeigt jetzt xHCI-Hostcontrollerstatus und danach die USB-Core-Device-Sicht; `XHCI` bleibt die reine Hostcontrollerdiagnose.
+- Device Inventory und Device Manager bekommen einen eigenen Buswert `usb` fuer enumerierte USB-Geraete unterhalb des Hostcontrollers. QEMU `usb-kbd` erscheint als `usb USB HID Boot Keyboard`, Treiber `usb/core`, Status `configured`, mit Hinweis auf HID-Binding in 0.13.6.
+- `Docs\Applications\R4X.txt` dokumentiert den neuen Device-Inventory-Buswert `10 usb`; ProgramApi v51 kann die Erweiterung ohne Struct-Aenderung tragen.
+
+Notizen:
+- Interrupts/MSI sind fuer den ersten Pfad optional; Polling ist akzeptabel, wenn Timeouts und Recovery sauber sind.
+- USB-Enumeration gilt nicht als abgeschlossen, solange nur der Controller erkannt wird. Mindestens ein echtes Device muss Descriptoren liefern.
+- Diese Version liefert die gemeinsame USB-Basis fuer USB-HID und USB-Mass-Storage; beide Folgestufen sollen keine eigenen Enumeration-Sonderpfade bauen.
+- Letzte QEMU-Abnahme: `DevTools\Scripts\Build.bat -test -profile modern-q35 -storage ahci -qemu-args "-device qemu-xhci,id=r4xhci -device usb-kbd,bus=r4xhci.0"`; Ergebnis Exitcode 0, `failures=0 timeouts=0`, `xfers=7/7`, `enable-slot ok`, `address-device ok`, `device-desc ok`, `strings ok`, `config-desc ok`, `first-if class=0x03:0x01:0x01`, ein verbundener Port enabled, `USB core` meldet `devices=1 configured=1`, Device Manager `Summary: 20 devices` inklusive USB-HID-Boot-Keyboard-Record.
+
+Version 0.13.6
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- USB-HID-Treiber `drivers/usb/hid.zig` als builtin Input-Treiber auf dem USB-Core angelegt und als `USBHID` in der Treiberregistry registriert.
+- HID-Boot-Keyboard-Erkennung implementiert: class `0x03`, subclass `0x01`, protocol `0x01`; nicht passende HID-Geraete werden als unsupported bzw. Maus-Kandidat diagnostiziert.
+- xHCI kann den ersten Interrupt-IN-Endpoint konfigurieren: `Configure Endpoint`, DCI-Berechnung fuer IN-Endpoint, eigener Transfer Ring und DMA-Reportpuffer.
+- HID-Setup fuer Boot-Keyboard implementiert: `SET_CONFIGURATION`, `SET_PROTOCOL(0)` und `SET_IDLE`.
+- HID-Setup robuster fuer echte Hardware gemacht: Bind-kritisch ist der konfigurierte Interrupt-IN-Endpoint; `SET_CONFIGURATION`, `SET_PROTOCOL(0)` und `SET_IDLE` werden als Setup-Warnungen diagnostiziert, wenn das Geraet trotzdem Reports liefern kann. `USB` zeigt `setup-warn`, `protocol`, `idle`, `report-id`, den letzten 8-Byte-Report und den letzten nichtleeren Report.
+- HID-Keyboard-Decode fuer echte Gaming-Keyboards erweitert: Neben dem Boot-Report-Layout gibt es einen Fallback, der bekannte Keyboard-Usages in allen 8 Report-Bytes erkennt. Das ist als Hardware-Bruecke gedacht, bis ein vollstaendiger HID-Report-Parser folgt.
+- USB-HID-Tastatur ist an den bestehenden Keyboard-Pfad angebunden: `keyboard.setPollHook()` pollt USB-HID nicht-blockierend; neue HID-Usages werden ueber Set-1-Scancodes in den vorhandenen Layout-/Modifier-/ASCII-Decoder eingespeist.
+- HID-Keyboard-Decoder erweitert: Cursor-Tasten laufen ueber E0-Set-1-Scancodes in `KEY_LEFT/RIGHT/UP/DOWN`, F3/F4 sowie Modifier-Make/Breaks landen im bestehenden Decoder; Shift+Tab, Alt-Tab und Alt-F4 nutzen damit den vorhandenen PS/2-Pfad.
+- USB-HID-Boot-Mouse als Einzelgeraet angebunden: Boot-Mouse-Protocol `0x02` wird erkannt, konfiguriert und ueber den vorhandenen `drivers/input/mouse.zig`-Zustand in R4Desk/R4X-API/Diagnose eingespeist.
+- xHCI-Port-Sondierung fuer den Hardwaredeploy ergaenzt: bei mehreren angeschlossenen USB-Geraeten werden Ports nacheinander enumeriert; fuer 0.13.6 wird ein HID-Boot-Keyboard oder eine HID-Boot-Mouse bevorzugt, nicht-HID-Geraete werden wieder deaktiviert und uebersprungen.
+- `USB` zeigt xHCI, USB-Core und USB-HID-Status; `INPUT` zeigt PS/2- und USB-HID-Quellen, Poll-/Report-/Fehlerzaehler.
+- Device Inventory und Device Manager melden QEMU `usb-kbd` und `usb-mouse` als `USBHID` mit Status `bound-input`; PS/2 bleibt parallel aktiv.
+- QEMU-Abnahme mit `modern-q35`, AHCI, `qemu-xhci` und `usb-kbd` bestanden: `USBHID` aktiv, Interrupt-IN-Endpoint `0x81` konfiguriert, `set-config/protocol/idle ok`, erster nicht-blockierender Poll setzt einen pending Interrupt-TRB ohne Timeout oder Fehler.
+- QEMU-Abnahme mit `modern-q35`, AHCI, `qemu-xhci` und `usb-mouse` bestanden: `USB HID Boot Mouse` wird als `USBHID bound-input` angezeigt, der Mouse-State ist present und der Leerlauf-Interrupt bleibt pending ohne Timeout oder Fehler.
+- QEMU-Abnahme mit USB-Storage plus `usb-kbd` bestanden: `scan: ports-probed=2 non-hid-skipped=1 selected=hid-input`, danach `USB HID Boot Keyboard` als `USBHID bound-input`. Damit blockiert ein vorgesteckter USB-Stick die HID-Auswahl nicht mehr.
+- Multi-Device-Ausbau wurde in 0.13.8 umgesetzt: xHCI-Runtime-Pool, retained Slots, getrennte Keyboard-/Mouse-Bindings, eigene Interrupt-Endpoints und paralleler USBMSC-Pfad.
+- Finale QEMU-Abnahme fuer Storage+Keyboard+Mouse wurde in 0.13.8 mit `USBGATE` bestanden; der 0.13.6-HID-Punkt ist damit als QEMU-reifer Treiberpfad abgeschlossen.
+- Echte HID-Hardwareabnahme wurde bewusst in die 0.13.10-Hardwarephase verschoben, weil 0.13.7/0.13.8 zuerst C:, Desktop und stabile Logs bereitstellen mussten.
+
+Notizen:
+- USB-HID ist in 0.13.X Pflicht, auch wenn PS/2 auf dem Lenovo funktioniert. Das gibt dem Hardwaredeploy einen robusteren Eingabepfad und macht xHCI direkt sichtbar nutzbar.
+- Entscheidung nach Lenovo-Test: USB-HID wird nicht weiter manuell erzwungen, bis USB-Mass-Storage C: bereitstellt. C: ist wichtiger, weil Desktop, Device Manager und Logdateien dann auf dem echten Bootstick nutzbar werden.
+- Der erste HID-Schnitt bleibt Boot-Protocol-basiert. Eine vollstaendige HID-Report-Parser-Engine, Sondertasten, Multitouch und Touchpad-Spezialfaelle werden spaeter geplant.
+- Headless-QEMU liefert ohne gesendeten Tastendruck keinen fertigen Interrupt-IN-Report; das ist kein Fehler. Der Treiber laesst den Transfer pending und wertet Leerlauf nicht als Timeout.
+- Headless-QEMU liefert auch bei `usb-mouse` ohne echte Bewegung keinen fertigen Report; echte Bewegungs-/Button-Abnahme bleibt Hardware oder GUI-QEMU.
+
+Version 0.13.7
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- xHCI-Enumeration bevorzugt fuer 0.13.7 Mass-Storage-Geraete, damit der Bootstick zuerst gebunden und als erster Blockdatentraeger gescannt werden kann. USB-HID bleibt vorhanden, die echte HID-Hardwareabnahme ist bewusst spaeter fortzusetzen.
+- Mass-Storage-Interface-Erkennung implementiert: class `0x08`, subclass `0x06`, protocol `0x50`; Bulk-In- und Bulk-Out-Endpoint werden aus den Konfigurationsdeskriptoren gelesen.
+- xHCI Bulk-Endpoint-Konfiguration und Bulk-Transfers implementiert. Dabei wurde der Endpoint-Context-Offset fuer Nicht-EP0-Endpoints korrigiert, was auch dem HID-Pfad zugutekommt.
+- USB-Mass-Storage Bulk-Only Transport als `drivers/usb/msc.zig` angelegt: CBW/CSW, Tags, Data-In/No-Data, INQUIRY, TEST UNIT READY, REQUEST SENSE, READ CAPACITY(10) und READ(10).
+- `storage/block.zig` um Bus `usb` erweitert; `USBMSC` registriert das erste Medium read-only als `usb0` mit 512-Byte-LBA, Kapazitaet, Max-Request-Grenze und Queue-Tiefe.
+- Bootsequenz geaendert: xHCI und USBMSC laufen vor ATA/AHCI/NVMe. Wenn der USB-Stick gueltig ist, wird er dadurch als erster FAT32-Datentraeger `C:`.
+- `USB`, `BLOCK`, `BLOCKTEST`, `DEVICES` und Device Manager zeigen USBMSC-Status, Bulk-Endpoints, Sense-Daten und `storage usb0`.
+- QEMU-Abnahme mit `modern-q35`, AHCI plus `qemu-xhci`/`usb-storage` bestanden: `usb0` ist `USBMSC`, read-only, `mounted-C`; AHCI-Images werden danach `D:` und `E:`, `BLOCKTEST` liest Sektor 0 mit Signatur `55AA`.
+- USB-Core/xHCI-Scan verbreitert: xHCI scannt aktivierte Ports, veroeffentlicht gefundene USB-Geraete in der USB-Core-Liste und waehlt danach Mass Storage vor HID als aktives Klassengeraet.
+- USBMSC-Write-Grundlage implementiert: WRITE(10), SYNCHRONIZE CACHE(10), Blockdevice-Write/Flush-Hooks und Diagnosezaehler fuer Writes, Flushes, Recovery, Reset und Clear-Halt.
+- Bulk-Only-Transport-Recovery-Grundlage implementiert: Transportfehler loesen Mass-Storage-Reset, ClearFeature(HALT) fuer Bulk-In/Bulk-Out und xHCI-Endpoint-Resetversuche aus.
+- xHCI-Ring-Wrap-Logik korrigiert: Producer-Cycle wird bei Command-, EP0-, Interrupt- und Bulk-Ring-Wrap umgeschaltet; Bulk-Link-TRB-Cycle wird erst nach der ersten erfolgreichen Transfer-Completion der neuen Ringrunde aktualisiert.
+- Debug-AUTOEXEC erweitert: Nach `FSDIAG` laufen zusaetzlich `USB` und `BLOCK`, damit USBMSC-/Blockdevice-Zaehler direkt nach Schreibversuchen sichtbar sind.
+- USBMSC-Schreibpfad in QEMU abgenommen: separater beschreibbarer `usb-storage`-Datentraeger wird als `usb0`/`C:` gemountet; `FSDIAG` schreibt und liest `C:\FSDIAG.TXT`; danach bleiben xHCI/USBMSC ohne Timeouts, Recovery oder Blockfehler.
+- xHCI-Port-Aktivierung fuer echte SuperSpeed-Hardware erweitert: Verbundene/enabled Ports mit Link-State ungleich `U0` werden nicht mehr still uebersprungen, sondern erst mit Wartephase, dann Warm-Reset und erneuter Wartephase bis `U0` gebracht. Das zielt auf Lenovo-Ausgaben wie `ccs=1 ped=1 speed=4 pls=5`.
+- xHCI-Mass-Storage-Auswahl korrigiert: Ein erfolgreich konfigurierter Mass-Storage-Port wird nun direkt als aktives Klassengeraet behalten. Der Scan deaktiviert diesen Slot nicht mehr, um denselben Stick sofort erneut zu adressieren. Das zielt auf die Lenovo-Ausgabe `port 10 ... stage=configured` gefolgt von `port 10 ... stage=address-failed`.
+- USBHID-Bind-Schutz ergaenzt: Wenn xHCI aktuell von USB Mass Storage gehalten wird, bindet USBHID kein anderes HID-Geraet und konfiguriert keine Interrupt-Endpoints auf dem Mass-Storage-Slot. Eine angeschlossene USB-Maus darf dadurch C:-Reads fuer R4Desk nicht mehr stoeren.
+
+Notizen:
+- 0.13.7 war bewusst der Weg von "kein C:" zu "R4Desk bootet vom Stick". Dieser Meilenstein ist erreicht, aber der USB-Stack ist architektonisch noch nicht reif genug fuer weitere Hardwaretest-Schleifen.
+- Ab jetzt gilt Hardware-Teststopp: Keine neuen Laptop-/USB-Stick-Tests, bis 0.13.8 in QEMU vollstaendig gruen ist.
+- QEMU ist fuer Lesen und Schreiben gruen. Hardware bleibt trotzdem eingefroren, weil echte xHCI-Controller, Hubs und USB-Sticks andere Timing-/Port-Zustaende zeigen koennen.
+- UAS ist fuer 0.13.X optional; Bulk-Only Transport reicht als erster USB-Stick-Pfad.
+- Letzte QEMU-Abnahme: `DevTools\Scripts\Build.bat -test -profile modern-q35 -storage ahci -qemu-args "-device qemu-xhci,id=r4xhci -drive if=none,id=usbtest,file=Code\disk.img,format=raw,readonly=on -device usb-storage,bus=r4xhci.0,drive=usbtest"`; Ergebnis: Exitcode 0, `USBMSC` aktiv, Device Manager `usb USB Mass Storage device driver=USBMSC status=bound-storage`, `storage usb0 mounted-C`, `BLOCKTEST #0 usb0 read=ok sig=55AA`.
+- Schreib-Testrunde mit separatem `Code\usb-test.img` und beschreibbarem `qemu-xhci`/`usb-storage`: `usb0` wird `C:` und ist `writable=yes`; `FSDIAG result: OK`; danach `USBMSC commands=11452 reads=11440 writes=7 flush=2/0 failures=0`, xHCI `bulk transfers=34353 failures=0`, Blockdevice `usb0 state=active`.
+- Nach dem Slot-Erhalt fuer Mass Storage bleibt die QEMU-Schreibabnahme gruen: `ports-probed=1 selected=mass-storage`, `address-device ok`, `USBMSC bound=yes`, `usb0 drives=C:`, `FSDIAG result: OK`, keine xHCI-/USBMSC-Fehler.
+- QEMU-Kombiabnahme USB-Stick plus USB-Maus bleibt gruen: `usb0` wird `C:`, `FSDIAG result: OK`, USBMSC bleibt fehlerfrei. Reiner USB-Maus-Fall ohne USB-Stick bindet weiter als `USB HID boot mouse bound`.
+
+Version 0.13.8
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Pflichtreferenzen liegen lokal unter `Reference\USB\`: xHCI 1.2c, USB 2.0, USB 3.2, USB HID 1.11, HID Usage Tables 1.5, USB Mass Storage Overview 1.4 und USB Mass Storage Bulk-Only Transport 1.0.
+- Der 0.13.7-Prototyp hat bewiesen, dass QEMU-USBMSC lesen/schreiben kann und echte Hardware R4Desk vom Stick erreichen kann. 0.13.8 ersetzt diese Prototypenlogik durch einen stabilen, testbaren USB-Stack.
+- Build- und Testskript kennen feste USB-QEMU-Profile: `xhci`, `hid-kbd`, `hid-mouse`, `msc-ro`, `msc-rw`, `msc-kbd`, `msc-mouse`, `msc-kbd-mouse` und `msc-data`. Der QEMU-Runner prueft profilbezogene Logmarker und schreibt eine Statusdatei, damit rote USB-Marker `Build.bat -test` wirklich fehlschlagen lassen.
+- USBMSC erkennt Write-Protect ueber SCSI MODE SENSE(6): read-only QEMU-USB meldet `write-protected=yes known=yes writable=no`, wird in der Blockdevice-Registry nicht mehr als beschreibbar ausgegeben und erzeugt keine USBMSC-Transport-/SCSI-Fehler beim erwarteten Schreibschutz.
+- xHCI scannt QEMU-Ports weiter, nachdem Mass Storage gefunden wurde, und veroeffentlicht mehrere konfigurierte USB-Geraete im USB-Core. USBMSC und USBHID waehlen ihr Zielgeraet anhand des Ports explizit aus, statt blind den zuletzt global adressierten Slot zu benutzen.
+- USBHID fuehrt Boot-Keyboard und Boot-Mouse als getrennte Bindings mit eigenem Port, Interface, Interrupt-IN-Endpoint, Reportpuffer, Zaehlern und Pollpfad. Tastatur- und Maus-Poll-Hooks schalten xHCI vor dem Poll gezielt auf das jeweilige HID-Zielgeraet.
+- QEMU-Profile gruen: `xhci`, `hid-kbd`, `hid-mouse`, `msc-ro`, `msc-rw`, `msc-kbd`, `msc-mouse`, `msc-kbd-mouse` und `msc-data`. `msc-kbd-mouse` beweist jetzt: USBMSC bleibt als C: aktiv, FSDIAG schreibt/liest erfolgreich, der USB-Core sieht Storage+Keyboard+Mouse (`devices=3 configured=3`) und USBHID meldet `keyboard=bound mouse=bound`.
+- Regression-Lauf ueber alle USB-Profile mit AHCI/Q35 bestanden; der Runner prueft die profilbezogenen Marker und `Build.bat -test` endet bei roten USB-Markern mit Fehlercode. Nach der erweiterten `USBREGRESS`-Diagnose wurde derselbe Profilsatz lokal mit `USBREGRESS 32` in der Debug-AUTOEXEC erneut gruen abgenommen.
+- Erste Mount-Policy implementiert: FAT32-Volumes werden anhand von R4OS-Systemmarkern (`/BOOT/R4OS.ELF`, `/BOOT/LIMINE.CONF`, `/CONFIG.R4S`, `/R4DESK`, `/BIN`) bewertet. Nur Systemkandidaten bekommen bevorzugt `C:`, reine Datenvolumes starten bei `D:`.
+- Neues QEMU-Profil `msc-data` prueft die Policy: USB-Mass-Storage nutzt `Code\data.img` ohne R4OS-Marker und landet als `D:`, waehrend das AHCI-Bootimage mit 5/5 Markern `C:` bleibt. `BLOCKTEST FAT D:` und `FSDIAG result: OK` bestanden.
+- USBMSC-BOT-Pruefung geschaerft: CSW-Signatur, CSW-Tag, CSW-Status, Phase Error und Residue werden separat gezaehlt und im `USB`-Status als `invalid-csw`, `tag-mismatch`, `phase` und `residue-err` sichtbar. Die QEMU-MSC-Profile erwarten fuer den Normalpfad jeweils `0`.
+- USBMSC-Blockdevice-Vertrag erweitert: `storage/block.zig` kennt ein `removable`-Flag; `USBMSC` registriert `usb0` als `removable=yes`, Device Inventory beschreibt USB-Blockdevices als entfernbare Medien, und der QEMU-Runner prueft `removable=yes` fuer MSC-Profile.
+- Erster xHCI-Handle-Schnitt implementiert: `DeviceHandle` und `EndpointHandle` kapseln Port, Slot, Speed, VID/PID, Config und Endpoint-DCI. USBMSC und USBHID speichern diese Handles aus der USB-Core-Device-Liste und nutzen Handle-basierte xHCI-Funktionen fuer Auswahl, Konfiguration, Bulk, Interrupt-IN und Recovery.
+- Handle-Umbau in QEMU abgenommen: `msc-kbd-mouse`, `hid-mouse`, `msc-ro` und `msc-data` bleiben gruen; Storage+Keyboard+Mouse funktioniert weiter, read-only MSC bleibt fehlerfrei, und die Mount-Policy bleibt stabil.
+- xHCI-Runtime-Pool eingefuehrt: jedes konfigurierte QEMU-Root-Hub-Geraet behaelt eigenen Slot, Port, Speed, Config, Device Context, Input Context, EP0-Ring, Interrupt-Ring, Bulk-Ringe, Descriptor-Puffer und Endpoint-Zustand. Klassen wechseln per Slot-/Port-Handle auf den passenden Runtime-Kontext, statt das Geraet erneut zu adressieren.
+- USBMSC-Auswahl ist idempotent: Wenn der gespeicherte Mass-Storage-Slot bereits mit Bulk-In/Bulk-Out konfiguriert ist, laufen SET_CONFIGURATION und Configure Endpoint nicht erneut. Nach USBHID-Initialisierung wird der aktive Boot-Storage-Kontext wieder selektiert, damit C:-Reads fuer CONFIG/R4Desk stabil bleiben.
+- Runtime-Pool-Abnahme in QEMU: `msc-kbd-mouse` zeigt Storage, Keyboard und Mouse als drei konfigurierte USB-Core-Geraete mit `retained-slots=3`; USBMSC bleibt `usb0 drives=C:`, FSDIAG schreibt/liest erfolgreich und USBHID meldet `keyboard=bound mouse=bound` ohne xHCI-/USBMSC-Fehler.
+- Nach dem Runtime-Pool erneut gruen: `xhci`, `hid-kbd`, `hid-mouse`, `msc-ro`, `msc-rw`, `msc-kbd`, `msc-mouse`, `msc-kbd-mouse` und `msc-data` unter `modern-q35`/AHCI.
+- Root-Hub-Port-State-Machine gebuendelt: Startup und Probe nutzen denselben Prepare-Pfad mit Change-Bit-Cleanup, Debounce, Port-Power, Port Reset, U0-Wartephase und Warm Reset. `USB` zeigt Link-State-Namen (`U0`, `RxDetect`, ...), Change-Bits, Power-/Debounce-Status sowie Zaehler fuer Change-Clears, Debounce-Fehler, Power-Anforderungen, U0-Waits und Warm-Resets.
+- Port-State-Abnahme in QEMU: `msc-kbd-mouse`, `xhci`, `hid-mouse`, `msc-ro` und `msc-data` bleiben unter `modern-q35`/AHCI gruen. Das Kombiprofil zeigt `retained-slots=3`, aktive Ports in `U0`, `portchg`-Diagnose und keine Debounce-/Timeout-/USBMSC-Fehler.
+- xHCI-Ringdiagnose erweitert: `USB` zeigt Ring-Wrap-Zaehler fuer Command, Event, EP0, Interrupt, Bulk-In und Bulk-Out, den letzten xHCI-Event mit Type, Completion-Code, Slot, Endpoint, Laenge und Parameter sowie das letzte stale Event. Bulk- und Interrupt-Zeilen zeigen Queue-/Cycle-Stand, Pending und Wraps.
+- Ringdiagnose-Abnahme in QEMU: `msc-kbd-mouse`, `msc-rw`, `hid-mouse` und `msc-data` bleiben unter `modern-q35`/AHCI gruen. Die MSC-Profile erzeugen Event-/Bulk-Wraps ohne `ringfull`, Timeout oder USBMSC-Transportfehler.
+- Descriptor-Parser gehaertet: Configuration-Deskriptoren werden als Descriptor-Stream gelaufen, HID-Descriptor und SuperSpeed Endpoint Companion werden gezaehlt, unbekannte Descriptoren werden uebersprungen und kaputte Laengen als `malformed` sichtbar. Die bestehende USB-Core-Struktur bekommt jetzt die fuer den Bootpfad beste Interface-Auswahl statt blind die erste Interface.
+- Descriptor-/Klassenauswahl in QEMU abgenommen: `msc-kbd-mouse`, `msc-rw`, `hid-mouse` und `msc-data` bleiben gruen. `USB` zeigt `records`, `unknown`, `malformed`, `hid-desc`, `ss-comp` und `selected=mass-storage-bulk` oder `selected=hid-boot-*`; USBMSC bleibt als Blockdevice aktiv und HID bindet parallel.
+- Control-Transfer-Basis gekapselt: Setup/Data/Status laufen jetzt ueber eine gemeinsame `ControlRequest`-Struktur mit Richtung `none/in/out`. `USB` zeigt letzte Request-Felder, Richtung, Completion-Code, Residue, OK-Status sowie Fail-/Stall-/Short-/Timeout-Zaehler.
+- Control-Transfer-Abnahme in QEMU: `msc-kbd-mouse`, `msc-ro`, `hid-mouse` und `msc-data` bleiben unter `modern-q35`/AHCI gruen. Descriptor-Reads, SET_CONFIGURATION, HID SET_PROTOCOL/SET_IDLE und MSC-Initialisierung laufen weiter ohne Control-Failures.
+- USBMSC-SCSI-Diagnose erweitert: `USBMSC` zeigt Init-Status fuer INQUIRY, TEST UNIT READY, READ CAPACITY(10) und MODE SENSE(6), TUR-Retry-Zaehler sowie Request-Sense-Zuordnung zum ausloesenden Opcode.
+- USBMSC-Sense-Kategorien sichtbar: REQUEST SENSE setzt `valid`, `for=0x..`, Key/ASC/ASCQ und Zaehler fuer Not Ready, Unit Attention, Illegal Request und Write Protect. `msc-rw`, `msc-ro` und `msc-data` bleiben unter `modern-q35`/AHCI gruen.
+- Autoexec-/QEMU-Testauswertung weiter verschaerft: USB-Profile pruefen jetzt xHCI-Control-Diagnose ohne Fail/Stall/Short/Timeout, erfolgreiche Configuration-Descriptor-Auswertung mit `records` und `malformed=0`, HID-Boot-Interfaceklassen, MSC-SCSI-Initmarker (`inquiry`, `tur`, `capacity`, `mode-sense`) und saubere Sense-Kategorien. `msc-kbd-mouse`, `hid-mouse`, `msc-ro` und `msc-data` sind mit diesen strengeren Markern unter `modern-q35`/AHCI gruen.
+- Erster Disconnect-/Reclaim-Pfad fuer retained xHCI-Slots implementiert: Der USB-Core kann Geraete nach Controller/Port entfernen, xHCI erkennt beim Portrefresh Runtimes ohne verbundenen Port, sendet `Disable Slot`, loescht DCBAA und entfernt den USB-Core-Eintrag. `USB` zeigt `disconnect`, `reclaim` und `disable-slot`-Zaehler. `msc-kbd-mouse` und `msc-data` bleiben unter `modern-q35`/AHCI gruen und zeigen im Normalpfad keine versehentlichen Reclaims.
+- Klassen-Handle-Auswahl gegen stale Ports gehaertet: `selectDeviceHandle()` refresht Ports, fuehrt Reclaim aus und lehnt Handles ab, deren Port nicht mehr verbunden ist. Damit koennen USBMSC/USBHID nach einem spaeteren Disconnect nicht versehentlich alte retained Slots weiterbenutzen.
+- `BLOCKTEST STRESS [D:] [loops]` implementiert: schreibt pro Runde eine 1536-Byte-FAT32-Testdatei, liest sie zurueck, vergleicht und loescht sie wieder. `BLOCKTEST STRESS C: 6` wurde lokal im QEMU-Profil `msc-kbd-mouse` auf USB-C: gruen abgenommen; danach blieben USBMSC, xHCI-Ringe, Sense-Zaehler und Blockdevice-Zaehler sauber.
+- USB-Core-Interface-Records implementiert: Pro konfiguriertem Geraet werden bis zu acht Interfaces mit Class/Subclass/Protocol und Endpoint-Hinweisen gespeichert und in `USB` ausgegeben. Die bootrelevante Interface-Auswahl bleibt erhalten. `msc-kbd-mouse` bleibt unter `modern-q35`/AHCI gruen und zeigt fuer Storage, Keyboard und Mouse je einen strukturierten `interface #...`-Record.
+- USBMSC meldet Backend-Recovery und den letzten SCSI-Sense-Snapshot jetzt an `storage/block.zig`: `BLOCK` zeigt pro Blockdevice `recovery=a/b` und `sense=...`, waehrend USBMSC weiterhin die detaillierten BOT-/Sense-Zaehler fuehrt.
+- `USBMSCTEST` implementiert: gezielter SCSI-Illegal-Request-Selbsttest fuer USBMSC. Der Test sendet einen ungueltigen CDB, erwartet Command Failed ohne BOT-Transport-Recovery, holt REQUEST SENSE und prueft `for=0xFF key=0x05`.
+- `USBMSCTEST` wurde in QEMU mit `msc-rw` gruen abgenommen: `USBMSC illegal request self-test: ok`, `selftest: runs=1 fail=0 illegal=1`, `sense=for=0xFF key=0x05 asc=0x20 ascq=0x00`, `transport=0`.
+- HID-Interrupt-Polling liefert jetzt einen expliziten Status `report`, `no_report` oder `failed`. `USBHID` zaehlt Leerlauf ohne Report getrennt als `noreport` pro Binding und aggregiert, sodass pending Interrupt-IN-Transfers nicht als Fehlerdiagnose verschwimmen.
+- `USBREGRESS [loops]` als schneller Shell-Regressionsanker implementiert und erweitert: wiederholt HID-Polls und USBMSC-Re-Selects und meldet `result: OK`, solange USB-Core-Geraetezahl, konfigurierte Geraete, retained Slots, HID-Bindings, MSC-Blockdevice sowie xHCI-/HID-/USBMSC-Fehlerzaehler stabil bleiben.
+- `USBREGRESS 32` wurde in QEMU mit `msc-kbd-mouse` und `hid-mouse` gruen abgenommen: `devices`, `configured`, `retained`, HID-/MSC-Bindings und alle neuen Fehlerdeltas bleiben stabil.
+- USBHID-Auswahl ist idempotent gegen den retained Runtime-Pool: nach einem Wechsel zurueck auf Keyboard oder Mouse verwendet HID einen bereits wiederhergestellten Interrupt-IN-Endpoint weiter, statt SET_CONFIGURATION/SET_PROTOCOL/SET_IDLE/Configure Endpoint in jeder Regressionsrunde erneut auszufuehren.
+- `USBREGRESS 256` wurde in QEMU mit `msc-kbd-mouse` gruen abgenommen: Storage, Keyboard und Mouse bleiben gleichzeitig gebunden, `devices=3/3 configured=3/3 retained=3/3 msc-blocks=1/1`, alle xHCI-/HID-/USBMSC-Fehlerdeltas bleiben `0`.
+- Nach der HID-Runtime-Idempotenz wurde der komplette USB-Profilsatz `xhci`, `hid-kbd`, `hid-mouse`, `msc-ro`, `msc-rw`, `msc-kbd`, `msc-mouse`, `msc-kbd-mouse` und `msc-data` erneut ohne zusaetzliche Debug-AUTOEXEC-Haken gruen abgenommen.
+- Langer Kombi-Stresslauf in QEMU bestanden: `modern-q35 -storage ahci -usb msc-kbd-mouse` mit temporaerem `USBREGRESS 256` und `BLOCKTEST STRESS C: 12` in der Debug-AUTOEXEC. Ergebnis: USBMSC blieb `usb0 drives=C:`, Keyboard und Mouse blieben gebunden, `BLOCKTEST`, FAT-Stress auf USB-C:, `BLOCKTEST FAT D:` und `FSDIAG` liefen gruen; xHCI/USBHID/USBMSC meldeten keine neuen Fehler, Timeouts, Reclaims oder Recoveries.
+- FAT32-Laufwerksrollen werden jetzt aus Systemmarkern abgeleitet statt nur aus dem Buchstaben: ein zweiter Systemkandidat wird z.B. als D: gemountet, bleibt aber Rolle `system`; reine Datenvolumes bleiben `data`.
+- FSDIAG gibt Laufwerksart und Rolle jetzt menschenlesbar aus (`kind=FAT32 role=system/data`), damit QEMU- und spaetere Hardwarelogs ohne ABI-Zahlen lesbar sind.
+- `DRIVES` zeigt jetzt pro Laufwerk die Mount-Rolle plus Blockdevice-Bezug: Blockindex, Blockname, Bus, Treiber, State, Writable-/Removable-Status und letzter Blockfehler. Damit sind `DRIVES`, `BLOCK`, `DEVICES` und Device Manager fuer die Mount-Policy besser vergleichbar.
+- Erweiterte `DRIVES`-Diagnose in QEMU abgenommen: `msc-rw` zeigt `C:` als `bus=usb driver=USBMSC`, D:/E: als AHCI; `msc-data` zeigt `C:` als AHCI-Systemvolume und `D:` als USBMSC-Datenvolume mit `role=data`.
+- FAT32-Partitionen mit kaputtem oder nicht unterstuetztem BPB werden vom MBR-Scan nicht mehr als FAT32-Laufwerk gemountet, sondern mit `FAT32: not mounted` uebersprungen.
+- Protective-MBR-Eintraege fuer GPT-Medien werden im MBR-Scan als `GPT-protective` erkannt und nicht als normales Laufwerk gemountet; echtes GPT-Parsing bleibt spaeterer Ausbau.
+- Direktes NVMe-Boot ohne USB wurde erneut abgenommen: `modern-q35 -storage nvme-boot -usb none` bootet, mountet `C:` und `D:` aus NVMe-Namespaces, `BLOCKTEST`, `NVMETEST`, `FSDIAG C:` und `FSDIAG D:` sind gruen.
+- NVMe-AUTOEXEC-/Runner-Marker wurden an USB-Profile angeglichen: `modern-q35 -storage nvme-boot -usb xhci` ist jetzt Runner-gruen und zeigt `USB`/xHCI-Diagnose im NVMe-Boot-Log.
+- Zusatzdatentraeger-Mix in R4OS ist Runner-gruen: `modern-q35 -storage nvme -usb msc-data` mountet deterministisch `C:`=AHCI-System, `D:`=USBMSC-Datenvolume, `E:`=AHCI-Datenvolume, `F:`=NVMe-Datenvolume.
+- Bekannte QEMU-/SeaBIOS-Grenze entschieden: `modern-q35 -storage nvme-boot -usb msc-data` liefert trotz Bootindex und `-boot order=n,strict=on` keinen seriellen Kernel-Output. Weil `nvme-boot` ohne USB, `nvme-boot` mit reinem xHCI und AHCI+USBMSC+NVMe-Mix gruen sind, gilt das nicht als R4OS-USBMSC-Laufzeitfehler und blockiert das 0.13.8-USB-Gate nicht.
+- `USBMSCTEST` wurde um `WP`/`WRITEPROTECT` erweitert: Der Test laeuft nur auf per MODE SENSE als read-only erkannten USBMSC-Medien und erwartet, dass WRITE(10) mit SCSI Sense `for=0x2A key=0x07 asc=0x27` fehlschlaegt, ohne BOT-Transport-Recovery auszuloesen.
+- `USBMSCTEST WP` wurde in QEMU mit `msc-ro` gruen abgenommen: `USBMSC write-protect self-test: ok`, `selftest: runs=1 fail=0 wp-test=1`, `sense=for=0x2A key=0x07 asc=0x27 ascq=0x00`, `transport=0`, `recovery=0`.
+- `USBMSCTEST SYNC` implementiert: prueft den SYNCHRONIZE-CACHE(10)-Pfad explizit und akzeptiert entweder erfolgreichen Flush oder einen sauber per REQUEST SENSE gemeldeten Illegal-Request-Fallback, solange kein BOT-Transportfehler oder Recovery entsteht.
+- `USBMSCTEST SYNC` wurde in QEMU mit `msc-rw` gruen abgenommen: `USBMSC sync-cache self-test: ok`, `selftest: runs=1 fail=0 sync=1`, `opcode=0x35`, `transport=0`, `recovery=0`; danach blieben `BLOCKTEST FAT D:` und `FSDIAG result: OK` gruen.
+- `USBGATE [loops]` implementiert: ein zusammenfassender Abschlussanker fuer xHCI, USB-Core, retained Slots, HID-Bindings und USBMSC-Blockstatus. Der Befehl meldet pro Kategorie Deltas und endet mit `result: OK` oder `FAILED`.
+- Finale 0.13.8-QEMU-Gate-Runde bestanden: `xhci`, `hid-kbd`, `hid-mouse`, `msc-ro`, `msc-rw`, `msc-kbd`, `msc-mouse`, `msc-kbd-mouse` und `msc-data` unter `modern-q35`/AHCI. Jeder Lauf hatte temporaer `USBGATE 64` in der Debug-AUTOEXEC und wurde zusaetzlich per COM-Log auf `USBGATE loops=64 ... result: OK` geprueft.
+- QEMU-only-Reifephase abgeschlossen: Keine Panic-/Exception-/FATAL-Marker, keine neuen xHCI-/HID-/USBMSC-Fehlerdeltas, keine FAT32-Vergleichsfehler, USBMSC bleibt als System- oder Datenlaufwerk deterministisch gemountet.
+- Dokumentation fuer den 0.13.8-Abschluss aktualisiert: Roadmap, `Docs\Deployment\BuildUndTest.txt`, `Docs\Drivers\TreiberStand.txt` und `Docs\Deployment\HardwareDeploy-0.13.txt` beschreiben Gate, Grenzen und naechsten Freigabeschritt.
+
+Notizen:
+- Diese Phase ist absichtlich breiter als ein einzelner Bugfix. Ziel ist nicht "die Maus stoert nicht mehr", sondern ein USB-Subsystem, das mehrere Geraete gleichzeitig modellieren kann.
+- Der Runtime-Pool ist jetzt die QEMU-taugliche Multi-Slot-Basis fuer Boot-USB. Weitere echte Hardware-Haerten wie Hubs, komplizierte Hotplug-Folgen, dauerhaft ausgefallene Removable-Medien, echte HID-Reports und echte Composite-Mehrklassenbindung werden nicht mehr in 0.13.8 hineingezogen, sondern nach dem Hardware-Gate neu priorisiert.
+- Referenzpflicht: xHCI-Arbeit gegen `Reference\USB\xhci-1.2c-intel-868295.pdf`; Enumeration/Control gegen USB 2.0/3.2; HID gegen HID 1.11/HUT; MSC gegen BOT/Overview. T10 SPC/SBC nachziehen, bevor weitere SCSI-Kommandos oder tiefere Sense-Auswertung implementiert werden.
+- Hardwaretests bleiben trotz abgeschlossenem 0.13.8-QEMU-Gate bis zur 0.13.9-Freigabe ausdruecklich gesperrt.
+
+Version 0.13.9
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Roadmap-Versionen 0.13.0 bis 0.13.6 formal bereinigt: erledigte Punkte sind geschlossen, verschobene echte Hardwareabnahmen stehen nicht mehr als Altlast in fruehen Versionen.
+- USB-Systemlaufwerk- und Desktop-Gate nach abgeschlossener 0.13.8-QEMU-Reifephase vorbereitet.
+- Hardware-Testcheckliste aktualisiert: bevorzugt UEFI, Legacy/CSM als Fallback, Boot ohne externe Maus, Boot mit externer Maus, Boot mit externer Tastatur, Boot mit beidem, jeweils erwartete `USB`/`BLOCK`/`DRIVES`-Marker.
+- Device Manager und Exportpfad gegen den gereiften USB-Stack in QEMU abgenommen: `DEVMGR.R4X` schreibt im Console-Fallback automatisch `C:\Temp\HWREPORT.TXT`, wenn C: beschreibbar ist.
+- Device Manager R4X-Stack von 24 KB auf 64 KB erhoeht, damit lokale Inventarpuffer plus Hardwarebericht-Export nicht in einen Stackueberlauf laufen.
+- Volle 0.13.9-Freigaberunde bestanden: `xhci`, `hid-kbd`, `hid-mouse`, `msc-ro`, `msc-rw`, `msc-kbd`, `msc-mouse`, `msc-kbd-mouse` und `msc-data` unter `modern-q35`/AHCI; alle Exitcode 0, keine Bad-Marker.
+- Exportgrenze dokumentiert: `msc-ro` meldet erwartbar `Export failed`, weil C: dort absichtlich read-only ist; alle beschreibbaren C:-Profile melden `Exported C:\Temp\HWREPORT.TXT`.
+- Freigabeentscheidung dokumentiert: Das damalige Lenovo-Image durfte nach `Build.bat -norun` als Hardware-Testkandidat verwendet werden; diese Freigabe ist durch die spaetere QEMU-only-Entscheidung aufgehoben.
+
+Notizen:
+- 0.13.9 ist kein Implementierungsersatz fuer 0.13.8, sondern die Release-/Deployment-Schwelle nach der USB-Reifephase.
+- Codex schreibt weiterhin kein Image auf USB-Datentraeger; der User uebernimmt das Flashen manuell.
+- Hardwaretests waren ab Abschluss dieser Freigabephase kurzzeitig wieder erlaubt; diese Entscheidung ist in 0.13.10 aufgehoben. Ab jetzt gilt QEMU-only.
+
+Version 0.13.10
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Keine weiteren Hardwaretests in 0.13.X planen oder anfordern; alle folgenden Abnahmen laufen ausschliesslich ueber QEMU.
+- 0.13.10 auf QEMU-only stabilisiert: `modern-q35` mit AHCI/NVMe/USB-Profilen bleibt der verbindliche Abschlussanker.
+- HWLOG-/Diagnosepfade nach dem echten HWLOG-Absturz in QEMU gehaertet, ohne neue Laptop-Testrunden zu verlangen.
+- Dokumentation auf QEMU-only-Fortsetzung umgestellt: Hardwaredeploy-Dokument bleibt Archiv/Befundsammlung, nicht aktive Testcheckliste.
+- ProgramApi-/DriverApi-/R4X-/R4D-/SDK-Entscheidungen final nachgezogen: ProgramApi bleibt v51, DriverApi bleibt v9, `QGATE`/`HWLOGTEST`/USB-Gate-Kommandos sind Shell-/Kernel-Diagnosen und kein neuer SDK-/R4X-/R4D-Vertrag.
+- Storage-R4D-Entscheidung dokumentiert: `register_storage_backend` ist in DriverApi v9 kein echter Blockdevice-Backend-Vertrag; ladbare Storage-Treiber brauchen spaeter einen sauberen DriverApi-v10-Vertrag.
+- Minimaler 0.13.X-Abschlusszustand definiert: QEMU-only, USBMSC als C:-/D:-Pfad stabil in den QEMU-Profilen, USB-HID in QEMU gebunden, HWLOG/QGATE reproduzierbar, echte Lenovo-Spezialpfade nach 0.13.X ausgelagert.
+- 0.13.10 nach abgeschlossener 0.13.9-Freigabe gestartet.
+- Hardware-Testkandidat `Code\disk.img` wurde mit `DevTools\Scripts\Build.bat -norun` erzeugt.
+- Testrunde 0.13.10-A war als Hardwareauftrag in `Docs\Deployment\HardwareDeploy-0.13.txt` konkretisiert; das Dokument ist ab jetzt Archiv, nicht aktive Testcheckliste.
+- Entscheidung: UEFI ist fuer 0.13.X kein Abschlussblocker mehr; der erste Hardwaredeploy wird ueber Legacy/CSM abgeschlossen.
+- Lenovo-L340-15API bootet das 0.13.9-freigegebene Image ueber Legacy/CSM sowohl ohne als auch mit eingesteckter USB-Maus.
+- Echter Lenovo-Test zeigt USBMSC stabil: USB-Stick wird als `usb0` gebunden, C: ist vorhanden, `FSDIAG` schreibt/liest erfolgreich.
+- Echte USB-Maus wird als HID Boot Mouse erkannt, scheitert aber vor dem Polling mit `mouse=detected`, `polls=0`, `failures=1`, `reason=USB HID mouse bind failed`.
+- xHCI-HID-Intervallkorrektur implementiert: Interrupt-Endpoint-`bInterval` wird nach xHCI Table 6-12 in den Endpoint-Context-Wert uebersetzt und in `USB` als `interval=<descriptor>-><context>` sichtbar.
+- Kompletter USB-QEMU-Profilsatz nach der Intervallkorrektur wieder gruen: `xhci`, `hid-kbd`, `hid-mouse`, `msc-ro`, `msc-rw`, `msc-kbd`, `msc-mouse`, `msc-kbd-mouse`, `msc-data` unter `modern-q35`/AHCI.
+- Echter Lenovo-Test nach der Intervallkorrektur: USBMSC bleibt stabil, R4Desk startet, `FSDIAG` schreibt/liest auf C:, USB-Maus bindet als Boot Mouse und bewegt sich, ist aber sehr langsam und bleibt nach einiger Zeit haengen.
+- USB-HID-Mauspfad nachgezogen: relative Mausreports unterdruecken doppelte Nicht-Null-Reports nicht mehr, Mouse-Polling holt pro Eingabeabfrage bis zu acht fertige Reports nach, `INPUT` zeigt HID-`dup` und `service`.
+- R4Desk fragt Eingabe im Hauptloop alle 10 ms statt alle 30 ms ab, damit USB-HID-Mausreports nicht kuenstlich lange liegen bleiben.
+- Bewusst kein permanenter USB-HID-Input-Thread: QEMU zeigte damit R4X-Stack/Rueckkehrprobleme beim Console-Device-Manager. Der stabile Pfad bleibt synchrones Polling ueber Keyboard-/Mouse-Abfragen.
+- R4X-/R4D-SDK-Builds laufen ohne x86-Red-Zone, Stack-Checks und Stack-Protector, passend zum Kernel-Mode-Modulumfeld.
+- R4X-Programmrueckkehr bereinigt: `r4os_call_program` haelt den Kernel-Stackpointer nicht mehr im Programmstack, behaelt aber den Stack-Top-Abstand fuer den R4X-Returnpfad.
+- Device Manager robuster gemacht: `DEVMGR.R4X` bekommt 128 KB Stack, der Hardware-Export prueft vollstaendige Writes und markiert truncation statt still zu kuerzen.
+- Kompletter USB-QEMU-Profilsatz nach der HID-Mauspolling-Korrektur wieder gruen: `xhci`, `hid-kbd`, `hid-mouse`, `msc-ro`, `msc-rw`, `msc-kbd`, `msc-mouse`, `msc-kbd-mouse`, `msc-data` unter `modern-q35`/AHCI.
+- USB-HID-Implementierung nach USB-HID-Spezifikation nachgezogen: xHCI merkt HID-Descriptoren und Report-Descriptor-Laengen aus der Konfiguration, USBHID liest den Report-Descriptor per GET_DESCRIPTOR(Report), parst Main/Global/Local-Items und meldet `report-desc=<gelesen>/<erwartet>` mit `parsed`, `malformed` oder `unread`.
+- HID-Report-Parser `drivers/usb/hid_report.zig` angelegt: feste Kernelstruktur fuer Felder, Usage Pages, Usage-Listen, Report IDs, Bitoffsets, Report Size/Count, logische Grenzen und Layoutmarker fuer Keyboard/Mouse/Pointer/X/Y/Wheel/Buttons.
+- USB-Mausdecoder nutzt den Report-Descriptor fuer einfache Button-, X-, Y- und Wheel-Felder und faellt nur dann auf Boot-Protocol-Bytes zurueck, wenn der Descriptor nicht lesbar oder nicht geeignet ist.
+- Vollstaendige QEMU-Abnahme fuer den HID-Descriptor-Ausbau bestanden: `xhci`, `hid-kbd`, `hid-mouse`, `msc-ro`, `msc-rw`, `msc-kbd`, `msc-mouse`, `msc-kbd-mouse` und `msc-data` unter `modern-q35`/AHCI; die Kombi zeigt `usb0` als C:, `keyboard=bound`, `mouse=bound`, `USBMSC bound`, `report-desc=63/63 parsed keyboard-layout` und `report-desc=52/52 parsed mouse-layout wheel`.
+- HID-Interrupt-IN-Pollpfad von fester 8-Byte-Grenze auf variable Reportpuffer erweitert: xHCI nimmt Slice-Puffer entgegen, USBHID pollt mindestens acht und bis zu 32 Byte je nach Endpoint-Max-Packet-Size, speichert die letzte Reportlaenge und zeigt Reports in `USB` mit `len=...`.
+- Vollstaendige QEMU-Abnahme nach variablem HID-Reportpuffer bestanden: `xhci`, `hid-kbd`, `hid-mouse`, `msc-ro`, `msc-rw`, `msc-kbd`, `msc-mouse`, `msc-kbd-mouse` und `msc-data` unter `modern-q35`/AHCI; USBMSC bleibt C:, Keyboard/Mouse bleiben gebunden, HID-Descriptordiagnose bleibt sichtbar.
+- xHCI-HID-Interrupt-Transferdiagnose erweitert: Completion-Residue wird ausgewertet, daraus die echte Reportlaenge berechnet und in `USB` als `interrupt-in ... last=<actual>/<requested> residue=<n> cc=<n>` sowie pro HID-Binding als `last-len=<actual>/<requested> residue=<n>` angezeigt.
+- USBHID nutzt die echte Interrupt-IN-Reportlaenge fuer Report-Dump, Nonzero-Tracking und Keyboard-/Mouse-Decode. `INPUT` zeigt die Kurzdiagnose jetzt als `len=<actual>/<requested> nz=<last-nonzero> residue=<n>`.
+- Vollstaendige USB-QEMU-Abnahme nach der Transferlaengen-Diagnose bestanden: `xhci`, `hid-kbd`, `hid-mouse`, `msc-ro`, `msc-rw`, `msc-kbd`, `msc-mouse`, `msc-kbd-mouse` und `msc-data` unter `modern-q35`/AHCI.
+- USB-Core-Interface-Records fuer Interrupt-IN erweitert: pro Interface werden jetzt Adresse, Max-Packet-Size und Intervall des Interrupt-IN-Endpoints gespeichert und in `USB core` ausgegeben.
+- USBHID bindet Boot-Keyboard und Boot-Mouse jetzt aus allen passenden Interface-Records eines konfigurierten USB-Geraets, nicht nur aus dem ausgewaehlten `first_interface`. Das haertet Composite-Geraete, bei denen HID nicht das bevorzugte Interface ist oder neben Storage/anderen Klassen auftaucht.
+- Vollstaendige USB-QEMU-Abnahme nach Composite-HID-Binding bestanden: `xhci`, `hid-kbd`, `hid-mouse`, `msc-ro`, `msc-rw`, `msc-kbd`, `msc-mouse`, `msc-kbd-mouse` und `msc-data` unter `modern-q35`/AHCI.
+- USBHID-HID-Kandidatenvalidierung ergaenzt: Boot-Keyboard/-Mouse-Interfaces ohne verwertbaren Interrupt-IN-Endpoint werden nicht mehr halb gebunden, sondern in `USB HID status` als `missing-ep=<n>` sichtbar gemacht.
+- Vollstaendige USB-QEMU-Abnahme nach der HID-Endpoint-Validierung bestanden: `xhci`, `hid-kbd`, `hid-mouse`, `msc-ro`, `msc-rw`, `msc-kbd`, `msc-mouse`, `msc-kbd-mouse` und `msc-data` unter `modern-q35`/AHCI.
+- Shell-Redirection fuer interne Hardware-/USB-Diagnosen erweitert: Kommandos wie `USB`, `INPUT`, `BLOCK`, `XHCI`, `HARDWARE`, `DEVICES`, `DMESG`, `PCIE`, `AHCI`, `NVME`, `AUDIO`, `NET`, `USBGATE` und `USBREGRESS` koennen jetzt per `>`/`>>` in Dateien geschrieben werden, z.B. `USB > C:\Temp\USB.TXT`.
+- Redirection-Test in QEMU bestanden: temporaer `USB > C:\Temp\USBREDIR.TXT`, `INPUT >> C:\Temp\USBREDIR.TXT` und `TYPE C:\Temp\USBREDIR.TXT` im `msc-kbd-mouse`-Profil; gespeicherter USB-/Input-Report war im COM-Log sichtbar, USBMSC blieb C:.
+- `HWLOG [path] [FULL]` als Hardware-Snapshot-Kommando implementiert: Default `C:\Temp\HWLOG.TXT`, groesserer Capture-Puffer, Abschnittsmarker fuer Version, Laufwerke, Blockdevices, USB, INPUT, Device Inventory, PCIe, Chipsatz, ACPI, IRQ, AHCI, NVMe und Hardware-Summary; `FULL` ergaenzt Tasks, Audio, Netzwerk und DMESG.
+- `HWLOG` in QEMU mit `msc-kbd-mouse` gegen USB-C: abgenommen: temporaer `HWLOG` und `TYPE C:\Temp\HWLOG.TXT` in der Debug-AUTOEXEC, Ergebnis `bytes=18830 truncated=no`; danach kompletter USB-Profilsatz erneut gruen.
+- HWLOG nach der QEMU-only-Entscheidung gehaertet: `HWLOG [MIN|STD|FULL] [path]`, kleiner `MIN`-Snapshot fuer vorsichtige Diagnose, gemeinsamer Log-Builder und `HWLOGTEST [MIN|STD|FULL]` mit Write-/Readback-Pruefung nach `C:\Temp\HWLOGT.TXT`.
+- `HWLOGTEST MIN`, `HWLOGTEST STD` und `HWLOGTEST FULL` in QEMU mit `modern-q35 -storage ahci -usb msc-kbd-mouse` gruen abgenommen: Readback ok, Marker ok, `truncated=no`, Snapshotgroessen 9471/18853/29294 Bytes.
+- Nach dem HWLOGTEST-Ausbau wurde der komplette USB-Profilsatz erneut ohne temporaere AUTOEXEC-Haken gruen abgenommen: `xhci`, `hid-kbd`, `hid-mouse`, `msc-ro`, `msc-rw`, `msc-kbd`, `msc-mouse`, `msc-kbd-mouse`, `msc-data`.
+- `USBGATE` und `USBREGRESS` setzen jetzt `ERRORLEVEL`; `QGATE [loops] [FULL]` als zusammenfassender 0.13-QEMU-Anker implementiert. Der Befehl kombiniert USB-Stabilitaet (`USBGATE`) und HWLOG-Readback (`HWLOGTEST MIN`, optional `STD`/`FULL`) und endet mit `QGATE result: OK/FAILED`.
+- `QGATE 64 FULL` in QEMU mit `modern-q35 -storage ahci -usb msc-kbd-mouse` gruen abgenommen: `USBGATE loops=64`, HWLOGTEST fuer MIN/STD/FULL, Summary `usb=OK hwlog-min=OK hwlog-std=OK hwlog-full=OK`, `QGATE result: OK`.
+- Capturing-/Redirection-Whitelist fuer die nackten Gate-Kommandos nachgezogen und verschachteltes Capturing repariert; `QGATE 8 FULL > C:\Temp\QGATE.TXT` mit anschliessendem `TYPE` in QEMU vollstaendig gruen abgenommen.
+- Nach dem QGATE-/ERRORLEVEL-Ausbau wurde der komplette USB-Profilsatz erneut ohne temporaere AUTOEXEC-Haken gruen abgenommen: `xhci`, `hid-kbd`, `hid-mouse`, `msc-ro`, `msc-rw`, `msc-kbd`, `msc-mouse`, `msc-kbd-mouse`, `msc-data`.
+- Erster echter USB-Boot auf Lenovo L340-15API erreicht R4DOS.
+- Legacy/CSM-Bootpfad funktioniert mindestens bis Kernel und Shell.
+- X: RAM-Drive ist aktiv.
+- Entscheidung nach weiterer Lenovo-Runde: Kuenftige Hardwaretests werden aus 0.13.X gestrichen. Der echte USB-Mauspfad bleibt zu unreif fuer sinnvolle manuelle Testrunden; `HWLOG` ist auf echter Hardware beim Ausfuehren abgestuerzt bzw. wurde nicht geschrieben. Ab jetzt wird nur noch in QEMU getestet.
+
+Notizen:
+- 0.13.X gilt ab jetzt als QEMU-Reifestufe fuer den spaeteren Hardwaredeploy, nicht mehr als aktuelle Laptop-Abnahme.
+- UEFI, echte USB-HID-Maus, Touchpad, RTL8168/8111, WLAN, native Vega-Grafik, Akku/EC und weitere Lenovo-Spezialpfade werden in 0.13.X nicht mehr manuell getestet.
+- Hardwaredeploy bleibt Langzeitziel, aber die naechsten Schritte muessen in QEMU reproduzierbar, automatisiert und ohne User-Hardwaretests abnehmbar sein.
+- Offene Bonuspfade fuer nach 0.13.X: echte Lenovo-USB-HID-Haertung, Hubs/Hotplug, Touchpad/I2C, UEFI-Abnahme, native Vega-Grafik, Akku/EC und ein echter DriverApi-v10-Storage-Backend-Vertrag.
+- Netzwerk-Remote-Debug, RTL8168/8111, UDP-Debugdienst, Host-Tool, Remote-Reboot und Remote-Kernel-Update wurden bewusst aus 0.13.X herausgenommen. Diese Themen werden erst wieder neu geplant, wenn der QEMU-Pfad dafuer ausdruecklich priorisiert wird.

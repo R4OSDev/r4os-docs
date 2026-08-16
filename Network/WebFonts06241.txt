@@ -1,0 +1,182 @@
+﻿Klickifax-Webfonts: Aktivierung und Darstellung (0.62.41)
+=========================================================
+
+Zweck
+-----
+
+0.62.41 schliesst den in 0.62.39 begonnenen Webfontpfad. Klickifax kann
+verwendete CSS-AT-FONT-FACE-Quellen aus LOCAL(), dem verifizierten Fontcache
+oder dem normalen Dokumentressourcenpfad dekodieren, dokumentbezogen
+aktivieren, fuer Layout und Umbruch messen und als Alpha8-Glyphen zeichnen.
+
+Eine Webschrift wird dabei weder installiert noch in den persistenten
+R4DRAW-Fontkatalog aufgenommen. Im Dateisystem entstehen ausser den bereits
+in 0.62.39 beschriebenen Originalobjekten unter
+`C:\R4OS\Temp\Klickifax\Cache\Fonts\` keine Fontdateien.
+
+
+Architekturgrenze
+-----------------
+
+Die Format- und Face-Logik bleibt vollstaendig im Userland:
+
+- R4FONT oeffnet TTF, OTF/CFF, WOFF, WOFF2 und Collections, liest CMAP und
+  Metriken, liefert Kerning und rastert eine Glyphendeckung als Alpha8.
+- `r4os.app_fonts.FaceStore` besitzt Decoderfaces, eine Kopie der
+  Quellbytes und einen begrenzten Glyphenrastercache. Seine FaceHandle aus
+  Owner, Slot und Generation sind nur innerhalb der Anwendung gueltig.
+- Klickifax besitzt mit `document_fonts.Set` die aktive Face-Menge des
+  sichtbaren Dokuments. Navigation und Regelwechsel invalidieren auch alte
+  temporaere Renderkennungen.
+- R4DRAW kennt weder Webfontcontainer noch FaceHandle. Der append-only
+  R4DRAW-Auftrag `gui_blend_alpha8` uebernimmt lediglich eine begrenzte
+  Deckungsmaske und eine RGB-Farbe. Der Desktop mischt diese Maske
+  clippingfest als Source-over in seinen XRGB-Szenenpuffer.
+
+Damit liegen keine importierten Bytes, dekodierten Faces oder Webfonttabellen
+im Kernel oder in R4DRAW. Der generische Alpha8-Auftrag kann auch von anderen
+Anwendungen verwendet werden und ist kein Klickifax-Sonderfall.
+
+
+Quellen- und Aktivierungsablauf
+------------------------------
+
+Klickifax sammelt nach dem Layout ausschliesslich Faces, die fuer sichtbare
+Text- oder Control-Operationen tatsaechlich gebraucht werden. Fuer jedes Face
+bleibt die in CSS deklarierte LOCAL-/URL-Reihenfolge erhalten.
+
+1. Ein LOCAL-Treffer wird erst nach erfolgreicher Reservierung seines
+   Ressourcenplatzes gegen einen konkreten installierten Facenamen gebunden.
+2. Ein Warmcachetreffer wird mit Request-Origin, deklarierter und finaler URL,
+   SHA-256, Containerstruktur und Groessengrenze erneut verifiziert. Der
+   Cache liefert caller-owned Bytes; ein Dateipfad wird nie als spaetere
+   Decoderwahrheit weitergereicht.
+3. Ein Netztreffer durchlaeuft weiterhin CSP FONT-SRC, Mixed Content, CORS,
+   Redirect-Hops, Generation und Abbruch. Erst strukturell vollstaendige
+   Originalbytes werden als Face gestaged.
+4. Ein Cache-Publish ist best effort. Ein bereits erfolgreich dekodiertes
+   Face wird nicht wegen eines unabhaengigen Cache-I/O-Fehlers verworfen.
+5. Decoder-, Policy-, Transport- oder Groessenfehler versuchen die naechste
+   deklarierte Quelle. Ein abgewiesener Warmtreffer wiederholt exakt dieselbe
+   URL ueber das Netzwerk, bevor der SRC-Fallback fortschreitet.
+
+Ein Face wird zweiphasig aktiviert: Dekodieren und Validieren erzeugen
+zunaechst nur ein gestagtes, unsichtbares Handle. Nach allen synchronen
+Cachearbeiten wird die logische FONT-DISPLAY-Zeit erneut abgelesen. Erst dann
+darf der aktuelle Dokumentepoch das Face atomar veroeffentlichen. Stop,
+Navigation oder eine alte Generation geben das gestagte Handle frei.
+
+
+FONT-DISPLAY und Reflow
+-----------------------
+
+R4OS zeigt waehrend jeder Ladephase den installierten Systemfallback. Es
+entsteht keine unsichtbare Textphase. Die Aktivierungsfenster sind
+deterministisch:
+
+- AUTO, BLOCK und SWAP behalten in dieser R4OS-Auslegung ein offenes
+  Aktivierungsfenster, bis Quelle, Abbruch oder Dokumentlebensdauer terminal
+  werden.
+- FALLBACK darf den sichtbaren Fallback innerhalb von 3000 ms ersetzen.
+- OPTIONAL darf ihn nur innerhalb von 100 ms ersetzen. Danach bleibt der
+  Systemfont fuer den aktuellen Dokumentepoch sichtbar.
+
+Alle in einem Bedarfsepoch verlangten Faces werden gemeinsam abgeschlossen.
+Erst wenn jedes Face ready, fehlgeschlagen oder ausserhalb seines
+Aktivierungsfensters ist, erzeugt der Koordinator hoechstens eine Revision.
+Klickifax publiziert die gestagten Faces zusammen und fuehrt genau einen
+fontbedingten Reflow und Repaint aus. Bereits aktive, unveraenderte Faces
+werden im naechsten Bedarfsepoch behalten und loesen keine weitere Revision
+aus.
+
+Der Ressourcenpfad blockiert das erste Seitenlayout nicht auf alle Webfonts.
+Die Seite bleibt mit Systemfonts bedienbar; spaete Ergebnisse werden im
+normalen Pump verarbeitet. Das gilt ebenso fuer Bildressourcen.
+
+
+Matching, Layout und Zeichnung
+------------------------------
+
+Das bestehende CSS-Matching bleibt die einzige Auswahlwahrheit. Familie,
+Gewicht, Stil, Stretch und UNICODE-RANGE bestimmen das Face. Innerhalb einer
+CSS-Fallbackliste wird ein Webface nur gewaehlt, wenn R4FONT fuer den
+betroffenen Unicode-Skalar wirklich einen Glyphenindex ungleich null liefert.
+Sonst folgt die naechste CSS-Familie beziehungsweise der installierte
+Systemfallback.
+
+R4FONT-Metriken werden in 26.6-Festkomma auf die angeforderte Pixelhoehe
+skaliert. Klickifax verwendet dieselben Advances und Kerningwerte fuer
+Messung, Umbruch und Zeichnung. Proportionale Breiten, mehrere Gewichte und
+Stile sowie gemischte ASCII-/Unicode-Laeufe bleiben dadurch konsistent.
+
+Glyphen eines gleichfarbigen sichtbaren Textlaufs werden zuerst in eine
+app-eigene Alpha8-Laufmaske komponiert. Geliehene FaceStore-Raster werden
+dabei sofort kopiert und ueberlappende Deckungen mit Source-over verbunden.
+Nur nichtleere, hoechstens 512 Pixel breite Strips gelangen zu R4DRAW; eine
+1600 Pixel breite Testzeile mit 400 Glyphbeitraegen benoetigt dadurch vier
+statt 400 Zeichenauftraege. Der FaceStore haelt hoechstens 512 Raster
+beziehungsweise 8 MB Rasterbytes und entfernt Eintraege per LRU.
+
+Der R4DRAW-Auftrag prueft Abmessungen, Stride und Payloadgroesse und kopiert
+den sichtbaren Bereich waehrend des Aufrufs; er bewahrt keinen geliehenen
+Anwendungszeiger auf. Ein negativer Transportwert stoppt weitere
+Webfont-Strips des Frames und wird in Klickifax sichtbar gemeldet. Die
+systemweite Ablösung der noch festen GUI-Displayliste bleibt unveraendert die
+allgemeine Aufgabe von 0.62.43; 0.62.41 fuehrt dafuer keine Browser-Sonderliste
+oder vergroesserte feste Kommandogrenze ein.
+
+
+Besitz und Freigabe
+-------------------
+
+Jede Klickifax-Instanz besitzt genau einen FaceStore. Mehrere unabhaengige
+DocumentFontSets innerhalb derselben Instanz duerfen identische Quellbytes
+ueber SHA-256 plus Bytevergleich teilen, behalten jedoch eigene FaceHandle,
+Aktivierungsepochen und Renderkennungen. Der persistente Fontcache wird ueber
+seine bestehende Mehrinstanz-Lease von verschiedenen Browserinstanzen geteilt.
+
+Die Freigabereihenfolge ist Face, Rasterreferenzen, Quellbyte-Referenz und
+zuletzt Decoder. Ein Handle wird bei Release invalidiert und seine Generation
+erhoeht; ein fremdes oder altes Handle wird abgewiesen. Navigation,
+Regelwechsel, Abbruch und Fensterende hinterlassen keine aktiven Faces,
+Quellobjekte oder Raster im FaceStore.
+
+Subdokumente besitzen in 0.62.41 noch keinen eigenen visuellen Layoutpfad und
+erzeugen deshalb keine Webfontbedarfe. Eine versehentliche Fontcompletion
+einer Child-Generation wird ausdruecklich abgewiesen und darf das sichtbare
+Top-Level-DocumentFontSet nicht veraendern. Sobald Subdokumente sichtbar
+layouten, benoetigen sie eine generationseigene Registry und ein eigenes Set.
+
+
+Grenzen
+-------
+
+- Der Webfontpfad installiert keine Schrift und bietet keine Aktion zum
+  Weiterreichen an den Font Installer.
+- R4FONT fuehrt in dieser Stufe CMAP, Metriken, Kerning und Glyphenraster aus.
+  Komplexes Text-Shaping, Bidirektionalitaet und GSUB-Sprachregeln bleiben
+  getrennte Browserfunktionen.
+- Unbekannte CSS-Bedingungen wie noch nicht ausgewertete AT-SUPPORTS-Kontexte
+  bleiben wie in 0.62.39 inaktiv.
+- Die manuelle Darstellungsabnahme findet gesammelt in 0.62.47 statt.
+
+
+Automatisierte Abnahme
+----------------------
+
+Die neutrale Offline-Fixture `Tests/Fixture/Browser/Fonts06241.html` und vier
+deterministisch erzeugte BSD-3-Clause-WOFFs pruefen Regular, Bold, Italic,
+einen getrennten Unicodebereich und einen absichtlich fehlerhaften ersten
+SRC. Manifest, Generator, Bytes, Lizenzen, CMAP, Metriken und ein exakter
+18px-Alpha8-Rasterhash sind reproduzierbar gepinnt.
+
+Hosttests decken FaceHandle-Lebensdauer, Quelldeduplizierung, LRU, Matching,
+Unicodefallback, FONT-DISPLAY-Grenzen, genau eine Revision, Navigation,
+Cache-/Netzfallback, Run-Strip-Batching und unabhaengige Dokumentbesitzer ab.
+Der Gast-Selbsttest beweist Cold-Decode und Warm-Decode aus dem echten
+persistenten Cache ohne Netzabruf, identische Metrik-/Rasterausgabe, einen
+echten validierten Canvas-Alpha8-Aufruf, einen gemeinsamen Quellblob bei zwei
+Besitzern sowie unveraenderten R4DRAW-Systemfontkatalog und
+`C:\R4OS\FONTS\`-Bestand. Der separate Alpha8-Vertragstest deckt ausserdem
+Kernelpacking, SDK-Clipping und Desktop-Source-over bis zum gebauten
+R4DESK-Consumer ab.

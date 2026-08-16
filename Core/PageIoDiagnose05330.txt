@@ -1,0 +1,111 @@
+﻿R4OS 0.53.30 - Expliziter Page-I/O-Diagnosepfad ohne automatische Eviction
+============================================================================
+
+Ziel
+----
+
+0.53.30 fuehrt Page-Out und Page-In bewusst nur als explizite Diagnosekante
+ein. Ein Diagnoseprogramm kann eine einzelne page-sized Testseite in einen
+reservierten Backing-Store-Slot schreiben und wieder lesen. Es gibt weiterhin
+keinen automatischen Pager, keine Eviction-Policy, keinen Swap-Stub und keinen
+zweiten FAT32- oder Block-I/O-Pfad.
+
+Damit wird die naechste Grenze belastbar: R4OS kann Slotbesitz, VM-Region,
+Datei-Backing, I/O-Ergebnis, Dirty-/Valid-Zustand und Fehlerfaelle sichtbar
+zusammenfuehren, ohne schon produktive Auslagerung bei Memory Pressure oder
+Page Faults zu aktivieren.
+
+Besitzgrenze
+------------
+
+Der Kernel besitzt nur die technische Mindestmechanik:
+
+- Backing-Store-Status und Slot-Tabelle in `Code/src/memory/backing_store.zig`
+- VM-Region-/Commit-Pruefung ueber die bestehende VirtualRange-Sicht
+- vorhandener R4SYS-/FAT32-/Storage-Pfad fuer Datei-I/O
+- explizite Diagnosezaehler und Statuswerte fuer Page-Out/Page-In
+
+R4DEV startet keine Hintergrundarbeit und entscheidet keine Opferseiten.
+Storage bekommt keinen speziellen Pagefile-Port. FAT32 erhaelt nur die kleine
+Write-at-Faehigkeit fuer vorhandene Dateibereiche; die Operation laeuft ueber
+`fs_request`, `fat32.writeFileRange()` und die vorhandenen Flush-/Volume-
+Grenzen.
+
+Neuer Vertrag
+-------------
+
+ProgramApi v126 haengt
+`memory_page_io_probe(path, backing_bytes, operation, region_id,
+region_offset, reservation_id, slot_index, page, flags, out)` append-only an.
+
+Die Probe:
+
+- prueft, dass Backing-Datei und Slot-Reservierung existieren,
+- prueft, dass `region_id` eine R4X-VM-Region ist,
+- akzeptiert nur page-aligned Offsets innerhalb committed Bytes,
+- berechnet Slot und Datei-Offset aus Reservation plus Slot-Index,
+- blockiert Page-In, wenn der Slot noch nicht valid ist,
+- fuehrt Page-Out ueber den normalen R4SYS-/FAT32-Schreibpfad aus,
+- fuehrt Page-In ueber den normalen R4SYS-/FAT32-Lesepfad aus,
+- markiert erfolgreiche Page-Outs als valid und clean,
+- markiert fehlgeschlagene oder partielle I/O-Ergebnisse als Slot-Fehler.
+
+`pageIoPrepare()` und `pageIoComplete()` trennen Validierung und Ergebnis-
+Uebernahme. Dadurch kann der I/O-Pfad spaeter ersetzt oder asynchron gemacht
+werden, ohne die Slot-/Rollback-Regeln zu verwischen. In 0.53.30 bleibt der
+Aufruf synchron und diagnostisch.
+
+Status und Blocker
+------------------
+
+Wichtige Statuswerte:
+
+- `ready`: Vorbereitung ist gueltig, der konkrete I/O-Aufruf darf laufen.
+- `page_out_ok`: die Testseite wurde vollstaendig geschrieben.
+- `page_in_ok`: die Testseite wurde vollstaendig gelesen.
+- `slot_not_valid`: Page-In wurde vor gueltigem Page-Out angefordert.
+- `vm_region_missing`: die Region existiert nicht oder ist keine R4X-VM-
+  Region.
+- `reservation_not_found`: die Slot-Reservierung existiert nicht.
+- `io_failed` und `partial_io`: der normale Datei-I/O-Pfad konnte die Seite
+  nicht vollstaendig uebertragen.
+
+Die Blocker spiegeln diese Ursachen direkt. Es gibt keinen stillen Fallback
+auf einen zweiten Speicher- oder Storagepfad.
+
+Abnahme
+-------
+
+PERFDIAG, MEMSUITE und STORDIAG pruefen jeweils:
+
+- Page-In auf einen noch nicht validen Slot scheitert sichtbar,
+- Page-Out einer Testseite schreibt genau 4096 Bytes,
+- Page-In liest dieselben 4096 Bytes zurueck,
+- Slotzustand, Flags und Performance-Snapshot melden valid/clean,
+- Fehlerzaehler steigen bei der absichtlich ungueltigen Page-In-Probe,
+- Pager, Eviction und Swap bleiben deaktiviert.
+
+Erwartete sichtbare Linien im Smoke-Test:
+
+- `R4DEV performance snapshot v126: OK`
+- `Page I/O invalid in: OK`
+- `Page I/O page out: OK`
+- `Page I/O page in: OK`
+- `Page I/O performance: OK`
+- `MEMSUITE pressure ... pageIO=... pager=0`
+- `STORDIAG pageIO: OK ... eviction=0`
+
+Nicht-Ziele
+-----------
+
+0.53.30 fuehrt bewusst nicht ein:
+
+- automatische Eviction,
+- Page-Fault-getriebenes Page-In,
+- Memory-Pressure-getriebenes Page-Out,
+- globale Pager-Policy,
+- Swap-/Pagefile-Autostart,
+- produktive Hintergrunddrains fuer anonyme Seiten.
+
+Der naechste Schritt darf erst echte Pager-Fehlergrenzen und Wiederanlauf-
+Regeln haerten, bevor automatische Eviction geplant wird.

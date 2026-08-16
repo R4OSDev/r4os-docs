@@ -1,0 +1,85 @@
+﻿R4OS 0.55.7 Connectivity-Basis
+==============================
+
+0.55.7 haertet die gemeinsame technische Grundlage fuer SSH, SFTP/SCP,
+Systemdatei-Update, FTP und RDP. Die Arbeit bleibt bewusst in SDK,
+Diagnoseprogrammen und R4X-Diensten. Der Kernel bekommt keinen speziellen
+SSH-, FTP-, RDP- oder Updater-Pfad.
+
+R4SYS Systemdatei-Replace
+-------------------------
+
+R4SYS stellt seit 0.55.7 einen SDK-Vertrag fuer geplante Systemdatei-
+Ersetzung bereit:
+
+- `classifySystemPath(path)` klassifiziert Kernel, R4L, R4D, R4P, Services,
+  Software, Fonts, Config, SDK und TEMP-Diagnosepfade.
+- `prepareSystemReplace(sys, target, staged, backup, flags)` prueft Stage,
+  Ziel, Backup, sibling-basierte Rename-Grenze, Dateitypen und Reboot-Bedarf.
+- `applySystemReplace(sys, plan)` fuehrt Backup und Replace ueber vorhandene
+  R4SYS-Dateioperationen aus und versucht bei Fehlern Rollback.
+- `SystemReplacePlan.rebootRequired()` markiert Kernel, Libraries, Treiber,
+  Protokolle, Services, Programme, Fonts und SDK-Dateien als rebootpflichtig.
+
+Der Vertrag erwartet fuer den finalen Replace-Schritt sibling-basierte Pfade:
+Ziel, Stage-Datei und Backup liegen im selben Verzeichnis. Ein spaeterer
+Updater darf Paketpayloads unter `C:\R4OS\UPDATE\STAGED` halten, muss fuer
+den eigentlichen Replace aber zuerst eine gepruefte Stage-Datei neben dem
+Ziel erzeugen. Das passt zur bestehenden FAT32-`fileRename`-Semantik und
+vermeidet einen neuen Kernel-Sonderweg.
+
+`FSDIAG.R4X` prueft diesen Vertrag im Standard-Smoke ueber `C:\TEMP`:
+Original schreiben, Stage-Datei per R4SYS-Write anlegen, Plan vorbereiten,
+Replace anwenden, Backup und Zielinhalt pruefen und danach aufraeumen.
+
+R4NET/TCPSVC Contract
+--------------------
+
+`NETIOD.R4X` prueft seit 0.55.7 zusaetzlich:
+
+- lesbare R4NET-Service-Statusnamen (`would-block`, `timeout`, ...),
+- lesbare Socket-Lifecycle-Namen (`bad-handle`, `local-close`, ...),
+- TCP-Read-/Write-Grenzen,
+- TCPSVC-Endpoint-Details aus `ServiceDetailByName`: Queue, Worker,
+  offene Handles und Timeout-Zaehler.
+
+Damit muessen Dead Connections, halb offene TCP-Zustaende, Bad Handles,
+Would-block-Faelle und Service-Timeouts als strukturierte Diagnose sichtbar
+bleiben. SSHD, RDPSVC und spaeter FTP behalten ihre eigene Session-Policy;
+TCPSVC bleibt Besitzer der TCP-Service-Handles und stellt Status bereit.
+
+SERVMAN Diagnose
+----------------
+
+`SERVMAN DIAG` zeigt nun eine Connectivity-Endpoint-Uebersicht fuer `TCPSVC`,
+`SSHD` und `RDPSVC`: Zustand, Endpoint-/Queue-Flags, Queue-Belegung, Worker,
+offene Handles, Busy-Rejections, Timeouts, Cancellations und letzter Fehler.
+
+Das ist keine User-/Rechteverwaltung. Es ist reine Betriebsdiagnose fuer ein
+single-user, fully trusted System.
+
+Abnahme
+-------
+
+Host-/Build-Abnahme:
+
+    DevTools\Zig\zig.exe test Code\System\SDK\r4os\r4sys.zig
+    DevTools\Zig\zig.exe run Tests\Gate\CheckConnectivityContracts0557.zig
+    DevTools\Scripts\Build.bat -app Code\System\Diagnostics\FsDiag
+    DevTools\Scripts\Build.bat -app NETIOD
+    DevTools\Scripts\Build.bat -app SERVMAN
+    DevTools\Scripts\Build.bat -norun
+    DevTools\Scripts\Build.bat -test
+
+Erwartete Smoke-Marker:
+
+    FSDIAG system replace result: OK
+    NETIOD connectivity-contract: OK
+    NETIOD tcp-service-workers: OK
+    SERVMAN Diagnose
+
+No-Fallback-Grenze:
+
+Der statische Gate-Test prueft, dass der neue Replace-Vertrag in
+`Code/System/SDK/r4os/r4sys.zig`, FSDIAG, NETIOD und SERVMAN liegt und nicht
+als Kernel-Helfer in `Code/Kernel/program/r4sys.zig` entsteht.

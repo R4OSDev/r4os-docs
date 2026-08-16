@@ -1,0 +1,182 @@
+﻿Klickifax Webfontquellen und Fontcache 0.62.39
+=================================================
+
+Ziel und Grenze
+---------------
+
+Diese Stufe erkennt CSS-AT-FONT-FACE-Regeln, fordert nur fuer sichtbaren
+Dokumenttext benoetigte Quellen an und speichert erfolgreiche Originalbytes
+in einem getrennten Fontcache. Sie installiert keine Schrift und erzeugt
+keine persistente R4F-Datei. R4FONT 0.62.40 sowie die dokumentbezogene
+Aktivierung und Alpha8-Darstellung aus 0.62.41 sind in
+`Docs/Network/WebFonts06241.txt` beschrieben.
+
+Die Logik liegt vollstaendig ausserhalb des Kernels. Der CSS- und
+Ressourcenvertrag lebt im SDK, die physische Ablage in Klickifax-Userland.
+R4DRAWs persistenter Systemfontkatalog und `C:\R4OS\FONTS\` bleiben
+unveraendert.
+
+Dokumentbezogene Face-Registry
+------------------------------
+
+`r4os.web_fonts.Registry` beginnt fuer jede Dokumentgeneration leer. Der
+CSS-Parser zeichnet AT-FONT-FACE-Regelspannen an der Wurzel sowie in
+unterstuetzten AT-MEDIA- und AT-LAYER-Kontexten zusammen mit derselben
+Bedingungsauswertung wie die Kaskade auf. Nur die fuer den aktuellen
+Layout-Viewport aktive Regelmenge gelangt in die Registry. Unbekannte
+Bedingungen, darunter noch nicht ausgewertete AT-SUPPORTS-Kontexte, bleiben
+inaktiv statt vorsorglich einen Download auszuloesen. Jede aktive Regel
+bewahrt ihren CSS-Quellabschnitt und dessen finale, gegebenenfalls
+umgeleitete Stylesheet-URL; eine zweite CSS- oder Basis-URL-Wahrheit entsteht
+nicht.
+
+Die Registry bildet begrenzt ab:
+
+- FONT-FAMILY
+- die deklarierte Reihenfolge von LOCAL(), URL() und FORMAT()
+- FONT-WEIGHT als Einzelwert, AUTO oder Bereich
+- FONT-STYLE als NORMAL, ITALIC oder OBLIQUE-Bereich
+- FONT-STRETCH als Einzelwert, AUTO oder Bereich
+- UNICODE-RANGE
+- FONT-DISPLAY
+
+Ungueltige Faces werden isoliert verworfen. Feste Grenzen fuer Regeln,
+Quellen, Unicodebereiche, Strings und CSS-Verschachtelung liefern einen
+sichtbaren Fehler statt gekuerzter Teilkataloge.
+
+Bedarf und Ressourcenlebensdauer
+--------------------------------
+
+Nach dem ersten vollstaendigen Layout sammelt Klickifax Familie, Gewicht,
+Stil und Text aus den tatsaechlichen Text- und Control-Operationen. Verborgene
+oder nicht ausgegebene Inhalte erzeugen keinen Bedarf. Unicodebereiche und
+Face-Matching reduzieren diesen Bedarf auf eindeutige Face-Indizes.
+
+LOCAL() prueft ausschliesslich konkrete Full- beziehungsweise Facenamen des
+vorhandenen R4OS-Fontkatalogs; ein blosser Familienname unterdrueckt keinen
+URL-Fallback. Ein verifizierter Warmcachetreffer wird ebenfalls sofort
+als verfuegbar markiert. Andernfalls durchlaufen ladbare URL-Quellen ihre
+deklarierte Reihenfolge. Jede Netzquelle verwendet die normale
+Dokumentressourcen-Warteschlange mit URL-Aufloesung, finaler Redirectadresse,
+HTTPS, CSP FONT-SRC, CORS, Generation, Abbruch und Stale-Response-Abweisung.
+Die CSP- und Mixed-Content-Entscheidung wird vor dem Initialabruf und erneut
+vor jedem einzelnen Redirectziel getroffen; kein blockiertes Zwischenziel
+wird nur deshalb geladen, weil ein spaeteres Endziel wieder erlaubt waere.
+Ein terminaler Fehler versucht die naechste geeignete Quelle; ein Fehler
+eines Webfonts unterdrueckt keinen Seitentext.
+
+Aendert eine Fenstergroesse die aktive AT-MEDIA-Regelmenge, verwirft die
+Webruntime ausschliesslich die bisherigen Font-Faces und deren noch laufende
+Fontressourcen. Anschliessend werden Layoutbedarf und geordnete Quellen aus
+der neuen aktiven Regelmenge neu synchronisiert. Skripte, Bilder,
+Stylesheets und Subdokumente derselben Generation bleiben dabei erhalten.
+
+Physische Ablage
+----------------
+
+Der loeschbare Klickifax-Bereich lautet:
+
+    C:\R4OS\Temp\Klickifax\
+      Cache\
+        Fonts\
+          Catalog.R4S
+          Objects\
+            ba7816bf\
+              8f01cfea\
+                414140de\
+                  5dae2223\
+                    b00361a3\
+                      96177a9c\
+                        b410ff61\
+                          f20015ad.FNT
+          Staging\
+      Work\
+
+Objects tragen eine SHA-256-Inhaltskennung und enthalten die gelieferten
+Bytes unveraendert. Der vollstaendige 64-stellige Digest wird nicht gekuerzt:
+Sieben Verzeichnisse tragen je acht Hexzeichen, das letzte Achtel liegt als
+`XXXXXXXX.FNT` im Blattverzeichnis. Damit bleibt jede einzelne Komponente
+8.3-kompatibel und ein neuer create-only Publish auch auf FAT32 atomar,
+waehrend der gesamte Pfad weiterhin alle 256 Digestbits adressiert. Leere
+Digestverzeichnisse, verwaiste Objekte sowie zurueckgebliebene atomare
+Stages werden beim Start rekursiv mit festen Tiefen- und Eintragsgrenzen
+bereinigt. Nach jeder Loeschung wird derselbe logische Verzeichnisindex
+erneut gelesen, sodass auch direkt benachbarte Stages, Orphans und leere
+Digestverzeichnisse vollstaendig erfasst werden. Der UTF-8-mit-BOM-Katalog
+speichert Quelle, Format, MIME,
+Groesse, Pruefsumme, Erstellungs- und letzten Zugriffszeitpunkt. Eine eigene
+URL-, Format- und Request-Origin-Aliasliste erhaelt Warmtreffer auch dann,
+wenn verschiedene URLs denselben Inhalt liefern. Sie bewahrt zudem die nach
+Redirects validierte finale URL. Vor einem Warmtreffer autorisiert der
+Webruntime sowohl die deklarierte als auch die finale URL erneut gegen die
+aktuelle FONT-SRC- und Mixed-Content-Policy. Ein unter einer Origin
+CORS-validierter Font wird niemals fuer eine andere Origin als Treffer
+angeboten. Gleiche Dateinamen sind ohne gleiche Bytes deshalb niemals
+derselbe Cacheeintrag. Liefert dieselbe Origin- und URL-Partition spaeter
+eine neue konkrete Representation, ersetzt deren Alias die alte eindeutig;
+ein SRC ohne FORMAT-Hinweis bleibt dadurch auch nach einem Formatwechsel
+warm aufloesbar.
+
+Ein Objekt ist standardmaessig auf 8 MB, der Fontcache insgesamt auf 32 MB
+und 128 Objekte begrenzt. 256 Quellaliase werden gehalten. Nach 30 Tagen
+werden unbenutzte Inhalte entfernt; anschliessend gilt ein deterministisches
+LRU-Verfahren. Diese Bereinigung beruehrt keine installierten Fonts.
+Die 8-MB-Grenze ist eine gemeinsame SDK-Wahrheit fuer Transport und Cache;
+exakt 8 MB sind zulaessig, ein weiteres Byte wird vor einer Ablage abgelehnt.
+
+Atomarer Vertrag
+----------------
+
+Neue Bytes werden create-only gestaged, vollstaendig geschrieben, beendet
+und anhand Groesse plus SHA-256 verifiziert. Der gleiche, besessene
+Same-Directory-Stage wird vor dem vorhandenen R4SYS-ATOMIC-REPLACE erneut
+verifiziert. Erst danach wird das unveraenderliche Inhaltsobjekt
+veroeffentlicht. Der Katalog folgt ueber einen eigenen verifizierten Stage und
+atomaren Replace. Ein Fehler vor dem Katalogcommit hinterlaesst hoechstens ein
+spaeter als Orphan erkennbares Inhaltsobjekt, niemals einen gueltigen Treffer
+auf unvollstaendige Daten. Auch ein fehlgeschlagenes Stream-Finish wird ueber
+Abort abgeschlossen, damit kein Stage-Pfad einen R4SYS-Streamslot bis zum
+Prozessende gebunden haelt.
+
+Vor dem Commit muss nicht nur die WOFF-, WOFF2- oder SFNT-Signatur stimmen.
+Deklarierte Gesamtlaengen, Tabellenanzahl und -verzeichnis sowie alle
+relevanten Tabellen-, Kompressions- und optionalen Datenbereiche muessen
+vollstaendig innerhalb der Antwort liegen. Abgeschnittene Magic-Byte-Payloads
+werden als Quellenfehler behandelt und geben den geordneten SRC-Fallback frei.
+
+Beim Start werden Katalog, BOM, Zaehler, Metadaten, Aliase und jedes
+referenzierte Objekt geprueft. Defekte Eintraege, abgelaufene Inhalte, fremde
+Orphans und alte Stagingdateien werden unter einer create-only Cachelease
+bereinigt. Warmtreffer werden vor Rueckgabe erneut byteweise gehasht und ihr
+LRU-Zeitpunkt atomar gespeichert. Ist keine gueltige Unix-Wallclock
+verfuegbar, bleibt die persistente Alters- und LRU-Zeit unveraendert; erst
+eine spaetere gueltige Wallclock beginnt beziehungsweise aktualisiert die
+Alterung. Monotone Bootticks gelangen niemals in den Katalog.
+
+Mehrere Klickifax-Instanzen teilen sich die Ablage ueber eine kurz gehaltene,
+nicht blockierende Lease. Start und Warmlookup duerfen eine belegte Lease
+nach begrenzten kooperativen Versuchen als Cachemiss behandeln. Ein bereits
+gueltig geladener Netzwerkfont wartet dagegen kooperativ, aber jederzeit ueber
+Stop, Navigation oder Fensterende abbrechbar auf seinen atomaren Commit; eine
+Leasekollision macht den technisch gueltigen Download nicht zum Quellenfehler.
+Eine einmalige Kollision deaktiviert den Fontcache einer laufenden Instanz
+nicht dauerhaft. Ein korruptes Katalogdokument gilt erst nach erfolgreicher
+Entfernung oder Ersetzung als bereinigt, damit derselbe Fehler nicht bei jedem
+Zugriff verborgen wiederkehrt.
+
+Abnahme
+-------
+
+`Fonts06239.html` ist die neutrale Seitenfixture. Sie enthaelt verwendete und
+verborgene Faces, LOCAL-/URL-Fallback, gleiche Dateinamen in verschiedenen
+Pfaden, Formatangaben, variable Gewichte und Breiten, Unicodebereiche und
+FONT-DISPLAY.
+
+Das gezielte Gate `Run-WebFontCacheContract06239.ps1` prueft Parser,
+Bedarfsmatching, Ressourcenfallback, CSP/CORS, Redirect, Abbruch, Warmtreffer,
+Inhaltsdeduplizierung, persistente Aliase, BOM, atomaren Commit, Grenzwerte,
+Bereinigung, unbekannte Wallclock, Lease-Fehlerklassifizierung sowie
+eigenstaendige Klickifax-Builds. Der headless Gastselbsttest fuehrt darueber
+hinaus die echte Zweitinstanz-Lease mit Freigabe und Wiederaufnahme aus.
+Manuelle Darstellung ist nicht Teil dieser Stufe und wird gebuendelt in
+0.62.47 abgenommen.

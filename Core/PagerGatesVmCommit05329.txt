@@ -1,0 +1,99 @@
+﻿R4OS 0.53.29 - Pager-Gates und VM-Commit-Anschluss ohne Page-I/O
+==================================================================
+
+Ziel
+----
+
+0.53.29 verbindet den bisherigen R4X-VM-Demand-Commit, den Backing-Store-
+Vertrag und die 0.53.28-Slot-Tabelle zu einem expliziten Pager-Gate. Das ist
+noch kein Pager: Es wird keine Seite ausgelagert, eingelesen, verdrängt oder
+in eine Swap-Datei geschrieben. Die Version prueft nur, ob ein nicht-
+residenter VM-Commit spaeter mit Backing-Store-Slots abbildbar waere und ob
+eine vorbereitende Reservierung sauber zurueckgerollt wird.
+
+Besitzgrenze
+------------
+
+Der Kernel besitzt nur die allgemeine Mechanik:
+
+- Backing-Store-Status aus dem vorhandenen R4SYS-/FAT32-Pfad
+- page-sized Slot-Kapazitaet aus der Slot-/Range-Tabelle
+- VM-Region, Commit, Resident-Bytes und Fault-Zaehler
+- Gate-Status, Blocker, Rollback und Diagnosezaehler
+
+Policy bleibt ausserhalb des Kernels. Es gibt keine UI-Policy, keine Service-
+Policy, keinen Pagefile-Autostart, keine Reclaim-Strategie fuer Anwendungen
+und keinen zweiten Block-I/O-Pfad. R4DEV, SDK und Diagnosen benutzen den
+Vertrag sichtbar, ohne ihn produktiv als Pager einzuschalten.
+
+Neuer Vertrag
+-------------
+
+ProgramApi v125 haengt `memory_pager_gate_probe(path, backing_bytes,
+region_id, requested_bytes, flags, out)` append-only an.
+
+Die Probe:
+
+- prueft die angegebene VM-Region auf vorhandenen `r4x_vm`-Besitz,
+- liest `committed_bytes`, `resident_bytes`, `fault_count` und
+  `failed_faults`,
+- berechnet `nonresident_bytes = committed - resident`,
+- nutzt bei `requested_bytes == 0` den nicht-residenten Commit als Bedarf,
+- prueft den Backing-Store ueber die vorhandene FAT32-/R4SYS-Information,
+- reserviert die benoetigten Slots metadata-only,
+- gibt die Reservierung sofort wieder frei,
+- meldet danach freie/reservierte Slots vor und nach dem Rollback.
+
+Bereitschaft bedeutet also: Commit-Gate und Fault-Gate koennen erkennen, ob
+die benoetigte Slot-Kapazitaet vorhanden waere. Page-In, Page-Out, Eviction,
+Pager und Swap bleiben in allen Feldern 0.
+
+Status und Blocker
+------------------
+
+Wichtige Statuswerte:
+
+- `ready`: VM-Region, Backing-Store und Slot-Kapazitaet passen; Rollback war
+  erfolgreich.
+- `vm_region_missing`: die Region existiert nicht.
+- `backing_unavailable`: die Backing-Datei ist nicht bereit.
+- `no_nonresident_commit`: ohne expliziten Request gibt es keinen nicht-
+  residenten Commit.
+- `insufficient_capacity`: die vorhandenen Slots reichen nicht.
+- `rollback_failed`: eine vorbereitete Slot-Reservierung konnte nicht sauber
+  geloest werden.
+
+Die Blocker spiegeln dieselben Ursachen. Damit sind negative Faelle
+diagnostizierbar und es gibt keinen stillen Fallback auf "einfach ohne Pager
+weitermachen".
+
+Abnahme
+-------
+
+PERFDIAG, MEMSUITE und STORDIAG pruefen jeweils:
+
+- fehlende VM-Region,
+- Region ohne nicht-residenten Commit,
+- fehlenden Backing-Store,
+- zu kleine Slot-Kapazitaet,
+- erfolgreiche Gate-Probe mit Slot-Reservierung und Rollback,
+- weiterhin deaktivierte `pager`, `eviction`, `page_in` und `page_out`.
+
+Die produktive VM bleibt demand-commit-basiert. Die Tests committen kleine
+R4X-VM-Regionen ohne Touch, damit `resident_bytes == 0` bleibt und der Gate-
+Pfad den nicht-residenten Commit prueft.
+
+Nicht-Ziele
+-----------
+
+0.53.29 fuehrt bewusst nicht ein:
+
+- Page-In oder Page-Out,
+- aktive Eviction,
+- Dirty-Page-Writeback fuer anonyme Seiten,
+- Swap-/Pagefile-I/O,
+- globale Pager-Policy,
+- automatische Auslagerung bei Memory Pressure.
+
+Der naechste Schritt darf erst echte Page-I/O-Grenzen planen, wenn diese Gate-
+und Rollback-Abnahme stabil bleibt.

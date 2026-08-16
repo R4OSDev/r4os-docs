@@ -1,0 +1,90 @@
+﻿0.53.27 Pagefile-Backing-Store ohne Pager
+==========================================
+
+Ziel
+----
+
+0.53.27 fuehrt den ersten belastbaren Backing-Store-Vertrag fuer spaetere
+Auslagerung ein. Dieser Schritt aktiviert keinen Pager und keine anonyme
+Page-Auslagerung. Er prueft nur, ob eine vorhandene Datei ueber den normalen
+R4SYS-/FAT32-Pfad als reservierbarer Kandidat taugt.
+
+Damit schliesst die Version die Luecke zwischen globalem Reclaim und
+spaeterem Pagefile-I/O: R4OS kann nun Diagnose- und Statusdaten fuer einen
+Backing-Store liefern, ohne Speicherknappheit durch versteckten Swap oder
+einen zweiten Block-I/O-Pfad zu kaschieren.
+
+Besitzgrenze
+------------
+
+Der Kernelteil bleibt klein:
+
+- `Code/src/memory/backing_store.zig` kennt Status, Flags, Blocker und
+  Zaehler.
+- R4DEV holt Datei- und Laufwerksfakten ueber bestehende R4SYS-/FAT32-
+  Funktionen.
+- Die Diagnoseprogramme erzeugen die Testdatei ebenfalls ueber R4SYS-
+  Stream-I/O.
+
+Der Vertrag uebernimmt noch keinen dauerhaften Besitz an der Datei. Er
+reserviert keine anonymen Pages, legt keine Swap-Slots an und schreibt keine
+Page-In-/Page-Out-Daten. Ein positiver Status bedeutet nur: Die Datei ist
+vorhanden, FAT32-backed, gross genug, page-aligned angefordert und als
+Reserve-Kandidat sichtbar.
+
+R4DEV und SDK
+-------------
+
+ProgramApi v123 haengt am Ende
+`memory_backing_store_probe(path, requested_bytes, flags, out)` an.
+
+Die Probe meldet:
+
+- Status: ready, missing-file, too-small, directory, unsupported-fs,
+  invalid-request oder unsupported-flags.
+- Flags fuer file-backed, existing-file, FAT32, reserve-only,
+  pager-disabled, uses-fs-api, no-second-io-path und page-aligned-request.
+- Blocker fuer fehlende Datei, zu kleine Datei, Verzeichnis, ungueltige oder
+  unaligned Anforderung, nicht unterstuetztes Dateisystem und Flags.
+- angeforderte Bytes, verfuegbare Bytes, Dateigroesse, Cluster-Groesse und
+  ersten Cluster.
+- Gesamtzaehler fuer Proben, Ready-Ergebnisse und Fehlschlaege.
+- `pager_enabled=0` und `anonymous_paging_enabled=0`.
+
+`ProgramPerformanceSummary` waechst append-only um denselben Backing-Store-
+Status. `performance_flag_memory_backing_store_ready` zeigt, dass diese
+Felder vorhanden sind. Das SDK stellt `supportsMemoryBackingStore()` und
+`memoryBackingStoreProbe(path, bytes, flags)` bereit.
+
+Abnahme
+-------
+
+PERFDIAG, MEMSUITE und STORDIAG pruefen jeweils zuerst eine fehlende Datei
+als negativen Fall und danach eine ueber R4SYS erzeugte 64-KB-Testdatei als
+positiven Backing-Store-Kandidaten. Erwartete sichtbare Linien sind:
+
+- `R4DEV performance snapshot v123: OK`
+- `Backing store missing: OK`
+- `Backing store probe: OK`
+- `MEMSUITE pressure result: OK` mit `backing=...`
+- `STORDIAG backingStore: OK`
+- `PERFDIAG result: OK`
+- `STORDIAG result: OK`
+
+No-Fallback-Grenze
+------------------
+
+0.53.27 bleibt bewusst unterhalb eines aktiven Pagers:
+
+- kein Legacy-Memory-ABI,
+- kein stilles Pagefile,
+- kein Swap-Stub,
+- keine anonyme Auslagerung,
+- kein zweiter FAT32-/Block-I/O-Pfad,
+- keine UI-, Service- oder Komfort-Policy im Kernel.
+
+Die naechste Stufe darf erst den Pager-Anschluss vorbereiten, wenn klar ist,
+wie Slots, Dirty-Status, Fehlergrenzen, Recovery und Reclaim-Orchestrierung
+ueber diesen Backing-Store laufen, ohne die Besitzgrenzen wieder aufzubrechen.
+Seit 0.53.28 ist diese Folgestufe als metadata-only Slot-/Range-Tabelle
+umgesetzt; Details stehen in `Docs/Core/PagerSlotTabelle05328.txt`.

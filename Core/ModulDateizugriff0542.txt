@@ -1,0 +1,70 @@
+﻿Modul-Dateizugriff 0.54.2
+==========================
+
+Ziel
+----
+0.54.2 zieht die produktiven R4D-, R4P- und R4L-Disk-Ladepfade auf den
+gemeinsamen Modul-Dateizugriff aus `Code/src/kernel/module_file.zig`.
+
+Diese Stufe ist ein echter Migrationsschnitt gegen die alten
+Kernel-Heap-Vollpuffer:
+- R4D-Discovery und Runtime-Load verwenden `module_file.readFullToTempRange`.
+- R4P-Discovery verwendet `module_file.readFullToTempRange`.
+- R4L-Systemlibraries halten ihre Pending-Datei ueber
+  `module_file.TempBuffer`, bis der Resolver sie geladen oder verworfen hat.
+- Der tote R4L-Einzelladepfad `loadLibraryEntry` wurde entfernt.
+- R4D und R4P importieren den Kernel-Heap nicht mehr fuer Moduldateien.
+
+Pufferlebensdauer
+-----------------
+R4D:
+- `loadPath` und `loadRuntimeNameResult` geben ihren Temp-Range-Puffer nach
+  dem Ladeversuch frei.
+- `discoverEntry` gibt den Temp-Range-Puffer nach dem Probe-/Load-Versuch
+  frei.
+
+R4P:
+- `loadModuleForEntry` gibt den Temp-Range-Puffer nach dem Modul-Load frei.
+- R4P-Metadaten werden in feste Felder der `Module`-Tabelle kopiert:
+  Name, Rolle und Dependencies zeigen nicht mehr in den Dateipuffer.
+- Zu lange Metadaten werden hart abgelehnt, statt still in Registry- oder
+  Modulfeldern abgeschnitten zu werden.
+
+R4L:
+- `collectPendingLibrary` liest die Datei in einen gemeinsamen Temp-Range-
+  Puffer und speichert diesen als Besitz im `PendingLibrary`-Eintrag.
+- `freePendingLibraries` gibt alle Pending-Temp-Puffer zentral ueber
+  `module_file.releaseTempBuffer` frei.
+- Der Pending-Puffer bleibt nur so lange aktiv, wie der Resolver ihn fuer
+  Imports, Exports, Relocations und den finalen `loadR4M`-Aufruf braucht.
+
+No-Fallback-Regel
+-----------------
+0.54.2 fuehrt keinen zweiten produktiven Loader, keinen Builtin-Ausweichpfad
+und keinen Legacy-ReadFile-Fallback ein. Die alten privaten Voll-Datei-
+Allokationen ueber `heap.alloc(entry.size)` bzw. `heap.alloc(file_entry.size)`
+sind aus R4D, R4P und R4L entfernt.
+
+Die temp_kernel-Vollpuffer bleiben in dieser Stufe eine benannte
+Uebergangsmechanik. Sie sind stabiler als Kernel-Heap-Puffer, aber nicht das
+Langfristziel.
+
+Offene Folgestufen
+------------------
+0.54.3:
+- Gemeinsame R4M0-Header-, Tabellen- und Metadata-Reader.
+- Klassifizierung/Probe ohne Voll-Datei-Laden.
+
+0.54.4:
+- R4X-Sections direkt in finale Zielbereiche laden.
+
+0.54.5:
+- R4L-, R4D- und R4P-Images streamingfaehig laden.
+- Discovery nur ueber Header/Metadaten, Nutzlast erst beim wirklichen Laden.
+
+Abnahme
+-------
+- `DevTools/Scripts/Build.bat -norun`
+- `DevTools/Scripts/Build.bat -test`
+- Code-Suche ohne R4D/R4P/R4L-Voll-Dateipuffer ueber
+  `heap.alloc(entry.size)` oder `heap.alloc(file_entry.size)`.

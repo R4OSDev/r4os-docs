@@ -1,0 +1,361 @@
+﻿Archivierte Roadmap: 0.32.X - Memory-Boot
+=============================================
+
+Version 0.32.X - Memory-Boot aus kernelold.zig herausziehen
+-------------------------------------------
+
+Status: Erledigt
+
+Leitbild:
+Nach Bootloader, BootInfo, BootDisplay, CPU-Boot, Timer-Boot, Driver Registry
+und frueher Eingabe ist der naechste chronologische Kernelbereich die
+Speicherinitialisierung. Ziel ist, den grossen Memory-Block aus
+`kernelold.zig` in klare Boot-Schichten zu ziehen, ohne dabei Paging,
+Physical Memory Management, Heap, Page Tables, ACPI-/PCIe-Device-Mapping und
+Display-Cachepolicy unkontrolliert zu vermischen.
+
+Qualitaetsziel:
+0.32.X darf keine halbe Memory-Migration werden. Am Ende soll `main.zig`
+sichtbar und nachvollziehbar den fruehen Speicherpfad starten, waehrend
+`kernelold.zig` danach nicht mehr produktiv denselben Memory-Boot erneut
+aufbaut. Weil der aktuelle CR3-/Device-Mapping-Teil von ACPI und PCIe
+abhaengt, wird der Memory-Boot bewusst in eine fruehe Core-Phase und eine
+spaetere Device-Mapping-/CR3-Finalisierung getrennt. Bootkritische Fehler
+muessen weiterhin kontrolliert fatal enden.
+
+Nicht-Ziel:
+In 0.32.X wird nichts aus dem Kernel ausgelagert. Memory Management, Paging,
+Page Tables, PMM, Virtual Ranges, Kernel Heap, HHDM/direct-map und CR3/PML4
+sind Kernel-Grundlagen. Diese Version ordnet und kapselt den Kernel-Code nur
+chronologisch. Diagnoseausgaben duerfen strukturiert werden, aber keine
+Memory-Funktion wird in R4X/R4D/R4P oder externe Software verschoben.
+
+Aufraeumziel:
+Alle produktiv an 0.32.X beteiligten Memory-Scripte sollen am Ende aus
+`Code/src/old/` herausgezogen sein. `kernelold.zig` darf nach Abschluss von
+0.32.X keinen produktiven Memory-Boot, keine PMM-/Paging-/Heap-Initialisierung
+und keine Device-Mapping-/CR3-Finalisierung mehr enthalten. Wenn ein Modul in
+0.32.X weiter gebraucht wird, bekommt es einen neuen Zielpfad ausserhalb von
+`old/` und alle Imports werden nachgezogen.
+
+Verbindliche Migrationsregeln:
+- Kein Kompatibilitaets-Wrapper in `old/`: Verschobene Memory-Module werden
+  nicht als forwarding Datei unter `Code/src/old/memory/` liegen gelassen.
+- Kein doppelter Init-Pfad: Jede Initialisierung hat nach dem Umzug genau
+  einen produktiven Einstiegspunkt.
+- Kein stiller Seiteneffekt im Import: Memory-Module duerfen beim Import keine
+  Initialisierung ausloesen; Initialisierung passiert nur ueber explizite
+  `init...()`-/`finalize...()`-Aufrufe.
+- `memory_boot` ist Orchestrierung, nicht Sammelbecken: Fachlogik bleibt in
+  klar benannten Memory-Modulen wie Map, Blocks, PMM, Paging, Page Tables,
+  Virtual Ranges und Heap.
+- Der fruehe Memory-Core darf keine ACPI-/PCIe-/Storage-Abhaengigkeiten
+  bekommen. Spaete Device-Mappings bleiben eine eigene Phase.
+- BootStatus-/Bootlog-Ausgaben duerfen umgeordnet werden, aber nicht verloren
+  gehen.
+
+Betroffene produktive Memory-Module:
+- `map.zig`: BootInfo-Memory-Map auswerten, dumpen und Summary bilden.
+- `blocks.zig`: MemoryBlock-Tabelle aus der Boot-Memory-Map aufbauen.
+- `phys.zig`: Physical Memory Manager / Frame-Allokation initialisieren.
+- `paging.zig`: aktuellen Paging-/CR3-Zustand uebernehmen und Paging-Helfer
+  bereitstellen.
+- `layout.zig`: zentrale Konstanten und Layout-Helfer fuer Kernelspace,
+  HHDM/direct-map, Page Tables und Device-Mapping-Fenster.
+- `page_tables.zig`: R4OS-PML4/Page-Table-Aufbau, Dry-Run, Device-Mappings
+  und spaeterer CR3-Switch.
+- `virt.zig`: virtuelle Kernel-Adressfenster / Virtual Ranges verwalten.
+- `heap.zig`: Kernel-Heap-Fenster initialisieren und erste Heap-Seite
+  committen.
+
+Definition of Done fuer 0.32.X:
+- `main.zig` zeigt die chronologische Memory-Initialisierung direkt und
+  nachvollziehbar.
+- `kernelold.zig` enthaelt keinen produktiven Memory-Boot-Code mehr.
+- Kein produktiv beteiligtes 0.32-Memory-Modul liegt noch unter
+  `Code/src/old/`.
+- Keine produktiven Imports zeigen fuer die verschobenen Module noch auf
+  `Code/src/old/memory/...`.
+- Fruehe Memory-Core-Phase und spaete Device-Mapping-/CR3-Finalisierung sind
+  getrennt, getestet und dokumentiert.
+- R4OS bootet im Smoke-Test weiterhin bis zum automatischen Testabschluss.
+
+Version 0.32.0 - Memory-Boot planen und Grenzen festlegen
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Aktuellen Memory-Block in `kernelold.zig` analysiert und in zwei Phasen
+  getrennt: frueher Memory-Core und spaete Device-Mapping-/CR3-Finalisierung.
+- Festgestellt: `cpu_boot.zig` richtet GDT, IDT und PIC ein, fuehrt aber noch
+  keine CPUID-/Feature-Erkennung aus. `_ = cpu.detect()` laeuft aktuell erst
+  in `kernelold.zig` direkt vor der Memory-Map-Ausgabe.
+- Festgelegt: CPU-Feature-Erkennung muss vor Framebuffer PAT-WC laufen, weil
+  `display.enableFramebufferWriteCombining()` PAT/MTRR/MSR-Status aus
+  `old/platform/cpu.zig` nutzt.
+- Zielmodul fuer die fruehe Memory-Core-Phase festgelegt:
+  `Code/src/kernel/memory_boot.zig`.
+- Festgelegt: Die fruehe Core-Phase umfasst Memory Map, Memory Summary,
+  MemoryBlock-Tabelle, Physical Allocator, Paging-Init, Page-Table-Builder-
+  Selftest, R4OS-PML4-Dry-Run, Virtual Ranges, Framebuffer PAT-WC und Kernel
+  Heap.
+- Festgelegt: Die daran beteiligten produktiven Memory-Module duerfen nach
+  Abschluss von 0.32.X nicht mehr unter `Code/src/old/memory/` liegen.
+- Festgelegt: `memory_boot.zig` muss die Memory Summary dauerhaft bereitstellen,
+  weil `kernelold.zig` aktuell `mem_summary.usable_bytes` spaeter an den
+  Launcher weitergibt.
+- Festgestellt: `page_tables.mapDeviceSpaceDryRun(acpi_info)` und
+  `page_tables.switchToKernelSpaceIfReady()` duerfen nicht blind in die fruehe
+  Main-Phase wandern, weil sie aktuell nach `acpi.inspect()` und
+  `pcie.enumerate()` laufen und ACPI-/PCIe-Daten brauchen.
+- Nicht-Ziele fuer die erste Code-Unterversion festgelegt: Module, Services,
+  Audio, Drive, RAM-Drive, Blockdevice, ACPI, PCI/PCIe, Storage, Loader,
+  Scheduler und Shell bleiben ausserhalb des fruehen `memory_boot.init()`.
+- Folgeunterversionen anhand der Analyse geschaerft.
+
+Ablauf vor 0.32.2 in Kurzform:
+- `main.zig` initialisiert Limine, COM1-Debug, BootInfo, BootDisplay,
+  CPU-Grundlage, Timer, Driver Registry und PS/2-Input.
+- `kernelold.kmain()` prueft BootInfo und DisplayBackend, startet
+  BootStatus-Detailredirect und gibt Long-Mode-, Framebuffer-, Console- und
+  Kernel-Base-Infos aus.
+- `old/platform/cpu.detect()` liest CPUID, PAT, MTRR, MSR und Featuredaten.
+- `old/memory/map.zig` liest die BootInfo-Memory-Map, gibt sie aus und bildet
+  die Memory Summary.
+- `old/memory/blocks.zig` baut daraus die MemoryBlock-Tabelle.
+- `old/memory/phys.zig` startet den Physical Allocator.
+- `old/memory/paging.zig` uebernimmt den aktuellen Paging-/CR3-Zustand.
+- `old/memory/page_tables.zig` prueft den Builder und baut einen R4OS-PML4-
+  Dry-Run fuer Kernelspace/HHDM/Probe-Mappings.
+- `old/memory/virt.zig` richtet Virtual-Range-Fenster ein.
+- `old/drivers/video/display.zig` versucht Framebuffer Write Combining ueber
+  PAT-WC, wenn CPU-Features und Paging das erlauben.
+- `old/memory/heap.zig` reserviert das Kernel-Heap-Fenster und committed die
+  erste Heap-Seite.
+- Erst danach werden Module/Services initialisiert und `Memory [OK]` sichtbar
+  ausgegeben.
+- Spaeter, nach RAM-Drive/Block/ACPI/PCIe, mappt `page_tables` Device-Space
+  fuer ACPI/IOAPIC/HPET/PCIe/BARs und schaltet bei Erfolg auf die eigene
+  R4OS-CR3/PML4-Struktur.
+
+Abnahme:
+- Roadmap beschreibt Memory-Boot-Grenze, Abhaengigkeiten und Nicht-Ziele
+  eindeutig.
+- Reihenfolge passt chronologisch zu `main.zig`: frueher Memory-Core nach
+  Input-Boot, vor Module, Services, Storage und Loader.
+- Spaete Device-Mapping-/CR3-Finalisierung ist als eigene Phase dokumentiert
+  und wird nicht versehentlich vor ACPI/PCIe gezogen.
+- Kein Code-Umbau in dieser Unterversion.
+- Aufraeumziel ist dokumentiert: beteiligte 0.32-Memory-Scripte raus aus
+  `old/`, keine produktive Memory-Boot-Logik mehr in `kernelold.zig`.
+- Version steht auf `KERNEL_VERSION=0.32.0`.
+- Push ist erfolgt.
+
+Version 0.32.1 - CPU-Feature-Erkennung vor Memory-Boot klaeren
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `_ = cpu.detect()` aus `kernelold.zig` entfernt.
+- CPU-Feature-Erkennung in `kernel/cpu_boot.zig` direkt nach GDT, IDT und PIC
+  verschoben.
+- Damit stehen CPUID, PAT, MTRR und MSR-Status vor der spaeteren
+  Framebuffer-PAT-WC-Entscheidung bereit.
+- CPU-Feature-Erkennung bleibt genau einmal im Bootpfad.
+- `old/platform/cpu.zig` selbst bleibt vorerst am alten Ort, weil es nicht nur
+  am Memory-Boot haengt, sondern aktuell auch von Display-PAT-WC,
+  Plattform-Hardware-Inventar, Device-Inventar und COMMAND-Diagnose genutzt
+  wird. Das ist kein 0.32-Memory-Modul und wird nicht in diese
+  Memory-Migration hineingezogen.
+- Import-/Nutzungsinventar fuer die Memory-Migration festgehalten:
+  `kernelold.zig` importierte vor 0.32.2 `old/memory/blocks.zig`,
+  `old/memory/heap.zig`, `old/memory/map.zig`,
+  `old/memory/page_tables.zig`, `old/memory/paging.zig`,
+  `old/memory/phys.zig` und `old/memory/virt.zig`.
+- Weitere aktuelle Nutzer der Memory-Module bleiben fuer 0.32.2 zu beachten:
+  IDT, Audio, Scheduler/Task, HPET, Module, Treiber-APIs, Storage-Treiber,
+  IOAPIC/LAPIC, Surface-Pipeline, COMMAND/R4X/R4D/R4P/R4DEV, Display, ACPI,
+  xHCI, RAM-Drive und PCIe.
+- Daraus folgt fuer 0.32.2: Die Memory-Module muessen sauber nach
+  `Code/src/memory/` verschoben und alle produktiven Imports nachgezogen
+  werden; forwarding Dateien unter `Code/src/old/memory/` sind nicht erlaubt.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` laeuft erfolgreich.
+- `DevTools/Scripts/Build.bat -test` laeuft erfolgreich.
+- `cpu.detect()` wird genau einmal im Bootpfad ausgefuehrt.
+- Import-/Nutzungsinventar fuer die Memory-Migration ist dokumentiert.
+- Framebuffer PAT-WC bleibt je nach CPU-/QEMU-Faehigkeit unveraendert OK oder
+  sauberer Fallback.
+- Version steht auf `KERNEL_VERSION=0.32.1`.
+- Push ist erfolgt.
+
+Version 0.32.2 - Fruehe Memory-Core-Phase nach memory_boot.zig ziehen
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Neues Modul `Code/src/kernel/memory_boot.zig` angelegt.
+- Fruehe Memory-Core-Phase aus `kernelold.zig` in
+  `memory_boot.initCore()` verschoben.
+- `main.zig` importiert `kernel/memory_boot.zig` direkt und ruft
+  `memory_boot.initCore()` nach `input_boot.completePs2()` auf.
+- Der Pre-Memory-Boot-Intro-Teil wurde aus `kernelold.zig` nach `main.zig`
+  gezogen: R4OS-Header, BootInfo-/Framebuffer-Pruefung, aktives
+  DisplayBackend, Console-Metriken, Foundation-Summary und Exception-Test-
+  Hook laufen jetzt vor `memory_boot.initCore()`.
+- Memory Map Dump/Summary, MemoryBlock init, PMM init, Paging init,
+  Page-Table-Builder-Selftest, R4OS-PML4-Dry-Run, Virtual Ranges,
+  Framebuffer PAT-WC und Kernel Heap laufen nun ueber `memory_boot`.
+- `memory_boot` speichert die usable-memory Bytes und stellt sie fuer den
+  spaeteren Launcher-Start ueber `memory_boot.usableBytes()` bereit.
+- `memory_boot.dumpBlockSummary()` ersetzt den letzten direkten
+  MemoryBlock-Zugriff in `kernelold.zig`.
+- Produktive Memory-Module nach `Code/src/memory/` verschoben:
+  `blocks.zig`, `heap.zig`, `layout.zig`, `map.zig`, `page_tables.zig`,
+  `paging.zig`, `phys.zig` und `virt.zig`.
+- Alle produktiven Imports wurden auf die neuen `Code/src/memory/`-Pfade
+  nachgezogen.
+- `Code/src/old/memory/` wurde nicht als Forwarder-/Stub-Schicht behalten.
+- `kernelold.zig` enthaelt die fruehe Memory-Core-Initialisierung nicht mehr.
+- PML4-Code-Probe robuster gemacht: Der Dry-Run nutzt fuer den Code-Probe
+  `layout.KERNEL_IMAGE_BASE` statt `@returnAddress()`, weil der alte Probe
+  im neuen Boot-/Inlining-Kontext keinen verlaesslichen Wert lieferte.
+- Fatal-Diagnose fuer PML4-Dry-Run erweitert: Bei einem Fehlschlag werden die
+  Page-Table-Stats sichtbar ausgegeben, bevor der Boot anhält.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` laeuft erfolgreich.
+- `DevTools/Scripts/Build.bat -test` laeuft erfolgreich.
+- Keine doppelte MemoryBlock-/PMM-/Paging-/Heap-Initialisierung.
+- Keine produktiven `old/memory/...`-Imports fuer die verschobenen Core-Module.
+- Keine verschobenen Core-Module verbleiben als Forwarder oder Kopie unter
+  `Code/src/old/memory/`.
+- Launcher bekommt weiterhin die korrekten usable-memory Bytes.
+- Version steht auf `KERNEL_VERSION=0.32.2`.
+- Push ist erfolgt.
+
+Version 0.32.3 - Spaete Device-Mapping-/CR3-Phase kapseln
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `memory_boot.finalizeDeviceMappings(acpi_info)` als spaete Memory-Boot-
+  Finalisierung angelegt.
+- Direkte `page_tables.mapDeviceSpaceDryRun(acpi_info)`- und
+  `page_tables.switchToKernelSpaceIfReady()`-Aufrufe aus `kernelold.zig`
+  entfernt.
+- Zeitliche Position bleibt unveraendert: nach `acpi.inspect()` und
+  `pcie.enumerate()`, vor Legacy-PCI-/Treiberinitialisierung.
+- `kernelold.zig` enthaelt fuer diese Phase nur noch den notwendigen
+  Orchestrierungsaufruf und stoppt bei Fehler fatal.
+- Status-Helfer fuer finalisierte Device-Mappings und erledigten CR3-Switch
+  ergaenzt.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` laeuft erfolgreich.
+- `DevTools/Scripts/Build.bat -test` laeuft erfolgreich mit `TEST OK`.
+- Sichtbarer Bootpfad erreicht weiter `Boot: OK` und `Poweroff: OK`.
+- Version steht auf `KERNEL_VERSION=0.32.3`.
+- Push ist erfolgt.
+Version 0.32.4 - Memory-Boot-Diagnose und BootStatus glaetten
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `memory_boot.initCore()` in klar benannte Boot-Phasen zerlegt:
+  Memory Map, MemoryBlock-Tabelle, Physical Allocator, Paging Core,
+  Page-Table Builder, R4OS PML4 Dry-Run, Virtual Ranges, Framebuffer PAT-WC
+  und Kernel Heap.
+- Detailausgaben werden mit `MemoryBoot: <Phase> [START]`, `[OK]` oder
+  `[SKIP]` strukturiert.
+- Page-Table-Statistiken bleiben Teil der Detaildiagnose und werden nicht mehr
+  fuer den normalen Erfolgspfad sichtbar aus dem Detail-Redirect herausgezogen.
+- Sichtbare Bootausgabe bleibt kurz: der normale Erfolgspfad zeigt weiter nur
+  den kompakten Memory-OK-Status.
+- Fehlerpfade bleiben phasennah und fatal, damit erkennbar ist, ob Map,
+  Blocks, PMM, Paging, Page Tables, Virtual Ranges oder Heap betroffen sind.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` laeuft erfolgreich.
+- `DevTools/Scripts/Build.bat -test` laeuft erfolgreich mit `TEST OK`.
+- Sichtbarer Bootpfad erreicht weiter `Boot: OK` und `Poweroff: OK`.
+- Version steht auf `KERNEL_VERSION=0.32.4`.
+- Push ist erfolgt.
+Version 0.32.5 - Framebuffer PAT-WC und Memory/Display-Grenze dokumentieren
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Dokumentiert, warum `display.enableFramebufferWriteCombining()` aktuell im
+  Memory-Boot liegt: Es ist ein Mapping-/Cache-Policy-Thema fuer den
+  sichtbaren Framebuffer, keine allgemeine Display-Zeichenlogik.
+- In `Docs/Desktop/DisplayArchitektur.txt` die Grenze zwischen Memory-Boot,
+  DisplayManager/DisplayBackend, Surface, DirtyRegion, Presenter, Compositor
+  und CursorLayer beschrieben.
+- In `Docs/Core/KernelBereinigung.txt` den 0.32.X-Memory-Boot und die
+  Framebuffer-PAT-WC-Grenze ergaenzt.
+- Festgehalten, dass neue Display-Systemschichten nicht direkt
+  `boot_info.framebuffer()` oder Page-Table-Funktionen nutzen sollen.
+- Langfristige Option dokumentiert: PAT-WC kann spaeter in eine
+  DisplayBackend-Cachepolicy-Schicht wandern, sobald native Grafiktreiber und
+  ein stabiler Backend-Vertrag existieren.
+
+Abnahme:
+- Dokumentation erklaert die Grenze zwischen Memory Mapping, DisplayBackend
+  und Surface/Presenter.
+- `DevTools/Scripts/Build.bat -norun` laeuft erfolgreich.
+- `DevTools/Scripts/Build.bat -test` laeuft erfolgreich mit `TEST OK`.
+- Sichtbarer Bootpfad erreicht weiter `Boot: OK` und `Poweroff: OK`.
+- Version steht auf `KERNEL_VERSION=0.32.5`.
+- Push ist erfolgt.
+Version 0.32.6 - Dokumentation und Abschluss
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `AGENTS.md` Kernel-Struktur aktualisiert: `kernel/memory_boot.zig` und
+  `Code/src/memory/` sind als produktive Pfade dokumentiert, `old/memory/`
+  ist aus der Kernel-Struktur entfernt.
+- `Docs/Core/KernelBereinigung.txt` um den 0.32.X-Abschlussstand erweitert.
+- Website-`kernel.md` unter
+  `D:\AI\Projects\Claude Code\R4OS Server\Website\Content\kernel.md` um
+  `kernel/memory_boot.zig` und die neue Startreihenfolge ergaenzt.
+- Verschobene Memory-Dateien dokumentiert: `blocks.zig`, `heap.zig`,
+  `layout.zig`, `map.zig`, `page_tables.zig`, `paging.zig`, `phys.zig` und
+  `virt.zig`.
+- Dokumentiert: `main.zig` startet nun die fruehe Memory-Boot-Phase ueber
+  `memory_boot.initCore()`.
+- Dokumentiert: Die spaete Device-Mapping-/CR3-Finalisierung bleibt nach
+  ACPI/PCIe und laeuft ueber `memory_boot.finalizeDeviceMappings(acpi_info)`.
+- Folgearbeit dokumentiert: Module/Services, RAM-Drive/Drive, Block,
+  ACPI/PCIe, Storage, Loader und Scheduler bleiben die naechsten
+  chronologischen Kandidaten.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` laeuft erfolgreich.
+- `DevTools/Scripts/Build.bat -test` laeuft erfolgreich mit `TEST OK`.
+- Doku beschreibt `memory_boot.zig` kurz und korrekt.
+- Keine an 0.32.X beteiligten produktiven Memory-Scripte verbleiben unter
+  `Code/src/old/`.
+- `kernelold.zig` enthaelt keinen produktiven Memory-Boot mehr.
+- Roadmap, AGENTS.md und Docs nennen dieselben neuen Pfade und dieselbe
+  Startreihenfolge.
+- Roadmap-Unterversionen sind abgeschlossen und koennen spaeter archiviert
+  werden.
+- Version steht auf `KERNEL_VERSION=0.32.6`.
+- Push ist erfolgt.

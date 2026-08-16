@@ -1,0 +1,535 @@
+﻿Dynamische Task-, Waiter- und Thread-Grundlage 0.59.10 bis 0.59.12
+==================================================================
+
+Ziel
+----
+
+Seit 0.59.10 besitzt R4OS keine einkompilierte Task- oder ProgramThread-
+Kapazitaet mehr. Der Scheduler besitzt die Task-Registry; der R4X-
+Runtimepfad besitzt davon getrennt die ProgramThread-Registry. Beide
+Objektarten werden bei Bedarf angelegt, bleiben waehrend ihrer gesamten
+Lebensdauer stabil adressiert und werden erst nach dem letzten gueltigen
+Bezug freigegeben. Eine konkrete Heap-, VM-, PMM-, Stack- oder FPU-Allokation
+darf einen Start weiterhin ablehnen; eine abstrakte Slotzahl darf das nicht.
+
+Der Umbau behaelt das bestehende trusted Single-User-Modell und die
+produktive Timer-Praeemption bei. Er fuehrt weder SMP noch POSIX-Threads,
+Security-Capabilities oder eine neue Userland-Schedulerpolicy ein.
+
+Taskobjekt und Identitaet
+-------------------------
+
+Ein `Task` ist ein einzeln allokiertes Objekt und zugleich ein Knoten der
+intrusiven Task-Registry. Vor dem Publish entstehen seine Bestandteile privat:
+
+- Task-Metadaten mit dem darin eingebetteten task-eigenen Waiter-Knoten;
+- ein guarded Kernel-Stack;
+- nur bei einem SIMD-faehigen Task ein passend grosser FPU-/XSAVE-State.
+
+Erst wenn alle Bestandteile vorliegen, erhaelt der Task eine von null
+verschiedene, kollisionssicher umlaufende ID sowie eine monotone Generation
+und wird atomar in die Registry eingekettet. Jeder Fehler vor dem Publish
+rollt die bereits erworbenen Bestandteile in umgekehrter Reihenfolge zurueck.
+Kann dabei eine Heap- oder VM-Freigabe noch nicht abgeschlossen werden, bleibt
+das private Taskobjekt selbst als unbeschraenkt intrusive Retry-Verankerung
+erhalten; erst nach dem letzten erfolgreichen Child-Release wird es
+freigegeben. Ein halber Task ist weder fuer Scheduler noch Diagnosen sichtbar.
+
+Der Scheduler haelt den Current-Task als stabilen `*Task` und laeuft fuer
+Yield und Timer-Praeemption ueber Registryzeiger. Ein Arrayindex ist weder
+Identitaet noch Lebenszeitbeweis. Jeder Verweis, der eine Yield-, Wait-, IRQ-
+oder Reapergrenze ueberlebt, bindet deshalb ID und Generation beziehungsweise
+haelt einen expliziten Pin.
+
+Ein current, gepinnter oder noch in einer WaitQueue eingetragener Task wird
+nicht freigegeben. `releaseDead` markiert solchen Bestand als deferred;
+`unpin` und der Reaper fuehren den Abbau erst nach dem letzten Bezug fort.
+Der Reaper markiert genau einen Dead-Task als `release_in_progress` und haelt
+seinen eigenen Unwind-Schutz ueber den gesamten falliblen Abbau. Der Dead-Task
+bleibt dabei als exakte Retry-Verankerung in der Registry, bis FPU-State und
+Stack wirklich geloest sind. Erst dann wird der Registryknoten ausgekettet und
+die Task-Metadaten werden freigegeben. Jeder Fehler hebt nur den Release-Claim
+auf und behaelt ID, Generation und verbleibende Ressourcen fuer den naechsten
+Versuch.
+
+Das alte Diagnosefeld `task_max_count` bleibt aus ABI-Gruenden erhalten und
+liefert die aktuelle Registrylaenge als Ordinal-Scan-Grenze. Es ist keine
+Admission-Kapazitaet. Der interne Kompatibilitaetswert `max_tasks` ist null
+und darf nie wieder eine Arraygroesse bestimmen. `current_task_index` bleibt
+ebenfalls ein Diagnoseordinal und ist keine Scheduleridentitaet. Seit 0.59.11
+verwenden neue Diagnosen und Oberflaechen stattdessen die versionierte
+Cursor-/Generationssicht.
+
+Versioniertes Program-/Task-/Thread-Inventar
+--------------------------------------------
+
+`programInventoryBegin` erfasst einen gemeinsamen `snapshot_generation`-
+Wert, die getrennten Epochen der Program-, Task- und ProgramThread-Registry
+sowie einen `ProgramInventorySummary`. Die Zusammenfassung enthaelt aktive,
+reservierte, fertige und retirende Programme, Completions, Task-/Thread-
+Zustaende, bisherige Spitzenwerte und getrennte Admission-/Rollbackzaehler.
+Dieselbe Zusammenfassung ist als geliehene Performance-Sicht ueber
+`R4DEV.execution_inventory_summary` verfuegbar.
+
+Seit 0.59.12 belegt der weiterhin 160 Byte grosse v1-Payload auch seinen
+bisherigen Tail vollstaendig: `heap_active_blocks` ist ein `u32` bei Offset
+148, `heap_used_bytes` ein `u64` bei Offset 152. Beide Werte sind
+zeitpunktbezogene Kernel-Heap-Messwerte und keine Admission-Kapazitaeten. Sie
+erlauben einem stabilen Inventarsnapshot, neben Programmen, Tasks und Threads
+auch die warme Heap-Bilanz byte- und blockgenau zu binden.
+
+Die drei Seitenoperationen fuer Programme, Tasks und Threads schreiben
+hoechstens `program_inventory_page_max` Eintraege in einen caller-owned
+Buffer. Jede Objektart besitzt im `ProgramInventoryCursor` ihre eigene
+`after_generation`-Position. Eintraege erscheinen streng nach ihrer stabilen
+Objektgeneration; wiederverwendete IDs und verschobene Registryknoten sind
+damit weder Reihenfolge noch Identitaet. `ProgramInventoryPageInfo` meldet
+Objektart, Gesamtzahl, gelieferte Zahl, naechste Generation und genau einen
+der Zustaende `complete`, `more`, `restart` oder `invalid`.
+
+Aendert sich eine der gebundenen Registryepochen waehrend eines Durchlaufs,
+liefert die betroffene Seitenoperation `restart`, null Eintraege und laesst
+die letzte Cursorposition unveraendert. Der Aufrufer verwirft dann alle
+Teilseiten und beginnt mit einem neuen `programInventoryBegin`; Seiten aus
+verschiedenen Generationen duerfen nie zusammengefuegt werden. Scheitert der
+Begin-/Allokationspfad mit OOM, bleiben Live-Set, uebergebener Cursor und die
+letzte vollstaendige Sicht unveraendert. Desktop, LOGSVC und Diagnosen koennen
+deshalb eine zuvor abgeschlossene Generation weiter anzeigen, statt einen
+halben oder still gekuerzten Snapshot zu veroeffentlichen.
+
+Dynamische ProgramThreads
+-------------------------
+
+`ProgramThread` besitzt seit 0.59.10 ebenfalls keine feste Paralleltabelle.
+Die intrusive Registry gehoert dem R4X-Runtimepfad, nicht dem Scheduler. Jeder
+Eintrag ist stabil allokiert, traegt eine eigene Generation und bindet seinen
+Scheduler-Task mit Task-ID plus Task-Generation. Die aktuelle
+Programminstanz wird damit nicht aus einer wiederverwendbaren Task-ID oder
+einem beweglichen Index abgeleitet.
+
+Ein neuer Thread bleibt bis zur vollstaendigen Initialisierung privat. Erst
+nach erfolgreicher Taskerzeugung werden Thread-ID, Generation und Registry-
+Publish gemeinsam unter IRQ-Schutz festgelegt. Normale ID-Lookups erwerben
+unter derselben Grenze einen Pin. Join verwendet zusaetzlich genau eine
+generationengebundene Owner-Lease; ein zweiter gleichzeitiger Join erhaelt
+`busy`. Der an den exakten Current-Task gebundene ProgramThread bleibt durch
+diesen laufenden Task verankert. IRQ-/Exceptionpfade duerfen nur unter ihrer
+bereits bestehenden IRQ-Grenze traversieren. Ein beliebiger lockfreier,
+ungepinnter ProgramThread-Zeiger darf keine Yield-, Wait-, Praeemptions- oder
+Retire-Grenze ueberleben.
+
+Beim Instanzabbau wird `retire_pending` gesetzt und eine Join-Queue zuerst
+geschlossen beziehungsweise abgebrochen. Der Retire-Claim wartet auf null
+Pins, Join-Leases, Waiter und Waiter-Referenzen. Danach loest der gemeinsame
+Join-/Instanz-Reaper zuerst die konkrete Taskgeneration und anschliessend den
+Stack. Fallible Phasen behalten `retire_in_progress` samt UnwindToken und
+persistenten Phasenmarken als exakte Retry-Verankerung. Erst nach Task-Detach,
+Stackfreigabe und leerer Queue wird das Objekt ausgekettet und freigegeben.
+Ein erfolgreicher Join raeumt damit genau einmal ein dynamisches
+Threadobjekt und dessen Stack auf, keinen festen Threadslot.
+
+Das isolierte `app_stack`-Fenster umfasst seit 0.59.10 acht GB statt eines
+GB. Damit bleibt die bestehende Reserve von acht MB samt Guard pro
+Programmthread unveraendert, ohne die fruehere virtuelle 128-Thread-Grenze
+fortzuschreiben. Das naechste feste Fenster beginnt weiterhin erst 64 GB nach
+der `app_stack`-Basis. Erschoepfte VM-Ranges, virtueller Adressraum oder reale
+Commit-Ressourcen bleiben ausdrueckliche technische Ablehnungsgruende und
+sind keine ProgramThread-Slotzahl.
+
+Async-I/O-Worker und zweiphasiger Abbau
+---------------------------------------
+
+Jeder asynchrone I/O-Request bindet seinen Worker mit Task-ID und
+Task-Generation und fuehrt einen gemeinsam sichtbaren `cancel_requested`-
+Zustand. `io_close` und der ownergebundene Instanzabbau duerfen weder Task-/
+VM-Freigaben noch einen Aufruf in die Service-Registry unter dem
+`async_io_lock` ausfuehren. Sie bilden deshalb zuerst einen rein skalaren
+Retire-Claim aus Slot, Request-ID, Owner-ID plus Owner-Generation, Task-ID
+plus Task-Generation sowie einer eventuell laufenden Service-Request-ID.
+Danach geben sie den Async-Lock frei, brechen zuerst den konkreten
+Service-Request ab und retiren exakt die gebundene Taskgeneration.
+
+Nach dem erneuten Locken darf ein Requestslot nur geloescht werden, wenn alle
+Claimfelder noch uebereinstimmen. Ist der Taskabbau noch nicht fertig,
+uebertraegt ein oeffentliches `io_close` den exakten Claim dauerhaft als
+`close_pending` an den Reaper und meldet erst danach `OK`. Fuer den Aufrufer
+ist der Request damit sofort logisch geschlossen; ein inzwischen
+wiederverwendeter Slot oder eine wiederverwendete Task-ID kann niemals durch
+den alten Claim freigegeben werden. Synchrone Fassaden versuchen den Abbau
+einmal sofort und danach hoechstens 64 Mal nach je einem Tick. Bleibt er
+blockiert, uebergeben auch sie den Retry-Anker an den Reaper und liefern das
+bereits abgeschlossene Operationsergebnis. Der Reaper retirert ausserhalb des
+Async-Locks und loescht nur nach erneuter Vollvalidierung.
+
+Ein neu erzeugter Worker wird noch unter dem Async-Lock runnable, damit weder
+Close noch Ownerabbau einen anschliessend dereferenzierten Rohzeiger freigeben
+koennen. Der Abschnitt von Service-Submit bis zur Publikation der
+Service-Request-ID ist mit einem `UnwindToken` gegen Hard-Kill geschuetzt; im
+Fehlerpfad gilt Cancel vor Clear. Publikation und Loeschen der ID erfolgen
+unter dem Async-Lock. Hat Cancel bereits gewonnen, wird ein gerade erst vom
+Service gelieferter Request sofort ausserhalb des Locks abgebrochen. Worker
+und Canceller publizieren damit gemeinsam genau eine terminale Completion,
+ohne Service-Lockverschachtelung, doppeltes Wakeup oder verlorenen Taskabbau.
+
+Dynamischer Waiter-Vertrag
+--------------------------
+
+Jeder Task besitzt genau einen in seinen Metadaten eingebetteten intrusiven
+`wait_node.Node`; dafuer gibt es keine eigene Waiter-Allokation. Eine
+WaitQueue enthaelt nur `head`, `tail`, `count`, eine Generation und den
+Closing-Zustand; ihre Kapazitaet entsteht aus den tatsaechlich wartenden Tasks
+und nicht aus `MAX_TASKS` oder einem parallelen Array. Ein Node darf zu einem
+Zeitpunkt in hoechstens einer Queue liegen und bindet seinen Besitzer mit
+Taskzeiger und Generation. Ein nicht detached initialisierter Node ist eine
+Invarianten-/Admissionverletzung, kein OOM- oder Allokationsfehler.
+
+Create, Signal, Timeout, Cancel, Kill und Objektabbau verwenden denselben
+exakt-einmaligen Entfernenvertrag:
+
+1. Enrollment verkettet den Node und blockiert danach die Task. Scheitert das
+   Blockieren, wird der Node vor dem Rueckweg wieder entfernt.
+2. Wake und Cancel entfernen zuerst den Node und aendern erst danach den
+   Taskzustand.
+3. Timeout und Kill rufen denselben Detach-Pfad auf; ein zweiter Entferner
+   sieht einen bereits geloesten Node und tut nichts.
+4. Ein Objekt setzt vor seinem Abbau `closing`, nimmt keine neuen Waiter mehr
+   an und leert die Queue vollstaendig per Cancel/Wake.
+5. Nach dem Parken liest die fortgesetzte Task nur ihr eigenes Wait-Ergebnis;
+   sie dereferenziert die moeglicherweise bereits zerlegte Queue nicht mehr.
+
+Damit koennen Timeout, Signal und Kill am selben Tick nicht denselben Waiter
+doppelt wecken oder nach Objektabbau auf Queue-Speicher zugreifen. Semaphore
+uebergeben einen Token unter derselben Queue-Critical-Section direkt an genau
+einen Waiter. Mutex und UnwindGuard wecken bei der finalen Freigabe dagegen
+alle aktuellen Waiter: Ein nur ausgewaehlter, aber noch nicht besitzender
+Waiter koennte vor seinem Lock-Retry hart beendet werden; die uebrigen duerfen
+dann nicht fuer immer an einem bereits freien Objekt schlafen.
+
+Kill-, Lock- und Unwind-Grenze
+-----------------------------
+
+Ein harter Task-Kill kann keine Zig-`defer`-Bloecke ausfuehren. Deshalb fuehrt
+jeder Task zwei exakte, von Diagnose-Arrays unabhaengige Schutzzaehler:
+
+- `held_lock_count` fuer generationengesicherte `sync.Mutex`-Owner;
+- `unwind_guard_count` fuer aktive `sync.UnwindGuard`-Owner und temporaere
+  `task_context.UnwindToken`-Transaktionen.
+
+Die auf acht Eintraege begrenzten Held-Lock-Records bleiben reine Diagnose
+und duerfen bei einem Tracking-Drop keine Lebenszeitentscheidung beeinflussen.
+Mutex-Rekursion erhoeht nur die Tiefe, nicht den Besitzerzaehler. ID und
+Generation muessen fuer Rekursion und Unlock uebereinstimmen. Ein Kill wird
+vor Waiter-Detach und Dead-Transition abgelehnt, solange einer der exakten
+Zaehler ungleich null ist; derselbe Vertrag gilt fuer Retire und Reap.
+
+`sync.UnwindGuard` ist ein generationengesicherter, rekursiver Owner-Lock mit
+eigener WaitQueue. Er erscheint bewusst nicht als `sleep_under_lock`, weil
+sein Vertrag Scheduler-Waits waehrend des Besitzes erlaubt. Die serialisierte
+FS-Anfrage, der Netzwerk-Pollowner und der R4D-Ownerkontext verwenden diesen
+Typ. Vor `scheduler.init` besitzt er einen ausdruecklichen rekursiven Single-
+Thread-Bootowner, damit Preload-R4D-Initialisierung denselben RAII-Vertrag
+nutzt, ohne eine noch nicht existierende Taskidentitaet zu erfinden.
+
+`task_context.UnwindToken` ist dagegen weder Lock noch Owner-Admission: Es hat
+keine WaitQueue, blockiert keinen Konkurrenten und serialisiert keine
+Ressource. Der Token erhoeht nur fuer die aktuelle, bereits laufende
+Tasktransaktion den Kill-Schutzzaehler. Heap-Growth/Reclaim, Task- und
+ProgramThread-Retire sowie gepinnter Storage-Abbau verwenden ihn ueber den
+minimalen Import-Bridge `sched/task_context.zig`. Ein natuerlicher Taskexit
+oder eine Ressourcenfreigabe mit verbleibendem Guard oder Token ist eine
+harte Kernelinvariantenverletzung und wird nicht als stiller Leak fortgesetzt.
+
+Auch eingebettete Warteobjekte duerfen waehrend ihrer Lebenszeit nicht bewegt
+werden. Blockdevices verwenden deshalb stabile Tombstone-Slots statt
+Suffixkopien; Enumerationen unterscheiden Live-Anzahl und Slotspan. Ein
+Unregister stoppt neue Admission und ist ein nicht blockierendes Veto, solange
+das Device gemountet ist oder Operationspins, Backend-Ausfuehrungen,
+Requestslots, ein Queue-Lock beziehungsweise Lock-Waiter oder sonstige
+Queue-Waiter vorhanden sind. Erst nach null Mount-, Pin-, Execution-, Request-,
+Lock- und Waiter-Bezuegen werden alle eingebetteten Queues geschlossen und der
+Tombstone darf wiederverwendet werden.
+
+FPU-/XSAVE-State
+----------------
+
+R4X-, R4D-, R4P- und R4L-Module behalten das AVX2-Standardprofil. Der Kernel
+selbst bleibt ohne SIMD gebaut. Ein Task, der keinen SIMD-Code ausfuehrt,
+besitzt deshalb keinen FPU-State und verursacht weder State-Speicher noch
+XSAVE/XRSTOR-Arbeit.
+
+Fuer einen SIMD-Task meldet `fpu.activeStateBytes()` die zum aktiven Backend
+und XCR0 passende Groesse. Genau diese Bytezahl wird mit 64-Byte-Ausrichtung
+allokiert und tasklokal initialisiert. Save und Restore pruefen Statezeiger,
+Groesse und Ausrichtung und arbeiten nur fuer den als SIMD-faehig
+klassifizierten Task. FXSAVE nutzt 512 Byte; XSAVE nutzt die von CPUID/XCR0
+getragene Groesse einschliesslich YMM-State. Ein ungueltiger oder zu kleiner
+State fuehrt nicht zu einem stillen Fallback.
+
+Guarded Stacks und Reclaim
+--------------------------
+
+Jeder normale Task erwirbt bei Bedarf einen 64-KB-Kernel-Stack im
+`kernel_stack`-Fenster. Davor liegen 16 KB uncommitteter Guard-Bereich. Der
+Guard kostet nur virtuellen Adressraum und wandelt einen Stackoverflow in
+einen kontrollierten Page Fault statt in Nachbarobjekt-Korruption um.
+
+Freigegebene Stacks duerfen als reine Churn-Optimierung in einem unabhaengig
+begrenzten Cache bleiben. Der Cache enthaelt hoechstens acht 80-KB-Ranges,
+davon jeweils 64 KB committed. Diese acht Eintraege sind keine versteckte
+Taskkapazitaet. Der globale Memory-Reclaim ruft den registrierten Task-Stack-
+Reclaimer vor den teureren Reclaimquellen auf; dieser loest ueberzaehlige
+Ranges und gibt je Stack 16 physische 4-KB-Frames an VM/PMM zurueck.
+
+Eine fehlgeschlagene VM-Freigabe darf einen moeglicherweise bereits teilweise
+unmappten Stack niemals wieder an einen Task ausgeben. Der Cacheeintrag bleibt
+als `release_pending`, nicht wiederverwendbare Range-ID fuer einen spaeteren
+Reclaim-Versuch erhalten und wird als Release-Fehler gezaehlt. Auch ein noch
+nicht publiziertes Taskobjekt behaelt eine solche Range-ID bis zum erfolgreichen
+Rollback. Programmthread-Stacks geben ihren bekannten kompakten Commitspan vor
+der acht MB grossen Reservation frei; eine leere Reservation wird nicht
+seitenweise gescannt. Physische Block-
+Freigaben werden vor dem Unmap vorgeprueft und begrenzt gebatcht/koalesziert,
+damit Teardown weder quadratisch wird noch mitten in einem Span an der
+Blockmetadatentabelle teilzerstoert scheitert.
+
+Technische Fortschrittsreserve und Fehler
+-----------------------------------------
+
+Bei der Initialisierung des Task-Systems werden vier getrennte kritische
+Bundles aus Task-Metadaten und guarded Stack vorbereitet. Nur der explizite
+Critical-Create-Pfad fuer
+Kernel-, I/O-, Netzwerk-, Admin- oder Reaper-Fortschritt darf diese Reserve
+verwenden. Ein normaler Programm- oder Workerstart konsumiert sie nie. Nach
+dem Ende eines kritischen Tasks kehrt sein Bundle vollstaendig in die Reserve
+zurueck.
+
+Die Reserve garantiert keine beliebige neue Last unter OOM. Sie garantiert,
+dass bereits laufende Verwaltungs- und Freigabepfade noch Arbeit annehmen
+koennen, um Ressourcen zurueckzugeben. Taskerzeugung klassifiziert echte
+Ressourcenfehler getrennt als `task_metadata`, `stack`, `fpu` oder `memory`.
+Der weiterhin diagnostizierte Wert `waiter` bezeichnet ausschliesslich einen
+nicht detached vorgefundenen eingebetteten Node, also eine Invarianten-/
+Admissionverletzung; er ist keine fehlgeschlagene Waiter-Allokation und wird
+vom R4X-Threadpfad als `busy` statt als OOM abgebildet. Ein globales, zwischen
+Tasks geteiltes Last-Error ist kein Vertrag.
+
+Abnahme
+-------
+
+Das vor jedem Kernelbuild laufende Hostgate ist:
+
+    Tests/Gate/Run-DynamicTaskRegistryContract05910.ps1
+
+Es verbietet kapazitaetsbestimmende `MAX_TASKS`-, `task.max_tasks`- und
+`MAX_PROGRAM_THREADS`-Verwendung sowie parallele Task-/Waiter-/FPU-Arrays.
+Sein Hostmodell prueft dreizehn Familien mit 4.096 gleichzeitig stabilen
+Tasks, 100.000 Create/Reap-Zyklen, Pointer-Scheduleridentitaet, unabhaengigem
+generationgesichertem Prioritaets-Fairness-Cursor, einer nebenwirkungsfreien
+IRQ-Bereitschaftsprobe, Pins und Deferred-Free, exakt-einmaligem Waiterabbau,
+Wake-All-Fortschritt nach Lockfreigabe, optionalem exaktem FPU-State, dem
+Achter-Stackcache, der Viererreserve sowie verankerten, phasenweisen Create-
+und Teardown-Rollbacks. Die ProgramThread-Familie umfasst Completion vor
+Waiter-Enrollment, atomaren Single-Join, generationstreues Reclaim einer
+stalen Join-Lease, Pin-vor-Reap und genau eine Retire-/Free-Folge. Zusaetzlich
+fixiert das Gate den skalaren ABA-sicheren Async-I/O-Retire-Claim,
+Service-Cancel vor Task-Retire, Task-/VM-Abbau ausserhalb des Async-Locks und
+lockgeschuetzte Service-Request-ID-Publikation. Dieselbe Familie prueft den
+auf 64 Ein-Tick-Retries begrenzten synchronen Close, den oeffentlichen
+`close_pending`-Handoff, Reaper-Revalidierung gegen vollstaendige
+Slot-/Request-/Owner-/Task-ABA sowie den cancel-before-clear geschuetzten
+Service-ID-Handoff.
+
+Die reale QEMU-Abnahme ist:
+
+    Tests/Runtime/Run-DynamicTaskRegistryRuntime05910.ps1
+
+Sie startet nur ein eigenes headless QEMU-Profil und verwendet keine reale
+Hardware. Verbindliche erfolgreiche Marker sind:
+
+    TASKREG05910 concurrency live=(12[8-9]|1[3-9][0-9]|[2-9][0-9]{2,}) runnable=[1-9][0-9]* blocked=[1-9][0-9]* priorities=3 wait=OK stable=OK
+    TASKREG05910 churn=10000 task=baseline heap=baseline pmm=baseline vm=baseline fpu=baseline
+    TASKREG05910 admission fault=task_metadata normal=REJECTED critical=OK reserve=returned netrx=progress caller=alive recovery=OK
+    TASKREG05910 result: OK
+    ASYNCIO05910 retire retry: injected request=[1-9][0-9]* attempts=65
+    ASYNCIO05910 sync close: deferred request=[1-9][0-9]* retries=64
+    ASYNCIO05910 retire retry: recovered request=[1-9][0-9]*
+    ASYNIOD retire retry: OK
+    THREADD dynamic concurrency live=160 runnable=[1-9][0-9]* blocked=[0-9]+ stable=OK
+    THREADD dynamic warm joined=160 postJoinGone=160 baseline=captured
+    THREADD dynamic baseline task=([0-9]+)/\1 fpu=([0-9]+)/\2 fpuInitDelta=[1-9][0-9]* fpuBytesDelta=[1-9][0-9]*
+    THREADD dynamic memory instanceReserved=([0-9]+)/\1 instanceCommitted=([0-9]+)/\2 instanceResident=([0-9]+)/\3 stackReserved=([0-9]+)/\4 stackCommitted=([0-9]+)/\5 exact=OK
+    THREADD dynamic memory global appStack=[0-9]+/[0-9]+ r4xOwner=[0-9]+/[0-9]+ blocks=[0-9]+/[0-9]+ physical=[0-9]+/[0-9]+ reserved=[0-9]+/[0-9]+ committed=[0-9]+/[0-9]+ drift=bounded
+    THREADD dynamic churn=10000 createReap=OK postJoinGone=10000 baseline=OK
+    THREADD dynamic result: OK
+    SIMDD dynamic wave=0 joined=64 reaped=64 freshInit=OK isolation=OK
+    SIMDD dynamic wave=1 joined=64 reaped=64 freshInit=OK isolation=OK
+    SIMDD dynamic result: OK waves=2 workers=64 active=65 rounds=400 avx2Isolation=OK freshInit=OK reuse=OK
+    System poweroff.
+
+Der THREADD-Snapshot muss 160 stabile, runnable Threads sehen. `blocked=0` ist
+dort zulaessig, weil die Worker nur ein bis zwei Ticks schlafen und beim
+Messzeitpunkt bereits wieder ready sein koennen. Den gemischten Runnable-/
+Blocked-Fall fixiert der TASKREG-Marker deterministisch mit jeweils mindestens
+einem Task.
+
+Die Admission-Zeile ist kein echter Gesamt-OOM und startet keine neue Admin-
+Sitzung. Der bootoption-gebundene One-shot injiziert gezielt genau einen
+`task_metadata`-Fehler in normale Admission. Danach beweist ein Critical-
+Create aus der vorbereiteten Reserve deren Rueckgabe; `netrx=progress` und
+`caller=alive` pruefen den Fortschritt bereits existierender Tasks waehrend
+dieser kontrollierten Fehlerinjektion. Der Netzwerk-Canary wartet dafuer
+hoechstens 64 echte Ein-Tick-Intervalle und akzeptiert entweder erhoehte
+`run_ticks` oder gemeinsam erhoehten Dispatch- und Pollzaehler.
+
+`ASYNIOD /RETIRERETRY` bindet die Fehlerinjektion an den eindeutigen
+File-Write-Request fuer `C:\TEMP\ASYNIOR.TXT`. Genau 65 Task-Retire-Versuche
+liefern `busy`: der Initialversuch plus 64 begrenzte Wiederholungen. Danach
+muessen der dauerhafte Reaper-Handoff und die generationstreue Recovery durch
+die drei `ASYNCIO05910`-Marker nachgewiesen sein. Diese Kernelmarker laufen
+ueber den normalen Logger an COM1 und Bootlog/LOGSVC und bleiben nach dem
+Desktop-Handoff vom Framebuffer fern.
+
+Der allgemeine `Build.bat -test` fuehrt ausserdem ASYNIOD mit 512 echten,
+nacheinander erzeugten, gewarteten und geschlossenen Async-Worker-Tasks aus.
+Der Marker `ASYNIOD task churn: OK requests=512` muss vor
+`ASYNIOD result: OK` erscheinen. Die 512 sequenziellen Requests erzwingen
+wiederholte Slot- und Task-ID-Wiederverwendung, ohne die bewusst getrennte
+gleichzeitige 64er-Requestqueue als Produktlimit umzudeuten.
+
+`Run-AsyncIoNetworkChurnRuntime05910.ps1` faehrt in derselben QEMU-Sitzung
+dreimal ASYNIOD mit je 512 Workern, NETIOD und `NETDIAG /LIFECYCLE`. FTPSVC
+bleibt fuer reale Listener-/Accept-Poll-Last aktiv. Jede Runde muss bis zur
+TCP- und UDP-Lifecycle-Ausgabe zurueckkehren. Die fuer 0.59.13 eingeplanten
+NETIOD-TCPSVC-Payload- und NETDIAG-Listenerbaseline-Altfehler sind nur in
+ihrer engen bekannten Form zulaessig; Letzterer hoechstens einmal in Runde 1
+mit vollendetem Cleanup-/UDP-Rueckweg. Ein Haenger vor UDP oder Poweroff ist
+damit reproduzierbar rot.
+
+Der Lauf muss jeden `TASKREG05910 FAILED`, `THREADD ... FAILED` oder
+`SIMDD ... FAILED`-Marker ablehnen. 128, 160, 4.096 und 100.000 sind
+Abnahmeschaerfen, keine Produktlimits.
+
+Inventarabnahme 0.59.11
+-----------------------
+
+Der statische, ABI- und modellbasierte Vertrag liegt in:
+
+    Tests/Gate/Run-ProgramTaskInventoryContract05911.ps1
+
+Seine sechs Hostmodellfamilien paginieren 320 Programme, Tasks und Threads
+ueber die historischen Grenzen 15/16/17, 31/32/33 und 63/64/65. Das Gate
+prueft ausserdem Restart ohne Cursorfortschritt, OOM-/Admission-Rollback ohne
+Live-Set-Aenderung, private Reservierungen und genau eine oeffentliche
+Completionzeile pro retirender Instanz, stale `ProgramJoinHandle` nach ID-Wiederverwendung,
+R4DEV-Telemetrie, append-only R4SYS-/R4DEV-Slots, Zig-/C-Paritaet sowie die
+dynamischen Verbraucher Desktop, MEMSUITE, SVCAPPD, EXSVC, SSHD und LOGSVC.
+
+Der reale QEMU-Lauf liegt in:
+
+    Tests/Runtime/Run-ProgramTaskInventoryRuntime05911.ps1
+
+Er startet `CLEANUPD /PROGRAMINVENTORY`, waermt die dynamischen Registries
+vor, haelt 80 echte Kindprogramme und erzeugt nach einem begonnenen Snapshot
+ein 81. Kind als Restart-Mutation. Danach werden Programme, Tasks und Threads
+mit caller-owned Siebenerseiten vollstaendig und generationstreu gelesen,
+alle historischen Grenzen sowie die gemeinsamen R4SYS-/R4DEV-Felder geprueft;
+die pro Anfrage vergebene `snapshot_generation` darf dabei verschieden sein.
+Ein waehrend des letzten `publish -> run` auftretender `RESTART` verwirft den
+gesamten Teilstand und bindet begrenzt einen neuen Cursor. Anschliessend werden
+saemtliche Kinder bis zur warmen Program-/Task-/Thread-/Completion-Baseline
+abgebaut. Auf einem produktiven Desktop bleiben dabei Objekt-, Lifecycle-,
+Completion- und ProgramThread-Zahlen exakt. Die momentane Schedulerverteilung
+laufender Service-/SSH-/RDP-Worker zwischen `running`, `ready` und `blocked`
+ist dagegen kein Besitz- oder Leakmerkmal und wird seit 0.59.15 nicht in den
+Baselinevergleich einbezogen; der R4SYS-/R4DEV-Gleichzeitigkeitssnapshot
+vergleicht diese Felder weiterhin vollstaendig. Der Runner ist ausschliesslich
+fuer headless QEMU bestimmt und spricht keine reale Hardware an.
+
+Produktionsnaher Abschlussstress 0.59.12
+----------------------------------------
+
+Der statische Quell-, ABI- und Harnessvertrag liegt in:
+
+    Tests/Gate/Run-DynamicExecutionStressContract05912.ps1
+
+Er fixiert 128 gleichzeitig lebende Rootprogramme als Abnahmeuntergrenze und
+ausdruecklich nicht als Produktlimit. 26 dieser Fixtures starten je ein
+Kindprogramm, weitere 26 halten je einen zusaetzlichen ProgramThread. Der
+vollstaendige Belastungsbestand umfasst damit 154 Programme sowie 180
+programmgebundene Tasks und Threads. Das Hostmodell faehrt zusaetzlich 10.000
+gemischte Create-/Exit-/Kill-/Wait-/Reap-Zyklen, kontrollierte private Program-
+und Task-Admission-OOMs mit unveraendertem Live-Set sowie drei modellierte
+Bootrunden. Die ABI-Pruefung bindet `heap_active_blocks` und
+`heap_used_bytes` in Zig, Kernel und C an den 160-Byte-
+`ProgramInventorySummary`.
+
+Die reale, ausschliesslich fuer QEMU vorgesehene Abnahme ist:
+
+    Tests/Runtime/Run-DynamicExecutionStress05912.ps1
+
+Der schnelle Standardlauf startet genau eine QEMU-Bootrunde, faehrt 1.000
+gemischte Zyklen und gibt dem finalen Baselinevergleich hoechstens 2.000 Ticks
+zum Settle. Der optionale Diagnosemodus `-Full` startet bei explizitem Aufruf
+mindestens drei frische Bootrunden mit je 10.000 Zyklen und 10.000 Tick
+Settle-Frist; er ist kein Abschlussblocker. Das Hostmodell bleibt davon
+unabhaengig immer bei 10.000 Zyklen.
+Jede Runtime-Runde bootet den produktionsnahen Desktop mit allen 13 Auto-
+Services. Acht gleichzeitig offene SSH-Sitzungen, ein aktiver RDPSVC-Worker
+sowie SERVMAN-, LOGCENTER-/RDPTRACE- und SYSUPD-STATUS-/VERIFY-Aufrufe muessen
+erst gemeinsam nachgewiesen und vollstaendig aus der Adminbarriere abgelaufen
+sein, bevor `CLEANUPD /DYNAMICSTRESS` seine eigene Messung beginnt. Dadurch
+gehoeren Service-, Netzwerk- und Adminaktivitaet zum realen Vorlauf. Die acht
+SSH-Sitzungen bleiben waehrend CLEANUPD offen; ihre kurzlebigen ownerlosen
+I/O-Worker werden deshalb getrennt vom exakten Programmlive-Set bewertet.
+Die SSH-Handshakes werden 4+3+1 gestaffelt und erst danach als Acht-Sitzungs-
+Barriere bewertet. Quick verwendet fuer den RDP-Drain 1.000 ms plus 250 ms
+Settle und vor dem Poweroff 1.000 Gast-Ticks; Full verwendet 8.000 ms plus
+2.000 ms sowie 5.000 Gast-Ticks. `-SkipImage` ist ausschliesslich fuer einen
+Harness-Retry mit einem bereits byteaktuell erzeugten Testimage aus exakt
+demselben Kernel-/R4X- und `TestInjection/`-Stand vorgesehen.
+
+`CLEANUPD /DYNAMICSTRESS` waermt die dynamischen Registries und lazy Payloads
+vor, haelt danach 128 Rootprogramme aus Console-, GUI- und Serviceklassen
+gleichzeitig aktiv und laesst daraus 26 Kindprogramme sowie 26 zusaetzliche
+Threads entstehen. Die ungekappte Inventarsicht muss deshalb exakt 154
+Programme und 180 programmgebundene Tasks und Threads mehr als die warme
+Ausgangslage sehen. Nach Close/Kill, Wait und Reap folgen ein kontrollierter
+Program-Growth-OOM und ein Task-Admission-OOM. Beide muessen den Start vor dem
+Publish ablehnen, das Live-Set unveraendert lassen und unmittelbar danach
+normale Admission wieder zulassen. Die Churn- und Settle-Phase muss alle leeren
+Registry-Chunks bis zum veroeffentlichten `warm_chunks`-Stand abbauen; erst
+dieser Zustand ist die finale warme Baseline. Der schnelle QEMU-Lauf faehrt
+1.000 echte gemischte Thread- und Programzyklen ohne interne
+Kindprozess-Ausgabe; `-Full` faehrt 10.000. Das Hostmodell prueft unabhaengig
+davon immer 10.000 Zyklen.
+
+Verbindliche Erfolgsmarker je Bootrunde sind mindestens:
+
+    CLEANUPD dynamicstress concurrency programs=154 ownedTasks=180 threads=180 roots=128 inventory=complete
+    CLEANUPD dynamicstress payload console=OK gui=OK service=OK child=OK waiters=OK completions=OK
+    CLEANUPD dynamicstress oom injected=2 program=REJECTED task=REJECTED live=stable admin=reachable recovery=OK reboot=no
+    CLEANUPD dynamicstress churn=1000 tier=quick deterministic=mixed spawn=OK thread=OK exit=OK reap=OK
+    CLEANUPD dynamicstress baseline program=exact task=owner-tagged-exact thread=owner-tagged-exact completion=exact ownerResources=exact storage=exact registry=warm heap=bounded512K memory=bounded640K serviceVm=bounded128K adminTasks=bounded8 waiter=covered
+    CLEANUPD dynamicstress result: OK
+    System poweroff.
+
+Im Full-Lauf lautet der Churnmarker entsprechend `churn=10000 tier=full`.
+
+Die Abschlussbaseline vergleicht Programme, Completions, Live-Set, Storage und
+die Ressourcen des Stressowners exakt mit dem geprueften Warmzustand.
+Zusaetzlich muessen Anzahl und Identitaet der ownergetaggten Tasks und Threads
+ueber ihre generationstreuen Hashes exakt uebereinstimmen und die Registry muss
+`chunk_count == warm_chunks` melden. Nur die laufende Administration besitzt
+eine begrenzte Huelle: hoechstens acht ownerlose Admin-Tasks, 512 KiB globale
+Heapabweichung, 640 KiB globale Speicherabweichung sowie zwei produktive
+Service-VM-Ranges mit zusammen 128 KiB. Programmbilder und App-Stacks bleiben
+exakt. Die Grenzen gelten nur fuer Mehrverbrauch; Registry-Shrink und
+Stackcache-Retirement duerfen die warme Belegung reduzieren. Jeder andere Drift und
+jeder `dynamicstress FAILED`-, Panic-, Exception-, Heap- oder PMM-Fehlermarker
+ist fatal. Der Runner sichert und restauriert `TestInjection/` selbst und
+spricht keine reale Hardware an.
+
+Wiederholte Boots und der 10.000-Zyklen-Full-Lauf dieses Runners bleiben
+optionale Tiefendiagnosen und sind auch am Ende von 0.59.14 kein
+Abschlussblocker. Fuer die aktuelle QEMU-only-Phase werden dort ausschliesslich
+genau ein aggregiertes `Build.bat -test` und ein `Build.bat -norun` gebuendelt.

@@ -1,0 +1,2367 @@
+﻿0.59.1
+Status: Erledigt
+Offene Punkte:
+- Keine offenen Implementierungspunkte in 0.59.1; die reale Laptop-Nachprobe
+  ist fehlgeschlagen und wird mit 0.59.2 fortgefuehrt.
+Erledigt:
+- 0.59.1 hat einen realen Fehler am gemeinsamen xHCI-Event-Ring behoben:
+  getrennte synchrone Warter konnten fremde Completions entnehmen und als
+  stale verbuchen. Die reale Laptop-Nachprobe zeigte jedoch, dass dieser
+  Fehler nicht die einzige Ursache des beobachteten Freeze war.
+- Der in 0.59.1 abgesicherte Fehlerpfad bleibt gueltig: Wird eine fertige HID-
+  Completion waehrend eines USBMSC-Warts verworfen, bleibt der Interrupt-
+  Transfer pending, ohne dass die Halted-Recovery greift. Die neue Messung mit
+  komplett inaktiver Deferred-Queue widerlegt ihn aber als aktuellen
+  Laptoppfad.
+- Command-, Control-, Bulk- und HID-Interrupt-Completions werden nun ueber
+  Eventtyp, Slot, Endpoint und physische TRB-Adresse exakt ihrem aktiven
+  Besitzer zugeordnet. Control-TDs besitzen dabei Setup-, Data- und Status-TRB
+  gemeinsam, damit auch ein auf den fehlerausloesenden TD-Teil zeigendes Event
+  korrekt zugestellt wird. Fremde, aber noch besessene Events bleiben in einer
+  geordneten Deferred-Queue erhalten.
+- Disconnect, Slot-Wiederverwendung, Ring-Neuinitialisierung, Endpoint-Recovery
+  und Queue-Ueberlauf bereinigen den Deferred-/Pending-Zustand gezielt, ohne
+  andere aktive Completions zu verwerfen.
+- HID-Interrupt-IN akzeptiert xHCI-Completion-Code 13 (Short Packet) als
+  regulaere Residue-verkuerzte Completion. Kurze Mausreports loesen damit
+  keinen Reset-/Dequeue-Recovery-Sturm mehr aus.
+- `[USBHIDPOLL]` zeigt die Deferred-Zaehler pending, queued, delivered,
+  overflows und purged. `USBDIAG /READSTRESS PATH [PASSES]` stellt einen
+  allgemeinen checksum-geprueften Nur-Lese-Stresstest bereit.
+- Das deterministische 0.59.1-Router-Gate laeuft vor jedem Kernelbuild; ein
+  eigener QMP-Lauf prueft USB-HID-Mausbewegung waehrend USBMSC-Leselast.
+- Treiber-, Diagnose-, Build-/Test- und AGENTS-Dokumentation sind aktualisiert;
+  die sichtbare Version ist auf 0.59.1 gesetzt.
+Abnahme:
+- `Run-XhciEventRouterContract0591.ps1`: 7/7 Tests erfolgreich, inklusive
+  HID-vor-USBMSC, HID-vor-Command, komplettem Control-TD, exaktem Matching,
+  ED-Bit, Purge und Overflow.
+- `DevTools/Scripts/Build.bat -app USBDIAG`: erfolgreich.
+- `Run-UsbHidMscEventRegression0591.ps1`: erfolgreich; achtmal 3 MB gelesen,
+  257 QMP-Eingabebatches in 12,05 s, konservativ 8,84 s Lastueberlappung,
+  251 Mauspakete nach der Last, recoveries=0 und deferred_overflows=0.
+- `DevTools/Scripts/Build.bat -norun`: erfolgreich.
+- `DevTools/Scripts/Build.bat -test`: `TEST OK`, Boot und Poweroff OK, keine
+  Fehler und alle geforderten API-/Paritaetsmarker vorhanden.
+- Reale Laptop-Abnahme: fehlgeschlagen. Die Maus fror erneut nach ein bis zwei
+  Sekunden ein, obwohl Deferred-Queue, Recovery und Timeouts unauffaellig
+  blieben.
+Notizen:
+- Ausgangsbefund auf dem realen Laptop: Der Desktop erscheint schnell, die
+  USB-Maus bewegt sich nur ein bis zwei Sekunden, waehrend Tastatureingaben
+  weiter funktionieren.
+- Sichtbarer Marker beim Freeze:
+  [USBHIDPOLL] service_polls=300 interrupt_polls=471 reports=109 no_report=362 halted_checks=3 recoveries=0 pending_timeouts=0
+- Die Unterversionsreihe beginnt nach dem Abschluss von 0.58 bei 0.59.1.
+- Zweiter Hardwaremarker beim Freeze:
+  [USBHIDPOLL] service_polls=300 interrupt_polls=586 reports=193 no_report=393 halted_checks=2 recoveries=0 pending_timeouts=0 deferred_pending=0 deferred_queued=0 deferred_delivered=0 deferred_overflows=0 deferred_purged=0
+
+0.59.2
+Status: Erledigt
+Offene Punkte:
+- Keine offenen Implementierungspunkte. Die erneute reale Laptop-Nachprobe
+  folgt nach dem Flash des gepushten 0.59.2-Images durch den Nutzer.
+Erledigt:
+- Der 0.59.1-Hardwaremarker schliesst die Deferred-Queue als Freeze-Ursache
+  aus. Der xHCI-Interrupt-Endpoint blieb Running und ein Transfer pending,
+  ohne Recovery, Timeout oder verlorenes Deferred-Event.
+- Der erste harte Ringfehler ist behoben: Command-, EP0- und HID-Interrupt-
+  Ringe initialisieren den Link-TRB-Cycle jetzt mit 0. Beim Producer-Wrap wird
+  der Link mit dem alten PCS veroeffentlicht und erst danach der lokale PCS
+  umgeschaltet. Zuvor wurde der Link vor dem Consumer-Durchlauf auf den neuen
+  Cycle gesetzt; reale Hardware konnte den Ring dadurch als leer ansehen.
+- Das reine Ringmodell `xhci_ring_cycle.zig` fixiert die Uebergabereihenfolge
+  ueber 800 Submissions und drei Wraps. Das neue
+  `Run-XhciRingCycleContract0592.ps1` laeuft vor jedem Kernelbuild.
+- Event-TRBs werden hardwaregerecht konsumiert: Cycle volatil zuerst lesen,
+  DMA-Barriere, Parameter/Status/Control in einen lokalen Snapshot lesen und
+  den Cycle erneut pruefen. Erst nach dem Drain bis zum Cycle-Mismatch werden
+  die konsumierten Slots gemeinsam per ERDP/EHB freigegeben.
+- Die Interrupter-Laufzeit quittiert `USBSTS.EINT` und `IMAN.IP` per W1C mit
+  Readback. Die Event-Ring-Initialisierung folgt jetzt
+  `ERSTSZ -> ERDP -> ERSTBA`; R4OS bleibt im Pollingbetrieb mit deaktiviertem
+  Interrupter-IE.
+- `[USBHIDPOLL]` zeigt jetzt Producer-Enqueue/PCS, Link-Cycle, Ring-Wraps,
+  Pending-Index/-Streak, Endpoint-State, Event-Dequeue/CCS/Raw-TRB,
+  ERDP-Commits, Ring-Full/Stale, live ERDP/IMAN/USBSTS und den Hardware-
+  Dequeue-Pointer. `[USBHIDWRAP]` protokolliert jeden HID-Ring-Wrap samt
+  Producer-/Link-Cycle und Healthwerten.
+- Die USB-HID-/USBMSC-QMP-Regression erzwingt jetzt mindestens vier HID-
+  Transfer-Ring-Wraps und 1050 echte Mauspakete, prueft fortlaufende Event-
+  Ring-Wraps/ERDP-Commits und verlangt weitere Reports nach dem letzten Wrap.
+- Build-/Test-, Treiber- und AGENTS-Dokumentation sind aktualisiert; die
+  sichtbare Version ist auf 0.59.2 gesetzt.
+Abnahme:
+- `Run-XhciRingCycleContract0592.ps1`: 3/3 Tests erfolgreich; 800
+  Submissions, drei Wraps und alte-PCS-Linkuebergabe verifiziert.
+- `Run-XhciEventRouterContract0591.ps1`: 7/7 Tests weiterhin erfolgreich.
+- `DevTools/Scripts/Build.bat -kernel`: erfolgreich.
+- `Run-UsbHidMscEventRegression0591.ps1`: Hostscript/QEMU Exit 0; 2075
+  QMP-Batches in 32,59 s, 2065 echte Mauspakete, acht HID-Ring-Wraps und noch
+  26 Pakete nach dem letzten Wrap. Event-Ring-Wraps liefen von 10 auf 17,
+  ERDP-Commits von 2785 auf 4570. Achtmal 3 MB USBMSC-Lesestress waren
+  checksum-geprueft OK; `recoveries`, `pending_timeouts`,
+  `deferred_overflows` und `ring_full` blieben 0, `stale_events` konstant 1.
+- `DevTools/Scripts/Build.bat -test`: `TEST OK`; QEMU, Boot und Poweroff OK,
+  keine Fehler und alle geforderten API-/Paritaetsmarker vorhanden.
+- `DevTools/Scripts/Build.bat -norun`: erfolgreich; das abschliessende
+  Produktionsimage enthaelt Version 0.59.2 und kein TestInjection-Overlay.
+- Reale Laptop-Abnahme: erfolgreich; die USB-Maus bleibt auf dem Lenovo
+  IdeaPad L340-15API funktionsfaehig. Sichtbare Diagnoseausgabe, langsamer
+  Hardware-Scroll und fehlender RTL8168-LAN-Support folgen getrennt.
+Notizen:
+- Der fruehere QMP-Lauf endete mit 251 Mauspaketen knapp unter den 255
+  nutzbaren Transfer-TRBs und konnte den ersten Producer-Wrap deshalb nicht
+  pruefen. Die neue Abnahme durchlaeuft beide PCS-Werte mehrfach.
+- Der Laptopwert `reports=193` plus Boot-/Command-/Storage-Events lag zugleich
+  nahe am ersten 256er-Event-Ring-Wrap. Deshalb wurden Producer- und Event-
+  Ring als zwei getrennte Hardwaregrenzen korrigiert und diagnostiziert.
+
+0.59.3
+Status: Erledigt
+Offene Punkte:
+- Keine offenen Implementierungspunkte; reale Sichtabnahme folgt mit dem
+  finalen 0.59.5-Laptopimage.
+Erledigt:
+- `boot_status.releaseForUserSession()` behaelt den nicht sichtbaren Output-
+  Hook dauerhaft. Normale Kernelmeldungen gehen weiter an COM1 und Bootlog,
+  erreichen aber nicht mehr den Framebuffer-ConsoleSink. Nur der Crashpfad
+  gibt die sichtbare Console bewusst frei.
+- LOGSVC folgt nach dem Service-Start dem absoluten
+  `BootLogInfo.total_written`-Cursor, importiert nur neue Bytes und behandelt
+  erhaltene sowie ueberholte Ringfenster ohne doppelte Records. Ein zweiter
+  Info-Snapshot verwirft Reads bei parallelem Writer-Fortschritt; der Cursor
+  endet vor einer noch unvollstaendigen Tailzeile.
+- `[USBHIDPOLL]` und `[USBHIDWRAP]` werden als Diagnosequelle mit Ursprung
+  USBHID beziehungsweise XHCI importiert. Breite Marker werden verlustfrei auf
+  mehrere LogCenter-Records verteilt.
+- `Run-DesktopKernelLogRoutingContract0593.ps1` ist als permanentes Gate vor
+  jedem Kernelbuild verdrahtet; Desktop-, LOGSVC-, Build- und AGENTS-
+  Dokumentation sowie die sichtbare Version sind aktualisiert.
+Abnahme:
+- `Run-DesktopKernelLogRoutingContract0593.ps1`: erfolgreich; User-Handoff,
+  Crashfreigabe, COM1-Reihenfolge, lineares/umgebrochenes/ueberholtes
+  Bootlogfenster, Info/Read-Retry, ueber zwei Refreshes geteilte Markerzeile
+  sowie zeilenumbruchloses Overrun-Fragment und Markeraufteilung geprueft.
+- `DevTools/Scripts/Build.bat -app LOGSVC`: erfolgreich.
+- `DevTools/Scripts/Build.bat -kernel`: erfolgreich.
+- `DevTools/Scripts/Build.bat -test`: `TEST OK`; QEMU, Boot und Poweroff OK,
+  keine Fehler und alle geforderten API-/Paritaetsmarker vorhanden.
+- `DevTools/Scripts/Build.bat -norun`: erfolgreich; das abschliessende
+  Produktionsimage enthaelt Version 0.59.3 und kein TestInjection-Overlay.
+Notizen:
+- Reale Ausgangsbeobachtung: `[USBHIDPOLL]` und `[USBHIDWRAP]` erschienen
+  direkt ueber dem laufenden Desktop. Die Korrektur liegt bewusst am zentralen
+  User-Session-Sink und gilt damit fuer alle normalen Runtime-Kernelmeldungen.
+- Ein Vorab-Smoke blieb nach einer aliasierenden Parserflag-Uebergabe im
+  Terminal-Selbsttest stehen und lief korrekt in den 240-s-Watchdog. Das Flag
+  wird nun lokal verarbeitet und erst danach in `LogState` zurueckgeschrieben;
+  der vollstaendig wiederholte Smoke endete anschliessend mit `TEST OK`.
+
+0.59.4
+Status: Erledigt
+Offene Punkte:
+- Keine offenen Implementierungspunkte; die reale Geschwindigkeitsabnahme folgt
+  mit dem Laptop-Image nach 0.59.5.
+Erledigt:
+- Ursache lokalisiert: Bei 1920x1080 und 2x-Font bewegte jede neue Zeile rund
+  7,9 MB direkt aus dem sichtbaren Framebuffer und zurueck. Die Byte-Schleife
+  erzeugte dabei rund 16 Millionen einzelne volatile Zugriffe; QEMU maskierte
+  die auf realer GPU-/PAT-WC-Hardware teuren Reads.
+- Ein statisches, auf 65.536 Zellen begrenztes RAM-Raster speichert Glyph und
+  wirksame Vorder-/Hintergrundfarbe ohne Heap oder grossen Stack. Scroll
+  verschiebt nur diese Zellen und repaintet den Textbereich streng zeilenweise
+  ohne sichtbaren Framebuffer-Readback.
+- Margins, historische Farben, `clear`, `clearFramed`, Backspace, Tabs und die
+  untere Leerzeile bleiben zellgenau. Scale-/Geometriewechsel, Splash und
+  User-Session-Handoff invalidieren nicht mehr autoritative Rasterdaten.
+- Fuer externe Pixel oder zu grosse Modi bleibt ein ueberlappungssicherer
+  Pixel-Fallback. Er nutzt ausgerichtete volatile `u64`-/`u32`-Transfers statt
+  der alten Byte-Schleife; ausgerichtete 32-bpp-Pixel werden als einzelnes
+  `u32` geschrieben.
+- Das permanente `Run-ConsoleScrollPerformanceContract0594.ps1` ist nach dem
+  0.59.3-Loggate in jeden Kernelbuild integriert; Display-, Desktop-, Build-
+  und AGENTS-Dokumentation sind aktualisiert.
+Abnahme:
+- `Run-ConsoleScrollPerformanceContract0594.ps1`: 2/2 Zellraster- und 5/5
+  Framebuffer-Tests erfolgreich; Margins/Farben, Invalidgeometrie,
+  ueberlappender Move, unaligned/padded Pixel und externe Invalidation geprueft.
+- `DevTools/Scripts/Build.bat -kernel`: erfolgreich; das permanente 0.59.4-Gate
+  sowie Kernel-Kompilation und Link liefen fehlerfrei durch.
+- `DevTools/Scripts/Build.bat -test`: `TEST OK`; QEMU, Boot und Poweroff OK,
+  keine Fehler und alle geforderten API-/Paritaetsmarker vorhanden.
+- `DevTools/Scripts/Build.bat -norun`: erfolgreich; das abschliessende
+  Produktionsimage enthaelt Version 0.59.4, nutzt `Injection/CONFIG.R4S` und
+  enthaelt kein `TestInjection`-Overlay.
+Notizen:
+- QEMU scrollt ausreichend schnell; das reale Laptop-Framebuffer ist deutlich
+  langsamer. Der alte Pfad las und schrieb beim Scroll direkt im sichtbaren
+  Framebuffer; 0.59.4 trennt autoritatives Zellraster und Pixel-Fallback.
+
+0.59.5
+Status: Erledigt
+Offene Punkte:
+- Keine offenen Implementierungs- oder Hardware-Abnahmepunkte.
+Erledigt:
+- `RTL8168.R4D` erkennt PCI `10EC:8168`; das Lenovo-Ziel
+  `17AA:38C7`, Revision `10`, wird diagnostisch exakt erkannt. BAR2 bleibt der
+  bevorzugte MMIO-Pfad, weitere gueltige Memory-BARs sind Fallbacks.
+- 64 RX- und 16 TX-Deskriptoren nutzen 64-Bit-DMA-Adressen, FCS-bereinigte
+  RX-Laengen, OWN-/EOR-/FS-/LS-Vertraege und DMA-Barrieren. RX, TX-Abschluss
+  und Recovery bleiben im Taskkontext; shared INTx setzt nur Hinweise.
+- PCI-Capabilities werden begrenzt und zyklussicher gesammelt, PM-D0 wird vor
+  PCIe-Link-Control hergestellt und per Readback geprueft. ASPM-L1 wird am
+  Endpunkt deaktiviert; GPHY-OCP- und PHYAR-Zugriffe sind begrenzt.
+- Der Kaltstart stoppt und beruhigt DMA ohne MAC-Reset. Ein Hardreset ist auf
+  eine serialisierte Poll-Recovery nach Systemfehler oder TX-Stall begrenzt;
+  unbekannte XIDs behalten ihren Firmware-PHY-Zustand.
+- Das Produktionsprofil laedt RTL8139 und RTL8168 und behaelt DHCP. Das
+  Testprofil bleibt unveraendert bei RTL8139/VIRTNET und statischer QEMU-IP.
+- Build-, Image-, Katalog-, SDK-, Treiber-, Netzwerk- und Hardwaredokumentation
+  sowie sichtbare Version 0.59.5 sind aktualisiert.
+Abnahme:
+- `Run-Rtl8168HardwareContract0595.ps1`: 3/3 Tests und statischer Hardware-,
+  IRQ-, Recovery-, SDK-, Manifest-, Image- und Produktionskonfigurationsvertrag
+  erfolgreich.
+- `Code/Kernel/net/config_writer.zig`: 6/6 Tests; beide produktiven
+  Netztreiberzeilen bleiben bei NETCFG-Schreibvorgaengen erhalten.
+- Eigenstaendiger RTL8168-Projektbuild, `Build.bat -app RTL8168` und
+  `Build.bat -kernel`: erfolgreich.
+- `Build.bat -test`: `TEST OK`; QEMU, Boot und Poweroff OK, keine Fehler und
+  alle geforderten API-/Paritaetsmarker vorhanden.
+- Abschliessendes `Build.bat -norun`: erfolgreich, normaler 84-R4X-Imageplan.
+  Der FAT32-Inhalt wurde direkt gelesen: `CONFIG.R4S` und `VERSION.R4S` sind
+  bytegleich zu `Injection/`, `RTL8168.R4D` ist bytegleich zum Buildartefakt,
+  Test-`POWEROFF`, `OLDLEG.R4X` und `BADSTART.R4X` fehlen.
+- Finales Hardwareimage: `Release/disk.img`, 536870912 Bytes, SHA-256
+  `b1d84a4cb0e053e8bd6308f45a03d0cbea72e9f2462170c5a8791870d8807aa8`.
+  `image-adds.txt` enthaelt genau einen RTL8168-, Produktions-CONFIG- und
+  VERSION-Eintrag, keinen `TestInjection`-Eintrag; kein QEMU-Prozess laeuft.
+- Reale Laptop-Abnahme: erfolgreich; Link und DHCP stehen, Ping und SSH
+  funktionieren ueber RTL8168.R4D an `192.168.178.213`.
+Notizen:
+- Zielgeraet: Lenovo IdeaPad L340-15API, Realtek PCIe GbE Family Controller,
+  Subsystem `17AA:38C7`, Revision `10`.
+- Fuer den USB-Stick ausschliesslich dieses nach dem Smoke neu erzeugte
+  Produktionsimage verwenden. Jeder spaetere Testimage-Build wuerde dieselbe
+  Datei wieder mit `TestInjection` ueberschreiben.
+
+0.59.6
+Status: Erledigt
+Offene Punkte:
+- Keine offenen Implementierungs-, automatisierten oder Hardware-
+  Abnahmepunkte.
+Erledigt:
+- Ursache des Schwarzbilds nach erfolgreichem mstsc-Login lokalisiert:
+  RDPSVC lehnte Remote-Frames oberhalb der fest verdrahteten Breite 1280 ab.
+  Der reale 1920x1080-Desktop erreichte deshalb nie ein Bitmap-PDU.
+- RDPSVC bindet vor Demand Active eine gueltige R4DESK-Sitzungsgeometrie bis
+  8192x8192. Demand Active, Vollbildstreifen, Dirty-/Cursorgrenzen und absolute
+  Mauseingabe verwenden dieselbe Geometrie; ein spaeterer Wechsel wird nach
+  LOGSVC geschrieben und beendet die Sitzung kontrolliert.
+- Der Sender arbeitet unabhaengig von der Framebreite mit 256-Pixel-Kacheln,
+  auch im `remoteFrameRead`-Fallback. PDU-Body, Rechteckzahl, PER-Laenge und
+  16-KB-Paketgrenze bleiben fest gedeckelt.
+- RLE16 sendet alle 4-Pixel-Kacheln. Breiten wie 1365/1366 behalten fuer den
+  1- bis 3-Pixel-Rest ein unkomprimiertes RGB565-Rechteck mit 4-Byte-
+  Zeilenpadding und mischen kein Raw32 mehr in eine 16-bpp-Sitzung.
+- LOGSVC erhaelt sofort `rdp geometry` sowie pro gesendeter Region die echte
+  `nonblack`-Pixelzahl. Der positionssensitive Checksum ist nur noch
+  Aenderungsdiagnose und kein Schwarztest. Session-Statistiken uebernehmen nun
+  auch Kompressions-, Raw- und Map-/Copy-Zaehler.
+- `Run-RdpBitmapGeometryContract0596.ps1` laeuft vor App-/Modulbuilds; der
+  RDPSVC-Selftest und Live-Harness decken Raw16-Padding und exakte Demand-
+  Active-Geometrie zusaetzlich ab. Build-, Netzwerk-, Display-, Service- und
+  Hardwaredokumentation sind aktualisiert.
+Abnahme:
+- `bitmap_geometry.zig`: 4/4 Hosttests fuer 1280, 1365, 1366, 1920, 3840,
+  8192, Rechteckgrenzen, Tilefolge und Schwarzmetrik erfolgreich.
+- `Run-RdpBitmapGeometryContract0596.ps1`: erfolgreich.
+- `DevTools/Scripts/Build.bat -app RDPSVC`: erfolgreich.
+- `Run-RdpServiceLiveTest.ps1`: klassische Sitzung, Reconnect, Modern-Wire,
+  TLS-only, CredSSP-Negativfaelle, exakte 1280x720-Demand-Active-Geometrie,
+  225 Bitmapupdates sowie Eingabe erfolgreich.
+- `DevTools/Scripts/Build.bat -test`: `TEST OK`; QEMU, Boot und Poweroff OK,
+  keine Fehler und alle geforderten Loader-/API-/Paritaetsmarker vorhanden.
+- Abschliessendes `DevTools/Scripts/Build.bat -norun`: erfolgreich, normaler
+  84-R4X-Produktionsimageplan ohne TestInjection. Der FAT32-Inhalt wurde direkt
+  gelesen: Version 0.59.6, Desktop-Shell, DHCP, RTL8168, SSHD und RDPSVC sind
+  aktiv; die eingebetteten RDPSVC-/RTL8168-Artefakte stimmen bytegenau mit den
+  finalen Buildartefakten ueberein.
+- Finales `Release/disk.img`: 536870912 Bytes, SHA-256
+  `D2BE692753CCE47D10A8B6E7DAAA8859665B7CBFD3D6212E2B801769204635E8`.
+- Reales Updatepaket `R4OS0596.R4U`: 144427 Bytes, SHA-256
+  `48EC0ACF818B238AF8F94DC0FEAC532BF3352F2DCD8DA49560C797B357B54540`;
+  SFTP-Upload und Rueckdownload von `C:\R4OS\UPDATE\INBOX` waren bytegleich.
+- `SYSUPD VERIFY` auf dem Lenovo akzeptierte Ausgang 0.59.5, Ziel 0.59.6,
+  zwei Payloads und 143765 gestreamte Bytes. `SYSUPD APPLY` installierte
+  RDPSVC und VERSION mit `applied=2/2`, `result=ok` und `reboot=yes`.
+- Nach Kaltstart blieben Journal `state=applied`, Version 0.59.6 und beide
+  Payloadchecksummen persistent. Ping hatte 0 Prozent Verlust, SSH-Port 22
+  und RDP-Port 3389 waren offen; die reale Windows-mstsc-Sichtabnahme zeigte
+  den 1920x1080-Desktop korrekt statt eines schwarzen Bildes.
+Notizen:
+- Beim Live-Zugriff waren alle 16 Programminstanz-Slots belegt; deshalb konnte
+  die SSH-Shell SERVMAN/LOGCENTER/RFDIAG nicht als Kindprozess starten
+  (`Program launch failed ... (-2)`). Die Kapazitaetskorrektur folgt getrennt,
+  weil Kernel, Desktop-Inventar und Exit-History dieselbe Grenze gemeinsam
+  anheben muessen.
+- Auch der SYSUPD-Hardwarelauf traf diese Grenze. Fuer die einmalige Abnahme
+  wurde `FTPSVC.R4X` 8.3-konform in `FTPSVC.OFF` umbenannt, kalt gebootet und
+  nach erfolgreichem Apply wiederhergestellt; direkte Systemdatei-Uploads
+  wurden nicht verwendet.
+- Ein schneller Soft-Reboot startete den einmaligen DHCP-Versuch vor stabilem
+  RTL8168-Link und liess die QEMU-Defaultadresse 10.0.2.15 aktiv. Ein echter
+  Poweroff/Kaltstart bezog wieder 192.168.178.213. Retry/Link-Ready folgen
+  getrennt.
+- `.r4ustage` und `.prev` sind keine FAT-8.3-Namen. Der aktuelle R4SYS-
+  Rename-Fallback arbeitet deshalb per Copy/Delete und ist bei Stromverlust
+  nicht atomar; Journal/RESUME ersetzen keine paketweite Transaktion.
+
+0.59.7
+Status: Erledigt
+Offene Punkte:
+- Keine offenen Implementierungs- oder QEMU-Abnahmepunkte. Die statische
+  Registry bleibt absichtlich bis 0.59.8 bestehen.
+Erledigt:
+- Der fruehere 118.664-Byte-Monolith ist in einen hoechstens 256 Byte grossen
+  `ProgramInstance`-Kern und acht bedarfsgerechte Heap-Payloadarten fuer
+  Runtime, Process, Environment, Console, Console-Ausgabe, GUI, GUI-Commands
+  und GUI-Raster zerlegt. Console und Services bezahlen keine unbenutzten
+  GUI-Grosspuffer mehr; Environment sowie GUI-Command/-Raster entstehen lazy.
+- Jeder Payload beginnt mit einem exakt 16 Byte grossen Header fuer Magic,
+  Owner-ID, angeforderte Groesse und Art. Private und lebende Hierarchien
+  werden parent-first vollstaendig vorgeprueft; erst danach erfolgt der
+  Reverse-Teardown. Ein Owner-/Headerfehler kann weder fremde Childpointer
+  dereferenzieren noch einen Teilzustand freigeben.
+- Spawn, Startfehler, OOM, normaler Exit, Request-Close und Kill rollen Image,
+  Stack, VM, Payloads und Registryzustand in eindeutiger Gegenreihenfolge
+  zurueck. Console-Ausgabe ist spawn-owned; der erste GUI-Blit erwirbt
+  Command und Raster als eigene Zweistufentransaktion.
+- Kill eines in `io_wait` blockierten Owners cancelt den eingereihten Service-
+  Request vor dem Worker, beendet die Waitqueue und leert den Async-Slot auch
+  dann, wenn der beendete Waiter seinen Diagnosezaehler nicht mehr abbauen
+  kann. Haupt- und Worker-Tasks geben ihre Task- und Stack-Slots wieder frei.
+- R4DEV v2/248 stellt append-only die Storage-Zusammenfassung v1/256 und den
+  Selftest v1/64 bereit. Current-/Peak-Bytes, aktive Klassen und Payloadarten,
+  Allokation, Release, Fehler, Rollback und Quarantaene sind in Zig, C,
+  Schema, Paritaetsbericht und Referenzdokumentation konsistent verdrahtet.
+- Das permanente 0.59.7-Gate und ein separates Hostmodell pruefen Budgets,
+  Klassenmatrix, 27 Fehler-/Rollbackfaelle, Ownerbeziehungen und gemischten
+  Churn. CLEANUPD besitzt eine headless-faehige GUI-Fixture fuer den echten
+  Command-/Rasterpfad sowie eine SVCSTALL-/ASYNIOD-Kill-Wait-Regression.
+- Build-, API-, Diagnose-, Architektur-, Deployment-, AGENTS- und
+  Katalogdokumentation sind aktualisiert; die sichtbare Version ist 0.59.7.
+Abnahme:
+- `Run-ProgramInstanceStorageContract0597.ps1`: 7/7 Tests erfolgreich;
+  <=256-Byte-Kern, acht Payloadarten, parent-first Gesamtpreflight,
+  Fehlerinjektion, Slot-Reuse und Byte-/Ownerbaseline geprueft.
+- Kernelselftest in QEMU: 27/27 Faelle, Heap-/Storagebaseline,
+  Nullinitialisierung, Zaehlerbalance und Reverse-Rollback erfolgreich.
+- `Run-ProgramInstanceStorageRuntime0597.ps1`: erfolgreich. Console-, GUI-
+  Command-/Raster-, Service-Close/-Kill-Lifecycles, ein kontrollierter
+  Infrastruktur-Warm-up und danach 72 Kills im blockierten `io_wait` liefen
+  ueber die alte 64er-Async-Grenze; Queue, Requestslots, Owner, Heap, PMM, VM
+  und Registry kehrten nach jedem gemessenen Zyklus exakt zurueck.
+- Gemischter QEMU-Churn: 18 Zyklen (je sechs Console/GUI/Service), 84
+  Payloadallokationen und 84 Releases; Owner-, PMM-, VM-, Registry- und
+  Storagebaseline blieben gleich.
+- Gezielte Builds fuer SVCAPPD, ASYNIOD und CLEANUPD: erfolgreich.
+- `DevTools/Scripts/Build.bat -test`: `TEST OK`; QEMU, Boot und Poweroff OK,
+  alle API-/Paritaetsmarker vorhanden; die Smoke-Auswertung meldete
+  `Errors: none`.
+- `DevTools/Scripts/Build.bat -norun`: erfolgreich; Produktionsplan mit 84
+  R4X, Version 0.59.7 und ohne TestInjection-Overlay. `Release/disk.img` hat
+  536.870.912 Bytes und SHA-256
+  `18de24ccb820d4d780d4b1b8369342e7b0e3ab95dfcc9f5aa23a88583ae0cb8a`.
+Notizen:
+- 0.59.7 veraendert den oeffentlichen Instanzvertrag nicht und hebt die starre
+  16er-Registry noch nicht auf; diese Grenze faellt in 0.59.8.
+- Der erste GUI-Abnahmeversuch nutzte EXAMPLE ohne Desktop-Host und verlangte
+  trotzdem ein Rasterpayload, obwohl EXAMPLE nur Commanddrawing verwendet.
+  Die dedizierte headless-Fixture uebt nun beide Lazy-Pfade absichtlich aus.
+- Die erste ASYNIOD-Instanz legt wiederverwendbare Task-Stack-/Page-Table-
+  Infrastruktur an. Ein kontrollierter Warm-up verlangt bereits exakte
+  Owner-/Payloadrueckkehr; die folgenden 72 Zyklen verlangen zusaetzlich die
+  bytegenaue warme PMM-/VM-Baseline und verdecken daher keinen Churn-Leak.
+
+0.59.8
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- Die feste 16er-Tabelle ist durch lazy allokierte, stabil adressierte
+  16-Slot-Heapchunks ersetzt. Wachstum verschiebt keine Instanz; leere Chunks
+  werden mit positiver Normal-/Speicherdruckhysterese freigegeben. Abgelehnte
+  Chunk-Frees und Grow-Race-Loser bleiben transaktional erreichbar und exakt
+  gezaehlt.
+- Spawn reserviert ID, Generation und Slot unsichtbar, erledigt Datei-, Image-,
+  Stack- und private Payloadarbeit ohne Registry-Lock und publiziert erst die
+  vollstaendige Instanz. Jeder Fehler rollt in umgekehrter Reihenfolge zurueck.
+  Ein echter Heap-OOM erhaelt genau einen begrenzten Pressure-Reap/Shrink/Retry;
+  die explizite Fehlerinjektion bleibt dagegen sofort sichtbar.
+- `free`, `reserved`, `live`, `done` und `retiring`, Generationen, Pins/Leases,
+  Reclaim-Pending und wrap-/Null-/kollisionssichere IDs bilden den internen
+  Vertrag. Die Registry besitzt keine zahlenbasierte Admission-Grenze mehr.
+- ProgramThread und Async-I/O-Request binden die stabile Owner-Adresse. Timer-
+  IRQ, Page Fault und Crash-Kontext klassifizieren den laufenden R4X dadurch
+  ohne sleepable Registry-Lock oder dynamischen Chunkiterator; die gemessene
+  FS-/Service-/Block-Lockumkehr ist beseitigt.
+- R4DEV v3 ergaenzt append-only Registry-Summary und Selftest. CLEANUPD prueft
+  reale >16-Churn-, OOM-, Stabilitaets- und Recoverypfade; LOADERD prueft die
+  Freigabe seiner vier konkreten Main-Tasks statt eines globalen Dead-Zaehlers.
+- Buildgate, Hostmodell, dedizierter QEMU-Runner, API-/SDK-/C-Paritaet,
+  Architektur-, Diagnose-, Deployment- und AGENTS-Dokumentation sind aktuell;
+  die sichtbare Version steht auf 0.59.8.
+Abnahme:
+- `Run-DynamicProgramRegistryContract0598.ps1`: 10/10 Tests erfolgreich;
+  4.096 gleichzeitige Deskriptoren, 100.000 Create/Remove-Zyklen, mittlere
+  Luecken, stabile Adressen, Shrink, ID-Wrap/Kollision, Race-Loser, Free-Reject,
+  injizierter sowie echter OOM und positive Hysterese geprueft.
+- `Run-DynamicProgramRegistryRuntime0598.ps1`: erfolgreich. 24 gehaltene und
+  insgesamt 26 lebende Instanzen erzwangen zwei Chunks/32 Slots; IDs und
+  Adressen blieben stabil. Der erzwungene Grow-OOM liess 30 vorhandene
+  Instanzen intakt, danach gelang wieder ein Start und die Livebaseline 2
+  wurde erreicht. Log: `qemu-test-dynamic-program-registry-0598-20260716-222851.log`.
+- `Run-ProgramInstanceStorageRuntime0597.ps1`: erfolgreich; Speicher-, Heap-,
+  PMM-, VM-, Task-, Async- und Ownerbaselines blieben mit der dynamischen
+  Registry exakt. Log: `qemu-test-program-storage-0597-20260716-223009.log`.
+- Vollstaendiger Neubau plus QEMU-Smoke: `TEST OK`, Boot/Poweroff OK, alle
+  API-/Paritaetsmarker vorhanden, LOADERD `ownedTasks=4/4`, PERFDIAG-Summary OK,
+  951.217 ausgeglichene Lock-Akquisitionen, `orderBad=0`, `sleepBad=0` und
+  `Errors: none`.
+- `DevTools/Scripts/Build.bat -norun`: erfolgreich; Produktionsplan mit 84
+  R4X, Version 0.59.8 und ohne TestInjection-Overlay. `Release/disk.img` hat
+  536.870.912 Bytes und SHA-256
+  `2cde8c14713eca8d71b8f52cddf8a3418d7d5036b3a6859d3e5efcf25c1ba2b6`.
+Notizen:
+- Das garantierte Zwischenziel von mindestens 32 gleichzeitig nutzbaren
+  Programminstanzen ist eine Abnahmeuntergrenze, kein neuer Slotdeckel.
+- Der erste Vollsmoke erreichte beim weiterhin fortschreitenden FSDIAG exakt
+  das 240-Sekunden-Watchdoglimit. Das unveraenderte Testimage beendete den
+  Wiederholungslauf mit dem dokumentierten 360-Sekunden-Override nach 236
+  Sekunden selbst per Poweroff.
+- Rohe Pointer ueber Yield-/Wait-Grenzen, Deferred-Retire, generationensichere
+  ProcessHandles und Completion-Reaping gehoeren weiterhin geschlossen in
+  0.59.9; diese Grenze wurde nicht durch die Registry-Arbeit verwischt.
+
+0.59.9
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- Der Programmlifecycle ist eine monotone, generationengebundene
+  `create -> publish -> run -> exit -> done -> retire -> reap`-
+  Zustandsmaschine. Rohe Instanzpointer ueberleben keine Yield-/Wait-Grenze;
+  Execution-, API- und GUI-Zugriffe laufen ueber Pins und exakte Handles.
+- Starts transportieren ihre typisierten Fehler caller-lokal. Ein paralleler,
+  yieldender Start kann weder Heap-OOM noch Generationsexhaustion eines
+  fremden Starts umklassifizieren; alle sechs Vor-Publish-Phasen rollen exakt
+  rueckwaerts zur Ressourcenbaseline zurueck.
+- Deferred-Retire ist in persistente, idempotente Einzelphasen zerlegt. Der
+  eigene Execution-Pin eines hart beendeten Tasks wird beim Task-/Thread-
+  Detach geloest; externe API-/GUI-Leases blockieren Output-, Payload-, Image-,
+  Stack-, VM-, Owner- und Slotabbau bis zu ihrem sicheren Ende.
+- `ProcessHandle`, Wait und Reap verwenden ID plus globale `u64`-Generation.
+  Stale Kopien koennen eine wiederverwendete ID nicht treffen. `committed` und
+  `ready` sind getrennt; Close/Kill einer exakten Completion liefern
+  `NOT_RUNNING`, Reap vor `ready` `WOULD_BLOCK` und voll gereapte Identitaeten
+  sofort `NOT_FOUND`.
+- Ownergebundene Completions halten Exitcode und benoetigte Konsolenausgabe,
+  waehrend schwere Instanzressourcen sofort nach Retire verschwinden. Der alte
+  ID-Reap bleibt genau einmal konsumierend; der getrennte Diagnosering besitzt
+  echte Head-/Count-/Alterssemantik und verliert keine Owner-Completion.
+- R4SYS/R4DESK v7 und R4DEV v4 sind append-only verdrahtet. Zig und C behalten
+  quellkompatible `raw: u32`-Ressourcenfelder; R4DEV-v3-Slots 29/30 und ihre
+  160-/64-Byte-v1-Payloads bleiben binaer eingefroren.
+- Der allgemeine QEMU-Watchdog und die drei Program-Runtime-Runner starten auch
+  mit doppelt geerbtem Windows-`Path`/`PATH`. Das Stderr-Gate ignoriert nur die
+  exakt bekannte hostseitige GLib-GIO-AppX-Manifestwarnung und bleibt fuer
+  andere QEMU-Fehler strikt.
+Abnahme:
+- `Run-ProgramLifecycleContract0599.ps1`: 11/11 Hostmodelltests erfolgreich;
+  112 langlebige Completions bei 96 Slots, 64-stufige Console-Kaskaden, 10.000
+  gemischte Zyklen, alle Spawn-/Exit-/Retire-Fehlerphasen sowie die getrennte
+  Execution-/API-Pin-Grenze bleiben leak- und doppelfreigabefrei.
+- `Run-ResourceFacadeContract05825.ps1`: 5/5 Zig-Hosttests sowie kompilierte
+  und ausgefuehrte C-Fassade erfolgreich; `ProcessHandle.raw` bleibt `u32`.
+- `Run-ProgramInstanceStorageRuntime0597.ps1`: QEMU erfolgreich, Log
+  `qemu-test-program-storage-0597-20260717-184248.log`.
+- `Run-DynamicProgramRegistryRuntime0598.ps1`: QEMU erfolgreich, Log
+  `qemu-test-dynamic-program-registry-0598-20260717-184624.log`.
+- `Run-ProgramLifecycleRuntime0599.ps1`: QEMU erfolgreich mit Foreground-
+  Exitcode/Ausgabe, Legacy-ID-Canaries, stale Handle, Async-/Thread-Kill,
+  Console-/Service-Churn, Fehlerinjektion und vollstaendiger Quiescence-
+  Baseline; Log `qemu-test-program-lifecycle-0599-20260717-184704.log`.
+- `DevTools/Scripts/Build.bat -test`: erfolgreich; QEMU, Boot, Poweroff,
+  LOADERD/R4XSTARTD/CSTARTD, beide App-Entry-Marker, R4CC/R4PACK/R4BUILD und
+  Zig-/C-Paritaet OK; `=== TEST OK ===`.
+- `DevTools/Scripts/Build.bat -norun`: erfolgreich; Produktionsplan mit 84
+  R4X, Version 0.59.9 und ohne TestInjection-Overlay. `Release/disk.img` hat
+  536.870.912 Bytes und SHA-256
+  `875b08d0aa914272a3ad3ba1e2753d7f90b15032cf805a05c1697831f5d1c964`.
+Notizen:
+- Der Lenovo wurde fuer 0.59.9 weder gebootet noch per SSH/RDP angesprochen;
+  die komplette Entwicklung und Abnahme blieb Host-/QEMU-only.
+- Der Vollsmoke bestaetigte zwei bereits seit 0.56 dokumentierte, nicht durch
+  0.59.9 verursachte Netzwerkdiagnose-Altlasten. Ihre baselinefeste Reparatur
+  und verbindlichen Smoke-Marker sind in der QEMU-Netzwerkphase 0.59.13
+  eingeplant; FTPSVC bleibt aktiv.
+
+0.59.10
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- Die feste Tasktabelle wurde durch eine dynamische, stabil adressierte Task-
+  Registry ersetzt. Scheduleridentitaet verwendet Taskzeiger sowie
+  ID/Generation; Pins, generationengesicherter Fairness-Cursor und linked
+  Retry-Reap verhindern bewegliche oder stale Taskreferenzen.
+- Jeder Task besitzt einen intrusiven Waiter. Create, Wake, Timeout, Cancel,
+  Kill und Queue-Abbau verwenden denselben exakt-einmaligen Detach-Vertrag.
+  Semaphore-Admission bleibt atomar; finale Mutex-/UnwindGuard-Freigaben
+  wecken alle betroffenen Waiter.
+- FPU-/XSAVE-State wird nur fuer tatsaechliche SIMD-Tasks exakt dimensioniert
+  und 64-Byte-ausgerichtet angelegt. Reine Kernel-Worker besitzen keinen
+  ungenutzten SIMD-State; getrennte AVX2-Wellen beweisen Initialisierung,
+  Isolation und vollstaendigen Reap.
+- Guarded Kernel-Stacks entstehen bedarfsgerecht. Der unabhaengige Cache ist
+  auf acht Eintraege begrenzt, reagiert auf Speicherdruck und behaelt
+  fehlgeschlagene Releases als nicht wiederverwendbare Retry-Anker.
+- ProgramThreads liegen in einer getrennten dynamischen Registry mit stabilen
+  Objekten, ID/Generation, Pins und generationengebundener Join-Lease. Das
+  Programmstack-Fenster wurde ohne neue Threadzahlgrenze auf acht GB erweitert.
+- Vier vorbereitete Task-/Stack-Bundles bilden die ausschliesslich fuer
+  Kernel-, I/O-, Netzwerk-, Admin- und Reaper-Fortschritt bestimmte technische
+  Reserve. Task-, Stack-, FPU-, Waiter- und sonstiger Speicherdruck bleiben
+  getrennte Fehlerklassen.
+- Async-I/O-Close, Cancel und Purge retiren Worker ueber vollstaendige skalare
+  Slot-/Request-/Owner-/Task-Claims ausserhalb des Async-Locks. Worker werden
+  vor Freigabe des Locks runnable; Service-Submit und Request-ID-Publikation
+  sind gegen Hard-Kill geschuetzt und brechen bei Fehler vor dem ID-Clear ab.
+- Oeffentliches `io_close` meldet Erfolg erst nach physischem Abschluss oder
+  dauerhaftem, generationengenauem `close_pending`-Handoff an den Reaper.
+  Synchrone Fassaden versuchen den Close einmal sofort und weitere 64 Male im
+  Ein-Tick-Abstand; bleibt Retire blockiert, uebernimmt der Reaper den exakten
+  Request ohne ABA-, UAF- oder Lockverschachtelungsfenster.
+- Hostvertrag, separater QEMU-Runner, ASYNIOD `/RETIRERETRY` und der
+  wiederholte Async-I/O-/Netzwerk-Churn sind dauerhaft in Build und
+  Dokumentation verdrahtet. Die sichtbare Version ist 0.59.10.
+Abnahme:
+- `Run-DynamicTaskRegistryContract05910.ps1`: OK; 13 ausfuehrbare
+  Hostmodellfamilien mit 4.096 gleichzeitig stabilen Tasks und 100.000
+  Create/Reap-Zyklen. Das 0.59.7-Rueckwaertsgate blieb ebenfalls gruen.
+- `Run-DynamicTaskRegistryRuntime05910.ps1`: OK, Log
+  `qemu-test-dynamic-task-registry-05910-20260718-005602.log`. 144 gemischte
+  Kernel-Tasks, 10.000 Task-Churns, 160 ProgramThreads, 10.000 Thread-Churns
+  und zwei vollstaendig gereapte AVX2-Wellen erreichten ihre Baselines.
+- Die gebundene Retire-Probe erzwang 65 aufeinanderfolgende Busy-Ergebnisse:
+  ein Initialversuch plus 64 begrenzte Retries. Danach wurde der Request
+  dauerhaft an den Reaper uebergeben und die exakte Taskgeneration erfolgreich
+  retirert; Injected-, Deferred- und Recovered-Marker waren vorhanden.
+- `Run-AsyncIoNetworkChurnRuntime05910.ps1`: OK, Log
+  `qemu-test-async-io-network-churn-05910-20260718-011052.log`. In drei
+  aufeinanderfolgenden Runden kehrten jeweils 512 reale ASYNIOD-Worker sowie
+  NETIOD und NETDIAG `/LIFECYCLE` zum Aufrufer zurueck; TCP-/UDP-Diagnose und
+  Gast-Poweroff wurden nach allen Sequenzen erreicht.
+- `DevTools/Scripts/Build.bat -test`: OK. Der vollstaendige Standard-Smoke
+  erreichte Boot, alle API-Diagnosemarker und Gast-Poweroff.
+- `DevTools/Scripts/Build.bat -testonly`: OK. Derselbe Testdatentraeger
+  durchlief den Standard-Smoke ein zweites Mal bis zum Gast-Poweroff.
+- `DevTools/Scripts/Build.bat -norun`: OK; normaler Produktionsplan mit 84
+  R4X-Modulen, Produktions-Overlay und `KERNEL_VERSION=0.59.10`.
+- Finales `Release/disk.img`: 536870912 Bytes, SHA-256
+  `322047D54743F0B9AE4619D1A3E324EA939305E0A9435F742C8DD597A802F2FC`.
+Notizen:
+- Die Admissionprobe erzeugt keinen echten Gesamt-OOM und startet keine neue
+  Adminsession. Sie injiziert genau einen caller-lokalen `task_metadata`-
+  Fehler und beweist Reserve-Rueckgabe sowie Fortschritt des bestehenden
+  Callers und des NETRX-Tasks. Der Netzwerk-Canary wartet hoechstens 64 echte
+  Ticks und akzeptiert Run-Tick- oder Dispatch-plus-Poll-Fortschritt.
+- Die 512 ASYNIOD-Requests laufen nacheinander und erzwingen wiederholte
+  Requestslot-/Task-ID-Wiederverwendung. Die weiterhin bewusst getrennte
+  64er-Async-Requestqueue ist keine Task- oder ProgramThread-Grenze.
+- Die bekannten fachlichen NETIOD-/NETDIAG-Statusaltlasten bleiben fuer
+  0.59.13 eingeplant. Die 0.59.10-Churnprobe bewertet den vollstaendigen
+  Rueckweg aus Async-I/O, TCP und UDP ohne den frueher beobachteten Haenger.
+- Der Lenovo wurde fuer 0.59.10 weder gebootet noch per SSH/RDP angesprochen;
+  Entwicklung und Abnahme blieben vollstaendig Host-/QEMU-only.
+
+0.59.11
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- R4SYS v7 besitzt append-only die Slots 101 bis 107 fuer Begin sowie
+  paginierte Program-, Task- und Threadseiten und generationstreue
+  Thread-Create-/Status-/Join-Operationen. Caller-owned Seitenbuffer,
+  getrennte Generationscursor und die Registryepochen liefern bei Mutation
+  `RESTART`, ohne Cursor oder Teilseite fortzuschreiben.
+- Program-/Task-/Thread-Snapshots tragen ihre exakte Objektgeneration. Private
+  Create-Reservierungen bleiben unsichtbar; waehrend Retire/Reap erscheint
+  ausschliesslich die sichere Completionzeile und niemals ein teilweise
+  freigegebenes `ProgramInstance`-Objekt.
+- `ProgramJoinHandle` bindet Thread-ID und -Generation an Besitzerinstanz-ID
+  und -Generation; Zig- und C-Fassaden pruefen zusaetzlich das reservierte
+  Nullfeld. SSHD, RDPSVC, Desktop und die betroffenen Diagnosen speichern ihre
+  besitzenden Threadhandles generationstreu.
+- Der Desktop haelt dynamische Programmsnapshot-Buffer, tauscht nur komplette
+  Generationen und scrollt ohne feste 16er-Grenze. Fensterzuordnung, Close,
+  Kill und Reap verwenden den exakten `ProgramProcessHandle`; dafuer wurde
+  R4DESK v7 append-only um Slot 51 `program_set_window_handle` erweitert.
+  `WOULD_BLOCK` behaelt Fenster und Handle, nur `STALE`/`NOT_FOUND` loesen die
+  lokale Bindung sicher auf.
+- CLEANUPD, THREADD, MEMSUITE, SVCAPPD, EXSVC, SSHD, LOGSVC sowie Performance-
+  und SIMD-Diagnosen verwenden den Cursor-/Handlevertrag. Der gemeinsame
+  Restartpfad verwirft alle Teilseiten und beginnt begrenzt neu; OOM oder ein
+  unvollstaendiger Durchlauf wird nie als leere Erfolgssicht ausgegeben.
+- R4DEV v4 Slot 33 und LOGSVC melden aktive, reservierte, fertige und
+  retirende Programme, Completions, Task-/Threadzustaende, Peaks sowie
+  getrennte Admission-/Rollbackursachen. Gemeinsame R4SYS-/R4DEV-Felder sind
+  identisch; die `snapshot_generation` bleibt korrekt an die einzelne Anfrage
+  gebunden.
+- API-Contract, Payload-/Operationsdokumente, SDK, Desktop-, Kernel-, Service-
+  und Diagnosedokumentation sowie die historischen 0.59.9-Gates wurden an den
+  generationstreuen Endvertrag angepasst.
+Abnahme:
+- `Run-ProgramTaskInventoryContract05911.ps1`: 6/6 Hostmodellfamilien, echter
+  C-Objektbuild und alle statischen Kernel-/SDK-/Desktop-/Verbraucherchecks
+  erfolgreich. 320 Eintraege ueberschreiten die alten Grenzen 15/16/17,
+  31/32/33 und 63/64/65 sowie 255 ohne Duplikat oder Trunkierung.
+- Current-API-/Payload-/Semantikgates sind mit 7 Gruppen, 274 Slots, 120
+  Payloadtypen, 115 Operationen und 261 Zig-/C-Funktionen gruen; kanonischer
+  SHA-256: `cd9cef9bd044c7410926527881bea332027ca6c055c13f8f554e44df3980b3fa`.
+- Kernel, Desktop, APPCDESK, CLEANUPD, THREADD, ASYNIOD, SIMDD, MEMSUITE,
+  SVCAPPD, EXSVC, SSHD, LOGSVC, RDPSVC und die weiteren migrierten Verbraucher
+  bauen und bestehen die historischen 0.59.6-/0.59.9-/0.59.10-Gates.
+- `Build.bat -test`: `TEST OK`; QEMU, Boot und Poweroff OK, keine Fehler und
+  alle Loader-/API-/Paritaetsmarker vorhanden. MEMSUITE prueft kombinierte
+  FS-/VM-Reclaimquellen und bindet VM-/Pager-Cleanup an den exakten
+  Programmbesitzer statt an gleichzeitig auslaufende Fremdinstanzen.
+- Abschliessendes `Build.bat -norun`: erfolgreich; Produktionsimage mit
+  Version 0.59.11 und ohne TestInjection-Overlay erzeugt.
+- `Run-ProgramTaskInventoryRuntime05911.ps1`: QEMU haelt 81 reale Kinder,
+  erzwingt Restart ohne Cursorfortschritt, liest alle drei Inventare in
+  Siebenerseiten und kehrt exakt zur warmen Program-/Task-/Thread-/Completion-
+  Baseline zurueck. Erfolgslog:
+  `DevTools/Logs/qemu-test-program-task-inventory-05911-20260718-033932.log`.
+Notizen:
+- Das separate WINSVC-Fensterlimit bleibt ausserhalb dieses Umbaus. Es darf
+  weder als Programminstanzgrenze fehlinterpretiert noch wegen des 4-KB-
+  Servicepayloads nebenbei angehoben werden.
+- Die Laufzeitprobe deckte zwei Fixture-Altstellen auf: Das historische
+  0.59.9-Gate erwartete noch rohe Desktop-IDs und der Inventarscanner wertete
+  einen zulaessigen letzten `publish -> run`-Restart als Endfehler. Beide
+  pruefen nun den generationstreuen Gesamt-Restartvertrag.
+- Die Gesamt-Smoke-Abnahme deckte zusaetzlich zwei alte MEMSUITE-
+  Raceannahmen auf: Der Pressure-Snapshot enthaelt FS-Cache plus auslagerbare
+  VM-Seiten, und globale Reclaim-/Ressourcenzaehler koennen fremde Owner
+  enthalten. Die Diagnose prueft nun die kombinierte Quelle, die konkrete
+  Testregion und ownergenaue Vorher-/Nachherbilanzen. Ein einmaliger bekannter
+  NETDIAG-Link-Cleanup-Haenger lief korrekt in den 240-s-Watchdog; der
+  unveraenderte `-testonly`-Lauf und der vollstaendig wiederholte `-test`-
+  Lauf endeten danach jeweils mit `TEST OK`.
+- Der Lenovo wurde fuer 0.59.11 weder gebootet noch per SSH/RDP angesprochen;
+  Entwicklung und Abnahme blieben vollstaendig Host-/QEMU-only.
+
+0.59.12
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- `CLEANUPD /DYNAMICSTRESS` bildet Hold, Child-Spawn, Zusatzthreads,
+  Console-/GUI-/Service-Payloads, unterschiedliche Exitcodes, Close/Kill,
+  Wait/Reap, Program-Growth-OOM und Task-Admission-OOM in einer
+  produktionsnahen Fixture ab. Quick faehrt 1.000, Full optional 10.000
+  gemischte Zyklen.
+- 128 Rootprogramme erzeugen 26 Kindprogramme sowie 26 Zusatzthreads. Die
+  ungekappte Inventarsicht weist 154 Programme und je 180 ownergetaggte Tasks
+  und Threads generationstreu nach; 128 bleibt Testuntergrenze, kein Limit.
+- Programme, Completions, Live-Set, Stressowner-Ressourcen und Storage kehren
+  exakt zurueck. Die Registry schrumpft bis `warm_chunks`; ownerlose
+  Produktionsadministration besitzt ausschliesslich die dokumentierte
+  Zuwachshuelle aus acht Tasks, 512 KiB Heap, 640 KiB Speicher und zwei
+  Service-VM-Ranges mit zusammen 128 KiB. Programmbilder und App-Stacks bleiben
+  exakt; echte Freigaben durch Shrink/Stackcache-Retirement sind erlaubt.
+- Der SDK-Netzwerkpfad haelt stacklokale TCP-/UDP-Requestpuffer auch nach einem
+  endlichen Caller-Timeout bis zum physischen Async-I/O-Close am Leben. Ein
+  `BUSY`-Close wird am exakten Request ohne zweiten Timeout ausgedraint; damit
+  schreibt kein spaet gestarteter Worker mehr in einen abgelaufenen Stackframe.
+- Desktop-, Terminal- und Diagnoseinventare wachsen dynamisch, verwerfen
+  unvollstaendige Seiten bei `RESTART` und melden OOM statt still zu
+  trunkieren. Der Abschlussaudit findet keine zurueckgekehrte feste Program-,
+  Task-, Thread-, Waiter- oder Completionkapazitaet und kein generisches `-2`
+  in modernen Handle-/Inventarpfaden.
+- Hostmodell, Produktions-QEMU-Runner, Buildgate, API-/SDK-, Kernel-, Desktop-,
+  Service-, Diagnose-, Deployment- und AGENTS-Dokumentation sind aktualisiert;
+  die sichtbare Version ist 0.59.12.
+Abnahme:
+- Der deterministische Hostvertrag samt ausfuehrbarem Modell prueft
+  Wachstum, Shrink, OOM/Rollback, Inventare und 10.000 gemischte Spawn-/
+  Thread-/Exit-/Reap-Zyklen in 5/5 Testfamilien. Der zusaetzliche SDK-
+  Lifetime-Test besteht 3/3 Faelle, einschliesslich
+  `BUSY -> WAIT_FOREVER -> CLOSE` und Stack-Canaries.
+- Gezielte inkrementelle Builds fuer Kernel/Inventarverbraucher sowie zuletzt
+  SSHD, RDPSVC und CLEANUPD sind erfolgreich; die R4M0-Artefaktpruefung meldet
+  keine Fehler.
+- Der erfolgreiche Abschlusslauf von
+  `Run-DynamicExecutionStress05912.ps1 -ImageOnly -BootRounds 1` erreicht
+  154 Programme, 180 ownergetaggte Tasks/Threads, beide OOM-/Recoverypfade,
+  1.000 Quick-Churn-Zyklen, den warmen Registry-/Owner-/Storageabschluss, alle
+  13 Auto-Services, acht parallele SSH-Sitzungen, aktives RDP sowie SERVMAN,
+  LOGCENTER und SYSUPD. QEMU beendet sich selbst per Poweroff; Log:
+  `DevTools/Logs/qemu-test-dynamic-execution-05912-r1-20260718-125747.log`.
+- Wiederholte Boots und 10.000 Gast-Churn-Zyklen bleiben als optionaler
+  `-Full`-Diagnoselauf verfuegbar, sind aber kein Abschlussblocker. Der
+  gebuendelte Standard-Smoke und Produktionsbuild folgen einmalig in 0.59.14.
+Notizen:
+- 0.59.12 schliesst den frueheren 16er-Programmslotpunkt architektonisch und
+  in QEMU ab. Das Endmodell ist durch verfuegbare Ressourcen und explizite
+  technische Stabilitaetsreserven begrenzt, nicht durch eine feste Anzahl
+  Program- oder Taskslots.
+- Der erste Lastlauf lokalisierte einen echten GPF in `apiIoWait`: Ein
+  endlicher TCP-Wait konnte vor dem noch nicht eingeplanten Serviceworker
+  auslaufen; der ignorierte `BUSY`-Close liess rohe Kernelpointer auf dem
+  abgelaufenen SSH-Stack zurueck. Der SDK-Drainpfad beseitigt diese Ursache.
+- Zwei weitere Diagnoseanlaeufe trennten echte Administration von Leaks: Der
+  8er-Kernel-Stackcache plus Service-VM war begrenzt lebend, und der geforderte
+  Registry-Shrink gab knapp 10 MiB warme Infrastruktur frei. Die Abnahme
+  deckelt deshalb Zuwachs, ohne erfolgreiche Freigabe als Drift zu werten.
+- Bis einschliesslich 0.59.14 wird weder der Lenovo gestartet noch per SSH/RDP
+  angesprochen. Die gebuendelte Hardwareabnahme folgt ausschliesslich in
+  0.59.15.
+
+0.59.13
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- Der `dhcp-link`-Kerneltask koordiniert Linkbereitschaft, Acquire, gedeckelten
+  Backoff, Renew/Rebind, Leaseverlust und Recovery. DHCP-Wunsch und aktive
+  Lease sind getrennt; vor dem ACK bleiben alte QEMU-Defaults geloescht.
+- Genau eine serialisierte Operation prueft Carrierwechsel auch waehrend
+  Offer-/ACK-Waits. VIRTNET handelt `VIRTIO_NET_F_STATUS` aus und liest den
+  echten QMP-/Carrierstatus statt `active` als Link zu melden.
+- R4NET, R4DEV, DHCP, DeviceManager, DHCPSVC und LOGSVC zeigen Zustand,
+  Linkgeneration, Retry, Wunschmodus, Task/Link, Leasequelle, Adressen und
+  Fehler. DHCPSVC nutzt das vorhandene Reservefeld ohne Groessenbruch.
+- Statische Live-Konfiguration beendet DHCP kontrolliert; der Config-Writer
+  bewahrt Treiberzeilen und fremde Optionen. NETIOD liest den vollen TCPSVC-
+  Payload; NETDIAG-Cleanup prueft seine konkrete Ressourcenbaseline.
+- Hostvertrag, QMP-Runner, Buildgate, API-/SDK-, Netzwerk-, Service-, Diagnose-
+  und Builddokumentation sind aktualisiert; die sichtbare Version ist 0.59.13.
+Abnahme:
+- `Run-DhcpLinkRetryContract05913.ps1`: 6/6 Koordinator-Hosttests inklusive
+  10.000 Linkflaps und 6/6 Config-Writer-Tests erfolgreich. API-Hash:
+  `0c28bf8dfc9e0a8462905782513bfcd2901e3716b6bb4e786b28e36862c35917`.
+- Gezielte Kernel-, VIRTNET-, DHCP-, DHCPSVC-, DEVMGR- und NETIOD-Builds samt
+  R4M0-Pruefungen sind erfolgreich.
+- `Run-DhcpLinkRetry05913.ps1 -Tier Quick -ImageOnly`: erfolgreich. QMP bindet
+  nach initialem Link-down auf Generation 2, verliert die Lease auf Generation
+  3 und bindet auf Generation 4 erneut. DHCPSVC zeigt `bound` und
+  `dhcp/running/up`; Ping, NETIOD, NETDIAG und Poweroff sind gruen. Log:
+  `DevTools/Logs/qemu-test-dhcp-link-retry-05913-quick-20260718-135659.log`.
+- Wiederholte Soft-Reboots, Linkflaps, verworfene Offer/ACKs und die
+  vollstaendige DHCP -> statisch -> DHCP-QEMU-Matrix bleiben als optionaler
+  `-Full`-Diagnoselauf erhalten. `Build.bat -test` und der Produktionsbuild
+  werden hier nicht erneut verlangt, sondern einmalig in 0.59.14 gebuendelt.
+Notizen:
+- Die fruehere Laptopbeobachtung 10.0.2.15 nach Soft-Reboot ist nur der
+  Ausgangsbefund. Eine reale FritzBox-Lease wurde hier nicht getestet; sie
+  gehoert in 0.59.15. Der Lenovo wurde weder gebootet noch per SSH/RDP
+  angesprochen.
+- Vorlaeufige Quick-Laeufe deckten die fehlende VIRTNET-Carrierlesung und die
+  fehlende DHCPSVC-Telemetrieabbildung auf; der Erfolgslog enthaelt beide Fixes.
+
+0.59.14
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- R4SYS ABI 8 um `file_replace_atomic` erweitert. Kernel und Zig-/C-SDK
+  erzwingen gleiches FAT32-Volume, gleiches Verzeichnis und FAT-8.3-Namen; der
+  Ownership-Transfer besitzt keinen Copy/Delete-Fallback.
+- SYSUPD auf eine paketweite Zustandsmaschine mit Preflight, Stage, Commit,
+  Verify, Applied, Cleanup, Reverse-Rollback und Rolled-Back umgestellt.
+  Duale gepruefsummte Journale, monotone Transaktions-/Journalgenerationen,
+  Paket-/Versionsbindung und atomare inaktive Slotpublikation sind umgesetzt.
+- Generationgebundene FAT-8.3-Stage-/Backupnamen ersetzen `.r4ustage` und
+  `.prev`. Das vorherige last-good Backup wird im Folgejournal mitgefuehrt und
+  erst nach dauerhaftem Gesamterfolg crashsicher rotiert.
+- Der Kernel verarbeitet das neueste gueltige Journal nach dem C:-Mount und
+  vor IRQ-, Treiberpolicy-, Service- und Shellstart. Applied-Cleanup wird
+  idempotent beendet; unvollstaendige Forward-Transaktionen werden in
+  umgekehrter Payloadreihenfolge zurueckgerollt; zwei ungueltige vorhandene
+  Slots fuehren zu fail-closed.
+- Die 0.55.10-/0.55.11-Gates sind auf ModuleCatalog, R4MF v2 und `META=`
+  migriert. `Run-SystemUpdateAtomicContract05914.ps1` ist im Kernelbuild
+  verdrahtet und sein 10-Familien-Hostmodell ist gruen.
+- `Run-SystemUpdateAtomic05914.ps1 -Tier Quick` packt ein echtes Zwei-Payload-
+  R4U, unterbricht einmal nach dem ersten dauerhaften Commit und setzt exakt
+  diese Transaktion per RESUME bis `cleanup 2/2` fort. Erfolgslog:
+  `DevTools/Logs/qemu-test-system-update-atomic-05914-quick-20260718-143819.log`.
+- `Docs/Deployment/SystemUpdater05914.txt`, Builddokumentation, AGENTS und die
+  generierten ABI-/API-Referenzen sind aktualisiert; sichtbare Version 0.59.14.
+- Der gebuendelte Abschluss wurde wie vorgesehen genau einmal gefahren:
+  `DevTools/Scripts/Build.bat -test` meldete QEMU/Boot/Poweroff, alle
+  verpflichtenden API-/Zig-C-Marker und `TEST OK`; danach erzeugte genau ein
+  `DevTools/Scripts/Build.bat -norun` das Produktionsimage erfolgreich.
+Abnahme:
+- `Run-SystemUpdateAtomicContract05914.ps1` und sein deterministisches
+  Hostmodell pruefen FAT-8.3-Namen, atomaren Einzelreplace, Paketjournal,
+  Resume/Rollback, Generationen, idempotentes Aufraeumen und Fehlerinjektion
+  nach jedem persistenten Schritt erschoepfend; der gezielte inkrementelle
+  Build aller fuer 0.59.14 geaenderten Projekte ist gruen.
+- Genau ein disposable QEMU-Quick-Boot installiert ein echtes
+  Multi-Payload-R4U und faehrt eine repraesentative Unterbrechung mit RESUME
+  bis zum vollstaendig verifizierten neuen Zustand. Produktives Ziel und
+  letztes gutes Backup bleiben erhalten; ein gemischter erfolgreicher Stand
+  ist verboten.
+- Harte Abbrueche an jeder Transaktionsgrenze sowie wiederholtes
+  VERIFY/APPLY/RESUME, voller Datentraeger, defektes Payload, falsche
+  Ausgangsversion und Verifyfehler bleiben als optionale `-Full`-QEMU-
+  Diagnosematrix verfuegbar und sind kein Abschlussblocker.
+- Fuer den gemeinsamen Abschluss von 0.59.12 bis 0.59.14 laufen hier genau
+  einmal `DevTools/Scripts/Build.bat -test` und danach genau einmal der finale
+  `DevTools/Scripts/Build.bat -norun`; beide muessen gruen sein.
+Notizen:
+- Der reale 0.59.6-Pfad war funktional erfolgreich, aber nur bei
+  unterbrechungsfreiem Apply belastbar.
+- Auch diese Unterversion bleibt QEMU-only. Es gibt weder einen Laptop-Apply
+  noch eine erneute temporaere FTPSVC-Deaktivierung; beides wird erst in der
+  gebuendelten 0.59.15-Hardwareabnahme bewertet.
+- Der erste Quick-Harness meldete nach dem bereits vollstaendig erfolgreichen
+  Gast-Poweroff einen leeren Windows-Prozess-Exitcode faelschlich als Fehler.
+  Der Gastlog wurde vollstaendig gegen alle Marker validiert und der Runner auf
+  dieselbe nulltolerante Exitcodebehandlung wie der DHCP-Runner korrigiert; es
+  wurde dafuer kein zweiter QEMU-Boot gestartet.
+
+0.59.15
+Status: Erledigt
+Offene Punkte:
+- WIEDERAUFNAHME am 20.07.2026 nach abgeschlossener Treiberlinie
+  0.59.16..0.59.24 (Warmreboot real geheilt: Root-Port-BME-Reparatur
+  am Bind ist Standardverhalten). Abnahmeprozedur:
+  (1) SYSUPD-Zyklus MIT AKTIVEM FTPSVC: finales Paket (RTL8168.R4D
+  immer-an-Bridge-Check + VERSION.R4S=0.59.24, VERSION zuletzt) per
+  SFTP-Inbox, VERIFY, APPLY; FTPSVC-Status vor APPLY belegen.
+  (2) CONFIG.R4S auf Produktionsstandard (dhcp=on, KEINE
+  RTL8168-Optionen - der Warmfix braucht keine mehr).
+  (3) Kaltboot-Nachweis: VERSION 0.59.24, Bridge-Beweiszeile,
+  DHCP-/MSI-/Canary-Baseline.
+  (4) Warmreboot-Nachweis mit reiner Produktions-Config.
+  (5) SSH/SFTP implizit belegt; RDP-Sichttest per mstsc durch den
+  User als Abschluss.
+- ABNAHMEPROTOKOLL 20.07.2026:
+  (1) SYSUPD MIT AKTIVEM FTPSVC: BESTANDEN. FTPSVC running/listen-ready
+  vor und waehrend des Zyklus belegt; Paket `R4OS05924.R4U` (38201 B,
+  SHA-256 BA76E355...42A7E97; RTL8168.R4D + VERSION.R4S zuletzt) per
+  SFTP-Inbox bytegleich, VERIFY OK (current=0.59.15 target=0.59.24),
+  APPLY applied=2/2, Journal cleanup, `TYPE VERSION.R4S` = 0.59.24.
+  (2) CONFIG.R4S auf reinen Produktionsstandard (dhcp=on, keine
+  RTL8168-Optionen) bytegleich verifiziert.
+  (3) KALTBOOT-NACHWEIS: BESTANDEN. VERSION 0.59.24, Optionszeile
+  `fw=off warmfix=off`, Bridge-Zeile gesund `endpoint=0x0007
+  bridge=0x0007` ohne Reparaturpfeil, DHCP bound, `tx canary
+  confirmed canary=0 stalls=0`, `rx path confirmed`, MSI aktiv.
+  (4) WARMREBOOT-NACHWEIS MIT PRODUKTIONS-CONFIG: BESTANDEN.
+  Rueckkehr in ~12 s; Beweiszeile `endpoint=0x0006 bridge=0x0003 ->
+  0x0007` bei `fw=off warmfix=off` - der Immer-an-Bridge-Check heilt
+  den Warmreboot ohne jede Option. DHCP bound.
+  (5) SSH/SFTP durch den gesamten Zyklus belegt (Exec, Inbox-Upload
+  mit Rueckdownload-SHA, Config-Uploads). RDP-SICHTTEST: BESTANDEN
+  (User per mstsc auf 192.168.178.213: Desktop sichtbar, Maus/
+  Tastatur reagieren, keine Schwarzbild-Region).
+  DAMIT IST 0.59.15 VOLLSTAENDIG ABGENOMMEN: Die gebuendelte
+  Hardwareabnahme lief auf einem Fundament, das Kalt- UND
+  Warmreboots beherrscht; SYSUPD bestand mit aktivem FTPSVC und
+  vollem Produktionsbestand; sichtbare Version 0.59.24.
+- PAUSIERT am 19.07.2026 nach der gescheiterten AB-Warmstartprobe. Die
+  RTL8168-Treiberausreifung laeuft zuerst als eigene Linie 0.59.16 bis
+  0.59.20 (Referenzvergleich, Hostmodell, Bind-/Laufzeit-/Transition-Reife);
+  in dieser Linie wird der Laptop weder gebootet noch remote angesprochen.
+  Die gebuendelte reale Hardwareabnahme dieser Unterversion laeuft erst bei
+  der Wiederaufnahme von 0.59.15 nach Abschluss von 0.59.20.
+- Nach Abschluss aller QEMU-Gates genau eine gebuendelte reale Hardwarelinie
+  auf dem Lenovo IdeaPad L340-15API fahren. Vorher wird der Laptop fuer die
+  Arbeiten 0.59.7 bis 0.59.14 weder gebootet noch remote veraendert.
+- Dynamische Program-/Taskverwaltung, USB-HID, RTL8168, DHCP, Desktop, RDP,
+  SSH, LogCenter, ServiceManager und den atomaren Updater gemeinsam unter
+  realer Last pruefen. In 0.59.15 werden nur nachgewiesene Hardwareabweichungen
+  gehaertet, keine neue Architektur oder unabhaengige Funktion begonnen.
+- Nach jedem notwendigen Hardwarefix die komplette QEMU-Abnahme erneut fahren
+  und anschliessend die betroffene reale Sequenz wiederholen; ein nur auf dem
+  Laptop bestandener Sonderpfad ist nicht ausreichend.
+Erledigt:
+- Finales 0.59.14-Produktionsimage `Release/disk.img` bytegenau geprueft:
+  536870912 Bytes, SHA-256
+  `9B830A5C503C4E1D95C4431C69AFD1EF6D517BDBB4C5E95334E6BE2CA45BF824`.
+  Das FAT32-Image enthaelt bytegleich die Produktions-`Injection/`, Desktop,
+  `OPTION NET dhcp=on`, RTL8168.R4D, SYSUPD sowie FTPSVC/SSHD/RDPSVC.
+  `VERSION.R4S` meldet 0.59.14; alle 13 Auto-Services sind aktiv.
+- Echtes Zwei-Payload-Paket `Release/R4OS05915.R4U` fuer den spaeteren
+  Inbox-/SFTP-Lauf erzeugt: 765 Bytes, SHA-256
+  `4A7E0F835DA3221C643474C9CF5551505AC3AE50519A2A26B7EFB961B85734F2`.
+  Es ersetzt eine semantisch unveraenderte, aber byteverschiedene `TIME.R4S`
+  ueber den Existing-Target-/Backup-Pfad und danach als letztes Payload
+  `VERSION.R4S` auf 0.59.15. Header, Manifest, Reihenfolge, Payloadbytes,
+  FNV-Pruefsummen, Mindestversion 0.59.14 und Rebootflag wurden geprueft.
+- Reale 0.59.14-Ausgangsbasis auf `192.168.178.213` geprueft: FritzBox-DHCP,
+  Gateway-Ping, SSH, FTP und RDP erreichbar; RTL8168 aktiv; alle 13
+  Auto-Services einschliesslich FTPSVC laufen. USB-HID/USBMSC, INPUTD,
+  NETIOD, NETDIAG und die Hardwareinventare melden produktive Lenovo-Hardware
+  ohne Recovery-, Timeout- oder Ringfehler.
+- RDPSVCs externer Wire-/mstsc-naher Hardwarelauf akzeptiert jetzt die real
+  ausgehandelte Demand-Active-Geometrie statt fest 1280x720. Klassische sowie
+  TLS/CredSSP-geschuetzte Aktivierung, 1920x1080-RGB565-Bitmaps und Eingabe
+  waren auf dem Lenovo gruen.
+- Drei nur unter produktiver Hardwarelast sichtbare Diagnoserandfaelle
+  gehaertet: CLEANUPD vergleicht fuer die Ruhebaseline keine fluechtige
+  Schedulerverteilung, LOGCENTER schreibt seine Mehrquellen-Fixtures nach
+  einem LOGSVC-Ring-Wrap frisch, und der externe RDP-Runner kann ohne QEMU
+  direkt gegen einen LAN-Host arbeiten. Betroffene Hostgates, Einzelbuilds
+  und der Programinventar-QEMU-Lauf sind gruen.
+- Wiederverwendbaren konservativen Inbox-Helfer
+  `Invoke-R4OsSftpInboxUpload.ps1` angelegt. Er erstellt UPDATE/INBOX
+  schrittweise, nutzt 32768-Byte-Puffer mit genau einer Anfrage, laedt das
+  Paket zurueck und verlangt exakte Laenge und SHA-256.
+- Der erste reale Multi-Payload-Apply deckte zwei Updatergrenzen auf und blieb
+  jeweils crashkonsistent: bestehende lange FAT-Ziele wie `LOGCENTER.R4X`
+  wurden zu streng abgelehnt; ausserdem wertete der Testmarkerpfad den
+  normalen `fileDelete`-Rueckgabewert 0 als aktive Unterbrechung. Existing-LFN
+  verwendet nun nur den bereits dauerhaften Short-Directory-Eintrag als
+  atomaren Sichtbarkeitspunkt, neue lange Ziele bleiben verboten; der Marker
+  gilt nur bei tatsaechlich geloeschter Datei (`> 0`). VERIFY und APPLY teilen
+  dieselbe Zielvorpruefung. Das 0.59.14-Atomikgate ist entsprechend verschaerft
+  und gruen.
+- Der normale Kernelbuild strippt seit 0.59.15 Host-Debug-/Symbolsektionen;
+  `-Dstrip-kernel=false` bleibt fuer lokale Linkerdiagnose verfuegbar. Das
+  gestripte 10.8-MB-Kernel-ELF bootete im frisch gepackten Testimage bis zum
+  vollstaendigen Standard-Smoke und sauberen Poweroff.
+- Bootstrap-R4U `R4OS05915B.R4U` (Kernel plus SYSUPD) wurde per SFTP
+  hochgeladen und bytegleich zurueckgelesen: 10915862 Bytes, SHA-256
+  `F72E5FBA06B1DCCDB3907048428D16F5CC050D623C85ABDAE6E1EFAB757D99E5`.
+  Der wegen des alten Markerfehlers absichtlich nach Commit 1/2 sichtbare
+  Journalstand wurde mit demselben paketgebundenen `SYSUPD RESUME` sauber bis
+  `cleanup`, `applied=2/2` fortgesetzt. VERSION blieb absichtlich 0.59.14.
+- Nach der DHCP-Antwortbindung wurden alle Hostgates, der unveraenderte
+  Standard-QEMU-Test bis zum geregelten Poweroff und der Produktionsbuild
+  `Build.bat -norun` erfolgreich gefahren. Das neu erzeugte Hardwareimage
+  `Release/disk.img` ist exakt 536870912 Bytes gross und hat SHA-256
+  `53CD9374BAB71ADB8DE9A6698DC4609ADE7B22DD455A4C79C9B5F13D4B33AC12`.
+  Ein read-only FAT32-Audit hat `/boot/limine.conf`, `limine-bios.sys`, den
+  gestrippten Kernel, Produktions-CONFIG/VERSION/SERVICES, RTL8168, NETDHCP
+  und R4DESK aus dem fertigen Image extrahiert und jeweils bytegleich mit den
+  gebauten Quellen verglichen. Das Image meldet 0.59.15, startet den Desktop
+  mit DHCP und enthaelt alle 13 Auto-Services einschliesslich FTPSVC, SSHD und
+  RDPSVC. Es ist zum Flashen auf einen verlaesslichen Ersatzstick bereit.
+Abnahme:
+- USB-Boot, Maus und Tastatur bleiben stabil. RTL8168 erreicht bei Kaltstart,
+  mehreren Soft-Reboots und Linkflaps reproduzierbar eine FritzBox-DHCP-Lease;
+  Ping, Gateway, SSH und RDP funktionieren ohne 10.0.2.15-Zwischenzustand.
+- Alle 13 Auto-Services und Desktop bleiben aktiv. Acht parallele SSH-Sessions
+  starten externe Kinder, waehrend eine mstsc-Sitzung sichtbar arbeitet und
+  SERVMAN, LOGCENTER sowie SYSUPD STATUS/VERIFY laufen; keine feste Program-,
+  Task-, Thread- oder Inventargrenze wird getroffen.
+- Ausgehend vom geflashten 0.59.14-Image wird das echte 0.59.15-Multi-Payload-
+  R4U per vorgesehenem Inbox-/SFTP-Pfad uebertragen, verifiziert, angewendet
+  und neu gebootet. Journal, Version und alle Payloadchecksummen muessen den
+  neuen Stand zeigen; FTPSVC bleibt dabei aktiv und Systemdateien werden nicht
+  direkt umgangen.
+- Nach Update und erneutem Program-/Task-Churn entsprechen Heap, PMM, VM,
+  Tasks, Threads, Registry, Completion-Store und Ownerzaehler wieder der
+  dokumentierten Produktionsbaseline. Desktop, Maus, Netzwerk, SSH und RDP
+  bleiben weiter funktionsfaehig.
+- Die finalen QEMU-Gates, `Build.bat -test`, Produktionsbuild, Imageaudit und
+  reale Laptopabnahme sind gemeinsam gruen; erst dann wird die dynamische,
+  DHCP-, SYSUPD- und Hardwarelinie als abgeschlossen markiert.
+Notizen:
+- 0.59.15 ist bewusst die einzige Hardware-Unterversion dieser Roadmapphase.
+- Der reale 0.59.6-Lauf benoetigte temporaer einen deaktivierten FTPSVC; diese
+  Ausnahme ist in der Abschlussabnahme ausdruecklich verboten.
+- Nach dem Bootstrap-Soft-Reboot war `192.168.178.213` fuer mehr als 110
+  Sekunden nicht erreichbar. User wurde wie vereinbart um Kontrolle der
+  aktuellen IP beziehungsweise des sichtbaren Bootzustands gebeten; bis zur
+  Rueckmeldung erfolgt kein weiterer Hardware-Apply.
+- Finales kleines Paket nach Rueckkehr des Laptops:
+  `Release/R4OS05915F.R4U`, 304741 Bytes, SHA-256
+  `E34C3784754AFBE2703601F88F246143932A5963EB1DB785A81F93E2CF595A9A`.
+  Reihenfolge: korrigierter SYSUPD, CLEANUPD, bestehendes LFN-Ziel LOGCENTER,
+  TIME, VERSION zuletzt. Kein explizites Rebootflag.
+- Tatsaechlicher finaler Hardware-Apply wurde danach auf sechs Payloads
+  erweitert: SYSUPD, CLEANUPD, LOGCENTER, Root-`C:\CONFIG.R4S`, TIME und
+  VERSION zuletzt. Paket `Release/R4OS05915F.R4U`: 305116 Bytes, SHA-256
+  `5294ACC853A4D6A2302C3B00C947A56D6F677F2889F0609494937AB3490AC917`.
+  Rueckdownload war bytegleich; VERIFY und APPLY waren gruen mit
+  `applied=6/6`, `bytes=303480`, `staged=177479`, Transaktion 4 und Journal
+  `cleanup`. VERSION meldete danach 0.59.15, Root-CONFIG wieder
+  `OPTION NET dhcp=on`, FTPSVC blieb aktiv.
+- Vor dem finalen Paket wurde SYSUPD selbst ueber
+  `Release/R4OS05915U.R4U` aktualisiert: 126472 Bytes, SHA-256
+  `F10EEFDADE68000BF992AEECEC27C1422CE24B7DE6AB3EEA7DECA0877BF2380F`.
+  Der alte Markerfehler unterbrach diesen letzten alten Lauf erwartungsgemaess
+  nach Commit 1/1; der bereits ersetzte neue SYSUPD setzte dasselbe gebundene
+  Paket per RESUME bis `cleanup`, `applied=1/1` fort. Danach lief das finale
+  Sechserpaket ohne falsche Unterbrechung in einem Zug durch.
+- Reale DHCP-Einzelprobe nach dem ersten Kaltstart: Die wegen manueller
+  Einstellungen noch statische `.213` wurde mit `DHCP ACQUIRE` live sofort
+  auf eine echte FritzBox-Lease umgestellt: `dhcp/running/up`, exakt
+  Discover/Offer/Request/Ack 1/1/1/1, 0 Retries, 0 Timeouts.
+- Offener Wiederaufnahmepunkt: Der anschliessende Soft-Reboot mit neuem Kernel,
+  VERSION 0.59.15 und persistentem `dhcp=on` landete reproduzierbar bei
+  `0.0.0.0`, GUI `DHCP Pending`, Link `up`, Status `none`. Auch der reine
+  Kabel-Linkflap stellte `.213` nicht automatisch wieder her. Das zeigt einen
+  realen fehlenden automatischen Acquire-Impuls beziehungsweise einen nicht
+  laufenden DHCP-Koordinator nach Hardware-Soft-Reboot; die Paketinstallation
+  selbst ist abgeschlossen und sauber.
+- User musste die Sitzung an dieser Stelle abbrechen. `DHCP ACQUIRE` wurde im
+  letzten 0.0.0.0-Zustand noch nicht ausgefuehrt. Bei Wiederaufnahme zuerst
+  den sichtbaren Laptopzustand/IP erfragen, nichts neu flashen. Falls weiterhin
+  0.0.0.0: lokal `DHCP STATUS` (insbesondere State und Mode/Task/Link) sichern,
+  dann `DHCP ACQUIRE`, danach per SSH Coordinator-/Task-/Bootlog-Telemetrie
+  lesen und den automatischen Startpfad haerten.
+- Nach der Rueckkehr auf `.213` zeigte die Hardware einen zweiten, kausalen
+  DHCP-Befund: die aktive Netzkonfiguration blieb `.213`, waehrend DHCP intern
+  eine fremde `.226`-Lease und sechs ACKs fuer eine Request fuehrte. Port 68
+  nahm Broadcastantworten anderer LAN-Clients auch ausserhalb einer eigenen
+  Operation an. Der Client bindet Antworten nun an aktive Operation,
+  erwartete Offer-/Ack-Nak-Phase, XID und Client-MAC; inaktive, fremde und
+  phasenfalsche Pakete werden nur gezaehlt. Ein beim Boot fehlgeschlagener
+  DHCP-Taskstart wird vom NET-RX-Task im Einsekundenraster wiederholt.
+- Hostvertrag, NETDHCP-Einzelbuild und Kernelbuild sind gruen. Der erste
+  QEMU-Quickversuch deckte auf, dass `Build.bat -app NETDHCP` nur das lokale
+  Projektartefakt erneuerte, `-testimageonly` aber die alte Kopie aus
+  `Code/zig-out` einpackte. Nach Aggregate-Neubau bestand die exakt einmal
+  wiederholte DHCP-Quickrunde; Log:
+  `DevTools/Logs/qemu-test-dhcp-link-retry-05913-quick-20260719-000352.log`.
+  Der Einzelbuildpfad schreibt deshalb jetzt auch R4D/R4P/R4L direkt in den
+  gemeinsamen Imagebestand und das Manifestbuild-Gate fixiert dies.
+- Hardwarepaket `Release/R4OS05915D.R4U` enthaelt in kompatibler Reihenfolge
+  zuerst `NETDHCP.R4P`, danach den davon abhaengigen gestrippten Kernel und
+  verlangt Reboot. Groesse 10809618 Bytes, SHA-256
+  `6059983C46B81DF81A39E2B9EAE24A3BB025C3AD7EEC0E80A3A765A51FC52B3B`;
+  Header, Manifest, zwei Payloadgroessen/-FNV-Werte und Offsetfolge sind
+  plausibel. Der konservative SFTP-Rueckdownload von `.213` war bytegleich;
+  `SYSUPD VERIFY` meldete fuer current/target 0.59.15, zwei Payloads und
+  10808977 gestreamte Payloadbytes `result: OK`.
+- Der erste APPLY dieses Pakets brach vor einem gemeldeten Commit kontrolliert
+  mit `reason=stage-write` nach 1048921/10808977 gestreamten Bytes ab. Danach
+  blieben Ping und TCP/22 erreichbar, SSH-Exec quittierte Kommandos aber ohne
+  Ausgabe oder Ausfuehrung; auch `REBOOT` erzeugte waehrend 180 Sekunden
+  keinen einzigen Pingausfall. Vor einem Retry ist deshalb ein physischer
+  Neustart erforderlich. Danach zuerst Recovery-/Journalstatus, VERSION,
+  freien FAT-Platz und alte Inbox-/Stageartefakte sichern; erst auf sauberem
+  Zustand die Stage-Write-Ursache beheben beziehungsweise Platz freigeben und
+  dasselbe bereits verifizierte Paket erneut APPLYen.
+- Beim anschliessenden physischen Start meldete Limine eine fehlende
+  Konfigurationsdatei. Das Paket zielte nicht auf `/boot/limine.conf`, der
+  Updater legt den Kernel-Stage aber absichtlich als private 8.3-Datei neben
+  `/boot/r4os.elf` ab. Laut User war der verwendete USB-Stick bereits seit
+  laengerem auffaellig. Zusammen mit `stage-write` nach rund 1 MiB ist ein
+  Medien-/FAT-/Verzeichnisfehler deshalb deutlich wahrscheinlicher als ein
+  gezieltes Loeschen der Limine-Konfiguration. Den Stick nicht mehr als
+  belastbare Hardware-Abnahmebasis verwenden; die Updateatomik bleibt bis zum
+  Wiederholungslauf auf einem verlaesslichen Datentraeger offen.
+- Lokaler Arbeitsstand ist noch nicht committed oder gepusht. Die finalen
+  Hardware-Churns, Roadmap-Abschluss und Push stehen aus. Der erste komplette
+  `Build.bat -test`-QEMU-Boot traf einmal den zeitabhaengigen globalen
+  `MEMSUITE /PAGERSTRESS`-Randfall, bei dem drei fremde VM-Seiten statt einer
+  Seite der Testregion ausgelagert wurden. Das unveraenderte, bytegleiche
+  Testimage bestand den sofortigen `Build.bat -testonly`-Retry vollstaendig;
+  Boot, API-Marker, Poweroff und Fehlerauswertung waren gruen. Das danach per
+  `Build.bat -norun` erzeugte `Release/disk.img` ist ein geprueftes
+  Produktionsimage ohne TestInjection und darf als neue Flashbasis verwendet
+  werden.
+- Der erste Boot dieser Flashbasis auf einem neuen 256-GB-USB-Stick erreicht
+  den Kernel, endet aber mit `No external shell available`. Die Stickgroesse
+  allein erklaert das nicht: Das Raw-Image besitzt absichtlich eine gueltige
+  512-MB-MBR-/FAT32-Partition am Datentraegeranfang. Exakt dasselbe Image
+  mountet in einem schreibgeschuetzten QEMU-Boot als C:, liest R4L/R4D/R4P
+  einschliesslich NETDHCP fehlerfrei und zeigt nach dem Launcher-Handoff den
+  vollstaendigen 0.59.15-Desktop. Damit liegt die Abweichung im realen
+  USBMSC-Pfad nach dem Limine-Handoff. Der aktuelle USBMSC-Treiber bindet nur
+  BOT/SCSI-Geraete mit exakt 512 Byte logischer Blockgroesse; vor einer
+  Aenderung sind deshalb die Windows-Werte fuer LogicalSectorSize/
+  PhysicalSectorSize und die unmittelbar vor dem Fatal sichtbaren Mount-/
+  Shellzeilen des neuen Sticks zu sichern.
+- Der angeschlossene Stick wurde auf dem Host read-only vollstaendig
+  identifiziert: Samsung Flash Drive FIT, USB 3/SuperSpeed, BOT/SCSI
+  08/06/50, logische und physische Sektoren 512 Byte, aktive 0x0C-MBR-
+  FAT32-Partition am erwarteten Offset. CHKDSK meldet keine Fehler; Limine,
+  Kernel, CONFIG/VERSION, Desktop/Terminal und die bootkritischen USB-R4D/R4P
+  sind bytegleich zum Produktionsimage. Kapazitaet, Flashvorgang und
+  Dateisystem sind damit als Ursache ausgeschlossen.
+- Die per Windows-Hub-IOCTL gelesene echte Configuration zeigt an beiden
+  Bulk-Endpunkten MPS 1024 und direkt folgende SuperSpeed Companions mit
+  `bMaxBurst=8`. xHCI zaehlte diese bisher nur, konfigurierte Max Burst aber
+  fest mit 0 und schrieb bei Bulk ausserdem ungueltig MPS in das nur fuer
+  periodische Endpunkte gueltige Max-ESIT-Feld. Der Treiber ordnet Companions
+  jetzt strikt dem vorhergehenden Endpoint zu, behaelt Burstwerte pro Device/
+  Runtime/Handle und erzeugt spezifikationskonforme Bulk-Contexts. Das neue
+  0.59.15-Gate bildet den exakten Samsung-FIT-Deskriptor ab; Gate, reine
+  Feldtests, inkrementeller Kernelbuild und der vollstaendige
+  `Build.bat -norun` sind gruen. Das neue normale Produktionsimage ist
+  536870912 Bytes gross, SHA-256
+  `D2CABB20F2945D41D60FF9C7B05561DA8209EA74964384FCD4496E9C2AA2291B`.
+  Exakt dieses Image bootete schreibgeschuetzt in QEMU hinter `qemu-xhci` als
+  USB-Systemlaufwerk, mountete C: per USBMSC und zeigte den vollstaendigen
+  0.59.15-Desktop. Der physische Samsung-Stick blieb unveraendert und CHKDSK
+  blieb gruen; Flash und realer Reboot stehen noch aus.
+- Der reale Boot dieses ersten SuperSpeed-Context-Images erreichte Limine und
+  den Kernel, endete aber bei Tick 110 erneut mit `No external shell available`.
+  Der zweite Hardwareunterschied lag vor dem Dateizugriff: HCRST setzt keine
+  Downstream-Ports zurueck, waehrend R4OS einen bereits von UEFI aktivierten
+  SuperSpeed-U0-Port bisher ohne eigenen Portreset neu adressierte. Der
+  Kaltstart erzwingt jetzt pro verbundenem Port genau einen Reset samt realen
+  50-ms-/10-ms-Erholzeiten. USBMSC besitzt begrenzte Inquiry-/Ready-/Capacity-
+  Retries, der Bulk-Ring-Wrap nutzt die gemeinsame Old-PCS-Uebergabe und der
+  Shell-Fatal unterscheidet fehlendes C:, MSC-Transportfehler und die konkrete
+  MSC-Initialisierungsursache. Neues Gate, direkter Kernelbuild und der
+  vollstaendige `Build.bat -norun` sind gruen. Das finale Produktionsimage ist
+  536870912 Bytes gross, SHA-256
+  `87F8AEC3C630CAD9DB6CCC2C1E21AD503242B24A15DD1B54335A9DDA501A6D64`.
+  Exakt dieses Image bootete in QEMU schreibgeschuetzt als einziges Laufwerk
+  hinter `qemu-xhci`, mountete C: per USBMSC und erreichte den Launcher ohne
+  Crash. Der reale Flash-/Kaltstart bleibt die offene Hardwareabnahme.
+- Der reale Kaltstart des Images `87F8...D64` kam bis USBMSC, scheiterte nun
+  eindeutig bei `SCSI INQUIRY`. Damit sind Limine, Portreset, Address Device,
+  Deskriptoren, SET_CONFIGURATION und Configure Endpoint bereits passiert;
+  offen war der erste BOT-Bulktransfer. Der bisherige xHCI-Wart legte seine
+  Frist ueber 25 Millionen CPU-Schleifen fest. Auf dem Laptop konnte dieselbe
+  Frist deshalb wesentlich frueher ablaufen als unter QEMU. Command-, Control-
+  und synchrone Bulktransfers verwenden jetzt eine echte Zwei-Sekunden-
+  Tickdeadline. USBMSC wartet nach Configure eine Sekunde, Bulk-IN akzeptiert
+  den gueltigen xHCI-Abschluss `Short Packet` mit exakter Residue-/Istlaenge und
+  asynchrone Bulk-Contexts lassen auch die nur beratende Average TRB Length wie
+  Max ESIT auf null. Falls die Hardware weiter abbricht, nennt der Bluescreen
+  Opcode, CBW-/Data-/CSW-Phase, xHCI-Ergebnis, Completion-Code und Ist-/Sollbytes.
+  Das erweiterte Gate (sieben Zig-Tests), der direkte Kernelbuild und der
+  vollstaendige `Build.bat -norun` sind gruen. Das neue Produktionsimage ist
+  536870912 Bytes gross, SHA-256
+  `E1C32A4D8D71595C10D279616EC42AC1F3CF945F38F0DB55BAB1FBE76E3FE50B`.
+  Exakt diese Bytes booteten hinter `qemu-xhci` als einziges USB-Laufwerk,
+  registrierten USBMSC, mounteten C: und erreichten den Launcher. Der reale
+  Flash-/Kaltstart bleibt offen.
+- Das finale Image `E1C32A4D...E50B` bootete danach auf dem Samsung-FIT-Stick
+  auch real bis zum vollstaendigen 0.59.15-Desktop. USB-HID, Tastatur, 8 x
+  10810984 Byte SCSI-/USBMSC-Lesestress mit identischer Pruefsumme, RTL8168,
+  FritzBox-DHCP, Gateway-Ping, SSH sowie echte TCP-/UDP-Lifecycles waren gruen.
+- `NETDIAG /SELFTEST` deckte unter echtem LAN-Hintergrundverkehr einen alten
+  Rohpaketfehler auf: IPv6/sonstige nicht unterstuetzte EtherTypes belegten den
+  16er-Paketpool dauerhaft, obwohl kein Raw-Frame-Verbraucher existiert. Bei
+  `packets=16/16` konnte die Driver-Lifecycle-Probe ihr Testpaket nicht mehr
+  allokieren. Solche Frames werden nun nach erfolgreicher Ethernet-
+  Klassifikation nur gezaehlt und nicht retained; das DHCP-/Netzwerkgate
+  verbietet die erneute Poolallokation in diesem Pfad. Hostgate, Kernelbuild
+  und kompletter QEMU-Standardtest sind gruen.
+- Das gepruefte Ein-Payload-Kernelpaket `Release/R4OS05915N.R4U`, 10810977
+  Bytes, SHA-256 `46ED5F45BC94837176DE03D13FEC363CD3C6BC0F25968EE08CA137B8E0DED42B`,
+  wurde per Inbox/SFTP bytegleich uebertragen, mit `VERIFY result: OK`
+  vorgeprueft und mit `applied=1/1`, Journal `cleanup` installiert.
+- Der anschliessende reale Soft-Reboot isolierte den verbliebenen Warmstart-
+  Fehler eindeutig unterhalb von DHCP: `dhcp/running/up`, State `acquire`,
+  30 Discover und 0 Offer; der RTL8168-Detailstatus zeigte 98 an den Backend
+  uebergebene TX-Frames, aber exakt 0 RX-Frames, 0 IRQ-Hits und mehr als
+  423000 Polls. `REBOOT` flushte bisher zwar Registry/Pagecache, legte aber den
+  laufenden Netzwerk-R4D samt altem DMA-Ring vor ACPI-Reset nicht still.
+- Der neue System-Transition-Pfad beendet Netzwerk-R4Ds in umgekehrter
+  Laufzeitreihenfolge unter ihrem Owner-Kontext nach allen dauerhaften Writes
+  und vor Serial-Flush/ACPI-Reset. Der resetfreie Kaltstart und Firmware-PHY-
+  Erhalt bleiben unveraendert. RTL8168-Gate, direkter Kernelbuild und kompletter
+  QEMU-Standardtest sind gruen. Paket `Release/R4OS05915W.R4U`: 10811825
+  Bytes, SHA-256 `06E805A9EA05D609172F5226B0C607F62B81012F3B04A193EB93A570D854A48B`;
+  reale Installation und Soft-Reboot-Wiederholung stehen nach einem Kaltstart
+  des derzeit netzlosen Laptops aus.
+- Ausfuehrlicher Uebergabestand nach den anschliessenden Hardwareiterationen:
+  Die Treiber-Einzelpakete `R4OS05915X.R4U` und `R4OS05915Y.R4U` sowie danach
+  das kombinierte Paket `R4OS05915Z.R4U` wurden fuer die weitere Eingrenzung
+  erzeugt. Der zuletzt vor dem aktuellen Fix nachweislich installierte Stand
+  war Z: 10867460 Bytes, SHA-256
+  `53FD9F5639E44DA0E8FCA3FB9974EB0B313493695E3346961408146F40BB6884`,
+  mit Kernel (10811576 Bytes), RTL8168.R4D (29240 Bytes) und IPCONFIG.R4X
+  (25737 Bytes). Unmittelbar vor Installation des Nachfolgers meldete der
+  Laptop fuer Z exakt `journal state=cleanup transaction=5 generation=37
+  target=0.59.15 applied=3/3 reboot=yes` und VERSION weiterhin 0.59.15.
+  Z ist damit vollstaendig installiert gewesen, aber nicht der aktuelle lokale
+  Quell-/Artefaktstand.
+- Der reale Fehler blieb nach diesen Iterationen strikt ein Warmstartfehler:
+  Nach einem physischen Poweroff/Kaltstart war der Lenovo jeweils wieder unter
+  `192.168.178.213` erreichbar; nach Soft-Reboot stand die GUI dagegen erneut
+  auf `0.0.0.0`, Link `up`, Source `dhcp-pending`, Status `none`. DHCP lief in
+  `acquire` beziehungsweise `dhcp/running/up`, sendete Discover, erhielt aber
+  kein Offer. `IPCONFIG /ALL` zeigte wiederholt exakt null RX-Pakete und null
+  IRQ-Hits bei schnell steigendem Pollzaehler, waehrend TX weiterlief. Damit
+  liegt der verbliebene Fehler unterhalb von DHCP im warm uebernommenen
+  RTL8168-/PCI-/DMA-/R4D-Zustand. `NETDIAG.R4X DRIVER` bestand zwar seine vier
+  synthetischen Lifecycle-Faelle und `DRVDIAG` meldete eine leere, fehlerfreie
+  Workqueue; diese Tests erzeugten jedoch keine echten Hardware-IRQs oder
+  RX-Completions und widerlegen den realen Befund daher nicht.
+- Der noch nicht eingecheckte Nach-Z-Quellstand haertet die komplette
+  Uebergabegrenze fail-closed. `Code/Kernel/net/core.zig` besitzt eine permanente
+  System-Transition, geschlossene Backend-Admission, gezaehlte und drainbare
+  Backendcallbacks, eine serialisierte Backendmutation und eine dauerhafte
+  Unsafe-Quarantaene. `Code/Kernel/kernel/driver_api.zig` koppelt Storage- und
+  Netzwerk-Preflight, verlangt vor destruktivem Owner-Cleanup ein explizites
+  `beginOwnerShutdown`, fuehrt den Netzwerk-Finalizer vor IRQ/Work/DMA-Abbau aus
+  und behaelt bei jedem nicht beweisbar sicheren Fehler die Ressourcen in
+  Quarantaene. `Code/Kernel/program/r4d.zig` serialisiert Load/Unload/Transition
+  ueber einen Lifecycle-Guard, versieht Runtimeeintraege mit Generationen,
+  prueft Owner/Registry/Generation nach jedem Warten erneut und publiziert
+  Quarantaene vor Lockfreigabe. Der System-Transition-Scan arbeitet rueckwaerts,
+  verwendet begrenzte Owner-Uebergaben und darf ohne Ownerbesitz keinen
+  Runtimepointer mutieren.
+- Der aktuelle RTL8168-Stand stoppt vor Warmreset neue Softwarearbeit, wartet
+  begrenzt auf Poll/TX/Recovery, deaktiviert und verifiziert PCI Bus Mastering,
+  sperrt RX, wartet beim 8168H auf den FIFO-Handoff, setzt den Controller
+  begrenzt zurueck, behandelt Exit-L1-Ereignisse und entfernt IRQ-Routen. Eine
+  Transition gibt die alten DMA-Seiten absichtlich nicht mehr zur Wiederverwendung
+  frei; kann Software-Idle, Bus-Master-Aus, Controllerreset oder Exit-L1 nicht
+  bewiesen werden, wird der Warmreset abgelehnt und R4OS faellt sicher auf
+  Poweroff zurueck. Die zugehoerigen MMIO-/PCI-/ACPI-Korrekturen liegen unter
+  anderem in `page_tables.zig`, `pci.zig`, `acpi.zig` und `reset.zig`.
+- Lokale Abnahme dieses finalen Nach-Z-Quellstands: Der gezielte
+  `Run-Rtl8168HardwareContract0595.ps1` bestand alle fuenf Zig-Modelltests und
+  den erweiterten statischen Lifecycle-/PCI-/MMIO-/Resetvertrag. Ein erster
+  direkter Kernelbuild fand nur einen Zig-Namenskonflikt in
+  `page_tables.zig:591` (`index` ueberschattete die bestehende Pagingfunktion);
+  nach mechanischer Umbenennung in `mapping_index` kompilierte der direkte
+  inkrementelle Kernelbuild gruen. Der direkte RTL8168-Projektbuild war ebenfalls
+  gruen und erzeugte ein gueltig inspiziertes R4M0 mit drei Sektionen, einem
+  Import, zwei Exporten und 407 Relocations. Das wegen der neuen Cleanupreihenfolge
+  aktualisierte `Run-DynamicTaskRegistryContract05910.ps1` bestand danach alle
+  13 Hostmodellfamilien. Ein vollstaendiges `Build.bat -kernel`, ein erneuter
+  kompletter QEMU-Standardtest und `Build.bat -norun` wurden nach diesen letzten
+  Nach-Z-Aenderungen noch NICHT gefahren.
+- Die daraus frisch gebauten Payloadartefakte sind:
+  `Code/zig-out/bin/r4os.elf`, 10819784 Bytes, SHA-256
+  `E6A4D3A1492FD1A08E972470ABAE2112C47452EC750ACA3A22D167C94CD4AC6C`,
+  und `Code/zig-out/RTL8168.R4D`, 33344 Bytes, SHA-256
+  `4CC37524D9B5E54FE158A4BFE8F50BAAD4574A6386D461E1F4F810C79AF94C1E`.
+  Das vorhandene `Release/disk.img` wurde bereits um 11:49 Uhr erzeugt, die
+  beiden aktuellen Artefakte erst um 14:37 Uhr. Dieses Image enthaelt den
+  aktuellen AA-Fix daher NICHT und darf nicht als dessen Flash-/Abnahmeimage
+  bezeichnet werden.
+- Aktuelles Hardwarepaket ist `Release/R4OS05915AA.R4U`: 10853766 Bytes,
+  SHA-256 `1A20FD3B2F776C9D0323F9AD70F0442F343AC8943EA737DAC140885B7145AF60`.
+  Es verlangt Reboot und enthaelt genau zwei Payloads in dieser Reihenfolge:
+  RTL8168.R4D nach `C:\R4OS\DRIVERS\RTL8168.R4D` (33344 Bytes, FNV-1a
+  2059864652, Offset 0), danach den Kernel nach `/boot/r4os.elf` (10819784
+  Bytes, FNV-1a 1094656106, Offset 33344). Header, Format/Flags, 574-Byte-
+  Manifest, 10853128 Payloadbytes, beide Einzel-FNV-Werte, Gesamt-FNV
+  3475123942, Offsetfolge und eingebettete Payloadbytes wurden lokal gegen die
+  Quellen geprueft.
+- AA wurde ausschliesslich ueber den vorgesehenen Inbox-/SFTP-Pfad nach
+  `/C/R4OS/UPDATE/INBOX/R4OS05915AA.R4U` uebertragen. `ls -l` meldete 10853766
+  Bytes; der konservative Rueckdownload war SHA-256-bytegleich. `SYSUPD VERIFY`
+  meldete `result: OK`, current/target 0.59.15, zwei Payloads und exakt
+  `bytes=10853128 streamed=10853128 reboot=yes`. `SYSUPD APPLY` lief ohne
+  Unterbrechung bis `result: OK`, `applied=2`, `bytes=10853128`,
+  `streamed=10853128`, `staged=10853128`, `reboot=yes`, Transaktion 6.
+  Die anschliessende Kontrolle VOR dem Reboot meldete exakt
+  `journal state=cleanup transaction=6 generation=45 target=0.59.15
+  applied=2/2 reboot=yes source=C:\R4OS\UPDATE\INBOX\R4OS05915AA.R4U`;
+  VERSION blieb erwartungsgemaess 0.59.15. AA ist somit bereits vollstaendig
+  auf Disk installiert und darf bei Wiederaufnahme nicht blind erneut APPLYt
+  werden.
+- Die eine vereinbarte reale AA-Soft-Reboot-Probe ist fehlgeschlagen oder
+  zumindest ohne sichtbaren Rueckkehrnachweis abgebrochen: Der per SSH gesendete
+  `REBOOT` kappte die Sitzung; der SSH-Helfer endete nach 30 Sekunden mit
+  Timeout. Danach antwortete `.213` auf zwei unmittelbare Pings nicht. Ein
+  eigener 60-Sekunden-Waechter mit 60 weiteren Versuchen sah ebenfalls keine
+  Rueckkehr. Es wurde NICHT weiter gepingt, keine alternative Adresse gesucht,
+  kein zweiter Reboot/Poweroff ausgefuehrt und kein weiteres Paket gebaut oder
+  angewendet. Auf ausdrueckliche Uservorgabe wurde nach diesem fehlgeschlagenen
+  Test jede technische Arbeit gestoppt; danach wurde ausschliesslich dieser
+  Roadmap-Uebergabestand geschrieben.
+- Verbindlicher Wiederaufnahmepunkt fuer eine andere LLM: Zuerst den User nach
+  sichtbarem Bootzustand und aktueller IP fragen. Nicht voraussetzen, dass der
+  Laptop noch `.213` hat oder ueberhaupt eingeschaltet ist. Der fehlende
+  Netzwerk-Rueckkehrnachweis kann drei verschiedene Zustaende bedeuten:
+  (1) R4OS ist gebootet, aber erneut mit `0.0.0.0`; (2) DHCP hat eine andere
+  Adresse vergeben; (3) die neue fail-closed Uebergabe hat wegen eines nicht
+  beweisbar sicheren NIC-Stopps absichtlich `poweroff()` statt Warmreset
+  ausgefuehrt. Erst nach ausdruecklicher Fortsetzung durch den User den
+  sichtbaren Zustand sichern. Wenn R4OS erreichbar ist, zunaechst nur
+  `TYPE C:\R4OS\CONFIG\VERSION.R4S`, `SYSUPD STATUS`, `IPCONFIG /ALL` und
+  `DHCP STATUS` lesen und Reset-/Bootlogmarker fuer `[NET]`,
+  `[R4D] system-transition`, `RTL8168.R4D shutdown` sowie
+  `[RESET][ERROR] network handoff unsafe` sichern. Wenn der Rechner aus ist,
+  soll der User ihn einmal physisch einschalten; danach dieselben read-only
+  Daten erheben, bevor irgendein neuer Fix oder Test begonnen wird.
+- Der gesamte 0.59.15-Arbeitsbaum ist weiterhin umfangreich dirty, nicht
+  committed und nicht gepusht; VERSION steht auf 0.59.15 und der
+  Unterversionsstatus bleibt `In Arbeit`. Vor einem weiteren Hardwarepaket
+  muessen nach Auswertung des AA-Bootzustands mindestens der vollstaendige
+  lokale Kernel-/Gatepfad und eine passende QEMU-Abnahme des dann tatsaechlich
+  geaenderten Stands nachgeholt werden. Keine der alten Dateien W/X/Y/Z und
+  auch nicht das derzeitige `disk.img` ersetzt diese Abnahme.
+- Wiederaufnahme nach dem AA-Abbruch: Der User hat den Laptop kalt gestartet;
+  er war wieder unter `192.168.178.213` erreichbar. Read-only-Baseline per
+  SSH: VERSION 0.59.15, `SYSUPD STATUS journal state=cleanup transaction=6
+  applied=2/2 source=...R4OS05915AA.R4U`, DHCP `bound` auf `.213`. Die
+  wiederholte AA-Soft-Reboot-Probe riss die Maschine nachweisbar herunter
+  (Transition meldete sicher, Warmreset lief), bootete laut Sichtpruefung des
+  Users aber erneut mit `0.0.0.0`. AA hat den Warmstartfehler damit nicht
+  behoben.
+- Root Cause gefunden: Das Kaltboot-Log zeigt `phase pre-DMA ownership
+  handoff OK`, also den Nicht-H-Zweig. Die reale NIC des L340-15API ist laut
+  linux-hardware.org-Probe des Modells ein RTL8168GU/8111GU mit XID 0x509
+  (upstream VER_42); `isRtl8168H(0x509)` ist false. Damit waren OOB-/Shared-
+  FIFO-Handoff, beide MAC-Resets und der Transition-CmdReset der gesamten
+  X/Y/Z/AA-Linie auf der realen Hardware wirkungslos. Upstream faehrt
+  `rtl_hw_init_8168g` (exakt unser Handoff) fuer VER_40 bis VER_48 bei jedem
+  Probe; nach einem ACPI-Warmreset besitzt sonst die NIC-Firmware den
+  Shared-FIFO: TX-Deskriptoren werden konsumiert, RX bleibt 0, DHCP-Discover
+  ohne Offer. Der Kaltstart maskiert das, weil UEFI die MAC im Treibermodus
+  uebergibt. Die In-Session-TX-Stall-Recovery (CmdReset plus Minimal-Reinit,
+  RX funktioniert danach) belegt, dass der GU keine zusaetzliche EPHY-/ERI-
+  Baseline braucht.
+- Fix implementiert: `contract.isRtl8168GFamily` (gphy_ocp-Menge 0x4C0/0x509/
+  0x5C8/0x541/0x6C0/0x502/0x54A/0x54B). OOB-Handoff (`handoffGFamilySharedFifo`),
+  post-OOB Bus-Master-Enable, `resetMacAfterPhy`, FIFO-Empty-Waits und der
+  Transition-`reset_supported` sind jetzt familiengegatet; EPHY-/ERI-Baseline,
+  EEE, Exit-L1 und SAW-Kalibrierung bleiben exakt H-only, der GU behaelt seine
+  erprobten Registerwerte. Der Bind loggt neu
+  `RTL8168.R4D xid=0x... phy=... oob-handoff=...`. `TreiberStand.txt` ist
+  aktualisiert.
+- Abnahme des Fixstands: `Run-Rtl8168HardwareContract0595.ps1` mit
+  angepassten G-Familien-Ankern 5/5 gruen, `Build.bat -app RTL8168` gruen,
+  kompletter `Build.bat -test` gruen (`=== TEST OK ===`, Poweroff OK,
+  `Errors: none`, alle API-Marker). `Code/zig-out/RTL8168.R4D`: 33344 Bytes,
+  SHA-256 `DF467133EB60EB5EAE4FE49BE51162916FAE8249E3B71EBC4F2A26BB90237C9C`,
+  bytegleich zwischen Einzel- und Aggregatbuild.
+- Neues Hardwarepaket `Release/R4OS05915AB.R4U`: 33786 Bytes, SHA-256
+  `7E764B3626C8413BAFF28D0074B1B6726BA46F93319F99196272F3149845D27C`, genau
+  ein Payload RTL8168.R4D nach `C:\R4OS\DRIVERS\RTL8168.R4D` (33344 Bytes,
+  Gesamt-FNV 3635105945), min/target 0.59.15, reboot=yes. Noch nicht
+  hochgeladen oder angewendet; der Laptop steht im 0.0.0.0-Warmbootzustand
+  und braucht fuer den Upload einen Kaltstart (POWEROFF, dann einschalten).
+- Prozedur fuer die AB-Abnahme: Nach Kaltstart auf `.213` SFTP-Upload in die
+  Inbox, Rueckdownload-SHA-Vergleich, `SYSUPD VERIFY`, `SYSUPD APPLY`
+  (erwartet `applied=1/1`), dann Soft-`REBOOT` als eigentliche Probe. Erwartete
+  neue Bootmarker: `xid=0x509 phy=gphy-ocp oob-handoff=yes`,
+  `G-family OOB/shared-FIFO handoff applied`,
+  `phase OOB handoff/first MAC reset OK`. Erfolgskriterium: `.213` mit DHCP
+  `bound` nach Warmreboot, danach eine zweite Reboot-Probe fuer die
+  Reproduzierbarkeit.
+- Getrennt notierter Nebenbefund (nicht 0.59.15-blockierend): Auf dem Lenovo
+  bleibt `irq hits=0` (NIC laeuft dauerhaft im Poll-Fallback) und die
+  TX-Stall-Recovery feuert wiederholt (~15 `descriptors/RX/TX start OK` pro
+  Session, drop=415 bei accepted-rx=650).
+- AB-Hardwarelauf am 19.07.2026: Nach Kaltstart durch den User war `.213`
+  wieder erreichbar (VERSION 0.59.15, Journal cleanup/Transaktion 6). Der
+  SFTP-Upload von `R4OS05915AB.R4U` war bytegleich, `SYSUPD VERIFY` OK
+  (1 Payload, 33344 Bytes), `SYSUPD APPLY` OK mit `applied=1/1`,
+  Transaktion 7, Journal `cleanup`. Der neue Treiber liegt damit auf Disk.
+- Die anschliessende einzelne Soft-Reboot-Probe ist GESCHEITERT: `REBOOT`
+  riss die Maschine um 15:30:06 nachweisbar herunter, der Laptop bootete
+  laut User, kehrte aber nie auf `.213` zurueck (finaler Ping 100% Verlust).
+  Auf ausdrueckliche Uservorgabe wurde nach dieser Probe jede weitere
+  technische Arbeit gestoppt; es wurde kein weiteres Paket gebaut, nichts
+  weiter angewendet und keine zweite Probe gefahren.
+- Einordnung fuer die Wiederaufnahme: Der XID-Befund (RTL8168GU, 0x509,
+  Nicht-H-Zweig) bleibt durch Bootlog und linux-hardware.org belegt. Das
+  Scheitern unterscheidet drei Faelle, die die neuen Bootmarker eindeutig
+  trennen: (a) Handoff lief und meldete
+  `G-family OOB/shared-FIFO handoff applied`, RX blieb trotzdem tot ->
+  naechster Schritt ist die GU-/G-Baseline (upstream `rtl_hw_start_8168g`
+  plus EPHY-Tabelle `e_info_8168g_2`, Werte liegen in
+  `r8169_main.c` v6.6, lokal analysiert); (b) Marker
+  `G-family ... link-list timeout` oder `shared-FIFO handoff failed` ->
+  der MAC-OCP-/E8DE-Zugriffspfad funktioniert auf dem realen GU nicht wie
+  bei H; (c) `RTL8168.R4D hardware initialization failed` bzw. gar kein
+  rtl8168-Adapter in `IPCONFIG /ALL` -> der neue Bind bricht komplett ab.
+  Zuerst also read-only am Geraet (lokal oder nach Kaltstart per SSH):
+  `LOGCENTER.R4X /EXPORT SEARCH=RTL8168 OUT=C:\TEMP\NETLOG.TXT` lesen und
+  `xid=`-, `oob-handoff=`-, Phasen- und Warnmarker sichern, dazu
+  `IPCONFIG /ALL`.
+- WICHTIGE Rueckfallebene: Kommt der naechste KALTSTART nicht mehr auf
+  `.213` (Fall c auch kalt), dann scheitert der neue G-Familien-Bind auf
+  dieser Hardware grundsaetzlich. Das alte AA-Paket
+  `C:\R4OS\UPDATE\INBOX\R4OS05915AA.R4U` liegt weiterhin in der Inbox und
+  enthaelt den vorherigen, kaltstart-erprobten Treiber; ein erneutes
+  explizites `SYSUPD VERIFY` plus `SYSUPD APPLY` dieses Pakets stellt den
+  AA-Treiberstand wieder her (lokal am Geraet ausfuehrbar). Alternativ
+  bleibt der USB-Stick-Reflash mit einem AA-Stand-Image.
+- Lokaler Stand nach dem Stopp: Arbeitsbaum weiterhin dirty und ungepusht;
+  zusaetzlich geaendert sind `rtl8168_contract.zig`, `RTL8168/src/main.zig`,
+  `Run-Rtl8168HardwareContract0595.ps1`, `Docs/Drivers/TreiberStand.txt`
+  und diese Roadmap. Gate 0595, `-app RTL8168` und der komplette
+  `Build.bat -test` des AB-Stands waren gruen; `Release/R4OS05915AB.R4U`
+  (SHA-256 `7E764B3626C8413BAFF28D0074B1B6726BA46F93319F99196272F3149845D27C`)
+  ist das zuletzt installierte Paket.
+
+0.59.16
+Status: Erledigt
+Leitgedanke: Keine weiteren Einzelversuche auf der Hardware. Der RTL8168-
+Treiber wird gegen zwei vollstaendige Open-Source-Referenzen systematisch
+analysiert; erst aus der klassifizierten Abweichungsmatrix ergeben sich die
+Umbauten der Folgeunterversionen. 0.59.16 aendert keinen Produktivcode.
+Offene Punkte:
+- Vollstaendiger struktureller Vergleich von `Code/System/Driver/RTL8168/`
+  gegen beide Referenzen unter `Reference/Hardware/RTL8168/` fuer die exakte
+  Zielkette RTL8168GU/8111GU (XID 0x509, upstream VER_42, Vendor
+  CFG_METHOD_24/25). Mindestens diese Achsen, je Achse mit Referenzstelle
+  (Datei/Funktion), unserem Ist-Zustand und Bewertung:
+  -- Probe-/Bind-Reihenfolge inklusive `rtl_hw_initialize`/
+     `rtl_hw_init_8168g` (OOB-/NOW_IS_OOB-/Link-List-Handoff) und
+     `rtl_hw_reset`;
+  -- `rtl_hw_start_8168g` und `rtl_hw_start_8168g_2`: FIFO-Groessen
+     (`rtl_set_fifo_size 0x08/0x10/0x02/0x06`), Pause-Thresholds
+     (`0x38/0x48`), ERI-Basiskonfiguration inkl. `0x2F8=0x1D8F`,
+     `0x2FC`-w0w1, `0x1B0`-Bit12, Packet-Filter-Reset, `0xC0/0xB8`-Reset,
+     RXDV-Gate-Disziplin, EEE-MAC-Konfiguration, ASPM-Entry-Latency;
+  -- EPHY-Baseline `e_info_8168g_2` (neun Patches) versus unser Verzicht
+     auf jede GU-EPHY-Konfiguration;
+  -- PHY-Konfiguration `rtl8168g_2_hw_phy_config` samt optionaler Firmware
+     `rtl8168g-3.fw`: bewerten, was ohne Firmware-Blob zwingend ist und ob
+     der firmwarefreie Betrieb ein RX-/Link-Risiko traegt;
+  -- RxConfig-/TxConfig-Familienbits (`RX128_INT_EN`, `RX_MULTI_EN`,
+     `RX_EARLY_OFF`, `TXCFG_AUTO_FIFO`), `MaxTxPacketSize`/EarlySize,
+     RMS/`RX_MAX_SIZE`, CPlusCmd-Snapshot;
+  -- Interrupt-Architektur: upstream MSI-Praeferenz mit INTx-Fallback
+     versus unser reines shared-INTx-plus-Poll-Modell; Erklaerung fuer den
+     realen Befund `irq hits=0` bei funktionierendem Poll-RX;
+  -- TX-Watchdog-/Recovery-Philosophie: upstream 5-Sekunden-Watchdog ohne
+     Vollreset pro Verdachtsfall versus unsere TX-Stall-Recovery, die real
+     etwa 15 Controller-Hardresets pro Sitzung ausfuehrt (drop=415 bei
+     accepted-rx=650);
+  -- Link-/PHY-Ereignisbehandlung (phy_state/Autoneg-Abschluss) versus
+     unser statisches `link_up`-Flag mit fruehem `net_backend_flag_link_up`;
+  -- Shutdown-/Warmstartpfad: `rtl_shutdown`, `rtl_prepare_power_down`,
+     `rtl_wol_enable_rx`/`rtl_disable_rxdvgate` versus unser
+     Transition-Shutdown; Sonderfall DASH/OOB im Vendortreiber;
+  -- bewusst nicht uebernommene Features explizit fuehren (Jumbo, WoL,
+     EEE-Advertisement, VLAN/Checksum-Offload, Runtime-PM, ethtool-Pfad).
+- Ergebnisdokument `Docs/Drivers/Rtl8168ReferenzVergleich05916.txt`: jede
+  Abweichung mit Kategorie (`warmstart-kritisch`, `rx-kritisch`,
+  `robustheit`, `feature-fehlt`, `bewusst-anders`), Risiko, Referenzanker
+  und Ziel-Unterversion. Die Matrix ist die einzige Grundlage fuer die
+  Umbauten ab 0.59.18; nichts wird "nebenbei" gefixt.
+- Warmstart-Fehlerbild der gescheiterten AB-Probe gegen die Matrix stellen:
+  alle drei Faelle (a: Handoff lief, RX trotzdem tot; b: Link-List-/MAC-OCP-
+  Timeout; c: Bind bricht ab) muessen durch die Analyse entweder erklaert
+  oder als offene Hypothese mit Pruefweg im Hostmodell (0.59.17) gefuehrt
+  werden. Der Laptop wird dafuer NICHT angesprochen; falls der User den
+  Bootlog-Auszug (`LOGCENTER /EXPORT SEARCH=RTL8168`) liefert, wird er als
+  Beleg eingearbeitet.
+- Kernelseitige Ursachenkandidaten als Code-Review (kein Umbau) pruefen und
+  im Vergleichsdokument mitfuehren:
+  -- driver_api-Dienste im fruehen Bind: `tickCount`/`waitTicks`/
+     `timerFrequency` zum R4D-Ladezeitpunkt (laufen Ticks im loader_boot-
+     Fenster wirklich; Wartezeiten real statt nominell);
+  -- MMIO-Mapping-Attribute fuer BAR2 (`page_tables`/PAT: UC-Garantie,
+     Alias-Pfad), Posted-Write-/Readback-Disziplin;
+  -- DMA-Region: physische Kontiguitaet, Ausrichtung, Cache-Attribute,
+     Fence-Semantik gegenueber Descriptor-OWN-Bits;
+  -- PCI-Schicht: Capability-Walk, PM-D0, ASPM-L1-Endpoint/Upstream,
+     Bus-Master-Reihenfolge, Config-Zugriffe (`pci.zig`/`pcie.zig`);
+  -- INTx-Routing (`platform/irq`, IOAPIC-Pin, Polaritaet/Trigger) als
+     Erklaerungskandidat fuer `irq hits=0`;
+  -- Ladereihenfolge R4D relativ zu platform_irq_boot/Timer-Umschaltung;
+  -- net/core-Annahmepfad (`accepted-rx` versus `drop=415`).
+- Aus der fertigen Matrix die Schnittfolge 0.59.17 bis 0.59.20 bestaetigen
+  oder nachschaerfen; zusaetzliche Unterversionen (zum Beispiel eine eigene
+  MSI-Unterversion, falls die Interrupt-Achse Kernelumbau verlangt) werden
+  hier eingeplant, nicht ad hoc begonnen.
+Erledigt:
+- Referenztreiber beschafft und dokumentiert:
+  `Reference/Hardware/RTL8168/r8169-linux-v6.6/` (Linux v6.6: r8169.h,
+  r8169_main.c, r8169_phy_config.c, r8169_firmware.c/h) und
+  `Reference/Hardware/RTL8168/r8168-realtek-vendor/` (Realtek r8168 via
+  GitHub-Mirror mtorromeo/r8168: r8168.h, r8168_n.c, Zusatzheader,
+  rtl_eeprom.*). Herkunft, Datum, Lizenz (GPL-2.0) und die wichtigsten
+  Funktionsanker stehen in `Reference/Hardware/RTL8168/README.txt`;
+  die GU-Kette ist in beiden Referenzen verifiziert (VER_42 bzw.
+  CFG_METHOD_24/25). `.gitignore` whitelistet `Reference/Hardware/**`.
+- Vollstaendiger Referenzvergleich als
+  `Docs/Drivers/Rtl8168ReferenzVergleich05916.txt`: zehn Achsen
+  A1..A10 mit exakten Referenzwerten, sieben Kernel-Reviewpunkte
+  K1..K7, Zuordnung der drei AB-Faelle und bestaetigte Schnittfolge.
+- Wichtigste neue Befunde:
+  -- Vendor-only RealWoW-Stilllegung fuer CFG_METHOD_24/25
+     (ERI 0x174=0x00FF + OCP 0xE428=0x0010) fehlt bei uns und in r8169;
+     als warmstart-kritischer Hauptkandidat neben RxConfig-/FIFO-Luecken
+     eingestuft.
+  -- `rtl_init_rxcfg` VER_40..53 verlangt RX128_INT_EN|RX_MULTI_EN|
+     RX_DMA_BURST|RX_EARLY_OFF; unser GU-Zweig schreibt die
+     Legacy-FIFO-Formel (7<<13) inkl. undefiniertem Bit13.
+  -- `TXCFG_AUTO_FIFO`, FIFO-Groessen/Pause-Thresholds, EarlySize 0x27,
+     Exit-L1-Events (OCP 0xC0AC, VER_40..63) und die komplette
+     hw_start_8168g-ERI-Basis sind bei uns faelschlich H-only.
+  -- UPS-Resume betrifft erst CFG_METHOD_29+ und ist als GU-Ursache
+     ausgeschlossen; MAC-MCU-Patches bleiben Hypothese zweiter Ordnung.
+  -- K2: keine ACPI-_PRT-Wahrheit; INTx-GSIs werden geraten, upstream
+     nutzt MSI -> MSI als 0.59.19-Scope bestaetigt.
+  -- K4: `pciMapBar` erbt Attribute bereits gemappter Seiten; UC ist
+     nur beim Erstmapping garantiert -> Nachweis in 0.59.18.
+  -- Advisory-Handoff-Timeouts machen Fall b im Sichtbefund von Fall a
+     ununterscheidbar; nur der LOGCENTER-Auszug trennt sie.
+- Schnittfolge 0.59.17..0.59.20 bestaetigt; keine zusaetzliche
+  Unterversion noetig, MSI ist in 0.59.19 abgegrenzt.
+Abnahme:
+- Vergleichsdokument vollstaendig: alle Achsen bearbeitet, jede Abweichung
+  klassifiziert, Kernel-Review-Kandidaten mit Befund, drei AB-Faelle
+  zugeordnet oder mit Modell-Pruefweg versehen; Schnittfolge der
+  Folgeunterversionen daraus abgeleitet. Kein Produktivcode geaendert.
+- `Build.bat -norun`: erfolgreich (Exit 0), normaler 84-R4X-Imageplan,
+  alle Gates gruen, Limine installiert; kein Produktivcode geaendert.
+Notizen:
+- Analyse am 19.07.2026 durchgefuehrt; Laptop wurde nicht angesprochen.
+- Der 0.59.17-Modellumfang ist um die Analysefaelle RealWoW-Zustand,
+  RxConfig-Familienbits, FIFO-/AUTO_FIFO-Kopplung, advisory-Timeouts
+  und K4-/K7-Randfaelle erweitert (Abschnitt D des Dokuments).
+
+0.59.17
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- `Code/System/Driver/RTL8168/src/rtl8168_host_model.zig`: deterministisches
+  RTL8168GU-Registermodell (ChipCmd mit CmdReset-Selbstruecksetzung und
+  Enginestopp, IMR/ISR mit W1C, MISC/RXDV-Gate, MCU mit NOW_IS_OOB,
+  LINK_LIST_READY und RXTX_EMPTY, MAC-OCP inkl. E8DE-Besitzuebergabe und
+  0xE428, ERI mit Byte-Enables inkl. RealWoW-Adresse 0x174, EPHY, GPHY-OCP
+  mit BMCR-Selbstruecksetzung, TX_CONFIG mit XID-0x509-Versionsbits,
+  Ringadressen, RX-/TX-Deskriptoren mit OWN/EOR/FS/LS und modelliertem
+  DMA-Uebersetzungspfad) plus vollstaendigem DriverApi-Mock (PCI-Konfigraum
+  mit PM-/PCIe-Capabilities, BARs, Bus-Master-Verifikation, Ticks, Logs).
+- Der ECHTE Treibercode laeuft unveraendert gegen das Modell. Testseams in
+  `main.zig` sind nachweislich verhaltensneutral: MMIO-Hooks und der
+  R4D-Entry-Stub sind comptime auf `builtin.is_test` gegatet; der
+  Produktions-R4D blieb nach dem Seam-Einbau bytegleich in Codegroesse und
+  Relocationszahl (15874 Bytes, 416 Relocs).
+- Sieben Modellfaelle, alle gruen: (1) Kaltbind mit echtem RX/TX-Verkehr
+  und allen Bind-Markern inkl. `xid=0x509`; (2) Warm-OOB-Bind: der
+  AB-Handoff uebergibt den Shared-FIFO und RX funktioniert; (3)
+  AA-Replikation als geskripteter Bind ohne Besitzuebergabe: TX-Deskriptoren
+  werden konsumiert, RX bleibt tot (exakt das reale Hardwarebild); (4)
+  RealWoW-Hypothese: bewaffnete Engine haelt RX auch nach Handoff tot,
+  dokumentiert die offene 0.59.18-Luecke; (5) advisory Link-List-Timeout
+  (Fall b) bricht den Bind nicht ab und laesst RX tot; (6)
+  Registerkonformitaets-Schnappschuss des Ist-Zustands vor 0.59.18
+  (Legacy-RxConfig, kein AUTO_FIFO, EarlySize 0x3F, null ERI-Writes); (7)
+  Transition-Shutdown beweist Bus-Master-Aus und Controllerreset.
+- Permanentes Gate `Run-Rtl8168HostModel05917.ps1` vor jedem App-/
+  Modulbuild in `Build.bat` verdrahtet (Seam-Anker, Modellfall-Anker und
+  echter `zig test`-Lauf); `Build.bat -app RTL8168` inklusive neuem Gate
+  gruen. `Docs/Deployment/BuildUndTest.txt` dokumentiert das Gate.
+Abnahme:
+- Hostmodell 12/12 Tests (7 Modellfaelle + 5 Contract-Tests) deterministisch
+  gruen, standalone und im Modulbuild; 0595-Gate unveraendert gruen.
+- `Build.bat -test`: erfolgreich; `=== TEST OK ===`, `Errors: none`, das
+  0.59.17-Gate lief im Vollbuild mit. Kein Laptop-Zugriff.
+Notizen:
+- Die geplante "AA-Stand"-Warmprobe laeuft als geskripteter AA-aequivalenter
+  Bind (Modellfall 3), weil der alte Codestand nicht mehr existiert; das
+  Modell reproduziert damit exakt den realen Befund TX-konsumiert/RX-tot.
+- K4 aus 0.59.16 wurde bereits hier nachgewiesen und als KEIN DEFEKT in
+  `Rtl8168ReferenzVergleich05916.txt` geschlossen (alle Device-Mappings UC).
+- Modellfall 4 (RealWoW) und Modellfall 6 (Konformitaets-Schnappschuss)
+  kodieren bewusst den Ist-Zustand VOR 0.59.18 und werden dort auf die
+  Referenzwerte umgestellt.
+
+0.59.18
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- RealWoW-Stilllegung (Vendor-Referenz CFG_METHOD_24/25) im G-Familien-
+  Handoff nach dem NOW_IS_OOB-Clear und vor der Link-List-Uebergabe:
+  `eriWrite(0x174, 0x3, 0x00FF)` + `macOcpWrite(0xE428, 0x0010)` mit
+  Marker `RTL8168.R4D G-family RealWoW engine parked`; Fehler sind hart.
+- Vollstaendige G-Baseline `initializeGFamilyMacBaseline` exakt nach
+  upstream `rtl_hw_start_8168g/_2` (VER_42): FIFO-Groessen C8/E8, Pause-
+  Thresholds CC/D0, ASPM-Entry-Latency 0x70F=0x27, Paketfilter-Reset,
+  ERI 0x2F8=0x1D8F, RXDV-Gate-Freigabe an Referenzposition, 0xC0/0xB8=0,
+  EEE-MAC (EEE_LED-Frequenzbits, ERI 0x1B0|=0x0003; referenzgetreu
+  uebernommen, weil der bewahrte Firmware-PHY EEE bereits ausgehandelt
+  haben kann), 0x2FC-w0w1 (+0x01/-0x06), 0x1B0-Bit12 loeschen,
+  Rdy_to_L23 loeschen; danach die neue Contract-EPHY-Tabelle
+  `rtl8168g2_ephy_baseline` (neun e_info_8168g_2-Patches, testfixiert).
+- Familienkorrekte Registerwerte fuer die ganze G-Familie:
+  RxConfig = RX128_INT|MULTI|DMA_BURST|EARLY_OFF statt der Legacy-FIFO-
+  Formel, `TXCFG_AUTO_FIFO`, EarlySize 0x27; Exit-L1-Events laufen als
+  `setGFamilyExitL1Events` (OCP 0xC0AC, VER_40..63) im Bind (enable) und
+  im Transition-Shutdown (disable); das RXDV-Defensiv-Clear bleibt nur
+  fuer Legacy-Familien ohne eigene Baseline.
+- Hostmodell auf Referenzsoll gedreht: Modellfall 4 verlangt jetzt
+  geparkte RealWoW-Engine UND funktionierendes RX im bewaffneten
+  Warmszenario; Modellfall 6 prueft jeden Registerwert exakt gegen die
+  Referenz (RxConfig/AUTO_FIFO/EarlySize, alle G-Baseline-ERI-Werte,
+  EPHY-Tabelle, Exit-L1-Bits, EEE-LED, ASPM-Latency, RealWoW-Werte).
+- 0595-Gate auf die neuen Anker erweitert (Selector-Dispatch, G-Baseline,
+  RealWoW-Reihenfolge im Handoff, Exit-L1-Umbenennung); Matrix
+  (`Rtl8168ReferenzVergleich05916.txt` Abschnitt E) und
+  `TreiberStand.txt` fortgeschrieben.
+Abnahme:
+- Hostmodell 12/12 gruen (inkl. neuem Referenz-Konformitaetsfall und
+  RealWoW-Recovery), 0595-Gate 5/5 gruen, `Build.bat -app RTL8168` mit
+  beiden Gates gruen; neues `Code/zig-out/RTL8168.R4D`: 33344 Bytes,
+  SHA-256 `9CF2843CABA95B1183073E10F76FE148CDA4FE55B1869EB7DC43BCA959321212`.
+- `Build.bat -test`: Erstlauf traf den dokumentierten 240-s-Watchdog-
+  Randfall bei weiter fortschreitendem R4CODE-Selftest (Boot und alle
+  API-Marker gruen; QEMU-Testprofil laedt RTL8168.R4D nicht). Der
+  dokumentierte `-testonly`-Retry auf dem bytegleichen Testimage mit
+  `QEMU_TEST_TIMEOUT_SECONDS=360` endete mit `=== TEST OK ===` und
+  `Errors: none`. Kein Laptop-Zugriff.
+Notizen:
+- A9(1) (Exit-L1-Disable im Shutdown) ist durch die gemeinsame Funktion
+  bereits hier mitgelandet; 0.59.20 verifiziert den Warmpfad gesamthaft.
+- Bewusst offen nach Matrix: PHY-Konfiguration bleibt BMCR-Autoneg ohne
+  Firmware-Blob, RMS bleibt 1522, D3hot/WoL bleibt aus; A6/A7/A8 folgen
+  in 0.59.19.
+
+0.59.19
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- Recovery-Reife nach Referenz: Die G-Familien-Eventmaske entspricht
+  upstream `rtl_set_irq_mask` fuer VER_07+ (RxOK|RxErr|TxOK|TxErr|
+  LinkChg). SYSErr bleibt der einzige ISR-Recoveryausloeser
+  (upstream `rtl8169_pcierr_interrupt`); PCSTimeout wird nur noch
+  gezaehlt — die alte Klassifikation war die wahrscheinlichste Ursache
+  der ~15 realen Vollresets pro Sitzung. Alle gelesenen ISR-Bits werden
+  quittiert, damit unmaskierte Ereignisse nicht dauerhaft latchen. Die
+  TX-Stall-Schwelle ist auf den Netdev-Watchdog kalibriert (5000 ms).
+- Telemetrie-Reife: getrennte Zaehler `stall/syserr/pcs`, ein
+  LOGSVC-/COM1-Marker je Recovery (`RTL8168.R4D recovery cause=...
+  stall=N syserr=N pcs=N`) und Linkflanken-Marker (`link up/down`) mit
+  Flankenzaehler. Drop-Befund geklaert: `drop=415` zaehlt am
+  Ethernet-Filter verworfenen LAN-Fremdverkehr — kein Defekt, keine
+  Codeaenderung; in `TreiberStand.txt` dokumentiert.
+- MSI-Unterstuetzung als eigener Schnitt umgesetzt:
+  -- Kernel: `pci_enable_msi` in der DriverApi (Version 16, append-only;
+     `ApiContract.json` um `irq_flag_msi=4` erweitert,
+     `ApiContractGen --write --baseline` bewusst ausgefuehrt, `--check`
+     gruen, neue Canonical-SHA `b4d2a1fe...51bcc`). Die Funktion findet
+     die MSI-Capability begrenzt/zyklussicher, vergibt einen Slot aus dem
+     festen Fenster Router-IRQ 24..31 (IDT-Vektoren 56..63, immer mit
+     LAPIC-EOI), programmiert Message-Adresse (BSP-APIC-ID via neuem
+     `platform_cpu.bootApicId`), Message-Data=Vektor, 32-/64-Bit-Variante,
+     eine Nachricht, verifiziert das Enable per Readback und setzt
+     INTx-Disable ohne W1C-Status-Echo.
+  -- irq_router: `IRQ_FLAG_MSI` ueberspringt IOAPIC-/PIC-Aktivierung
+     (MSI hat keine Leitung); Dispatch und EOI laufen ueber die
+     bestehenden fest verdrahteten Vektoren.
+  -- Treiber: MSI-first mit `OPTION RTL8168 msi=off`-Killswitch,
+     `supportsDriverApi(16)`-Guard, exakt einer registrierten Route und
+     Marker `RTL8168.R4D MSI registered`; shared INTx und Polling bleiben
+     unveraenderte Fallbacks (`MSI unavailable; trying shared INTx`).
+  -- SDK: `pciEnableMsi`-Wrapper; Hostmodell-Mock mit MSI-Szenarioknopf.
+- Hostmodell auf 14 Tests erweitert: MSI-Praeferenz (genau die gewaehrte
+  Route, keine Recovery-Marker im Normalbetrieb) und INTx-Fallback
+  (Line+GSI-Routen, RX-Verkehr) sind fixiert; 05917-Gate um beide
+  Testanker erweitert.
+Abnahme:
+- Hostmodell 14/14 gruen; 0595-Gate (inkl. neuer MSI-/Recovery-Anker) und
+  05917-Gate gruen; `Build.bat -kernel` mit der MSI-Infrastruktur gruen;
+  `ApiContractGen --check` gruen (Canonical `b4d2a1fe...51bcc`).
+- Kompletter `Build.bat -test`: `=== TEST OK ===`, `Errors: none`. Der
+  Erstversuch scheiterte an einem transienten OS-Lesefehler auf einer
+  Zig-Stdlib-Datei beim Kompilieren von STACKD (`unable to load
+  'SinglyLinkedList.zig': Unexpected`, kein Bezug zum Aenderungsstand);
+  der unveraenderte Retry lief vollstaendig durch. Kein Laptop-Zugriff.
+Notizen:
+- MSI ist in QEMU nicht am RTL8168 pruefbar (keine Emulation); die
+  funktionale MSI-Abnahme auf echter Hardware gehoert zur
+  0.59.15-Wiederaufnahme. Fehlprogrammierung degradiert durch den
+  Poll-Fallback nicht unter den heutigen Stand; `msi=off` ist der
+  dokumentierte Killswitch. Auf der Hardware ist MSI-Betrieb als
+  `irq=28` mit steigenden `hits` in `IPCONFIG /ALL` erkennbar.
+
+0.59.20
+Status: Erledigt
+Offene Punkte:
+- Keine. Die Ausreifungslinie 0.59.16..0.59.20 ist abgeschlossen; es folgt
+  die Wiederaufnahme von 0.59.15 nach dem untenstehenden Plan.
+Erledigt:
+- Transition-/Warmstart-Reife im Modell verifiziert: Der neue Modellfall
+  "warm transition shutdown parks the MAC and disables exit-L1 events"
+  faehrt den kompletten Warmzyklus (Warm-OOB-Bind mit bewaffneter
+  RealWoW-Engine, dann `rtl8168_shutdown`) und beweist Bus-Master-Aus,
+  Controllerreset, gesetztes RXDV-Gate, geloeschte
+  G-Familien-Exit-L1-Events und die Idempotenz des gecachten
+  Transition-Ergebnisses. Das Modell-Kaltszenario bleibt Pflichtabnahme
+  und ist unveraendert gruen; die fail-closed-Poweroff-Klassifikation aus
+  0.59.15 ist unangetastet.
+- 05917-Gate um den Warmzyklus-Anker erweitert;
+  `Docs/Deployment/BuildUndTest.txt` beschreibt den vollen 0.59.17..0.59.20-
+  Umfang des Hostmodell-Gates.
+- Konsolidierte Gesamtabnahme: Hostmodell 15/15, 0595- und 05917-Gate
+  gruen, kompletter `Build.bat -test` `=== TEST OK ===`/`Errors: none`
+  (der Lauf brauchte auf dem ausgelasteten Host den dokumentierten
+  `-testonly`-Retry mit `QEMU_TEST_TIMEOUT_SECONDS=480`; der Gast
+  progressierte dabei jeweils normal), abschliessendes `Build.bat -norun`
+  mit normalem 84-R4X-Produktionsplan.
+- Finale Artefakte: `Code/zig-out/bin/r4os.elf` 10821512 Bytes, SHA-256
+  `9CA7577EBA10C4CB4B9901D004EF4DFF7B2C8A4CE18F9F34271471AFEFF56DB7`;
+  `Code/zig-out/RTL8168.R4D` 33384 Bytes, SHA-256
+  `83FD38D70BC00204231A59FABC9DFCBC786D21000542E8530EB143F36EE98A3C`;
+  `Release/disk.img` (Produktionsimage, neue Flashbasis) 536870912 Bytes,
+  SHA-256 `BEF5D92869068BEB0355175D06B9A7BAC48FEF148489CE00315E0A9075396599`.
+- Wiederaufnahme-Paket `Release/R4OS05915AC.R4U`: 10855534 Bytes, SHA-256
+  `658E9DF249708BBA31C43D78A0B252F60484710D9817EC50365733A674B4CAA5`,
+  genau zwei Payloads in dieser Reihenfolge: RTL8168.R4D nach
+  `C:\R4OS\DRIVERS\RTL8168.R4D` (driver), danach der Kernel nach
+  `/boot/r4os.elf` (boot-kernel); 10854896 Payloadbytes, Gesamt-FNV
+  2275183906, min/target 0.59.15, reboot=yes. Der Kernel ist wegen der
+  MSI-Infrastruktur (DriverApi v16) zwingend Teil des Pakets; Kernel und
+  Treiber muessen gemeinsam installiert werden.
+- `VERSION.R4S` bleibt bewusst auf 0.59.15: Die sichtbare Version gehoert
+  der pausierten Hardware-Unterversion und wird erst mit deren
+  erfolgreicher Wiederaufnahme fortgeschrieben.
+Abnahme:
+- Alle Gates und der komplette QEMU-Smoke gruen; Paket gebaut und
+  dokumentiert; Wiederaufnahmeplan liegt vor. Kein Laptop-Zugriff in der
+  gesamten Linie 0.59.16..0.59.20.
+Notizen — Wiederaufnahmeplan 0.59.15:
+- (1) Kaltstart durch den User; danach read-only per SSH: `TYPE VERSION.R4S`
+  (erwartet 0.59.15), `SYSUPD STATUS` (erwartet cleanup/Transaktion 7 von
+  Paket AB), `IPCONFIG /ALL`, LOGCENTER-Export `SEARCH=RTL8168` (erwartet
+  AB-Kaltbootmarker `xid=0x509 ... oob-handoff=yes`).
+- (2) `R4OS05915AC.R4U` per SFTP-Inbox uebertragen (Rueckdownload-SHA
+  bytegleich), `SYSUPD VERIFY` (2 Payloads, 10854896 Bytes), `SYSUPD APPLY`
+  (erwartet `applied=2/2`, Journal cleanup), Journal-/VERSION-Kontrolle.
+- (3) Soft-`REBOOT`-Probe 1 mit Ping-Watcher: Erfolgskriterium ist die
+  Rueckkehr auf `.213` mit DHCP `bound`. Danach Marker sichern:
+  `RTL8168.R4D xid=0x509`, `G-family RealWoW engine parked`,
+  `G-family OOB/shared-FIFO handoff applied`, `MSI registered` (oder
+  dokumentierter Fallback), `link up`; in `IPCONFIG /ALL` gilt `irq=28`
+  mit steigenden `hits` als MSI-Beweis, Recovery-Marker duerfen im
+  Normalbetrieb nicht auftreten.
+- (4) Soft-`REBOOT`-Probe 2 (Reproduzierbarkeit), danach Kabel-Linkflap
+  (Marker `link down`/`link up`, DHCP-Reacquire nach 0.59.13-Vertrag).
+- (5) Restliche gebuendelte 0.59.15-Hardwarelinie gemaess Unterversionsziel:
+  USB-HID/USBMSC, Desktop, SSH/RDP, LOGCENTER/SERVMAN, SYSUPD mit aktivem
+  FTPSVC und vollem Produktionsbestand; erst nach Bestehen VERSION-Bump und
+  Roadmap-Abschluss von 0.59.15.
+- Rueckfallebenen: `OPTION RTL8168 msi=off` in `CONFIG.R4S` erzwingt den
+  alten INTx-/Pollpfad ohne neues Paket; die Pakete AA/AB liegen weiter in
+  der Laptop-Inbox fuer einen Treiber-Rollback per explizitem VERIFY/APPLY;
+  das neue Produktionsimage `disk.img` (SHA `BEF5D928...6599`) ist die
+  geprueften Flashbasis fuer den USB-Stick-Weg.
+- Scheitert Probe 3 oder 4 erneut, gilt die Fall-a/b/c-Matrix aus
+  `Rtl8168ReferenzVergleich05916.txt` Abschnitt C mit den neuen Markern;
+  read-only sichern, nicht iterieren.
+- HARDWAREBEFUND der ersten AC-Wiederaufnahme (19.07. abends): Upload,
+  VERIFY und APPLY von `R4OS05915AC.R4U` liefen sauber (`applied=2/2`,
+  Transaktion 8). Die Warmprobe scheiterte NEU-ANDERS: MSI wurde real
+  vergeben (`irq=24 registered=yes`), aber `hits=0`; vor allem schloss
+  **TX gar nicht mehr ab** (`submitted-tx=69`, `completed-tx=0`,
+  Treiber-`err=45`, DHCP `Discover/Offer 23/0` mit `offer-timeout`).
+  Der ueber `C:\TEMP\NETLOG.TXT` gesicherte Warmlog zeigt eine endlose
+  TX-Stall-Schleife (ueber 108 `recovery cause=tx-stall`-Zyklen, je mit
+  neu angewandter G-Baseline). Auch der KALTSTART blieb ohne IP: Die
+  0.59.18/19-Registeraenderungen brechen die reale TX-Engine auf dem GU
+  in beiden Bootpfaden; Hauptverdaechtige sind `TXCFG_AUTO_FIFO` samt
+  FIFO-ERI-Werten, EarlySize 0x27 und EEE-MAC — nichts davon ist in QEMU
+  oder im Hostmodell gegen echtes Silizium pruefbar. Das AB-Bild
+  (TX scheinbar ok, RX tot) war vermutlich Firmware-Schlucken der
+  TX-Deskriptoren, wie im Modellfall 3 modelliert.
+- RECOVERY: Der User hat den Systemstick an den Buildhost gebracht. Der
+  AC-Treiber wurde vom Stick gesichert und byteverifiziert durch den
+  kaltstart-erprobten AB-Treiber ersetzt (aus `R4OS05915AB.R4U`
+  extrahiert, SHA-256
+  `DF467133EB60EB5EAE4FE49BE51162916FAE8249E3B71EBC4F2A26BB90237C9C`,
+  auf dem Stick verifiziert). Der AC-Kernel (DriverApi v16, append-only)
+  bleibt; der AB-Treiber ist dagegen kompatibel. Erwartung: Kaltstart
+  wieder mit `.213`.
+- BISEKTIONS-ITERATION (19.07. abends, laufend): Der Diagnosetreiber
+  besitzt OPTION-Schalter (`autofifo`, `gbaseline`, `ephy`, `eee`,
+  `rxcfg`, `realwow`, `exitl1`; Default Referenz-an) plus
+  selbstdokumentierende Options-Bootlogzeile. Hardware-Test 1
+  (`ephy=off`, Rest an, via Paket `R4OS05915AD.R4U`) scheiterte:
+  Die EPHY-Patches allein sind NICHT der TX-Killer.
+- Daraus wurde die SELBSTBISEKTIONSLEITER: Bei zwei TX-Stalls pro Stufe
+  unterdrueckt der Treiber kumulativ `eee` -> `autofifo` -> `gbaseline`
+  -> `ephy` -> `rxcfg` -> `realwow`+`exitl1` (Marker
+  `bisect escalation level=N` samt Optionszeile) und endet damit immer
+  sendefaehig. Ein TX-KANARIENVOGEL (Miniframe an die eigene MAC,
+  EtherType 0x88B5, alle 2 s bis zur ersten real abgeschlossenen
+  Sendung, Marker `tx canary confirmed level=N canary=...`) fuettert die
+  Stall-Erkennung ohne externen Verkehr; ohne ihn verhungert die Leiter
+  bei statischer Konfiguration (realer Befund aus Test 1).
+- Hostmodell 19/19 (u.a. Leiter-Eskalation und vollautonomes Einpendeln
+  ueber den Kanarienvogel bei modelliertem AUTO_FIFO-Killer); 0595- und
+  05917-Gate erweitert und gruen. Produktionsimage
+  `E22FDF278261F59E980FA93E1C6A01E99C9607FA9A681F2834B7FD66793B2048`
+  wurde vom User geflasht und real gebootet.
+- ERGEBNIS des ersten autonomen Laufs (frischer Flash, lange stromlose
+  Phase): `tx canary confirmed level=0 canary=1 stalls=0` und KEINE
+  einzige Leitereskalation. Der TX-Pfad ist mit VOLLER
+  Referenzkonfiguration gesund; der fruehere TX-Stall-Sturm reproduziert
+  sich nach echter Entstromung nicht. Arbeitshypothese: Die GU-NIC
+  ueberlebt kurze Power-Zyklen (Laptop-Standby-Versorgung) mit
+  vergiftetem internem Zustand; die frueheren "auch kalt kaputt"-Befunde
+  waren Folgezustaende der vorangegangenen Stall-Stuerme. Konsequenz
+  fuer alle kuenftigen Hardwaretests: zwischen Fehlversuchen zaehlt nur
+  eine echte, laengere stromlose Phase als Kaltzustand.
+- ABER: RX blieb in diesem Lauf stumm (keine ARP-Antwort, keine Lease,
+  MAC-Scan leer) - das urspruengliche 0.59.15-RX-Fehlerbild, jetzt auf
+  dem Kaltpfad mit Referenzkonfiguration. Die Leiter hatte dafuer einen
+  blinden Fleck: sie eskalierte nur bei TX-Stalls.
+- Deshalb RX-ARM der Leiter ergaenzt: Nach bestaetigtem TX eskaliert
+  jede 8-Sekunden-Stille im Empfang (ein Heim-LAN ist nie still) die
+  Leiter genauso, mit Markern `bisect rx-silence escalation level=N`
+  und `rx path confirmed level=N`. Hostmodell 20/20 inkl. neuem
+  RX-Arm-Fall (RxConfig-Familienbits als modellierter RX-Killer;
+  Diskriminator ist RX_EARLY_OFF Bit 11, weil die Legacy-Formel 7<<13
+  Bit 15 ebenfalls setzt). Flashimage
+  `C8F42179B73DCA8FA9B830ACCFDA0A95F10894EA1BC0CDECF1854F59E53D92A1`.
+- DURCHBRUCH im zweiten autonomen Lauf (19.07. ~18:34): Nach echtem
+  Kaltstart bestaetigte der Kanarienvogel TX auf Stufe 0, der RX-Arm
+  eskalierte GENAU EINMAL und der Empfang kehrte sofort zurueck:
+  `bisect rx-silence escalation level=1` -> `eee=off` ->
+  `rx path confirmed level=1 rxsilence=1`. DER RX-KILLER IST DIE
+  EINSEITIGE EEE-MAC-KONFIGURATION (EEE_LED-Bits + ERI 0x1B0|=0x0003)
+  OHNE die zugehoerige PHY-seitige EEE-Konfiguration: upstream setzt
+  beide Seiten (PHY via rtl8168g_2_hw_phy_config samt Firmware), wir
+  bewusst nur die MAC-Seite -> die MAC faellt in Low-Power-Idle und der
+  Empfangspfad steht. Der A2(8)-Risikovermerk der Matrix war korrekt;
+  der 0.59.18-Fix ist, den EEE-MAC-Block dauerhaft zu entfernen
+  (bewusst-anders: kein EEE ohne PHY-EEE-Vertrag).
+- Im selben Lauf: DHCP `bound` mit exakt Discover/Offer 1/1 und
+  Request/Ack 1/1 sowie ERSTMALS REALE MSI-INTERRUPTS
+  (`irq=24 registered=yes hits=481`) - das historische `hits=0` ist
+  geloest, die NIC laeuft interruptgetrieben mit Poll-Sicherheitsnetz.
+  TX/RX-Zaehler vollstaendig gesund, keinerlei Recovery im Normalbetrieb.
+- Die anschliessende Warmreboot-Probe scheiterte weiterhin (down
+  18:35:58, keine Rueckkehr, MAC nirgends im Subnetz). Da die Leiter
+  im Warmfall bis zur AB-aequivalenten Stufe herunterschalten kann,
+  liegt der Warm-Killer AUSSERHALB aller gegateten Registerpfade.
+  Verbleibende Kandidaten: (a) harter Bind-Abbruch im warm vergifteten
+  Zustand (dann laeuft keine Leiter; Fail-open-Bind noetig) oder
+  (b) der GPHY, die einzige nie zurueckgesetzte Komponente
+  ("Firmware-Erhalt"; der H-Pfad besitzt einen PHY-Softreset, der
+  GU-Pfad nur Autoneg-Restart). Das Warm-Bootlog wurde vom User als
+  `C:\TEMP\WARM.TXT` PERSISTENT auf den Stick exportiert und ist bei
+  jeder naechsten Gelegenheit auslesbar; es trennt (a) von (b).
+- WICHTIGE Plattformerkenntnis verschaerft: Auch ~30 Sekunden stromlos
+  reichen NICHT als Kaltzustand - nach der gescheiterten Warmprobe blieb
+  auch der folgende Kaltboot netzlos. Der Laptop-Akku versorgt die
+  NIC-Standby-Schiene weiter; als echter Kaltzustand zaehlt nur eine
+  laengere stromlose Phase (Minuten). Alle frueheren "auch kalt
+  kaputt"-Befunde sind damit als Zustandsvererbung erklaerbar.
+- WARM.TXT AUSGEWERTET (vom Stick am Host gelesen): Der Warm-Bind lief
+  vollstaendig, die Leiter kletterte korrekt bis Stufe 6 (AB-aequivalente
+  Minimalkonfiguration) und TX stallte trotzdem endlos weiter (99+
+  Stalls auf Endstufe). Fall (a) Bind-Abbruch ist damit WIDERLEGT;
+  Fail-open-Bind ist nicht das fehlende Stueck. Der Warm-Killer sitzt in
+  Zustand, den keine Registerkonfiguration und kein CmdReset loescht -
+  uebrig bleiben GPHY (wird von uns nie resettet; Linux resettet ihn bei
+  jedem Up via phy_init_hw) und MAC-MCU (Vendor nullt deren Breakpoints
+  bei jedem Init via hw_disable_mac_mcu_bps; kalt No-op, warm heilsam).
+- NEUER STAND (implementiert, Hostmodell 21/21):
+  (1) EEE endgueltig bewusst-anders: Default aus, nur expliziter Opt-in
+  `OPTION RTL8168 eee=on`; Kaltboots brauchen keine Eskalation mehr.
+  (2) MCU-Breakpoint-Stilllegung fest im G-Handoff (Vendor-Sequenz
+  0xFC28..0xFC36=0, 3 ms, 0xFC26=0; Marker `MAC MCU breakpoints
+  cleared`).
+  (3) Leiter neu nummeriert (L1 autofifo, L2 gbaseline, L3 ephy,
+  L4 rxcfg, L5 realwow+exitl1) mit PHY-SOFTRESET-NOTANKER als Endstufe
+  L6: begrenzte BMCR-Resets (max. 3 Versuche, Marker
+  `bisect phy reset applied attempt=N`), ausgeloest von TX-Stall- UND
+  RX-Stille-Arm; der Kaltpfad erreicht die Stufe nie. Der neue
+  Modellfall repliziert exakt das WARM.TXT-Bild (TX erst nach
+  PHY-Reset) und heilt es.
+  Danach: Flash, autonomer Warm-/Kalttest; erst nach realem Warmbefund
+  regulaere Gates-/QEMU-Gesamtabnahme und die restliche 0.59.15-Linie.
+- REALER NEGATIVBEFUND zum MCU-Eingriff (Image `89191980...4D08`):
+  Der Kaltboot mit der Vendor-Sequenz `hw_disable_mac_mcu_bps` im
+  Handoff kam NICHT ins Netz (MAC nirgends im Subnetz) - das Nullen der
+  MCU-Breakpoint-Bank (insb. 0xFC26) stoppt auf dem realen GU
+  offenkundig die laufende ROM-Firmware der MCU und toetet den kalten
+  Datenpfad. Der Vendor nutzt die Sequenz nur unmittelbar vor dem Laden
+  eigener MCU-Patch-Firmware. KONSEQUENZ (dauerhaft): keine
+  MCU-Eingriffe ohne vollstaendigen Patch-Vertrag; die Sequenz wurde
+  ersatzlos entfernt und im Code als bewusste Sperre dokumentiert.
+  Damit traegt den Warmpfad-Notanker allein der PHY-Softreset (L6).
+  Korrigiertes Image (ohne MCU-Eingriff, Hostmodell 21/21, alle Gates
+  gruen): `Release/disk.img`, 536870912 Bytes, SHA-256
+  `5179083B2E7C9A66EC6C8D37312DF133A70353ACE72037F065C3679C1A6D24B8`.
+  Der Laptop braucht nach dem MCU-Fehlversuch wieder eine laengere
+  stromlose Phase vor dem naechsten Kaltboot.
+- Der erste Kaltboot des korrigierten Images zeigte `0.0.0.0` - aber der
+  Vollexport `D.TXT` (vom User erzeugt, am Host ausgewertet) widerlegte
+  die MCU-Vererbungs-These fuer diesen Boot: Der Treiber war KOMPLETT
+  gesund (`tx canary confirmed level=0 stalls=0`,
+  `rx path confirmed level=0 rxsilence=0` - reale Frames empfangen und
+  zugestellt, null Eskalationen). Das `0.0.0.0` entstand OBERHALB des
+  Treibers: Der DHCP-Client fuhr endlose `acquire`/`offer-timeout`-
+  Zyklen (op_gen 2..10+), ohne dass je ein Offer die DHCP-Schicht
+  erreichte. Kandidaten: FritzBox-Drossel nach den heutigen
+  Discover-Stuermen dieses Geraets oder ein Annahmedetail der strikten
+  0.59.13-Offer-Bindung. Das ist eine Netzstack-/Serverseiten-Frage,
+  KEIN Treiberproblem mehr.
+- Nebenbefund: Die LOGCENTER-Suche ist case-sensitiv und das Terminal
+  schreibt Eingaben gross - lokale Suchen nach kleingeschriebenen
+  Markern (`bisect`) sind am Geraet derzeit nicht moeglich; fuer
+  kuenftige Marker Grossschreibung oder case-insensitive Suche erwaegen.
+- Als Bruecke wurde die bewaehrte statische `.213`-Konfiguration direkt
+  auf dem Stick in `CONFIG.R4S` eingetragen (Stick war am Host). Ablauf
+  bei Wiederaufnahme: Kaltboot -> sofortige Erreichbarkeit ->
+  Kaltverifikation per SSH (Stufe 0, MSI-Hits) -> WARMREBOOT-PROBE mit
+  PHY-Anker -> danach Live-Diagnose des DHCP-Offer-Raetsels (UDP-/
+  DHCPSVC-Telemetrie waehrend `DHCP ACQUIRE`).
+- REALER SCHLUSSBEFUND DER BISHERIGEN LINIE: Auch mit statischer IP
+  scheiterte das Image 5179 (Netzwerkeinstellungen -> Test -> "Backend
+  Error"), waehrend derselbe Boot zuvor (19:34, D.TXT) voellig gesund
+  war; ein Windows-Boot auf derselben Hardware bezog sofort DHCP .213.
+  Identische Software, boot-zu-boot gegensaetzliche Ergebnisse: Der
+  neue Bind ist ZUSTANDSABHAENGIG instabil. Der User stellte die
+  entscheidende Frage: VOR 0.59.15 funktionierten Kaltboot mit DHCP
+  und statischer IP zuverlaessig - die Regression kam von uns.
+- UNVOREINGENOMMENE CODE-REVIEW (git): Der Treiber hat genau EINEN
+  Commit (0.59.5); der komplette OOB-/Shared-FIFO-Handoff, beide
+  Bind-CmdResets, ERI-/EPHY-/MAC-OCP-Baseline, RealWoW-Parken,
+  Exit-L1, AUTO_FIFO/EarlySize-0x27/RxCfg-Familienbits, resetMacAfterPhy
+  und der Pre-Bind-Bus-Master-Tanz existierten im wochenlang kalt
+  bewiesenen Stand NICHT und liefen im neuen Bind UNBEDINGT auf jeder
+  Leiterstufe - sie waren nie Teil irgendeiner Bisektion. Ein CmdReset
+  plus OOB-Uebergabe auf einem Chip, den das UEFI bereits im
+  Treibermodus uebergibt, erklaert exakt die boot-abhaengigen
+  Totalausfaelle.
+- RUECKBAU AUF MINIMAL-BIND PLUS ERKENNTNISSE (umgesetzt): main.zig
+  wurde frisch aus dem committeten 0.59.5-Original aufgebaut (2135 ->
+  ~1080 Zeilen, R4D 33 KB -> 11 KB Code). Der Bind ist wieder der
+  reset-freie Legacy-Pfad (Stop, RXDV-Gate loeschen, Deskriptoren,
+  Legacy-TX/RX-Config, EarlySize 0x3F, CPlus DAC+MulRW, Ringe, RX/TX
+  an; Autoneg-Anstoss nur bei Link-down). Behalten und real bewiesen:
+  MSI mit `msi=off`-Killswitch und INTx-/Poll-Fallback, kalibrierte
+  Recovery (PCSTimeout nur zaehlen, SYSErr einziger IRQ-Ausloeser,
+  5-s-Stallschwelle, Ack-all, Ursachen-Telemetrie), TX-Kanarienvogel
+  plus `tx canary confirmed`/`rx path confirmed`-Marker (reine
+  Diagnose, ohne Eskalationsleiter), Link-Marker, XID-Logzeile
+  (` bind=reset-free`), Testseams, Kernel-Transition (fail-closed)
+  mit reset-freiem Treiber-Shutdown, der die DMA-Region fuer den
+  Transition-Owner haelt. ENTFERNT: Handoff, Baselines, RealWoW,
+  Exit-L1, PHY-Softreset-Anker, Bisektionsleiter samt Optionen,
+  Pre-Bind-BM-Dance, Upstream-L1. Das Hostmodell (12 Modelltests plus
+  5 Contract-Tests, 17/17 gruen) fixiert den Pfad jetzt auch NEGATIV:
+  Der Bind darf keinerlei ERI-/EPHY-/MAC-OCP-/CFG9346-Zugriffe und
+  keinen CmdReset machen; Gate 0595 verbietet die entfernten Token
+  hart. Warm-OOB bleibt als dokumentierte Plattformrealitaet im Modell
+  (Antwort: Kernel-Transition-Shutdown plus Kaltstart, kein
+  Bind-Eingriff). Wiedereinbau einzelner Referenzfeatures nur noch
+  Feature fuer Feature mit realem Mehrboot-Kaltstartnachweis.
+- Warmreboot-Politik nach Rueckbau: nicht laenger im Bind-Code jagen.
+  Der Warmstart hat mit keiner Treibervariante je funktioniert und die
+  NIC-Zustandsvererbung ueber kurze Stromzyklen ist plattformseitig;
+  wie real bei 0.59.6 gilt Poweroff/Kaltstart als dokumentierter
+  Aktivierungsweg. Softwareseitig verbleibt die Kernel-Transition
+  (DMA-Stilllegung vor ACPI-Reset) als Hygiene.
+- Abnahme des Rueckbaus lokal: Gate 0595 (5/5) und Hostmodell-Gate
+  0.59.17 (17/17) gruen, `Build.bat -app RTL8168` gruen (R4D-Codegroesse
+  33 KB -> 11 KB), volles `Build.bat -test` mit QEMU-Smoke im ersten
+  Anlauf `TEST OK` (Boot, Poweroff, alle API-Marker, keine Fehler).
+  Produktions-Image aus denselben Artefakten: `Release/disk.img`,
+  536870912 Bytes, SHA-256
+  `C9011255DF9A9F0AB91D8E328087C3E1E913428420332A51AD87B0CBF9D3A488`.
+  Das Image nutzt die Produktions-`Injection/` (DHCP an, keine
+  statische IP mehr).
+- REALER KALTBOOT 1 MIT RUECKBAU-IMAGE C9011255 (Volltreffer): DHCP
+  Discover/Offer 1/1, Request/Ack 1/1/0, Retries/Timeouts 0/0, State
+  bound (.213, 10-Tage-Lease). MSI real: irq=24 registered hits=263.
+  Verkehr sauber: accepted-rx=151 submitted-tx=49 err=0 retrans=0;
+  SSH-Session lief ueber den Treiber. Logmarker in exakt erwarteter
+  Folge: `xid=0x509 phy=gphy-ocp bind=reset-free`, `options msi=on
+  irq=on`, `MSI registered`, `link up`, `tx canary confirmed canary=0
+  stalls=0` (erste echte Sendung schloss vor dem ersten Kanarienvogel
+  ab), `rx path confirmed`. KEINE Recovery-, Stall- oder Fehlermarker.
+  Damit ist die Rueckbau-These real bestaetigt: Die 0.59.16..20-
+  Bind-Eingriffe WAREN die Kaltpfad-Regression. Der fruehere
+  DHCP-Offer-Starvation-Befund trat nicht wieder auf und war
+  hoechstwahrscheinlich dieselbe zustandsabhaengige Bind-Instabilitaet
+  (halbtoter RX), kein Netzstack-Fehler.
+- Nebenbefund KORRIGIERT: `POWEROFF` ueber `Invoke-R4OsSshExec`
+  funktioniert. Der 30s-Exec-Timeout ist erwartetes Verhalten (der
+  SSH-Kanal stirbt mit der Maschine); die anschliessend beobachtete
+  Erreichbarkeit war bereits der NAECHSTE fertige Kaltboot, weil der
+  User sofort wieder eingeschaltet hatte. Damit zaehlt auch dieser
+  Schnellzyklus als sauberer Kaltboot (SSH + VERSION.R4S ok) -
+  effektiv 3/3 fehlerfreie Kaltboots. REBOOT ueber denselben
+  Exec-Pfad loeste ebenfalls sauber aus.
+- REALER KALTBOOT 2 (nach KURZEM Stromzyklus, manueller Poweroff ueber
+  das Geraet): identisch perfekt - Discover/Offer 1/1, Request/Ack
+  1/1/0, Retries/Timeouts 0/0, bound .213; MSI irq=24 hits=416, err=0,
+  retrans=0, SSH aktiv. Damit ist auch das kritische Kurzzyklus-
+  Fenster (NIC-Zustandsvererbung) mit dem Minimal-Bind sauber.
+  Der manuelle Poweroff am Geraet funktionierte normal.
+- REALER WARMREBOOT-TEST (gezielt, ein Versuch, per SSH-Exec REBOOT):
+  Der Reboot loeste aus (Ping nach 3 s weg; der SSH-Exec-Pfad traegt
+  REBOOT also, anders als POWEROFF). Nach ~3,5 Minuten weiterhin kein
+  Ping - der alte Warmreboot-Fehler ist mit dem Minimal-Bind
+  UNVERAENDERT da, wie mit jeder bisherigen Treibervariante. Das
+  bestaetigt die Einordnung als Plattformrealitaet (NIC-Zustand
+  ueberlebt den ACPI-Warmreset; nur Stromentzug setzt zurueck) und
+  entlastet den Rueckbau: Kaltpfad stabil, Warmpfad unabhaengig davon
+  defekt.
+- WARMREBOOT MIT STATISCHER IP (gezielter Zweittest): CONFIG.R4S wurde
+  per SFTP live auf die statische .213-Konfiguration umgestellt
+  (bytegleich verifiziert), dann warmer REBOOT per SSH. Ergebnis:
+  offline nach 4 s, nach 4 Minuten weiterhin KEIN Ping. Der
+  Warmreboot-Ausfall ist damit definitiv NIC-/Datenpfad-seitig und
+  NICHT DHCP-spezifisch - ohne jede DHCP-Beteiligung bleibt die
+  Maschine unerreichbar (konsistent mit den endlosen TX-Stalls aus
+  WARM.TXT). Vollstaendige Matrix, alle vier Felder real geprueft:
+  kalt+DHCP ok (4/4), kalt+statisch ok (live bestaetigt:
+  `Source: config`, .213, Ping+SSH), warm+DHCP tot, warm+statisch
+  tot. Aktuelle Antwort bleibt Poweroff/Kaltstart (bzw. die
+  diskutierte Reboot-als-Poweroff-Policy). Die statische
+  CONFIG.R4S ist aktuell auf dem Geraet aktiv; Ruecksetzung auf
+  `dhcp=on` per SFTP jederzeit moeglich.
+- WICHTIGE KORREKTUR DER EINORDNUNG: "Softwareseitig nicht loesbar"
+  ist FALSCH - Windows rehabilitiert dieselbe NIC aus jedem vererbten
+  Zustand per Software (real bewiesen). Korrekt ist: mit unserer
+  registerbasierten Versuchsliste nicht loesbar. Der konkrete fehlende
+  Baustein ist die FIRMWARE: Windows-Treiber und Linux r8169 laden
+  fuer den GU einen MCU-Patch (linux-firmware `rtl_nic/rtl8168g-2.fw`
+  fuer VER_42) plus PHY-Parameterprogrammierung; R4OS laedt gar keine.
+  Unser MCU-Fehlversuch war exakt die gefaehrliche Haelfte des
+  Zwei-Schritte-Vertrags (Breakpoints nullen OHNE anschliessenden
+  Patch-Load). Ein vollstaendiger Firmware-Ladepfad (MCU-Patch +
+  rtl_fw-PHY-Writer; Lizenz-/Redistributionsfrage klaeren) ist ein
+  moeglicher spaeterer Unterversionskandidat - unter dem
+  Negativ-Gate-Regime Feature fuer Feature mit realem
+  Mehrboot-Kaltstartnachweis. Bis dahin gilt Poweroff/Kaltstart.
+- Der Firmware-Pfad ist als Linie 0.59.21..0.59.24 unten eingeplant.
+  Die aelteren Wiederaufnahme-Pakete `R4OS05915AC.R4U`/`R4OS05915AD.R4U`
+  sind durch den Rueckbau OBSOLET (enthalten den alten Treiber);
+  aktuelle Flashbasis ist ausschliesslich das Rueckbau-Image
+  `C9011255...D3A488`. `VERSION.R4S` bleibt weiterhin bewusst auf
+  0.59.15 bis zur erfolgreichen Wiederaufnahme.
+
+0.59.21
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- Firmware-Analyse abgeschlossen; Ergebnis in
+  `Docs/Drivers/Rtl8168FirmwarePfad05921.txt`. Kernbefunde:
+  (1) XID 0x509 ist vendor CFG_METHOD_25 (TxConfig 0x50800000 +
+  ICVerID 0x00100000) bzw. upstream VER_42; beide Referenzen binden
+  `rtl_nic/rtl8168g-3.fw` (die fruehere g-2-Notiz war falsch, g-2
+  gehoert zu VER_40).
+  (2) QUELLENENTSCHEIDUNG: Vendor-GPL-C-Arrays statt .fw-Datei. Der
+  Vendortreiber enthaelt BEIDE Bausteine vollstaendig inline:
+  MAC-MCU-Patch `set_mac_mcu_8168gu_2` (417 MAC-OCP-Writes) und
+  PHY-MCU-RAM-Code `set_phy_mcu_8168gu_2` (38 Ops: 37 Writes + 1 RMW).
+  Kein rtl_fw-Interpreter, keine externe Datei, keine
+  Binaer-Redistributionsfrage; Provenienz dokumentiert.
+  (3) Vollstaendiger MAC-MCU-Vertrag spezifiziert: BPS 0xFC28..36=0,
+  3 ms, 0xFC26=0 -> Patch 0xF800..0xFB2E -> 0xFC26=0x8000 ->
+  Breakpoints (0x0297/0x00A9/0x012D/0x08DF). Der reale
+  0xFC26-Negativbefund war exakt der Zustand nach Schritt 1 ohne
+  Schritte 2+3; der Vertrag ist unteilbar.
+  (4) PHY-Vertrag: Versionsmarker Seite 0x0A43/0x801E gegen 0x0001
+  (idempotent, Skip wenn aktuell), Patch-Request-Handshake
+  0x0B82/0x10 Bit4 -> Wait 0x0B80/0x10 Bit6, RAM-Code, Marker
+  schreiben. Designpunkt fuer den Warmtest: fw=force ignoriert den
+  Marker (vergifteter PHY kann "aktuell" melden).
+  (5) Integrationsdesign fuer 0.59.22 fixiert: eigener Baustein
+  `rtl8168_firmware.zig` (generierte Tabellen + Lader), nur hinter
+  `OPTION RTL8168 fw=on|force` (Default aus), exakte 0x509-Grenze,
+  Ladepunkt vor initializeHardware, mechanische Tabellen-Extraktion
+  per DevTools-Script, Gate-Erlaubnis fuer indirekte Zugriffe NUR in
+  dieser Datei, Fehlersemantik best-effort-zu-Ende + fataler Marker.
+Abnahme:
+- Analysedokument liegt vor (UTF-8 BOM), Roadmap-Kernbefunde
+  eingetragen. Keine Codeaenderung; kein Laptop-Zugriff.
+Notizen:
+- Lizenz: GPL-2.0-Quellkonstanten im privaten R4OS unkritisch; bei
+  spaeterer Weitergabe auf linux-firmware-Datei wechseln oder neu
+  bewerten.
+
+0.59.22
+Status: Erledigt
+Offene Punkte:
+- Keine.
+Erledigt:
+- Tabellen-Generator `Export-Rtl8168FirmwareTables05922.ps1` extrahiert
+  mechanisch aus dem GPL-Vendortreiber und erzeugt
+  `src/rtl8168_firmware_tables.zig` (417 MAC-Words mit Ankern
+  0xF800=0xE008 / 0xFC26=0x8000 / 0xFC36=0x08DF; 38 PHY-Ops inkl.
+  rmw17_clear_bit0); harte Zaehl-/Ankervalidierung im Generator.
+- Lader `src/rtl8168_firmware.zig`: einziger Ort mit indirekten
+  MAC-OCP-/GPHY-OCP-Zugriffen. Unteilbarer MCU-Vertrag (BPS nullen,
+  3 ms, 0xFC26=0, komplette Tabelle inkl. Aktivierung), PHY-RAM-Code
+  mit Patch-Request-Handshake (0x0B82/0x10 Bit4 -> 0x0B80/0x10 Bit6,
+  200 ms Budget), Versionsmarker 0x801E idempotent, `force` ignoriert
+  ihn; bei Teilfehler wird KEIN Versionsmarker geschrieben. Marker:
+  `fw mac-mcu loaded words=417`, `fw phy ram-code loaded ops=38`,
+  `fw phy ram-code current; skipped`, `... FAILED`.
+- main.zig-Integration minimal-invasiv: `fwMode` (off/on/force,
+  Default off), Aufruf nur bei exakter Identitaet
+  `state.xid == XID_RTL8168GU` vor initializeHardware; Optionszeile
+  erweitert um `fw=off|on|force`. Der reset-freie Bind ist unveraendert.
+- Hostmodell: MAC-OCP-Sequenztracking, PHY-Parameter-Indirektion
+  (0xA436/0xA438) und Handshake-Status (0xB800 Bit6 folgt 0xB820
+  Bit4) modelliert; vier neue Tests (Vertragsreihenfolge, Handshake+
+  Versionsmarker, Skip-Idempotenz, Force-Reload) - 21/21 gruen. Die
+  fw=off-Negativkonformitaet ist unveraendert Pflichttest.
+- Gates 0595/05917 erweitert (Lader-Reihenfolgeanker, Tabellenzaehler
+  417/38, Testanker) und gruen.
+Abnahme:
+- Hostmodell 21/21, beide Gates gruen; volles `Build.bat -test` im
+  ersten Anlauf `=== TEST OK ===`/`Errors: none` (QEMU unveraendert
+  ohne RTL8168; fw-Pfad dort inert). Produktionsimage
+  (0.59.23-Flash-/Testbasis): `Release/disk.img`, 536870912 Bytes,
+  SHA-256
+  `6AE3F0F93F1DDBE22D17C1970444FF3538B259C2C0875F843F42A65DE15D5941`.
+  Da nur der RTL8168-Treiber gegenueber dem Rueckbau-Image C9011255
+  geaendert ist und fw per Default aus bleibt, ist ein Neuflash fuer
+  Schritt 1 optional; fuer die Abnahme wird das neue Image verwendet.
+Notizen:
+- PHY-RAM-Code fuer CFG_METHOD_25 ist klein (38 Ops) - die grossen
+  RAM-Codes gehoeren anderen Chips; fruehere 1080er-Zaehlung war eine
+  Bereichs-Fehlattribution und wurde in Doku/Analyse korrigiert.
+- TreiberStand.txt um den optionalen fw-Pfad ergaenzt.
+
+0.59.23
+Status: Erledigt
+Offene Punkte:
+- Hardware-Abnahme des Firmware-Pfads in ZWEI strikt getrennten
+  Schritten. Schritt 1, Kaltpfadschutz zuerst: mindestens drei
+  Kaltboots mit `fw=on` muessen exakt die heutige Baseline liefern
+  (DHCP 1/1, `tx canary confirmed stalls=0`, `rx path confirmed`,
+  keine Recovery-Marker) UND die neuen fw-Marker zeigen
+  (`fw mac-mcu loaded words=417`, beim ersten Boot
+  `fw phy ram-code loaded ops=38`, bei Folgeboots je nach
+  PHY-Zustand loaded oder `current; skipped`). Faellt EIN Boot ab,
+  bleibt fw aus und die
+  Linie geht zurueck in die Analyse - der stabile Kaltpfad ist
+  unverhandelbar.
+- Schritt 2, erst nach bestandenem Schritt 1: der Warmtest. REBOOT mit
+  `fw=force` (Marker-Skip umgehen, der vergiftete PHY kann "aktuell"
+  melden); Erfolgskriterium ist Erreichbarkeit nach dem Warmreset
+  (Ping + SSH, DHCP oder statisch). Damit wird die Windows-These real
+  geprueft: Firmware-Load als der fehlende Baustein.
+- Ergebnisoffen dokumentieren: Heilt Firmware den Warmpfad, wird
+  `fw=on` nach Mehrboot-Nachweis Produktionsdefault. Heilt sie ihn
+  nicht, wird fw nach Kaltpfad-Befund eingestuft (an, wenn nachweislich
+  harmlos und MCU-Errata-nuetzlich; sonst aus) und 0.59.24 uebernimmt.
+- Konkreter Ablauf: Die Option kommt per SSH/SFTP in die
+  Geraete-`C:\CONFIG.R4S` (`OPTION RTL8168 fw=on` bzw. `fw=force`
+  ergaenzen; DHCP-/Statik-Zeilen bleiben wie vorgefunden), danach
+  Poweroff durch den User, Kaltboot, Verifikation per SSH
+  (IPCONFIG /ALL plus LOGCENTER-Export SEARCH=RTL8168). Kein neues
+  Image noetig, solange das 0.59.22-Image auf dem Stick ist.
+Notizen (Laufprotokoll):
+- Vorbereitung real: 0.59.22-Image (6AE3F0F9...) geflasht, Erstboot
+  ohne fw sauber (DHCP bound). `fw=on` per SFTP in C:\CONFIG.R4S
+  eingetragen und verifiziert; SSH-POWEROFF wirkt (offline nach 4 s;
+  der 30s-Exec-Timeout ist Kanalverhalten, kein Fehler).
+- KALTBOOT 1/3 mit fw=on: BESTANDEN. Baseline exakt (Discover/Offer
+  1/1, Request/Ack 1/1/0, Retries 0/0, bound; MSI irq=24 hits=296;
+  err=0, retrans=0; `rx path confirmed`, `tx canary confirmed
+  canary=0 stalls=0`, keine Recovery-Marker). Firmware-Marker:
+  `fw mac-mcu loaded words=417` (MCU-Patch REAL geladen, Datenpfad
+  dahinter makellos) und `fw phy ram-code current; skipped` - der
+  PHY trug den Versionsmarker 0x0001 bereits (Windows-Treiber-Erbe
+  ueber den kurzen Stromzyklus). Damit ist die Idempotenzlogik real
+  geprueft und die Existenz von `fw=force` fuer den Warmtest
+  bestaetigt.
+- KALTBOOT 2/3 und 3/3 mit fw=on: BEIDE BESTANDEN, identisches Bild
+  (DHCP 1/1/0-0, MSI aktiv, `fw mac-mcu loaded words=417`,
+  `fw phy ram-code current; skipped`, canary/rx confirmed, keine
+  Recovery). SCHRITT 1 (Kaltpfadschutz) ABGESCHLOSSEN: Der
+  Firmware-Ladepfad ist auf dem Kaltpfad nachweislich harmlos.
+- SCHRITT 2, WARMTEST mit fw=force: NEGATIV, aber mit dem bisher
+  praezisesten Befund (Beweisdateien WARMFW.TXT/FULL.TXT vom User am
+  Geraet exportiert, am Host archiviert). Im vergifteten Warmzustand
+  laedt die Firmware VOLLSTAENDIG (`fw mac-mcu loaded words=417`,
+  `fw phy ram-code loaded ops=38`, KEINE Handshake-Timeouts - die
+  GPHY-/MAC-OCP-Schnittstellen antworten normal) und der LINK KOMMT
+  HOCH (`link down` -> `link up`). Danach endlose
+  `recovery cause=tx-stall`-Zyklen (67+ in Minuten): Die MAC-seitige
+  TX-/DMA-Engine holt keine Deskriptoren ab. PRAEZISIERUNG: Das
+  vergiftete Element ist NICHT der PHY (funktional, Link up) und
+  NICHT ueber MCU-Patch/RAM-Code adressierbar - es ist der MAC-TX-/
+  DMA-Pfad (Deskriptor-Fetch/FIFO-Besitz). Verbleibendes Delta zu
+  Linux/Windows: die vollstaendige Ownership-/hw_start-Kette beim Up;
+  unsere fruehere Handoff-Implementierung (damals OHNE Firmware) hat
+  warm ebenfalls nicht geheilt UND kalt vergiftet - die Kombination
+  Handoff+Firmware bleibt ungetestet und waere eine eigene kuenftige
+  Analyse, KEIN Schnellschuss.
+- ABSCHLUSSBEWERTUNG 0.59.23: fw ist kalt in 4/4 Boots harmlos
+  bewiesen (inkl. vollem force-Load kalt: `phy ram-code loaded` plus
+  makellose Baseline, canary=1 stalls=0). Geraete-Config steht auf
+  `fw=on` (idempotenter Regelzustand); Produktions-Default-Frage
+  bleibt der 0.59.15-Abnahme vorbehalten. Der Warmreboot bleibt
+  ungeheilt -> 0.59.24 (Reboot-als-Poweroff) uebernimmt
+  planmaessig.
+Erledigt:
+- (leer)
+Abnahme:
+- Real dokumentierte Boot-Protokolle beider Schritte (IPCONFIG,
+  LOGCENTER-Marker), Roadmap-Befund, Gate-/Doku-Nachzug.
+Notizen:
+- (werden waehrend der Bearbeitung ergaenzt)
+
+0.59.24
+Status: Erledigt
+(Umgewidmet auf User-Entscheid: KEINE Reboot-als-Poweroff-Kaschierung.
+Stattdessen echter Warmpfad-Fixversuch auf Basis des 0.59.23-Befunds.)
+Offene Punkte:
+- Warmpfad-Kurierung als RECOVERY-ESKALATION statt Bind-Eingriff:
+  Nach zwei echten TX-Stall-Recoveries (Zustand, den 7/7 reale
+  Kaltboots der Rueckbau-Aera nie erreicht haben - kalt strukturell
+  inert) laeuft EINMAL pro Boot die vollstaendige Referenz-Uebernahme,
+  optionsgesteuert `OPTION RTL8168 warmfix=on` (Default aus bis zum
+  Hardware-Nachweis):
+  (1) Ownership-Handoff nach upstream rtl_hw_init_8168g: RXDV-Gate
+  setzen, 2 ms, FIFO-Leerlauf advisory abwarten, Engines stoppen,
+  NOW_IS_OOB loeschen, E8DE Bit14 loeschen + Link-List-Wait,
+  E8DE Bit15 setzen + Link-List-Wait.
+  (2) Begrenzter CmdReset (bestehende Primitive inkl. MAC-Restore).
+  (3) Firmware force (MCU-Patch + PHY-RAM-Code, 0.59.22-Lader).
+  (4) PHY-Softreset + Autoneg (Linux phy_init_hw-Aequivalent).
+  (5) Referenz-Startkette: ERI-FIFO-Schwellen (C8/E8/CC/D0),
+  EPHY-Tabelle e_info_8168g_2 (liegt im Contract), danach Reinit mit
+  Referenzwerten TXCFG_AUTO_FIFO, EarlySize 0x27 und
+  VER_40-RxConfig-Formel (nur solange `warmfix_active`; ohne
+  Eskalation bleibt der Bind byteidentisch legacy). KEIN EEE, kein
+  RealWoW, kein Exit-L1 (bewiesen irrelevant bzw. schaedlich).
+- Neues Modul `rtl8168_warmfix.zig` als einziger Traeger der
+  Eskalationszugriffe (ERI/EPHY/MCU ueber die Contract-Kommandobauer
+  und die Access-Primitiven); main.zig bezieht die Referenz-
+  Startwerte ueber warmfix-Provider, die Negativ-Konformitaet des
+  normalen Binds bleibt.
+- Hostmodell: Warm-OOB-Szenario + Eskalationstest (Datenpfad lebt
+  nach der Uebernahme - das Modell traegt die Ownership-Maschine
+  bereits), Cold-Inertheit (keine Eskalation ohne Stalls),
+  unveraenderte fw=off/warmfix=off-Konformitaet.
+- Gates erweitern, QEMU-Smoke, Image; danach EIN realer Warmtest
+  (warmfix=on + fw=on) und ein Kaltboot-Gegennachweis.
+Erledigt:
+- `rtl8168_warmfix.zig` implementiert: takeover (rtl_hw_init_8168g-
+  Reihenfolge, advisory Waits), phySoftReset (BMCR Bit15 mit
+  600-ms-Budget), applyStartChain (ERI C8/E8/CC/D0 + EPHY-Baseline
+  aus dem Contract) und die Referenzwert-Provider txConfigValue/
+  earlyTxSize/rxConfigValue. Access-Interface um 8-Bit-Primitiven
+  erweitert (ChipCmd/MCU sind 8-Bit-Register; 32-Bit-Zugriffe haetten
+  TX_POLL getroffen).
+- main.zig: Eskalation in recoverTxStall (nur !syserr-Stalls, >= 2,
+  einmalig, exakte 0x509-Identitaet, warmfix=on), Startkette nach
+  jedem Reset im warmfix_active-Zustand, Reinit-Conditionals beziehen
+  Referenzwerte NUR aus dem Warmfix-Modul; Optionszeile um
+  `warmfix=on|off` ergaenzt.
+- Hostmodell: Ownership-Maschine reaktiviert (NOW_IS_OOB-/E8DE-
+  Uebergabe), neues `warm_stall`-Szenario bildet das reale
+  0.59.23-Bild ab (Deskriptoren bleiben owned statt AA-Schlucken).
+  Kerntest "warm tx-stall escalation performs the reference takeover
+  and revives the datapath" beweist den kompletten Zyklus bis zum
+  lebenden Datenpfad; "cold boots never trigger the warmfix
+  escalation" beweist die Kalt-Inertheit. 23/23 gruen.
+- Gates 0595/05917: Eskalations-/Takeover-Reihenfolgeanker,
+  Startketten-Token, EEE-/RealWoW-Registerverbot im Warmfix-Modul,
+  neue Testanker; beide gruen.
+Abnahme:
+- Hostmodell 23/23, beide Gates gruen; `Build.bat -test` gruen (erster
+  Lauf Watchdog-Flake bei normal progressierendem Gast, dokumentierter
+  `-testonly`-Retry mit 480s: `=== TEST OK ===`/`Errors: none`).
+  Produktionsimage (Warmtest-Flashbasis): `Release/disk.img`,
+  536870912 Bytes, SHA-256
+  `911E4D6B3740D9AC327D2B3B6C1FBF8F5EF545FC5F55E6B7F4ED7D85C36A97E5`.
+- REALER WARMTEST RUNDE 1 (Treiber per SYSUPD-R4U D7C465C2...
+  geliefert, applied=1/1; Kalt-Sanity des Warmfix-Treibers zuvor
+  makellos, Eskalation kalt stumm): NEGATIV, aber mit dem naechsten
+  Praezisionssprung. Die Eskalation feuerte exakt nach Plan
+  (Stall 2): `warmfix fifo-drain timeout; continuing` (advisory,
+  erwartbar), `warmfix takeover applied`, Firmware force KOMPLETT
+  (`mac-mcu 417` + `phy ram-code 38`), PHY-Reset mit Link down->up -
+  und danach Stalls 3..39+ endlos. Ownership-Handoff + Firmware +
+  Startkette heilen gemeinsam NICHT.
+- NEUE LEITHYPOTHESE (aus dem Muster): MMIO/Downstream funktioniert
+  vollstaendig, aber ALLES was die NIC selbst als Bus-Master
+  initiiert ist tot (TX-Deskriptor-Fetch, RX-DMA-Writes, historisch
+  MSI-Hits=0 im Warmfall). Das passt nicht zu NIC-internem Zustand,
+  sondern zum PCI-UPSTREAM: Ein Root-Port mit geloeschtem
+  Bus-Master-Enable nach ACPI-Warmreset blockt exakt alle
+  Upstream-Speicherzugriffe des Endpunkts. Linux/Windows heilen das
+  implizit, weil pci_enable_device die gesamte Bridge-Kette
+  aktiviert; R4OS aktiviert bisher nur den Endpunkt.
+- NAECHSTE ITERATION: Eskalation um PCI-Diagnose+Reparatur erweitern
+  (Parent-Bridge per Secondary-/Subordinate-Scan finden, COMMAND von
+  Endpunkt und Bridge VOR der Reparatur loggen - allein das beweist
+  oder widerlegt die These real -, dann MEM+BME auf der Bridge
+  setzen und verifizieren). Modell: Bridge-Geraet mit BME-Gate fuer
+  DMA/Consume/Deliver.
+- REALE WARMTEST-RUNDEN 2/3/4 (Pakete B/C/D): ALLE DREI mit BLUESCREEN
+  (GPF, Vector 13; Desktop nur 1-2 s, dann Crash). Systematische
+  Eingrenzung ueber die Runden:
+  * 0.59.23 (fw=force, kein warmfix): 67 Stalls, KEIN Crash.
+  * Runde 1 (warmfix ohne PCI-Scan): Takeover+Firmware, KEIN Crash.
+  * Runde 2 (PCI-Reparatur am Anfang): Crash.
+  * Runde 3 (Diagnose am Anfang, Reparatur ans Ende verschoben): Crash.
+  * Runde 4 (warmfix=diag: NUR PCI-Scan, kein Takeover/FW/Write): Crash.
+  EINDEUTIGER TAETER: der PCI-Config-Zugriff ueber fremde Geraete
+  (warmfixFindBridge -> pciDeviceAt/pciReadConfig32) AUS DEM
+  RECOVERY-/POLL-TASK-KONTEXT. Beim Bind (Init-Kontext) war derselbe
+  Scan immer problemlos; logWarn und recoverTxStall selbst sind
+  erwiesen sicher (Runde 1: 67 fehlerfreie Recovery-Marker). Der
+  DriverApi-PCI-Config-Pfad ist offenbar nicht fuer Laufzeit-/
+  Taskkontext ausgelegt.
+- KORREKTUR-PLAN (0.59.24 Fortsetzung): Bridge-BDF und Endpoint-/
+  Bridge-COMMAND EINMAL BEIM BIND (Init-Kontext) ermitteln und im
+  State cachen; in der Recovery KEIN Scan mehr, nur der eine gezielte
+  pciWriteConfig32 auf den gecachten Bridge-BDF. Damit faellt jeder
+  Fremdgeraete-PCI-Zugriff aus dem Taskkontext weg. Optional zusaetzlich
+  pruefen, ob der Kernel-DriverApi einen tasksicheren Config-Pfad
+  braucht.
+- PAKET E (Umsetzung besser als geplant): Diagnose UND Reparatur
+  komplett an den BIND verlegt (`warmfixBridgeAtBind`, Linux
+  pci_enable_bridge-Semantik: bei warmfix=on werden Memory+Bus-Master
+  auf der Parent-Bridge gesetzt, wenn sie fehlen - auf gesunden
+  Kaltboots ein No-Op; warmfix=diag loggt nur). Die Eskalation traegt
+  KEINE PCI-Zugriffe mehr. Hostmodell 25/25 (neu: Bind-Heilungstest
+  ohne einen einzigen Stall, Diag-only-Test), Gates gruen.
+- ***** DURCHBRUCH, WARMTEST RUNDE 5 (Paket E): DER WARMREBOOT IST
+  GEHEILT. ***** Ping kehrte nach dem warmen REBOOT erstmals ueberhaupt
+  zurueck; DHCP bound .213. Die Beweiszeile:
+  `warmfix pci endpoint=0x0006 bridge=0x0003 -> 0x0007`.
+  ROOT CAUSE des gesamten 0.59.15-Warmproblems: Der ACPI-Warmreset
+  loescht das BUS-MASTER-ENABLE IM ROOT-PORT ueber der NIC (COMMAND
+  0x0003 = IO+Memory ohne BME); die BIOS-Firmware setzt es nur auf dem
+  Kaltpfad. Ohne Bridge-BME sterben alle von der NIC initiierten
+  Upstream-Zugriffe (TX-Deskriptor-Fetch, RX-DMA-Writes, MSI), waehrend
+  MMIO/Downstream normal funktioniert. Der Endpunkt selbst (0x0006) war
+  nie das Problem. Nach der Bind-Reparatur lief der Warmboot wie ein
+  Kaltboot: `link up`, `tx canary confirmed canary=0 stalls=0`,
+  `rx path confirmed` - die Eskalation musste NIE feuern. Das erklaert
+  rueckwirkend, warum wochenlang kein NIC-Register, keine Firmware und
+  kein Handoff half: falsche Schicht. Windows/Linux heilen implizit
+  ueber pci_enable_device (Bridge-Kette).
+- WARMREBOOT 2: REPRODUZIERT. Identische Beweiszeile
+  (`bridge=0x0003 -> 0x0007`), DHCP bound, Rueckkehr in Sekunden.
+  Das BIOS laesst den Root-Port nach ACPI-Warmreset deterministisch
+  ohne BME zurueck; die Bind-Reparatur heilt es deterministisch.
+- Abschluss-Smoke: volles `Build.bat -test` im ersten Anlauf
+  `=== TEST OK ===`/`Errors: none`. Produktionsimage (neue Flashbasis
+  mit Warmfix-Treiber): `Release/disk.img`, 536870912 Bytes, SHA-256
+  `E33276EA917E1A3C0ACBCE2000E5A70F6B14F5874490EBB7C719C7FAE69153DA`.
+  Push erledigt (4d88217f).
+- DEFAULT-ENTSCHEID (User): Der Bridge-Check am Bind ist
+  STANDARDVERHALTEN. Umgesetzt: `warmfixBridgeAtBind` laeuft immer fuer
+  XID 0x509 (Diagnosezeile immer, Reparatur wenn Memory/Bus-Master
+  fehlen); die `warmfix`-Option steuert nur noch die stall-getriggerte
+  Referenz-Eskalation als Sicherheitsnetz (Default aus); der
+  diag-Modus (Crash-Eingrenzungsinstrument) ist entfernt. Hostmodell
+  24/24 (Bridge-Heilung optionsfrei, Kaltbind zeigt die Beweiszeile
+  ohne Reparaturpfeil), Gates gruen. VERSION.R4S auf 0.59.24
+  fortgeschrieben (die sichtbare Version gehoert nun der
+  abgeschlossenen Warmfix-Linie; die 0.59.15-Wiederaufnahme prueft
+  sie real ueber SYSUPD).
+- Notierte Folgekandidaten (nicht Teil dieser Unterversion):
+  Kernel-Pruefpunkt PCI-Config-Fremdzugriffe aus dem Taskkontext
+  (GPF statt sauberer Ablehnung); langfristige Verlagerung des
+  Bridge-Enable in den Kernel-pciEnableBusMaster-Pfad (gilt dann fuer
+  alle Treiber).
+Notizen:
+- Hypothese aus 0.59.23: Handoff ohne Firmware tot (WARM.TXT-Aera),
+  Firmware ohne Handoff tot (0.59.23), Linux/Windows fahren beides
+  plus volle Startkette - die Kombination ist der letzte ungetestete
+  Kandidat. Die Eskalationsarchitektur beseitigt das alte Risiko der
+  zustandsabhaengigen Bind-Eingriffe.

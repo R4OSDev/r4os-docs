@@ -1,0 +1,546 @@
+﻿*** Kernel Refactor Roadmap Leitbild ***
+In dieser Roadmap befassen wir uns im Verlauf mehrerer großer Versionen mit der säuberung des Kernels.
+Aktuell wurden viele Funktionen nach 
+kernelold.zig ausgelagert und in src/old/ verschoben.
+Wir holen die nach und nach zurück in main.zig, kontrollieren dabei aber alles.
+Was aus dem Kernel raus kann soll in Software, Treiber und Protokolle untergebracht werden.
+Im Zuge dieses Refactor ist auch die Dokumentation zu aktualisieren und pflegen.
+
+-------------------------------------------
+Ab hier beginnen die Versionen und ab hier darf auch bereinigt werden.
+Das Refactor Leitbild muss bei einer Roadmap Bereinigung stehen bleiben
+-------------------------------------------
+
+Version 0.29.X - Boot-Display, DisplayTarget und Surface-Pipeline glatt ziehen
+-------------------------------------------
+
+Status: Geplant
+
+Leitbild:
+In 0.29.X wird die fruehe Display-Initialisierung weiter aus dem Legacy-Kernel
+herausgeloest. Der von Limine/BootInfo gelieferte Framebuffer soll nicht mehr
+parallel an mehrere Subsysteme weitergereicht werden. Stattdessen entsteht eine
+klare Display-Grenze: boot_display richtet das fruehe Display ein, ein
+DisplayTarget beschreibt das aktuelle physische Ausgabeziel, und Surface-/
+Compositor-Code arbeitet gegen einen Presenter statt direkt gegen den
+Boot-Framebuffer.
+
+Ist-Ablauf aktuell:
+- `main.zig` haelt die Limine-Requests lebendig, initialisiert COM1-Debug,
+  ruft `boot_info.init()` auf, ruft `boot_display.init()` auf und springt
+  danach in `kernelold.kmain()`.
+- `boot_info.zig` kopiert den ersten Limine-Framebuffer in eine eigene
+  `boot_framebuffer`-Struktur und stellt ihn ueber `boot_info.framebuffer()`
+  bereit.
+- `boot_display.zig` holt diesen BootInfo-Framebuffer und gibt denselben
+  Pointer aktuell an drei Stellen weiter: `Console.init(framebuf)`,
+  `display.initBootFramebuffer(framebuf)` und `surface_pipeline.init(framebuf)`.
+- `display.zig` macht daraus einen globalen `bootfb`-/`primary_device`
+  DisplayBackend. Es speichert Mode, Mapping, Cache-Policy, Ops und Present-
+  Statistiken. Spaeter ruft `kernelold.zig`
+  `display.enableFramebufferWriteCombining()` auf, um PAT-WC fuer den
+  Framebuffer zu aktivieren.
+- `surface_pipeline.zig` speichert zusaetzlich einen eigenen rohen
+  Framebuffer-Pointer. Daraus liest sie Breite/Hoehe/Pitch/Pixelformat,
+  allokiert spaeter den Backbuffer, kopiert den sichtbaren Framebuffer in den
+  Backbuffer, verwaltet Dirty-Regionen und praesentiert Dirty-Rects ueber
+  `display.presentXrgb32Rect()`.
+- Der Mauscursor wird aktuell nicht in den Backbuffer gezeichnet. Die
+  Surface-Pipeline restauriert die alte Cursorposition aus dem Backbuffer und
+  zeichnet den neuen Cursor direkt per `display.putXrgb32()` in den sichtbaren
+  Framebuffer.
+- `Console` ist eine fruehe Textkonsole direkt auf dem Boot-Framebuffer. Sie
+  zeichnet mit `framebuffer.zig` direkt in den sichtbaren Speicher und wird von
+  `kernel/log.zig` als Console-Sink gehalten.
+- `kernelold.zig` nutzt den vorbereiteten Zustand noch direkt: `framebuf` geht
+  an `mouse.init(framebuf)`, `con` wird fuer Console-Geometrie ausgegeben, und
+  `display.enableFramebufferWriteCombining()` wird nach Paging/Memory-Init
+  aufgerufen.
+- `old/drivers/video/framebuffer.zig` ist aktuell ein Alias auf
+  `boot_info.Framebuffer`. Dadurch haengt der Legacy-Displaypfad weiterhin
+  direkt am BootInfo-Datentyp.
+- `display/surface.zig` und `display/presenter.zig` existieren bereits als
+  neue neutrale Begriffe, sind aber noch nicht in die aktive Legacy-
+  Surface-Pipeline verdrahtet.
+- Diagnose- und Legacy-API-Pfade haengen an diesen Statistiken:
+  `command_runtime.zig` nutzt `display.stats()` und `surface_pipeline.stats()`,
+  `r4draw.zig` nutzt `surface_pipeline` als R4DRAW-Bruecke,
+  `r4desk.zig` ruft Cursor-Refresh ueber `surface_pipeline` auf,
+  `device_inventory.zig` und `hardware.zig` lesen `display.stats()`.
+
+Nicht-Ziel:
+- Kein neuer Grafikkartentreiber.
+- Keine Entfernung des Limine-Framebuffers.
+- Keine komplette Compositor-Neuimplementierung.
+- Keine Aenderung am sichtbaren Desktop-Verhalten, solange die neue Grenze
+  eingefuehrt wird.
+- Keine Entfernung der Memory-/PageTable-Nutzung des BootInfo-Framebuffers in
+  0.29.X. Diese Mapping-Information wird fuer den CR3-/Device-Mapping-Pfad
+  separat behandelt.
+
+Qualitaetsregeln fuer 0.29.X:
+- Jede Unterversion muss nach Abschluss einen stabilen Zwischenstand bilden.
+  Keine Unterversion darf absichtlich halb migrierte produktive Pfade
+  hinterlassen.
+- Neue Typen oder Adapter duerfen nur eingefuehrt werden, wenn klar ist,
+  welche alte Kopplung sie ersetzen. Keine zweite parallele Wahrheit fuer
+  Mode, Mapping, Framebuffer-Adresse oder Pixel-Format.
+- BootInfo-/Limine-spezifische Daten duerfen nach dem Umbau nur noch am
+  Boot-Adapter sichtbar sein. Display-, Surface-, Cursor- und Console-Code
+  sollen nicht direkt vom Bootloader-Datentyp abhaengen.
+- Jede Schicht braucht einen klaren Besitzer:
+  BootInfo besitzt Bootloader-Daten, boot_display uebersetzt den Bootzustand,
+  display besitzt das aktive physische Ausgabeziel, Presenter praesentiert
+  Software-Surfaces, Surface-Pipeline verwaltet Software-Zeichenflaechen,
+  Console rendert fruehen Kerneltext.
+- Bestehende Diagnose- und Stats-Ausgaben duerfen nicht still verschwinden.
+  Wenn Namen oder Datenmodelle geaendert werden, muessen die Diagnosepfade
+  bewusst angepasst werden.
+- Fallbacks muessen explizit bleiben. Wenn Backbuffer, RGB32, Write-Combining
+  oder Cursor-Overlay nicht verfuegbar sind, muss der Code sauber degradieren
+  statt undefiniert weiterzulaufen.
+- Jede Code-Unterversion braucht mindestens `DevTools/Scripts/Build.bat -norun`.
+  Fuer Aenderungen am aktiven Boot-/Displaypfad ist zusaetzlich
+  `DevTools/Scripts/Build.bat -test` Pflicht.
+- Nach jeder abgeschlossenen Unterversion wird gepusht.
+
+Version 0.29.0 - Aktuellen Boot-Display-Pfad dokumentieren
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+
+Abnahme / Tests:
+- Dokumentation unter `Docs/Desktop/` oder `Docs/Core/` ergaenzt.
+- `DevTools/Scripts/Build.bat -norun` laeuft erfolgreich.
+- Dokumentation benennt explizit Ist-Zustand, Ziel-Zustand, erlaubte
+  temporaere Legacy-Bruecken und nicht erlaubte neue Kopplungen.
+
+Erledigt:
+- Ist-Ablauf in `Docs/Desktop/DisplayArchitektur.txt` dokumentiert.
+- Harte Boot-Framebuffer-Kopplungen dokumentiert:
+  `display`, `surface_pipeline`, `Console/log` und Legacy-Nutzer.
+- `display.zig` als aktueller DisplayManager-/Backend-Singleton beschrieben.
+- `surface_pipeline.zig` als Legacy-Bruecke fuer Backbuffer, Dirty-Region,
+  Present und Cursor-Overlay beschrieben.
+- Zielbild und nicht erlaubte neue Kopplungen dokumentiert.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.29.0` gesetzt.
+
+Notizen:
+- Diese Unterversion ist die technische Bestandsaufnahme, damit der folgende
+  Umbau nicht blind passiert.
+
+Version 0.29.1 - DisplayTarget-Grenze festlegen, ohne bestehende DisplayBackend-Daten zu duplizieren
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+
+Abnahme / Tests:
+- Kernel baut mit `DevTools/Scripts/Build.bat -norun`.
+- QEMU-Smoke mit `DevTools/Scripts/Build.bat -test` zeigt `TEST OK`.
+- Fruehe Textausgabe erscheint weiterhin im Bootlog/Smoke-Test.
+- Review-Kriterium: Es gibt genau eine Quelle fuer aktive Display-Geometrie
+  und Mapping-Daten.
+
+Erledigt:
+- `display.DisplayTarget` als kleine Initialisierungsgrenze eingefuehrt.
+- `display.bootTargetFromFramebuffer(...)` als Boot-Adapter eingefuehrt.
+- `display.initBootTarget(...)` als klare Registrierungsgrenze eingefuehrt.
+- `display.initBootFramebuffer(...)` als Kompatibilitaetshelfer erhalten und
+  intern auf DisplayTarget abgebildet.
+- `boot_display.init()` nutzt jetzt die DisplayTarget-Grenze.
+- Keine zweite dauerhafte Wahrheit eingefuehrt: Die aktiven Daten bleiben im
+  DisplayBackend.
+- Ziel-API und Begriffsabgrenzung in `Docs/Desktop/DisplayArchitektur.txt`
+  dokumentiert.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.29.1` gesetzt.
+
+Notizen:
+- Der aktuelle `display.zig`-Device ist bereits nahe an einem DisplayBackend.
+  0.29.1 soll deshalb erst die Grenze schaerfen, nicht blind neue Typen
+  danebenstellen.
+
+Version 0.29.2 - BootInfo-Framebuffer-Typ aus dem Displaypfad entkoppeln
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+
+Abnahme / Tests:
+- `DevTools/Scripts/Build.bat -norun` erfolgreich.
+- `DevTools/Scripts/Build.bat -test` erfolgreich.
+- Keine Regression bei frueher Kernel-Ausgabe, R4DOS-Start und Desktop-Start.
+- Suche/Review: Display-/Surface-/Console-Code importiert `boot_info.zig` nicht
+  mehr direkt, ausser in bewusst markierten Adapterstellen.
+
+Erledigt:
+- `old/drivers/video/framebuffer.zig` vom direkten `boot_info.Framebuffer`-
+  Alias entkoppelt.
+- Neutralen `Framebuffer`-Descriptor im Displaypfad eingefuehrt.
+- `boot_display.zig` kopiert den BootInfo-Framebuffer einmalig in den
+  neutralen Display-Framebuffer.
+- `boot_display.State` gibt jetzt den neutralen Display-Framebuffer weiter.
+- Console, Display, Surface-Pipeline und Mouse arbeiten weiter mit dem
+  neutralen Display-Framebuffer-Typ.
+- Low-Level-Helfer fuer `packRgb`, `unpackRgb`, `putPacked32`, `rect` und
+  `fill` bleiben unveraendert nutzbar.
+- Dokumentation in `Docs/Desktop/DisplayArchitektur.txt` ergaenzt.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.29.2` gesetzt.
+
+Notizen:
+- Dieser Schritt ist wichtig, weil sonst zwar Namen geaendert werden, der
+  Displaypfad aber weiterhin am Bootloader-/BootInfo-Typ klebt.
+
+Version 0.29.3 - display.zig als DisplayManager/Backend-Grenze festziehen
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+
+Abnahme / Tests:
+- `DevTools/Scripts/Build.bat -norun` erfolgreich.
+- `DevTools/Scripts/Build.bat -test` erfolgreich.
+- `display.stats()` liefert weiterhin gueltige Daten fuer Diagnosepfade.
+- Framebuffer Cache PAT-WC wird weiterhin mit `[OK]` oder sauberem Fallback
+  gemeldet.
+- Review-Kriterium: Ein spaeterer Grafiktreiber koennte ein anderes Backend
+  registrieren, ohne Surface-/Console-Code auf Limine umzubauen.
+
+Erledigt:
+- `display.registerBootBackend(...)` als klare Backend-Registrierung
+  eingefuehrt.
+- `display.initBootTarget(...)` und `display.initBootFramebuffer(...)` als
+  Kompatibilitaetsbruecken auf dieselbe Registrierung abgebildet.
+- `boot_display.init()` registriert das Boot-Backend jetzt ueber
+  `registerBootBackend(...)`.
+- Neue DisplayManager-Abfragen eingefuehrt:
+  `activeBackendRegistered`, `activeBackendName`, `activeBackendKind`,
+  `activeMode`, `activeMapping`, `activeFramebufferForLegacy`.
+- `display.framebuffer()` bleibt nur als Legacy-Bruecke und leitet auf
+  `activeFramebufferForLegacy()` weiter.
+- `display.stats()` bleibt kompatibel fuer Diagnosepfade.
+- Write-Combining bleibt im DisplayManager-/Mapping-Pfad.
+- Dokumentation in `Docs/Desktop/DisplayArchitektur.txt` ergaenzt.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.29.3` gesetzt.
+
+Notizen:
+- Danach ist `display` die Stelle, die das konkrete physische Displayziel
+  besitzt. Andere Schichten sollen nicht mehr Besitzer spielen.
+
+Version 0.29.4 - Framebuffer-Console nach src/display/console.zig verschieben
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+
+Abnahme / Tests:
+- Suche/Review: Keine Imports mehr auf `old/drivers/video/console.zig`.
+- `DevTools/Scripts/Build.bat -norun` erfolgreich.
+- `DevTools/Scripts/Build.bat -test` erfolgreich.
+- Fruehe Bootausgabe und Fatal-/Log-Ausgabe funktionieren weiterhin.
+- Dokumentation enthaelt die Abgrenzung `kernel/log.zig` vs.
+  `display/console.zig`.
+
+Erledigt:
+- `old/drivers/video/console.zig` nach `display/console.zig` verschoben.
+- Import in `boot_display.zig` auf `display/console.zig` angepasst.
+- Import in `kernel/log.zig` auf `display/console.zig` angepasst.
+- Relative Imports in `display/console.zig` angepasst:
+  neutraler Framebuffer-Descriptor und Kernel-Fallback-Font.
+- `main.zig` importiert die Console weiterhin nicht direkt.
+- Dokumentation in `Docs/Desktop/DisplayArchitektur.txt` ergaenzt.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.29.4` gesetzt.
+
+Notizen:
+- Dieser Schritt ist bewusst vor der Surface-Pipeline-Entkopplung geplant,
+  damit die fruehe Textausgabe zuerst einen sauberen Platz im neuen
+  Display-Bereich bekommt.
+
+Version 0.29.5 - Surface-Pipeline von rohem Boot-Framebuffer auf Presenter umstellen
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+
+Abnahme / Tests:
+- `DevTools/Scripts/Build.bat -norun` erfolgreich.
+- `DevTools/Scripts/Build.bat -test` erfolgreich.
+- R4DRAW-/Desktop-Pfade starten weiterhin, weil `r4draw.zig` die
+  Surface-Pipeline produktiv nutzt.
+- Dirty-Rect- und Full-Present-Statistiken bleiben plausibel.
+- Review-Kriterium: `surface_pipeline` praesentiert ueber eine klare
+  Presenter-/DisplayManager-Grenze und nicht mehr ueber einen eigenen
+  Boot-Framebuffer-Besitz.
+
+Erledigt:
+- `surface_pipeline.init(framebuf)` durch `initFromDisplayManager()`
+  ersetzt.
+- `boot_display.init()` initialisiert die Surface-Pipeline ueber den aktiven
+  DisplayManager statt ueber einen rohen Framebuffer-Pointer.
+- Surface-Pipeline speichert keinen eigenen sichtbaren Framebuffer-Pointer
+  mehr.
+- Breite, Hoehe, Pitch, BPP und XRGB32-Faehigkeit kommen aus dem aktiven
+  DisplayBackend/DisplayManager.
+- Backbuffer wird als neutrale `display.Surface` mit `legacy_bridge`-Kind
+  gefuehrt.
+- Dirty-Rect-Present laeuft real ueber `display/presenter.zig`.
+- Presenter uebergibt XRGB32-Surface-Rechtecke an den DisplayManager.
+- Legacy-API-Funktionen `width`, `height`, `clear`, `rect`, `text`,
+  `textWithFont`, `beginFrame`, `beginFrameRect`, `present`,
+  `refreshCursorOverlay` und `stats` bleiben erhalten.
+- Direkte No-Backbuffer-Textausgabe nutzt DisplayManager-Pixelwrites statt
+  eigener Framebuffer-Packlogik.
+- Dokumentation in `Docs/Desktop/DisplayArchitektur.txt` ergaenzt.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.29.5` gesetzt.
+
+Notizen:
+- Die Surface-Pipeline bleibt noch Legacy-Bruecke fuer R4DRAW/Desktop, besitzt
+  aber nicht mehr das physische Ausgabeziel.
+
+Version 0.29.6 - Cursor-Overlay und Mouse-Grenze entkoppeln
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+
+Abnahme / Tests:
+- `DevTools/Scripts/Build.bat -norun` erfolgreich.
+- `DevTools/Scripts/Build.bat -test` erfolgreich.
+- R4DOS/Terminal-Ausgabe bleibt nutzbar.
+- Cursor-Refresh bleibt im Desktop-Pfad unveraendert nutzbar.
+- Review-Kriterium: `mouse.init` braucht keinen rohen Framebuffer-Pointer mehr
+  fuer reine Bildschirmgrenzen.
+
+Erledigt:
+- `mouse.init(framebuf)` durch `mouse.init(mouse.Bounds)` ersetzt.
+- `mouse.zig` importiert keinen Video-Framebuffer-Typ mehr.
+- `kernelold.zig` leitet Mouse-Grenzen aus `display.activeMode()` ab und nutzt
+  den Boot-Framebuffer nur noch als Fallback fuer die Bounds.
+- Der Cursor bleibt vorerst Overlay und nicht Teil des Backbuffers.
+- Restore der alten Cursorposition laeuft aus dem Backbuffer.
+- Draw der neuen Cursorposition laeuft weiter ueber
+  `display.putXrgb32(...)`.
+- Cursor-Damage-/Overlay-Rolle in `Docs/Desktop/DisplayArchitektur.txt`
+  dokumentiert.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.29.6` gesetzt.
+
+Notizen:
+- Der Cursor-Overlay-Pfad ist noch Legacy, aber er besitzt keinen eigenen
+  Framebuffer mehr und nutzt keinen zweiten Presenter.
+
+Version 0.29.7 - Console/log-Ausgabe als eigenen fruehen Sink behandeln
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+
+Abnahme / Tests:
+- `DevTools/Scripts/Build.bat -norun` erfolgreich.
+- `DevTools/Scripts/Build.bat -test` erfolgreich.
+- Fruehe Bootausgabe, Fatal-Ausgabe und Bootlog-Weiterleitung funktionieren.
+- Review-Kriterium: `kernel/log.zig` kennt nicht die Details des Framebuffer-
+  Renderings.
+
+Erledigt:
+- `kernel/log.zig` importiert `display/console.zig` nicht mehr.
+- `kernel/log.zig` haelt nur noch einen generischen `ConsoleSink`.
+- `ConsoleSink` kapselt Textausgabe, Clear, Farben, Margins, Font-Scale,
+  Cursorposition und Textgeometrie.
+- `display/console.zig` besitzt die konkrete Cursor-/Geometrie-Logik selbst
+  ueber `setCursor(...)` und `textRows()`.
+- `boot_display.zig` verdrahtet die konkrete Framebuffer-Console ueber einen
+  lokalen Adapter mit `kernel/log.zig`.
+- Fruehe Boot-/Fatal-/Kernel-Ausgabe bleibt weiterhin ueber denselben Logpfad
+  nutzbar.
+- Dokumentation in `Docs/Desktop/DisplayArchitektur.txt` ergaenzt.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.29.7` gesetzt.
+
+Notizen:
+- Die BootConsole ist weiterhin ein bewusst direkter frueher Fallback-Sink,
+  aber `kernel/log.zig` kennt keine Framebuffer-Renderingdetails mehr.
+
+Version 0.29.8 - Legacy-API- und Diagnosepfade kompatibel halten
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+
+Abnahme / Tests:
+- `DevTools/Scripts/Build.bat -norun` erfolgreich.
+- `DevTools/Scripts/Build.bat -test` erfolgreich mit `TEST OK`.
+- R4DRAW-/Desktop-Start ohne Regression.
+- Display-/Hardware-/DeviceInventory-Informationen bleiben plausibel.
+- Smoke-/Diagnosepfade, die Displayinformationen ausgeben, muessen weiterhin
+  aussagekraeftige Werte liefern.
+
+Erledigt:
+- R4DRAW-Kompatibilitaet geprueft: `screenWidth`, `screenHeight`, `clear`,
+  `rect`, `text`, `displayBeginFrame`, `displayBeginFrameRect`,
+  `displayPresent` und `textWithFont` bleiben auf der bisherigen
+  Surface-Pipeline-Bruecke erhalten.
+- R4DESK-Kompatibilitaet geprueft: Mouse-State und Cursor-Refresh laufen
+  weiterhin ueber die bestehende `surface_pipeline.refreshCursorOverlay()`-
+  Bruecke.
+- COMMAND-/Displaybench-Kompatibilitaet geprueft: `surface_pipeline.stats()`
+  und `display.stats()` liefern weiterhin die erwarteten Felder fuer
+  Diagnoseausgaben.
+- `hardware.zig`-Displaydiagnose von festem `fallback=bootfb` auf
+  DisplayBackend-Mapping umgestellt.
+- `device_inventory.zig` benennt den Eintrag als aktives DisplayBackend statt
+  als hartes Framebuffer-Display.
+- Externe API-Semantik fuer R4DRAW bleibt unveraendert.
+- Dokumentation in `Docs/Desktop/DisplayArchitektur.txt` ergaenzt.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.29.8` gesetzt.
+
+Notizen:
+- Diese Unterversion ist bewusst konservativ: Sie benennt Diagnosepfade nach,
+  ohne R4DRAW/R4DESK-ABI oder COMMAND-Diagnosebefehle umzubauen.
+
+Version 0.29.9 - boot_display.zig als zentrale fruehe Display-Schicht festziehen
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+
+Abnahme / Tests:
+- `DevTools/Scripts/Build.bat -norun` erfolgreich.
+- `DevTools/Scripts/Build.bat -test` erfolgreich.
+- Fruehe Fatal-/Log-Ausgabe funktioniert weiterhin.
+- Review-Kriterium: `main.zig` bleibt minimal und kennt keine Details von
+  Console, Surface-Pipeline oder DisplayBackend.
+
+Erledigt:
+- `boot_display.zig` kapselt weiterhin die Reihenfolge:
+  BootInfo lesen, neutralen Framebuffer erzeugen, BootConsole initialisieren,
+  DisplayTarget erzeugen, DisplayBackend registrieren, Surface-/Presenter-Pfad
+  starten und Log-Sink setzen.
+- `boot_display.State` exportiert keine rohen Framebuffer-/Console-Pointer
+  mehr als allgemeine Display-Wahrheit.
+- `boot_display.State` exportiert nur noch `ConsoleMetrics` fuer die fruehe
+  Boot-Ausgabe.
+- `kernelold.zig` liest Display-Geometrie ueber `display.activeMode()`.
+- `kernelold.zig` initialisiert Mouse-Bounds ueber den DisplayManager statt
+  ueber einen Boot-Framebuffer-Pointer.
+- `kernelold.zig` nutzt fuer Console-Ausgabe nur noch die von `boot_display`
+  bereitgestellten BootConsole-Metriken.
+- Fehlerpfad fuer fehlendes aktives DisplayBackend ergaenzt.
+- Dokumentation in `Docs/Desktop/DisplayArchitektur.txt` ergaenzt.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.29.9` gesetzt.
+
+Notizen:
+- `boot_display.zig` ist damit sichtbarer Besitzer der fruehen
+  Display-Initialisierung; `kernelold.zig` bleibt nur Legacy-Verbraucher des
+  vorbereiteten Zustands.
+
+Version 0.29.10 - Doppelte Boot-Framebuffer-Weitergabe entfernen
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Abnahme / Tests:
+- Suche/Review: Keine produktive Display-Initialisierung mehr, die denselben
+  BootInfo-Framebuffer parallel an `display` und `surface_pipeline` reicht.
+- Suche/Review: Keine neue Abhaengigkeit von `boot_info.Framebuffer` in
+  Display-/Surface-Code ausserhalb des BootInfo-Adapters.
+- `DevTools/Scripts/Build.bat -norun` erfolgreich.
+- `DevTools/Scripts/Build.bat -test` erfolgreich.
+- Review-Kriterium: Der Code kann erklaeren, wer Besitzer des physischen
+  Ausgabeziels ist und wer nur praesentiert oder rendert.
+
+Erledigt:
+- `boot_display.zig` ist der einzige Adapter von `boot_info.Framebuffer` zur
+  fruehen Display-Schicht.
+- `boot_display.zig` wandelt den Boot-Framebuffer einmalig in BootConsole,
+  DisplayTarget und ConsoleSink um.
+- `display.zig` bietet keine oeffentliche `initBootFramebuffer`- oder
+  `bootTargetFromFramebuffer`-Abkuerzung mehr an.
+- `surface_pipeline.zig` bleibt ueber `display.activeMode()` und
+  `display.stats()` an den DisplayManager gekoppelt, nicht an BootInfo.
+- `DisplayTarget.framebuffer` als Low-Level-Backend-Handle dokumentiert.
+- Dokumentation in `Docs/Desktop/DisplayArchitektur.txt` ergaenzt.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.29.10` gesetzt.
+
+Notizen:
+- Das ist der eigentliche Glattzieh-Punkt dieser Version.
+- Besitzer des physischen Ausgabeziels ist nach der Uebersetzung der
+  DisplayManager in `display.zig`; `boot_display.zig` bleibt Boot-Adapter und
+  fruehe Initialisierungsschicht.
+
+Version 0.29.11 - Dokumentation und Abgrenzung fuer spaeteren Grafiktreiber aktualisieren
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Abnahme / Tests:
+- Dokumentation unter `Docs/Desktop/DisplayArchitektur.txt` oder passender
+  Nachbardokumentation aktualisiert.
+- `DevTools/Scripts/Build.bat -norun` erfolgreich, falls Code beruehrt wurde.
+- Dokumentation enthaelt konkrete Verantwortlichkeiten und nicht nur
+  Wunschbegriffe.
+
+Erledigt:
+- Dokumentiert, dass der aktuelle Limine-/Boot-Framebuffer nur ein
+  Boot-/Fallback-DisplayTarget ist.
+- Dokumentiert, dass ein spaeterer Grafiktreiber ein neues DisplayBackend als
+  aktives DisplayTarget bereitstellen soll.
+- Dokumentiert, dass Surface, Presenter, Compositor und Anwendungen nicht vom
+  Ursprung des aktiven Displayziels wissen sollen.
+- Mindestvertrag fuer spaetere Grafiktreiber dokumentiert:
+  Displaymodus, Mapping, Present-Operationen und Diagnose-/Stats-Daten.
+- Geplanten Framebufferwechsel dokumentiert:
+  neues Backend registrieren, Presenter-Ziel wechseln, Full-Redraw anfordern,
+  Cursor-/Overlay-Zustand neu setzen und BootTarget nicht mehr aktiv nutzen.
+- Legacy-Bereiche klar benannt:
+  BootConsole/FallbackConsole, Surface-Pipeline-Bruecke und Cursor-Overlay.
+- Dokumentation in `Docs/Desktop/DisplayArchitektur.txt` ergaenzt.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.29.11` gesetzt.
+
+Notizen:
+- Dieser Schritt verbindet die 0.29.X-Bereinigung mit dem spaeter geplanten
+  Grafiktreiber, ohne den Treiber schon zu bauen.
+
+Version 0.29.12 - Abschlussabnahme 0.29.X
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Abnahme / Tests:
+- `DevTools/Scripts/Build.bat -norun` erfolgreich.
+- `DevTools/Scripts/Build.bat -test` erfolgreich mit `TEST OK`.
+- Keine sichtbare Regression bei Boot-Ausgabe, R4DOS-Start und Desktop-Start.
+- Falls der User einen GUI-Sichttest macht: Desktop sichtbar, Mauszeiger
+  bewegbar, R4DOS-Modus startbar, Terminal-/R4DRAW-Ausgabe plausibel.
+
+Erledigt:
+- Vollstaendige Build-Abnahme mit `DevTools/Scripts/Build.bat -norun`
+  ausgefuehrt.
+- QEMU-Smoke mit `DevTools/Scripts/Build.bat -test` ausgefuehrt.
+- Abschluss gegen die 0.29.X-Qualitaetsregeln durchgefuehrt:
+  keine doppelte produktive Display-Wahrheit, keine neue BootInfo-Kopplung im
+  Displaypfad, klare Besitzerrollen und intakte Diagnosepfade.
+- 0.29.X damit technisch abgeschlossen.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.29.12` gesetzt.
+
+Notizen:
+- Nach Abschluss kann 0.29.X in `Docs/Changelogs/V0.29.txt` ausgelagert
+  werden, wenn die Roadmap bereinigt wird.

@@ -1,0 +1,1357 @@
+﻿R4OS Treiberstand
+=================
+
+Einordnung
+----------
+
+Dieses Dokument ist die ausfuehrliche Treiberchronik: Es haelt je Treiber
+fest, was erprobt wurde, welche Hardware wie reagiert hat und welche
+Grenzen bekannt sind. Der knappe aktuelle Ueberblick - Projektliste,
+Bootgrenze, Registry und Regeln - steht in `Docs/Drivers/README.txt`;
+das Formatvertragsdokument ist `Docs/Drivers/R4DFormat.txt`.
+
+Begonnen hat der Bestand mit Version 0.4, die das R4D-Treibersystem als
+sichtbares, DOS-artiges Modulmodell vorbereitet und an mehreren echten
+Kernelpfaden erprobt hat. Die Abschnitte tragen ihre jeweilige Version;
+Pfade sind auf den heutigen Baum gezogen.
+R4D-Treiber sind Dateien unter /R4OS/DRIVERS/ und werden ueber Header,
+Lifecycle, DriverApi und Registry behandelt.
+
+Der Kernel enthaelt weiterhin einen Boot-Core. Das ist beabsichtigt:
+Speicherverwaltung, Interruptgrundlagen, minimale Ausgabe, Boot-Storage und
+Boot-FS muessen verfuegbar sein, bevor Treiber von Disk geladen werden
+koennen.
+
+Seit 0.45.60 sind COMMAND-/Kernel-Testnamen in diesem Dokument nur noch
+historische Abnahmebegriffe. Aktuelle Standardabnahmen laufen ueber externe
+R4X-Diagnostics (`STORDIAG`, `USBDIAG`, `FSDIAG`, `HWDIAG`, `AUDIOD`,
+`SYNTHD`) und Host-TestScripts.
+
+
+Was in 0.4 funktioniert
+-----------------------
+
+- R4D-Dateiformat ist dokumentiert.
+- R4XBuilder kann einfache R4D-Container erzeugen.
+- Der R4D-Loader liest /R4OS/DRIVERS/*.R4D, prueft Headerdaten und ruft
+  init()/shutdown().
+- Driver-Registry zeigt Name, Quelle, Typ, Version und Lifecycle-Status.
+- Builtin-Core-Treiber und geladene R4D-Treiber werden unterschieden.
+- Bootlog/DMESG puffert Treiber- und Bootmeldungen.
+- CONFIG.R4S wird geparst und erzeugt einen deterministischen Boot-Plan.
+- DRIVER=, DISABLE=, OPTION und AUTO=PCI/AUTO=ACPI sind als Konfiguration
+  vorhanden.
+- DriverApi Version 2 stellt Logging, Port-I/O, DMA-Pufferplatzhalter,
+  IRQ-Platzhalter, Optionszugriff und Subsystem-Registrierung bereit.
+- LOAD, UNLOAD und DRIVERS nutzen die Runtime-Ladelogik aus der Shell.
+- PS2 bleibt Builtin; ATAPIO erscheint seit 0.45.50 als Preload-R4D im
+  Bootpfad und in der Registry.
+- AudioBackend-, MixerBackend- und SynthEngine-Registry sind vorhanden.
+- SID.R4D, OPL3.R4D und MIDI.R4D werden ins Image kopiert und ueber
+  Injection/CONFIG.R4S geladen.
+
+
+Audio und Synth als Treiber-Aufbau
+----------------------------------
+
+- AC97 ist als `AC97.R4D`-AudioBackend vorhanden und kann BEEP/R4Synth-PCM
+  ausgeben.
+- HDA ist seit 0.39.2 als `HDA.R4D`-AudioBackend aktiv und wurde in QEMU mit
+  BEEP, R4Synth/WAV und AUDIOD getestet.
+- R4Synth ist der normale Shell-Mediaplayer fuer WAV, MIDI und SID.
+- OPL3 und MIDI nutzen die SynthEngine-Struktur.
+- SID.R4D ist der Besitzer des nativen SID-Cores. Seit 0.45.24 gibt es
+  keinen produktiven Kernel-SID-Core mehr; der Kernel haelt nur R4AUDIO-,
+  SynthEngine- und R4P-Bruecken. Details zum SID-Stand stehen in
+  Docs/Audio/SIDStand.txt.
+
+
+Netzwerkstand seit 0.12
+-----------------------
+
+- Der Kernel besitzt einen Net-Core mit Adapter-Registry, Paketpool, TX-Vertrag,
+  RX-Uebergabe und Diagnoseausgaben ueber NET/NETINFO/NETSTAT.
+- RTL8139.R4D ist der aktive SDK-basierte Netzwerk-R4D-Treiber fuer den 0.12-
+  Pfad. Der fruehe Builtin-Bring-up bleibt als Referenzcode vorhanden, wird im
+  normalen Bootpfad aber nicht mehr automatisch geprobt.
+- RTL8139.R4D erkennt Realtek/QEMU 0x10EC:0x8139 ueber PCIe ECAM oder Legacy
+  PCI, aktiviert PCI-I/O und Bus Mastering, liest BAR0/BAR1, IRQ-Line/Pin und
+  die MAC-Adresse aus IDR0..5.
+- Der Treiber richtet zusammenhaengende DMA-Regionen, den klassischen 8K-RX-
+  Ring und vier TX-Slots ein. RX/TX laufen aktuell per Polling.
+- DriverApi v9 stellt net_receive_frame bereit, damit R4D-Netztreiber empfangene
+  Ethernet-II-Frames in den Net-Core geben koennen.
+- ARP, IPv4 und ICMP Echo funktionieren im QEMU-User-Network ueber RTL8139.R4D:
+  ARPTEST gateway: ok, PINGTEST gateway: ok, PING 10.0.2.2: ok und ICMPSELFTEST
+  inbound echo: ok.
+- RTL8139 erscheint in DRIVERS als R4D-Treiber vom Typ net, im Device Inventory
+  als active-netbackend und als network-Record.
+
+
+virtio-net seit 0.56.36
+-----------------------
+
+- VIRTNET.R4D (Code/System/Driver/VirtioNet) ist der zweite Netzwerk-R4D-
+  Treiber: virtio-net ueber den MODERNEN virtio-1.x-PCI-Transport
+  (Vendor-Capabilities Common/Notify/ISR/Device, MMIO-Common-Config,
+  VIRTIO_F_VERSION_1 + VIRTIO_NET_F_MAC). Split-Virtqueues RX=Q0 (32
+  Deskriptoren)/TX=Q1 (16 Slots), 12-Byte-Net-Header, 2-KB-Puffer in
+  einem 100-KB-DMA-Bereich.
+- Unterstuetzt QEMU -device virtio-net-pci,disable-legacy=on (0x1041)
+  und das transitionale Default-Device (0x1000 mit modernen
+  Capabilities). Reine Legacy-Geraete (disable-modern=on) werden bewusst
+  mit Log-Warnung abgelehnt; es gibt keinen I/O-Port-Fallback.
+- IRQ-first mit Poll-Fallback nach RTL8139-Muster (interrupt_line + GSI
+  16-23 shared/level-low, ISR-Byte read-to-clear, Drain-Guard gegen
+  parallelen IRQ-/Poll-Zugriff); OPTION VIRTNET irq=off erzwingt Polling.
+- Aktivierung ueber CONFIG.R4S DRIVER=VIRTNET; Abnahme-Harness
+  Tests/Gate/Run-VirtioNetDhcpLiveTest05636.ps1
+  (DHCP-Lease ueber den Draht mit modern-only-Device).
+
+
+RTL8111/RTL8168 seit 0.59.5
+---------------------------
+
+- RTL8168.R4D (Code/System/Driver/RTL8168) erkennt Realtek 10EC:8168 als
+  dritten Netzwerk-R4D-Treiber. Erstes reales Abnahmeziel ist der Lenovo-
+  Controller mit Subsystem 17AA:38C7 und PCI-Revision 10.
+- Der Treiber priorisiert den ueblichen MMIO-BAR2 und kann auf einen anderen
+  gueltigen Memory-BAR ausweichen. Er nutzt 64 RX- und 16 TX-Deskriptoren mit
+  64-Bit-DMA-Adressen sowie MTU 1500. Empfang und TX-Abschluss bleiben im
+  Taskkontext; shared INTx dient als Hinweis und ein 10-ms-Pollpfad bleibt als
+  deterministischer Fallback aktiv.
+- PCI-Power-Management wird vor Busmaster/MMIO nach D0 gebracht. Am Endpunkt
+  wird PCIe-ASPM-L1 defensiv abgeschaltet.
+- WARMREBOOT-ROOT-CAUSE UND STANDARD-FIX (0.59.24, real fuenffach
+  bewiesen): Der ACPI-Warmreset dieses Lenovo loescht das
+  Bus-Master-Enable im PCIe-ROOT-PORT ueber der NIC (COMMAND 0x0003);
+  die BIOS-Firmware setzt es nur auf dem Kaltpfad. Ohne Bridge-BME
+  sterben alle NIC-initiierten Upstream-Zugriffe (TX-Deskriptor-Fetch,
+  RX-DMA-Writes, MSI), waehrend MMIO normal funktioniert - wochenlang
+  sah das wie eine kranke NIC aus. Der Fix ist STANDARDVERHALTEN am
+  Bind (`warmfixBridgeAtBind`, Linux pci_enable_bridge-Semantik, exakt
+  XID 0x509): Parent-Root-Port finden, Endpoint-/Bridge-COMMAND als
+  Beweiszeile loggen (`warmfix pci endpoint=0x.... bridge=0x....
+  [-> 0x....]`), fehlendes Memory/Bus-Master setzen und verifizieren.
+  Auf gesunden Kaltboots ein No-Op; keine Option noetig. WICHTIG:
+  Der Check laeuft ausschliesslich im Init-Kontext - PCI-Config-
+  Zugriffe auf fremde Geraete aus dem Recovery-/Taskkontext crashen
+  real mit GPF (dreifach reproduziert, offener Kernel-Pruefpunkt).
+- Die reale Lenovo-Hardware meldet XID 0x509 (RTL8168GU/8111GU, upstream
+  VER_42). Der Treiber protokolliert die erkannte XID samt PHY-Familie
+  beim Bind (`RTL8168.R4D xid=0x... phy=... bind=reset-free`).
+- Der Bind ist der bewusst reset-freie Legacy-Pfad des wochenlang kalt
+  bewiesenen 0.59.5-Stands: Engines gebunden stoppen, RXDV-Gate loeschen,
+  Deskriptoren, Legacy-TX-/RX-Konfiguration, EarlySize 0x3F, CPlusCmd
+  DAC+MulRW, Ringadressen high-before-low, RX/TX an; ein
+  BMCR-Autoneg-Anstoss erfolgt nur ohne Link. Die waehrend der
+  0.59.16..0.59.20-Reifung ergaenzten Bind-Registerpfade (OOB-/Shared-
+  FIFO-Handoff, Bind-CmdResets, ERI-/EPHY-/MAC-OCP-Referenzbaseline,
+  RealWoW-Parken, Exit-L1, AUTO_FIFO/EarlySize 0x27/RxConfig-
+  Familienbits, PHY-Softreset-Anker, Bisektionsleiter, Pre-Bind-Bus-
+  Master-Dance) haben auf der realen Hardware boot-abhaengige
+  Totalausfaelle des zuvor stabilen Kaltpfads erzeugt und wurden
+  vollstaendig entfernt. Gate 0595 und das Hostmodell erzwingen das
+  negativ: kein CmdReset und keine indirekten Registerzugriffe im Bind.
+  Ein Wiedereinbau einzelner Referenzfeatures verlangt Feature fuer
+  Feature einen realen Mehrboot-Kaltstartnachweis.
+- Historische Einordnung: Vor der Root-Cause-Findung galt der
+  Warmreboot als bind-seitig unloesbar; saemtliche NIC-Register-,
+  Handoff- und Firmware-Versuche scheiterten, weil das Problem eine
+  Ebene hoeher lag (Root-Port statt NIC). Die Kernel-Transition
+  (DMA-Stilllegung vor ACPI-Reset) bleibt als Hygiene bestehen.
+- Seit 0.59.22 existiert ein OPTIONALER Firmware-Ladepfad fuer exakt
+  XID 0x509 (vendor CFG_METHOD_25): `OPTION RTL8168 fw=on` laedt beim
+  Bind den vollstaendigen MAC-MCU-Patch (417 Words, unteilbarer
+  Vertrag: Breakpoints nullen, 3 ms, 0xFC26=0, Patch, 0xFC26=0x8000,
+  Breakpointwerte) und den PHY-RAM-Code (38 Ops unter dem
+  Patch-Request-Handshake, Versionsmarker 0x801E, idempotent);
+  `fw=force` ignoriert den Versionsmarker (Warmtest-Variante). Default
+  ist AUS; alle indirekten Registerzugriffe leben ausschliesslich in
+  `src/rtl8168_firmware.zig`, die Tabellen werden mechanisch per
+  `Export-Rtl8168FirmwareTables05922.ps1` aus dem GPL-Vendortreiber
+  generiert. Analyse und Vertrag:
+  `Docs/Drivers/Rtl8168FirmwarePfad05921.txt`. Realer 0.59.23-Befund:
+  kalt in 4/4 Boots harmlos (inkl. vollem force-Load); der Warmreboot
+  bleibt allein durch Firmware ungeheilt - im Warmzustand laedt die
+  Firmware vollstaendig und der Link kommt, aber die MAC-TX-/DMA-Engine
+  holt keine Deskriptoren ab.
+- Zusaetzlich existiert die OPTIONALE Warmfix-Eskalation
+  (`OPTION RTL8168 warmfix=on`, Default aus) als Sicherheitsnetz fuer
+  unbekannte Warmzustaende: Nach zwei echten TX-Stall-Recoveries - ein
+  Zustand, den reale Kaltboots nie erreichen - laeuft einmal pro Boot
+  die vollstaendige Referenz-Uebernahme aus `src/rtl8168_warmfix.zig`:
+  Ownership-Handoff nach upstream rtl_hw_init_8168g (RXDV-Gate,
+  FIFO-Drain advisory, Engines stoppen, NOW_IS_OOB loeschen,
+  E8DE-Link-List-Uebergabe), Firmware `force`, PHY-Softreset, danach je
+  Controllerreset die Referenz-Startkette (ERI-FIFO-Schwellen, EPHY
+  `e_info_8168g_2`) und der Reinit mit TXCFG_AUTO_FIFO, EarlySize 0x27
+  und VER_40-RxConfig. Die Eskalation macht KEINE PCI-Config-Zugriffe
+  (Taskkontext-GPF); ohne Eskalation bleibt der Bind byteidentisch
+  legacy; EEE/RealWoW/Exit-L1 sind bewusst ausgeschlossen. Marker:
+  `warmfix takeover applied`.
+- Seit 0.59.19 bevorzugt der Treiber MSI (DriverApi Version 16,
+  `pci_enable_msi` mit festem Router-Fenster 24..31 und direktem
+  LAPIC-Vektor); real auf dem Lenovo bewiesen (irq=24, echte Hits).
+  `OPTION RTL8168 msi=off` erzwingt den alten Pfad, shared
+  INTx und Polling bleiben Fallbacks. Die Recovery ist auf die
+  Referenzsemantik kalibriert: Nur ein echter SYSErr oder ein 5-Sekunden-
+  TX-Stall loest den begrenzten Vollreset aus (einziger CmdReset-Nutzer);
+  PCSTimeout wird nur gezaehlt (die alte
+  Klassifikation erzeugte auf dem realen GU wiederholte unnoetige Resets),
+  alle gelesenen ISR-Bits werden quittiert. Jede Recovery und jede
+  Linkflanke erzeugt einen LOGSVC-/COM1-Marker mit Ursachenzaehlern
+  (`recovery cause=... stall=/syserr=/pcs=`, `link up/down`). Ein
+  TX-Kanarienvogel (Miniframe an die eigene MAC, EtherType 0x88B5)
+  beweist den Sendepfad auch ohne externen Verkehr und meldet
+  `tx canary confirmed`; der erste zugestellte Empfang meldet
+  `rx path confirmed`. EEE wird nicht konfiguriert (der einseitige
+  MAC-EEE-Versuch hatte real den Empfang getoetet).
+- Der reale `drop`-Zaehler der Core-Traffic-Sicht zaehlt am Ethernet-Filter
+  verworfenen Fremd-/Multicastverkehr des LANs und ist kein Fehlerbild.
+- Seit 0.59.17 faehrt das permanente Gate `Run-Rtl8168HostModel05917.ps1`
+  den echten Treibercode gegen ein deterministisches GU-Registermodell
+  (`src/rtl8168_host_model.zig`): reset-freier Kaltpfad positiv (Verkehr,
+  exakte Legacy-Registerwerte, MSI/INTx/Poll, Kanarienvogel, kalibrierte
+  Recovery) und negativ (keine ERI-/EPHY-/MAC-OCP-/CFG9346-Zugriffe,
+  kein CmdReset im Bind) plus Warm-OOB-Wissensfall und reset-freiem
+  Transition-Shutdown-Nachweis.
+  Der zugehoerige Testseam in `main.zig` existiert nur im Testbuild.
+  Referenzvergleich und Abweichungsmatrix (historische Analyse):
+  `Docs/Drivers/Rtl8168ReferenzVergleich05916.txt`.
+- `REBOOT` beendet den aktiven Netzwerk-R4D nach Registry-/Pagecache-Flush
+  und vor dem ACPI-Reset. Dadurch sind RX/TX, Interrupts und insbesondere der
+  alte Descriptor-DMA-Ring stillgelegt, bevor der naechste Kernel neue
+  Ringadressen veroeffentlicht.
+- Das Produktionsprofil laedt `DRIVER=RTL8139` und `DRIVER=RTL8168`, damit
+  QEMU-/Alt-Hardware und das neue Laptopziel dasselbe Image verwenden. Die
+  bestehende TestInjection-/QEMU-Konfiguration bleibt unveraendert.
+- Descriptor-, PCI-Capability-, RX-/TX-, Reboot-Handoff- und Recovery-
+  Vertraege werden hostseitig geprueft. Realer Endstand 0.59.24 auf dem
+  Lenovo: Kaltboots (7+ in Folge) und WARMREBOOTS (5+ in Folge) binden
+  mit DHCP in Sekunden; SYSUPD-Zyklen mit aktivem FTPSVC, SSH/SFTP und
+  RDP sind ueber den produktiven RTL8168.R4D-Pfad abgenommen.
+
+
+USB/xHCI und HID seit 0.13
+--------------------------
+
+- XHCI ist ein Builtin-Bootpfad fuer den ersten Hardwaredeploy. Der Treiber
+  erkennt xHCI-Controller ueber PCIe Class/Subclass/ProgIF 0x0C/0x03/0x30,
+  mappt MMIO, initialisiert Command-/Event-Ringe, setzt Max Slots und liest
+  Root-Hub-Portstatus.
+- Der USB-Core fuehrt enumerierte USB-Geraete unterhalb des Hostcontrollers mit
+  festen Limits. Device Inventory nutzt dafuer Busart `usb`; der Hostcontroller
+  selbst bleibt ein PCIe-Record.
+- Die Enumeration liest Device-, Configuration-, Interface-, Endpoint- und
+  Stringdeskriptoren und veroeffentlicht in der USB-Core-Liste mehrere
+  konfigurierte Root-Hub-Geraete. QEMU-Profile mit USBMSC plus HID zeigen
+  Storage, Keyboard und Mouse gleichzeitig in `USB`.
+- Der Configuration-Parser laeuft den Descriptor-Stream defensiv: HID-
+  Deskriptoren, SuperSpeed Endpoint Companions und unbekannte Descriptoren
+  werden gezaehlt beziehungsweise uebersprungen, kaputte Laengen erscheinen als
+  `malformed`. Fuer den bestehenden USB-Core waehlt xHCI die beste
+  bootrelevante Interface aus, also bevorzugt Mass Storage Bulk-Only, danach
+  HID Boot Keyboard/Mouse, statt blind das erste Interface zu verwenden.
+- Seit 0.59.15 werden SuperSpeed Endpoint Companions nicht mehr nur gezaehlt:
+  xHCI ordnet jeden Companion ausschliesslich dem unmittelbar vorhergehenden
+  Endpoint zu und behaelt dessen `bMaxBurst` im USB-Core, Handle und retained
+  Runtime-Zustand. Der Bulk-Endpoint-Context uebernimmt den Wert in Max Burst
+  Size, setzt fuer asynchrone Endpunkte Max ESIT Payload auf null und verwendet
+  eine separate Average TRB Length. Damit ist auch der reale Samsung-FIT-BOT-
+  Deskriptor mit MPS 1024 und `bMaxBurst=8` abgedeckt.
+- Der xHCI-Kaltstart verlaesst sich nicht auf einen von UEFI bereits aktivierten
+  U0-Port: Jeder verbundene Startport erhaelt genau einen echten Portreset,
+  anschliessend gelten 50 ms Reset-Recovery und 10 ms Settle nach Address
+  Device. Bulk-Ring-Wraps publizieren ihren Link-TRB sofort mit dem alten PCS.
+  USBMSC wiederholt Inquiry, TEST UNIT READY und READ CAPACITY nur innerhalb
+  fester Zeitgrenzen und bricht danach mit einer klassifizierten Bootursache ab.
+  xHCI-Events warten dabei zwei reale Sekunden statt CPU-abhaengig gezaehlter
+  Pollschleifen. Nach Configure erhaelt BOT eine Sekunde Anlaufzeit; Bulk-IN
+  behandelt `Short Packet` als erfolgreichen Abschluss, berechnet die Istlaenge
+  aus der Residue und meldet bei Fehlern Phase, Completion-Code und Bytes.
+- xHCI besitzt fuer 0.13.8 einen retained Runtime-Pool: jedes konfigurierte
+  QEMU-Root-Hub-Geraet behaelt eigenen Slot, Port, Speed, Config, Device
+  Context, Input Context, EP0-Ring, Interrupt-Ring, Bulk-Ringe,
+  Descriptor-Puffer und Endpoint-Zustand. USBMSC und USBHID wechseln per
+  Slot-/Port-Handle auf den passenden Runtime-Kontext, ohne das Geraet erneut
+  zu adressieren.
+- xHCI stellt fuer Klassen jetzt `DeviceHandle` und `EndpointHandle` bereit.
+  USBMSC und USBHID speichern Handles aus der USB-Core-Device-Liste und nutzen
+  Handle-basierte Funktionen fuer Auswahl, Konfiguration, Bulk-Transfers,
+  Interrupt-IN-Polling und Recovery. Der Klassenvertrag haengt nicht mehr an
+  rohen globalen `current`-Feldern.
+- Die Root-Hub-Port-Vorbereitung ist fuer 0.13.8 gebuendelt: verbundene Ports
+  werden entprellt, Port-Power wird bei Bedarf gesetzt, Change-Bits werden
+  geloescht, nicht aktivierte Ports werden per Port Reset aktiviert und
+  aktivierte Ports mit Link-State ungleich U0 laufen erst durch eine U0-
+  Wartephase und danach durch Warm Reset. `USB` zeigt Link-State-Namen wie
+  `U0` oder `RxDetect`, `chg`, `pwr`, `deb` sowie Zaehler fuer Change-Clears,
+  Debounce-Fehler, Power-Anforderungen, U0-Waits und Warm-Resets.
+- Die xHCI-Ringdiagnose zeigt Command-/Event-Ring-Indizes, Ring-Wrap-Zaehler
+  fuer Command, Event, EP0, Interrupt, Bulk-In und Bulk-Out, den letzten
+  xHCI-Event mit Type, Completion-Code, Slot, Endpoint, Laenge und Parameter
+  sowie das letzte tatsaechlich verworfene stale Event. Bulk- und Interrupt-
+  Zeilen zeigen zusaetzlich Queue-/Cycle-Stand und Pending-Zustand. Seit
+  0.59.1 zeigen eigene Deferred-Zaehler auch wartende, zugestellte, bereinigte
+  und wegen voller Queue verworfene Completions; diese gelten nicht mehr
+  pauschal als stale.
+- Control-Transfers laufen ueber eine gemeinsame `ControlRequest`-Struktur fuer
+  No-Data-, IN- und vorbereitete OUT-Requests. `USB` zeigt die letzte
+  Control-Request mit Type, Request, Value, Index, Laenge, Richtung,
+  Completion-Code, Residue, OK-Status sowie Fail-/Stall-/Short-/Timeout-
+  Zaehlern.
+- USBHID ist ein Builtin-Input-Treiber fuer HID Boot Protocol. Fuer Boot-
+  Keyboards werden SET_CONFIGURATION, SET_PROTOCOL(0), SET_IDLE und der
+  Interrupt-IN-Endpoint vorbereitet. Fuer 0.13.6 ist der konfigurierte
+  Interrupt-IN-Endpoint bind-kritisch; SET_CONFIGURATION, SET_PROTOCOL(0) und
+  SET_IDLE werden bei echter Hardware als Setup-Warnungen toleriert, wenn das
+  Geraet trotzdem Reports liefern kann.
+- USBHID speist neue Tastaturreports ueber Set-1-Scancodes in den bestehenden
+  Keyboard-Decoder ein. PS/2 bleibt parallel aktiv.
+- `USB` zeigt fuer HID neben Poll-/Report-Zaehlern auch `setup-warn`,
+  `protocol`, `idle`, `report-id`, den letzten Report mit Laenge und den
+  letzten nichtleeren Report. Das ist fuer Gaming-Keyboards wichtig, die trotz
+  Boot-HID-Interface einzelne Class-Requests ablehnen, Report-IDs verwenden
+  oder ein leicht abweichendes Layout liefern.
+- xHCI wertet HID-Deskriptoren im Configuration-Descriptor aus und merkt sich
+  die Report-Descriptor-Laenge pro Interface. USBHID liest den Report
+  Descriptor per GET_DESCRIPTOR(Report) mit `wValue=0x2200` und `wIndex` auf
+  das Interface, ohne den Boot-HID-Pfad hart davon abhaengig zu machen.
+- Seit 0.45.15 parst `drivers/usb/hid_report.zig` HID-Report-Descriptoren
+  nicht mehr selbst. Die Datei enthaelt nur noch Summary-/Statusformen und
+  dispatcht Parse an `HIDREPORT.R4P` mit Rolle `usb.hid_report`.
+  xHCI, USB-Core, HID-Control-Transfers, Interrupt-IN-Polling und
+  Input-Injektion bleiben Kernel-/USBHID-Aufgaben.
+- Ebenfalls seit 0.45.15 ist die HID-Boot-Protokolllogik Pflicht-R4P:
+  `USBHID.R4P` mit Rolle `usb.hid_boot` klassifiziert Boot-Keyboard-/Mouse-
+  Interfaces und dekodiert Boot-Reports in neutrale Usage-/Modifier- bzw.
+  Mouse-Delta-Ergebnisse. Der Kernel bleibt Besitzer von SET_CONFIGURATION,
+  SET_PROTOCOL, SET_IDLE, Interrupt-IN-Polling, Scancode-Mapping,
+  Mouse-State und Eingabeinjektion.
+- Fehlt `HIDREPORT.R4P` oder `USBHID.R4P`, blockiert USBHID passende
+  Boot-HID-Bindings sichtbar (`source=none`, Required-Hinweis) und nutzt
+  keinen eingebauten Parser- oder Decode-Ersatz.
+- Der HID-Interrupt-IN-Pollpfad ist nicht mehr hart auf 8 Byte begrenzt.
+  xHCI nimmt jetzt variable Reportpuffer entgegen; USBHID pollt mindestens
+  acht Byte und bis zu 32 Byte je nach Endpoint-Max-Packet-Size. Damit koennen
+  Report-ID-Layouts und groessere einfache HID-Reports diagnostiziert und fuer
+  die Mausauswertung genutzt werden, ohne den kleinen Boot-Protocol-Pfad
+  aufzugeben.
+- xHCI wertet bei HID-Interrupt-IN jetzt die Transfer-Residue des Completion-
+  Events aus und berechnet daraus die echte Reportlaenge. `USB` zeigt
+  `interrupt-in ... last=<actual>/<requested> residue=<n> cc=<n>`, USBHID
+  zeigt pro Binding `last-len=<actual>/<requested> residue=<n>` und verwendet
+  diese Laenge fuer Report-Dump und Decode. Das ist wichtig fuer echte Maeuse,
+  die kuerzere Reports liefern als der angeforderte Endpoint-Puffer.
+- Seit 0.59.1 gilt xHCI-Completion-Code 13 (`Short Packet`) bei HID-
+  Interrupt-IN als regulaere, ueber die Residue verkuerzte Completion. Er
+  loest weder Endpoint-Recovery noch Reportverlust aus. Das ist insbesondere
+  fuer Maeuse noetig, deren gueltiger Report kleiner als MaxPacketSize ist.
+- `USB` zeigt pro HID-Binding `report-desc=<gelesen>/<erwartet>` sowie
+  `parsed`, `malformed` oder `unread` und zusammengefasste Layoutmarker wie
+  `keyboard-layout`, `mouse-layout` und `wheel`. Damit lassen sich echte
+  HID-Reports vom Lenovo-Test direkt gegen die Descriptorbasis einordnen.
+- USBHID fuehrt Boot-Keyboard und Boot-Mouse als getrennte Bindings mit eigenem
+  Port, Interface, Interrupt-IN-Endpoint, Reportpuffer, Zaehlern und Pollpfad.
+  Relative X/Y-Reports und Buttons werden in den bestehenden
+  `drivers/input/mouse.zig`-Zustand eingespeist, sodass R4Desk und die
+  R4X-Maus-API denselben Pfad nutzen wie PS/2.
+- USB-Core veroeffentlicht pro Interface jetzt auch Max-Packet-Size und
+  Intervall des Interrupt-IN-Endpoints. USBHID nutzt diese Interface-Records
+  direkt und bindet Boot-Keyboard/Boot-Mouse aus jedem passenden Interface
+  eines konfigurierten Geraets, statt nur das ausgewaehlte `first_interface`
+  zu betrachten. Composite-Geraete und Geraete mit mehreren Klassen koennen
+  dadurch HID weiter bereitstellen, auch wenn ein anderes Interface fuer
+  Storage oder eine Spezialklasse bevorzugt wurde.
+- Boot-HID-Kandidaten ohne verwertbaren Interrupt-IN-Endpoint werden nicht mehr
+  als halb gebundene HID-Geraete stehen gelassen. `USB HID status` zeigt solche
+  Faelle als `missing-ep=<n>`; `keyboard`/`mouse` bleiben dann `no` oder beim
+  naechsten gueltigen Interface normal `bound`.
+- USBHID nutzt den retained xHCI-Runtime-Zustand idempotent: nach einem Wechsel
+  zurueck auf Keyboard oder Mouse wird ein bereits konfigurierter Interrupt-
+  IN-Endpoint weiterverwendet. SET_CONFIGURATION, SET_PROTOCOL, SET_IDLE und
+  Configure Endpoint laufen nur erneut, wenn der wiederhergestellte
+  Runtime-Zustand den erwarteten Endpoint nicht enthaelt.
+- HID-Polling trennt Leerlauf und Fehler: xHCI liefert fuer Interrupt-IN jetzt
+  `report`, `no_report` oder `failed`, und `USBHID` zeigt pro Binding sowie
+  aggregiert `noreport`, `reports` und echte `failures`.
+- xHCI uebersetzt HID-Interrupt-Endpoint-Intervalle vor Configure Endpoint in
+  den Endpoint-Context-Wert nach xHCI Table 6-12. Full-/Low-Speed-Interrupt-
+  Endpoints werden aus linearem `bInterval` in Millisekunden auf den
+  naechsten niedrigeren 125-us-Potenzwert abgebildet, High-/Super-Speed-
+  Endpoints verwenden `bInterval - 1`. `USB` zeigt die Diagnose als
+  `interval=<descriptor>-><context>` plus Max-Packet-Size. Das zielt auf echte
+  Maeuse mit `bInterval=1`, die vorher als HID Mouse erkannt wurden, aber vor
+  dem Polling bei Configure Endpoint ausstiegen.
+- USBHID behandelt relative Mausreports anders als Tastaturreports: doppelte
+  Tastaturreports bleiben Leerlauf und werden unterdrueckt, doppelte
+  Nicht-Null-Mausreports werden aber dekodiert, weil identische relative
+  Bewegungen echte Bewegung sind. Doppelte Null-Mausreports bleiben Leerlauf.
+- Seit 0.56.17 betreibt USBHID einen hoch priorisierten Poll-Task im
+  10-ms-Takt; Desktop-/Input-Hooks bleiben nur zusaetzliche sofortige
+  Pollgelegenheiten. Pro Poll werden fuer die Maus bis zu acht bereits fertige
+  Interrupt-IN-Reports abgeholt, damit R4Desk Bewegungsbursts aufnehmen kann.
+  `USB` und `INPUT` zeigen dafuer zusaetzlich `dup` und `service`.
+- Seit 0.59.1 vermittelt xHCI Command- und Transfer-Completions aus dem
+  gemeinsamen Event-Ring besitzergenau. Transfer-Events werden ueber Slot,
+  Endpoint und physische TRB-Adresse, Command-Completions ueber ihre physische
+  Command-TRB-Adresse zugeordnet. Ein Control-TD besitzt dabei gemeinsam seine
+  Setup-, optionale Data- und Status-TRB-Adresse, sodass auch ein Fehler-Event
+  auf dem ausloesenden TD-Teil exakt zugestellt wird. Eine Completion fuer
+  einen anderen noch aktiven Warter wird geordnet zurueckgestellt und spaeter
+  zugestellt, statt vom gerade pollenden Control-, Bulk-, Command- oder
+  HID-Pfad als stale verworfen zu werden.
+- Der Deferred-Zustand folgt dem Geraete-Lifecycle: Endpoint-Recovery entfernt
+  die passende offene HID-Completion, Disconnect und Slot-Wiederverwendung
+  bereinigen alte Slot-Events. Bei Queue-Ueberlauf bleibt ein HID-Binding nicht
+  dauerhaft pending, sondern darf einen neuen Interrupt-Transfer einstellen.
+  Das behebt den Hardwarepfad, auf dem USBMSC-Zugriffe beim Boot von einem
+  USB-Stick eine fertige Maus-Completion konsumieren konnten, obwohl der
+  Maus-Endpoint weder halted noch anderweitig fehlerhaft war.
+- Ein echter Laptop blieb mit 0.59.1 trotzdem nach ein bis zwei Sekunden
+  stehen; dabei waren alle Deferred-Zaehler 0. Der anschliessende Audit fand
+  einen falschen Link-Cycle am ersten Umlauf der 255 nutzbaren Transfer-TRBs.
+  Seit 0.59.2 starten die Link-TRBs von Command-, EP0- und Interrupt-Ring mit
+  Cycle 0. Beim Umlauf wird der Link erst mit dem alten Producer Cycle State
+  (PCS) publiziert und der lokale Producer danach auf das neue PCS
+  umgeschaltet.
+- Der Event-Ring liest seit 0.59.2 zuerst das Cycle-Bit volatil, uebernimmt den
+  restlichen Event-TRB erst nach einer DMA-Barriere und leert alle bereits
+  publizierten Events als Batch. ERDP/EHB wird einmal nach dem Batch committed;
+  IMAN.IP und USBSTS.EINT werden dabei per W1C quittiert. Die Initialisierung
+  schreibt ERSTSZ, ERDP und zuletzt ERSTBA, waehrend das pollingbasierte R4OS
+  Interrupter Enable bewusst ausgeschaltet laesst.
+- Die 0.59.2-QEMU-Hardwareprobe las USBMSC 8/8-mal zu insgesamt 24 MB und
+  lieferte 2065 Mauspakete ueber acht HID-Ring-Umlaeufe. Parallel stiegen die
+  Event-Ring-Umlaeufe von 10 auf 17 und die ERDP-Commits von 2785 auf 4570;
+  Recovery, Pending-Timeout, Deferred-Overflow und Ring-Full blieben 0, der
+  bereits vorhandene Stale-Zaehler blieb konstant bei 1.
+- `USBREGRESS [loops]` prueft den In-System-Kontextwechsel zwischen USBHID und
+  USBMSC: Geraetezahl, konfigurierte Geraete, retained Slots, HID-Bindings,
+  MSC-Blockdevice und xHCI-/HID-/USBMSC-Fehlerzaehler muessen stabil bleiben.
+- QEMU-Abnahme mit `qemu-xhci` und `usb-kbd`: XHCI und USBHID sind aktiv,
+  Device Manager zeigt `usb USB HID Boot Keyboard` mit Treiber `USBHID` und
+  Status `bound-input`. Headless-Leerlauf laesst den Interrupt-Transfer pending
+  und zaehlt das nicht als Fehler.
+- QEMU-Abnahme mit `qemu-xhci` und `usb-mouse`: Device Manager zeigt
+  `usb USB HID Boot Mouse` mit Treiber `USBHID` und Status `bound-input`;
+  `INPUT` meldet den zentralen Mouse-State als present. Ohne GUI-Bewegung
+  bleibt auch hier der Interrupt-Transfer pending und fehlerfrei.
+- Seit 0.42.4 ist der USB-HID-Bootbesitz aus `kernelold.zig` herausgezogen
+  und wird durch `Code/src/kernel/usb_hid_boot.zig` aus `main.zig` gestartet.
+  `kernelold.zig` besitzt keinen direkten HID-Init und keinen `USBHID`-
+  Registry-Besitz mehr. Seit 0.45.18 sind `HIDREPORT.R4P` und `USBHID.R4P`
+  frueh geladene R4P-Pflichtrollen aus `/boot/preload/`.
+- Seit 0.45.14 werden `HIDREPORT.R4P`, `USBHID.R4P`, `USBBOT.R4P` und
+  `USBSCSI.R4P` zusaetzlich ueber Limine aus `/boot/preload/` bereitgestellt.
+  Der Kernel laedt vorher `R4DEV.R4L` als minimale R4P-API-Lib, registriert
+  die vier USB-Rollen mit `source=preload` und startet danach erst Storage-
+  Controller, USBMSC und USBHID. Der spaete `/sys/protocols/`-Scan bleibt
+  bestehen, ueberspringt diese Rollen aber ohne Doppelregistrierung.
+- Seit 0.45.42 gibt es dafuer zusaetzlich den Limine-geladenen
+  Fruehladecontainer `PRELOAD.R4I` unter `/boot/preload.r4i`. Der Container
+  buendelt echte R4M0-Artefakte mit Name, Rolle, Typ, Groesse und Bytes:
+  `R4DEV.R4L`, die vier USB-R4P-Pflichtrollen und ein echtes R4D-Smoke-
+  Artefakt. R4L/R4P werden daraus bereits vor Storage geladen; R4D-Eintraege
+  werden formal erkannt, aber Storage-R4D-Aktivierung folgt erst mit dem
+  StorageBackend-Vertrag. Die Einzeldateien unter `/boot/preload/` bleiben
+  vorerst als Legacy-/Missing-Test-Fallback erhalten.
+- Seit 0.45.15 sind die HID-Rollen `HIDREPORT.R4P` und `USBHID.R4P`
+  Pflichtquelle. Der Kernel enthaelt keinen HID-Report-Parser und keinen
+  HID-Boot-Decode-Ersatz mehr.
+- Seit 0.45.16 sind die USBMSC-Rollen `USBBOT.R4P` und `USBSCSI.R4P`
+  Pflichtquelle. Der Kernel enthaelt keinen BOT-CBW-/CSW-Ersatz und keinen
+  SCSI-CDB-/Response-Parser-Ersatz mehr. Fehlende Rollen blockieren USBMSC
+  sichtbar mit `source=none`, statt ein USB-Systemvolume ueber Built-ins zu
+  mounten.
+- Seit 0.45.17 besitzt `USBDIAG.R4X` die USB-Protokolldiagnose fuer
+  HIDREPORT, USBHID-Boot, USBBOT und USBSCSI. Die produktiven USB-HID- und
+  USBMSC-Abnahmen starten das Programm in den xHCI-Profilen, waehrend
+  `SYSINFO.R4X /USBHID` und `SYSINFO.R4X /USBMSC` die sichtbaren
+  Besitz-/Geraetestatus weiter pruefen.
+- Seit 0.45.18 ist der USB-Protokollvertrag abgeschlossen: die vier Rollen
+  `usb.hid_report`, `usb.hid_boot`, `usb.msc_bot` und `usb.scsi_block` werden
+  als `source=preload`, `state=active` und `required=R4P` erwartet. SYSINFO
+  und Device-Inventory nennen gebundene USBHID-/USBMSC-Pfade als
+  `preload/R4P-required active`.
+- Alte interne `command_runtime.zig`-USB-Befehle sind seit 0.45.1 mit der
+  Kernel-Runtime entfernt und werden nicht als COMMAND.R4X-Befehle
+  reaktiviert.
+- USBMSC ist ein Builtin-Storage-Treiber fuer USB Mass Storage Bulk-Only
+  Transport. Er nutzt CBW/CSW, INQUIRY, TEST UNIT READY, REQUEST SENSE,
+  READ CAPACITY(10), READ(10), WRITE(10), SYNCHRONIZE CACHE(10) und MODE
+  SENSE(6) fuer das Write-Protect-Bit.
+- `USBBOT.R4P` mit Rolle `usb.msc_bot` baut CBWs und validiert CSWs inklusive
+  Signatur, Tag, Residue und Status. USBMSC bleibt Besitzer der USB-
+  Geraeteauswahl, xHCI-Bulk-Transfers, Recovery, SCSI-Kommandofolge und
+  Blockdevice-Registrierung.
+- `USBSCSI.R4P` mit Rolle `usb.scsi_block` baut die CDBs fuer INQUIRY,
+  TEST UNIT READY, REQUEST SENSE, READ CAPACITY(10), MODE SENSE(6),
+  READ(10), WRITE(10) und SYNCHRONIZE CACHE(10) und parst Sense-, Capacity-
+  und Write-Protect-Antworten. USBMSC bleibt Besitzer des Ablaufs, der
+  Transfers, der Sense-Klassifikation, der Medienentscheidung und der
+  Blockdevice-Registry.
+- `USBMSC` zeigt den SCSI-Initialisierungspfad mit INQUIRY, TEST UNIT READY,
+  READ CAPACITY(10) und MODE SENSE(6), inklusive TUR-Retry-Zaehler. REQUEST
+  SENSE merkt sich den ausloesenden Opcode und zaehlt Sense-Kategorien fuer
+  Not Ready, Unit Attention, Illegal Request und Write Protect.
+- USBMSC registriert `usb0` als Blockdevice. Beschreibbare QEMU-USB-Medien
+  werden als C: gemountet und bestehen FSDIAG-Schreib-/Lesetests; read-only
+  Medien melden `write-protected=yes known=yes writable=no` und werden in der
+  Blockdevice-Registry nicht mehr als beschreibbar ausgegeben. `usb0` ist als
+  `removable=yes` markiert und wird auch im Device Inventory als entfernbares
+  USB-Blockmedium beschrieben.
+- Die Blockdevice-Registry bekommt von USBMSC zusaetzlich Backend-Recovery-
+  Zaehler und den letzten SCSI-Sense-Snapshot. `BLOCK` zeigt damit neben
+  Read/Write/Flush auch `recovery=a/b` und `sense=for=0x.. key=0x.. asc=0x..`,
+  waehrend `USBMSC` weiter die klassenspezifische Detaildiagnose liefert.
+- Der USBMSC-BOT-Pfad prueft CSW-Signatur, CSW-Tag, CSW-Status, Phase Error
+  und Residue getrennt. `USB` zeigt dafuer `invalid-csw`, `tag-mismatch`,
+  `phase` und `residue-err`; die QEMU-MSC-Profile erwarten im Normalpfad
+  jeweils `0`.
+- Seit 0.45.55 sind die alten USBMSC-Kernel-/Shell-Selftests historische
+  Diagnosepfade. Aktuelle Abnahme laeuft ueber `USBDIAG.R4X` fuer die
+  USB-R4P-Protokollrollen, `STORDIAG.R4X` fuer Storage-Inventory und
+  R4D-/Preload-Ownership, `FSDIAG.R4X` fuer FAT32-Dateipfade sowie
+  `SYSINFO.R4X /STORAGE`, `DEVMGR.R4X /STORAGE` und `HWDIAG.R4X`.
+  USBMSC selbst behaelt REQUEST-SENSE-Klassifikation, Write-Protect-Status,
+  Recovery-Zaehler und Blockdevice-Snapshots.
+- Der MBR-/FAT32-Mountpfad bewertet R4OS-Systemmarker auf FAT32-Volumes:
+  `/BOOT/R4OS.ELF`, `/BOOT/LIMINE.CONF`, `/CONFIG.R4S`, `/R4DESK` und `/BIN`.
+  Nur Systemkandidaten bekommen bevorzugt C:; reine Datenvolumes starten bei D:.
+  Die Laufwerksrolle wird aus diesen Markern abgeleitet, nicht nur aus dem
+  Buchstaben: ein zweiter Systemkandidat bleibt auch als D: oder E: `system`.
+  FAT32-Partitionen mit kaputtem oder nicht unterstuetztem BPB werden nicht als
+  Scheinlaufwerk gemountet, sondern vom MBR-Scan mit `FAT32: not mounted`
+  uebersprungen.
+  Protective-MBR-Eintraege fuer GPT-Medien werden als `GPT-protective`
+  diagnostiziert und nicht als normales Laufwerk gemountet; GPT-Parsing bleibt
+  ein spaeterer UEFI-/Deployment-Ausbau.
+- `DRIVES` zeigt die Mount-Tabelle jetzt mit Rollen und Blockdevice-Bezug:
+  pro Laufwerk werden Blockindex, Blockname, Bus, Treiber, State,
+  Writable-/Removable-Status und letzter Blockfehler ausgegeben. Damit ist die
+  kurze DOS-Sicht mit `BLOCK`, `DEVICES` und Device Manager vergleichbar.
+- QEMU-Abnahmen fuer 0.13.8: `xhci`, `hid-kbd`, `hid-mouse`, `msc-ro`,
+  `msc-rw`, `msc-kbd`, `msc-mouse`, `msc-kbd-mouse` und `msc-data` sind gruen.
+  Storage+Keyboard+Mouse beweist, dass USBMSC als C: stabil bleibt, FSDIAG
+  erfolgreich schreibt/liest und USBHID parallel `keyboard=bound mouse=bound`
+  meldet. Nach dem Runtime-Pool-Umbau wurden alle USB-Profile unter
+  `modern-q35`/AHCI erneut gruen abgenommen; `msc-kbd-mouse` zeigt dabei drei
+  konfigurierte USB-Core-Geraete und `retained-slots=3`. Nach der erweiterten
+  `USBREGRESS`-Diagnose wurde derselbe Profilsatz lokal mit `USBREGRESS 32`
+  in der Debug-AUTOEXEC erneut gruen abgenommen.
+- Nach der idempotenten HID-Runtime-Auswahl wurde `msc-kbd-mouse` mit
+  `USBREGRESS 256` unter `modern-q35`/AHCI gruen abgenommen: Storage,
+  Keyboard und Mouse bleiben gebunden, `devices/configured/retained` bleiben
+  `3/3`, `msc-blocks` bleibt `1/1`, und alle xHCI-/HID-/USBMSC-Fehlerdeltas
+  bleiben `0`.
+- `USBGATE [loops]` ist der zusammenfassende Gate-Befehl fuer USB-Bootlaeufe.
+  Er prueft xHCI-Fehlerdeltas, USB-Core-Devicezaehler, retained Slots,
+  HID-Bindings und USBMSC-Blockstatus nach wiederholten HID-Polls und
+  USBMSC-Re-Selects und meldet `result: OK` oder `FAILED`.
+- Die finale 0.13.8-Gate-Runde wurde unter `modern-q35`/AHCI mit temporaerem
+  `USBGATE 64` ueber `xhci`, `hid-kbd`, `hid-mouse`, `msc-ro`, `msc-rw`,
+  `msc-kbd`, `msc-mouse`, `msc-kbd-mouse` und `msc-data` gefahren. Jeder Lauf
+  wurde per COM-Log auf `USBGATE loops=64 ... result: OK` geprueft.
+- Ein laengerer Kombi-Stresslauf mit temporaerem `USBREGRESS 256` und
+  `BLOCKTEST STRESS C: 12` in der Debug-AUTOEXEC ist unter `modern-q35`/AHCI
+  mit `msc-kbd-mouse` gruen: USBMSC bleibt `usb0`/`C:`, Keyboard und Mouse
+  bleiben gebunden, `BLOCKTEST`, FAT-Stress auf USB-C:, `BLOCKTEST FAT D:`
+  und `FSDIAG` laufen ohne xHCI-/HID-/USBMSC-Fehler, Timeout, Recovery oder
+  FAT32-Vergleichsfehler.
+- Nach derselben Aenderung wurde der komplette USB-Profilsatz `xhci`,
+  `hid-kbd`, `hid-mouse`, `msc-ro`, `msc-rw`, `msc-kbd`, `msc-mouse`,
+  `msc-kbd-mouse` und `msc-data` erneut unter `modern-q35`/AHCI gruen
+  abgenommen.
+- Nach der erweiterten `DRIVES`-Diagnose wurden `msc-rw` und `msc-data` unter
+  `modern-q35`/AHCI gruen abgenommen. `msc-rw` zeigt `C:` als `bus=usb
+  driver=USBMSC`, D:/E: als AHCI; `msc-data` zeigt `C:` als AHCI-Systemvolume
+  und `D:` als `bus=usb driver=USBMSC role=data`.
+- Zusatzlaufwerks-Mix wurde manuell im COM-Log mit `modern-q35 -storage nvme
+  -usb msc-data` geprueft: R4OS mountet `C:` als AHCI-Systemvolume, `D:` als
+  USBMSC-Datenvolume, `E:` als AHCI-Datenvolume und `F:` als zusaetzliches
+  NVMe-Datenvolume. Nach dem NVMe-AUTOEXEC-/Runner-Abgleich ist dieser
+  Kombilauf auch im lokalen Runner gruen.
+- Direktes `nvme-boot` ohne USB bleibt gruen. Mit reinem xHCI bootet R4OS
+  ebenfalls und ist nach dem NVMe-AUTOEXEC-/Runner-Abgleich Runner-gruen.
+  `nvme-boot` plus USB-Storage liefert trotz Bootindex und strenger
+  Bootreihenfolge keinen seriellen Kernel-Output und ist deshalb als QEMU-/
+  SeaBIOS-/Bootreihenfolge-Harness-Grenze dokumentiert, nicht als belegter
+  USBMSC-Laufzeitfehler.
+- Nach dem Port-State-Umbau wurden `msc-kbd-mouse`, `xhci`, `hid-mouse`,
+  `msc-ro` und `msc-data` unter `modern-q35`/AHCI gruen abgenommen. Das
+  Kombiprofil zeigt `portchg` ohne Debounce-/Timeout-Fehler, aktive Ports in
+  `U0` und weiterhin `retained-slots=3`.
+- Nach dem Ringdiagnose-Umbau wurden `msc-kbd-mouse`, `msc-rw`, `hid-mouse`
+  und `msc-data` unter `modern-q35`/AHCI gruen abgenommen. Die MSC-Profile
+  zeigen Ring-Wraps fuer Event/Bulk ohne `ringfull`, Timeout oder USBMSC-
+  Transportfehler.
+- Nach dem Descriptor-Umbau wurden `msc-kbd-mouse`, `msc-rw`, `hid-mouse` und
+  `msc-data` unter `modern-q35`/AHCI gruen abgenommen. `USB` zeigt jetzt
+  Descriptor-Zaehler (`records`, `unknown`, `malformed`, `hid-desc`,
+  `ss-comp`) und die ausgewaehlte Interface (`selected=mass-storage-bulk`,
+  `selected=hid-boot-keyboard` oder `selected=hid-boot-mouse`).
+- Nach der Control-Transfer-Kapselung wurden `msc-kbd-mouse`, `msc-ro`,
+  `hid-mouse` und `msc-data` unter `modern-q35`/AHCI gruen abgenommen.
+  Descriptor-Reads, SET_CONFIGURATION, HID SET_PROTOCOL/SET_IDLE und MSC-
+  Initialisierung laufen weiter ohne Control-Failures im Normalpfad.
+- Nach der USBMSC-Sense-Diagnose wurden `msc-rw`, `msc-ro` und `msc-data`
+  unter `modern-q35`/AHCI gruen abgenommen. Beschreibbare und read-only Medien
+  zeigen `mode-sense=ok`; der Normalpfad bleibt ohne USBMSC-Transportfehler.
+- `USBMSCTEST` wurde unter `modern-q35`/AHCI mit `msc-rw` gruen abgenommen:
+  `USBMSC illegal request self-test: ok`, `selftest: runs=1 fail=0 illegal=1`,
+  `sense=for=0xFF key=0x05 asc=0x20 ascq=0x00` und `transport=0`.
+- `USBMSCTEST WP` wurde unter `modern-q35`/AHCI mit `msc-ro` gruen abgenommen:
+  `USBMSC write-protect self-test: ok`, `selftest: runs=1 fail=0 wp-test=1`,
+  `sense=for=0x2A key=0x07 asc=0x27 ascq=0x00`, `transport=0` und keine
+  Recovery. Der Test laeuft nur auf per MODE SENSE als write-protected
+  erkannten USBMSC-Medien.
+- `USBMSCTEST SYNC` prueft den SYNCHRONIZE-CACHE(10)-Pfad: erfolgreicher
+  Flush oder ein sauber per REQUEST SENSE gemeldeter Illegal-Request-Fallback
+  gelten als ok, solange kein BOT-Transportfehler und keine Recovery entstehen.
+  Unter `modern-q35`/AHCI mit `msc-rw` ist der Test gruen: `opcode=0x35`,
+  `selftest ... sync=1`, `transport=0`, `recovery=0`; danach bleiben
+  `BLOCKTEST FAT D:` und `FSDIAG` gruen.
+- Die USB-QEMU-Testauswertung prueft seitdem fuer USB-Geraete auch
+  xHCI-Control-Zustand ohne Fail/Stall/Short/Timeout, erfolgreiche
+  Configuration-Descriptor-Auswertung ohne `malformed`, HID-Boot-
+  Interfaceklassen und fuer MSC die SCSI-Initmarker `inquiry`, `tur`,
+  `capacity`, `mode-sense` plus saubere Sense-Kategorien.
+- USBMSC ist nach der Klassenumschaltung idempotent: wenn der gespeicherte
+  Mass-Storage-Slot bereits mit Bulk-In/Bulk-Out konfiguriert ist, werden
+  SET_CONFIGURATION und Configure Endpoint nicht erneut gesendet. Nach der
+  USBHID-Initialisierung wird der aktive Boot-Storage-Kontext wieder
+  selektiert, damit CONFIG- und R4Desk-Reads von C: stabil bleiben.
+- xHCI besitzt einen ersten Disconnect-/Reclaim-Pfad fuer retained Slots:
+  `USB` aktualisiert beim Statusdump die Portregister, erkennt Runtimes ohne
+  verbundenen Port, sendet `Disable Slot`, loescht den DCBAA-Eintrag und
+  entfernt den passenden USB-Core-Porteintrag. Die Diagnose zeigt dafuer
+  `disconnect`, `reclaim` und `disable-slot=commands/fail`-Zaehler. Im QEMU-
+  Normalpfad bleiben diese Zaehler bei `0`, damit keine aktiven Geraete
+  versehentlich entfernt werden.
+- xHCI-Handle-Auswahl refresht vor jeder Klassen-Auswahl die Ports und laesst
+  Handles auf nicht mehr verbundene Ports scheitern. USBMSC/USBHID koennen
+  dadurch nicht mehr blind einen alten retained Slot reaktivieren, wenn der
+  Port inzwischen getrennt wurde; der jeweilige Klassenpfad bekommt stattdessen
+  einen normalen Select-Fehler.
+- Das QEMU-Profil `msc-data` haengt `Code\data.img` als USB-Mass-Storage an
+  und prueft die Mount-Policy: USB-Datenvolume ohne R4OS-Marker wird `D:`,
+  AHCI-Systemvolume bleibt `C:`, `BLOCKTEST FAT D:` und `FSDIAG` sind gruen.
+- `BLOCKTEST STRESS [D:] [loops]` wiederholt FAT32-Write/Read/Compare/Delete
+  mit 1536-Byte-Testdateien und nutzt damit den Block-Write-/Flush-Pfad
+  mehrfach hintereinander. `BLOCKTEST STRESS C: 6` wurde im QEMU-Profil
+  `msc-kbd-mouse` auf USB-C: gruen abgenommen; ein spaeterer Kombi-Lauf mit
+  `BLOCKTEST STRESS C: 12` plus `USBREGRESS 256` blieb ebenfalls sauber.
+  Danach blieben USBMSC, xHCI-Ringe, Sense-Zaehler und Blockdevice-
+  Fehlerzaehler sauber.
+- `USBREGRESS 32` wurde mit `msc-kbd-mouse` und `hid-mouse` unter
+  `modern-q35`/AHCI gruen abgenommen: Geraetezahl, konfigurierte Geraete,
+  retained Slots, HID-Bindings und MSC-Blockdevice blieben stabil; alle neuen
+  xHCI-/HID-/USBMSC-Fehlerdeltas blieben `0`.
+- Nach der xHCI-Interrupt-Intervallkorrektur wurde der komplette USB-
+  Profilsatz `xhci`, `hid-kbd`, `hid-mouse`, `msc-ro`, `msc-rw`, `msc-kbd`,
+  `msc-mouse`, `msc-kbd-mouse` und `msc-data` unter `modern-q35`/AHCI wieder
+  gruen abgenommen. QEMU-HID zeigt nun z.B. `interval=7->6`, Storage+HID
+  bleibt gleichzeitig stabil.
+- Nach der HID-Transferlaengen-Diagnose wurde derselbe USB-Profilsatz unter
+  `modern-q35`/AHCI erneut gruen abgenommen; die zusaetzlichen Felder
+  `last=<actual>/<requested>`, `residue` und `last-len=<actual>/<requested>`
+  sind damit im normalen Diagnosepfad verfuegbar.
+- Nach dem Composite-HID-Binding wurde der komplette USB-Profilsatz erneut
+  unter `modern-q35`/AHCI gruen abgenommen. Storage, Keyboard und Mouse bleiben
+  parallel stabil, waehrend USBHID seine Endpoints aus den Interface-Records
+  statt nur aus dem globalen `first_interface` ableitet.
+- Nach der HID-Endpoint-Validierung wurde der komplette USB-Profilsatz erneut
+  unter `modern-q35`/AHCI gruen abgenommen; die neue `missing-ep`-Diagnose
+  bleibt in den normalen `USB`-Ausgaben sichtbar.
+- Historisch konnten Hardwarelogs ueber interne Diagnosekommandos und
+  Shell-Redirection auf C: gesichert werden. Diese 0.13-Diagnose war ein
+  Uebergangspfad fuer fruehe USB-/Hardwareabnahmen.
+- Seit 0.45.38/0.45.41 ist `HWDIAG.R4X` der aktuelle Besitzer fuer solche
+  Hardwareberichte. `HWDIAG.R4X MIN|STD|FULL|EXPORT` baut seine Ausgabe aus
+  `R4DEV.hardwareSummary()` und Device-Inventory-Records; `SYSINFO.R4X`,
+  `DEVMGR.R4X`, `BOOTINFO.R4X`, `MEMVIEW.R4X` und `DMESG` bleiben die
+  spezialisierten Konsumenten fuer Kurzsicht, Device-Details, Bootinfo,
+  Memory und Bootlog. Kernel-Treiber behalten Status-/Snapshotdaten, aber
+  keine freien Hardware-Pretty-Dumps.
+- `HWLOG`/`HWLOGTEST` sind damit nur noch historische Namen in alten 0.13-
+  Notizen und kein aktueller Treiber- oder Kernelvertrag.
+- `USBGATE` und `USBREGRESS` setzten ihren Erfolg historisch auch im Shell-
+  `ERRORLEVEL`. `QGATE [loops] [FULL]` war der zusammenfassende
+  0.13-QEMU-Gate-Befehl fuer USB-Stabilitaet und den damaligen
+  Hardwarelog-Readback.
+- `QGATE 64 FULL` wurde unter `modern-q35`/AHCI mit `msc-kbd-mouse` gruen
+  abgenommen; danach lief der komplette USB-Profilsatz `xhci`, `hid-kbd`,
+  `hid-mouse`, `msc-ro`, `msc-rw`, `msc-kbd`, `msc-mouse`,
+  `msc-kbd-mouse` und `msc-data` erneut ohne temporaere Debug-AUTOEXEC-Haken.
+- Die Capturing-/Redirection-Whitelist enthaelt jetzt auch die nackten Formen
+  `USBGATE`, `USBREGRESS`, `USBMSCTEST` und `QGATE`; verschachteltes Capturing
+  stellt die vorherige Ausgabeumleitung wieder her. `QGATE 8 FULL >
+  C:\Temp\QGATE.TXT` wurde in QEMU erfolgreich mit vollstaendigem Gate-Output
+  geschrieben und wieder gelesen.
+- Nach einem echten Lenovo-Befund, bei dem `HWLOG` nicht geschrieben wurde bzw.
+  beim Ausfuehren abgestuerzt ist, werden keine weiteren Hardwaretests mehr als
+  0.13.X-Abnahme geplant. Weitere Haertung dieses Pfads erfolgt zuerst nur in
+  QEMU.
+- Der USB-Core speichert pro konfiguriertem Geraet jetzt bis zu acht Interface-
+  Records mit Nummer, Class/Subclass/Protocol, Endpoint-Anzahl und wichtigen
+  Endpoint-Adressen. Die bootrelevante Auswahl (`selected=mass-storage-bulk`,
+  `selected=hid-boot-*`) bleibt unveraendert, aber `USB` zeigt zusaetzlich
+  `interface #...`-Zeilen. `msc-kbd-mouse` bleibt unter QEMU gruen und zeigt
+  Storage, Keyboard und Mouse jeweils mit strukturiertem Interface-Record.
+
+
+Bekannte Grenzen
+----------------
+
+- AC97 und HDA laufen produktiv ueber `AC97.R4D` bzw. `HDA.R4D`; alte
+  Built-in-Hardware-Audioquellen fuer AC97 und HDA sind entfernt.
+- PS2, USBHID, XHCI, ATAPIO und AHCI bleiben fuer den Boot-Core weiterhin
+  Builtin-Pfade.
+- RTL8139.R4D nutzt seit 0.17.3 einen IRQ-first RX/TX-Pfad mit
+  verzoegertem Poll-Fallback; QEMU-User-Network und TAP/ICS sind mit
+  steigenden IRQ-Hits und ohne Poll-Fallback abgenommen. `OPTION RTL8139
+  irq=off` erzwingt den Fallback-Modus fuer Tests.
+- UDP, DHCP, DNS, TCP und IPC sind Folgeversionen innerhalb 0.12.X; der Serial-Link-Core besitzt bereits R4SL-Framing und SERIALLINK-Diagnose, braucht aber noch echte COM2-Hostabnahme.
+- Auto-Detection ist vorbereitet, aber noch kein vollstaendiger Hardware-Match-
+  Resolver fuer beliebige Treiber.
+
+
+Manuelle Basispruefung
+----------------------
+
+    VER
+    DRIVERS
+    DMESG
+    AUDIO
+    LOAD SID
+    UNLOAD SID
+
+Erwartung:
+- Version meldet den aktuellen Build.
+- DRIVERS zeigt Builtin-Treiber und R4D-Treiber getrennt.
+- DMESG enthaelt Boot-/Treiberlog ohne FATAL.
+- AUDIO zeigt aktives Backend und registrierte Synths.
+- LOAD/UNLOAD eines vorhandenen R4D-Treibers bleibt stabil und ruft den
+  R4D-Lifecycle sichtbar auf.
+- ARPTEST, PINGTEST, PING 10.0.2.2 und ICMPSELFTEST pruefen den RTL8139.R4D-Pfad fuer ARP, IPv4 und ICMP.
+
+0.12 RTL8139 Netzwerkdiagnose
+-----------------------------
+Marker: 0.12-rtl8139-arp-icmp-cache
+
+Der RTL8139-Pfad ist derzeit die Referenz fuer Netzwerktests in QEMU. ARPTEST
+sendet Broadcast-ARP fuer das Gateway, PINGTEST baut darauf auf und sendet einen
+ICMP-Echo-Request, ARPFLUSH leert den Cache fuer Wiederholungstests. NET/NETSTAT
+zeigt Ethernet-, ARP-, IPv4- und ICMP-Zaehler inklusive ARP-Cache-Alter an.
+
+Aktuelle Abnahme: Im QEMU-User-Network antwortet das Gateway sichtbar genug fuer den R4OS-PING-Pfad. ARPTEST gateway: ok, PINGTEST gateway: ok, PING 10.0.2.2: ok und ICMPSELFTEST inbound echo: ok laufen ueber RTL8139.R4D.
+
+0.12 Net-Konfiguration und RTL8139
+----------------------------------
+Marker: 0.12-rtl8139-net-config
+
+RTL8139 verwendet fuer ARP und IPv4 die zentrale Net-Konfiguration. Dadurch
+bleiben QEMU-Defaults, spaetere statische Nutzerwerte und DHCP-Uebernahmen an
+einem Ort, waehrend der Treiber nur Frames sendet und empfaengt.
+
+0.12 DriverApi v3 Netzwerk-Backend
+----------------------------------
+Marker: 0.12-treiberstand-driverapi-v3-netbackend
+
+DriverApi Version 3 konkretisiert den Netzwerk-Backend-Slot. R4XBuilder schreibt
+R4D-Header nun mit API-Version 3. SID.R4D, OPL3.R4D und MIDI.R4D bleiben mit der
+neuen Version aktiv. register_net_backend validiert einen NetBackend-Descriptor
+und registriert daraus einen Net-Core-Adapter; DMA-/IRQ-/PCI-Detail-APIs und
+Unload-Regeln bleiben Folgepunkte innerhalb 0.12.2.
+
+0.12 DriverApi v4 DMA
+---------------------
+Marker: 0.12-treiberstand-driverapi-v4-dma
+
+DriverApi Version 4 fuehrt DmaBuffer-basierte DMA-Regionen ein. Damit bekommen
+R4D-Treiber erstmals physische und virtuelle Adresse in einem stabilen ABI-
+Container. EXAMPLE.R4D testet diesen Pfad per LOAD/UNLOAD. Der alte physische
+alloc_dma_buffer-Slot bleibt fuer bestehende Treiber erhalten.
+
+0.12 DriverApi v5: PCI fuer R4D-Treiber
+---------------------------------------
+
+DriverApi v5 stellt die erste PCI-Schnittstelle fuer ladbare Treiber bereit.
+R4D-Treiber koennen Geraete zaehlen, anhand von Class/Subclass suchen,
+PciDeviceInfo lesen, Config32 lesen/schreiben, BARs auslesen und Bus Mastering
+aktivieren. Legacy-PCI und PCIe werden ueber bus_kind unterschieden, damit
+Treiber beide Pfade mit derselben Struktur behandeln koennen.
+
+Die Abnahme lief im modernen Q35/AHCI/RTL8139-Profil. EXAMPLE.R4D meldete
+sowohl eine gueltige DMA-Region als auch ein gefundenes Network-Class-PCI-Geraet.
+Der eigentliche RTL8139-Treiber kann damit auf einem tragfaehigen DriverApi-
+Fundament beginnen.
+
+0.12 DriverApi v6: IRQ-Router
+-----------------------------
+
+Der Kernel besitzt jetzt einen kleinen dynamischen IRQ-Router fuer R4D-Treiber.
+Er haengt im zentralen IDT-Dispatch, laesst bis zu vier Handler pro Legacy-IRQ
+zu, unterstuetzt Shared-IRQ-Registrierungen und stellt einfache Statistiken
+bereit. PIC- und IOAPIC-Systeme werden beide bedient; bei aktivem IOAPIC kann
+eine dynamische Legacy-Leitung programmiert und entmaskt werden.
+
+EXAMPLE.R4D prueft den Pfad im QEMU-Test ueber einen Shared-IRQ0-Smoke. Der
+Handler sieht einen echten Timer-Dispatch, danach deregistriert der Treiber den
+Handler wieder. Automatische Cleanup-Regeln beim spaeteren UNLOAD bleiben ein
+separater Lifecycle-Punkt.
+
+0.12 R4D Runtime-Lifecycle
+--------------------------
+
+Ein Fehler im Runtime-Loader ist behoben: Der geladene R4D-Name wird vor dem
+Init-Aufruf stabil kopiert. Dadurch kann UNLOAD denselben Treiber spaeter sicher
+wiederfinden, auch wenn das geladene Modulabbild seine Datenbereiche veraendert.
+Der Debug-Test zeigt jetzt runtime load EXAMPLE [OK], danach SHUTDOWN,
+ENTLADEN und unload EXAMPLE [OK].
+
+0.12 DriverApi v7: PCI-MMIO Mapping
+-----------------------------------
+
+DriverApi v7 schliesst den PCI-Grundvertrag fuer ladbare Treiber ab: Neben
+Geraetesuche, Config-Zugriff, BAR-Rohwerten, Bus Mastering, DMA und IRQs gibt es
+jetzt pci_map_bar() fuer Memory-BARs. Der Kernel mapped die benoetigten Seiten
+Cache-Disabled/No-Execute und liefert eine stabile virtuelle Adresse zurueck.
+Der EXAMPLE-Treiber mappt im RTL8139-Profil BAR1 erfolgreich.
+
+0.12 R4D Owner-Cleanup und PMM-Nullframe
+---------------------------------------
+
+Der R4D-Runtime-Pfad besitzt jetzt Owner-basierten Cleanup. IRQ-Handler,
+DMA-Regionen und R4D-NetBackends werden beim UNLOAD automatisch geloest, wenn
+der Treiber sie nicht selbst freigegeben hat. EXAMPLE.R4D testet das aktiv,
+indem es eine DMA-Region und einen IRQ0-Handler offen laesst; der Kernel meldet
+beim UNLOAD cleanup owner=7 irq=1 dma=1 net=0.
+
+Bei diesem Test wurde ein realer Stabilitaetsfehler sichtbar: Der PMM konnte
+physische Adresse 0 als DMA-Puffer liefern. Frame 0 ist nun explizit reserviert
+und wird von Einzel- und Contiguous-Allokationen uebersprungen.
+
+0.12 RTL8139.R4D und DriverApi v9
+---------------------------------
+
+RTL8139.R4D ist der erste echte Netzwerk-R4D-Treiber. Er nutzt DriverApi v5 bis
+v9 fuer PCI-Zugriff, DMA, IRQ-Grundvertrag, MMIO/Port-I/O und RX-Uebergabe an
+den Net-Core. Der normale Bootpfad laedt DRIVER=RTL8139 aus CONFIG.R4S und
+registriert daraus ein R4D-NetBackend.
+
+Die moderne Q35/AHCI/RTL8139-Abnahme meldet runtime load RTL8139 [OK], DRIVERS
+zeigt RTL8139 src=r4d type=net state=AKTIV, DEVMGR zeigt active-netbackend und
+die Netzwerkdiagnosen melden ARPTEST/PINGTEST/PING/ICMPSELFTEST ok.
+0.12 Serial-Link-Core
+---------------------
+
+Der erste Serial-Link-Core nutzt COM2 als geplanten Link-Port und laesst COM1
+als Debug-/Logging-Kanal unangetastet. COM2 wird per UART-Scratch-Register auf
+Anwesenheit geprueft; fehlt der Port im QEMU-Profil, wird das sauber als
+present=no angezeigt und nicht als RX-Datenrauschen gezaehlt.
+
+Der R4SL-Framevertrag besteht aus Magic R4SL, Version 1, Typ, Laenge, Sum16-
+Checksumme und maximal 256 Byte Payload. SERIALLINK TEST prueft den Parser
+lokal deterministisch.
+
+Die Standard-Abnahme meldet selftest ok, COM2 present=no, bad_magic=0,
+bad_length=0, checksum=0, overflow=0 und timeout=0. Mit
+`-qemu-args "-serial null"` meldet die COM2-Abnahme present=yes,
+initialized=yes, TX frames=1, RX frames=1, skipped=0 und keine R4SL-
+Framefehler; der RTL8139-Ping zu 10.0.2.2 bleibt dabei ok. Mit QEMU TCP-Serial und Code/BuildTools/SerialLinkHost ist auch der Host-Handshake ready/hello/ack abgenommen: SERIALLINK hosttest ok, host=1, TX frames=3, RX frames=2 und Fehlerzaehler 0. TYPE_MESSAGE=2 landet in der Serial-Message-Inbox; die Fehlerabnahme mit --inject-errors meldet bad_magic=1, bad_length=1, checksum=1, msg=1 und Last message HOST-IPC-MSG. Der Timeoutpfad ist mit COM2-Nullsink als host-timeout abgenommen; Overflow bleibt durch bad_length vor dem Pufferueberlauf abgefangen.
+Netzwerktreiber seit 0.12
+=========================
+
+RTL8139.R4D ist der erste echte Netzwerk-R4D-Treiber im normalen R4OS-Image.
+Er nutzt die SDK-/DriverApi-Pfade fuer PCI-Suche, Port-I/O, Bus Mastering,
+DMA-Regionen und NetBackend-Registrierung. RX-Frames werden ueber DriverApi v9
+mit `net_receive_frame()` in den Kernel-Net-Core uebergeben.
+
+Status:
+- QEMU/Realtek 10EC:8139 wird erkannt.
+- BAR0-I/O und Bus Mastering werden aktiviert.
+- RX/TX-DMA ist fuer QEMU-RTL8139 eingerichtet.
+- NetBackend wird im Net-Core registriert und im Device Inventory sichtbar.
+- ARP, IPv4, ICMP, UDP, DHCP, DNS und das kleine TCP nutzen denselben Net-Core.
+- Device Manager zeigt fuer Netzwerkadapter Treiber, Linkstatus, MAC/IP,
+  Gateway-Quelle und Fehlerzaehler im Inventar-Record.
+
+Grenzen:
+- RTL8139 nutzt PCI-INTx IRQ-first mit Poll-Fallback; MSI/MSI-X und saubere
+  ACPI-`_PRT`-Routenauswertung bleiben Folgeausbau.
+- Es gibt bewusst keine Security-Policy im Treiberpfad.
+- Weitere NICs wie NE2000, E1000 oder VirtIO-Net sind 0.13-Kandidaten.
+0.31.5 HDA als R4D-Kandidat
+---------------------------
+HDA war zu diesem Stand weiterhin ein nativer Built-in-Pfad und noch kein
+`HDA.R4D`. Der Treiber ist optional und darf den Boot nicht blockieren. Fuer
+die spaetere Auslagerung werden DriverApi v10, PCI/MMIO, DMA, Bus Mastering,
+Codec-Discovery, Stream-BDL, Recovery und ein gleichwertiger Diagnosepfad
+benoetigt.
+
+HDA soll nach AC97 ausgelagert werden. Ein Platzhalter-`HDA.R4D` reicht nicht;
+der Built-in-Pfad wird erst entfernt, wenn ein echter R4D-Treiber geladen,
+gestoppt, entladen, diagnostiziert und per Boot-/Audio-Smoke abgenommen wurde.
+Seit 0.39.2 existiert `HDA.R4D` als produktiver Playback-Treiber mit
+Audio-Output-Backend, Stream-DMA und BDL-Ring. Seit 0.39.3 ist der alte
+Built-in-HDA-Pfad entfernt; HDA hat keinen stillen Kernel-Fallback mehr.
+0.31.6 RTL8139 Built-in entfernt
+--------------------------------
+RTL8139 ist jetzt nur noch als `RTL8139.R4D` produktiver Netzwerktreiber im
+System. Der alte Built-in-Treiber unter `Code/src/old/drivers/network/rtl8139.zig`
+wurde entfernt; seit 0.45.1 existiert auch die alte `command_runtime.zig`-
+Kopplung an Kernel-Netzwerkdiagnosen nicht mehr.
+
+Der R4D-Pfad nutzt DriverApi, NetBackend, IRQ, DMA und `net_receive_frame()`.
+Netzwerkdiagnosen laufen ueber `DRIVERS`, `NET`, `NETINFO`, `NETSTAT`,
+`IPCONFIG`, `DEVMGR`, `NETETHTEST` und `PINGTEST`. Ohne geladenen Adapter bleibt
+R4OS lokal bootfaehig; Netzwerkoperationen melden `no-adapter` statt den Boot zu
+blockieren.
+0.31.7 Storage-Treiber und Boot-Storage-Schutz
+----------------------------------------------
+ATA-PIO, AHCI und NVMe wurden fuer die R4D-Auslagerung getrennt bewertet.
+Keiner dieser Pfade wird in 0.31.7 entfernt, weil jeder je nach Profil das
+Systemlaufwerk `C:` bereitstellen kann. Zusaetzlich bleiben USB/xHCI/USBMSC als
+bootkritische Kandidaten markiert, da R4OS auch vom USB-Stick booten kann und
+der Stick dann als FAT32-`C:` genutzt wird.
+
+Grundregel: Ein Treiber, der benoetigt wird, um `C:` oder `C:\R4OS\DRIVERS` zu
+lesen, darf nicht durch ein R4D ersetzt werden, das erst von genau diesem Pfad
+geladen werden muss. Fuer spaetere echte Boot-Storage-Module braucht R4OS zuerst
+einen Preload-/Initramfs-Mechanismus. Bis dahin ist Kernel-Slimdown nur bei
+Storage-Zusatztreibern sinnvoll, die nicht Teil des aktiven Bootpfads sind.
+0.31.8 USB-Treiber mit Bootpfad-Schutz
+--------------------------------------
+xHCI, USB-Core, USBHID und USBMSC sind fuer die R4D-Auslagerung getrennt
+bewertet. In 0.31.8 wird kein USB-Code entfernt. xHCI, USB-Core und USBMSC
+bleiben built-in, solange USB-Boot unterstuetzt wird und ein USB-Stick als
+FAT32-`C:` dienen kann.
+
+USBHID ist ein spaeterer R4D-Kandidat, braucht aber vorher einen stabilen
+InputBackend-Vertrag. R4DOS, Terminal, R4Desk und Notfallbedienung duerfen
+durch eine HID-Auslagerung nicht regressieren. Fuer USBMSC gilt die gleiche
+Boot-Storage-Regel wie fuer ATAPIO, AHCI und NVMe: Was noetig ist, um `C:`
+oder `C:\R4OS\DRIVERS` zu erreichen, bleibt built-in, bis R4OS Module vor dem
+Mounten von `C:` preloaden kann.
+
+Seit 0.45.44 ist die erste Trennschicht umgesetzt: Der Kernel besitzt einen
+USB-Hostcontroller-Vertrag, und Built-in-xHCI registriert sich als
+`source=built-in`. USB-Core, HID und MSC nutzen in dieser Unterversion weiter
+den bestehenden Built-in-xHCI-Transferpfad. `XHCI.R4D` selbst ist erst die
+naechste Unterversion.
+
+Seit 0.45.45 existiert `XHCI.R4D` als preloaderfaehiger R4D-Treiber. Er wird
+aus `PRELOAD.R4I` vor dem Storage-Mount geladen, erkennt xHCI ueber PCI,
+aktiviert Memory Space und Bus Mastering, mappt BAR0, liest
+Controllerfaehigkeiten und registriert `XHCI source=preload`. Der Built-in-
+xHCI-Code bleibt fuer echte Transfers als Legacy-Rescue-Datenpfad erhalten;
+USB-Stick-Boot und alte Hardwareprofile haengen daher nicht an einer halben
+R4D-Portierung.
+
+Seit 0.45.46 existiert `USBMSC.R4D` als preloaderfaehiger R4D-Treiber. Der
+Treiber wird aus `PRELOAD.R4I` geladen und markiert den USBMSC-Besitz als
+`source=preload`; das USBMSC-Blockdevice wird ebenfalls mit dieser Source
+registriert. Die eigentlichen BOT-/SCSI-Transfers laufen in dieser
+Unterversion noch ueber den Built-in-Legacy-Rescue-Datenpfad, damit
+USB-Stick-Boot stabil bleibt. `USBBOT.R4P` und `USBSCSI.R4P` bleiben die
+einzigen produktiven Protokollrollen.
+
+Seit 0.45.47 ist der USB-Stick-Bootpfad ueber preloaded `XHCI.R4D` und
+`USBMSC.R4D` automatisch abgenommen. `Run-UsbMscBootTest.ps1` prueft
+`USBPRELOAD loaded=10/10 missing=0 failed=0`, USBMSC-System- und
+Datenvolumes, `SYSINFO.R4X /USBMSC`, `USBDIAG.R4X` und `FSDIAG.R4X`.
+`FSDIAG.R4X` ist in beschreibbaren Profilen ein hartes OK-Gate; in
+read-only-Profilen ist der Schreibschutzfehler erwartbar. Der sichtbare
+Besitzer bleibt `source=preload`; Built-in-xHCI und Built-in-USBMSC bleiben
+als Legacy Rescue fuer alte Hardwareprofile erhalten.
+
+Seit 0.45.48 existiert `AHCI.R4D` als preloaderfaehiger Storage-R4D. Der
+Treiber wird aus `PRELOAD.R4I` geladen, prueft den AHCI-PCI-Kandidaten, mappt
+BAR5 und fuehrt einen DMA-Smoke aus. Bei aktivem Preload-Treiber markiert
+`storage_boot` AHCI-Blockdevices als `source=preload`; der Built-in-AHCI-Code
+bleibt fuer echte SATA-Transfers als Legacy Rescue erhalten, damit AHCI ein
+unterstuetzter Bootpfad bleibt.
+
+Seit 0.45.49 existiert `NVME.R4D` als preloaderfaehiger Storage-R4D mit
+echtem NVMe-I/O-Pfad. Der Treiber wird aus `PRELOAD.R4I` geladen, mappt BAR0,
+richtet Admin-/I/O-Queues ein, liest Controller und Namespaces per Identify,
+nutzt PRP1-DMA und registriert nutzbare 512-Byte-Namespaces als
+StorageBackend mit `source=preload`, `bus=nvme`, Read, Write und Flush. Wenn
+dieser Preload-Pfad ein Blockdevice liefert, ueberspringt der Kernel den
+Built-in-NVMe-Datenpfad; der alte Code bleibt nur als Legacy Rescue, falls
+der Preload-Treiber aktiv ist, aber kein Blockdevice liefert.
+
+Seit 0.45.50 existiert `ATAPIO.R4D` als preloaderfaehiger Legacy-IDE-
+Storage-R4D mit echtem PIO-I/O-Pfad. Der Treiber wird aus `PRELOAD.R4I`
+geladen, nutzt DriverApi-Port-I/O, fuehrt Identify, Read/Write und Flush aus
+und registriert `ata0`/`ata1` als StorageBackends mit `source=preload`,
+`bus=ata`, Read, Write und Flush. Der Standard-QEMU-Bootpfad mountet C: und
+D: ueber diese R4D-Blockdevices; `storage_boot` importiert den alten
+ATA-PIO-Built-in nicht mehr.
+
+Seit 0.45.52 ist K045-C10 fuer Storage-/USB-Storage abgeschlossen.
+Standardkonsumenten importieren AHCI, NVMe und xHCI nicht mehr direkt aus
+Built-in-Treibern. R4DEV und Device Inventory lesen PCIe-Summary,
+USB-Hostcontroller-Registry, USB-Core-Summary und Blockdevice-Records; nur
+`storage_boot.zig` und die USB-Klassenkanten behalten die dokumentierten
+Legacy-Rescue-Datenpfade fuer AHCI, NVMe, xHCI und USBMSC. ATAPIO bleibt im
+Standard komplett R4D/Preload.
+
+0.31.9 Display-/Framebuffer-Grenze gegen R4D
+--------------------------------------------
+Der Boot-Framebuffer bleibt built-in und ist der robuste Boot-/Fallback-Pfad
+fuer sichtbare Ausgabe. Er wird nicht als normaler R4D-Treiber ausgelagert.
+
+DisplayManager, Surface und Presenter sind technische Display-Systemschichten
+fuer Ausgabe und Present und keine klassischen Hardware-R4D-Treiber. Compositor,
+Cursor-Damage und Dirty-Rechtecke gehoeren seit 0.45.27 zu R4Desk/SDK. Ein
+spaeterer Grafikkarten-Treiber muss ein DisplayBackend liefern und darf den
+Desktop-/App-Pfad nicht direkt verdrahten.
+
+Voraussetzungen fuer spaetere native Grafiktreiber sind ein stabiler
+DisplayBackend-Treibervertrag, Mode-Set-Regeln, MMIO-/DMA-/IRQ-Lifecycle,
+Diagnose, Full-Redraw beim Backend-Wechsel und ein sicherer Rueckfall auf den
+Boot-/Fallback-Pfad.
+0.31.10 Abschluss der Built-in-/R4D-Kandidatenliste
+---------------------------------------------------
+0.31.X legt die Regeln fuer Kernel-Verschlankung fest: Nicht bootkritische
+Treiber sollen als R4D laufen und ihr Built-in-Pfad wird nach erfolgreicher
+Abnahme entfernt. Bootkritische Grundlagen bleiben built-in, bis R4OS einen
+sicheren Preload-/Initramfs- oder gleichwertigen Fruehladepfad besitzt.
+
+Kategorien:
+- Bereits R4D: RTL8139.R4D, SID.R4D, OPL3.R4D, MIDI.R4D.
+- Produktiv ueber R4D: AC97 seit 0.38.3 mit `AC97.R4D` fuer PCI/I/O/DMA,
+  AudioBackend-Registrierung, PCM-Normalisierung und BDL-/DMA-Ausgabe. Die
+  alte AC97-Quelle ist seit 0.38.4 entfernt. HDA seit 0.39.2 mit `HDA.R4D`
+  fuer PCI/MMIO, Codec-/Output-Pfad, Stream-DMA, BDL, PCM-Write, Stop/Drain
+  und Recovery; die alte HDA-Quelle folgt in 0.39.3.
+- Spaetere optionale Kandidaten: weitere Netzwerktreiber, USBHID nach
+  InputBackend, Zusatz-Storage nach StorageBackend und Bootpfad-Pruefung.
+- Bootkritisch per Preload/R4D oder Legacy Rescue: ATAPIO, AHCI, NVMe, xHCI,
+  USBMSC, wenn sie `C:` oder `C:\R4OS\DRIVERS` tragen koennen.
+- Dauerhafte Kernel-Grundlagen: GDT, IDT, fruehe Interrupt-/Timerbasis,
+  Speicherverwaltung, BootInfo, BootDisplay, Boot-Framebuffer und COM1-
+  Debugpfad.
+- Systemschichten statt Hardwaretreiber: DisplayManager, Surface und Presenter.
+- Desktop-Komfort statt Kernel/R4D: Compositor, Cursor-Damage und
+  Dirty-Rechtecke gehoeren seit 0.45.27 zu R4Desk/SDK.
+
+Bewusste offene Luecken bleiben InputBackend, DisplayBackend-Treibervertrag,
+MMIO-Unmap und ein sauberer Device-Quiesce-/Shutdown-Vertrag. Ohne diese
+Vertraege und Abnahmen werden keine halbfertigen R4D-Ports als Ersatz fuer Built-ins
+akzeptiert.
+
+0.37.1 Audio-Bootauswahl fuer HDA und AC97
+------------------------------------------
+Seit 0.37.1 liegt die Bootauswahl fuer die nativen HDA- und AC97-
+Hardwarebackends in `Code/src/kernel/audio_boot.zig`. Die Schicht nutzt den
+bereits geladenen Config-Zustand fuer `DRIVER=HDA`, `DRIVER=AC97` und
+passende `DISABLE=`-Eintraege. Nicht gewaehlte, deaktivierte oder
+fehlschlagende Backends bleiben nichtfatal und werden im Audio-Bootstatus als
+selected, skipped, disabled oder failed nachvollziehbar.
+
+Der alte Startpfad importiert HDA und AC97 nicht mehr direkt. HDA und AC97
+waren damit aber noch keine R4D-Treiber; sie blieben bis zur spaeteren
+AC97-/HDA-R4D-Abnahme Built-in.
+
+0.37.2 Audio-Bootstatus als Abschlussgate
+-----------------------------------------
+
+Seit 0.37.2 ist der Audio-Bootstatus als Diagnosegrenze stabilisiert.
+`audio_boot.status()` liefert den Gesamtzustand, `hdaStatus()` und
+`ac97Status()` liefern die Backend-Snapshots und `backendStateName()` die
+kanonischen Textwerte. Diese Zugriffe loesen keine erneute Audio-
+Initialisierung und keine zweite Hardware-Probe aus.
+
+Damit ist 0.37.X aus Treibersicht abgeschlossen: `kernelold.zig` besitzt keine
+produktive Audio-Startlogik mehr, waehrend HDA und AC97 bewusst Built-in-
+Treiber bleiben. Die echte AC97-/HDA-R4D-Auslagerung beginnt erst in einer
+eigenen Unterversion mit belastbarem Audio-Hardware-Backend-Vertrag.
+
+0.38.0 DriverApi v11 und Audio-R4D-Vertrag
+------------------------------------------
+
+0.38.0 ist das Vertragsgate fuer die kommende AC97-Auslagerung. Es zieht noch
+keinen AC97-Code nach `Code/System/Driver/AC97`, schliesst aber die fehlenden
+Grundlagen fuer einen belastbaren Audio-Hardware-R4D:
+
+- DriverApi v11 haengt `tick_count`, `timer_frequency` und `wait_ticks`
+  append-only an die Tabelle.
+- Das SDK bietet dafuer `DriverContext.tickCount()`, `timerFrequency()` und
+  `waitTicks(ticks)` sowie API-Kompatibilitaetshelfer.
+- `AudioBackend.status` wird im Audio-Core gespeichert und ueber `AUDIO`
+  sichtbar.
+- R4D-Audio-Backends erhalten PCM im Streamformat und muessen Geraeteformat-
+  Konvertierung selbst oder ueber SDK-nahe Hilfen leisten.
+- Produktive R4D-Treiber sollen fuer IRQs den vorhandenen
+  `irq_register`-/`irq_unregister`-Pfad nutzen; `request_irq` bleibt ein alter
+  Platzhalter.
+
+`EXAMPLE.R4D` prueft den neuen DriverApi-v11-Grundpfad mit Version, Groesse,
+Tick-/Wait-Helfern und IRQ0-Smoke. `SDKSMOKE.R4D` prueft zusaetzlich die
+AudioBackend-Descriptorfelder fuer Register/Unregister, Status und Shutdown.
+
+AC97 und HDA bleiben nach 0.38.0 noch Built-in-Treiber. Der naechste Schritt war
+der eigentliche AC97-R4D-Lade- und Fehlerpfad, nicht ein Fake-Backend.
+
+0.38.1 AC97-R4D-Ladeplan und negative Statuspfade
+-------------------------------------------------
+
+Seit 0.38.1 startet `audio_boot` AC97 nicht mehr direkt als Built-in-Treiber.
+Bei `DRIVER=AC97` wird AC97 als erwarteter R4D-Hardwarepfad markiert; der
+Treiberplan laedt danach `AC97.R4D` ueber den normalen R4D-Runtime-Loader aus
+`C:\R4OS\DRIVERS`.
+
+Der Runtime-Loader liefert fuer geplante Treiber nun ein detailliertes
+Ladeergebnis statt nur bool: geladen, bereits aktiv, ungueltiger Name,
+Datei fehlt, ungueltige Datei, Init fehlgeschlagen oder allgemeiner Ladefehler.
+Der Treiberplan reicht diese AC97-Ergebnisse an `audio_boot` weiter, damit
+Diagnose und Bootlog zwischen disabled, missing, init-failed, loaded,
+registered und active unterscheiden koennen.
+
+`DISABLE=AC97`, fehlendes `AC97.R4D` und ein fehlschlagendes `DriverInit`
+bleiben nichtfatal und werden sichtbar gemeldet. Fuer den absichtlichen
+Init-Fehler existiert `AC97FAIL.R4D` aus `Code/System/Driver/AudioFail`; dieser
+Treiber ist nur eine Testfixture fuer den Fehlerpfad und kein produktiver
+AC97-Platzhalter.
+
+Die Abnahme erfolgt ueber den normalen Build-/Boot-Smoke und zusaetzlich ueber
+`Tests/Gate/Run-AudioR4DPlanTest.ps1` fuer missing, disabled
+und init-failed.
+
+0.38.2 AC97.R4D-Control-Plane
+-----------------------------
+
+Seit 0.38.2 ist `AC97.R4D` ein regulaer gebauter und ausgelieferter
+R4D-Treiber unter `Code/System/Driver/AC97` und `C:\R4OS\DRIVERS\AC97.R4D`. Der
+Treiber portiert die AC97-Control-Plane aus dem alten Built-in-Pfad in den
+SDK-/DriverApi-Pfad:
+
+- PCI-Suche nach Multimedia/Audio-Geraeten
+- BAR0/BAR1 als AC97-NAM-/NABM-I/O-Basen
+- I/O-Space und Bus Mastering ueber DriverApi
+- DMA-BDL und Samplepuffer ueber `alloc_dma_region`
+- Codec-Reset, Playback-Reset, Status-Clear und Shutdown
+- Bootlog-Meldungen fuer Probe, Hardwarefund, I/O-Basis, DMA und Fehler
+
+`AC97.R4D` registriert in diesem Stand noch kein Audio-Output-Backend. Damit
+ist die Hardwareinitialisierung belastbar, aber noch keine Audioausgabe
+fertig. PCM-Normalisierung, DMA-BDL-Fuellung, Write/Stop/Drain und
+AudioBackend-Status bleiben 0.38.3. HDA bleibt bis 0.39.X der stabile
+Built-in-Hardwarepfad.
+
+Die Abnahme prueft den normalen Build, den Boot ohne AC97-Hardware, missing,
+disabled, init-failed und einen QEMU-AC97-Hardware-Smoke ueber
+`Tests/Gate/Run-Ac97R4DProbeTest.ps1`.
+
+0.38.3 AC97.R4D-Playback
+------------------------
+
+Seit 0.38.3 registriert `AC97.R4D` bei erfolgreichem Hardwarestart ein echtes
+Audio-Output-Backend namens `AC97`. Der Treiber nutzt DriverApi fuer PCI,
+Port-I/O, DMA, Backend-Registrierung, Timer-/Wait-Helfer und Shutdown-Cleanup.
+Die alte AC97-Built-in-Quelle blieb bis 0.38.4 nur noch Migrationsreferenz.
+
+Der neue Playback-Pfad umfasst:
+
+- PCM-Write-Callback fuer den Audio-Core
+- SDK-nahe PCM-Normalisierung ueber `r4os.audio_pcm`
+- Konvertierung nach 48 kHz stereo s16le fuer AC97
+- BDL-/DMA-Pufferfuellung und Busmaster-Start
+- Wartepfad fuer wiederverwendete DMA-Slots
+- Stop, Drain/Timeout und Reset bei blockierten Puffern
+- Statuscallback mit Writes, Underruns, Errors und letztem Ergebniscode
+- Deregistrierung des AudioBackends und DMA-Freigabe beim Shutdown
+
+`DRIVER=AC97` benutzt damit den R4D-Pfad fuer echte PCM-Ausgabe. Negative
+Faelle bleiben weiter nichtfatal: fehlende Datei, deaktivierter Treiber, kein
+AC97-Geraet und absichtlich fehlschlagender Init werden sichtbar gemeldet, ohne
+den Boot abzubrechen.
+
+Abgenommen wurde der Stand mit normalem Build, Standard-Boot, dem
+Audio-R4D-Plan-Smoke, dem AC97-R4D-Probe-Smoke und einem eigenen
+AC97-R4D-Playback-Smoke mit QEMU `-device AC97`, `BEEP.R4X /SELFTEST` und
+`AUDIOD.R4X`.
+
+0.38.4 AC97-Built-in entfernt
+-----------------------------
+
+Seit 0.38.4 existiert der alte AC97-Built-in-Quellpfad nicht mehr im
+Kernelbaum. Seit 0.45.1 existiert auch die alte `command_runtime.zig`-
+Altlast nicht mehr; Audio-Diagnose muss ueber Bootstatus, AudioBackend-Status
+und externe Diagnosepfade laufen.
+
+Damit ist `DRIVER=AC97` eindeutig ein `AC97.R4D`-Pfad. Fehlende, deaktivierte,
+fehlgeschlagene oder hardwarelose AC97-R4D-Laeufe bleiben nichtfatal und
+werden ueber Bootlog, sichtbaren Audio-Bootstatus und `AUDIO` diagnostiziert.
+HDA bleibt davon unberuehrt Built-in bis zur eigenen 0.39.X-Auslagerung.
+
+0.38.5 AC97-R4D-Abschlussaudit
+------------------------------
+
+0.38.5 schliesst 0.38.X mit einem reproduzierbaren Audit ab. Der neue
+Zig-Check `Tests/Gate/CheckAudioR4D038.zig` haelt fest,
+dass der AC97-Built-in-Pfad nicht wieder auftaucht und dass der produktive
+AC97-Pfad weiterhin `AC97.R4D` mit Audio-Output-Backend, SDK-PCM-Hilfe,
+Statuscallback und sauberer Deregistrierung ist.
+
+Die Laufzeitabnahme bleibt dieselbe harte Matrix: Standard-Boot, missing,
+disabled, no-device, init-failed, AC97-QEMU-Probe und AC97-QEMU-Playback.
+HDA bleibt fuer 0.38.X ausdruecklich Built-in und wird erst in 0.39.X
+umgezogen.
+
+0.39.0 HDA-R4D-Vertragsgate
+---------------------------
+
+0.39.0 ist der saubere Start der HDA-Auslagerung, ohne einen halbfertigen
+Treiber als produktiv auszugeben. Der aktuelle Built-in-HDA-Pfad bleibt der
+aktive HDA-Vergleichspfad und wurde gegen die Anforderungen eines spaeteren
+`HDA.R4D` geprueft:
+
+- PCI-Class/Subclass-Erkennung fuer HDA
+- BAR64-MMIO-Mapping und volatile Registerzugriffe
+- CORB/RIRB-Transport plus Immediate-Command-Fallback
+- Codec-Discovery, Output-Pfad-Auswahl und Pin-Konfiguration
+- Stream-DMA, BDL-Ring, PCM-Write, Stop, Drain und Recovery
+- sichtbare Diagnose fuer Init-Stage, Failure-Stage, Controllerprofil,
+  Codecmaske, DMA/BDL, Timeouts und Fehlerstatus
+
+DriverApi v11 und das SDK reichen fuer den naechsten HDA-Control-Plane-Port
+aus. `pci_map_bar` liefert fuer HDA physische und virtuelle BAR-Adressen,
+`alloc_dma_region` liefert phys/virt-DMA-Puffer, `wait_ticks` deckt
+Wartepfade ab und der Audio-Output-Backend-Vertrag ist bereits vorhanden.
+Deshalb gibt es in 0.39.0 keine append-only DriverApi-v12-Erweiterung.
+
+Der neue statische Check
+`Tests/Gate/CheckHdaR4D039.zig` haelt diesen Vertrag fest
+und prueft zusaetzlich das Q35/HDA-Standardprofil mit `ich9-intel-hda` und
+`hda-duplex`. Die echte R4D-Control-Plane beginnt erst in 0.39.1.
+
+0.39.1 HDA.R4D-Control-Plane
+----------------------------
+
+Seit 0.39.1 ist `HDA.R4D` ein regulaer gebauter und ausgelieferter
+R4D-Treiber unter `Code/System/Driver/HDA` und `C:\R4OS\DRIVERS\HDA.R4D`. Der Treiber
+nutzt ausschliesslich SDK und DriverApi und importiert keine Kernel-internen
+HDA-, Audio- oder Kernelmodule.
+
+Der portierte Bereich ist die passive HDA-Control-Plane:
+
+- PCI-Suche nach Class Multimedia/Subclass HDA
+- Memory Space und Bus Mastering ueber DriverApi
+- MMIO-BAR0-Mapping ueber `pci_map_bar`
+- volatile Registerzugriffe auf globale und Immediate-Command-Register
+- passiver Reset; aktiver Reset nur mit `OPTION HDA r4d_reset=...` oder wenn
+  der Controller noch nicht aus Reset ist
+- Immediate-Command-Transport als erster Codec-Befehlspfad
+- Codec-, Function-Group- und Widget-Sichtung
+- Output-Candidate-Erkennung fuer Converter und Output-Pin
+
+`HDA.R4D` registriert in diesem Stand noch kein Audio-Output-Backend. Damit
+ist die Controller-/Codec-Diagnose ueber R4D belastbar, aber noch keine
+Audioausgabe fertig. Der Built-in-HDA-Pfad blieb in 0.39.1 noch der
+produktive Playback-/Recovery-Vergleichspfad.
+
+Die Abnahme prueft den normalen Build, den Standard-Boot, das erweiterte
+statische HDA-Gate und einen Q35/HDA-Probe-Smoke ueber
+`Tests/Gate/Run-HdaR4DProbeTest.ps1`.
+
+0.39.2 HDA.R4D-Playback
+-----------------------
+
+Seit 0.39.2 registriert `HDA.R4D` ein echtes Audio-Output-Backend `HDA` und
+uebernimmt den produktiven `DRIVER=HDA`-Playbackpfad. Der Treiber konfiguriert
+Output-Pfad, Stream-Descriptor, BDL-Ring und DMA-Samplepuffer selbst und nutzt
+die SDK-PCM-Hilfe `r4os.audio_pcm`, ohne Kernel-interne HDA- oder Audio-Module
+zu importieren.
+
+Der portierte Playback-Bereich umfasst:
+
+- Converter-/Pin-Konfiguration inklusive Stream-/Channel-Set und EAPD
+- Output-Stream-DMA mit BDL und acht Samplepuffern
+- PCM-Write mit Normalisierung nach 48 kHz stereo s16le
+- laufende BDL-Refills, Stop, Drain und Recovery
+- Statuscallback fuer Writes, Refills, Timeouts, FIFO-/Descriptor-Fehler,
+  LPIB, Stream-Control/-Status und letzten Ergebniscode
+
+`audio_boot` startet HDA nicht mehr ueber `hda.probe()`, sondern erwartet bei
+`DRIVER=HDA` den R4D-Ladeplan und meldet `HDA.R4D [active]`, wenn das Backend
+registriert und aktiv ist. Fehlende, deaktivierte oder fehlschlagende HDA.R4D-
+Faelle bleiben nichtfatal.
+
+Die Abnahme prueft den normalen Build, den Standard-Boot, das erweiterte
+statische HDA-Gate und den Q35/HDA-Playback-Smoke ueber
+`Tests/Gate/Run-HdaR4DProbeTest.ps1`. Der Smoke startet
+`BEEP.R4X /SELFTEST`, R4Synth mit einer Test-WAV aus `C:\TEMP` und
+`AUDIOD.R4X` sichtbar ueber `HDA.R4D [active]`.
+
+0.39.3 Built-in-HDA entfernt
+----------------------------
+
+Seit 0.39.3 ist `Code/src/old/drivers/audio/hda.zig` entfernt. Der Kernel
+besitzt keinen produktiven HDA-Built-in-Fallback mehr; `DRIVER=HDA` laeuft
+ueber `driver_plan` und `HDA.R4D` oder meldet einen nichtfatalen R4D-Zustand.
+
+Die Legacy-Runtime importiert keinen HDA-Kerneltreiber mehr. `AUDIO` und
+`HDATEST` verwenden Audio-Core und `audio_boot.dumpStatus()`, wodurch der
+aktive R4D-Pfad, deaktivierte Auswahl, fehlende Datei oder Load-/Init-Fehler
+sichtbar bleiben, ohne eine zweite Hardware-Probe zu starten.
+
+Das statische HDA-Gate
+`Tests/Gate/CheckHdaR4D039.zig` prueft nun zusaetzlich:
+
+- `Code/src/old/drivers/audio/hda.zig` fehlt.
+- Kernel/Driver/SDK enthalten keine direkten HDA-Built-in-Importe,
+  `hda.probe`, `hda.dumpStatus` oder native
+  `registerNativeAudioBackend("HDA")`-Fallbacks.
+- `HDA.R4D` bleibt SDK-only und behaelt Playback-, DMA-, Status- und
+  Diagnosevertrag.
+
+Der neue Plan-Smoke
+`Tests/Gate/Run-HdaR4DPlanTest.ps1` prueft fehlendes und
+ungueltiges `HDA.R4D` im Q35/HDA-Profil. Erwartet werden
+`HDA.R4D [missing]` bzw. `HDA.R4D [load failed]`, jeweils ohne Fatalfehler.
+
+0.39.4 Audio-Hardware-R4D-Abschluss
+-----------------------------------
+
+0.39.4 ist das gemeinsame Abschlussaudit fuer AC97.R4D und HDA.R4D. Das neue
+Script `Tests/Gate/Run-AudioHardwareR4DFinalTest.ps1`
+verbindet die statischen Guards `CheckAudioR4D038.zig` und
+`CheckHdaR4D039.zig` mit den Laufzeit-Smokes fuer:
+
+- Boot ohne geplante Hardware-Audio-R4D-Treiber
+- AC97 missing, disabled, no-device und init-failed
+- AC97 aktive Probe und Playback
+- HDA missing und load-failed
+- HDA Q35-Playback mit BEEP, R4Synth-WAV und AUDIOD
+
+Der Abschlussstatus ist damit: `AC97.R4D` und `HDA.R4D` sind die produktiven
+Hardware-Audiotreiber, beide ohne Built-in-Fallback im Kernelbaum. Fehlerhafte
+oder fehlende R4D-Dateien bleiben sichtbare, nichtfatale Treiberzustaende.
+
+0.43.4 Driver-Policy-/R4D-Bootbesitz
+------------------------------------
+
+Seit 0.43.4 liegt der produktive Driver-Policy-/R4D-Bootbesitz nicht mehr in
+dem alten Startpfad, sondern in `Code/src/kernel/driver_policy_boot.zig`. Der
+Schnitt laeuft aus `main.zig` nach USB-HID und vor dem R4P-/Runtime-Startpfad, nutzt
+den bereits geladenen CONFIG-Zustand, prueft die Plattform-IRQ-Grundlage,
+wendet Core-Directives an, startet den `DRIVER=`-Plan und schreibt Summary,
+Registry-Nachzustand, sichtbare Bootstatuszeile und `[DRVPOLICY]`-Bootlog.
+
+Das aendert keine Treiberauslagerung: AC97.R4D, HDA.R4D, RTL8139.R4D,
+SID.R4D, OPL3.R4D und MIDI.R4D bleiben die bestehenden produktiven R4D-Pfade.
+Bootkritische Built-ins wie PS/2, xHCI/USBHID, Storage und fruehe Ausgabe
+bleiben Kernelpfade, bis dafuer eigene, belastbar abgenommene Ladepfade
+existieren.
+
+Runtime-`LOAD`/`UNLOAD` bleibt vom fruehen `DRIVER=`-Bootplan getrennt. Die
+Abschlussabnahme fuer diesen Besitzwechsel liegt in
+`Tests/Gate/CheckDriverPolicyBoot043.zig`,
+`Run-DriverPolicyBootTest.ps1`, `Run-DriverPolicyConsumerTest.ps1` und
+`Run-NetDriverLifecycleTest.ps1`.

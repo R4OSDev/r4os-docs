@@ -1,0 +1,149 @@
+﻿R4OS 0.64.5 - R4IMG als unabhaengige Runtime-R4L
+======================================================
+
+Ziel
+----
+
+0.64.5 migriert R4IMG als erste produktive Library auf den in 0.64.1 bis
+0.64.4 aufgebauten Runtime-R4L-Pfad. Fachlicher Contract, Implementierung,
+Bindings, Tests und ausschliesslich benoetigter Fremdcode liegen nun in der
+R4IMG-Einheit. Zentraler Plattform-Contract, Kernel und Kern-SDK kennen keine
+R4IMG-Funktionen mehr.
+
+Libraryeinheit
+--------------
+
+Die eigenstaendig baubare Einheit liegt unter:
+
+    Code/System/Libraries/R4IMG/
+
+Sie enthaelt:
+
+    Contract/LibraryContract.json
+    Contract/LibraryContract.baseline.json
+    Contract/Generated/implementation_abi.zig
+    Bindings/Zig/r4img.zig
+    Bindings/Zig/r4img_abi.zig
+    Bindings/C/r4img.h
+    Source/main.zig
+    Source/codec.zig
+    Source/svg.zig
+    ThirdParty/stb/
+    Tests/
+
+Normale Builds pruefen den lokalen Contract mit R4LContractGen --check. Eine
+Aenderung an R4IMG verlangt keine fachliche Aenderung am Plattform-Contract,
+Kernel oder Kern-SDK, solange ihr lokaler Kompatibilitaetsvertrag eingehalten
+wird.
+
+API_V1
+------
+
+R4IMG 0.3.0 exportiert API_V1 Revision 1 und Query Revision 1. Die
+API_V1-Tabelle besitzt 80 Bytes und sechs Funktionsslots:
+
+    probe
+    scratch_bytes
+    decode
+    decode_svg_at
+    scale_composite
+    decoder_diagnostic
+
+Magic, Interface-ID, ABI-Major, Revision und Mindestgroesse werden vor dem
+ersten Funktionsaufruf geprueft. Alle Bild-, Ziel- und Scratchbuffer bleiben
+caller-owned. Die Library behaelt keine uebergebenen Pointer und allokiert
+nichts ueber die ABI-Grenze.
+
+Implementierung und Fremdcode
+-----------------------------
+
+Die bisher im Kern-SDK liegenden Decoder- und SVG-Quellen wurden nach
+R4IMG/Source verschoben. Der nur von R4IMG benoetigte STB-C-Code samt Headern
+liegt nun unter R4IMG/ThirdParty/stb. Der generische R4MF-Buildpfad kann eine
+Zig-R4L mit nachfolgenden C-Quellen und eigenen Include-Wurzeln bauen; R4IMG
+benoetigt dadurch keine zentrale Sonderbehandlung mehr.
+
+Die erzeugte R4IMG.R4L besitzt echten Code, Daten, Exporte und Relocations:
+
+    Dateigroesse  135485 Bytes
+    Code          108170 Bytes
+    Sections      4
+    Exporte       2
+    Relocations   937
+
+Runtime-Verbraucher
+-------------------
+
+Klickifax und KlickifaxLive deklarieren R4IMG:API_V1:1 in ihrem jeweiligen
+Manifest. Beide verwenden ausschliesslich das bei R4IMG liegende Zig-Binding
+und rufen Probe, Decode, SVG, Skalierung und Diagnose ueber die vom Loader
+bereitgestellte Tabelle auf. In die R4X-Artefakte wird kein R4IMG-Decodercode
+mehr einkopiert.
+
+Der R4FONT-Smoke prueft nur noch R4FONT. Ein eigener R4IMG-C-Verbraucher baut
+gegen den generierten C-Header und importiert API_V1 Revision 1. Er ist eine
+nicht auszuliefernde Contractfixture.
+
+Zentrale Bereinigung
+--------------------
+
+R4IMG wurde entfernt aus:
+
+- zentralen API-Gruppen und App-Profilen;
+- dem generierten Kern-SDK- und C-App-Contract;
+- der bisherigen SDK-Fassade und dem zentralen C-Header;
+- festen Librarylisten und STB-Linksonderfaellen;
+- Generator- und Projektvorlagen-Sonderfaellen.
+
+Historische Changelogs und die versionierten Abschlussberichte 0.64.1 bis
+0.64.4 bleiben als Dokumentation des damaligen Zustands unveraendert. Die
+durch die zentrale Contract-Neugenerierung veraenderte Kernel-ABI-Tabelle ist
+im Kernelartefakt enthalten; deshalb steigt dessen Version auf 0.1.9.
+
+Gezielte Abnahme
+----------------
+
+- Der eigenstaendige R4IMG-Build bestand 16 Buildschritte und 21 Tests.
+- Der Klickifax-Hosttest bestand 47 Tests; Klickifax und KlickifaxLive wurden
+  als produktive R4X-Artefakte gebaut.
+- Die R4IMG-Zig- und C-Conformancefixtures, Decoder-, SVG-, Alpha-,
+  Skalierungs-, Limit- und Fehlerfaelle sind gruen.
+- API-Architektur-, API-Dokumentations-, In-Tree-Closure-, Klickifax-Loading-,
+  WebImage- und R4FONT-Gates sind gruen.
+- Alle geaenderten JSON-Dateien sind parsebar; Zig-Formatierung,
+  Encodingpolicy und `git diff --check` sind sauber.
+
+Gesamtabnahme
+-------------
+
+- `DevTools/Scripts/Build.bat -norun` endete nach 1044,2 Sekunden mit
+  Exitcode 0. ModuleCatalog entdeckte 158 aktuelle Manifeste; das finale
+  Full-Inventar enthaelt 102 Komponenten inklusive Kernel, der Imageplan 101
+  installierte Module.
+- `DevTools/Scripts/Build.bat -test` endete mit
+  `QEMU_TEST_TIMEOUT_SECONDS=600` nach 271,3 Sekunden mit Exitcode 0. Das
+  Testinventar enthielt 123 Komponenten inklusive Kernel, der Testimageplan
+  122 Module.
+- Das serielle Log zeigt die geladene R4IMG.R4L mit vier Sections und 937
+  Relocations, den benannten Import `R4IMG:API_V1:1`, gruene Klickifax-Bild-,
+  Lade- und Browser-Selbsttests sowie `System poweroff.`. Panic-, Fatal-,
+  CPU-Exception-, GPF- und Page-Fault-Marker fehlen.
+- Nach dem QEMU-Lauf wurden Modules.json, MODULES.JSON und Release.json wieder
+  deterministisch fuer das Full-Profil erzeugt.
+
+Versionen
+---------
+
+    R4OS          0.64.5
+    Kernel        0.1.9
+    R4IMG.R4L     0.3.0
+    KLICKIFAX.R4X 0.29.3
+    KFXLIVE.R4X   0.2.8
+
+Ergebnis
+--------
+
+R4IMG ist vollstaendig als unabhaengige Runtime-R4L umgesetzt. Neue
+kompatible Decoder- oder SVG-Funktionen koennen innerhalb der Libraryeinheit
+entwickelt und ausgeliefert werden. Nur Verbraucher, die eine neue oder
+inkompatible Schnittstelle nutzen wollen, muessen angepasst werden.

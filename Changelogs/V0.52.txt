@@ -1,0 +1,1235 @@
+﻿Leitbild 0.52.X - Netzwerkzugriff
+
+0.52.X soll R4OS erstmals gezielt von aussen erreichbar machen. Nach dem
+Selbsthosting-Fokus der 0.51.X-Reihe steht nun der praktische Zugriff auf ein
+laufendes R4OS-System im Mittelpunkt: anmelden, Dateien uebertragen,
+Sitzungen beobachten und das System aus der Ferne bedienen.
+
+Der Schwerpunkt liegt auf robusten, nachvollziehbaren Grundfunktionen statt
+auf einem Sicherheitsmodell. R4OS bleibt ein Einbenutzer-System im vollen
+Vertrauensmodell; SSH, SSH-Dateiuebertragung und RDP dienen als technische
+Zugangswege fuer Entwicklung, Diagnose, Datenaustausch und spaetere
+Selbstwartung.
+
+Der Netzwerkzugriff in 0.52.X soll die vorhandenen Netzwerk-, Dienst-, R4X-
+und Dateisystemstrukturen nutzen und erweitern, ohne neue Funktionalitaet
+unnoetig in den Kernel zu ziehen. Protokolle, Serverprozesse und Werkzeuge
+sollen soweit moeglich als externe R4OS-Programme, Dienste,
+Systembibliotheken oder ladbare Protokollmodule entstehen.
+
+Leitplanken fuer 0.52.X:
+
+- Jede Unterversion soll einen belastbaren, abnehmbaren Zielzustand liefern.
+  Diagnose- oder Sichtbarkeitsschritte sind erlaubt, muessen aber als
+  dauerhafte Grundlage taugen und duerfen keine Platzhalter-Protokolle,
+  Dummy-Krypto oder nur zufaellig gruene Tests hinterlassen.
+- Kernel-Code ist nur zulaessig, wenn eine allgemeine API-/ABI-Erweiterung,
+  ein echter Core-Lifetime-Vertrag oder eine bootnahe Grundlage technisch
+  zwingend dort hingehoert. SSH, SFTP, SCP und RDP selbst gehoeren nicht in
+  den Kernel.
+- Netzwerkzugriff nutzt die vorhandenen R4X-/R4L-/R4P-Pfade: `SSHD.R4X`
+  beziehungsweise spaeter `RDPSVC.R4X` sind Dienste, TCP laeuft ueber
+  `TCPSVC`/R4NET, Dateizugriff ueber R4SYS, Darstellung und Eingabe ueber
+  die vorhandenen Desktop-/Console-/Input-Vertraege.
+- Es gibt keine stillen Fallbacks. Wenn ein benoetigter Dienst, ein
+  Protokollmodul oder eine API fehlt, muss der Fehler sichtbar sein. Wird ein
+  Pfad umgezogen, bleibt am Ende der Unterversion nur der neue produktive
+  Pfad uebrig; alte Bruecken sind entweder entfernt oder klar als Diagnose
+  ausserhalb des normalen Pfads markiert.
+- Wiederverwendbare Protokoll- oder Hilfslogik wird genau einem Besitzer
+  zugeordnet. Falls ein spaeterer Umzug von service-lokalem Code in eine
+  Library oder ein Protokollmodul noetig wird, passiert das als eigener
+  endgueltiger Umzug ohne parallelen Altpfad.
+
+Versionnummer: 0.52.1
+Status: Erledigt
+
+Offene Punkte:
+- Keine fuer die reine Connectivity-Bestandsaufnahme.
+- Folgebedarf aus dem Audit: Der eingehende TCP-Listen-/Accept-Pfad fuer
+  Host -> R4OS muss vor SSH-, SSH-Dateiuebertragungs- oder RDP-Servern erneut
+  eingegrenzt werden. Dieser Punkt wird in 0.52.2 bearbeitet.
+
+Erledigt:
+- Bestehenden Netzwerkstand erfasst: Produktiver QEMU-Netzpfad ist
+  `RTL8139.R4D` mit QEMU-User-Network oder TAP/ICS. R4OS besitzt externe
+  Diagnose- und Werkzeugpfade fuer DHCP, DNS, PING, NETCAT, TCPECHO, SEND
+  und RECV.
+- `DevTools/Scripts/TestScripts/Run-IpConfigLiveTest.ps1 -Profile user`
+  ausgefuehrt: DHCP, RTL8139-Adapter, Link, IPv4, Gateway, DNS und
+  Netzwerkdetails sind im QEMU-User-Network gruen.
+  Log: `DevTools/Logs/qemu-test-ipconfig-user-20260611-192837.log`.
+- `DevTools/Scripts/TestScripts/Run-DnsLiveTest.ps1 -Profile user -HostName
+  WWW.GOOGLE.DE -IncludePing -ExplicitServer` ausgefuehrt: DNS ueber
+  `10.0.2.3` funktioniert und `PING.R4X` meldet `Lost = 0`.
+  Log: `DevTools/Logs/qemu-test-dns-user-20260611-192901.log`.
+- `DevTools/Scripts/TestScripts/Run-NetcatLiveTest.ps1 -Profile user -Port
+  8080 -Payload R4OS0521-GUEST-TO-HOST` ausgefuehrt: R4OS kann eine
+  TCP-Verbindung zum Host-Gateway `10.0.2.2:8080` aufbauen, Nutzdaten senden
+  und die Antwort lesen.
+  Log: `DevTools/Logs/qemu-test-netcat-user-20260611-192925.log`.
+- Host-zu-R4OS per QEMU-User-Network-Portweiterleitung getestet:
+  `Run-NetcatListenLiveTest.ps1 -Profile user -GuestPort 8022 -HostPort
+  10022` erreicht in R4OS `NETCAT listen 8022: waiting`, endet aber mit
+  `NETCAT listen 8022: failed`.
+  Log: `DevTools/Logs/qemu-test-netcat-listen-user-20260611-193151.log`.
+- Zweiter eingehender Gegencheck mit
+  `DevTools/Scripts/TestScripts/Run-TcpEchoListenToolLiveTest.ps1 -Profile
+  user`: R4OS erreicht `TCPECHO listen 8080: waiting`, endet aber mit
+  `TCPECHO listen 8080: failed`.
+  Log: `DevTools/Logs/qemu-test-tcpecho-listen-tool-user-20260611-193834.log`.
+
+Abnahme:
+- Erfuellt: Die gezielten TestScripts bauen Test-Images und starten R4OS in
+  QEMU. Der normale `Build.bat -test` bleibt bewusst adapterlos und ist fuer
+  SSH-/RDP-Netztests allein nicht ausreichend.
+- Erfuellt: R4OS erreicht im QEMU-User-Network ein Netzwerkziel per DNS und
+  Ping. `WWW.GOOGLE.DE` wurde aufgeloest und mit `Lost = 0` angepingt.
+- Teilweise erfuellt: R4OS kann ausgehend mit dem Host kommunizieren
+  (`NETCAT` zu `10.0.2.2:8080` gruen).
+- Zum Audit-Zeitpunkt nicht erfuellt: Host -> R4OS ueber QEMU-User-Network-
+  Portweiterleitung ist fuer die aktuellen R4OS-Server-/Listenpfade noch
+  nicht gruen. NETCAT und TCPECHO erreichen den Listenmodus, liefern aber
+  `failed`.
+- Ergebnis: Fuer spaetere SSH-Tests ist QEMU-User-Network mit
+  Portweiterleitung die passende einfache Testvariante, z.B.
+  `hostfwd=tcp:127.0.0.1:10022-10.0.2.15:22`. Der im Audit rote
+  eingehende Pfad wird in 0.52.2 erneut eingegrenzt. TAP oder Bridge bleiben
+  sinnvolle Alternativen fuer direkte Host-/LAN-Erreichbarkeit.
+
+Notizen:
+- `DevTools/QEMU/Config/standard.conf` enthaelt nur Maschinen-, Laufwerks- und
+  Geraetebasis; `Build.bat -test` startet zusaetzlich explizit mit
+  `-nic none`. Netztests muessen daher weiterhin ueber gezielte TestScripts
+  oder einen erweiterten QEMU-Aufruf laufen.
+- Die getestete QEMU-User-Network-Form ist:
+  `-netdev user,id=r4net0[,hostfwd=...] -device rtl8139,netdev=r4net0,id=r4net`.
+- Host-Pruefung am 11.06.2026: Twingate und NordLynx sind auf dem Host aktiv.
+  In den IPv4-Routen wurde aber keine offensichtliche Kollision mit dem
+  QEMU-User-Network `10.0.2.0/24` oder dem `127.0.0.1`-Hostforward-Ziel
+  gefunden. Host-/VPN-Filter wurden damit nicht endgueltig ausgeschlossen;
+  die weitere Eingrenzung erfolgt in 0.52.2 ohne dauerhaftes Abschalten von
+  Twingate.
+- `DevTools/Scripts/TestScripts/Run-TcpListenTest.ps1` wurde als
+  Kontrollprobe versucht, ist im aktuellen Image aber kein gueltiger
+  Abnahmepfad mehr: Der alte `TCP`-Befehl existiert nicht mehr
+  (`Bad command or file name: TCP`).
+- Fuer SSH ist als erster Zieltest nach der Reparatur des eingehenden Pfads
+  ein Host-Port `127.0.0.1:10022` auf Gast-Port `22` sinnvoll.
+
+Versionnummer: 0.52.2
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Ursache fuer die roten Host->R4OS-Listen-Smokes aus 0.52.1 eingegrenzt.
+  Der R4OS-TCP-Listen-/Accept-Pfad und QEMU-User-Network-hostfwd
+  funktionieren; die roten Tests wurden durch das Test-Harness verursacht.
+- `Run-NetcatListenLiveTest.ps1` und
+  `Run-TcpEchoListenToolLiveTest.ps1` verwenden fuer den eigentlichen
+  Listen-Smoke jetzt ein minimales Test-AUTOEXEC mit DHCP, Listen-Befehl und
+  POWEROFF statt den Listenlauf hinter den kompletten Standard-Smoke zu
+  haengen.
+- Beide Host-Clients warten jetzt im seriellen QEMU-Log auf den
+  `... listen <port>: waiting`-Marker, bevor sie verbinden. Das gilt fuer
+  QEMU-User-Network mit `hostfwd` und fuer TAP, bei TAP danach zusaetzlich
+  mit Gast-IP-Erkennung aus dem DHCP-/IPCONFIG-Log.
+- Die TCPECHO-Abnahme prueft wieder die tatsaechlich sichtbaren
+  Ende-zu-Ende-Marker: DHCP ok, Listen wartet, Echo-Payload kommt korrekt
+  zurueck, Poweroff. Nicht ausgegebene interne Detailcounter werden nicht mehr
+  als Pflichtlog erwartet.
+
+Abnahme:
+- `DevTools/Scripts/TestScripts/Run-TcpEchoListenToolLiveTest.ps1 -Profile
+  user -GuestPort 8080 -HostPort 18080 -Payload R4TCPECHO-LISTEN`:
+  erfolgreich. Host verbindet auf `127.0.0.1:18080`, QEMU leitet auf
+  `10.0.2.15:8080` weiter, R4OS meldet
+  `TCPECHO listen 8080: ok bytes=16 payload=R4TCPECHO-LISTEN`.
+  Log: `DevTools/Logs/qemu-test-tcpecho-listen-tool-user-20260611-202155.log`.
+- `DevTools/Scripts/TestScripts/Run-NetcatListenLiveTest.ps1 -Profile user
+  -GuestPort 8084 -HostPort 18084 -Payload R4NETCAT-IN -Reply
+  R4NETCAT-OUT`: erfolgreich. Host verbindet auf `127.0.0.1:18084`, R4OS
+  akzeptiert die Verbindung, liest `R4NETCAT-IN` und sendet `R4NETCAT-OUT`.
+  Log: `DevTools/Logs/qemu-test-netcat-listen-user-20260611-202217.log`.
+- Ergebnis: QEMU-User-Network mit
+  `hostfwd=tcp:127.0.0.1:<hostport>-10.0.2.15:<guestport>` ist als einfache
+  Host->R4OS-Testbasis fuer den spaeteren SSH-Server geeignet. Twingate und
+  der gemappte Host-NIC-Adapter mussten fuer diese Abnahme nicht dauerhaft
+  geaendert werden.
+
+Notizen:
+- Der gescheiterte alte `Run-TcpListenTest.ps1` bleibt kein gueltiger
+  Abnahmepfad, weil der historische `TCP`-Befehl im aktuellen Image nicht
+  existiert.
+- Fuer den SSH-Ersttest ist weiterhin `127.0.0.1:10022 -> 10.0.2.15:22`
+  als QEMU-User-Network-hostfwd sinnvoll.
+
+Versionnummer: 0.52.3
+Status: Erledigt
+
+Offene Punkte:
+- Keine fuer den GUI-/QEMU-Netzstandard.
+
+Erledigt:
+- Die funktionierende QEMU-User-Network-Anbindung ist der dauerhafte
+  Standard fuer normale GUI-Laeufe geworden:
+  `rtl8139` mit `user`-Netzbackend und SSH-Vorwaertsleitung
+  `127.0.0.1:10022 -> 10.0.2.15:22`.
+- `DevTools/Scripts/Build.bat -gui` und `-guionly` respektieren weiterhin
+  eine vorhandene Custom-QEMU-Config. Enthalten lokale Custom-Configs keinen
+  eigenen Netzblock, haengt Build.bat automatisch den neuen Standard an.
+- `Injection/CONFIG.R4S` nutzt nun `OPTION NET dhcp=on`, damit das normale
+  Image im QEMU-User-Network sauber per DHCP startet statt feste Werte aus
+  einem alten Testprofil zu erzwingen.
+- Die lokale Custom-QEMU-Config wurde von TAP/Host-NIC auf QEMU-User-Network
+  umgestellt. TAP bleibt ein bewusst waehlbarer Spezialpfad, ist aber nicht
+  mehr der empfohlene Standard fuer SSH-Vorbereitung.
+- `DevTools/Scripts/TestScripts/Run-GuiCustomNetworkTest.ps1` als
+  Abnahmescript angelegt. Es baut ein Testimage, startet die Custom-QEMU-
+  Config headless und prueft RTL8139, DHCP, IPCONFIG und sauberen Poweroff.
+- `Docs/Deployment/BuildUndTest.txt` und `Docs/Network/README.txt` um den
+  neuen GUI-Netzstandard, DHCP-Default und SSH-hostfwd-Pfad erweitert.
+
+Abnahme:
+- Gegenprobe mit alter TAP/Host-NIC-Custom-Config:
+  `Run-GuiCustomNetworkTest.ps1` startete R4OS, lud RTL8139, blieb aber bei
+  `DHCP boot acquire: backend-error` und `Client IP 0.0.0.0`.
+  Log: `DevTools/Logs/qemu-test-gui-custom-network-20260611-203605.log`.
+- Abnahme mit QEMU-User-Network-Custom-Config:
+  `Run-GuiCustomNetworkTest.ps1` erfolgreich. Das Log enthaelt
+  `[R4D] runtime load RTL8139 [OK]`, `DHCP boot acquire: ok`,
+  `Adapter ... rtl8139`, `Source ... dhcp` und `System poweroff`.
+  Log: `DevTools/Logs/qemu-test-gui-custom-network-20260611-203720.log`.
+- `DevTools/Scripts/Build.bat -norun`: erfolgreich.
+
+Notizen:
+- Die Ursache fuer die lokale GUI-Instabilitaet lag nicht bei Twingate oder
+  R4OS-TCP selbst, sondern beim TAP/Host-NIC-Pfad der Custom-QEMU-Config.
+- `Build.bat -test` bleibt bewusst adapterlos; gezielte Netzabnahmen laufen
+  weiter ueber die TestScripts.
+- `DevTools/QEMU/` ist im Repository ignoriert. Lokale Custom-QEMU-Configs
+  koennen daher angepasst werden, der versionierte Standard liegt aber in
+  `Build.bat`, `Injection/CONFIG.R4S`, Doku und TestScripts.
+
+Versionnummer: 0.52.4
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `Code/Software/SshService/` als neues R4X-Service-Projekt angelegt.
+- Artefakt `SSHD.R4X` mit App-Klasse `service` gebaut und ueber die
+  Image-Liste unter `C:\R4OS\SERVICES\SSHD.R4X` installiert.
+- `SSHD` in `C:\R4OS\CONFIG\SERVICES.R4S` mit `start=auto`,
+  `enabled=yes` und `/RUN` registriert.
+- Dienstkonfiguration unter `SYSTEM\Services\SSHD` mit den produktiven
+  Defaults angelegt: `ClientTarget=WindowsOpenSSH`, `Enabled=ON`,
+  `UserName=r4os`, `Password=rosebud`, `ListenPort=22`,
+  `MaxSessions=1`, `LogPasswords=ON`,
+  `ShellPath=C:\R4OS\SOFTWARE\TERMINAL\TERMINAL.R4X`,
+  `ShellArgs=/NOAUTOEXEC`, `SftpRoot=/C/`, `HostKeyType=ed25519`.
+- `SSHD.R4X /RUN` legt fehlende Registry-Werte selbst nach, erzeugt in
+  0.52.4 aber bewusst noch keine Host-Key-Platzhalter.
+- `SSHD.R4X /RUN` liest die Registry-Werte, registriert den Service-
+  Endpoint `SSHD` fuer Status/Diagnose und lauscht ueber `TCPSVC` auf
+  Port 22.
+- Der Dienst wartet beim Boot robust auf TCPSVC/Netzwerkbereitschaft und
+  versucht Listen-Setup wiederholt, statt bei Timing-Problemen dauerhaft
+  auszufallen.
+- Erste SSH-Sichtbarkeit umgesetzt: eingehende TCP-Verbindung wird
+  akzeptiert, der Identifikationsbanner `SSH-2.0-R4OS_SSHD_0.52.4` wird
+  gesendet, danach wird die Verbindung sauber geschlossen.
+- `DevTools/Scripts/TestScripts/Run-SshBannerLiveTest.ps1` angelegt. Der
+  Test startet QEMU mit `127.0.0.1:10022 -> 10.0.2.15:22`, wartet auf den
+  laufenden Dienst und liest den Banner vom Host aus.
+- Architektur festgelegt: SSH-Protokollzustand bleibt service-lokal in
+  `Code/Software/SshService/`. Es gibt keinen Kernel-SSH-Pfad und keinen
+  zweiten versteckten Transportpfad neben TCPSVC/R4NET.
+- Dokumentation in `Docs/Services/README.txt`, `Docs/Software.md` und
+  `Docs/Network/README.txt` aktualisiert.
+- Sichtbare Version auf `0.52.4` gesetzt.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun`: erfolgreich.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  DevTools\Scripts\TestScripts\Run-SshBannerLiveTest.ps1`: erfolgreich.
+  Host verbindet ueber `127.0.0.1:10022` auf Gast-Port `22` und liest
+  `SSH-2.0-R4OS_SSHD_0.52.4`.
+  Log: `DevTools/Logs/qemu-test-sshd-banner-20260611-211835.log`.
+- Das Testlog zeigt `SERVMAN STATUS SSHD` mit `Status: running` und
+  TCPSVC-Detailstatus `active=0/8 listen=1`.
+- Noch keine KEX-, Auth- oder Shell-Erwartung in dieser Unterversion.
+- Es existieren keine Dummy-Hostkeys und keine vorgetaeuschte
+  Verschluesselung.
+
+Notizen:
+- SSHD ist ein normaler R4OS-Dienst, kein Kernelbestandteil.
+- Die Zugangsdaten `r4os:rosebud` sind eine SSH-Protokollantwort und kein
+  R4OS-Sicherheitsmodell.
+- Registry-Werte unter `SYSTEM\Services\SSHD` sind OS-/Dienstkonfiguration.
+  Sie duerfen im R4OS-Vertrauensmodell bewusst offen und schlicht bleiben.
+- Der Quellpfad folgt der bestehenden Repo-Konvention fuer R4X-Dienste:
+  `Code/Software/SshService/`. Der Installationspfad im Image bleibt
+  `C:\R4OS\SERVICES\SSHD.R4X`.
+- Ein zentrales persistentes Port-Reservierungssystem existiert noch nicht.
+  Fuer 0.52.4 reicht `ListenPort=22` in der SSHD-Registry-Konfiguration plus
+  die Laufzeit-Listenerverwaltung in `TCPSVC`.
+- `ShellPath` zeigt auf die Shell-Anwendung, nicht auf ein sichtbares
+  Terminalfenster. SSHD stellt spaeter den Remote-Console-/PTY-Rahmen.
+- 0.52.4 ist eine dauerhafte Dienst-/Netzbasis, kein SSH-Protokoll-Ersatz:
+  Sie beweist Boot, Service-Lifecycle, Port 22 und Host->R4OS-Erreichbarkeit.
+
+Versionnummer: 0.52.5
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `SSHD.R4X` spricht jetzt eine echte SSH-Transportbasis mit Windows OpenSSH:
+  Identifikationsaustausch, Binary-Packet-Format, Padding,
+  Sequenznummern, `SSH_MSG_KEXINIT`, `SSH_MSG_KEX_ECDH_INIT`,
+  `SSH_MSG_KEX_ECDH_REPLY`, `SSH_MSG_NEWKEYS`, `SSH_MSG_SERVICE_REQUEST`,
+  `SSH_MSG_SERVICE_ACCEPT` und kontrollierter Disconnect sind umgesetzt.
+- Kryptografie bleibt im SSHD-Userland und nutzt keine Kernel-Erweiterung:
+  `curve25519-sha256`, `ssh-ed25519`,
+  `chacha20-poly1305@openssh.com` und `none`-Compression sind der
+  abgenommene Transportpfad.
+- Der Ed25519-Host-Key wird beim ersten Start aus einem Dienst-Seed erzeugt
+  und als `HostKeySeed`/`HostKeyPublic` unter `SYSTEM\Services\SSHD`
+  gespeichert. Vorhandene Werte werden geladen, validiert und bei
+  Teilzustand, falschem Typ oder Public-Key-Mismatch sichtbar abgelehnt.
+- Der verschluesselte Client-zu-Server-Pfad entschluesselt nach `NEWKEYS`
+  den OpenSSH-Service-Request `ssh-userauth`; der Server antwortet
+  verschluesselt mit `SSH_MSG_SERVICE_ACCEPT`.
+- Der erste Auth-Anlauf wird ebenfalls verschluesselt gelesen. Da 0.52.5
+  noch keine erfolgreiche Anmeldung liefern sollte, beendet diese
+  Unterversion die Verbindung danach bewusst mit
+  `authentication waits for R4OS 0.52.6`; der Login ist in 0.52.6
+  umgesetzt.
+- `Run-SshTransportLiveTest.ps1` baut ein Testimage, startet QEMU headless
+  mit Hostforward `127.0.0.1:10022 -> 10.0.2.15:22` und nimmt den
+  Transport mit Windows OpenSSH ab.
+- Der SDK-/R4XBuilder-Pfad wurde endgueltig von flachen Codebytes auf
+  gelinkte ELF-Eingaenge mit R4M0-Sections und ELF-Relocations fuer
+  R4X/R4D/R4P umgestellt. Dadurch koennen Zig-R4X-Dienste wie `SSHD.R4X`
+  echte std.crypto-/Rodata-/Pointer-Relocations nutzen, ohne einen
+  parallelen Raw-Fallback zu behalten.
+
+Abnahme:
+- `Build.bat -norun` erfolgreich.
+- `Build.bat -test` erfolgreich.
+- `Run-SshBannerLiveTest.ps1` erfolgreich mit Banner
+  `SSH-2.0-R4OS_SSHD_0.52.5`.
+- `Run-SshTransportLiveTest.ps1` erfolgreich: OpenSSH sieht
+  `curve25519-sha256`, `ssh-ed25519`,
+  `chacha20-poly1305@openssh.com`, `SSH2_MSG_NEWKEYS sent`,
+  `SSH2_MSG_NEWKEYS received`, `SSH2_MSG_SERVICE_ACCEPT received` und den
+  kontrollierten Disconnect `authentication waits for R4OS 0.52.6`.
+- Das QEMU-Log bestaetigt Boot ueber Limine, geladene `RTL8139.R4D`,
+  `TCPSVC`-Listenstatus und laufenden `SSHD`-Service. Kein Crash, kein
+  Klartext-/Fallback-Transport und kein haengender Testprozess.
+
+Notizen:
+- Ziel dieser Unterversion war noch keine erfolgreiche Anmeldung, sondern ein
+  vollstaendiger und kryptografisch echter SSH-Transport. Dieser Stand ist
+  erreicht; Login wurde danach in 0.52.6 umgesetzt.
+- Der SSH-Transport bleibt ausserhalb des Kernels. Wenn spaeter eine
+  Auslagerung in eine Library oder ein Protokollmodul sinnvoll wird, erfolgt
+  sie als endgueltiger Umzug ohne parallelen service-lokalen Altpfad.
+- OpenSSHs Chacha/AEAD-Pakete richten den verschluesselten Paketkoerper aus,
+  nicht das klassische `packet_length || body`-Gesamtpaket. Dieser Unterschied
+  ist im SSHD-Paddingpfad fest abgebildet.
+
+Versionnummer: 0.52.6
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- SSH-Passwortauthentifizierung fuer `ssh-userauth` umgesetzt. `SSHD.R4X`
+  liest `UserName` und `Password` aus `SYSTEM\Services\SSHD`; die Defaults
+  bleiben `r4os` und `rosebud`.
+- Ungueltige Benutzer, falsche Passwoerter und nicht unterstuetzte
+  Auth-Methoden werden mit normaler SSH-Auth-Failure-Antwort abgewiesen.
+  Erfolgreiche Anmeldung erzeugt `SSH_MSG_USERAUTH_SUCCESS`, fuehrt aber
+  kein R4OS-User-/Rechtesystem ein.
+- `MaxSessions=1` wird als erster belastbarer Sitzungszustand eingehalten:
+  eine aktive SSH-Session, klare Counter fuer akzeptierte Verbindungen,
+  Auth-Erfolge, Auth-Fehler, Channel-Opens und Shell-Sessions.
+- SSH-Session-Channel fuer `session`, PTY-Request, Shell-Request,
+  Window-Change, Daten, EOF und Close umgesetzt. Noch nicht unterstuetzte
+  Channel-Requests werden sichtbar abgelehnt.
+- Headless Remote-Console-Host ueber die bestehende R4SYS-/Console-Schicht
+  umgesetzt: `programSetConsoleHost`, `consoleSetMetrics` und
+  `consolePushKey` stehen im SDK bereit und verbinden den SSH-Channel mit
+  einer normalen Console-R4X-Instanz.
+- `SSHD` startet `ShellPath` aus der Registry, standardmaessig
+  `C:\R4OS\SOFTWARE\TERMINAL\TERMINAL.R4X /NOAUTOEXEC`, ohne ein sichtbares
+  Terminalfenster zu oeffnen. `TERMINAL.R4X` bleibt damit der produktive
+  Shellpfad auch fuer SSH.
+- `TERMINAL.R4X` besitzt nun den Built-in-Befehl `EXIT`, damit interaktive
+  und remote gehostete Shell-Sitzungen sauber beendet werden koennen.
+- `SERVMAN STATUS name` fragt bei Services mit Endpoint zusaetzlich eine
+  kurze printable Statusantwort ueber Operation `1` ab. `SSHD` nutzt diesen
+  Pfad fuer Diagnosewerte wie Sessions, Auth-Counter, letzten Login,
+  fehlgeschlagene Methode und getestetes Passwort.
+- `SSHD` schreibt Auth-Versuche, Auth-Fehler, Auth-Erfolge und gestartete
+  Shells zusaetzlich als Service-Records an `LOGSVC`, sofern der Logdienst
+  verfuegbar ist. Fehlende LOGSVC-Verfuegbarkeit blockiert SSHD nicht.
+- `Run-SshLoginLiveTest.ps1` angelegt. Der Test baut ein Testimage, startet
+  QEMU headless mit `127.0.0.1:10022 -> 10.0.2.15:22`, prueft einen
+  Fehllogin mit `wrongbud`, meldet sich danach mit `rosebud` an und fuehrt
+  ueber die SSH-Shell `SERVMAN STATUS SSHD` sowie `ECHO SSH0526-LOGIN` aus.
+- Sichtbare Version auf `0.52.6` gesetzt.
+
+Abnahme:
+- `Build.bat -norun` erfolgreich.
+- `Run-SshBannerLiveTest.ps1`: erfolgreich mit Banner
+  `SSH-2.0-R4OS_SSHD_0.52.6`.
+  Log: `DevTools/Logs/qemu-test-sshd-banner-20260611-233130.log`.
+- `Run-SshTransportLiveTest.ps1`: erfolgreich. Windows OpenSSH handelt den
+  verschluesselten Transport weiterhin bis `NEWKEYS` und
+  `SSH_MSG_SERVICE_ACCEPT` aus.
+  Log: `DevTools/Logs/qemu-test-sshd-transport-20260611-233201.log`.
+- `powershell -ExecutionPolicy Bypass -File
+  DevTools\Scripts\TestScripts\Run-SshLoginLiveTest.ps1`: erfolgreich.
+  Windows OpenSSH verbindet ueber Host-Port `10022`, ein falsches Passwort
+  wird mit `Permission denied` abgewiesen, `r4os:rosebud` authentifiziert
+  erfolgreich und die Remote-Shell liefert `SSH0526-LOGIN` zurueck.
+  Log: `DevTools/Logs/qemu-test-sshd-login-20260611-233233.log`.
+- Die SSH-Ausgabe aus `SERVMAN STATUS SSHD` enthaelt `auth_ok=1`,
+  `shells=1`, `failed_method=password` und `failed_password=wrongbud`.
+- Das QEMU-Log bestaetigt Boot ueber Limine, geladene `RTL8139.R4D`,
+  `TCPSVC`-Listenstatus, laufenden `SSHD`-Service und den SSHD-Endpoint.
+- `Build.bat -test` erfolgreich mit `TEST OK`, Boot OK und Poweroff OK.
+  Log: `DevTools/Logs/qemu-test-standard.log`.
+- Kein Kernel-SSH-Pfad, kein zweiter Shell-Interpreter und kein
+  Host-Dateisystem- oder Klartext-Transport-Fallback.
+
+Notizen:
+- Die Authentifizierung ist nur Teil des SSH-Protokolls. R4OS bleibt
+  single-user und fully trusted.
+- Passwortversuche duerfen bewusst im Klartext geloggt werden, weil R4OS kein
+  Sicherheitsmodell erzwingt und Diagnose hier wichtiger ist.
+- Entscheidung: R4OS folgt dem Muster bestehender Betriebssysteme. Wie Linux
+  per PTY oder Windows per ConPTY stellt SSHD einen headless Sitzungsrahmen
+  bereit und startet darin die Shell; es wird kein sichtbares Terminalfenster
+  ferngesteuert.
+- `TERMINAL.R4X` bleibt der produktive Shellpfad und erhaelt die Eingabe aus
+  der Remote-Console. Damit entsteht kein zweiter Shell-Interpreter nur fuer
+  SSH.
+- `SSHD.R4X /STATUS` existiert als Service-Diagnosepfad, wird aber nicht als
+  normale Terminal-Anwendung gestartet, weil service-class Programme bewusst
+  nicht aus der Shell heraus als App laufen. Produktiver Sichtpfad ist
+  `SERVMAN STATUS SSHD`.
+- Der OpenSSH-Livetest verwendet `ssh -T` und eine kontrollierte stdin-Datei.
+  Das ist fuer die aktuelle Windows-OpenSSH-/QEMU-Abnahme stabiler als ein
+  erzwungenes lokales Pseudo-Terminal.
+
+Versionnummer: 0.52.7
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `TERMINAL.R4X` kann mit `/C <Befehl>` einen einzelnen R4DOS-Befehl
+  ausfuehren und dessen Errorlevel als Programm-Exitcode zurueckgeben.
+- `SSHD.R4X` verarbeitet neben Shell-Requests auch Exec-Requests und startet
+  dafuer `TERMINAL.R4X /NOAUTOEXEC /C <Befehl>` als headless Console-Host.
+- SSH-Channel-Ende sendet Exit-Status, EOF und Close; erfolgreiche Execs
+  liefern Exitstatus `0`, unbekannte Befehle liefern Exitstatus `1`.
+- Window-Adjust und zweite Channel-Open-Versuche werden kontrolliert
+  behandelt.
+- R4X-ProgramApi auf Version `101` erweitert:
+  `program_spawn_with_console_host` fuer gezielte headless Console-Hosts und
+  `program_reap_instance` fuer explizites Reaping. Automatisches Reaping bei
+  Status-/Instanzabfragen wurde entfernt, damit schnelle SSH-Exec-Programme
+  nicht von anderen Diensten weggeraeumt werden.
+- SSHD pumpt waehrend aktiver Sessions weiter seinen Service-Endpoint. Beim
+  Drain wird Endpoint-Arbeit als Aktivitaet gewertet, damit z.B.
+  `ssh ... "SERVMAN STATUS SSHD"` vollstaendige Service-Statusausgabe
+  zurueckliefert.
+- Temporaere Pump-Diagnosefelder aus dem SSHD-Status wurden wieder entfernt;
+  fachliche Counter wie `shells=`, `execs=`, `in=` und `out=` bleiben.
+- Neuer Live-Test `Run-SshSessionLiveTest.ps1` prueft interaktive Shell,
+  Exec-Ausgabe, Exec-Fehlerexitcode und `SERVMAN STATUS SSHD` ueber SSH.
+- SSHD-, Terminal-, Service-, Netzwerk-, API-, R4X- und SDK-Dokumentation
+  wurde an die neue Session-/Exec-Grundlage angepasst.
+- Sichtbare Systemversion in `Injection/R4OS/CONFIG/VERSION.R4S` auf
+  `0.52.7` gesetzt.
+
+Abnahme:
+- `Build.bat -norun` erfolgreich.
+- `Build.bat -test` erfolgreich.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  DevTools\Scripts\TestScripts\Run-SshSessionLiveTest.ps1` erfolgreich:
+  Shell-Exit `0`, Exec-Exit `0`, Bad-Exec-Exit `1`.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  DevTools\Scripts\TestScripts\Run-SshBannerLiveTest.ps1` erfolgreich:
+  Banner `SSH-2.0-R4OS_SSHD_0.52.7`.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  DevTools\Scripts\TestScripts\Run-SshTransportLiveTest.ps1` erfolgreich.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  DevTools\Scripts\TestScripts\Run-SshLoginLiveTest.ps1` erfolgreich:
+  SSH-Exit `0`.
+
+Notizen:
+- Falls der bestehende Console-/STDIO-Vertrag fuer Remote-Sessions noch nicht
+  reicht, wird er um einen SSH-Remote-Host erweitert, statt Terminal- oder
+  Kernel-Code unpassend zu verbiegen.
+- 0.52.7 schliesst die Channel-Schicht als tragfaehige Basis ab. SFTP und
+  SCP duerfen danach diese Schicht nutzen, aber keine eigene zweite
+  Session-/Exec-Implementierung einfuehren.
+
+Versionnummer: 0.52.8
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `SSHD.R4X` erkennt den SSH-Subsystem-Request `sftp` und schaltet in einen
+  SFTP-Sessionmodus.
+- SFTP-v3-Grundumfang implementiert: Init/Version, Open, Close, Read, Write,
+  Status, RealPath, Stat/LStat, FStat, SetStat/FSetStat als akzeptierter
+  No-op, OpenDir, ReadDir und MkDir.
+- Windows-/DOS-nahe Pfadabbildung umgesetzt: `/C/` entspricht `C:\`,
+  `/D/` entspricht `D:\`; Laufwerkspfade wie `C:\TEMP\X.TXT` werden
+  tolerant akzeptiert. Startverzeichnis ist `/C/`.
+- SFTP nutzt R4OS-Datei-APIs und keinen Kernel-Dateitransferpfad oder
+  Host-Dateisystem-Fallback.
+- SFTP-Download, SFTP-Upload, Ueberschreiben kleiner Dateien und
+  Verzeichnislisten sind mit Windows OpenSSH abgenommen.
+- SFTP-Upload-Pufferung ist umgesetzt: sequenzielle Writes bis 64 KB,
+  Commit beim Close. Die 0.52.8-Abnahme schreibt 40 KB nach `C:\TEMP`, liest
+  die Datei wieder zurueck und vergleicht die Bytes auf dem Host.
+- `READDIR` nutzt jetzt die bestehende R4SYS-Directory-Iteration ab Index `2`
+  und sendet mehrere echte Eintraege pro SFTP-Name-Antwort. Die zuvor
+  service-lokal erzeugten `.`/`..`-Einzelantworten wurden entfernt.
+- Grosse statische SSHD-/SFTP-Arbeitsbereiche wurden auf dynamische
+  R4X-Heap-Scratch-Bereiche umgestellt.
+- Der R4X-Service-Stack hat fuer Service-Programme einen groesseren initialen
+  Commit erhalten, damit Dienste wie `SSHD.R4X` nicht mehr bei groesseren
+  lokalen Arbeitsbereichen in einen Page Fault laufen.
+- Stack-Growth fuer R4X-Programme kann eine Service-Stack-Reserve nun auch
+  ueber die faultende Adresse finden, wenn die Scheduler-Task-ID bei einem
+  Dienst nicht eindeutig zur Programminstanz zeigt.
+- Der virtuelle Memory-Commit claimt PMM-Frames jetzt vor dem Mapping und
+  gleicht PMM-/Blocktabellen-Zustand sauberer ab. Damit sind die beim
+  SSHD-Service-Stack beobachteten `Overlap`-Fehler behoben.
+- Der TCP-Core puffert groessere Out-of-order-Bursts robuster: 48 Slots mit
+  2048 Byte pro Slot, Duplikat-/Overlap-Behandlung und ein 40-KB-
+  Out-of-order-Contract-Probe im Netz-Limit-Testpfad.
+- SSHD behandelt einen verschwundenen TCP-Handle waehrend einer aktiven
+  Channel-Session nicht mehr wie "gerade keine Daten", sondern beendet die
+  Session sauber.
+- Das SSH-Channel-Fenster ist fuer OpenSSH-SFTP auf `1 MB` festgelegt; SFTP
+  verarbeitet Eingaben mit Window-Adjust und begrenzten Datei-/Antwortchunks.
+- `DevTools/Scripts/TestScripts/Run-SftpLiveTest.ps1` wurde angelegt und
+  prueft QEMU-Hostfwd, OpenSSH-SFTP, Lesen, Listen, Upload/Download und
+  Bytevergleich.
+- Sichtbare Version auf `0.52.8` gesetzt.
+
+Abnahme:
+- `DevTools\Scripts\Build.bat -norun`: erfolgreich.
+- `DevTools\Scripts\Build.bat -test`: erfolgreich mit `TEST OK`, Boot OK
+  und Poweroff OK.
+  Log: `DevTools/Logs/qemu-test-standard.log`.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  DevTools\Scripts\TestScripts\Run-SshBannerLiveTest.ps1 -HostPort 10038`:
+  erfolgreich mit Banner `SSH-2.0-R4OS_SSHD_0.52.8`.
+  Log: `DevTools/Logs/qemu-test-sshd-banner-20260612-190638.log`.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  DevTools\Scripts\TestScripts\Run-SshTransportLiveTest.ps1 -HostPort 10039`:
+  erfolgreich. Windows OpenSSH handelt den verschluesselten Transport aus.
+  Log: `DevTools/Logs/qemu-test-sshd-transport-20260612-190710.log`.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  DevTools\Scripts\TestScripts\Run-SshLoginLiveTest.ps1 -HostPort 10040`:
+  erfolgreich mit `ssh-exit=0`.
+  Log: `DevTools/Logs/qemu-test-sshd-login-20260612-190742.log`.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  DevTools\Scripts\TestScripts\Run-SshSessionLiveTest.ps1 -HostPort 10041`:
+  erfolgreich mit `shell-exit=0`, `exec-exit=0` und `bad-exit=1`.
+  Log: `DevTools/Logs/qemu-test-sshd-session-20260612-190820.log`.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  DevTools\Scripts\TestScripts\Run-SftpLiveTest.ps1 -HostPort 10042`:
+  erfolgreich. Windows OpenSSH-SFTP verbindet ueber QEMU-Hostfwd,
+  listet `/C/` und `/C/R4OS/CONFIG`, liest `VERSION.R4S`, schreibt
+  `UPLOAD0528.BIN` nach `/C/TEMP/SFTP0528.BIN`, liest sie als
+  `DOWN0528.BIN` zurueck und der Host-Bytevergleich ist identisch
+  (`upload-bytes=40960`).
+  Log: `DevTools/Logs/qemu-test-sftp-20260612-190902.log`.
+- Der SFTP-Livetest prueft nach dem Transfer erneut `SERVMAN STATUS SSHD`
+  ueber SSH und sieht `sftp=1`, `sftp_open=`, `sftp_read=` und
+  `sftp_write=`.
+- Kein Kernel-Dateitransferpfad, kein Host-Dateisystem-Fallback und keine
+  zweite SSH-/SFTP-Sessionlogik.
+
+Notizen:
+- SFTP ist der primaere moderne Dateiuebertragungsweg ueber SSH.
+- Auch SFTP bleibt Teil des Dienst-/Softwarepfads, nicht des Kernels.
+- Ziel ist kein halber SFTP-Demo-Pfad, sondern ein kleiner, robuster
+  Datenaustauschumfang mit Lesen, Schreiben, Listen, Ueberschreiben und
+  nachvollziehbaren Fehlern.
+- Eine experimentelle RTL8139-Poll-Aenderung wurde waehrend der Eingrenzung
+  verworfen und nicht dauerhaft uebernommen. Die dauerhaft uebernommenen
+  Ursachenbehebungen liegen in SSHD, TCP-Core, R4X-Service-Stack und
+  virtuellem Memory-Commit.
+- SFTP ist bewusst klein gehalten: einzelne Dateien, sequenzielle Writes,
+  begrenzte Dateigroessen und klare Statusantworten. Rekursive Kopien,
+  Dateirechte, Zeitstempeluebernahme und Spezialdateien sind kein Ziel von
+  0.52.8.
+
+Versionnummer: 0.52.9
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `SSHD.R4X` erkennt klassische SCP-Exec-Kommandos vor dem normalen
+  Terminal-Exec-Pfad. Unterstuetzt werden einfache Einzeldatei-Transfers mit
+  OpenSSH `scp -O`.
+- Gast-zu-Host ist ueber den klassischen `scp -f`-Dialog umgesetzt:
+  Bestaetigungsbyte, Dateikopf, Nutzdaten, Abschlussbestaetigung.
+- Host-zu-Gast ist ueber den klassischen `scp -t`-Dialog umgesetzt:
+  Dateikopf lesen, Nutzdaten puffern, beim Abschluss ueber R4SYS schreiben.
+- SCP verwendet die bestehende SSH-Session-/Channel-Schicht aus 0.52.7 und
+  die Pfadabbildung aus 0.52.8. `/C/` und DOS-Pfade laufen ueber denselben
+  R4SYS-Dateipfad wie SFTP.
+- Kein Kernel-Dateitransferpfad, kein Host-Dateisystem-Fallback und keine
+  zweite SSH-/SCP-Sessionlogik.
+- SCP-Transfers sind aktuell auf 64 KB begrenzt. Nicht unterstuetzte Optionen
+  und ungueltige Pfade werden sichtbar abgelehnt.
+- `SERVMAN STATUS SSHD` zeigt SCP-Session-, Read-, Write- sowie Ein- und
+  Ausgangsbyte-Zaehler.
+- `DevTools/Scripts/TestScripts/Run-ScpLiveTest.ps1` wurde angelegt. Der Test
+  nutzt Windows OpenSSH `scp.exe` mit `-O`, prueft Download, Upload,
+  Rueckdownload, Bytevergleich, klassischen SCP-Trace und SSHD-Statuszaehler.
+- Dokumentation fuer SSHD, Services, Netzwerk und Softwareliste aktualisiert.
+- Sichtbare Version auf `0.52.9` gesetzt.
+
+Abnahme:
+- `DevTools\Scripts\Build.bat -norun`: erfolgreich.
+- `DevTools\Scripts\Build.bat -test`: erfolgreich mit `TEST OK`, Boot OK und
+  Poweroff OK. Log: `DevTools/Logs/qemu-test-standard.log`.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  DevTools\Scripts\TestScripts\Run-ScpLiveTest.ps1 -HostPort 10047`:
+  erfolgreich. Windows OpenSSH-SCP verbindet ueber QEMU-Hostfwd, liest
+  `/C/R4OS/CONFIG/VERSION.R4S`, schreibt 32768 Bytes nach
+  `/C/TEMP/SCP0529.BIN`, liest die Datei zurueck und der Host-Bytevergleich
+  ist identisch. Der Test prueft ausserdem `scp -v -f`, `scp -v -t`,
+  Dateikopf-Trace und `scp=`, `scp_read=`, `scp_write=` im SSHD-Status.
+  Log: `DevTools/Logs/qemu-test-scp-20260612-192153.log`.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  DevTools\Scripts\TestScripts\Run-SftpLiveTest.ps1 -HostPort 10048`:
+  erfolgreich. SFTP-Listen, Download, 40960-Byte-Upload nach `C:\TEMP`,
+  Rueckdownload und Bytevergleich bleiben gruen.
+  Log: `DevTools/Logs/qemu-test-sftp-20260612-192239.log`.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  DevTools\Scripts\TestScripts\Run-SshSessionLiveTest.ps1 -HostPort 10049`:
+  erfolgreich mit `shell-exit=0`, `exec-exit=0` und `bad-exit=1`.
+  Log: `DevTools/Logs/qemu-test-sshd-session-20260612-192330.log`.
+- Keine stillen Kompatibilitaetsfallbacks: Klassisches SCP wird ueber
+  `scp -O` und den geprueften `scp -f`/`scp -t`-Dialog abgenommen; SFTP ist
+  eine separate Regression und nicht der SCP-Ersatzpfad.
+
+Notizen:
+- SCP ist fuer Kompatibilitaet mit bekannten Host-Werkzeugen umgesetzt.
+- SFTP bleibt der bevorzugte Dateiuebertragungsweg; SCP ist der
+  Kompatibilitaetspfad fuer einfache Kopieroperationen.
+- Rekursive Kopien, Zeitstempel-/Rechteuebernahme und Spezialdateien sind
+  nicht Ziel der ersten SCP-Unterversion.
+- OpenSSH fuegt im Verbose-Modus intern `-v` zum Remote-SCP-Kommando hinzu;
+  der Test prueft deshalb bewusst den tatsaechlichen klassischen
+  `scp -v -f`/`scp -v -t`-Dialog.
+
+Versionnummer: 0.52.10
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- RDP als eigener Connectivity-Block geplant, bevor produktiver RDP-Code
+  entsteht.
+- Produktiver Besitzer festgelegt: `RDPSVC.R4X` unter
+  `Code/Software/RdpService/`, installiert nach
+  `C:\R4OS\SERVICES\RDPSVC.R4X`.
+- Protokollbesitz festgelegt: RDP-Transport, Negotiation, Activation,
+  Bitmap-Encoding und Session-Zustand entstehen zunaechst service-lokal in
+  `RDPSVC.R4X`. Es gibt keinen parallelen Kernel-, R4P- oder Library-Fallback.
+  Eine R4L-Auslagerung ist erst sinnvoll, wenn ein zweiter echter Nutzer
+  existiert.
+- Zielclient festgelegt: Windows Remote Desktop Client (`mstsc`) ist der
+  primaere Host-Client. Ein deterministisches Host-Testwerkzeug darf die
+  fruehen RDP-Phasen abnehmen, ersetzt aber nicht das spaetere `mstsc`-Ziel.
+- Bestehende API-Nutzung festgelegt: `R4NET`/`TCPSVC` fuer TCP,
+  `R4SYS` fuer Registry, Dateien, Zeit, Service-Status und Logs,
+  `WINSVC` nur fuer Fenster-/Task-/Fokuszustand, `R4DESK` fuer Desktop-
+  und Eingabegrenzen, `R4DRAW` fuer Pixel-/Rastervertraege und `R4DEV`
+  nur fuer Diagnose.
+- Fehlende API-Erweiterungen festgelegt: ein allgemeiner Desktop-Remote-
+  Frame-Vertrag mit XRGB32-Snapshot, Revision, Dirty-Rect und Cursorstatus
+  sowie ein allgemeiner Remote-Input-Vertrag fuer Tastatur, Maus und Wheel.
+  Diese Vertraege gehoeren zu Desktop/R4DESK, nicht in den Kernel.
+- Kernel-Grenze dokumentiert: Kein RDP-Protokoll, keine RDP-Session-Policy,
+  kein RDP-Auth-Sonderpfad, kein Input-Injection-Pfad in IRQ/Treiberlogik und
+  kein Desktop-Fernsteuerungs-Spezialpfad im Kernel.
+- Konkrete RDP-Folgeunterversionen 0.52.11 bis 0.52.17 in die Roadmap
+  eingetragen.
+- Doku unter `Docs/Network/RDPPlan05210.txt`,
+  `Docs/Network/README.txt`, `Docs/Services/README.txt` und
+  `Docs/Desktop/DisplayArchitektur.txt` aktualisiert.
+- Sichtbare Version auf `0.52.10` gesetzt.
+
+Abnahme:
+- `Build.bat -norun` erfolgreich.
+- Roadmap enthaelt konkrete, abnehmbare RDP-Unterversionen statt eines
+  offenen Sammelpunkts.
+- Dokumentation benennt eindeutig den RDP-Codebesitzer, die genutzten
+  bestehenden APIs, die wirklich fehlenden API-Erweiterungen und die
+  Kernel-Grenzen.
+
+Notizen:
+- RDP ist absichtlich nach SSH, SFTP und SCP eingeordnet. Erst wenn der
+  Dienst-/TCP-/Session-/Dateipfad stabil ist, wird der deutlich groessere
+  Desktop-Fernzugriff konkretisiert.
+- Diese Unterversion ist ein verbindlicher Architekturabschluss fuer RDP, kein
+  produktiver RDP-Server.
+- RDP orientiert sich fuer 0.52.X an klassischem RDP mit `mstsc` als Ziel.
+  NLA, CredSSP und TLS sind nicht Ziel dieses Blocks. Falls `mstsc` in einer
+  spaeteren Abnahme zwingend mehr verlangt, wird das als sichtbarer
+  Kompatibilitaetsblocker dokumentiert und nicht durch einen stillen
+  Alternativpfad versteckt.
+- Die RDP-Standardweiterleitung fuer QEMU soll Host `127.0.0.1:13389` auf
+  R4OS `10.0.2.15:3389` abbilden. Der Gastdienst lauscht auf Port 3389; der
+  Host-Port vermeidet Konflikte mit einem lokalen Windows-RDP-Dienst.
+
+Versionnummer: 0.52.11
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `RDPSVC.R4X` als R4X-Service unter `Code/Software/RdpService/` angelegt.
+- Service-Registry, Defaults und Status-Endpunkt fuer `RDPSVC` umgesetzt:
+  `Enabled=ON`, `ListenPort=3389`, `ClientTarget=WindowsMSTSC`,
+  `UserName=r4os`, `Password=rosebud`, `MaxSessions=1`,
+  `LogPasswords=ON`.
+- Dienst nach `C:\R4OS\SERVICES\RDPSVC.R4X` installiert und in
+  `SERVICES.R4S` als `manual` vorbereitet. Autostart bleibt aus, bis der
+  RDP-Protokollpfad belastbar ist.
+- `RDPSVC` lauscht ueber `TCPSVC` auf Port 3389, nimmt eingehende
+  Verbindungen sauber an, zaehlt sie im Endpoint-Status und schliesst sie
+  wieder ohne RDP-Dummybytes.
+- `TCPSVC`/R4NET um `ACCEPT_POLL` erweitert, damit Dienste mit Listenern
+  ihren eigenen Service-Endpunkt ohne lange Accept-Blockade bedienen koennen.
+- QEMU-/Build-Standard fuer RDP-Hostforward umgesetzt:
+  `127.0.0.1:13389 -> 10.0.2.15:3389`.
+- Host-Test `DevTools/Scripts/TestScripts/Run-RdpServiceLiveTest.ps1`
+  erstellt und fuer RDPSVC-Listen, Hostforward, Accept, Close und
+  Endpoint-Status genutzt.
+- Dokumentation zu RDPSVC, RDP-Plan, Build-/QEMU-Forwarding, Software- und
+  Service-Inventar aktualisiert.
+
+Abnahme:
+- `Build.bat -norun` erfolgreich.
+- `Build.bat -test` erfolgreich: Build, Boot, Poweroff und `TEST OK`.
+- `Run-RdpServiceLiveTest.ps1` erfolgreich: Host-Port `127.0.0.1:13389`
+  erreicht `RDPSVC` ueber QEMU-Hostforward.
+  Log: `DevTools/Logs/qemu-test-rdpsvc-20260612-203727.log`.
+- `SERVMAN STATUS RDPSVC` zeigt Listener-, Accept-, Close- und Fehlerzaehler.
+- Kein Kernel-RDP-Pfad und kein direkter TCP-Fallback.
+
+Notizen:
+- 0.52.11 erzeugt noch keinen RDP-Handshake. Der Dienst soll sichtbar
+  erreichbar sein und korrekt verwaltet werden.
+- Die blockierende TCP-Accept-Operation bleibt fuer bestehende Tools erhalten.
+  RDPSVC nutzt den neuen nicht-blockierenden `ACCEPT_POLL`-Pfad, damit
+  Dienstdiagnose und Listenerbetrieb gleichzeitig belastbar bleiben.
+
+Versionnummer: 0.52.12
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- RDP-Basisparser und -Writer fuer TPKT, X.224 Connection Request/Confirm
+  und RDP Negotiation Request/Response service-lokal in `RDPSVC` umgesetzt.
+- `RDPSVC` liest nach `ACCEPT_POLL` exakt ein initiales TPKT-Paket,
+  validiert TPKT-Version, Paketgroesse, X.224-Connection-Request und
+  optionale RDP-Negotiation-Request-Daten.
+- Connection Confirm fuer klassisches RDP erzeugt:
+  X.224 Confirm plus RDP Negotiation Response mit `selectedProtocol=0`.
+- Verbindungszustand, Paketlaengen, X.224-Typ, angefragtes/ausgewaehltes
+  Protokoll, Negotiation-, Protokollfehler-, Timeout-, RX- und TX-Zaehler in
+  `SERVMAN STATUS RDPSVC` sichtbar gemacht.
+- `Run-RdpServiceLiveTest.ps1` auf bytegenaue RDP-Negotiation erweitert und
+  um einen kaputten TPKT-Header als Fehlerpfad ergaenzt.
+- Noch keine Desktop-, Auth- oder Bitmap-Ausgabe eingefuehrt.
+
+Abnahme:
+- `Build.bat -norun` erfolgreich.
+- `Build.bat -test` erfolgreich: Build, Boot, Poweroff und `TEST OK`.
+- `Run-RdpServiceLiveTest.ps1` erfolgreich: Host-Test prueft
+  TPKT/X.224/RDP-Negotiation bytegenau gegen `RDPSVC`.
+  Log: `DevTools/Logs/qemu-test-rdpsvc-20260612-205041.log`.
+- Fehlerhafte Pakete fuehren zu sichtbarem Protokollfehler und sauberem
+  Verbindungsabbau (`proto_errors=1`, `closed=2`).
+
+Notizen:
+- Diese Unterversion schafft die tragfaehige Transportkante fuer alles
+  Weitere. Sie beendet die Verbindung nach der Negotiation kontrolliert;
+  Security/Activation folgt in 0.52.13.
+- TLS, CredSSP und NLA bleiben bewusst nicht eingebaut und werden nicht als
+  halbe Fallbacks simuliert.
+
+Versionnummer: 0.52.13
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Klassischen RDP-Security-/Activation-Pfad service-lokal in `RDPSVC`
+  umgesetzt: MCS Connect Initial/Response, Erect Domain, Attach User,
+  Channel Join, Client Info, Demand Active, Confirm Active, Synchronize,
+  Control, Font List und Font Map.
+- Kein halber TLS-/CredSSP-/NLA-Fallback und keine Fake-Security-Exchange:
+  RDPSVC handelt klassisches RDP mit `selectedProtocol=0` und
+  `ENCRYPTION_METHOD_NONE`/`ENCRYPTION_LEVEL_NONE` aus.
+- `r4os:rosebud` aus `SYSTEM\Services\RDPSVC` als Protokoll-Loginwert
+  verwendet. Auth-Versuche werden diagnostisch geloggt; bei
+  `LogPasswords=ON` erscheinen getestete Passwoerter auch im Status.
+- `SERVMAN STATUS RDPSVC` um MCS-, Security-, Client-Info-, Auth-,
+  Activation-, Sync-/Control-, Font- und Client-Core-Groessenzaehler
+  erweitert.
+- Host-Test `Run-RdpServiceLiveTest.ps1` auf die komplette
+  Activation-Strecke erweitert, inklusive Bytepruefung fuer MCS Response,
+  Security-none, Share-PDUs, Font Map und `size=1280x1024`.
+- Kein OS-User-, Rechte-, Permission- oder Kernel-RDP-Pfad eingefuehrt.
+
+Abnahme:
+- `Build.bat -norun` erfolgreich.
+- `Build.bat -test` erfolgreich: Build, Boot, Poweroff und `TEST OK`.
+- `Run-RdpServiceLiveTest.ps1` erfolgreich: Host-Test erreicht eine
+  aktivierte RDP-Session ohne Desktop-Pixel und prueft den Fehlerpfad fuer
+  ein kaputtes TPKT-Paket.
+- `SERVMAN STATUS RDPSVC` zeigt Security-, Client-Info-, Activation- und
+  Auth-Zaehler sowie `last_auth_user=r4os`, `last_password=rosebud` und
+  `size=1280x1024`.
+- NLA, CredSSP und TLS sind nicht als halbe Fallbacks eingebaut.
+
+Notizen:
+- Die Zugangsdaten dienen der RDP-/Diagnose-Kompatibilitaet, nicht einem
+  R4OS-Sicherheitsmodell.
+- Diese Unterversion aktiviert noch keinen Desktop und sendet keine Bitmap-
+  Updates. Der naechste Schritt bleibt der allgemeine R4DESK-Remote-Frame-
+  Vertrag, damit RDPSVC keine Desktop-Interna importieren muss.
+
+Versionnummer: 0.52.14
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- R4DESK-R4XStart-Vertrag auf Version 2 erweitert: allgemeiner
+  Remote-Frame-Vertrag mit Geometrie, XRGB32-Format, Frame-Revision,
+  Dirty-Rect, Cursorstatus, chunkweisem Lesen und Revision-Wait.
+- Desktop publiziert den komponierten Scene-Backbuffer nach jedem Present ueber
+  den neuen R4DESK-Vertrag. Der Desktop bleibt Besitzer des Bildes.
+- R4DESK speichert den letzten Remote-Frame als stabilen Snapshot und kopiert
+  nur die gemeldeten Dirty-Rects, soweit sich die Geometrie nicht aendert.
+- SDK- und C-ABI nachgezogen: `RemoteFrameInfo`, Fehlercodes, Flags,
+  R4XStart-R4Desk-v2-Funktionsslots und Wrapper fuer Zig und C.
+- `RFDIAG.R4X` als externes Diagnoseprogramm unter
+  `Code/System/Diagnostics/RemoteFrameDiag/` angelegt und nach
+  `C:\R4OS\SOFTWARE\TERMINAL\DIAG\RFDIAG.R4X` installiert.
+- Desktop-Smoke startet `RFDIAG.R4X` als fremdes Console-R4X, spiegelt dessen
+  Output in den Smoke-Log und prueft Exitcode sowie Snapshot-Marker.
+- `Run-RemoteFrameContract05214.ps1` als gezielter Host-/QEMU-Smoke angelegt:
+  Desktop-Smoke, RFDIAG, Geometrie, Revision, Chunk-Read, Dirty-Rect,
+  Cursorstatus und Wait-Marker.
+- Contract-, API-, SDK-, Diagnostic-, Software-, RDP-Plan- und Build/Test-Doku
+  aktualisiert.
+- Sichtbare Version auf `0.52.14` gesetzt.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun`: erfolgreich.
+- `DevTools/Scripts/TestScripts/Run-RemoteFrameContract05214.ps1`:
+  erfolgreich. Der Test startet Desktop im Test-Image, liest den publizierten
+  Snapshot ueber RFDIAG und findet die Marker
+  `RFDIAG snapshot: OK`, `RFDIAG result: OK` und
+  `Remote frame snapshot: ok mode=...`.
+- `DevTools/Scripts/Build.bat -testonly`: erfolgreich mit Standard-Testimage,
+  Boot, Poweroff und `TEST OK`.
+- `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckR4XStartGui05112.zig`:
+  erfolgreich.
+- `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckFinalModules021.zig`:
+  erfolgreich, aktuelles Inventar 7 API-R4L, 71 R4X, 12 R4D und 20 R4P.
+- `Run-DiagnosticProjectBuilds05121.ps1`: erfolgreich, inklusive
+  `RemoteFrameDiag`.
+- `git diff --check`: erfolgreich.
+- Kein Kernel-Framebuffer-Readback-Spezialpfad, kein WINSVC-Pixelpfad und
+  kein RDPSVC-Import von Desktop-Interna.
+
+Notizen:
+- Dieser Vertrag ist bewusst allgemein. 0.52.15 kann daraus RDP-Bitmap-
+  Updates bauen, ohne Desktop-Interna zu importieren.
+- `RFDIAG.R4X` ist nicht RDP-spezifisch und bleibt als allgemeiner
+  Remote-Frame-Vertragscheck erhalten.
+
+Versionnummer: 0.52.15
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `RDPSVC` importiert den oeffentlichen R4DESK-Vertrag
+  `R4DESK:Query:1` und liest den Remote-Frame-Vertrag ohne Desktop-Interna,
+  Kernel-Framebuffer-Readback oder WINSVC-Pixelpfad.
+- Nach der klassischen RDP-Aktivierung sendet `RDPSVC` erste unkomprimierte
+  RDP-Bitmap-Updates aus dem XRGB32-Remote-Frame: 32 bpp, bottom-up,
+  full-width Dirty-/Frame-Streifen, korrekte Geometrie und Nutzdatenlaenge.
+- `SERVMAN STATUS RDPSVC` zeigt neue Bitmap- und Frame-Zaehler inklusive
+  Updates, Rechtecke, Pixel, Bytes, Fehler, letzter Revision, Dirty-Rect und
+  Pruefsumme.
+- `Run-RdpServiceLiveTest.ps1` startet QEMU mit normaler Desktop-Shell,
+  aktiviert die RDP-Sitzung ueber `127.0.0.1:13389` und prueft die
+  empfangenen Bitmap-PDUs hostseitig: TPKT-Laenge, MCS-ShareData-Payload,
+  Update-Typ, Rechteckfolge, Pixelformat, Flags, Nutzdatenlaenge und
+  Payload-Pruefsumme.
+- PowerShell-Testparser fuer TPKT-Laenge und unsigned Bitmap-Pruefsummen
+  robust gemacht.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` erfolgreich.
+- `DevTools/Scripts/TestScripts/Run-RdpServiceLiveTest.ps1 -TimeoutSeconds
+  180` erfolgreich:
+  `activation-bitmap-ok`, `invalid-reset`, `bitmap=1280x412`,
+  `updates=412`, `checksum=3958593603`.
+- Testlog:
+  `DevTools/Logs/qemu-test-rdpsvc-20260612-230611.log`.
+- Die interaktive `mstsc`-Sichtabnahme bleibt fuer die 0.52.17-
+  Abschlussmatrix vorgemerkt; 0.52.15 ist ueber den deterministischen
+  Hostparser bytegenau abgenommen.
+
+Notizen:
+- Bildqualitaet und Korrektheit haben Vorrang vor Bandbreite.
+- Der Host-Test liest einen echten Desktop-Dirty-/Remote-Frame-Snapshot
+  von `1280x412`; das ist fuer diese Stufe gueltig, weil 0.52.15 Vollbild-
+  oder Dirty-Rect-Updates erlaubt und noch keine Kompression erzwingt.
+
+Versionnummer: 0.52.16
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Allgemeiner Remote-Input-Vertrag in R4DESK/R4XStart/SDK/C-ABI angelegt:
+  Tastatur, Modifier, Mausposition, Buttons und Wheel laufen ueber eine
+  Desktop-API statt ueber Kernel-, Treiber- oder IRQ-Sonderpfade.
+- Desktop pollt Remote-Input als normalen Desktop-Eventpfad und erzeugt nach
+  Remote-Eingabe deterministisch neue Frames.
+- `RDPSVC` mappt RDP-Input-PDUs auf den R4DESK-Remote-Input-Vertrag und
+  zaehlt Input-PDUs, Events, Keys, Maus, Wheel, Pushes und Fehler im Status.
+- `Run-RdpServiceLiveTest.ps1` wurde vom spekulativen Desktop-Wartefenster auf
+  belastbare Bereitschaft umgestellt: RDPSVC-Listenstatus,
+  RDPSVC-Service-Endpoint, Desktop-Remote-Frame und Aktivierungsversuche
+  werden gezielt abgewartet.
+- Der Host-Test nimmt nun eine komplette RDP-Session ab: klassische
+  Aktivierung, initiales Bitmap, deterministische Input-PDU mit Mausbewegung,
+  Klick, Wheel und Unicode-Taste sowie ein zweites Bitmap mit anderer
+  Pruefsumme.
+- `RDPSVC` sendet grosse Bitmap-Streams kontrolliert: direkte TCP-Schreibseite
+  nutzt die angenommene Backend-Connection, der Service-Handle bleibt fuer
+  Status, Close und Diagnose zustaendig, und Bitmap-Batches warten ueber
+  `tx_ack` auf sichtbare TCP-Bestaetigung.
+- R4NET/TCPSVC melden fuer TCP-Service-Poll strukturierte
+  `tx_seq`/`tx_ack`/`tx_window`-Werte und bieten einen sichtbaren
+  Retransmit-Request fuer Diagnose-/Wartepfade.
+- `RTL8139.R4D` verarbeitet RX-Frames, die am Ende des RTL8139-Rings
+  umbrechen, korrekt ueber ring-sichere Header-Lesesicht und Scratch-Copy.
+  Damit gehen unter hoher ACK-/RDP-Paketlast keine ACK- oder Input-Pakete mehr
+  durch Ring-Wrap verloren.
+- Der Poll-Fallback von `RTL8139.R4D` drainet den RX-Ring robuster, bleibt
+  aber ein expliziter Fallback; der RDP-Standardtest laeuft wieder im normalen
+  IRQ-first-Pfad ohne `OPTION RTL8139 irq=off`.
+- `TCPSVC` startet nach Service-Endpoint-Rennen wieder stabil: laengeres
+  Endpoint-Register-Warten und tolerierte fehlende Reply-Abholung verhindern
+  den beobachteten `ExitCode=-2`/`service exited`-Fehler.
+- `SERVMAN STATUS` zeigt `ExitCode`, damit Service-Fehlerzustand und
+  Rueckgabecode direkt sichtbar sind.
+- Sichtbare Version bleibt `0.52.16`.
+
+Abnahme:
+- `DevTools\Scripts\Build.bat -norun`: erfolgreich.
+- `DevTools\Scripts\Build.bat -test`: erfolgreich mit `TEST OK`, Boot OK und
+  Poweroff OK. Log: `DevTools/Logs/qemu-test-standard.log`.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  DevTools\Scripts\TestScripts\Run-RdpServiceLiveTest.ps1 -TimeoutSeconds
+  1200 -CapturePcap`: erfolgreich. Ergebnis:
+  `activation-bitmap-input-ok`, `invalid=invalid-close`,
+  initiales Bitmap `1280x720`, `updates=720`,
+  `checksum=2017657966`, nach Input zweites Bitmap `1280x720`,
+  `input_updates=720`, `input_checksum=2944646839`.
+  Log: `DevTools/Logs/qemu-test-rdpsvc-20260613-123049.log`.
+  PCAP: `DevTools/Logs/qemu-test-rdpsvc-20260613-123049.pcap`.
+- Der RDP-Live-Test lief mit normalem QEMU-User-Network/RTL8139-IRQ-Pfad und
+  Hostforward `127.0.0.1:13389 -> 10.0.2.15:3389`.
+- Kein Input-Sonderpfad im Kernel, kein WINSVC-Input-Hack und kein
+  Treiber-/IRQ-Injection-Pfad.
+
+Notizen:
+- Die Remote-Eingabe soll sich wie lokale Desktop-Eingabe anfuehlen, aber
+  ueber eine klare Desktop-API laufen.
+- Die entscheidende Fehlerursache des zuvor haengenden Input-Pfads lag nicht
+  im RDP-Input-PDU, nicht an Twingate und nicht am Host-NIC-Mapping, sondern
+  an verlorenen RX-Frames bei RTL8139-Ring-Wrap unter RDP-ACK-Last.
+- Die PCAP-Eingrenzung zeigte: Der Host bestaetigte die initialen Bitmap-
+  Pakete und sendete danach die Input-PDU, R4OS sah die relevanten ACK-/Input-
+  Frames aber nicht mehr zuverlaessig. Nach der RX-Ring-Korrektur laeuft der
+  gleiche Pfad bis zum zweiten Bitmap durch.
+- Die ACK-/Pacing-Erweiterung bleibt bewusst im RDPSVC/TCP-Service-Vertrag und
+  nicht im Kernel-RDP-Pfad. Sie ist eine allgemeine TCP-Diagnosegrundlage fuer
+  groessere Dienstantworten.
+
+Versionnummer: 0.52.17
+Status: Erledigt
+
+Offene Punkte:
+- Keine fuer den automatisierten RDP-Lifecycle-Abschluss.
+- Die echte Windows-`mstsc`-Sichtpruefung bleibt ein manueller User-Test, weil
+  Codex das sichtbare Windows-Clientfenster nicht verlaesslich als
+  Benutzerabnahme bewerten kann.
+
+Erledigt:
+- `RDPSVC` besitzt eigene Session-Lifecycle-Zaehler fuer abgeschlossene
+  Sitzungen, Reconnects, Disconnects, Cleanup, Close-Fehler,
+  Listener-Close, Session-Limit-Wartefaelle und letztes Session-Ergebnis.
+- `SERVMAN STATUS RDPSVC` zeigt diese Lifecycle-Diagnose zusaetzlich zu den
+  bisherigen Transport-, Security-, Bitmap-/Frame- und Input-Zaehlern.
+- `RDPSVC` klassifiziert Session-Ergebnisse sichtbar:
+  `input-ok`, `client-disconnect`, `protocol-error`, `timeout`,
+  `auth-failed`, `tcp-error` und `close-error`.
+- Nach erfolgreichem Remote-Input wartet `RDPSVC` kurz auf den Client-
+  Disconnect und liest dafuer den bestehenden `R4NET.tcpConnection`-
+  Detailpfad. Dafuer wurde keine neue Kernel- oder TCPSVC-ABI eingefuehrt.
+- Listener-Cleanup nutzt jetzt `tcpCloseListenServiceResult` und zaehlt
+  erfolgreiche beziehungsweise fehlgeschlagene Listener-Schliessungen.
+- `Run-RdpServiceLiveTest.ps1` fuehrt jetzt zwei vollstaendige RDP-
+  Aktivierungen nacheinander aus und prueft danach einen kaputten TPKT-
+  Fehlerpfad. Damit muss Session-Cleanup funktionieren, sonst erreichen
+  Reconnect und dritte Fehlerpfad-Verbindung den Dienst nicht.
+- Der Host-Test wertet initiales Bitmap, Input-Bitmap, Reconnect-Bitmap und
+  Reconnect-Input-Bitmap getrennt aus und gibt alle Pruefsummen aus.
+- Keine RDP-Fallbacks in Kernel, WINSVC, QEMU-Scripts oder Hosttests
+  eingefuehrt.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun`: erfolgreich.
+- `DevTools/Scripts/Build.bat -test`: erfolgreich, `TEST OK`, Boot OK,
+  Poweroff OK.
+- `DevTools/Scripts/TestScripts/Run-RdpServiceLiveTest.ps1 -TimeoutSeconds
+  1200 -CapturePcap`: erfolgreich.
+  Ergebnis: `activation-bitmap-input-ok+activation-bitmap-input-ok`,
+  `invalid=invalid-close`, initiales Bitmap `1280x720`, Input-Bitmap
+  `1280x720`, Reconnect-Bitmap `1280x720`, Reconnect-Input-Bitmap
+  `1280x720`.
+  Log: `DevTools/Logs/qemu-test-rdpsvc-20260613-130015.log`.
+  PCAP: `DevTools/Logs/qemu-test-rdpsvc-20260613-130015.pcap`.
+- Reconnect/Disconnect/Fehlerpfad-Abnahme laeuft ueber denselben
+  QEMU-Hostforward `127.0.0.1:13389 -> 10.0.2.15:3389` und den normalen
+  RTL8139-/TCPSVC-Pfad.
+- Manuelle Sichtabnahme vorbereitet:
+  `mstsc /v:127.0.0.1:13389` gegen ein mit `Build.bat -gui` gestartetes
+  R4OS-System, Benutzer `r4os`, Passwort `rosebud`.
+
+Notizen:
+- Service-Ausgaben nach dem Desktop-Start landen im QEMU-Seriellog nicht
+  verlaesslich sichtbar. Der automatisierte Host-Test prueft Lifecycle daher
+  ueber echte Anschlussverbindungen: Wenn eine Session nicht freigeraeumt
+  wuerde, koennte die zweite Aktivierung beziehungsweise der dritte
+  Fehlerpfad-Connect bei `MaxSessions=1` nicht akzeptiert werden.
+- Erst nach 0.52.17 sind Komfortthemen wie Kompression, Clipboard, Audio,
+  Laufwerksumleitung oder mehrere Sessions sinnvoll planbar.
+
+Versionnummer: 0.52.18
+Status: Erledigt
+
+Offene Punkte:
+- Keine fuer die SSH-/RDP-Hostforward-Korrektur.
+- Die echte `mstsc`-Sichtpruefung bleibt weiterhin manuell; 0.52.18 behebt
+  den GUI-QEMU-Forwarding-Standard, nicht den RDP-Protokollumfang.
+
+Erledigt:
+- Ursache der manuellen SSH-Abnahme mit `ssh -p 10022 r4os@127.0.0.1`
+  gefunden: Der laufende QEMU-Prozess lauschte nur auf `127.0.0.1:13389`,
+  nicht auf `127.0.0.1:10022`.
+- Ursache eingegrenzt: QEMU `readconfig` bindet bei mehreren
+  `hostfwd = ...`-Zeilen in derselben `[netdev]`-Sektion nur den letzten
+  Forward. Die generierte `custom.conf` enthielt dadurch zwar SSH und RDP
+  textuell, aktiv war aber nur der RDP-Forward.
+- `Build.bat -gui` erkennt lokale Custom-Configs mit generiertem
+  `[netdev "r4net0"]` und `type = "user"`, schreibt beim Start eine
+  temporaere Config ohne diesen User-Netzblock und nutzt danach wieder den
+  bewährten CLI-Default mit beiden Forwardings:
+  `127.0.0.1:10022 -> 10.0.2.15:22` und
+  `127.0.0.1:13389 -> 10.0.2.15:3389`.
+- TAP-/ICS-Custom-Netze bleiben echte Custom-Netze in `custom.conf` und
+  werden von `Build.bat -gui` weiterhin respektiert.
+- Build-/QEMU-/Netzwerkdokumentation an den korrigierten GUI-Standard
+  angepasst.
+- Sichtbare Version auf `0.52.18` gesetzt.
+
+Abnahme:
+- `DevTools\Scripts\Build.bat -norun`: erfolgreich.
+- `DevTools\Scripts\Build.bat -testonly`: erfolgreich mit `TEST OK`,
+  Boot OK und Poweroff OK. Vorher wurde mit `Build.bat -norun` ein aktuelles
+  Image erzeugt.
+- Host-Diagnose waehrend der gemeldeten Fehlersituation: `Get-NetTCPConnection`
+  zeigte `127.0.0.1:13389` als `Listen`, aber keinen Listener fuer
+  `127.0.0.1:10022`; `Test-NetConnection 127.0.0.1 -Port 10022` schlug fehl,
+  `-Port 13389` war erfolgreich.
+- Temporärer QEMU-Gegentest bestaetigt die Ursache: Eine `readconfig`-
+  `[netdev]`-Sektion mit zwei `hostfwd`-Zeilen bindet nur den zweiten Port.
+  Die CLI-`-netdev`-Form bleibt der korrekte Standard fuer mehrere Forwards.
+
+Notizen:
+- Nach dem Update muss das sichtbare QEMU-Fenster geschlossen und R4OS mit
+  `DevTools\Scripts\Build.bat -gui` neu gestartet werden. Erst der neue
+  QEMU-Prozess bindet beide Hostports.
+- Fuer SSH sollte danach auf dem Host sowohl `Get-NetTCPConnection
+  -LocalAddress 127.0.0.1 -LocalPort 10022,13389` als auch
+  `ssh -p 10022 r4os@127.0.0.1` funktionieren.
+
+Versionnummer: 0.52.19
+Status: Erledigt
+
+Offene Punkte:
+- Keine fuer die manuelle SSH-Login- und PTY-Enter-Korrektur.
+
+Erledigt:
+- Ursache der manuellen SSH-Abbrueche nach beziehungsweise waehrend der
+  Passworteingabe eingegrenzt: Viele SSH-Clients senden nach
+  `SSH_MSG_SERVICE_ACCEPT` zuerst einen Auth-Versuch mit Methode `none`.
+  SSHD antwortete korrekt mit Auth-Failure, wartete danach aber nur das
+  kurze Test-Retryfenster von 1 Sekunde auf das Passwortpaket. AskPass-Tests
+  waren schnell genug, ein Mensch in Windows Terminal oder PuTTY nicht.
+- `SSHD.R4X` nutzt fuer Passwortauthentifizierung jetzt ein eigenes
+  manuelles Auth-Timeout von 2 Minuten.
+- Nach `none`, nicht passendem Service oder falschem Passwort bleibt die
+  Verbindung fuer weitere Auth-Versuche offen, bis der Client trennt, der
+  Timeout erreicht ist oder die maximale Versuchszahl erreicht wird.
+- Falsche Passwoerter werden weiterhin gezaehlt und bei `LogPasswords=ON`
+  sichtbar geloggt.
+- Ursache des naechsten manuellen SSH-Problems eingegrenzt: Interaktive
+  SSH-/PTY-Clients senden Enter haeufig als `CR`, waehrend `TERMINAL.R4X`
+  lokal `LF` als Abschicken erwartet.
+- `SSHD.R4X` normalisiert fuer interaktive Shell-Kanaele `CR` und `CRLF` auf
+  genau ein `LF`, bevor die Eingabe an die Console weitergereicht wird.
+  Das gilt auch, wenn `CRLF` ueber zwei SSH-Channel-Data-Pakete verteilt
+  ankommt. SFTP und SCP bleiben bytegenau und werden nicht normalisiert.
+- `Run-SshLoginLiveTest.ps1` simuliert den manuellen Fall nun standardmaessig
+  mit verzögerter AskPass-Ausgabe, damit der alte 1-Sekunden-Fehler nicht
+  mehr unbemerkt durchkommt.
+- `Run-SshLoginLiveTest.ps1` prueft zusaetzlich eine erzwungene OpenSSH-PTY-
+  Sitzung mit reinen `CR`-Zeilenenden, damit interaktives Enter abgedeckt ist.
+- SSHD-, Netzwerk- und Service-Dokumentation an den manuellen Auth-Timeout-
+  und PTY-Enter-Stand angepasst.
+- Sichtbare Version auf `0.52.19` gesetzt.
+
+Abnahme:
+- `DevTools\Zig\zig.exe build -Ddev-module-aggregate=true` im Verzeichnis
+  `Code`: erfolgreich; neues `SSHD.R4X` wurde gebaut.
+- `DevTools\Scripts\Build.bat -norun`: erfolgreich.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  DevTools\Scripts\TestScripts\Run-SshLoginLiveTest.ps1`: erfolgreich mit
+  `ssh-exit=0`, `pty-exit=0` und 3000 ms AskPass-Verzoegerung.
+  Log: `DevTools\Logs\qemu-test-sshd-login-20260614-211541.log`.
+- Der SSH-Live-Test prueft Fehllogin `wrongbud`, Passwortlogin
+  `r4os:rosebud`, `SERVMAN STATUS SSHD`, Passwort-Logging und eine
+  erzwungene OpenSSH-PTY-Sitzung mit reinen `CR`-Zeilenenden.
+- `DevTools\Scripts\Build.bat -test`: erfolgreich mit `TEST OK`,
+  Boot OK und Poweroff OK.
+- Gegenprobe gegen das noch laufende alte GUI-Image: OpenSSH mit
+  3 Sekunden verzögerter AskPass-Ausgabe reproduziert den gemeldeten Fehler.
+  Trace endet nach `we sent a password packet, wait for reply` mit
+  `Connection closed by 127.0.0.1 port 10022`.
+
+Notizen:
+- Fuer die manuelle Windows-Terminal-/PuTTY-Abnahme muss R4OS mit dem neu
+  gebauten Image erneut gestartet werden, z.B. per
+  `DevTools\Scripts\Build.bat -gui`.
+
+Versionnummer: 0.52.20
+Status: Erledigt
+
+Offene Punkte:
+- Keine fuer die SSH/RDP-Lifetime-Stabilisierung.
+- Die echte Windows-`mstsc`-Kompatibilitaet bleibt ein Folgethema: Der
+  aktuelle `RDPSVC`-Pfad spricht Classic-RDP ohne TLS/NLA/CredSSP. Der eigene
+  RDP-Live-Test ist gruen, moderne MSTSC-Standardprofile koennen aber noch am
+  Protokollumfang scheitern.
+
+Erledigt:
+- Ursache fuer moegliche SSH-Sitzungsabbrueche bei parallel laufenden
+  Programm-/Service-Aktivitaeten beseitigt: `SSHD.R4X` nutzt fuer das Ende
+  seiner Terminal-Sitzung nicht mehr den globalen `last_exit_code`.
+- `SSHD.R4X` bewertet eine Remote-Shell nur noch ueber die konkrete
+  Terminal-Instanz-ID. Ist die Instanz noch aktiv, bleibt die SSH-Sitzung
+  offen; ist sie beendet, wird der Exit-Code der passenden Instanz genutzt.
+- `programReapInstance(instance_id)` liefert nun auch dann den
+  instanzgebundenen Exit-Code, wenn die beendete Instanz bereits durch einen
+  anderen Laufzeitpfad aus der aktiven Instanzliste entfernt wurde und noch in
+  der kurzen Exit-History liegt.
+- Die R4X-Laufzeit verhindert damit, dass ein fremder Programm- oder
+  Service-Exit eine SSH-Sitzung durch einen globalen Exit-Code-Fallback
+  beendet.
+- `Run-RdpServiceLiveTest.ps1` stabilisiert die Reconnect-Abnahme: erster und
+  zweiter RDP-Input enden jetzt bewusst an unterschiedlichen Cursorpositionen
+  und mit unterschiedlichem Tastencode, damit der zweite Screenshot nicht
+  zufaellig dieselbe Checksumme wie sein Startbild haben kann.
+- R4SYS-/SDK-Dokumentation zum erweiterten `programReapInstance`-Verhalten
+  aktualisiert.
+- Sichtbare Version auf `0.52.20` gesetzt.
+
+Abnahme:
+- `DevTools\Scripts\Build.bat -norun`: erfolgreich.
+- `DevTools\Scripts\Build.bat -testonly`: erfolgreich mit `QEMU: OK`,
+  `Boot: OK`, `Poweroff: OK`, `Errors: none`.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  DevTools\Scripts\TestScripts\Run-SshLoginLiveTest.ps1`: erfolgreich mit
+  `ssh-exit=0`, `pty-exit=0` und 3000 ms AskPass-Verzoegerung.
+  Log: `DevTools\Logs\qemu-test-sshd-login-20260614-233146.log`.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  DevTools\Scripts\TestScripts\Run-RdpServiceLiveTest.ps1`: erfolgreich.
+  Ergebnis: `activation-bitmap-input-ok+activation-bitmap-input-ok`,
+  `invalid=invalid-close`, initiales Bitmap `1280x720`,
+  Reconnect-Bitmap `1280x720` und unterschiedliche Input-Checksummen.
+  Log: `DevTools\Logs\qemu-test-rdpsvc-20260614-233244.log`.
+- Kombinierter Host-Harness mit dynamischer OpenSSH-stdin-Steuerung wurde
+  versucht, aber nicht als Produktabnahme gewertet: Der Windows-OpenSSH-Prozess
+  blieb offen, lieferte ueber die Host-Redirects jedoch keine verwertbare
+  Shell-Ausgabe. Daraus wurde kein R4OS-Produktfehler abgeleitet.
+
+Notizen:
+- Die manuell beobachtete Korrelation "RDPSVC-Start, dann SSH-Verbindung zu"
+  passt zur entfernten SSHD-Fallback-Klasse: Remote-Sitzungsende darf nicht am
+  global letzten Programm-Exit haengen.
+- Der aktuelle RDP-Automationstest prueft den Classic-RDP-Pfad inklusive
+  Negotiation, Activation, Bitmap, Remote-Input, Reconnect und kaputtem
+  TPKT-Fehlerpfad. MSTSC braucht als naechsten Schritt eine eigene
+  Kompatibilitaetsentscheidung fuer Classic-Security/TLS/NLA.

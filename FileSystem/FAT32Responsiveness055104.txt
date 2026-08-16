@@ -1,0 +1,73 @@
+﻿FAT32 Responsiveness 0.55.10.4
+==============================
+
+Ziel
+----
+
+0.55.10.4 reduziert die sichtbaren Hänger langer FAT32-Operationen, ohne das
+Dateisystem reentrant oder parallel beschreibbar zu machen. FAT32 bleibt
+integer und wird weiterhin ueber den gemeinsamen FS-Request-Gate serialisiert.
+
+
+Problem
+-------
+
+Die 0.55.10.0- bis 0.55.10.3-Arbeit hat den Schreibpfad messbar gemacht,
+Append-/Stream-Metadatenarbeit reduziert und Flushes grosser Streams vom
+Chunkpfad auf den Commitpunkt verlagert. Trotzdem koennen lange Directory-
+Scans, FAT-Cluster-Walks, Allocation-Suchen und grosse Range-Writes eine
+Task-Zeitscheibe lange binden. Fuer SSH/SCP/SFTP, Registry-Writeback und
+spaetere Systemdatei-Updates ist das ein Responsiveness-Risiko.
+
+
+Umsetzung
+---------
+
+`Code/Kernel/fs/fat/fat32.zig` besitzt jetzt einen kleinen kooperativen
+Yield-Helfer. Er wird in langen Schleifen aufgerufen:
+
+- FAT-Free-/Allocation-Suche
+- Cluster-Walks und Chain-Frees
+- Directory-Scans und Directory-Slot-Suchen
+- grosse File-Reads, Writes, Range-Writes und Copy-Loops
+- Directory-Initialisierung fuer neue Verzeichnisse
+
+Der Helfer gibt nach einer festen Schrittzahl per `scheduler.yield()` CPU-Zeit
+ab. Er loest dabei keinen FAT32-Lock und hebt den FS-Request-Gate nicht auf.
+Andere Tasks koennen laufen, aber ein zweiter Dateisystem-Request bleibt am
+Gate serialisiert. Dadurch entsteht keine parallele FAT-/Directory-Mutation.
+
+
+R4DEV-Vertrag
+-------------
+
+ProgramApi v145 erweitert `ProgramPerformanceSummary` append-only um:
+
+- `fat32_yield_points`
+- `fat32_yields`
+- `fat32_yield_skips`
+
+Die ProgramApi-Tabelle selbst waechst nicht. Der neue SDK-Check
+`supportsFat32Responsiveness()` prueft diesen Diagnosevertrag.
+
+
+Abnahme
+-------
+
+`FSDIAG.R4X` verlangt fuer die grosse 1-MB-Streamprobe ProgramApi v145. Die
+Probe muss weiterhin Offset-/Finish-Guards, Ruecklese-Checksumme, Abort,
+Flush-Guard, Dirty-Clean-Guard und Writeback-Metriken bestehen. Zusaetzlich
+muss sie FAT32-Yield-Punkte und angenommene Scheduler-Yields melden:
+
+    FSDIAG stream large result: OK ... yield=yes
+    FSDIAG stream large metrics: ... yield=<yields>/<yield_points> skip=<skips>
+
+
+Grenzen
+-------
+
+0.55.10.4 ist keine Async-Dateisystem-Architektur, kein Journaling und kein
+per-Volume-Mehrschreiber-Modell. Es ist der belastbare kooperative Schritt
+unter dem bestehenden Single-Writer-Vertrag. Wenn spaeter echte parallele
+Dateisystemarbeit kommt, braucht sie eigene Volume-/Inode-/Directory-
+Besitzregeln, Recovery und Diagnose.

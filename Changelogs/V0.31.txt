@@ -1,0 +1,340 @@
+﻿R4OS Changelog / archivierte Roadmap 0.31.X
+===========================================
+
+Quelle: Roadmap.txt nach Abschluss von 0.31.X.
+
+Version 0.31.X - Built-in-Treiber schrittweise zu R4D auslagern
+-------------------------------------------
+
+Status: Geplant
+
+Leitbild:
+R4OS soll langfristig möglichst wenige Hardwaretreiber fest im Kernel tragen.
+Treiber, die nicht für den frühen Bootpfad nötig sind, sollen als R4D-Module ladbar werden.
+Der Kernel behält nur die Grundlagen, die nötig sind, um zu booten, Speicher zu verwalten, `C:\` zu finden und R4D-Module sicher zu laden.
+
+Wichtige Einschränkung:
+R4OS kann von einem USB-Stick booten.
+Dieser Stick wird als FAT32-Volume eingebunden und als `C:\` genutzt.
+Darum dürfen USB-Bus, xHCI und USB-Mass-Storage nicht vorschnell vollständig aus dem Kernel entfernt werden, solange sie für das Mounten des Bootlaufwerks gebraucht werden.
+Boot-Storage hat Vorrang vor Kernel-Verkleinerung.
+
+Qualitaetsziel:
+0.31.X ist kein radikales Entfernen von Treibern.
+Zuerst muessen Ladepfad, Registry, APIs, Fallbacks und Boot-Storage-Grenzen stabil sein.
+Das Ziel ist trotzdem Kernel-Verschlankung: Nicht bootkritische Built-in-Treiber sollen nach erfolgreicher R4D-Abnahme aus dem Kernel verschwinden.
+Fallbacks sind nur fuer Boot-kritische Pfade oder kurze Migrationsfenster vorgesehen.
+Ein Built-in-Treiber wird erst entfernt, wenn ein R4D-Ersatz mindestens gleichwertig geladen, initialisiert, diagnostiziert und sauber entladen werden kann.
+
+Version 0.31.0 - Treiber-Auslagerung planen und Boot-Abhängigkeiten markieren
+Status: Erledigt
+
+Erledigt:
+- Fest einkompilierte Treiber grob in Kategorien eingeordnet: Kernel-Grundlage, Boot-Storage, frueh noetig, optional, bereits R4D, spaeter ladbar.
+- Boot-Storage-Schutz dokumentiert: Alles, was fuer `C:\` beim Boot noetig sein kann, bleibt vorerst im Kernel oder braucht vor Auslagerung einen gleichwertigen fruehen Ladepfad.
+- USB-Boot-Szenario dokumentiert: USB-Stick -> USB/xHCI/MSC -> Blockdevice -> MBR/FAT32 -> `C:\` -> R4D-Module.
+- Erste R4D-Kandidaten festgelegt: optionale Audio-Hardwarepfade, danach nicht bootkritische Netzwerk-/Geraetetreiber.
+- Mindestkriterien fuer R4D-Auslagerung dokumentiert: API vorhanden, Registry sichtbar, Diagnose vorhanden, Fehlerfall sicher, Entladen geklaert.
+- Kein Code-Umbau in dieser Unterversion.
+
+Notizen:
+- Boot-Storage hat Vorrang vor Kernel-Verkleinerung.
+- Fallbacks sollen nicht aus Bequemlichkeit bleiben, sondern nur fuer Boot-kritische Pfade oder kurze Migrationsfenster.
+- Bereits vorhandene R4D-Pfade wie RTL8139, SID, OPL3 und MIDI dienen als Zielbild, ersetzen aber noch nicht alle Built-ins.
+
+Abnahme:
+- Roadmap und Dokumentation nennen klar, welche Treiber nicht ausgelagert werden dürfen, solange sie Boot-Storage bereitstellen.
+- `Docs/Drivers/README.txt` und `Docs/Drivers/Leitbild.txt` enthalten eine kurze Übersicht über Built-in- und R4D-Treiberrollen.
+- Kandidatenliste unterscheidet klar zwischen optionalen Treibern und Boot-Storage.
+- Kein Code-Umbau in dieser Unterversion.
+- Version steht auf `KERNEL_VERSION=0.31.0`.
+- Push ist erfolgt.
+
+Version 0.31.1 - R4D-Treiberlebenszyklus und Registry sauber dokumentieren
+Status: Erledigt
+
+Erledigt:
+- Driver Registry als gemeinsame Statusliste fuer Built-in- und R4D-Treiber dokumentiert.
+- Klar gestellt, dass R4D-Treiber sich nicht direkt selbst in die Registry eintragen; der Runtime-Loader besitzt diesen Schritt.
+- R4D-Ladeablauf dokumentiert: Datei finden, Modul validieren, optional `discoverAll()`, echter Runtime-Load, Registry-Eintrag, `DriverInit`, Statuswechsel, optional `DriverShutdown`.
+- Unterschied zwischen `discoverAll()` und echtem Runtime-Load erklaert.
+- Fehlerpfade beschrieben: fehlendes Modul, ungueltiger Header/Import/Export, fehlender `DriverInit`, Init-Fehler, volle Registry, Shutdown-Fehler.
+- Website-`kernel.md`, `Docs/Drivers/README.txt` und `Docs/Drivers/Leitbild.txt` nachgezogen.
+
+Notizen:
+- Eine gefundene R4D-Datei ist nicht automatisch aktiv.
+- Aktiv ist ein R4D erst nach erfolgreichem Runtime-Load und `DriverInit`.
+- Optionale R4D-Fehler sollen sichtbar bleiben und den Boot nicht stoppen; Boot-pflichtige Fehler duerfen kontrolliert fatal enden.
+
+Abnahme:
+- Website-`kernel.md` und relevante Docs erklären den R4D-Lebenszyklus kurz und korrekt.
+- `DRIVERS`/Diagnoseausgaben bleiben mit der Dokumentation vereinbar.
+- Dokumentation sagt klar, wann ein R4D nur erkannt und wann er wirklich aktiv ist.
+- Version steht auf `KERNEL_VERSION=0.31.1`.
+- Push ist erfolgt.
+
+Version 0.31.2 - R4D-API-Fundament prüfen und Testtreiber festlegen
+Status: Erledigt
+
+Erledigt:
+- Bestehende `driver_api.zig` gegen echte Treiberbedarfe geprüft: IRQ, IO-Port, MMIO, PCI, DMA/Buffer, Backend-Registrierung und Cleanup.
+- Festgestellt: DriverApi v9 deckt Logging, Optionen, Port-I/O 8/16/32 Bit, DMA-Regionen, PCI/PCIe-Suche, Config-Zugriff, BAR-Zugriff, MMIO-Mapping, Bus-Mastering, IRQ-Router, NetBackend und Net-RX ab.
+- Festgestellt: `request_irq`/`release_irq` sind alte Platzhalter; produktive R4D-Treiber sollen `irq_register`/`irq_unregister` nutzen.
+- Fehlende API-Punkte als Vorarbeit dokumentiert: echter StorageBackend-Vertrag, echter InputBackend-Vertrag, Audio-Hardware-Backend-Vertrag fuer AC97/HDA, MMIO-Unmap und klarer Device-Quiesce-/Shutdown-Vertrag.
+- Testtreiber festgelegt: `EXAMPLE.R4D` bleibt der API-Smoke-Treiber fuer Registry, `DriverInit`, `DriverShutdown`, DMA, IRQ, PCI/MMIO und Cleanup. Fuer rein ungefaehrliche Minimalabnahmen kann spaeter ein noch kleinerer No-Hardware-Smoke aus `Code/SDK/Smoke/R4D` abgeleitet werden.
+- Bestehende R4D-Buildtools und `Code/Driver/` sind fuer API-Smokes, Synth-/MIDI-Treiber und RTL8139 ausreichend. Fuer AC97/HDA/Storage/Input fehlen vorher bewusst zu schliessende Subsystem-Vertraege.
+
+Notizen:
+- RTL8139.R4D beweist den Netzwerkpfad bereits produktiv genug fuer einen echten R4D-Netzwerktreiber.
+- Audio-Synth-R4Ds sind leichter als echte Audio-Hardwaretreiber, weil sie weniger IRQ-/DMA-/MMIO-Hardwarelebenszyklus brauchen.
+- Boot-Storage-Treiber duerfen erst ausgelagert werden, wenn der R4D-Pfad selbst ohne diesen Treiber erreichbar bleibt.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` läuft erfolgreich.
+- R4D-Mindestvertrag ist dokumentiert.
+- Fehlende API-Punkte sind als Vorarbeit dokumentiert, bevor AC97/HDA/Storage/Input umgebaut werden.
+- Version steht auf `KERNEL_VERSION=0.31.2`.
+- Push ist erfolgt.
+
+Version 0.31.3 - Audio als erster R4D-Auslagerungskandidat vorbereiten
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- AC97 und HDA als nicht bootkritische Audio-Treiber eingeordnet.
+- Bestehenden Bootpfad geprüft: HDA/AC97 werden nur ueber DRIVER=HDA/DRIVER=AC97 gestartet, Fehler blockieren den Boot aktuell nicht fatal.
+- Bestehende R4D-API geprüft: PCI/MMIO/DMA/IRQ/Optionen sind vorhanden, der Audio-Hardware-Backend-Vertrag ist fuer echte AC97/HDA-R4D aber noch zu generisch.
+- Dokumentiert, dass ein Audio-R4D vor Entfernung der Built-ins einen expliziten Backend-Vertrag fuer write_pcm, stop/quiesce und deregistration braucht.
+- Festgelegt, dass Built-in-Audio nur als kurzer Migrationsschritt bleiben darf und nach erfolgreicher R4D-Abnahme entfernt werden soll.
+
+Abnahme:
+- Build.bat -norun erfolgreich.
+- Doku beschreibt Audio als ersten sinnvollen R4D-Kandidaten.
+- Bootpfad bleibt so strukturiert, dass fehlendes oder fehlerhaftes AC97/HDA den Boot nicht abbrechen darf.
+
+Notizen:
+- Die produktiven Built-ins nutzen aktuell registerNativeAudioBackend(name, write_pcm, stopPlayback).
+- DriverApi.register_audio_backend registriert derzeit nur einen generischen Backend-Zeiger und reicht allein noch nicht fuer einen echten Hardware-Audio-R4D.
+- Vor der eigentlichen AC97-/HDA-Auslagerung muss der Audio-Backend-Vertrag erweitert oder als eigene R4D-Audio-API-Version definiert werden.
+Version 0.31.4 - AC97 als R4D-Prototyp planen oder umsetzen
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Kein AC97.R4D gebaut: Die echte Portierung folgt erst, wenn sie mit Hardwarepfad, Diagnose und Smoke belastbar abgenommen werden kann.
+
+Erledigt:
+- AC97 als ersten konkreten Audio-R4D-Kandidaten geprüft.
+- Festgestellt, dass der alte generische `register_audio_backend` fuer echte AC97-/HDA-Hardwareauslagerung nicht ausreicht.
+- DriverApi append-only auf Version 10 erweitert.
+- Expliziten Audio-Output-Backend-Descriptor fuer R4D eingefuehrt.
+- SDK um `AudioBackend`, `registerAudioOutputBackend()` und `unregisterAudioBackend()` erweitert.
+- Audio-Core so erweitert, dass native Built-ins und kontextfaehige R4D-Audio-Backends ueber denselben aktiven PCM-Ausgabepfad laufen koennen.
+- Owner-Cleanup fuer R4D-Audio-Backends ergaenzt.
+- Dokumentiert, dass AC97 built-in bleibt, bis ein echter AC97.R4D mit Runtime-Abnahme existiert.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` erfolgreich.
+- `DevTools/Scripts/Build.bat -test` erfolgreich: QEMU OK, Boot OK, Poweroff OK, TEST OK.
+- Doku beschreibt DriverApi v10 als Voraussetzung fuer AC97.R4D/HDA.R4D.
+- Kein dauerhafter neuer Built-in-Fallback wurde hinzugefuegt.
+
+Notizen:
+- `register_audio_backend` bleibt aus Kompatibilitaetsgruenden bestehen.
+- Der neue Vertrag heisst bewusst Audio-Output-Backend, weil er echte PCM-Ausgabe beschreibt und nicht Synth-/Mixer- oder generische Audio-Metadaten.
+- AC97.R4D darf erst als umgesetzt gelten, wenn der echte AC97-Hardwarepfad ueber R4D geladen, gestoppt, entladen und diagnostiziert werden kann.
+Version 0.31.5 - HDA als R4D-Kandidat vorbereiten
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Kein HDA.R4D gebaut: HDA folgt nach AC97, sobald der AC97-R4D-Pfad und DriverApi-v10-Audiovertrag praktisch abgenommen sind.
+
+Erledigt:
+- HDA-Abhaengigkeiten zu PCI, MMIO, DMA, Bus Mastering, Codec-Discovery, CORB/RIRB, Stream-BDL, Recovery und Audio-Core geprueft.
+- Festgelegt, dass HDA nicht vor AC97 ausgelagert wird.
+- DriverApi v10 als technische Grundlage fuer spaeteres HDA.R4D bestaetigt.
+- Dokumentiert, dass HDA optional bleibt und fehlende Hardware oder fehlerhafte Initialisierung den Boot nicht blockieren duerfen.
+- Registry-/Diagnosepfad geklaert: vorerst Built-in-HDA, Diagnose ueber AUDIO/HDATEST; spaeter HDA.R4D mit gleichwertiger Registry- und Diagnose-Sicht.
+- Built-in-HDA bleibt nur bis zur echten HDA.R4D-Abnahme bestehen.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` erfolgreich.
+- HDA bleibt optional und darf den Boot nicht blockieren.
+- Doku beschreibt HDA als spaeteren Audio-R4D-Kandidaten.
+- Registry-/Diagnosepfad fuer HDA ist geklaert.
+
+Notizen:
+- Ein Platzhalter-HDA.R4D waere nicht belastbar genug und wuerde den Kernel nicht sinnvoll verschlanken.
+- HDA braucht dieselbe Audio-Output-Backend-Grenze wie AC97, plus deutlich mehr Controller-/Codec-Zustand.
+- Der aktuelle Standardpfad `DRIVER=HDA` bleibt bis zur R4D-Portierung erhalten.
+Version 0.31.6 - RTL8139 als R4D-Kandidat vorbereiten
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- RTL8139 als nicht bootkritischen Netzwerktreiber eingeordnet.
+- Bestaetigt: `RTL8139.R4D` ist bereits der produktive SDK-basierte Netzwerk-R4D-Treiber.
+- Bestaetigt: benoetigte R4D-API ist vorhanden: PCI/PCIe, Port-I/O, Bus Mastering, DMA, IRQ, `register_net_backend` und `net_receive_frame`.
+- Alten Built-in-RTL8139-Treiber aus dem Kernelbaum entfernt.
+- Direkte Legacy-Abhaengigkeit aus `command_runtime.zig` entfernt.
+- Legacy-Befehle `RTL8139` und `RTL8139TX` auf allgemeine NetCore-/R4D-Diagnosen umgelenkt.
+- Dokumentiert, dass ARP, IPv4, ICMP, UDP, DHCP, DNS und TCP am NetCore haengen und nicht direkt am RTL8139-Treiber.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` erfolgreich.
+- R4D-NetBackend-Pfad ist dokumentiert und ueber `RTL8139.R4D` sichtbar.
+- Netzwerkdiagnosen bleiben ueber DRIVERS, NET, NETINFO, NETSTAT, IPCONFIG, DEVMGR, NETETHTEST und PINGTEST verstaendlich.
+- Ohne geladenen Netzwerkadapter bleibt der lokale Boot konzeptionell unabhaengig; Netzwerkoperationen melden `no-adapter`.
+
+Notizen:
+- `DRIVER=RTL8139` bleibt der CONFIG-/Driver-Plan-Einstieg fuer Runtime-Load des R4D-Treibers.
+- Kein Built-in-RTL8139-Fallback bleibt im Kernel.
+- Ein Ausfall von RTL8139.R4D darf nur Netzwerk betreffen, nicht Shell, Desktop oder Storage.
+Version 0.31.7 - Storage-Treiber mit Boot-Storage-Schutz vorbereiten
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- AHCI, NVMe und ATA-PIO getrennt bewertet: Alle drei koennen je nach QEMU-/Hardwareprofil Boot-Storage fuer `C:\` sein.
+- USB/xHCI/USBMSC als gleichwertig bootkritisch markiert, weil R4OS auch vom USB-Stick als FAT32-`C:\` starten kann.
+- Festgelegt: Storage-Treiber werden nicht aus dem Kernel entfernt, solange sie zum Finden, Mounten oder Lesen von `C:\SYS\DRIVERS` gebraucht werden koennen.
+- Festgelegt: Boot-Storage bleibt built-in, bis ein sicherer Preload-/Initramfs-Mechanismus existiert, der R4D-Module vor `C:\` bereitstellen kann.
+- Festgelegt: Zusatz-Storage darf spaeter als R4D ausgelagert werden, aber nur wenn der konkrete Treiber nicht Teil des aktiven Boot-Storage-Pfads ist.
+- Preload-/Initramfs-Alternative als spaeterer Mechanismus dokumentiert.
+- Dokumentation fuer Dateisystem/Storage und Treiberstand aktualisiert.
+
+Notizen:
+- Boot-Storage meint den kompletten Pfad bis zum gemounteten Systemlaufwerk: Controller-Treiber, Blockdevice, MBR/FAT32 und Zugriff auf `C:\SYS\DRIVERS`.
+- `ATA-PIO`, `AHCI`, `NVMe`, `xHCI` und `USBMSC` duerfen deshalb nicht pauschal als "optional" behandelt werden.
+- Eine spaetere Storage-R4D-Auslagerung braucht zuerst eine saubere Entscheidung pro Bootprofil: Was ist Boot-Pfad, was ist Zusatzlaufwerk?
+- Fuer echten Kernel-Slimdown eignen sich zuerst Storage-Treiber, die nur Datenlaufwerke bedienen und nicht benoetigt werden, um weitere R4D-Module zu laden.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -test` läuft erfolgreich.
+- USB-Boot-Szenario ist ausdrücklich nicht gebrochen, weil kein bootkritischer Storage-Code entfernt wurde.
+- Dokumentation beschreibt klar: Boot-Storage bleibt built-in, bis ein sicherer Preload-/Initramfs-Mechanismus existiert.
+- Keine Storage-Auslagerung entfernt den Zugriff auf `C:\SYS\DRIVERS`.
+- Version steht auf `KERNEL_VERSION=0.31.7`.
+- Push ist erfolgt.
+Version 0.31.8 - USB-Treiber nur mit Bootpfad-Schutz planen
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- xHCI, USB Core, USB HID und USB MSC getrennt bewertet.
+- Festgelegt: xHCI und USB Core bleiben built-in, solange USB-Boot und USB-Klasseninitialisierung davon abhaengen.
+- Festgelegt: USB MSC bleibt built-in, solange ein USB-Stick das FAT32-Systemlaufwerk `C:\` bereitstellen kann.
+- Festgelegt: USB HID ist eher R4D-faehig als USB MSC, braucht vorher aber einen echten InputBackend-Vertrag und darf R4DOS-/Desktop-Eingabe nicht brechen.
+- Minimaler USB-Boot-Core als Zielbild dokumentiert: Bus/Core im Kernel, Klassen-Treiber spaeter modular, aber nur wenn Boot-Storage nicht abgeschnitten wird.
+- USB-Grenzen dokumentiert: Bus/Core, Storage-Klasse, HID-Klasse, Bootlaufwerk und optionale Zusatzgeraete werden getrennt bewertet.
+- Keine USB-Auslagerung vorgenommen und keinen Bootpfad entfernt.
+- Dokumentation in Treiber- und Hardware-Dokumenten aktualisiert.
+
+Notizen:
+- USB ist kein einzelner Treiber, sondern ein Stapel: xHCI-Controller, USB-Core, Klassenbindung, HID, MSC und Block/FAT32.
+- Fuer USB-Boot ist der Pfad USB/xHCI/MSC -> Blockdevice -> MBR/FAT32 -> `C:\` -> `C:\SYS\DRIVERS` bootkritisch.
+- HID-Geraete sind nicht Boot-Storage, koennen aber fuer R4DOS, Desktop und spaetere Notfallbedienung wichtig sein.
+- Eine spaetere USB-R4D-Aufteilung darf nicht dazu fuehren, dass R4OS zwar Module laden will, aber den USB-Stick mit diesen Modulen noch nicht lesen kann.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -test` läuft erfolgreich.
+- USB-Bootpfad wird nicht durch Codeaenderungen gebrochen, weil kein USB-Code entfernt wurde.
+- Doku erklärt klar, warum USB nicht pauschal aus dem Kernel entfernt wird.
+- Kein Planpunkt entfernt USB MSC aus dem Kernel, solange `C:\` davon abhaengen kann.
+- Version steht auf `KERNEL_VERSION=0.31.8`.
+- Push ist erfolgt.
+Version 0.31.9 - Display-/Framebuffer-Grenze gegen R4D abgrenzen
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Boot-Framebuffer als Kernel-/Boot-/Fallback-Grundlage festgelegt und nicht als auszulagernden R4D-Treiber behandelt.
+- DisplayManager als Besitzer des aktiven DisplayBackends abgegrenzt.
+- Surface, Presenter, Compositor, DirtyRegion und CursorLayer als Display-Systemschichten dokumentiert, nicht als klassische Hardware-R4D-Treiber.
+- Spaetere Grafikkarten-Treiber als eigene DisplayBackend-Lieferanten eingeordnet.
+- Klar festgelegt: Ein spaeterer Grafiktreiber kann das aktive DisplayBackend uebernehmen, aber die fruehe Boot-/Fatal-Ausgabe braucht weiter einen robusten Boot-/Fallback-Pfad.
+- Keine Display-Schicht verschoben oder entfernt, nur weil sie historisch unter `old/drivers/video/` liegt.
+- Display-/Treiber-/Hardware-Dokumentation aktualisiert.
+
+Notizen:
+- Der Boot-Framebuffer ist das erste sichtbare Ausgabeziel und bleibt als frueher Rettungspfad wertvoll.
+- Ein nativer Grafiktreiber darf spaeter nicht R4Desk, Anwendungen oder den Compositor direkt verdrahten, sondern muss ein DisplayBackend fuer den DisplayManager bereitstellen.
+- Surface/Compositor/Presenter sind Kernel-/Display-Runtime-Schichten. Sie koennen nicht sinnvoll als isolierte Hardware-R4D ausgelagert werden.
+- Fuer echte Grafiktreiber-Auslagerung fehlen spaeter noch ein DisplayBackend-Vertrag fuer Treiber, Mode-Set-Regeln, MMIO-/DMA-/IRQ-Lifecycle und ein sicherer Backend-Wechsel.
+
+Abnahme:
+- Doku unterscheidet Boot-Framebuffer, DisplayManager, Surface/Compositor/Presenter und spätere Grafiktreiber.
+- Keine Codeaenderung bricht die fruehe Bootausgabe.
+- Keine Display-Schicht wird als R4D ausgelagert, nur weil sie aktuell unter `old/drivers/video/` liegt.
+- Version steht auf `KERNEL_VERSION=0.31.9`.
+- Push ist erfolgt.
+Version 0.31.10 - Abschluss und Kandidatenliste festschreiben
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Finale Auslagerungsreihenfolge festgelegt: zuerst optionale Audio-Hardware, dann weitere Netzwerk-Treiber, danach optionale Storage-/USB-Klassen und spaeter native Grafiktreiber.
+- Nicht auszulagernde Kernel-Grundlagen festgehalten: GDT, IDT, fruehe Interrupt-/Timerbasis, Speicherverwaltung, BootInfo, BootDisplay, COM1-Debugpfad, Boot-Framebuffer und Boot-Storage-Minimum.
+- Kandidaten in Kategorien eingeordnet: bereits R4D, naechster R4D-Kandidat, optionaler spaeterer R4D, bootkritisch built-in, Systemschicht statt Treiber, dauerhaft Kernel-Grundlage.
+- Festgelegt: Built-in-Pfade werden nach erfolgreicher R4D-Abnahme entfernt, ausser sie sind Boot-/Fallback-Grundlage oder ein bewusst begrenzter Migrationsfallback.
+- Festgelegt: Bootkritische Pfade bleiben built-in, bis ein sicherer Preload-/Initramfs- oder gleichwertiger Fruehladepfad existiert.
+- Offene API-Luecken dokumentiert: Audio-Hardware-Backend fuer AC97/HDA, StorageBackend, InputBackend, DisplayBackend-Treibervertrag, MMIO-Unmap und sauberer Device-Quiesce-/Shutdown-Vertrag.
+- `AGENTS.md`, `Docs/Drivers/README.txt` und `Docs/Drivers/TreiberStand.txt` mit dem Abschlussstand aktualisiert.
+
+Notizen:
+- `RTL8139.R4D`, `SID.R4D`, `OPL3.R4D` und `MIDI.R4D` sind aktuelle R4D-Referenzen.
+- AC97 und HDA sind die naechsten realistischen Hardware-R4D-Kandidaten, weil sie nicht fuer Boot, `C:\` oder fruehe Ausgabe gebraucht werden.
+- ATA-PIO, AHCI, NVMe, xHCI und USBMSC koennen Boot-Storage sein und werden deshalb nicht pauschal ausgelagert.
+- USBHID ist spaeter eher auslagerbar als USBMSC, braucht aber einen stabilen InputBackend-Vertrag.
+- Surface, Presenter, Compositor, DirtyRegion und CursorLayer sind Display-Systemschichten, keine Hardware-R4D-Treiber.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -test` läuft erfolgreich.
+- Roadmap zeigt klar, welche Treiber wann und unter welchen Bedingungen ausgelagert werden dürfen.
+- Keine Boot-kritische Komponente wurde ohne Ersatz aus dem Kernel entfernt.
+- Kandidatenliste unterscheidet Prototyp, optionaler Treiber, Boot-kritischer Treiber, temporaerer Fallback und dauerhaft nicht auszulagernde Kernelgrundlage.
+- Version steht auf `KERNEL_VERSION=0.31.10`.
+- Push ist erfolgt.
+Version 0.31.11 - Manuelle Website-Kerneldoku aktualisieren
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `D:\AI\Projects\Claude Code\R4OS Server\Website\Content\kernel.md` aktualisiert.
+- Built-in-Treiber, R4D-Kandidaten und Boot-Storage-Schutz kurz und einfach erklaert.
+- USB-Boot ueber FAT32-`C:\` als Grenze fuer USB-/Storage-Auslagerung beschrieben.
+- Kernel-Verschlankung als Ziel festgehalten: Built-ins nach echter R4D-Abnahme entfernen, Fallbacks nur wenn noetig.
+- Driver Registry und R4D-Lebenszyklus mit dem finalen Stand abgeglichen.
+- `old/arch/x86_64/`-Pfade fuer GDT, IDT, PIC und PIT in der manuellen Doku korrekt benannt.
+
+Notizen:
+- Die Website-Doku liegt ausserhalb des R4OS-Repositories und wird als manuelle Dokumentation direkt aktualisiert.
+- Diese Unterversion aendert keinen Kernel-Code.
+
+Abnahme:
+- `kernel.md` ist im gleichen einfachen Stil wie die restliche manuelle Dokumentation gepflegt.
+- Keine veralteten Aussagen zu `old/`-Pfaden, Driver Registry oder R4D-Auslagerung bleiben stehen.
+- Die manuelle Doku erklaert kurz, warum Boot-Storage und USB nicht vorschnell ausgelagert werden.
+- Version steht auf `KERNEL_VERSION=0.31.11`.
+- Push ist erfolgt.

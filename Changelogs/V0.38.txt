@@ -1,0 +1,342 @@
+﻿*** Kernel Refactor Roadmap Leitbild ***
+In dieser Roadmap befassen wir uns im Verlauf mehrerer großer Versionen mit der säuberung des Kernels.
+Aktuell wurden viele Funktionen nach
+kernelold.zig ausgelagert und in src/old/ verschoben.
+Wir holen die nach und nach zurück in main.zig, kontrollieren dabei aber alles.
+Was aus dem Kernel raus kann soll in Software, Treiber und Protokolle untergebracht werden.
+Im Zuge dieses Refactor ist auch die Dokumentation zu aktualisieren und pflegen.
+
+Grundsatz fuer alle Unterversionen:
+- Keine halben Umbauten: Eine Unterversion ist erst erledigt, wenn Code, Imports, Doku, Version und Abnahme zusammenpassen.
+- Keine stillen Doppelpfade: Wenn eine Initialisierung nach `main.zig` wandert, darf sie nicht weiterhin produktiv in `kernelold.zig` laufen.
+- Boot-kritische Pfade muessen konservativ behandelt werden. Was fuer Boot, `C:\`, Speicher, Interrupts oder fruehe Ausgabe noetig ist, bleibt built-in, bis ein stabiler Ersatz existiert.
+- Kernel-Verschlankung ist ein ausdrueckliches Ziel. Fallbacks und parallele Built-in-Pfade werden nur genutzt, wenn sie fuer Boot-Stabilitaet, Migration oder echte Abnahme noetig sind.
+- Nicht bootkritische Treiber sollen nach erfolgreicher R4D-Auslagerung aus dem Kernel entfernt werden, statt dauerhaft als Built-in-Fallback liegen zu bleiben.
+- Jeder Umzug braucht klare Modulgrenzen: Boot-Schicht, Runtime-Core, Treiber, API und Diagnose duerfen nicht unkontrolliert vermischt werden.
+- Jede neue Boot-Schicht braucht eine klare Zustands- und Fehlersemantik: entweder erfolgreich initialisiert, sauber uebersprungen oder fatal beendet. Stilles Weiterlaufen nach kaputten Pflichtpfaden ist kein erledigter Zustand.
+- `kernelold.zig` darf waehrend der Migration nur noch als Legacy-Bruecke dienen. Neu umgezogene Initialisierungen muessen aus `kernelold.zig` verschwinden oder dort explizit als bereits initialisierter Zustand konsumiert werden.
+- Zwischenversionen duerfen lauffaehig klein sein, aber nicht fachlich halb: Keine Unterversion wird abgeschlossen, wenn Besitzgrenzen, Boot-Reihenfolge oder Abhaengigkeiten noch absichtlich unklar bleiben.
+- Eine Unterversion darf bewusst nur Vertrag, Diagnose oder Probe liefern,
+  wenn sie klar als nicht-produktiver Ersatz gekennzeichnet ist. Produktive
+  Umschaltung und Entfernen des Altpfads passieren erst nach echter
+  Funktionsabnahme.
+- Vor jedem Abschluss wird gezielt nach Rest-Imports, Doppelaufrufen und verdeckten Abhaengigkeiten gesucht. Gefundene Altlasten werden entweder beseitigt oder in der Roadmap als bewusster Folgepunkt notiert.
+- Jede abgeschlossene Unterversion erhoeht `Injection/sys/CONFIG/VERSION.R4S` auf die passende Version und wird danach gepusht.
+- Mindestens `DevTools/Scripts/Build.bat -norun` gehoert zu jeder Code-Unterversion. Bei Boot-, IRQ-, Input-, Storage-, USB- oder R4D-Aenderungen gehoert `DevTools/Scripts/Build.bat -test` dazu.
+- GUI-/Hardware-nahe Punkte bekommen zusaetzlich eine klare manuelle Sichtabnahme durch den User, wenn QEMU-Smoke allein nicht reicht.
+
+-------------------------------------------
+Ab hier beginnen die Versionen und ab hier darf auch bereinigt werden.
+Das Refactor Leitbild muss bei einer Roadmap Bereinigung stehen bleiben
+-------------------------------------------
+
+Rahmen fuer 0.38.X:
+- 0.38.X ist die geplante Audio-R4D-Grundlage nach dem Audio-Bootschnitt aus
+  0.37.X und fuehrt als ersten echten Hardwarepfad `AC97.R4D` produktiv ein.
+  Diese Roadmap darf erst begonnen werden, wenn 0.37.X abgeschlossen ist und
+  `audio_boot` den Kernel-Audio-Core ohne `kernelold.zig` besitzt.
+- 0.38.X zieht HDA noch nicht produktiv um. HDA bleibt bis 0.39.X der stabile
+  Built-in-Pfad, damit AC97-R4D-Vertrag, Diagnose und Fehlerfaelle zuerst
+  sauber abgenommen werden koennen.
+- Ziel ist nicht ein Platzhaltertreiber, sondern eine echte R4D-Auslagerung:
+  `AC97.R4D` muss echte PCM-Ausgabe ueber den AudioBackend-Vertrag liefern.
+- AC97 und HDA sind nicht bootkritisch. R4OS muss ohne Audiotreiber, mit
+  fehlender R4D-Datei, mit deaktiviertem Treiber und mit fehlschlagendem
+  Audio-R4D weiter booten.
+- Nach erfolgreicher AC97-R4D-Abnahme wird der Built-in-AC97-Pfad entfernt.
+  Ein dauerhafter Built-in-Fallback fuer AC97 gilt nicht als erledigter
+  Zustand.
+- Der Kernel behaelt den Audio-Core, die AudioBackend-Registry, den
+  Format-/Backend-Vertrag, ProgramApi/R4SYS-Bruecken und die Boot-/Diagnose-
+  Sicht. Hardware-Besitz, PCI/I/O-Port/DMA-Setup und PCM-Ausgabe gehoeren in
+  `AC97.R4D`.
+- Vor der AC97-Portierung muss entschieden und umgesetzt sein, wo PCM-
+  Normalisierung liegt: entweder liefert der Audio-Core den Hardwarebackends
+  ein verbindliches Zielformat, oder R4D-Treiber bekommen SDK-/Treiber-eigene
+  PCM-Helfer. R4D-Treiber duerfen keine Kernel-internen `old/audio/pcm.zig`-
+  oder sonstigen Kernelmodule importieren.
+- DriverApi-Erweiterungen bleiben append-only. Falls Audio-R4D Tick-/Wait-
+  Helfer oder zusaetzliche Diagnosezugriffe braucht, entsteht dafuer eine
+  neue dokumentierte DriverApi-Version statt stiller ABI-Aenderungen.
+- `AUDSVC.R4X` bleibt Software-Policy fuer PCM-Streams, Lautstaerke,
+  Mixer-/Service-Zustand und Restart-Cleanup.
+- Audio-R4P-Module bleiben Protokoll-/Parser-/Frontendpfade. MIDI-, OPL3-
+  und SID-R4P besitzen keine Hardware und keine Backend-Lifetime.
+- `SID.R4D`, `OPL3.R4D` und `MIDI.R4D` bleiben in 0.38.X SynthEngine-
+  Container und werden nicht mit AC97/HDA vermischt.
+- Die Boot-Reihenfolge muss ausdruecklich beachtet werden: `audio_boot`
+  initialisiert Core/Status, waehrend R4D-Hardwarebackends ueber den
+  Treiberplan geladen und danach als AudioBackend aktiv werden. Falls dafuer
+  ein spaeter Audio-Backend-Finalisierungsschritt noetig ist, muss er klar
+  von Core-Initialisierung und Driver-Policy getrennt werden.
+- Jede Unterversion braucht Abnahmen fuer den Erfolgsfall und fuer den
+  nichtfatalen Fehlerfall: R4D fehlt, R4D ist deaktiviert oder Init scheitert.
+- Mindestens `DevTools/Scripts/Build.bat -norun` und
+  `DevTools/Scripts/Build.bat -test` gehoeren zu jeder Code-Unterversion.
+  Fuer AC97-spezifische Schritte sind zusaetzliche Audio-Smokes mit passender
+  QEMU-Konfiguration oder klar begruendete Diagnose-Abnahmen noetig.
+
+Version 0.38.0
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- AC97-R4D-Aktivierungsvertrag als Gate festgelegt: 0.38.0 zieht noch keinen
+  AC97-Code um, sondern schliesst DriverApi-/SDK-/Audio-Core-Luecken.
+- DriverApi append-only auf v11 erweitert: `tick_count`, `timer_frequency` und
+  `wait_ticks` stehen R4D-Treibern fuer Hardware-Wartepfade und Timeouts zur
+  Verfuegung.
+- SDK-Wrapper und Kompatibilitaetshelfer ergaenzt:
+  `tickCount()`, `timerFrequency()`, `waitTicks(ticks)`, `apiCompatible()`
+  und `supportsDriverApi(...)`.
+- AudioBackend-Statuscallbacks werden im Audio-Core gespeichert und ueber
+  `AUDIO` sichtbar.
+- PCM-/Formatvertrag festgelegt: Audio-R4D-Backends erhalten Streamdaten im
+  gelieferten Format; AC97.R4D muss die Konvertierung nach 48 kHz stereo s16le
+  selbst oder ueber SDK-nahe Hilfen leisten und darf keine Kernel-internen
+  PCM-Module importieren.
+- `EXAMPLE.R4D` als DriverApi-v11-Smoke erweitert: Version, Tabellengroesse,
+  Tick-/Wait-Helfer und IRQ0-Pfad werden pruefbar.
+- `SDKSMOKE.R4D` als AudioBackend-Vertrags-Smoke erweitert: Register/
+  Unregister, optionale Status- und Shutdown-Felder.
+- `irq_register`/`irq_unregister` bleiben der verbindliche IRQ-Pfad fuer
+  produktive R4D-Treiber; `request_irq` bleibt ein historischer Platzhalter.
+- Kuenftiger `DRIVER=AC97`-Pfad festgelegt: 0.38.1 verdrahtet den bereits
+  geladenen Driver-Plan auf `AC97.R4D`, ohne `BOOT.R4S` erneut zu laden.
+- Kein `audio_boot.finalizeBackends()` in 0.38.0 noetig: Backend-Aktivierung
+  erfolgt ueber DriverApi/Audio-Core; 0.38.1 prueft nur die Bootplan-
+  Reihenfolge fuer AC97.R4D.
+- Fehlend/deaktiviert/fehlerhaft/erfolgreich werden ab 0.38.1 als Lade- und
+  Diagnosepfade umgesetzt; 0.38.0 definiert die erwarteten Statusfaelle.
+- Dokumentation aktualisiert:
+  `Docs/Audio/README.txt`, `Docs/Drivers/R4DFormat.txt`,
+  `Docs/Drivers/TreiberStand.txt`, `Docs/Core/KernelBereinigung.txt` und
+  `Docs/SDK/README.txt`.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.38.0` gesetzt.
+- Abnahme bestanden:
+  `Code/SDK`: `zig build`;
+  `DevTools/Scripts/Build.bat -norun`;
+  `DevTools/Scripts/Build.bat -test` mit `TEST OK`.
+
+Notizen:
+- Diese Unterversion ist das belastbare Vertrags- und Reihenfolge-Gate. Sie
+  darf keine halbe AC97-Auslagerung beginnen, bevor Loader-, SDK-,
+  DriverApi- und Audio-Core-Vertrag passen.
+
+Version 0.38.1
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- AC97-R4D-Aktivierung in Boot-Reihenfolge und Driver-Plan belastbar
+  verdrahtet: `audio_boot` initialisiert den Core, markiert `DRIVER=AC97` als
+  erwartetes `AC97.R4D`, und der Treiberplan laedt danach ueber den normalen
+  R4D-Runtime-Pfad.
+- Der direkte Built-in-AC97-Start wurde aus `audio_boot` entfernt. HDA bleibt
+  bis 0.39.X bewusst Built-in.
+- `DRIVER=AC97`, `DISABLE=AC97`, fehlende `AC97.R4D` und fehlschlagende
+  `DriverInit`-Faelle haben sichtbare, nichtfatale Statuspfade.
+- `driver_plan.buildAndLoad()` verbraucht den bestehenden Driver-Plan, wertet
+  `BOOT.R4S` nicht erneut aus und startet keine parallele AC97-Built-in-
+  Auswahl.
+- Der R4D-Runtime-Loader liefert fuer geplante Treiber detaillierte
+  Ergebnisse: loaded, already-active, name-invalid, file-missing,
+  invalid-file, init-failed und load-failed.
+- `audio_boot` unterscheidet AC97-R4D-Zustaende: nicht geplant, disabled,
+  missing, init-failed, loaded, registered und active.
+- Der Audio-Core besitzt Statushelfer fuer registrierte, aktive und
+  ausgabefaehige AudioBackends, ohne die Initialisierung erneut anzustossen.
+- Die interne Legacy-Diagnose `AUDIO` zeigt den Audio-Bootstatus zusaetzlich
+  zum Audio-Core-, AC97- und HDA-Status.
+- `AC97FAIL.R4D` als negative Testfixture angelegt. Der Treiber meldet sich
+  als AC97-Audiotreiber, scheitert absichtlich in `DriverInit` und ist kein
+  produktiver AC97-Platzhalter.
+- `DevTools/Scripts/TestScripts/Run-AudioR4DPlanTest.ps1` angelegt und fuer
+  missing, disabled und init-failed verdrahtet.
+- Dokumentation aktualisiert:
+  `Docs/Audio/README.txt`, `Docs/Drivers/TreiberStand.txt`,
+  `Docs/Drivers/R4DFormat.txt` und `Docs/Core/KernelBereinigung.txt`.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.38.1` gesetzt.
+- Abnahme mit `DevTools/Scripts/Build.bat -norun`,
+  `DevTools/Scripts/Build.bat -test` und
+  `DevTools/Scripts/TestScripts/Run-AudioR4DPlanTest.ps1`.
+
+Notizen:
+- Diese Unterversion macht den Lade- und Fehlerpfad produktionsfest, ohne
+  bereits einen halb fertigen AC97-Treiber als Erfolg zu werten. Der echte
+  `AC97.R4D`-Control-Plane-Port bleibt 0.38.2, echte PCM-Ausgabe bleibt
+  0.38.3.
+
+Version 0.38.2
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `Code/Driver/AC97` als echten SDK-basierten R4D-Treiber angelegt.
+- `AC97.R4D` in den zentralen `Code/build.zig`-Build aufgenommen und im
+  normalen Image unter `C:\SYS\DRIVERS\AC97.R4D` ausgeliefert.
+- AC97-Control-Plane in den R4D-Treiber portiert: PCI-Erkennung,
+  I/O-BAR-Auswertung fuer NAM/NABM, I/O-Space/Busmaster-Aktivierung,
+  DMA-BDL-/Samplepuffer, Codec-/Playback-Reset, Status-Clear und Shutdown.
+- `AC97.R4D` registriert in 0.38.2 bewusst noch kein Audio-Output-Backend,
+  weil PCM-Write, Stop/Drain, BDL-Fuellung und Diagnosezaehler erst 0.38.3
+  gehoeren.
+- DriverApi-/Bootlog-Diagnose fuer AC97.R4D-Probe, Hardwarefund, I/O-Basis,
+  DMA-Anlage, Control-Plane-Ready und Fehlergruende ergaenzt.
+- Fehlerfaelle abgenommen: AC97.R4D fehlt, AC97 ist deaktiviert, AC97.R4D ist
+  vorhanden aber findet im Standard-QEMU kein Geraet, und AC97FAIL.R4D
+  scheitert absichtlich in `DriverInit`; alle Faelle bleiben nichtfatal.
+- AC97-spezifischer QEMU-Hardware-Smoke mit `-device AC97` angelegt:
+  `DevTools/Scripts/TestScripts/Run-Ac97R4DProbeTest.ps1`.
+- `DevTools/Scripts/TestScripts/Run-AudioR4DPlanTest.ps1` an die nun im
+  Standardimage vorhandene `AC97.R4D` angepasst und um den No-Device-Fall
+  erweitert.
+- Dokumentation aktualisiert:
+  `Docs/Audio/README.txt`, `Docs/Drivers/TreiberStand.txt`,
+  `Docs/Drivers/R4DFormat.txt`, `Docs/Core/KernelBereinigung.txt`,
+  `Docs/Software.md` und `Docs/SupportedHardware.txt`.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.38.2` gesetzt.
+- Abnahme mit `DevTools/Scripts/Build.bat -norun`,
+  `DevTools/Scripts/Build.bat -test`,
+  `DevTools/Scripts/TestScripts/Run-AudioR4DPlanTest.ps1` und
+  `DevTools/Scripts/TestScripts/Run-Ac97R4DProbeTest.ps1`.
+
+Notizen:
+- Das ist der belastbare AC97-Control-Plane-Schritt. Ein Name-only- oder
+  Fake-Backend wurde vermieden; echte PCM-Ausgabe bleibt explizit 0.38.3.
+
+Version 0.38.3
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `AC97.R4D` registriert bei erfolgreichem Hardwarestart ein echtes
+  Audio-Output-Backend namens `AC97`.
+- PCM-Write, Stop, Shutdown und Statuscallback ueber den DriverApi-
+  AudioBackend-Vertrag umgesetzt.
+- SDK-nahe PCM-Hilfe `Code/SDK/r4os/audio_pcm.zig` angelegt und ueber
+  `r4os.audio_pcm` exportiert; AC97.R4D importiert keine Kernel-internen
+  PCM-Module aus `Code/src/old/audio` oder `Code/src/kernel`.
+- PCM-Normalisierung nach 48 kHz stereo s16le fuer s16le/u8 mono/stereo im
+  R4D-Pfad umgesetzt.
+- AC97-BDL-/DMA-Pufferfuellung, Busmaster-Start, Wartepfad fuer
+  wiederverwendete DMA-Slots und Reset bei blockierten Puffern umgesetzt.
+- Drain/Timeout-Verhalten, Statuszaehler fuer Writes/Underruns/Errors,
+  letzter Ergebniscode und Shutdown-Cleanup ergaenzt.
+- `DRIVER=AC97` nutzt den R4D-Backendpfad fuer echte PCM-Ausgabe; die alte
+  Built-in-AC97-Quelle bleibt bis 0.38.4 nur Migrationsreferenz und kein
+  stiller Produktiv-Fallback.
+- AC97-R4D-Playback-Smoke mit QEMU `-device AC97`, `BEEP.R4X /SELFTEST` und
+  `AUDIOD.R4X` angelegt:
+  `DevTools/Scripts/TestScripts/Run-Ac97R4DPlaybackTest.ps1`.
+- `Run-Ac97R4DProbeTest.ps1` auf den neuen sichtbaren Status
+  `AC97.R4D [active]` angepasst.
+- Fehlerfaelle fuer missing, disabled, no-device und init-failed erneut ueber
+  `Run-AudioR4DPlanTest.ps1` abgenommen; alle bleiben nichtfatal.
+- Dokumentation aktualisiert:
+  `Code/Driver/AC97/README.txt`, `Docs/Audio/README.txt`,
+  `Docs/Drivers/TreiberStand.txt`, `Docs/Drivers/R4DFormat.txt`,
+  `Docs/Drivers/README.txt`, `Docs/Core/KernelBereinigung.txt`,
+  `Docs/SDK/README.txt`, `Docs/Software.md` und
+  `Docs/SupportedHardware.txt`.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.38.3` gesetzt.
+- Abnahme mit `DevTools/Scripts/Build.bat -norun`,
+  `DevTools/Scripts/Build.bat -test`,
+  `DevTools/Scripts/TestScripts/Run-AudioR4DPlanTest.ps1`,
+  `DevTools/Scripts/TestScripts/Run-Ac97R4DProbeTest.ps1` und
+  `DevTools/Scripts/TestScripts/Run-Ac97R4DPlaybackTest.ps1`.
+
+Notizen:
+- AC97.R4D liefert jetzt echte Ausgabe. 0.38.4 entfernt die verbliebenen
+  Built-in-AC97-Quellen und Migrationsreste, damit kein dauerhafter
+  Doppelpfad uebrig bleibt.
+
+Version 0.38.4
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Verbliebene Built-in-AC97-Quelle `Code/src/old/drivers/audio/ac97.zig`
+  entfernt, nachdem `AC97.R4D` in 0.38.3 echte PCM-Ausgabe geliefert hat.
+- `Code/src/old/program/command_runtime.zig` von direktem AC97-Built-in-
+  Import geloest; `AUDIO` und `HDATEST` nutzen Audio-Core, `audio_boot` und
+  HDA-Diagnose statt `ac97.dumpStatus()`.
+- Rest-Import-Pruefung auf `old/drivers/audio/ac97.zig`, `ac97.init`,
+  `ac97.dumpStatus`, `const ac97` und AC97-Built-in-Imports im Code
+  durchgefuehrt: kein produktiver Code-Referenzrest.
+- `DRIVER=AC97` bleibt eindeutig R4D-Pfad; missing, disabled, no-device und
+  init-failed bleiben nichtfatal und werden ueber `audio_boot`/AudioBackend-
+  Status sichtbar.
+- Dokumentation und Hardwareliste auf `AC97.R4D` als produktiven AC97-Pfad
+  ohne Built-in-Fallback aktualisiert.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.38.4` gesetzt.
+- Abnahme: `git diff --check`, `DevTools/Scripts/Build.bat -norun`,
+  `DevTools/Scripts/Build.bat -test`,
+  `DevTools/Scripts/TestScripts/Run-AudioR4DPlanTest.ps1`,
+  `DevTools/Scripts/TestScripts/Run-Ac97R4DProbeTest.ps1` und
+  `DevTools/Scripts/TestScripts/Run-Ac97R4DPlaybackTest.ps1`.
+
+Notizen:
+- HDA bleibt bewusst Built-in bis 0.39.X. 0.38.5 bleibt als Abschlussaudit
+  fuer 0.38.X geplant, damit Diagnose, R4D-Status und Regressionen noch einmal
+  gesammelt geprueft werden.
+
+Version 0.38.5
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- 0.38.X-Abschluss gegen halbe Zustaende gehaertet: `AC97.R4D` ist der
+  produktive AC97-Pfad, die alte Built-in-AC97-Quelle ist geloescht, und
+  Missing-/Disabled-/No-Device-/Failed-R4D bleiben nichtfatal.
+- Statisches Abschlussgate `DevTools/Scripts/TestScripts/CheckAudioR4D038.zig`
+  angelegt. Es prueft, dass der alte AC97-Built-in-Pfad nicht mehr erreichbar
+  ist und dass AC97-R4D-Planung, Diagnose, Backend-Status, SDK-Audio-PCM und
+  COMMAND-AUDIOSTATUS zusammenpassen.
+- Audio-, Driver- und Bootdiagnose fuer AC97-R4D-Status, aktive Backend-Auswahl,
+  Writes/Errors, Shutdown/Cleanup und Bootlog nachvollziehbar gemacht und
+  dokumentiert.
+- HDA als Built-in-Bootpfad unberuehrt gelassen; der normale QEMU-Standardtest
+  bleibt der HDA-Regressionstest fuer 0.38.X.
+- Dokumentation in `Docs/Core/KernelBereinigung.txt`,
+  `Docs/Core/Architektur.txt`, `Docs/Audio/README.txt`,
+  `Docs/Drivers/TreiberStand.txt`, `Docs/Deployment/BuildUndTest.txt`,
+  `Docs/SupportedHardware.txt`, `Docs/Software.md` und
+  `Code/Driver/AC97/README.txt` aktualisiert.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.38.5` gesetzt.
+- Abnahme: `git diff --check`, `DevTools/Zig/zig.exe run
+  DevTools/Scripts/TestScripts/CheckAudioR4D038.zig`,
+  `DevTools/Scripts/Build.bat -norun`, `DevTools/Scripts/Build.bat -test`,
+  `DevTools/Scripts/TestScripts/Run-AudioR4DPlanTest.ps1`,
+  `DevTools/Scripts/TestScripts/Run-Ac97R4DProbeTest.ps1` und
+  `DevTools/Scripts/TestScripts/Run-Ac97R4DPlaybackTest.ps1`.
+
+Notizen:
+- 0.38.X ist damit fuer AC97 abgeschlossen: AC97.R4D ist produktiv, der AC97-
+  Built-in-Pfad ist entfernt, und der Abschluss wird reproduzierbar statisch
+  und per QEMU-Smoke abgesichert. HDA ist kein offener Restpunkt dieser Version,
+  sondern bewusst als eigene 0.39.X-Phase geplant.

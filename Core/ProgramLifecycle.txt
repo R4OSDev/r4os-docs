@@ -1,0 +1,289 @@
+﻿Programmlifecycle und Completions 0.59.9
+=======================================
+
+Ziel
+----
+
+Seit 0.59.9 sind die Lebensdauer einer laufenden Programminstanz, das
+besitzende Abschlussergebnis und die diagnostische Exit-History drei getrennte
+Objekte. Dadurch darf R4OS Image, Stack, VM und Laufzeit-Payloads unmittelbar
+nach dem Exit abbauen, ohne Exitcode oder benoetigte Konsolenausgabe des
+Besitzers zu verlieren.
+
+Eine oeffentliche Prozessidentitaet besteht aus einer `u32`-Instanz-ID und
+einer global monoton vergebenen `u64`-Generation. Die Generation ist keine
+slotlokale Versionsnummer. Sie wird weder beim Chunk-Shrink noch bei einer
+erneuten Verwendung derselben ID oder Slotadresse zurueckgesetzt. Ist der
+`u64`-Raum erschoepft, lehnt die Registry weitere Starts mit einem eigenen
+Fehler ab, statt eine alte Identitaet wiederzuverwenden.
+
+Zustandsmaschine
+----------------
+
+Der Registry-Slot ist die massgebliche Lifecycle-Quelle. Seine Zustaende
+laufen nur vorwaerts:
+
+    free -> create -> publish -> run -> exit -> done -> retire -> reap -> free
+
+`create`
+  Private Spawntransaktion. ID, Generation, Completion-Knoten und alle schon
+  erworbenen Ressourcen sind noch nicht oeffentlich auffindbar. Nur in dieser
+  Phase gibt es einen vollstaendigen Rueckwaerts-Rollback.
+
+`publish`
+  Image, Stack, Payloads, Main-Task und Execution-Bindung sind vollstaendig.
+  Der Eintrag ist atomar sichtbar, der Task aber noch nicht in den
+  Programmeinstieg gelaufen.
+
+`run`
+  Der Programmeinstieg wurde betreten. Ein Registry-Pin beziehungsweise eine
+  generationengebundene Execution-Reference schuetzt den stabilen Kern waehrend
+  der R4X-Ausfuehrung.
+
+`exit`
+  Genau ein Exitpfad besitzt den Exitcode und Exitgrund. Weitere natuerliche
+  Exits, Close-/Kill-Rennen oder Servicebeendigungen duerfen weder einen
+  zweiten History-Eintrag noch eine zweite Ressourcenfreigabe erzeugen.
+
+`done`
+  Completion und Diagnoseeintrag sind genau einmal festgeschrieben. Neue
+  Threads und Async-I/O-Auftraege werden nicht mehr angenommen.
+
+`retire`
+  Neue Instanz-Lookups sind gesperrt. Der Deferred-Reaper stoppt Async-I/O und
+  Zusatzthreads. Der Execution-Pin des hart beendeten Tasks darf noch bis zur
+  Task-/Thread-Detach-Phase bestehen und wird dort geloest. Vor Output-Detach
+  und allen schweren Freigaben muessen dagegen auch externe API-/GUI-Pins
+  vollstaendig abgebaut sein.
+
+`reap`
+  Die schweren Ressourcen sind abgebaut und der Completion-Datensatz ist
+  bereit. Der Slot kann freigegeben werden; der getrennte Completion-Knoten
+  bleibt bei einem besitzenden Start bis zum expliziten Handle-Reap erhalten.
+
+Spawn und Rollback
+------------------
+
+Vor dem Publish werden Slot, globale Generation und ein kleiner
+Completion-Knoten reserviert. Der Exitpfad muss daher auch unter Heap-OOM kein
+Ergebnisobjekt mehr allozieren. Anschliessend entstehen Dateiimage, VM-/Backing-
+Besitz, ProgramStack, Payloadhierarchie, blockierter Main-Task und dessen
+generationengebundene Execution-Reference. Erst ein kurzer Commit macht den
+Slot sichtbar; danach darf der Task runnable werden.
+
+Fehler eines Starts werden ueber den caller-lokalen, typisierten Ausgang
+`ProgramLaunchOptions.error_out` transportiert. Es gibt keinen globalen
+Last-Spawn-Error, den ein zweiter, waehrend eines Yields laufender Start
+ueberschreiben koennte. Insbesondere darf eine erschoepfte globale Generation
+den Heap-OOM eines fremden Starts nicht umklassifizieren.
+
+Scheitert eine Phase vor Publish, werden alle erfolgreichen Schritte exakt in
+umgekehrter Reihenfolge zurueckgenommen. Nach Publish gibt es keinen Rollback
+zu `run`. Exit und Retire sind monotone, wiederholbare Schritte; eine temporaer
+nicht freigebbare Ressource bleibt in der Retire-Queue.
+
+Deferred Retire
+---------------
+
+Ein aktueller Task darf weder seinen eigenen Stack noch sein Image oder seinen
+ProgramInstance-Kern freigeben. Dasselbe gilt, wenn `releaseDead` einen Task
+noch nicht sicher vom Scheduler loesen kann oder ein Waiter einen Thread-/I/O-
+Datensatz referenziert. Der eigene Execution-Pin blockiert deshalb nicht die
+Schritte `cancel_execution` und `detach_task`: Erst das Detach kann Task,
+Threads und diesen Pin gemeinsam loesen. Ein fremder API-/GUI-Pin blockiert
+dagegen den Uebergang zu `output_detach` und damit jeden Zugriff gefaehrdenden
+Payload-, Image-, Stack-, VM- oder Slotabbau. Der Slot bleibt in beiden Faellen
+generationengebunden in der Retire-Queue und wird spaeter erneut bearbeitet.
+
+Die Freigabereihenfolge ist:
+
+1. neue Lookups und neue Laufzeitressourcen sperren;
+2. Async-I/O abbrechen und Zusatzthreads stoppen;
+3. Main- und Zusatz-Tasks sicher vom Scheduler loesen;
+4. Execution-References und ProgramStacks der Threads loesen;
+5. benoetigte Konsolenausgabe in die Completion uebertragen;
+6. restliche Payloads, Main-Stack und Image freigeben;
+7. VM-/Backing-Owner abbauen und den Registry-Slot freigeben;
+8. Completion auf `ready` setzen, sodass wartende Handle-Abfragen fortfahren.
+
+Diese Phasengrenze verhindert den Retire-Deadlock eines hart beendeten Tasks,
+ohne externe Leases zu umgehen: Der Execution-Pin faellt durch Schritt 3/4,
+waehrend alle anderen Pins vor Schritt 5 null sein muessen.
+
+Jeder Schritt ist idempotent. Ein Deferred-Retry setzt nicht auf einen
+frueheren Lifecycle-Zustand zurueck und gibt keine spaetere Ressource frei,
+solange ein frueherer Sicherheitsnachweis fehlt.
+
+Der Registry-Slot speichert dafuer ausserhalb des kleinen ProgramInstance-
+Kerns eine exklusive Reaper-Besitzmarke und die bereits erreichte Retire-
+Phase. Output-Detach, restlicher Payloadabbau, Image-/Stack-/VM-/Ownerabbau
+und finaler Slot-Reclaim sind getrennte Fortschrittsgrenzen. Nach jeder
+destruktiven Phase wird deren Abschluss festgehalten; scheitert erst die
+spaetere READY-/Slot-Publikation, wiederholt der naechste Reaperlauf keine
+Freigabe. Ein zweiter Worker kann denselben Slot waehrenddessen weder aus der
+Queue nehmen noch parallel abbauen.
+
+Generationstreuer Thread-Join
+-----------------------------
+
+Seit 0.59.11 ist `ProgramJoinHandle` die oeffentliche Identitaet eines
+Programmthreads. Der 32-Byte-Wert bindet Thread-ID plus Thread-Generation und
+Besitzerinstanz-ID plus Instanzgeneration. `thread_create_handle`,
+`thread_handle_status` und `thread_handle_join` pruefen alle vier Werte; eine
+alte Handlekopie kann deshalb nach Wiederverwendung einer Thread-ID weder den
+Status des neuen Threads lesen noch ihn joinen oder reapen.
+
+Die besitzenden Zig-/C-Ressourcenfassaden speichern den vollstaendigen ABI-
+Handle und invalidieren ihn erst nach erfolgreichem Join. Die bisherigen
+reinen Thread-ID-Slots bleiben als binaere Legacy-Bruecke vorhanden, sind
+aber kein neuer Ressourcenvertrag. Ein Join darf weder aus einem
+Registryordinal noch aus einer nur zufaellig wieder passenden ID eine
+Lebenszeit ableiten.
+
+ProcessHandle und Completion
+----------------------------
+
+`ProgramProcessHandle` ist ein 16-Byte-ABI-Wert aus ID, reserviertem Nullfeld
+und Generation. Status, Close, Kill, Wait, Reap und Outputlesen pruefen beide
+Identitaetsbestandteile atomar. Eine alte Struct-Kopie kann deshalb nach
+ID-/Slotwiederverwendung niemals die neue Instanz treffen.
+
+Die oeffentlichen Zig-/C-Ressourcenobjekte behalten fuer bestehende Quellen
+das bisherige Integerfeld `raw` als Instanz-ID. Reserviertwert und Generation
+sind append-only angehaengt; die Inline-Fassade baut daraus vor jedem v7-
+Aufruf den eigentlichen ABI-Handle. Damit kompilieren alte Vergleiche,
+ID-Lesezugriffe, Nullzuweisungen und Struct-Initialisierungen weiter, waehrend
+neue Aufrufe trotzdem generationensicher bleiben. Ein erfolgreicher Reap
+nullt ID und alle angehaengten Identitaetsfelder.
+
+Die Fehlerklassen sind dabei eindeutig: `INVALID` gilt fuer syntaktisch
+ungueltige Handles, `STALE` nur dann, wenn dieselbe ID aktuell mit einer
+anderen Generation in Registry oder Completion-Store existiert, und
+`NOT_FOUND`, wenn zu der ID keine Identitaet mehr existiert. Nach dem
+vollstaendigen Reap liefern deshalb auch Wait und alle anderen Handle-
+Operationen unmittelbar `NOT_FOUND`; Wait darf diesen Zustand nicht bis zu
+einem Timeout weiter abfragen.
+
+Eine Exit-Completion besitzt getrennte Zustaende `committed` und `ready`.
+`committed` bedeutet, dass Exitcode und Grund unverlierbar feststehen;
+`ready` wird erst nach abgeschlossenem Retire publiziert. Eine exakte pending-
+oder ready-Completion bezeichnet kein laufendes Programm mehr: Close und Kill
+liefern deshalb stabil `NOT_RUNNING`. Reap vor `ready` liefert `WOULD_BLOCK`,
+statt einen halbfertigen Datensatz zu konsumieren.
+
+`ProgramProcessCompletion` enthaelt den Handle, Start-/Endtick,
+Diagnosesequenz, Exitcode, Exitgrund, Klasse/Rolle, den eingefrorenen
+Konsolenzustand und Metadaten der optional erhaltenen Ausgabe. Der Exitcode ist
+reines Nutzdatum. Auch `-1`, `-2` und `-9` werden nicht mehr mit API-Fehlern
+vermischt.
+
+`wait` beobachtet `committed` und `ready` getrennt, liefert aber erst die
+fertige Completion und konsumiert sie nicht. Bei einem endlichen Budget
+gewinnt eine bereits fertige Completion am Zeitrand.
+`completion_read` liest die erhaltene Ausgabe vor dem Reap. Erst `reap`
+kopiert das Ergebnis und konsumiert den besitzenden Knoten atomar. Die Zig-
+und C-Ressourcenfassaden invalidieren danach den lokalen Handle. Geliehene
+Handles duerfen Status, Close, Kill, den nicht konsumierenden `waitReady` und
+`completion_read` verwenden. `reap` und der aus Wait plus Reap bestehende
+High-Level-`wait` bleiben owner-only und weisen geliehene Handles vor dem
+Warten mit `err_not_owned` ab.
+
+Eine von einem R4X-Programm erzeugte besitzende Completion traegt auch den
+Handle ihres Besitzers. Endet dieser Besitzer, werden noch pending Ergebnisse
+auf nicht-besitzend umgestellt und spaeter automatisch konsumiert; bereits
+fertige, nicht mehr erreichbare Ergebnisse werden sofort freigegeben. Das
+verhindert insbesondere Lecks, wenn ein Console-Host mitsamt rekursiv
+gestarteten Kindern beendet wird. Vom Kernel verwaltete Dienste besitzen
+dagegen einen expliziten Kernel-Owner und bleiben bis zur Auswertung durch den
+ServiceManager erhalten.
+
+Die alten ID-basierten R4SYS-/R4DESK-Slots bleiben binaer unveraendert als
+Legacy-Bruecke. Neue Fassaden verwenden die append-only Handle-Slots. Interne
+Foreground-, Shell-, Service- und Console-Host-Beziehungen tragen ebenfalls
+ID plus Generation, sobald sie eine Yield-/Wait- oder Reap-Grenze ueberleben.
+Der alte `program_reap_instance` bleibt genau einmal konsumierend: Nach dem
+ersten Exitcode liefert ein weiterer Reap wieder `-1`. Der getrennte
+Diagnosering bleibt davon unberuehrt und kann denselben Exit weiterhin fuer
+History-/R4DEV-Sichten anzeigen.
+
+Completion-Store und Konsolenausgabe
+------------------------------------
+
+Der dynamische Completion-Store besitzt keine einkompilierte Prozesszahl.
+Nicht mehr benoetigte schwere Instanzressourcen bleiben nicht bis zu einem
+spaeten SSH-/Desktop-Reap liegen. Bei einer outputfaehigen Konsole wird nur der
+bereits begrenzte ConsoleOutput-Payload aus der Instanz geloest und an die
+Completion uebergeben; es gibt im Exitpfad weder eine zweite 16-KB-Kopie noch
+eine fehlbare Nachallokation.
+
+Ein Completion-Knoten blockiert die Wiederverwendung seiner ID fuer die
+ID-basierten Legacy-Aufrufe bis zum Reap. Die Generation bleibt trotzdem die
+eigentliche Identitaetsgrenze. Ein absichtlich nicht gereapter besitzender
+Handle ist ein sichtbarer Ressourcenbesitz und kein Grund, andere fertige
+Completions oder Diagnosedaten zu ueberschreiben.
+
+Exit-History
+------------
+
+Die Exit-History ist ein unabhaengiger, nicht konsumierender Diagnosering mit
+16 Eintraegen, `head`, `count` und monotoner Sequenz. `head` zeigt auf den
+naechsten Schreibplatz; der aelteste Eintrag liegt bei
+`(head + capacity - count) % capacity`. Jeder Exit wird genau einmal
+eingetragen. Ein Wrap ueberschreibt ausschliesslich den aeltesten
+Diagnoseeintrag, niemals einen besitzenden Completion-Knoten.
+
+Gehosteter GUI-Start
+--------------------
+
+Ein handle-basierter GUI-Start ist intern zweistufig: `program_spawn_handle`
+liefert zuerst die stabile Prozessidentitaet, danach weist Desktop mit
+`program_set_window_handle` den Fensterplatz zu. Der Hintergrundtask wird
+zwar erst nach Publish und nach dem Schreiben des Ausgabehandles Ready, sein
+Usercode wartet aber auf diese Fensteranheftung. Damit kann eine GUI-App beim
+ersten `programWindowId` keinen nur durch die Startreihenfolge verursachten
+Minuswert mehr sehen.
+
+Die Schranke gilt nur fuer handle-basierte GUI-Starts. Console-, Service- und
+direkte Starts behalten ihren bisherigen Ablauf. Desktop reicht einem neuen
+GUI-Task nach dem aktiven Launchereignis zusaetzlich eine kooperative
+Ausfuehrungsgrenze; die naechste Schleife verarbeitet dessen erste
+GUI-Revision. Der fokussierte Klickifax-Lauf prueft diesen Vertrag bis zum
+ersten Frame, einer Tasteneingabe und dem weiterhin lebenden Fenster.
+
+Diagnose und Abnahme
+--------------------
+
+`ProgramRegistrySummaryV2` in R4DEV-v4-Slot 31 ergaenzt Zaehler fuer naechste
+Generation, pending/ready Completions, erhaltene Outputbytes, Retire-Queue und
+-Retries sowie History-Head, -Count und -Sequenz. Slot 32 nimmt den getrennten
+`ProgramRegistrySelfTestResultV2` auf. Die alten R4DEV-v3-Slots 29/30 bleiben
+mit ihren v1-Typen und exakt 160/64 Byte binaer eingefroren; sie schreiben
+niemals den V2-Suffix. `CLEANUPD /PROGRAMLIFECYCLE` ruft beide alten Slots mit
+nachgestellten Guardbytes auf und verlangt unveraenderte Canaries. Damit kann
+die QEMU-Probe getrennt nachweisen, dass schwere Ressourcen schon vor dem
+Besitzer-Reap auf Baseline liegen und nach dem Reap auch Completion-/
+Outputspeicher verschwindet.
+
+Auch die Quellfassaden behalten die alten Namen und Signaturen fuer v1:
+`programRegistrySummary`, `programRegistrySelfTest`,
+`PerformanceView.programRegistry`, `r4_program_registry_summary` und
+`r4_program_registry_self_test`. Die Lifecycle-Erweiterungen sind nur ueber
+die expliziten V2-/`_v2`-Namen erreichbar; optionale `Legacy`-Namen leiten
+lediglich auf die v1-Fassaden weiter.
+
+Der statische und modellbasierte Vertrag liegt in:
+
+    Tests/Gate/Run-ProgramLifecycleContract0599.ps1
+
+Der reale QEMU-Lauf liegt in:
+
+    Tests/Runtime/Run-ProgramLifecycleRuntime0599.ps1
+
+Die elf Hostmodelltests fahren mindestens 10.000 gemischte Start-/Wait-/Kill-/
+Reap-Zyklen, Generation-/ID-Wrap, stale Handles, Ring-Wrap, caller-lokale
+Spawnfehler und Fehlerinjektion in allen Spawn-/Exit-/Retire-Phasen. Eine
+eigene Regression haelt beim Kill gleichzeitig den Execution-Pin und einen
+externen API-Pin: Detach muss den ersten loesen, der zweite muss vor
+Output-Detach blockieren. Der QEMU-Lauf prueft zusaetzlich echte Foreground-
+Waits, Async-I/O/Zusatzthreads, Console-Hosts, Services und Deferred-Retire.
+Beide Abnahmen sind Host-/QEMU-only und sprechen keine echte Hardware an.

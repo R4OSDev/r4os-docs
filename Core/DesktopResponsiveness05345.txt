@@ -1,0 +1,119 @@
+﻿0.53.45 Desktop-Responsiveness und Present-Diagnose
+===================================================
+
+Ziel
+----
+
+0.53.45 macht den sichtbaren Desktop- und Display-Latenzpfad messbar:
+Compositor, Cursor-Damage, Present, Scene-Kopien und Desktop-Layout-
+Writeback duerfen nicht mehr nur implizit funktionieren. R4OS soll weiterhin
+keine Desktop-Policy in den Kernel ziehen; Kernelnahe Aenderungen bleiben auf
+generische Display-Present-Metriken begrenzt.
+
+Besitzgrenzen
+-------------
+
+- R4DESK besitzt Eventloop, Cursor-Damage, Desktop-Scene, Fenster-/Taskbar-
+  Komposition, Layout-Writeback und die sichtbare Responsiveness-Auswertung.
+- R4DRAW bleibt der App-nahe Zeichen- und Present-Vertrag fuer fertige
+  Pixelbereiche.
+- Der DisplayManager besitzt nur den technischen Present-Pfad und allgemeine
+  Present-Zaehler. Er kennt keine Fenster, keinen Cursor und keine Desktop-
+  Policy.
+- R4DEV/SDK liefern strukturierte Diagnose-Snapshots. Die Auswertung bleibt
+  in R4X-Diagnostics wie `PERFDIAG.R4X` und `DISPLAYD.R4X`.
+
+R4DESK-Statistiken
+------------------
+
+`Code/Software/Desktop/src/draw.zig` erweitert `RenderStats` um:
+
+- Frame-, Compose- und Present-Ticks jeweils als Total, Max und Last.
+- Kopierte Scene-Bytes als Total und Last.
+- Cursor-Present-Latenz als Total, Max und Last.
+- UI-Blocker-Zaehler fuer sichtbare Frames oberhalb der Warnschwelle.
+- Layout-Worker-Starts, Completions, Errors sowie Layout-Worker-Ticks als
+  Total, Max und Last.
+
+`R4DESK.R4X /SMOKE` und `/R4XSMOKE` drucken diese Werte und melden
+`DESKTOP responsiveness: OK`, wenn der Renderpfad, Copy-Pfad, Cursorpfad und
+Layout-Worker-Pfad plausibel durchlaufen wurden. Der Layout-Drag-Smoke
+akzeptiert kein stilles synchrones Speichern mehr: der R4X-Worker muss starten
+und abschliessen.
+
+DisplayManager-Metriken
+-----------------------
+
+`Code/src/display/display.zig` misst fuer generische CPU-Presents die Dauer:
+
+- `fill`
+- `rect`
+- `presentPacked32Rect`
+- `presentXrgb32Rect`
+
+Die Werte landen in den Display-Stats als Total, Max, Last und Slow-Count.
+Das ist bewusst kein Desktop-Vertrag. Der Kernel stellt nur sichtbar bereit,
+wie teuer die technische Present-Operation war.
+
+R4DEV und SDK
+-------------
+
+ProgramApi v139 ist der Display-Responsiveness-Stand. Die ProgramApi-
+Funktionstabelle waechst nicht. Stattdessen wachsen vorhandene Snapshots
+append-only:
+
+- `DisplaySummary` meldet Present-Ticks als Total, Max, Last und Slow-Count.
+- `ProgramPerformanceSummary` spiegelt die Display-Present-Ticks fuer
+  globale Performance-Snapshots.
+- `performance_flag_display_responsiveness_ready` markiert, dass der
+  Display-Pfad die neuen Felder liefert.
+- `supportsDisplayResponsivenessDiagnostics()` steht im SDK fuer R4DEV- und
+  Program-Kontexte bereit.
+
+Damit gibt es keine zweite ABI-Wahrheit: `Code/System/SDK/Contract/`, SDK, R4DEV und
+Diagnostics nutzen denselben ProgramApi-v139-Stand.
+
+Diagnostics
+-----------
+
+`DISPLAYD.R4X` liest `DisplaySummary`, macht eine kleine XRGB32-Present-Probe
+ueber R4DRAW und prueft, dass Present-Zaehler, Bytes und Tickfelder
+konsistent sichtbar sind.
+
+`PERFDIAG.R4X` verlangt ProgramApi v139, prueft
+`supportsDisplayResponsivenessDiagnostics()`, erzeugt eine eigene 1x1-
+Present-Probe ueber R4DRAW und erwartet danach:
+
+- `R4DEV performance snapshot v139: OK`
+- `Display responsiveness present: OK`
+- `Performance summary fields: OK`
+- `PERFDIAG result: OK`
+
+Bei einer 100-Hz-Tickquelle kann eine sehr kleine 1x1-Present-Probe
+legitimerweise `ticks=0/0` zeigen. Entscheidend ist dann, dass Present-
+Zaehler und Bytes fortschreiten. Groessere Lasten fuellen Total-/Max-Ticks.
+
+Abnahme
+-------
+
+- `DevTools/Scripts/Build.bat -norun`
+- `DevTools/Scripts/Build.bat -test`
+- QEMU-Standardlog mit ProgramApi v139, Display-Responsiveness-Present und
+  `PERFDIAG result: OK`.
+
+Nicht-Ziele
+-----------
+
+- Keine GPU-Treiberarchitektur.
+- Keine Desktop- oder Cursor-Sonderlogik im Kernel.
+- Keine Scheduler-Sonderpolicy fuer Desktop.
+- Keine zweite Layout-Persistenzquelle.
+- Keine alte ProgramApi-v138-Diagnose als Kompatibilitaetsfallback.
+
+Offene Folgepunkte
+------------------
+
+0.53.45 macht den sichtbaren Pfad messbar und den Layout-Writeback-Pfad
+workerbasiert. Es ersetzt keine spaeteren Arbeiten an Audio-Latenz,
+Boot-/Loader-Kosten, Service-/FS-/TCP-Latenzhistogrammen oder echten
+Grafiktreibern.

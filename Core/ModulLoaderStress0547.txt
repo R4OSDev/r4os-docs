@@ -1,0 +1,67 @@
+﻿R4OS 0.54.7 - Modul-Loader-Stress
+==================================
+
+Ziel
+----
+0.54.7 prueft den 0.54.X-Loader nicht mehr nur mit kleinen Beispielmodulen.
+Der Standard-Smoke enthaelt jetzt grosse synthetische R4X-, R4L-, R4D- und
+R4P-Module, die ueber den normalen Build- und Image-Pfad ausgeliefert werden.
+
+Testmodule
+-----------
+- `LSTRX.R4X`: Raw-R4XStart-Console-App unter
+  `C:\R4OS\SOFTWARE\TERMINAL\DIAG\LSTRX.R4X`, mit grosser `.rodata`-Section,
+  R4SYS-Import und zweitem echtem R4XStart-Import `R4STD:Query:1`.
+- `LSTRL.R4L`: Raw-R4L unter `C:\R4OS\LIBS\LSTRL.R4L`, exportiert
+  `LoadStressValue` und traegt eine grosse `.rodata`-Section.
+- `LSTRD.R4D`: Raw-R4D unter `C:\R4OS\DRIVERS\LSTRD.R4D`, mit R4D-Metadaten
+  und `DriverInit`/`DriverShutdown`-Exports. Der aktuelle Userland-Vertrag hat
+  keine gezielte "lade beliebigen R4D"-API; dieser Teil prueft deshalb bewusst
+  den produktiven Discovery-/Metadata-Probe-Pfad fuer grosse R4D-Dateien.
+- `LSTRP.R4P`: Raw-R4P unter `C:\R4OS\PROTOCOLS\LSTRP.R4P`, mit Rolle
+  `misc.loaderstress`, aktiver Query-Antwort, Dispatch-Smoke und grosser
+  `.rodata`-Section.
+
+Alle vier Artefakte werden in `Code/build.zig` aus generierten Bytes gebaut.
+Damit bleibt der Test deterministisch, belastet aber nicht den Zig-Compiler
+mit riesigen Comptime-Arrays.
+
+LOADERD-Abnahme
+---------------
+`LOADERD.R4X` prueft seit 0.54.7:
+- Dateigroesse mindestens 320 KB und Section-Payload mindestens 300 KB.
+- R4M0-Magic, Version, Architektur, Kind, Header, Tabellen, Entry- und
+  Metadata-Ranges.
+- Import-/Export-Vertraege per `fileReadAt`, ohne das ganze Modul in einen
+  Diagnosepuffer zu lesen.
+- `LSTRX.R4X` importiert `R4STD:Query:1`, damit der R4XStart-Importadapter
+  mit mehr als einem echten Gruppenimport laufen muss.
+- `LSTRP.R4P` ist als `misc.loaderstress` aktiv und beantwortet Dispatch.
+- Vier parallele `LSTRX.R4X`-Starts laufen durch, werden explizit ueber
+  `programReapInstance` geraeumt, der Loader-Range-Read-Zaehler steigt und der
+  Voll-Datei-Zaehler bleibt unveraendert.
+
+No-Fallback-Grenze
+------------------
+Der Test wird absichtlich gegen den finalen Loader-Zielpfad formuliert. Ein
+alter Voll-Datei-Fallback soll nicht gruen werden:
+- LOADERD akzeptiert die Stressmodule nur als grosse R4M0-Dateien.
+- Die Pruefung liest Header, Tabellen und Strings mit `fileReadAt`.
+- Die parallelen Starts muessen Loader-Range-Reads erhoehen.
+- `loader_file_full_reads` darf durch den Stress nicht steigen.
+
+Desktop-Smoke
+-------------
+Der automatische Standard-Smoke startet LOADERD und deckt den Modul-Loader
+ohne sichtbare Fenster ab. Fuer die Desktop-Regression bleibt ein manueller
+Sichttest dokumentiert:
+
+1. `DevTools/Scripts/Build.bat -gui`
+2. Desktop booten lassen.
+3. `Computer` oeffnen.
+4. Explorer, Paint und R4Code jeweils wiederholt starten.
+5. Keine Meldung `Program module file allocation failed`, keine sichtbare
+   Verlangsamung nach dem ersten Explorer-/Computer-Start.
+
+Codex nutzt diesen GUI-Test nicht als Standardabnahme, weil sichtbare
+User-Testfenster nicht ungefragt gesteuert oder beendet werden sollen.

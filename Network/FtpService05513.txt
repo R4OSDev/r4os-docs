@@ -1,0 +1,104 @@
+﻿FTPSVC 0.55.13
+===============
+
+Ziel
+----
+
+0.55.13 macht aus der 0.55.12-Control-Grundlage einen belastbaren FTP-
+Transferdienst. FTPSVC bleibt dabei ein normaler R4X-Service: TCP laeuft ueber
+R4NET/TCPSVC, Datei-I/O laeuft ueber R4SYS und es gibt keinen Kernel-FTP-Pfad
+oder zweiten Speicher-/Dateisystem-Fallback.
+
+Service-Vertrag
+---------------
+
+- Dienstprojekt: `Code/System/Services/FtpService`
+- Artefakt: `C:\R4OS\SERVICES\FTPSVC.R4X`
+- Service-Name: `FTPSVC`
+- Start: `auto`
+- Control-Port im Gast: `21`
+- Passiver Datenport im Gast: `2020`
+- QEMU-Standardweiterleitung:
+  `127.0.0.1:10021 -> 10.0.2.15:21`
+  `127.0.0.1:10020 -> 10.0.2.15:2020`
+- Anmeldung: Benutzer `r4os`, Passwort `rosebud`
+
+FTPSVC fuehrt bewusst keine User-, Gruppen-, Berechtigungs-, Sandbox- oder
+Capability-Logik ein. Die Anmeldung ist ein technischer FTP-Client-Vertrag und
+kein R4OS-Sicherheitsmodell.
+
+Transferumfang
+--------------
+
+Der Dienst unterstuetzt in 0.55.13:
+
+- Passive Datenkanaele ueber `PASV` und `EPSV`
+- Aktive Datenkanaele ueber `PORT`
+- Directory Listing ueber Datenkanal fuer `LIST` und `NLST`
+- Control-Listing fuer `STAT` und als Diagnosepfad ohne vorbereiteten
+  Datenkanal
+- Downloads mit `RETR` ueber `R4SYS.fileReadAt`
+- Uploads mit `STOR` ueber `R4SYS.fileStreamBegin`, `fileStreamWrite`,
+  `fileStreamFinish` und `fileStreamAbort`
+- `SIZE`, `DELE`, `RNFR`, `RNTO`, `MKD`, `RMD`
+- `ABOR` fuer vorbereitete Datenkanaele
+
+Die FTP-Wurzel bleibt die virtuelle Laufwerksansicht aus 0.55.12. `LIST /`
+zeigt die gemounteten Laufwerke wie `C`, `D` oder `E`. Dateioperationen muessen
+unterhalb eines konkreten Laufwerks stattfinden, zum Beispiel `/C/TEMP/DATEI`.
+
+Diagnose
+--------
+
+`SERVMAN STATUS FTPSVC` zeigt neben dem normalen Servicezustand nun auch
+Transferzaehler: passive und aktive Setups, Data-Accepts, aktive Connects,
+erfolgreiche `RETR`/`STOR`/`DELE`/`RNTO`/`MKD`/`RMD`, Transferfehler,
+Abbrueche, Control-Bytes, Datenbytes, letzten Befehl, letzten Pfad und letzten
+Fehlergrund.
+
+Der Dienst pumpt waehrend laengerer Upload-/Download-Schleifen weiter den
+Service-Endpunkt. Status- und Ping-Anfragen bleiben damit waehrend Transfers
+bedienbar, ohne FTP- oder Dateioperationen in den Kernel zu verschieben.
+
+QEMU-Hinweis
+------------
+
+Fuer passive Transfers nutzt der automatische Host-Test Host-Port `10020` auf
+Gast-Port `2020`. Der FTP-Server meldet im PASV-Reply die R4OS-Gastadresse,
+waehrend der Test ueber die QEMU-Hostweiterleitung verbindet.
+
+Aktive Transfers werden im Live-Test mit `PORT 10,0,2,2,p1,p2` geprueft. Das
+ist der Host aus Sicht des QEMU-User-Networks. Auf echter Hardware verwendet
+der Client entsprechend seine echte erreichbare Adresse.
+
+Abnahme
+-------
+
+Statisch:
+
+    DevTools/Zig/zig.exe run Tests/Gate/CheckFtpService05513.zig
+
+Build:
+
+    DevTools/Scripts/Build.bat -app FTPSVC
+    DevTools/Scripts/Build.bat -norun
+    DevTools/Scripts/Build.bat -test
+
+Live-Transfer:
+
+    Tests/Runtime/Run-FtpServiceTransferLiveTest05513.ps1
+
+Der Live-Test baut ein Test-Image, startet QEMU headless und prueft per Host-
+TCP-Client:
+
+- Login `r4os` / `rosebud`
+- `MKD`/`RMD`
+- passives `STOR` einer 64-KB-Datei
+- `SIZE`
+- passives `RETR` mit Bytevergleich
+- `RNFR`/`RNTO`
+- passives `LIST`
+- aktives `PORT` + `RETR` mit Bytevergleich
+- `DELE`
+- `ABOR`
+- Reconnect + `STAT /`

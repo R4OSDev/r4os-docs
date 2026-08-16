@@ -1,0 +1,92 @@
+﻿R4OS 0.53.39 - Preemption-Haertung, Starvation-Policy und Scheduler-Latenz
+============================================================================
+
+Ziel
+----
+
+0.53.39 macht die in 0.53.38 aktivierte Timer-Preemption nicht breiter,
+sondern belastbarer messbar. Der Kernel bekommt keine neue Prioritaets-,
+Realtime- oder SMP-Policy. Stattdessen werden die vorhandenen Task-, Wait- und
+Preemption-Pfade so instrumentiert, dass lange Ready-Zeiten, Wait-Dauern,
+Laufzeiten ohne Switch, Quantum-Ueberschreitungen und lange Deferred-
+Preemption-Abschnitte sichtbar werden.
+
+Scheduler-Messpunkte
+--------------------
+
+Jede Task fuehrt jetzt zusaetzlich:
+
+- `ready_since_tick`
+- letzte und maximale Ready-Latenz
+- letzte und maximale Wait-Dauer
+- maximale Laufzeit seit dem letzten Scheduling
+- maximale Dauer eines Deferred-Preemption-Fensters
+
+Der Scheduler aggregiert diese Werte in `scheduler.stats()`:
+
+- Ready-Latenz-Samples, Total/Max/Last und beobachtete maximale Ready-Zeit
+- Objekt-Wait-Total/Max/Last
+- maximale Laufzeit ohne Switch
+- Quantum-Overrun-Zaehler und maximales Overrun-Fenster
+- maximale Deferred-Preemption-Dauer
+- dokumentierte Warnschwellen fuer Long-running und Starvation
+
+Wait-Pfad
+---------
+
+Es gibt keinen zweiten Wait-Pfad. `WaitQueue.wait()` nutzt weiterhin
+`scheduler.blockCurrent()` und `scheduler.parkBlocked()`. Die Wait-Dauer wird
+beim Wake/Timeout in der Task festgehalten und danach fuer Objekt-Waits und
+WaitQueue-Aggregate verwendet. Dadurch werden Sleep/Wake, Thread-Join,
+Completion-Waits, Timer-/Sleep-Waits sowie Service-/Storage-Completion-Waits
+ueber denselben Scheduler-Vertrag sichtbar.
+
+R4DEV / SDK
+-----------
+
+ProgramApi steigt auf v134. Die ProgramApi-Funktionstabelle waechst nicht.
+Es gibt keinen v133-Fallback; mitgelieferte Programme werden neu gebaut.
+
+Neu sichtbar sind:
+
+- `program_api_version_scheduler_latency`
+- `performance_flag_scheduler_latency_ready`
+- `supportsSchedulerLatencyDiagnostics()`
+- neue Scheduler-/Wait-Latenzfelder in `ProgramPerformanceSummary`
+- neue pro-Task-Latenzfelder in `ProgramTaskPerformanceInfo`
+
+`missing_flags` melden Wait- und Preemption-Latenz nicht mehr als fehlend.
+FS-, Service-, TCP- und Display-Latenzhistogramme bleiben bewusst offene
+Messklassen.
+
+PERFDIAG-Abnahme
+----------------
+
+PERFDIAG prueft ab 0.53.39 ProgramApi v134 und erzeugt mit zwei R4X-Threads
+plus CPU-Burn-Phase echte Last. Zusaetzlich zu produktiver Preemption werden
+geprueft:
+
+- `performance_flag_scheduler_latency_ready`
+- keine Wait-/Preemption-Missing-Flags
+- Ready-Latenz-Samples und konsistente Ready-Maxima
+- Objekt- und Queue-Wait-Latenzen mit `wait_queue_drops=0`
+- maximale Laufzeit ohne Switch, Quantum-Overrun und Deferred-Max
+- Long-running-/Starvation-Warnschwellen; Starvation-Warnungen muessen im
+  Standardtest 0 bleiben
+
+Im finalen Standard-QEMU-Abnahmelauf der 0.53.39-Implementierung standen unter
+anderem:
+
+    R4DEV performance snapshot v134: OK
+    Productive timer preemption: OK
+    Scheduler latency hardening: OK
+    Scheduler latency: readySamples=1492482 readyMax=218 readyWaitMax=205 runMax=216 overrun=2720/213 deferMax=216 waitObj=4662/165 waitQ=4651/165 warnAt=100/200
+    Preemption: supported=1 enabled=1 test=0 gates=0 sim=3480 eligible=2851 quantum=3 disabled=0 critical=0 noReady=5 qdef=563 kernelIp=2845 qexp=2851 app=6 switches=6 depth=0/2 warn=0/0
+
+No-Fallback-Entscheidung
+------------------------
+
+0.53.39 fuehrt keine Prioritaetsklasse, keine kooperative Sonderroute und keine
+Test-only-Preemption als Ausweichpfad ein. Die Haertung nutzt die bestehende
+Scheduler-/Wait-/R4DEV-Struktur und macht echte Problemfenster sichtbar, statt
+sie durch einen zweiten Pfad zu umgehen.

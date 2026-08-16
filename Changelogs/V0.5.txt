@@ -1,0 +1,597 @@
+﻿R4OS Roadmap 0.5.X - R4DOS: DOS-Style Shell
+============================================
+
+Leitbild
+--------
+
+R4OS 0.5.X baut R4DOS aus: Die Shell soll sich anfuehlen wie DOS - nicht als
+Imitation, sondern als bewusste Verkörperung derselben Philosophie: einfach,
+vorhersagbar, nahbar und frei.
+
+Die Shell ist eine Anwendung, nicht der Kernel. COMMAND.R4X soll ein normales
+R4X-Programm werden. Der Kernel kennt keine Befehle, Prompts oder DIR-Logik.
+Eine alternative Shell kann spaeter ueber CONFIG.R4S als
+
+    SHELL=/BIN/MEINE.R4X
+
+gesetzt werden.
+
+DOS-Feel entsteht aus vielen kleinen Details: DOS-Pfade, Drive Letters,
+interne und externe Befehle, Wildcards, /-Schalter, Batch, AUTOEXEC.BAT,
+Pipes, Redirection, Dateiattribute, Special Device Files und Kommandozeilen-
+History. 0.5.X sammelt diese Details geduldig ein.
+
+Das vollstaendige Leitbild steht in Docs/R4DOS/Leitbild.txt.
+
+
+0.5.0 - COMMAND.R4X als normale Anwendung
+-----------------------------------------
+
+Status:
+- abgeschlossen
+
+Implementierungsnotiz:
+- Erster Schnitt: Der Kernel liest SHELL= aus CONFIG.R4S, startet
+  C:\BIN\COMMAND.R4X als normales R4X-Programm und meldet bei Fehlern den
+  konkreten Pfad. Als robuste Rettung faellt R4OS auf die COMMAND-Laufzeit
+  zurueck. COMMAND.R4X nutzt dafuer einen R4X-API-Einstieg in
+  Code/src/program/command_runtime.zig; die Befehle sind damit aus der alten
+  Kernel-Shell-Rolle geloest und als COMMAND-Runtime gebuendelt. Ein Aufruf
+  von COMMAND oder COMMAND.R4X aus der laufenden Shell startet den Interpreter
+  sauber neu, statt einen zweiten Vordergrund-Programmlauf zu blockieren.
+
+Ziele:
+- Shell-Code aus der Kernel-Rolle loesen und als normales R4X-Programm
+  COMMAND.R4X bereitstellen.
+- COMMAND.R4X ist R4OS' Antwort auf COMMAND.COM: Der Programmname zitiert
+  DOS, die Endung .R4X bleibt das native R4OS-Executable-Format mit Header,
+  Entry-Offset, Codegroesse, Stackgroesse und ABI-Anbindung.
+- COMSPEC wird als Umgebungsvariable fuer den aktiven Command-Interpreter
+  vorbereitet und zeigt standardmaessig auf C:\BIN\COMMAND.R4X.
+- Kernel-Startcode startet nach dem Boot die konfigurierte Shell und enthaelt
+  keinen eigenen Befehls-Dispatcher mehr.
+- CONFIG.R4S erhaelt SHELL= als steuerbaren Shell-Pfad, Standard:
+  SHELL=/BIN/COMMAND.R4X.
+- Fehlerfall definieren, wenn die konfigurierte Shell fehlt oder nicht
+  startbar ist.
+- Bestehende Shell-Funktionalitaet bleibt beim Wechsel erhalten:
+  DIR, CD, TYPE, COPY, DEL, MD, RD, WRITE, DRIVES, LOAD, UNLOAD, DRIVERS,
+  AUDIO, VER, Laufwerkswechsel, externe R4X-Programme und HALT.
+
+Abnahme:
+- R4OS bootet sichtbar in COMMAND.R4X.
+- Aenderung von SHELL= in CONFIG.R4S waehlt eine andere R4X-Shell oder zeigt
+  einen klaren Fehler.
+- COMMAND.R4X liegt als normales R4X-Programm unter /BIN/ im Boot-Image.
+- COMSPEC zeigt auf die aktive Shell.
+- COMMAND bzw. COMMAND.R4X kann aus der Shell heraus neu gestartet werden,
+  ohne "Program already running" auszulösen.
+- Der Boot-/Kernel-Startcode enthaelt keine Befehlsimplementierungen fuer
+  DIR/CD/COPY mehr; diese liegen in der COMMAND-Runtime.
+- Bestehende Shell-Regressionen laufen weiter.
+
+
+0.5.1 - DOS-Pfadmodell, Prompt und Umgebung
+-------------------------------------------
+
+Status:
+- abgeschlossen
+
+Implementierungsnotiz:
+- Erster Schnitt: Nach erfolgreichem Mount der Bootdisk wird C: als aktives
+  Laufwerk gesetzt. Die Shell normalisiert druckbare Eingabezeichen beim
+  Tippen auf Grossbuchstaben.
+- SET, PATH und PROMPT sind als kleine Shell-Umgebung umgesetzt. PATH steuert
+  die Suche externer R4X-Programme; PROMPT unterstuetzt $P, $G, $L, $B, $Q,
+  $$, $_, $T und $D. $D ist bis zu einer echten RTC/CMOS-Zeitquelle ein
+  dokumentierter Platzhalter.
+- COMMAND.R4S wird vom Bootlaufwerk gelesen, wenn vorhanden. Wirksam sind
+  FONT, FONT_SIZE, CODEPAGE, COLOR_TEXT, COLOR_BACKGROUND, COLOR_BORDER,
+  BORDER, KEYBOARD und SHOW_BANNER. Das Build-Image enthaelt eine Default-
+  Datei C:\R4DOS\COMMAND.R4S.
+- KEYBOARD=US/DE schaltet den PS/2-Keyboard-Decoder um. DE ist ein erster
+  ASCII-naher deutscher Layout-Schnitt mit Q/Y-Tausch, deutscher Zahlenreihe
+  und erreichbar bleibendem Backslash; Umlaute und ß warten auf
+  Codepage-Unterstuetzung.
+- Native R4F-Fontdateien sind ladbar. Die Build-Pipeline erzeugt
+  R4DOS8.R4F und R4DOS16.R4F aus dem eingebauten ASCII-Font und legt sie
+  unter C:\SYS\FONTS\ ins Boot-Image. FONT_SIZE=8x8 nutzt den bisherigen
+  2x-Skalierungsmodus; FONT_SIZE=8x16 nutzt 1x mit 16 Zeilen pro Glyph.
+  CODEPAGE=437 ist die erste gueltige Codepage. .CPI ist als
+  Kompatibilitaetspfad vorbereitet: Ein .CPI-Container mit eingebettetem
+  R4F0-Block kann geladen werden; echte historische CPI-Tabellen bleiben
+  Importer-Ausbau.
+
+Ziele:
+- Backslash-Pfade als primaeres Shell-Idiom festigen:
+  C:\BIN\HELLO.R4X statt Unix-Pfade.
+- Drive Letters A-Z und laufwerksspezifische Current Directories ausbauen.
+  Wechsel zwischen C: und X: merkt sich das jeweilige Verzeichnis.
+- Nach erfolgreichem Bootdisk-Mount ist C: das aktive Startlaufwerk. X: bleibt
+  als RAM-Drive verfuegbar, ist aber nicht mehr die erste Arbeitsumgebung.
+- C: allein wechselt zum Laufwerk.
+- SET, PATH und PROMPT als interne Befehle einfuehren.
+- PROMPT-Codes wie $T, $D, $P und $G vorbereiten.
+- COMMAND.R4S als Shell-Konfiguration einfuehren. CONFIG.R4S bleibt fuer
+  Boot/Kernel/Treiber, COMMAND.R4S gehoert zu COMMAND.R4X und steuert
+  User-Space-Darstellung.
+- COMMAND.R4S unterstuetzt Schriftart, Textfarbe, Hintergrundfarbe und
+  Rahmenfarbe der R4DOS-Shell.
+- COMMAND.R4S unterstuetzt SHOW_BANNER=ON/OFF. Bei ON zeigt COMMAND.R4X beim
+  Start vor AUTOEXEC.BAT einen kurzen DOS-artigen Startblock, z.B. R4OS-
+  Version und COMMAND.R4X.
+- Font-Konfiguration gestuft planen:
+  eigenes einfaches Bitmap-Format .R4F als native R4OS-Fontform, .CPI als
+  kompatibles DOS-Codepage-Fontformat, CP437 als erste Codepage, .FON aus der
+  fruehen Windows-Aera spaeter mindestens per Importpfad oder optionalem
+  Loader.
+- Keine proprietaeren DOS-/Windows-Fontdateien mitliefern, solange ihre Lizenz
+  nicht eindeutig frei ist. R4OS darf kompatible Loader haben; User koennen
+  eigene Fonts unter C:\SYS\FONTS\ ablegen.
+- COMMAND.R4S unterstuetzt das Tastaturlayout:
+  KEYBOARD=US als aktueller Default, KEYBOARD=DE als erstes zusaetzliches
+  Layout.
+- Tastaturlayout-Mapping erfolgt zentral zwischen Scancodes und Zeichen, damit
+  Prompt, Batch, COPY CON und externe Programme dieselbe Eingabe sehen.
+- Rahmenmodus konfigurierbar machen:
+  BORDER=ON aktiviert den C64-artigen Rahmen, BORDER=OFF deaktiviert ihn fuer
+  einen schlichten DOS-Stil.
+- Textposition und nutzbarer Textbereich beruecksichtigen den Rahmenmodus:
+  Mit BORDER=ON beginnt Text innerhalb des Rahmens; mit BORDER=OFF nutzt die
+  Shell die volle Textflaeche ohne C64-Margins.
+- VER bleibt der einfache Versionsanker fuer R4OS/R4DOS.
+
+Abnahme:
+- Der erste Prompt nach dem Boot lautet bei vorhandener Bootdisk C:\>.
+- C:\, X:\ und relative Pfade verhalten sich DOS-artig und konsistent.
+- Pro-Laufwerk-CWD ist sichtbar nachvollziehbar.
+- PATH steuert die Suche externer R4X-Programme.
+- PROMPT $P$G und PROMPT $T $D $P$G funktionieren.
+- COMMAND.R4S wird von COMMAND.R4X gelesen, wenn vorhanden, und fehlende
+  Datei fuehrt zu stabilen Defaults.
+- FONT, FONT_SIZE, CODEPAGE, COLOR_TEXT, COLOR_BACKGROUND, COLOR_BORDER,
+  BORDER, KEYBOARD und SHOW_BANNER sind in COMMAND.R4S dokumentiert und
+  wirksam.
+- SHOW_BANNER=ON zeigt beim Shell-Start einen kurzen Startblock; SHOW_BANNER=OFF
+  startet still bis AUTOEXEC.BAT bzw. Prompt.
+- Native .R4F-Bitmap-Fonts koennen geladen werden; R4DOS8.R4F und
+  R4DOS16.R4F liegen im Boot-Image unter C:\SYS\FONTS\.
+- .CPI ist als Kompatibilitaets-/Importpfad vorbereitet. 0.5.1 akzeptiert
+  CPI-Container mit eingebettetem R4F0-Block; echte historische DOS-CPI-
+  Tabellen bleiben als Importer-Ausbau dokumentiert.
+- .FON-Dateien sind als spaeterer Kompatibilitaets-/Importpfad eingeplant,
+  aber nicht zwingend Teil der ersten Font-Abnahme.
+- KEYBOARD=US erhaelt das aktuelle englische Layout.
+- KEYBOARD=DE liefert deutsches Layout fuer Buchstaben, Zahlenreihe,
+  Satzzeichen und typische DOS-Sonderzeichen wie Backslash.
+- BORDER=ON zeigt C64-artigen Rahmen und verschiebt Text in den inneren
+  Arbeitsbereich.
+- BORDER=OFF entfernt den Rahmen und setzt den Textbereich auf den
+  DOS-artigen Vollbildbereich.
+
+
+0.5.2 - Interne Befehle und externe Tools sauber trennen
+--------------------------------------------------------
+
+Status:
+- abgeschlossen
+
+Implementierungsnotiz:
+- CLS leert den Shell-Bildschirm mit aktuellem Rahmenmodus und Farben.
+- COLOR ist als Sitzungsbefehl umgesetzt: COLOR ohne Parameter zeigt aktuelle
+  Farben, COLOR 07/COLOR 1F setzen DOS-artig Hintergrund/Schrift. Persistenz
+  bleibt bei COMMAND.R4S.
+- ECHO, REM und PAUSE sind als interne Befehle vorhanden. ECHO ON/OFF steuert
+  das Batch-Zeilen-Echo.
+- ERASE als DEL-Alias, REN/RENAME fuer kurze FAT-Namen, DATE, TIME, VOL und
+  VERIFY sind vorhanden. DATE nutzt bis zu RTC/CMOS ein Platzhalterdatum; TIME
+  zeigt Zeit seit Boot. VERIFY speichert den DOS-kompatiblen Schalter und
+  prueft bei VERIFY ON Shell-Schreibwege durch Zuruecklesen und Bytevergleich.
+- R4CONFIG.R4X ist als erstes externes Konfigurationswerkzeug vorhanden. Es
+  laeuft als R4CONFIG aus C:\BIN und schreibt C:\R4DOS\COMMAND.R4S ueber ein
+  Status-Menue mit THEME, OTHER STYLE und KEYBOARD. C64 STYLE ist der
+  R4OS-Default; weitere Themes sind DOS STYLE, AMBER MONO und GREEN MONO.
+  BORDER und BANNER werden getoggelt, US/DE als Tastaturlayout gesetzt.
+  Jede Auswahl speichert sofort und zeichnet das Menue neu; QUIT beendet
+  R4CONFIG und COMMAND.R4X wird neu gestartet.
+  Feingranulare Menues fuer Font-Dateien, Codepage und einzelne RGB-Werte
+  bleiben Ausbaupunkt.
+- COMMAND.COM-nahe interne Befehle ergaenzt: MEM zeigt einfache
+  Speicherzahlen, TREE listet Verzeichnisbaeume, TRUENAME gibt aufgeloeste
+  DOS-Pfade aus. BREAK, CHCP, CTTY, LFNFOR, LOADHIGH/LH, LOCK, UNLOCK und EXIT
+  sind als DOS-kompatible Minimalstufen vorhanden und liefern bewusst klare
+  Diagnose, wo R4OS keine DOS-Altlast nachbildet.
+
+Ziele:
+- Interne Befehle in COMMAND.R4X verwalten.
+- COMMAND.COM-orientierten Kern uebernehmen:
+  BREAK, CD/CHDIR, CLS, COPY, DATE, DEL/ERASE, DIR, ECHO, EXIT, MD/MKDIR,
+  PATH, PROMPT, REN/RENAME, RD/RMDIR, SET, TIME, TYPE, VER, VERIFY und VOL.
+- Weitere COMMAND.COM-nahe Befehle fuer R4OS einplanen, auch wenn sie anfangs
+  nur Diagnose- oder Not-implemented-Ausgaben liefern koennen:
+  CHCP, CTTY, LFNFOR, LOADHIGH/LH, LOCK, TRUENAME und UNLOCK.
+- R4DOS-pragmatische interne Ergaenzungen beibehalten, wenn sie fuer die
+  Shell-Erfahrung nuetzlich sind:
+  HELP, ATTRIB, TREE, MORE, PAUSE, REM, MEM, COLOR und vorhandene R4OS-
+  Diagnosen wie DRIVES, LOAD, UNLOAD, DRIVERS, AUDIO und HALT.
+- COLOR als internen Befehl fuer die aktuelle Shell-Darstellung einfuehren:
+  COLOR ohne Parameter zeigt die aktuellen Farben, COLOR 07 setzt DOS-artig
+  Hintergrund/Schrift, COLOR 1F setzt z.B. Blau/Hellweiss. COMMAND.R4S bleibt
+  die persistente Konfiguration; COLOR wirkt mindestens fuer die laufende
+  Sitzung und kann optional COMMAND.R4S aktualisieren.
+- Externe Befehle als R4X-Apps unter /BIN/ planen und schrittweise umsetzen:
+  EDIT, XCOPY, MOVE, FIND, SORT, FORMAT, SYS, DEBUG, R4CONFIG und weitere
+  Tools nach Bedarf.
+- R4CONFIG.R4X als textbasiertes Konfigurationswerkzeug fuer COMMAND.R4S
+  bereitstellen. Aufruf DOS-artig als R4CONFIG.
+- R4CONFIG.R4X liest und schreibt C:\R4DOS\COMMAND.R4S und konfiguriert mindestens
+  Font, Font-Groesse, Codepage, Farben, Rahmenmodus, Tastaturlayout und
+  Startbanner.
+- R4CONFIG.R4X bietet ein Status-Menue mit sofortigem Speichern und neuem
+  COMMAND.R4X-Start beim Beenden. Restore Defaults und Preview bleiben
+  spaetere Ausbaupunkte.
+- Befehlssuche definieren: zuerst intern, dann PATH-Verzeichnisse.
+- Nicht gefundene Befehle melden DOS-artig:
+
+      Bad command or filename
+
+Abnahme:
+- HELP zeigt interne und vorhandene externe Befehle nachvollziehbar.
+- COMMAND.COM-Aliase funktionieren: CD/CHDIR, MD/MKDIR, RD/RMDIR, DEL/ERASE
+  und REN/RENAME.
+- VERIFY und VOL sind als interne Befehle vorhanden.
+- COLOR ohne Parameter und COLOR 07/COLOR 1F funktionieren fuer die aktuelle
+  Shell-Sitzung.
+- Interne Befehle laufen ohne Programmsuche.
+- Externe R4X-Tools werden ueber PATH gefunden.
+- R4CONFIG startet als externes Tool aus C:\BIN und kann COMMAND.R4S
+  bearbeiten.
+- R4CONFIG schreibt eine vollstaendige COMMAND.R4S mit FONT, FONT_SIZE,
+  CODEPAGE, COLOR_TEXT, COLOR_BACKGROUND, COLOR_BORDER, BORDER, KEYBOARD und
+  SHOW_BANNER. Feingranulare Font-Auswahl im Menue bleibt Ausbaupunkt.
+- Unbekannte Befehle liefern die vereinbarte Meldung.
+
+
+0.5.3 - Wildcards und DOS-Schalter
+----------------------------------
+
+Status:
+- abgeschlossen
+
+Implementierungsnotiz:
+- Zentraler Glob-Matcher in Code/src/fs/glob.zig umgesetzt. * und ? werden
+  case-insensitiv gematcht; *.* bedeutet DOS-artig alle Dateien.
+- DIR nutzt Muster wie DIR *.TXT und DIR C:\BIN\*.R4X. Erste Schalter:
+  /W fuer breite Ausgabe, /P fuer Pausen, /A fuer Hidden/System, /A:H als
+  Attributfilter, /O:N fuer Namenssortierung und /S fuer rekursive Ausgabe.
+- DEL nutzt Muster wie DEL *.BAK und unterstuetzt /P fuer Rueckfragen sowie
+  /S fuer rekursives Loeschen passender Dateien in Unterverzeichnissen.
+- COPY nutzt Muster wie COPY *.* C:\BACKUP\ und kopiert passende Dateien mit
+  Originalnamen in ein vorhandenes Zielverzeichnis. /Y wird DOS-artig geparst;
+  da R4DOS aktuell noch keine Ueberschreib-Rueckfrage stellt, ist /Y vorerst
+  kompatibel ohne sichtbaren Zusatzeffekt.
+- TYPE nutzt den zentralen Glob-Matcher ebenfalls: TYPE *.TXT gibt alle
+  passenden Dateien aus und funktioniert dadurch auch mit Redirection und
+  Pipes, z.B. TYPE *.TXT | MORE.
+- REN nutzt Wildcards fuer kurze FAT-Namen im selben Verzeichnis. Muster wie
+  REN *.TXT *.BAK werden auf jeden passenden Directory-Eintrag angewendet.
+- TREE nutzt Wildcards fuer Verzeichnismuster und listet passende
+  Unterverzeichnisse mitsamt deren Baum, z.B. TREE C:\SYS\*.
+
+Ziele:
+- Zentralen Glob-Matcher fuer * und ? implementieren:
+  * matcht beliebig viele Zeichen, ? matcht genau ein Zeichen.
+- Der Glob-Matcher filtert Directory-Eintraege und wird einmalig geschrieben,
+  statt in jedem Befehl eigene Wildcard-Logik zu bauen.
+- DOS-Eigenheit uebernehmen: *.* bedeutet "alle Dateien", auch wenn R4OS
+  langfristig 8.3-Namen und LFN nebeneinander unterstuetzt.
+- Wildcards fuer alle dateibasierten Befehle nutzen:
+  DIR, COPY, DEL, REN, ATTRIB, TYPE, TREE und spaetere Tools.
+- DOS-Schalter mit / festlegen, keine parallelen Unix-Schalter mit - oder --.
+- Der Argument-Parser behandelt DOS-Schalter diszipliniert und zentral:
+  kombinierbare Flags wie /P /W /S /A und Wert-Schalter mit Doppelpunkt wie
+  /O:N.
+- Erste konkrete Switches:
+  DIR /P haelt bei vollem Screen an, DIR /W zeigt mehrspaltig, DIR /S listet
+  rekursiv, DIR /A zeigt auch Hidden/System, DIR /O:N sortiert nach Name.
+  COPY /Y kopiert ohne Bestaetigungsfrage.
+  DEL /P fragt vor jeder Datei, DEL /S loescht rekursiv.
+- Beispiele:
+
+      DIR /P /W /S /A
+      DIR /O:N *.TXT
+      COPY /Y SOURCE DEST
+      DEL /P /S *.TMP
+      ATTRIB +R -H FILE.TXT
+
+Abnahme:
+- DIR *.TXT, DIR ?.TXT, DEL *.BAK und COPY *.* DEST funktionieren.
+- COPY *.* C:\BACKUP\ kopiert alle Dateien in das Zielverzeichnis.
+- TREE C:\SYS\* filtert Verzeichnisse mit dem zentralen Glob-Matcher.
+- *.* matcht auch Dateien ohne sichtbaren Punkt im Namen.
+- Der Glob-Matcher ist als gemeinsame Shell-/R4DOS-Hilfsfunktion nutzbar und
+  nicht in DIR, COPY und DEL dupliziert.
+- Schalter werden DOS-artig mit / geparst, inklusive /O:N.
+- DIR /P, /W, /S, /A und /O:N sind einzeln und sinnvoll kombiniert nutzbar.
+- COPY /Y und DEL /P /S sind implementiert.
+- Unix-Schalter werden nicht als gleichwertige Alternative dokumentiert oder
+  erwartet.
+
+
+0.5.4 - Dateiattribute und Special Device Files
+-----------------------------------------------
+
+Status:
+- abgeschlossen
+
+Implementierungsnotiz:
+- FAT-Attribute R/H/S/A sind ueber Entry.attr sichtbar. ATTRIB listet und setzt
+  +R/-R, +H/-H, +S/-S und +A/-A, auch mit Wildcards.
+- DIR blendet Hidden/System standardmaessig aus. DIR /A zeigt alle, DIR /A:H
+  filtert Hidden-Dateien.
+- DIR zeigt in der Detailansicht R/H/S/A-Spalten; DIR /W bleibt kompakt.
+- Neu erzeugte Dateien tragen Archive, aber nicht Read-only. Der FAT-Schreibweg
+  verweigert Ueberschreiben, Loeschen und Umbenennen von Read-only-Dateien.
+- Erster Special-Device-Schnitt umgesetzt: CON und NUL werden in TYPE/COPY als
+  reservierte Geraetenamen behandelt, nicht als FAT-Dateien. COPY CON FILE.TXT
+  liest live von der Tastatur bis Strg+Z; COPY NUL FILE.TXT erzeugt eine leere
+  Datei; COPY FILE.TXT NUL verwirft die Ausgabe. PRN/LPT1/AUX/COM1 sind
+  reserviert. AUX und COM1 schreiben als erste serielle Output-Sinks auf den
+  COM1-UART; PRN/LPT1 liefern bis zu einem Drucker-Backend eine klare Diagnose.
+
+Ziele:
+- FAT-Attribute Read-only, Hidden, System und Archive sichtbar und nutzbar
+  machen.
+- FAT32-Directory-Entry-Attribute lesen und schreiben:
+  R = Read-only, H = Hidden, S = System, A = Archive.
+- Neue Dateien erhalten Read-only nicht standardmaessig.
+- DIR blendet Hidden/System standardmaessig aus; DIR /A zeigt alle, /A:H
+  filtert Hidden-Dateien, weitere /A:-H-/A:S-/A:R-/A:A-Varianten werden
+  DOS-artig vorbereitet.
+- DIR-Output kann Attribute sichtbar machen, mindestens in einer Detailansicht
+  oder per Schalter.
+- ATTRIB setzt, entfernt und listet Attribute:
+  ATTRIB zeigt eine Liste mit Attributspalten, ATTRIB +R FILE.TXT setzt
+  Read-only, ATTRIB -H FILE.TXT entfernt Hidden.
+- DEL, COPY und WRITE respektieren Read-only im normalen Befehlsweg.
+- System-Attribut fuer Kerneldateien, Treiber und Boot-Daten nutzen.
+- Special Device Files einfuehren, beginnend mit CON und NUL.
+- Virtuelle DOS-Geraetenamen reservieren und in der FAT-/Pfadauflösung
+  abfangen, bevor normale Directory-Eintraege gesucht werden:
+  CON, NUL, PRN, LPT1, AUX und COM1.
+- Device-Namen werden als Stream-Sources oder Stream-Sinks behandelt und
+  funktionieren auch ohne reale Datei auf dem Medium.
+- CON liest von der Tastatur und schreibt auf die Konsole; NUL liest sofort
+  EOF und verwirft alle Writes; PRN/LPT1 fuehren auf den Drucker-Stream;
+  AUX/COM1 fuehren auf den seriellen Port.
+- COPY CON FILE.TXT liest live von der Konsole und beendet die Eingabe mit
+  Strg+Z.
+
+Abnahme:
+- ATTRIB +R/-R, +H/-H, +S/-S und +A/-A funktionieren auf FAT-Dateien.
+- ATTRIB ohne Parameter zeigt Dateien mit R/H/S/A-Attributspalten an.
+- ATTRIB +R FILE.TXT setzt Read-only; ATTRIB -H FILE.TXT entfernt Hidden.
+- Neu erzeugte Dateien sind nicht automatisch Read-only.
+- Hidden/System-Dateien erscheinen nur mit DIR /A.
+- DIR /A:H zeigt Hidden-Dateien gezielt an.
+- DIR zeigt Attribute in der vereinbarten Detaildarstellung.
+- COPY CON FILE.TXT kann eine Datei live erzeugen.
+- COPY CON FILE.TXT beendet die Eingabe mit Strg+Z und schreibt die bis dahin
+  eingegebenen Daten.
+- Mit 0.5.5-Redirection verwirft TYPE FILE.TXT > NUL Output.
+- Mit 0.5.5-Redirection schreibt TYPE FILE.TXT > PRN in den Drucker-Stream
+  oder liefert eine klare Diagnose, wenn noch kein
+  Drucker-Backend vorhanden ist.
+- Device-Namen werden nicht als normale FAT-Dateien angelegt oder gesucht.
+
+
+0.5.5 - Streams, Redirection und Pipes
+--------------------------------------
+
+Status:
+- abgeschlossen
+
+Implementierungsnotiz:
+- Erste Stream-Stufe umgesetzt: Die Shell erkennt >, >>, < und | vor der
+  Befehlsausfuehrung. Interne Capture-Pfade existieren fuer DIR, TYPE, ECHO,
+  VER, MORE und SORT.
+- DIR > FILE.TXT ersetzt eine Datei, DIR >> FILE.TXT haengt an. Ausgabe nach
+  NUL wird verworfen, Ausgabe nach CON geht auf die Konsole. AUX/COM1 schreiben
+  auf den seriellen COM1-UART; PRN/LPT1 bleiben reserviert und melden Device
+  not ready.
+- TYPE FILE.TXT | MORE und DIR | MORE paginieren ueber einen temporaeren
+  Shell-Puffer. MORE FILE.TXT und MORE < FILE.TXT sind ebenfalls nutzbar.
+- SORT < FILE.TXT sortiert kleine Textdateien zeilenweise und schreibt auf die
+  Konsole oder per > in eine Datei. SORT FILE.TXT ist als direkte Variante
+  vorhanden.
+- Externe R4X-Programme koennen ihren api.print/api.putc-Output in den
+  Shell-Stream leiten. HELLO > FILE.TXT, HELLO | MORE und HELLO | SORT nutzen
+  denselben Capture-Puffer wie interne Befehle. Eingabe per < FILE.TXT wird
+  fuer externe R4X-Programme als erste Stufe ueber die bestehende read_key-API
+  bereitgestellt; eine eigene stdin-ABI bleibt ein spaeterer Ausbaupunkt.
+
+Ziele:
+- Command-Line-Parser erkennt Redirection- und Pipe-Symbole:
+  >, >>, < und |. Diese Operatoren werden vor der Befehlsausfuehrung aus der
+  normalen Argumentliste herausgeloest.
+- Shell-Kommandos auf Standard-Input, Standard-Output und Standard-Error
+  ausrichten, statt direkt nur auf die Konsole zu schreiben.
+- Interne Befehle schreiben ueber ein gemeinsames Output-Konzept, nicht direkt
+  per kprint. Standardziel bleibt die Konsole, Redirection ersetzt es durch
+  Datei, NUL oder Pipe.
+- Externe R4X-Programme erhalten dieselben Standard-Streams ueber die
+  ProgramApi oder eine kompatible Shell-/Kernel-ABI-Erweiterung.
+- Redirection implementieren:
+
+      DIR > FILE.TXT
+      DIR >> FILE.TXT
+      SORT < FILE.TXT
+
+- Pipes implementieren:
+
+      DIR | MORE
+      TYPE LOG.TXT | MORE
+
+- Pipe-Pufferung zwischen Befehlen/Prozessen bereitstellen. Fuer 0.5.X darf
+  das zunaechst DOS-artig sequenziell ueber einen temporaeren Puffer oder eine
+  temporaere Datei geloest werden; spaeter kann daraus echtes Streaming
+  wachsen.
+- MORE als internen Befehl fuer paginierte Ausgabe nutzbar machen.
+
+Abnahme:
+- Parser trennt normale Argumente sauber von >, >>, < und |.
+- Interne Befehle koennen auf Konsole, Datei und Pipe schreiben.
+- Externe R4X-Programme koennen mindestens Standard-Output in Datei oder Pipe
+  liefern, sobald die ABI-Erweiterung vorhanden ist.
+- > ersetzt eine Datei, >> haengt an.
+- < liefert Eingabe aus Datei.
+- SORT < FILE.TXT liest seine Eingabe aus der Datei.
+- DIR > FILE.TXT und DIR >> FILE.TXT schreiben bzw. haengen Ausgaben an.
+- Mindestens DIR | MORE und TYPE FILE.TXT | MORE funktionieren.
+
+
+0.5.6 - Batch und AUTOEXEC.BAT
+------------------------------
+
+Status:
+- abgeschlossen
+
+Implementierungsnotiz:
+- Erste Batch-Stufe umgesetzt: AUTOEXEC.BAT wird vom Bootlaufwerk gelesen und
+  zeilenweise ausgefuehrt. Unterstuetzt sind @-Praefix, ECHO ON/OFF, REM und
+  ignorierte :LABEL-Zeilen. Das Build-Image enthaelt eine Default-AUTOEXEC.BAT
+  mit PATH, TEMP, BLASTER und PROMPT.
+- Zweiter Batch-Schnitt umgesetzt: .BAT-Dateien koennen aus dem aktuellen
+  Verzeichnis und ueber PATH gestartet werden, auch ohne Endung. %0 bis %9,
+  Umgebungsvariablen wie %PATH% und %TEMP% sowie %ERRORLEVEL% werden vor der
+  Ausfuehrung ersetzt.
+- Labels und GOTO funktionieren in einfachen Batchdateien. CALL fuehrt eine
+  weitere Batch-/Shell-Zeile aus. IF EXIST und IF NOT EXIST fuehren den Rest
+  der Zeile bedingt aus, inklusive GOTO-Zielen. IF "A"=="B" fuehrt einfache
+  Textvergleiche nach Variablenersetzung aus.
+- ERRORLEVEL ist als einfache Sitzungsvariable vorhanden: Vor jedem Befehl
+  wird er auf 0 gesetzt; unbekannte Befehle und Batch-Syntax-/Label-Fehler
+  setzen ihn auf 1. Externe R4X-Programme uebergeben ihren Exit-Code an
+  %ERRORLEVEL%; negative Loader-/Programmwerte werden DOS-pragmatisch zu 1.
+  IF ERRORLEVEL n fuehrt den Rest der Zeile DOS-artig aus, wenn ERRORLEVEL
+  groesser oder gleich n ist. Feinere Rueckgabewerte einzelner interner
+  Befehle bleiben ein Ausbaupunkt.
+- FOR und SHIFT sind als einfache COMMAND.COM-nahe Batch-Stufe vorhanden:
+  FOR %%F IN (*.TXT) DO ... ersetzt die Laufvariable pro Treffer und nutzt
+  vorhandene Wildcards im aktuellen FAT-Verzeichnis. SHIFT verschiebt %1 bis
+  %9 nach links.
+
+Ziele:
+- .BAT-Dateien als R4OS-Skriptsprache einfuehren. R4OS behaelt die Endung
+  .BAT bewusst bei; es gibt fuer 0.5.X keine eigene Ersatzendung wie .R4B.
+- Batch-Dateien sind einfache Textdateien, die COMMAND.R4X zeilenweise so
+  ausfuehrt, als waeren die Befehle am Prompt eingegeben worden.
+- Ziel ist DOS-Batch-Kompatibilitaet fuer den implementierten Befehlssatz:
+  Echte DOS-Batchdateien mit unterstuetzten Befehlen, Variablen und
+  Kontrollfluss sollen laufen. Nicht implementierte externe DOS-Tools,
+  BIOS-/DOS-Interna und historische Spezialfaelle duerfen sichtbar scheitern.
+- Erste Batch-Stufe:
+  zeilenweise Ausfuehrung, REM, ECHO, @-Praefix, ECHO ON/OFF, :LABEL,
+  einfache Quoting-Regeln, %0 bis %9, %PATH%, %TEMP% und %ERRORLEVEL%.
+- Zweite Batch-Stufe:
+  IF, IF NOT, IF EXIST, IF NOT EXIST, GOTO, CALL, FOR und SHIFT.
+- AUTOEXEC.BAT beim Shell-Start aus C:\AUTOEXEC.BAT ausfuehren, bevor der
+  erste Prompt erscheint.
+- CONFIG.R4S bleibt fuer Boot-/Treiber-Konfiguration, AUTOEXEC.BAT fuer
+  User-Space-Umgebung.
+- AUTOEXEC.BAT nutzt bewusst das Schicht-1-Vokabular:
+  PATH, SET, PROMPT, ECHO und normale Programmstarts.
+- Typischer Startinhalt:
+
+      @ECHO OFF
+      PATH C:\BIN;X:\BIN
+      SET TEMP=C:\TEMP
+      SET BLASTER=A220 I5 D1
+      PROMPT $P$G
+
+Abnahme:
+- TEST.BAT kann mehrere Befehle nacheinander ausfuehren.
+- .BAT ist die erkannte Batch-Endung; .R4B ist fuer 0.5.X nicht erforderlich.
+- Argumente %0 bis %9 und Umgebungsvariablen werden ersetzt.
+- ERRORLEVEL wird nach internen und externen Befehlen gesetzt.
+- @ECHO OFF unterdrueckt Echo, @ unterdrueckt es fuer eine einzelne Zeile,
+  REM wird ignoriert.
+- IF NOT EXIST FILE.TXT GOTO NOFILE, :LABEL, GOTO END und CALL funktionieren
+  in einfachen Batchdateien.
+- CALL, GOTO, IF, FOR, SHIFT und :LABEL sind COMMAND.COM-orientiert
+  dokumentiert und testbar.
+- COMMAND.R4X sucht AUTOEXEC.BAT bevorzugt im Root des Boot-Drives und
+  ignoriert sie sauber, wenn sie nicht existiert.
+- AUTOEXEC.BAT setzt PATH, TEMP, BLASTER und PROMPT vor dem ersten Prompt.
+- Der erste sichtbare Prompt nach AUTOEXEC.BAT nutzt den gesetzten PROMPT,
+  z.B. PROMPT $P$G.
+- AUTOEXEC.BAT kann optional Programme vor dem ersten Prompt starten.
+
+
+0.5.7 - Command History und Editing
+-----------------------------------
+
+Status:
+- abgeschlossen
+
+Implementierungsnotiz:
+- Erste DOSKEY-nahe History-Stufe umgesetzt: Der PS/2-Keyboardtreiber reicht
+  Pfeil-hoch, Pfeil-runter und F3 als eigene Shell-Tastencodes durch.
+- COMMAND.R4X fuehrt eine Sitzungs-History mit 16 Eintraegen. Enter speichert
+  nicht-leere, bereits normalisierte Grossbuchstaben-Befehle; doppelte direkte
+  Wiederholungen werden nicht erneut abgelegt.
+- Pfeil-hoch und Pfeil-runter ersetzen die aktuelle Eingabezeile durch
+  aeltere bzw. neuere History-Eintraege. Nach dem neuesten Eintrag wird die
+  Eingabezeile wieder leer.
+- F3 holt den letzten Befehl in die Eingabezeile. Strg+C bricht die aktuelle
+  Prompt-Eingabe ab, leert die Zeile und zeigt einen neuen Prompt.
+- DOSKEY.R4D bleibt als spaetere optionale Treiber-/TSR-artige Auslagerung
+  dokumentiert; fuer 0.5.X sitzt die Funktion direkt in COMMAND.R4X.
+
+Ziele:
+- Interaktive Shell-Eingabe wird konsequent in Grossbuchstaben normalisiert:
+  Wer abc tippt, sieht und verarbeitet ABC. Das gilt fuer Befehle, Schalter,
+  Pfade und History-Eintraege der R4DOS-Kommandozeile.
+- DOSKEY-Stil fuer Command History:
+  Pfeil-hoch/Pfeil-runter wandern durch vorherige Befehle, F3 wiederholt den
+  letzten Befehl.
+- History als einfacher Ringpuffer fuer die laufende Shell-Sitzung; Persistenz
+  ueber Reboots ist fuer 0.5.X nicht erforderlich.
+- Strg+C unterbricht laufende Befehle oder Batch-Ausfuehrung so weit die
+  aktuelle Programmausfuehrung das zulaesst.
+- Fuer 0.5.X darf die Funktion direkt in COMMAND.R4X liegen, damit der
+  UX-Gewinn frueh sichtbar wird.
+- DOSKEY.R4D als optionale spaetere Treiber-/TSR-artige Modulform planen:
+  Das Modul kann sich in die Tastatur-Pipeline einklinken und dieselbe
+  History-/Editing-Funktion auch fuer alternative Shells bereitstellen.
+- Tab-Completion ist nicht Ziel dieser Version, die Tuer bleibt aber fuer
+  spaetere 4DOS-/DOSKEY-artige Erweiterungen offen.
+
+Abnahme:
+- Kleinbuchstaben erscheinen beim Tippen am Prompt sofort als Grossbuchstaben.
+- History speichert und zeigt die normalisierte Grossbuchstaben-Form.
+- Pfeil-hoch holt den vorherigen Befehl, Pfeil-runter bewegt sich wieder in
+  Richtung neuerer Befehle.
+- F3 fuegt den letzten Befehl erneut in die Eingabe ein oder fuehrt das
+  vereinbarte COMMAND.R4X-Aequivalent dieses DOSKEY-Verhaltens aus.
+- History bleibt waehrend einer Shell-Sitzung nutzbar und muss nach einem
+  Reboot nicht erhalten bleiben.
+- Cursor-/Editing-Verhalten zerstoert den Prompt nicht.
+- F3 und Strg+C sind reproduzierbar testbar.
+
+
+0.5.X - Abschlusskriterien
+--------------------------
+
+Status:
+- abgeschlossen
+
+Abnahme fuer die gesamte Version:
+- R4OS startet eine austauschbare COMMAND.R4X.
+- Die Shell benutzt DOS-Pfade, DOS-Schalter, interne/externe Befehle,
+  Wildcards, Attribute, Special Devices, Redirection, Pipes, Batch und
+  History in einem konsistenten Stil.
+- DOS-Style ist erreicht, echte DOS-Kompatibilitaet bleibt klar Phase X:
+  8086-Emulator, Virtual SB16 und INT-21h-Implementierung werden in 0.5.X
+  nicht begonnen.
+- Dokumentation unter Docs/R4DOS/ ist aktualisiert.

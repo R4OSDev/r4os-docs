@@ -1,0 +1,88 @@
+﻿R4OS 0.53.24 - FS-Reclaim- und Pagefile-Vorbereitung
+=====================================================
+
+Ziel
+----
+
+0.53.24 verbindet die Dirty-/Writeback-Grundlage aus 0.53.23 mit einer
+ehrlichen Reclaim- und Pagefile-Vorbereitung. Der Stand fuehrt kein Pagefile,
+keinen Swap und keinen globalen Speicher-Reclaim ein. Stattdessen macht R4OS
+sichtbar, welche FS-Cache-Sektoren lokal dropbar sind, welche dirty Sektoren
+erst nach Writeback freigegeben werden duerfen, und warum daraus noch kein
+globaler RAM-Gewinn entsteht.
+
+Besitzgrenze
+------------
+
+- `Code/src/fs/page_cache.zig` bleibt Besitzer des lokalen FAT32-Sector-
+  Cache-Zustands.
+- `Code/src/program/r4dev.zig` spiegelt die Reclaim-Sicht in
+  `ProgramPerformanceSummary`.
+- `ProgramMemoryPressureSnapshot` bleibt globaler Memory-Vertrag und meldet
+  weiterhin `reclaimable_bytes=0`, solange kein echter PMM-/VM-Reclaim
+  existiert.
+- Es gibt keinen neuen Block-I/O-Pfad, keinen Pagefile-Treiber und keine
+  Kernel-Policy fuer Speicherkomfort.
+
+Reclaim-Vertrag
+---------------
+
+Clean Cache-Sektoren sind lokal reclaimable: Sie koennen bei Cache-Druck
+verworfen und durch neue Sektoren ersetzt werden. Dirty Sektoren sind nicht
+direkt reclaimable; sie muessen zuerst ueber den 0.53.23-Writeback-Pfad
+geschrieben werden. Schlaegt dieser Writeback fehl, bleibt der Sektor im
+Cache und der Fehler wird sichtbar gezaehlt.
+
+Der Cache zaehlt:
+
+- aktuelle clean-reclaimable Eintraege und Bytes
+- aktuelle dirty-nicht-reclaimable Eintraege und Bytes
+- Reclaim-Scans bei vollem Cache
+- clean verworfene Cache-Eintraege
+- dirty Pressure-Drains
+- fehlgeschlagene Reclaim-Drains
+
+Pagefile-Blocker
+----------------
+
+ProgramApi v120 meldet `fs_cache_pagefile_ready=0` und setzt explizite
+Blocker:
+
+- kein Pagefile
+- kein Swap
+- statischer FS-Cache, der keine Frames an die PMM zurueckgibt
+- kein globaler Reclaim
+- kein Pager
+
+Diese Blocker sind Absicht. Sie verhindern, dass spaetere Tests oder Tools
+aus lokalen Cache-Drop-Metriken einen produktiven Pagefile-Vertrag ableiten.
+
+R4DEV-Metriken
+--------------
+
+ProgramApi v120 erweitert `ProgramPerformanceSummary` append-only um:
+
+- `fs_cache_clean_reclaimable_entries`
+- `fs_cache_dirty_non_reclaimable_entries`
+- `fs_cache_pagefile_ready`
+- `fs_cache_pagefile_blockers`
+- `fs_cache_clean_reclaimable_bytes`
+- `fs_cache_dirty_non_reclaimable_bytes`
+- `fs_cache_reclaim_scans`
+- `fs_cache_reclaim_clean_entries`
+- `fs_cache_reclaim_dirty_drains`
+- `fs_cache_reclaim_failed_drains`
+
+`performance_flag_fs_reclaim_ready` kennzeichnet diesen Snapshot-Stand.
+
+Abnahme
+-------
+
+MEMSUITE verbindet `ProgramMemoryPressureSnapshot` und
+`ProgramPerformanceSummary`: globaler Memory-Reclaim bleibt 0, waehrend der
+FS-Cache lokale clean-reclaimable Bytes und Pagefile-Blocker meldet.
+
+PERFDIAG und STORDIAG pruefen dieselben Felder aus Performance- und
+Storage-Sicht. Erfolgreiche Abnahme verlangt clean-reclaimable Bytes > 0,
+Reclaim-Scans > 0, keine fehlgeschlagenen Reclaim-Drains,
+`fs_cache_pagefile_ready=0` und die vollstaendige Blocker-Maske.

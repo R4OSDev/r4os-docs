@@ -1,0 +1,98 @@
+﻿R4OS 0.54.9 - Modul-Loader-Abschluss
+====================================
+
+Ziel
+----
+0.54.9 schliesst die 0.54.X-Reihe zur modernen Modul-Ladepipeline ab. Der
+Schwerpunkt liegt nicht auf einer neuen Loaderfunktion, sondern auf dem
+harten No-Fallback-Schnitt nach der R4X-, R4L-, R4D- und R4P-Migration.
+
+Abschlussentscheidung
+---------------------
+Der produktive Disk-Loaderpfad ist:
+
+- `kernel/module_file.zig` fuer Range-Reads ueber vorhandene FAT32- und
+  FS-Request-Pfade.
+- `kernel/module_r4m.zig` fuer R4M0-Header, Metadaten, Section-, Import-,
+  Export-, Entry- und Relocation-Records.
+- `program/r4x.zig` fuer R4X-Program-Images mit direktem Section-Load in das
+  finale Program-Image.
+- `kernel/modules.zig` mit `loadResolvedFile(...)` fuer R4L-, R4D- und
+  R4P-Diskmodule.
+
+Der alte temporaere Voll-Datei-Helfer `readFullToTempRange(...)` ist aus
+`kernel/module_file.zig` entfernt. Damit gibt es im gemeinsamen
+Modul-Dateizugriff keinen produktiven temp_kernel-Vollpuffer-Helfer mehr, auf
+den R4X/R4L/R4D/R4P still zurueckfallen koennten.
+
+Zusaetzlich wurden tote private R4D-Bytes-Loader fuer Disk-aehnliche Pfade
+entfernt. R4D-Bytes-Loading bleibt nur noch im expliziten Preload-Pfad
+`PRELOAD:\` sichtbar.
+
+Was bewusst erhalten bleibt
+---------------------------
+R4DEV ProgramApi v143 behaelt die Loader-Memory-Diagnosefelder. Diese Felder
+sind kein Fallback und keine Kompatibilitaetsroute. Sie sind ein Gate:
+`loader_file_active_buffers`, `loader_file_reserved_bytes`,
+`loader_file_committed_bytes` und `loader_file_full_reads` muessen im
+produktiven Diskpfad null bleiben, waehrend `loader_file_range_reads` durch
+Loader-Aktionen steigt.
+
+Preload-Bytes bleiben ein eigener Fruehbootpfad fuer Artefakte, die vor dem
+`C:`-Mount benoetigt werden. Dieser Pfad ist kein Disk-Modul-Fallback und
+ersetzt keine fehlgeschlagenen spaeten R4L/R4D/R4P-Loads.
+
+No-Fallback-Audit
+-----------------
+R4X:
+- Startcontract, Memory-Contract und R4M0-Header werden range-basiert
+  gelesen.
+- Sections werden direkt in das finale `ProgramImage` geladen.
+- Es gibt keinen `r4x-module-file-buffer`, keinen
+  `Program module file allocation failed`-Pfad und keinen
+  `readFullToTempRange(...)`-Aufruf.
+
+R4L:
+- Disk-Libraries werden ueber `loadResolvedFile(...)` und den gemeinsamen
+  R4M0-Range-Reader geladen.
+- Pending-Libraries halten nur Quelle, Header, Pfad und Namen, aber keinen
+  kompletten Moduldatei-Slice.
+- Preload-Bytes sind nur der explizite Nicht-Disk-Fruehbootpfad.
+
+R4D:
+- Discovery und Runtime-Load nutzen Metadaten-Probe und
+  `loadResolvedFile(...)`.
+- Bootkritische Preload- oder Built-in-Grenzen bleiben sichtbar getrennt.
+- Es gibt keinen privaten Kernel-Heap- oder temp_kernel-Dateipuffer mehr fuer
+  R4D-Diskmodule.
+- Tote private R4D-Disk-Bytes-Loader sind entfernt; der verbleibende
+  `loadResolvedBytes(...)`-Pfad ist Preload.
+
+R4P:
+- Discovery liest Header und Metadaten range-basiert.
+- Runtime-Module werden ueber `loadResolvedFile(...)` geladen.
+- R4P-Rollen und Dispatch laufen aus dem finalen Modulimage.
+
+Abnahmebefund
+-------------
+Die Abschlussabnahme muss belegen:
+- Code-Suche findet keine produktive Nutzung von `readFullToTempRange`,
+  `TempBuffer`, `FullReadRequest`, `r4x-module-file-buffer` oder alten
+  Moduldatei-Allokationsmeldungen.
+- Code-Suche findet keine privaten R4D-Disk-Bytes-Loader wie
+  `loadRuntimeBytes(...)`, `loadBytes(...)` oder
+  `loadR4MDriverBytesRuntime(...)`.
+- Code-Suche zeigt, dass R4X/R4L/R4D/R4P-Diskmodule ueber Range-Reads,
+  `module_r4m` und `loadResolvedFile(...)` laufen.
+- `LOADERD.R4X` meldet fuer den Loader-Stress steigende Range-Reads und
+  `fullReads=0`.
+- `PERFDIAG.R4X` bestaetigt aktive Loader-Dateipuffer=0, reserved=0,
+  committed=0 und Full-Reads=0.
+- `Build.bat -norun` und `Build.bat -test` bestehen.
+
+Restarbeit ausserhalb 0.54.X
+----------------------------
+File-backed/lazy Program-Images bleiben nach 0.54.8 bewusst nicht enthalten.
+Wenn R4OS spaeter Program-Image-Paging bekommt, muss das als eigene
+Architekturarbeit mit Page-State, Fault-Pfad, Backing-Quelle, Section-Rechten,
+Relocation-Modell, Cleanup und negativer Diagnose geplant werden.

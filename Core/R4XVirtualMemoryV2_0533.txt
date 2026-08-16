@@ -1,0 +1,155 @@
+﻿R4X Virtual Memory V2 - 0.53.3
+================================
+
+Ziel
+----
+
+0.53.3 macht aus dem in 0.53.2 vorbereiteten `r4x-vm`-Adressraum eine
+produktive 64-bit-VM-API fuer R4X-Programme. Programme sollen grosse
+virtuelle Bereiche reservieren, gezielt Teilbereiche committen/decommitten,
+Regionen abfragen und wieder freigeben koennen, ohne den alten 32-bit-AppHeap
+als Fallback zu verwenden.
+
+Dies ist noch nicht der finale Allocator V2. 0.53.3 ist die harte
+Vertragskante: R4SYS/R4XStart, ProgramApi, SDK-Zig-Bindings und C-Header
+sprechen denselben Region-Vertrag. 0.53.4 baut darauf Demand-Commit und
+Page-Fault-Backing, 0.53.5 den SDK-Allocator V2 und 0.53.6 entfernt die alte
+AppHeap-V1-API.
+
+
+Adressraum und Ownership
+------------------------
+
+Die neue API nutzt das eigene `r4x-vm`-Fenster:
+
+    Basis: 0xFFFF_FB00_0000_0000
+    Groesse: 4 TiB
+
+Jede Region gehoert genau einer R4X-Instanz:
+
+    kind      = virtual_range
+    owner     = r4x_instance
+    owner_id  = Programminstanz-ID
+    window    = r4x_vm
+
+Der Kernel speichert diese Zuordnung in der VirtualRange-/MemoryBlock-
+Buchhaltung. VM-Aufrufe akzeptieren nur Regionen der aktuell laufenden
+Instanz. Beim Freigeben einer Instanz werden verbliebene `virtual_range`-
+Regionen dieses Owners automatisch released.
+
+
+ProgramApi v103
+---------------
+
+ProgramApi v103 haengt am Tabellenende fuenf neue Funktionen an:
+
+    int32_t vm_reserve(uint64_t size, uint64_t alignment, uint64_t flags,
+                       R4ProgramVmRegionInfo *out);
+    int32_t vm_commit(uint32_t region_id, uint64_t offset, uint64_t len,
+                      uint64_t flags);
+    int32_t vm_decommit(uint32_t region_id, uint64_t offset, uint64_t len);
+    int32_t vm_release(uint32_t region_id);
+    int32_t vm_query(uint32_t region_id, R4ProgramVmRegionInfo *out);
+
+`size`, `alignment`, `offset` und `len` sind 64-bit-Werte. `alignment == 0`
+bedeutet Page-Alignment. Commit/Decommit arbeiten pagegenau. 0.53.3 committed
+noch sofort physische Frames fuer den angeforderten Bereich; sparsames
+Demand-Commit folgt in 0.53.4.
+
+
+R4XStart R4SYS v3
+-----------------
+
+R4XStartR4Sys wurde append-only auf Version 3 und 264 Bytes erweitert.
+Offsets 224 bis 256 enthalten dieselben VM-Funktionen:
+
+    224 vm_reserve
+    232 vm_commit
+    240 vm_decommit
+    248 vm_release
+    256 vm_query
+
+Damit koennen R4XStart-Programme die VM-API ueber den R4SYS-Import nutzen,
+ohne den alten ProgramApi-Pointer direkt auszuwerten.
+
+
+R4ProgramVmRegionInfo
+---------------------
+
+Die Query-/Reserve-Struktur ist 64 Byte gross:
+
+    id              uint32_t
+    status          uint8_t
+    owner           uint8_t
+    kind            uint8_t
+    window          uint8_t
+    owner_id        uint64_t
+    base            uint64_t
+    len             uint64_t
+    committed_bytes uint64_t
+    guard_base      uint64_t
+    guard_len       uint64_t
+    flags           uint64_t
+
+Oeffentliche Konstanten fuer `status`, `owner`, `kind`, `window`, Fehlercodes
+und VM-Flags liegen in `Code/System/SDK/r4os/abi.zig` und
+`Code/System/SDK/Shared/C/include/r4os/abi.h`.
+
+
+Flags und Fehler
+----------------
+
+0.53.3 unterstuetzt fuer `vm_reserve`:
+
+    vm_region_flag_writable
+    vm_region_flag_executable
+    vm_region_flags_default = writable
+
+`vm_commit` akzeptiert in 0.53.3 noch keine abweichenden Flags. Schutzwechsel
+gehoeren zu einem spaeteren `vm_protect`-Schritt.
+
+Fehlercodes trennen die wichtigsten Ursachen:
+
+    invalid_range, invalid_alignment, owner_mismatch, table_full,
+    no_space, out_of_memory, already_committed, not_committed,
+    guard_range, map_failed, unsupported_flags, no_instance
+
+
+SDK-Sicht
+---------
+
+Zig:
+
+    ctx.supportsVmApi()
+    ctx.vmReserve(size, alignment, flags)
+    ctx.vmCommit(region_id, offset, len)
+    ctx.vmCommitFlags(region_id, offset, len, flags)
+    ctx.vmDecommit(region_id, offset, len)
+    ctx.vmRelease(region_id)
+    ctx.vmQuery(region_id)
+
+C:
+
+    r4sys_supports_vm(sys)
+    r4sys_vm_reserve(sys, size, alignment, flags, &info)
+    r4sys_vm_commit(sys, region_id, offset, len)
+    r4sys_vm_commit_flags(sys, region_id, offset, len, flags)
+    r4sys_vm_decommit(sys, region_id, offset, len)
+    r4sys_vm_release(sys, region_id)
+    r4sys_vm_query(sys, region_id, &info)
+
+
+Abnahme
+-------
+
+BootCoreDiag prueft im Smoke-Test:
+
+- ProgramApi/R4SYS meldet VM-API-Unterstuetzung.
+- Eine 16-MB-R4X-VM-Region wird reserviert.
+- Ungueltige Commit-Flags liefern `unsupported_flags`.
+- 64 KB werden committed, beschrieben, abgefragt und wieder decommitted.
+- Die Region wird released; anschliessendes Query findet sie nicht mehr.
+
+Zusammen mit der 4-GB-Reserve-Probe aus 0.53.2 ist damit sowohl die grosse
+virtuelle Reserve als auch der produktive Commit-/Decommit-/Release-Pfad
+abgedeckt.

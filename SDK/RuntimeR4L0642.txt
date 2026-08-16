@@ -1,0 +1,99 @@
+﻿Runtime-R4L 0.64.2: benannte Aufloesung und Providergeneration
+================================================================
+
+Ergebnis
+--------
+
+R4X kann beliebige R4L-Exporte als
+`<MODUL>:<SYMBOL>:<MINDESTVERSION>` importieren. Nur R4SYS, R4DESK, R4DRAW,
+R4NET, R4AUDIO und R4DEV besitzen weiterhin feste Gruppen-IDs und
+Kernel-Gruppentabellen. Jeder andere Import wird ohne Namens-Whitelist mit
+`group_id=0` in den unveraenderten 40-Byte-R4XStartImport uebertragen.
+
+Der Startkontext enthaelt fuer jeden Import Modulname, Exportname,
+Mindestversion, aufgeloeste Version und den direkten Providerpointer. Das
+Zig- und C-SDK stellt eine case-insensitive Suche nach Modul und Export bereit.
+`group_id=0` ist ein gueltiger benannter Transport und kein unbekannter
+Plattformgruppenfehler.
+
+Loader und Resolver
+-------------------
+
+Der R4M0-Resolver arbeitet fuer Plattform- und Libraryimporte mit demselben
+Modul-/Exportverzeichnis. Eine R4L kann dadurch andere R4Ls oder
+Plattformexports aus ihrem eigenen Importverzeichnis beziehen. Der
+Imageplaner betrachtet das erste Importfeld als Providername und erzwingt fuer
+bekannte Provider denselben Image-Scope; konkrete Librarynamen stehen nicht
+in seiner Logik.
+
+Vor der Veroeffentlichung einer geladenen R4L werden Namen und Versionen
+begrenzt sowie Exporte case-insensitiv auf Eindeutigkeit geprueft. Primaere
+API_Vn-Exporte werden nach den gemeinsamen Regeln aus R4LInterface.txt
+validiert: Tabellenalignment und geladener Bereich, Magic, Headerversion,
+Pflichtflags, Groesse, Major, Revision und nichtleere 128-Bit-Identitaet.
+Query-Exporte muessen vollstaendig und wohlgeformt im Providerimage liegen.
+Fehlender Provider, fehlendes Symbol, zu alte Version, doppelter Provider,
+doppelter Export und malformed Tabelle erzeugen eindeutige Loaderdiagnosen.
+
+Datentabellen und Relocations
+-----------------------------
+
+Die Test-R4L EXTMATH ist dem Kernel, Plattform-Contract und App-Profil
+absichtlich unbekannt. Sie exportiert Query:1 mit group=0 sowie API_V1:1 als
+40-Byte-Datentabelle. Der einzige Funktionsslot wird durch eine deklarierte
+BASE_REL64-Relocation auf Code innerhalb derselben R4L gesetzt. LOADERD sucht
+den Import namentlich, prueft Transport und Header und ruft den R4L-Code mit
+100 auf; das erwartete Ergebnis ist 142.
+
+Lebensdauer und Updates
+-----------------------
+
+Geladene R4L-Images gehoeren zur aktiven Bootgeneration 1 und werden im
+Modulregister als pinned veroeffentlicht. Nach Beginn dieser Generation lehnt
+der Loader einen zweiten Bibliotheksladezyklus ab. Es existiert kein Unload-,
+Replace- oder In-place-Updatepfad fuer aktive Providerseiten. Damit bleiben
+Tabellen, Code, Daten und alle daraus erreichbaren Funktionspointer bis zum
+Neustart unveraendert gueltig.
+
+Das vorhandene Updatesystem ersetzt nur das on-disk-Artefakt atomar. Die
+aktive Generation wird nicht neu gebunden; die neue Datei wird am naechsten
+Systemstart als neue Generation geladen. Handles und Tabellen verschiedener
+Generationen werden in 0.64.X nie gemischt.
+
+Uebergang der bisherigen Query-Libraries
+----------------------------------------
+
+R4STD, R4IMG und R4FONT sind noch nicht fachlich migriert. Ihre Marker-R4Ls
+importieren aber nicht mehr direkt KernelProvider. Der Kernel fuehrt ihre
+Namen nicht mehr in der Gruppenauflosung. Bestehende Zig- und C-Fassaden
+finden ihren mitgefuehrten alten Gruppenwert generisch im Query-Header, bis
+die jeweilige Library in einer spaeteren 0.64-Unterversion eine eigene
+API_Vn-Tabelle erhaelt.
+
+Abnahme
+-------
+
+- Parser-Selbsttest: benannter Import ohne Profilbit; Plattformgruppen bleiben
+  auf Query:1 begrenzt.
+- Positive Gastprobe: EXTMATH:API_V1:1 erreicht LOADERD und fuehrt echten,
+  relocatierten R4L-Code aus.
+- Negative Gastproben: MISS021, VERBAD, NOSYM, DUPEXP, DUPMOD und BADTAB.
+- Bestehende sechs Plattformtabellen werden in LOADERD unveraendert geprueft.
+- `Build.bat -norun` erzeugt das vollstaendige Produktionsimage; der
+  anschliessende headless `Build.bat -test` bootet bis zum geordneten
+  Poweroff. LOADERD meldet den relocatierten Funktionsaufruf und alle
+  Resolver-Negativproben als OK.
+- Der finale Gastlauf wurde unter starker Hostlast mit dem dokumentierten
+  600-Sekunden-Watchdog gegengeprueft und endete selbststaendig ohne Panic,
+  Fatal, CPU-Exception oder Page Fault.
+
+Quellen
+-------
+
+    Code/System/SDK/Contract/ABI/R4LInterface.txt
+    Code/System/SDK/Contract/ABI/R4XStart.txt
+    Code/Kernel/kernel/modules.zig
+    Code/Kernel/program/r4x.zig
+    Code/System/SDK/r4os/r4xstart.zig
+    Code/System/Diagnostics/LoaderDiag/
+    Tests/Fixture/R4LNegative/

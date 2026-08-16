@@ -1,0 +1,118 @@
+﻿R4X Virtual Memory V2 - 0.53.5 SDK-Allocator V2
+================================================
+
+Ziel
+----
+
+0.53.5 zieht den normalen SDK-Allocator von der AppHeap-V1-Blocktabelle auf
+R4X-VM-Regionen um. Neue Zig-R4X-Programme, die `ctx.allocator()` oder
+`sys.allocator()` verwenden, laufen damit nicht mehr ueber `mem_alloc(u32)`,
+sondern ueber die 64-bit-VM-API aus 0.53.3/0.53.4.
+
+Der Schritt ist bewusst kein Fallback und keine reine Grenzerhoehung. Der
+alte AppHeap bleibt nur als direkter Diagnose-/Legacy-Vertrag sichtbar, bis
+0.53.6 ihn aus dem produktiven Zielpfad entfernt. Der normale SDK-Pfad nutzt
+VM V2.
+
+Allocator-Modell
+----------------
+
+Der neue Allocator lebt im SDK unter `Code/System/SDK/r4os/vm_allocator.zig`.
+
+Kleine Allocations:
+
+- Pro Programm werden kleine Bloecke aus 64-MB-VM-Regionen bedient.
+- Die Region committed logisch in 64-KB-Schritten, startet aber nur mit
+  einer committed Page.
+- Block-Metadaten liegen in der Region selbst.
+- Freie Nachbarbloecke werden zusammengefuehrt.
+- Freie Top-Seiten werden per `vm_decommit` wieder aus dem logischen Commit
+  herausgenommen.
+
+Grosse Allocations:
+
+- Bloecke ab 1 MB oder mit Alignment groesser als 4 KB erhalten eine eigene
+  VM-Region.
+- Der Nutzpointer grosser Bloecke ist mindestens page-aligned.
+- `free` released die komplette direkte VM-Region.
+
+Statistik:
+
+- `allocatorStats()` meldet kleine Regionen, direkte aktive Regionen,
+  aktive Allocations, aktive Bytes, Peaks, reservierte Bytes, committed
+  Bytes, Decommits und Allocation-Fehler.
+- Direkte grosse Regionen werden in den aktiven Bytes und Allocations
+  mitgezaehlt.
+
+Besitzgrenze
+------------
+
+Der Kernel bleibt Besitzer der allgemeinen VM-Mechanik:
+
+- Reserve/Release im `r4x_vm`-Fenster
+- logischer Commit/Decommit
+- Demand-Zero-Page-Faults
+- Owner-Cleanup pro R4X-Instanz
+- MemoryBlock-/VirtualRange-Diagnose
+
+Die Heap-Strategie liegt ausserhalb des Kernels im SDK:
+
+- kleine Blockverwaltung
+- grosse Direktregionen
+- Reuse und Coalescing
+- Decommit freier SDK-Arenen
+- Allocator-Statistik fuer Anwendungen und Diagnosen
+
+Damit kommt keine neue malloc-Policy in den Kernel. Der Kernel sieht
+VM-Regionen und Commit-/Resident-Zustaende; der SDK-Allocator verwaltet die
+kleinen Userland-Bloecke.
+
+C-Pfad
+------
+
+Das C-SDK besitzt weiterhin keinen vollstaendigen malloc. Fuer C-R4XStart-
+Programme gibt es aber direkte VM-Helfer:
+
+- `r4sys_vm_alloc(sys, size, alignment)`
+- `r4sys_vm_free(sys, ptr)`
+
+Diese Helfer reservieren und committen je Allocation eine eigene VM-Region.
+Sie sind fuer einfache C-Smokes und klare grosse Puffer gedacht, nicht als
+kleiner Blockallocator.
+
+Diagnose und Abnahme
+--------------------
+
+`BOOTDIAG.R4X` prueft den neuen SDK-Allocator im Standard-Smoke:
+
+- kleine `ArrayList`-Allocations
+- Wachstum/Realloc ueber normale Zig-Container
+- grosse 2-MB-Allocation
+- page-aligned grosse Allocation
+- Sparse-Touch ueber Demand-Commit
+- AppHeap-Statistik bleibt unveraendert
+- Memory-Snapshot sieht zusaetzliche VM-Regionen
+
+`APPHEAPD.R4X` prueft jetzt zwei bewusst getrennte Dinge:
+
+- den direkten AppHeap-Vertrag `memAlloc`/`memFree`/`memRealloc` als
+  Alt-/Diagnosepfad
+- den normalen SDK-Allocator als VM-V2-Pfad ohne AppHeap-Verbrauch
+
+`CSTARTD.R4X` prueft die C-Helfer `r4sys_vm_alloc` und `r4sys_vm_free`.
+
+Abnahme:
+
+- `DevTools/Scripts/Build.bat -norun`
+- `DevTools/Scripts/Build.bat -test`
+
+Beide Abnahmen waren fuer 0.53.5 erfolgreich. Der Standard-Smoke meldet
+Boot, Poweroff und `TEST OK`.
+
+Folgeschritt
+------------
+
+0.53.5 entfernt die normale SDK-Abhaengigkeit vom AppHeap. 0.53.6 ist der
+harte Migrationsschnitt: alte AppHeap-V1-API aus dem produktiven Zielpfad
+entfernen, alle mitgelieferten Artefakte neu bauen und alte Memory-ABI
+sichtbar ablehnen statt still weiterlaufen zu lassen.

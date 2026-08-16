@@ -1,0 +1,326 @@
+﻿R4OS Dateisystem und Storage
+=============================
+
+Schichten
+---------
+
+R4D-Storage
+  NVME, AHCI, ATAPIO und USBMSC registrieren Blockdevices.
+
+Block-Core
+  Registry, Requestqueues, Worker und Completion.
+
+Seit 0.59.10 liegen Blockdevices in stabil adressierten Tombstone-Slots.
+Live-Anzahl und Enumerationsspan sind getrennt; ein Unregister verschiebt
+weder Device noch eingebettete Mutex-/WaitQueue-Objekte und aendert keine
+Nachbarindizes. Neue I/O-Admission erwirbt unter IRQ-Schutz einen Operationspin
+und einen `task_context.UnwindToken`; der Token ist nur Kill-Schutz fuer die
+laufende Operation und kein wait-spannender Owner-Lock.
+
+Unregister setzt zuerst `retiring` und stoppt damit neue Admission. Der
+Preflight ist ein nicht destruktives Veto, solange eines der folgenden
+Lebenszeitmerkmale besteht:
+
+- ein Laufwerk ist auf dem Blockdevice gemountet;
+- ein Operationspin ist aktiv;
+- ein Backend-Callback wird gerade ausgefuehrt;
+- ein queued, aktiver oder fertiger Requestslot ist noch belegt;
+- der Device-Queue-Mutex ist besessen;
+- an Slot-, Completion- oder Mutex-Queue wartet noch ein Task.
+
+Erst bei null Mount-, Pin-, Execution-, Request-, Lock- und Waiter-Bezuegen
+werden die eingebetteten Queues geschlossen. Taucht an dieser Grenze doch ein
+Waiter auf, werden alle Queues wieder geoeffnet und `retiring` wird
+zurueckgenommen. Erst ein erfolgreicher Commit macht den Slot zum Tombstone.
+Ein abgelehnter Storage-Abbau ist zugleich ein R4D-Unload-Veto, damit kein
+Backendkontext aus bereits heruntergefahrenem Treibercode erreichbar bleibt.
+
+MBR/Probe
+  Partitionserkennung und FS-neutrale Systemvolume-Erkennung. Der
+  Marker-Score bewertet FAT32 und NTFS gleichermassen; beide werden als
+  vollwertiges Volume eingehaengt. Ausnahme ist die aktive FAT32-
+  Bootpartition: Sie bleibt seit 0.60.9 ohne Laufwerksbuchstabe und wird
+  seit 0.60.11 intern gemountet, damit /boot-Ziele erreichbar bleiben,
+  ohne ein allgemeines Laufwerk zu werden.
+
+VFS (fs/vfs.zig, seit 0.60.2)
+  FS-neutrale Volume-Tabelle pro Laufwerksbuchstabe und Dispatch aller
+  generischen Dateioperationen an das Dateisystem des Laufwerks.
+  Vokabular: opake NodeRef statt Clusternummern, Entry mit ABI-
+  Attributbits und ABI-Zeitformat (DOS-u16-Paare). Alle Kernel-
+  Verbraucher sprechen ausschliesslich VFS; nur die MBR-Probe und die
+  R4DEV-FAT32-Telemetrie bleiben FS-spezifisch.
+
+FAT32 (fs/fat/fat32.zig)
+  Verzeichnis-/Dateioperationen, Clusterketten und FSInfo als erstes
+  VFS-Backend.
+
+NTFS (fs/ntfs/ntfs.zig, read seit 0.60.4, write seit 0.60.6/0.60.7)
+  Zweites VFS-Backend. Die gesamte On-Disk-Logik liegt im geteilten Kern
+  Code/System/SDK/r4os/ntfs_volume.zig (auf ntfs_format), der ueber ein
+  Device-Seam identisch im Kernel (Page-Cache) und in Hostmodellen
+  (RAM-Image) laeuft; fs/ntfs/ntfs.zig ist der duenne Kerneladapter.
+  Lesen: MFT-Bootstrap, per-Volume-$UpCase, $I30-B+Baum-Lookup/-
+  Enumeration, Runlists inkl. Sparse und initialized_size,
+  $ATTRIBUTE_LIST. Seit 0.60.10 vollstaendig fuer Fremdvolumes:
+  LZNT1-Dekompression (einheitenweise, stored/komprimiert/sparse),
+  echte UTF-8-Namen (BMP), benannte $DATA-Stroeme (ADS) ueber
+  readNamedStreamRange, hardlink-bewusstes Loeschen (link_count > 1
+  entfernt nur den Namen), Reparse-Points und EFS als sichtbare
+  Ablehnungen. Schreiben komprimierter Dateien lehnt weiterhin ab.
+  Schreiben: create/overwrite/append/delete mit vollstaendiger
+  $I30-B+Baum-Engine (Leaf-/Interior-Splits, Root-Push-down,
+  $INDEX_ALLOCATION-Anlage/-Wachstum, Interior-Delete via Praedezessor,
+  Empty-Block-Elimination bis zum Root-Kollaps), mkdir/rmdir/rename,
+  Append in place inkl. resident->non-resident-Konversion, MFT-Wachstum
+  um 64-Record-Schritte. $Bitmap-/MFT-Allokation, Dirty-Flag und
+  $MFTMirr-Sync mit fester crash-sicherer Reihenfolge (dirty -> bitmap
+  -> data -> record+mirror -> index -> clear).
+  Atomarer Ownership-Transfer (seit 0.60.8): replaceFileAtomic als
+  Rename-Kette in einer Dirty-Klammer (target->backup, staged->target),
+  jeder Crash-Schnitt mit demselben Aufruf idempotent fortsetzbar,
+  kein Copy/Delete-Fallback; Stage-/Backupnamen bleiben 8.3-validiert.
+  Der SYSUPD-Recovery-Boot loest das Volume pro Payload-Pfad auf
+  (laufwerksneutral); R4U kennt die Zielklasse "data" fuer Payloads auf
+  anderen Volumes. copy folgt 0.60.9.
+  Abnahme: Run-NtfsTreeContract0607.ps1 (B+Baum-Hostmodell, Churn,
+  Crash-Matrix, striktes NtfsVerify), Run-NtfsWriteContract0606.ps1
+  (Phase-1-Hostmodell), Run-NtfsReplaceContract0608.ps1 (Replace-
+  Zustands-/Crash-Matrix), Run-NtfsTreeRuntime0607.ps1 (NTFSDIAG
+  /WRITE + /TREE), Run-NtfsSysupdRuntime0608.ps1 (SYSUPD-Atomik auf
+  NTFS), Run-NtfsReadRuntime0604.ps1 (Lesepfad); Windows-chkdsk
+  manuell ueber Test-NtfsChkdsk0605.ps1.
+
+NTFS-Formatter (Host, seit 0.60.5)
+  Code/BuildTools/ImageCreator/src/ntfs_mkfs.zig erzeugt auf demselben
+  ntfs_format-Kern chkdsk-saubere NTFS-3.1-Volumes (Metadaten,
+  collation-sortierte $I30-B+Baeume, $LogFile 0xFF). Erreichbar ueber den
+  ImageCreator-Subcommand `format-ntfs`. Strukturpruefung: Hosttool
+  Code/BuildTools/NtfsVerify (Pflichtgate Run-NtfsFormatterContract0605);
+  Windows-chkdsk-Nachweis manuell ueber Test-NtfsChkdsk0605.ps1.
+
+Requestschicht
+  Gemeinsamer Datei-/Range-I/O-Pfad.
+
+Page-Cache
+  4-KB-Seiten, Hashindex, Dirtyzustand, Writeback und Reclaim.
+
+R4SYS
+  Oeffentlicher Datei-, Verzeichnis-, Laufwerks- und Streamingvertrag.
+
+Laufwerke
+---------
+
+Der produktive Pfad arbeitet mit dem explizit aufgeloesten Laufwerk eines
+Pfads. Es gibt keine implizite Auswahl eines beliebigen FAT32-Mounts.
+C: ist der Systempfad; weitere Laufwerke werden ueber die Drive Registry
+gefuehrt.
+
+Systemlayout seit 0.60.9: Die Systemplatte traegt eine aktive FAT32-
+Bootpartition (128 MB, Limine + Kernel + Preload unter /boot, ohne
+Laufwerksbuchstabe) und das NTFS-3.1-Systemvolume C:. Der MBR-Scan
+erkennt das Systemvolume FS-neutral ueber Marker (/CONFIG.R4S, /R4OS,
+/R4OS/CONFIG, /R4OS/SOFTWARE, Score >= 3); die Bootpartition (bootable,
+LIMINE.CONF, kein R4OS-Baum) bleibt unlettered. data.img (D:) bleibt
+FAT32 (Mischbetrieb). Das Image entsteht ueber den ImageCreator-
+Subcommand `create-system` (FAT32-Teil klassisch, NTFS-Teil ueber den
+geteilten ntfs_mkfs-Kern mit den Windows-Metadatentemplates).
+
+Seit 0.60.17 schreibt der geteilte NTFS-Kern in Loecher sparse-geflaggter
+Dateien: writeFileAt alloziert Cluster fuer den betroffenen Bereich,
+splittet den unmapped Run in [Loch][gemappt][Loch], zero-fuellt die
+frischen Cluster (der Cluster-Slop um die Payload liest weiter Nullen)
+und committet die Runlist ueber commitDataRunlist (inkl. 0.60.16-Spill).
+Gemappte In-place-Writes bleiben der lazy Fast-Path ohne Dirty-Klammer.
+initialized_size folgt Windows: Bytes in [init, data_size) lesen als
+Nullen; ein Write dahinter zero-t erst gemappte Cluster im Gap und hebt
+init im Commit an; Append auf Sparse zero-t den Gap und mappt das
+Append-Fenster im bestehenden VCN-Raum. updateNonResident pflegt fuer
+sparse/komprimierte Attribute total_allocated (0x40, reale Allokation
+statt VCN-Raum) - chkdsk prueft das gegen. Unberuehrte Loecher bleiben
+Loecher; Loecher stanzen bleibt sichtbar unsupported. Nachweis: Gate
+Run-NtfsSparseContract0617 gegen das echte Windows-Fixture (SPARSE.BIN)
+inkl. Crash-Sweep; chkdsk des mutierten Volumes ab Pass 0 fehlerfrei.
+
+Seit 0.60.16 kann der geteilte NTFS-Kern eine non-residente $DATA-Runlist,
+die nicht mehr in den 1-KB-FILE-Record passt, wie Windows in einen
+Erweiterungs-Record auslagern: der Basis-Record behaelt
+$STANDARD_INFORMATION und $FILE_NAME und erhaelt ein $ATTRIBUTE_LIST, das
+jedes Attribut seinem Record zuordnet; das $DATA lebt fortan im
+Erweiterungs-Record (lowest_vcn 0). Die Listeneintraege muessen die
+ECHTE Instance-ID des referenzierten Attributs tragen - chkdsk prueft
+{Typ, Name, VCN, Instance} kreuz und meldet sonst einen beschaedigten
+Attributlisteneintrag (realer chkdsk-Befund der 0.60.16-Abnahme;
+NtfsVerify wurde daraufhin um denselben Cross-Check inklusive
+Basis-Rueckreferenz der Erweiterungs-Records ergaenzt und das Gate um
+einen Bad-Instance-Zwilling als Negativ-Beweis). Der Lesepfad folgte
+$ATTRIBUTE_LIST
+schon seit 0.60.3; der Schreibpfad ergaenzt Spill (spillDataToExtension),
+weiteres Runlist-Wachstum im Erweiterungs-Record (commitDataRunlist) und
+leckfreies Loeschen beider Records. Nebenbei behoben: das
+Runlist-Mapping-Zwischenpuffer war 256 Byte gross und deckelte Runlists
+kuenstlich auf ~64 Fragmente; jetzt record-gross. Ein Runlist, die selbst
+einen ganzen Erweiterungs-Record fuellt (viele Dutzend Fragmente),
+braeuchte einen VCN-Split ueber mehrere Records und bleibt sichtbar
+record_full (notiert fuer spaeter).
+
+Seit 0.60.14 besitzt der geteilte NTFS-Kern einen Deferred-Stream-
+Schreibpfad (appendFileAtOffsetDeferred/finishDeferred): File-Streams
+(fileStreamWrite ueber Slots, damit auch das SYSUPD-Staging) mutieren in
+derselben Reihenfolge, aber ohne Durable-Flush pro Phase; das Dirty-Flag
+spannt ueber den gesamten Stream und finishDeferred (vfs.flushVolume am
+Stream-Finish) ist der einzige Durability-Punkt: erst Drain, dann
+Dirty-Clear mit eigenem Flush. Messbasis im Haertungsmodell: 64 4-KB-
+Chunks = 1 Device-Flush (vorher ~6 pro Append). Ein Crash mitten im
+Stream hinterlaesst ein dirty Volume mit einer zerrissenen Streamdatei -
+der chkdsk-reparierbare Dirty-Fall; Konsistenz stellt das Loeschen der
+Datei her (SYSUPD-Recovery tut das fuer Stage-Dateien). Der durable
+Einzel-Append-Vertrag (appendFileAtOffset) bleibt unveraendert.
+
+Seit 0.60.13 blendet der geteilte NTFS-Kern die Windows-Metadatei-
+Records ($MFT bis $Extend, Records 0-15, inklusive des "."-Eintrags der
+Root) wie Windows aus jeder Verzeichnisauflistung aus; namensbasierter
+Pfadzugriff auf die Systemnamen meldet not-found, sodass kein
+generischer Lese-/Schreib-/Loeschpfad einen Metadatei-Record ueber den
+Namen erreichen kann. Der Record-Allokator beginnt bei MFT_FIRST_NORMAL
+(16) - Userdateien koennen nie in den verborgenen Bereich fallen.
+
+Seit 0.60.11 wird die Bootpartition beim MBR-Scan zusaetzlich intern
+gemountet (vfs.mountBootVolume, weiterhin ohne Buchstaben und ohne
+Drive-Registry-Eintrag). Der letterlose /boot-Teilbaum des Systemlaufwerks
+routet in allen pfadbasierten R4SYS-Operationen (inklusive File-Streams
+und dem Recovery-Boot) auf dieses Bootvolume. Damit kann SYSUPD die
+Payloadklasse boot-kernel (/boot/r4os.elf) regulaer stagen und atomar
+ersetzen; Rename/Replace erzwingen ueber die Same-Parent-Regel, dass
+beide Seiten auf demselben Volume liegen, Copy/Move arbeiten cross-volume.
+
+Datei-I/O
+---------
+
+R4SYS besitzt Info, Read/Write, ReadAt, Append, Copy, Move, Rename, Delete und
+Streaming Begin/Write/Finish/Abort. Asynchrones I/O nutzt die R4SYS-I/O-
+Felder. Optionale Felder werden mit hasFn geprueft.
+
+Cache und Writeback
+-------------------
+
+Reads und Writes laufen ueber Requestschicht und Page-Cache. Dirty-Seiten
+werden kontrolliert geschrieben. Reclaim darf nur geeignete saubere
+Payloadframes an den PMM zurueckgeben. Diagnosewerte liegen in R4DEV.
+
+Regeln
+------
+
+- Ein produktiver Block-I/O-Pfad pro Backend.
+- Keine stille Built-in-Datenroute neben aktivem R4D.
+- Offsets, Laengen, Clusterketten und Kapazitaeten werden validiert.
+- Fehlercodes bleiben fachlich; fehlende API-Felder werden separat gemeldet.
+- Systemdateien muessen langfristig im laufenden R4OS ersetzbar bleiben.
+
+Haertung (0.60.11)
+------------------
+
+Das Pflichtgate Run-NtfsHardeningContract0611 faehrt vor jedem Kernelbuild
+das kombinierte Hostmodell CheckNtfsHardening0611 gegen den geteilten
+NTFS-Kern: einen gemischten Churn ueber alle Schreiboperationen (create,
+delete, rename/move, append, in-place overwrite, atomic replace, mkdir,
+rmdir) mit Schattenmodell und dynamischem Verzeichnispool, einen
+deterministischen Crash-Sweep ueber alle sieben geklammerten
+Operationsarten mit variierten Flush-Budgets (Dirty-Flag-Semantik,
+old-or-new-Konsistenz, idempotente Replace-Wiederholung) und die
+Dirty-Flag-Matrix. In-place-Writes (writeFileAt) sind bewusst ohne
+Dirty-Klammer (Pager-Semantik; torn content bei Stromverlust ist der
+dokumentierte Vertrag). Die chkdsk-Nachweis-Suite
+Invoke-NtfsChkdskSuite0611 erzeugt alle Beweisimages (frisches Format,
+Write-/Tree-/Replace-/Haertungs-Churn, gecrashtes Dirty-Image, mutiertes
+Windows-Fixture) und faehrt sie durch die manuelle Adminabnahme
+Test-NtfsChkdsk0605 (Pass 2 muss fehlerfrei sein).
+
+Recovery-Compare-and-delete (0.60.21)
+------------------------------------
+Alias-first Publishing (Rename, create-only Publish, atomarer Replace)
+hat dauerhafte Fenster, in denen ein Indexname und der kanonische
+$FILE_NAME des Records NICHT uebereinstimmen. Generische VFS-Lookups
+lehnen diesen Halbzustand bewusst als io ab - eine Namensaufloesung, die
+ihn akzeptierte, koennte ein halb uebergebenes Objekt als normale Datei
+ausliefern. Genau dadurch war ein solcher Eintrag aber auch nicht mehr
+entfernbar: der normale identitaetsgebundene Delete sah ihn nicht.
+
+Seit 0.60.21 gibt es dafuer die recovery-only Operation
+vfs.deleteRecoveryEntryIfIdentity. Sie loest den Namen ueber die
+transiente Sicht auf, handelt aber ausschliesslich bei exaktem
+{record, sequence}; ein nur gleichnamiger oder inzwischen ersetzter
+Fremdeintrag wird als mismatch abgelehnt, ohne irgendetwas zu schreiben.
+
+Ob das Objekt freigegeben oder nur ein Alias geloest wird, ist NICHT
+geraten: der Kern zaehlt ueber den $I30-Walk, wie viele Index-Eintraege
+des Verzeichnisses noch genau dieses {record, sequence} referenzieren.
+Nur bei exakt einem verbleibenden Namen wird der Record samt
+Erweiterungs-Record und Clustern freigegeben; bei mehreren wird
+ausschliesslich dieser eine Alias geloest (unlinked). Der frueher
+naheliegende Weg - die Entscheidung aus einem Vergleich mit dem
+kanonischen Namen abzuleiten - ist falsch: ein Loeschen des KANONISCHEN
+Namens im Zwei-Alias-Fenster haette den Record freigegeben, obwohl der
+Stage-Alias noch darauf zeigte, und damit einen haengenden Index-Verweis
+auf einen freigegebenen Record hinterlassen.
+
+Vorbedingungen sind link_count == 1 und ein kanonisches $FILE_NAME in
+DIESEM Verzeichnis; erst damit ist die Zaehlung vollstaendig. Hardlinks
+und verzeichnisuebergreifende Halbzustaende werden sichtbar als
+unsupported abgelehnt statt geraten. deleteFile teilt sich seither
+denselben Rumpf (releaseFileObjectLocked) und entfernt den Indexeintrag
+ebenfalls identitaetsgebunden.
+
+Das Fenster zwischen dem kanonischen $FILE_NAME-Write und dem
+Ziel-Index-Insert enthaelt keinen eigenen Flush und war deshalb mit dem
+Flush-Budget nicht erreichbar; dafuer existiert der Test-Seam
+cut_after_canonical_rewrite (Default false, wie flush_budget).
+Pflichtgate: Run-NtfsRecoveryDeleteContract0621.
+
+Persistente Upload-Publish-Claims (0.60.22)
+-------------------------------------------
+SFTP, SCP und FTP sowie allgemeine atomare Storage-Operationen uebergeben
+ein Objekt vom privaten Stage-Namen an den Zielnamen. Bis 0.60.21 lebte
+der einzige Recovery-Token dafuer nur im RAM, ein Reset mitten in der
+Uebergabe verlor ihn also.
+
+Seit 0.60.22 wird ein kleiner Textclaim (Body-Pruefsumme, feste
+Feldreihenfolge) dauerhaft geschrieben und geflusht, BEVOR der Publish
+seinen ersten Visibility-Point kreuzen darf. Gelingt das nicht, wird der
+Publish abgelehnt statt blind fortgesetzt. Der Claim bindet Volume-Token,
+Parent, Stage-/Ziel-/Backupnamen und die exakte Dateiidentitaet; das
+Volume wird ueber den Token gebunden, nicht ueber den Laufwerks-
+buchstaben, weil Buchstaben Aliase sind.
+
+Die Claims liegen bewusst in EINEM Verzeichnis (/R4OS/UPDATE/CLAIMS) auf
+dem Systemvolume, auch fuer Ziele auf anderen Volumes: die
+Ordnungsanforderung ist einseitig (der Claim muss nur VOR dem ersten
+Visibility-Point durabel sein), und ein zentrales Verzeichnis erspart der
+Recovery das Scannen ganzer Volumes.
+
+Ein frisches Image enthaelt den UPDATE-Baum absichtlich noch nicht. Der
+Claim-Store legt daher UPDATE und CLAIMS unter dem vorhandenen R4OS-
+Systemverzeichnis selbst bedarfsgerecht an; ein atomarer Besitztransfer
+haengt nicht davon ab, dass SYSUPD oder ein Netzwerkdienst vorher lief.
+Die Attribution im Claim unterscheidet SFTP, SCP, FTP und allgemeines
+Storage; die Recovery-Regeln bleiben fuer alle Produzenten identisch.
+
+Vor dem normalen Runtimestart - direkt nach der SYSUPD-Paketrecovery -
+faehrt der gedeckelte Replay-Sweep jeden ueberlebenden Claim in einen
+terminalen Zustand. Die Regel ist absichtlich asymmetrisch um den Point
+of no Return: VOR dem kanonischen Rewrite wird ein abgebrochener Upload
+zurueckgerollt, DANACH wird die Uebergabe vollendet. Damit sieht ein
+Client bei verlorener Bestaetigung entweder die Datei oder nicht,
+niemals ein halbes Objekt. Ein fremdes Objekt unter dem Namen wird nie
+angefasst; der Claim wird dann nur zurueckgezogen, damit er kein
+spaeteres Loeschen autorisieren kann. Ein einzelner fehlschlagender
+Claim bricht den Sweep nicht ab, sondern bleibt fuer den naechsten Boot
+liegen. Pflichtgate: Run-UploadPublishClaimContract0622.
+
+Abnahme
+-------
+
+    DevTools/Scripts/Build.bat -app FsDiag
+    DevTools/Scripts/Build.bat -app StorageDiag
+    DevTools/Scripts/Build.bat -norun
+    DevTools/Scripts/Build.bat -test

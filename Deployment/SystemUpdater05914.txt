@@ -1,0 +1,214 @@
+﻿R4OS 0.59.14 - atomare und crashkonsistente Systemupdates
+=========================================================
+
+Ziel
+----
+
+SYSUPD installiert ein R4U-Paket als eine paketweite Transaktion. Ein Fehler,
+Prozessabbruch oder Stromverlust darf weder das letzte gute System verlieren
+noch einen gemischten Dateistand als erfolgreich markieren. SFTP und SCP
+bleiben reine Transportwege in `C:\R4OS\UPDATE\INBOX`; Systemziele werden nie
+direkt per Netzwerktransfer ueberschrieben.
+
+Bedienung
+---------
+
+```
+SYSUPD STATUS
+SYSUPD VERIFY C:\R4OS\UPDATE\INBOX\UPDATE.R4U
+SYSUPD APPLY C:\R4OS\UPDATE\INBOX\UPDATE.R4U
+SYSUPD RESUME
+```
+
+Seit 0.63.13 ist fuer neue Aufrufer der typisierte Weg `STAGE`, `COMMIT`,
+`RESUME-BATCH`, `STATUS`. `APPLY` bleibt der direkte Einzelpfad, akzeptiert
+aber nur reine, nicht laufende R4X-Anwendungen ohne ausstehenden Batch.
+
+`VERIFY` prueft Header, Manifest, Paketbindung, Checksummen, Releasezuordnung,
+Komponenten und alle Zielklassen ohne Dateisystemmutation. `APPLY` fuehrt
+Preflight, Staging, Commit, Gesamt-Verify, Inventarpflege und Cleanup aus.
+`VERSION.R4S` und `MODULES.JSON` sind keine Paketpayloads.
+
+`RESUME` setzt nur die im gueltigen Journal gebundene Paketdatei fort. Pfad,
+Laenge, Paketdigest, Ausgangs- und Zielversion sowie alle Payloaddaten muessen
+unveraendert sein. Ein anderes Paket kann eine angefangene Transaktion nicht
+uebernehmen.
+
+Atomarer Einzelreplace
+----------------------
+
+R4SYS ABI 8 stellt `file_replace_atomic` bereit. Die Operation akzeptiert nur
+Ziel, Stage und Backup auf demselben FAT32-Volume und im selben Verzeichnis.
+Stage und Backup muessen echte FAT-8.3-Namen sein. Seit 0.59.15 darf das Ziel
+auch einen bereits vorhandenen langen FAT-Namen besitzen: dessen bestehender,
+stabiler Short-Directory-Eintrag bleibt der atomare Sichtbarkeitspunkt und die
+LFN-Slots werden nicht neu geschrieben. Ein noch nicht vorhandenes langes Ziel
+wird abgelehnt, weil seine mehrteilige LFN-Anlage nicht atomar publiziert
+werden koennte. Es gibt in diesem Pfad keinen Copy/Delete-Fallback.
+
+FAT32 uebertraegt die vorhandene Clusterkette zuerst auf den Backup-Eintrag,
+flushes diesen Zustand, uebertraegt danach die Stage-Kette auf das Ziel und
+flushes erneut. Zum Schluss wird der Stage-Eintrag ohne Freigabe der nun vom
+Ziel besessenen Kette geloest. Jeder persistente Grenzpunkt ist wiederholbar;
+keine Kette darf verloren, doppelt freigegeben oder quer verlinkt werden.
+`VERIFY` und `APPLY` verwenden dieselbe Zielvorpruefung; ein fehlendes langes
+Ziel wird daher schon vor Journal und Staging eindeutig gemeldet.
+
+Der gezielte Unterbrechungsmarker `TST05914.FLT` gilt seit 0.59.15 nur dann als
+aktiv, wenn seine atomare Loeschung tatsaechlich eine vorhandene Datei entfernt
+hat. Der normale Rueckgabewert `0` fuer "nicht vorhanden" darf einen
+Produktions-Apply nicht nach dem ersten Commit unterbrechen.
+
+Die zentrale Bootkonfiguration `C:\CONFIG.R4S` ist seit 0.59.15 ebenfalls ein
+explizites `config`-Ziel fuer R4UPack, R4SYS und SYSUPD. Damit lassen sich etwa
+persistente DHCP-/statische Netzwerkoptionen ueber denselben geprueften,
+atomaren Inbox-Pfad korrigieren; ein direkter SFTP-Schreibzugriff auf die
+Bootkonfiguration bleibt unzulaessig.
+
+Seit 0.60.2 dispatcht `file_replace_atomic` FS-neutral ueber das VFS: auf
+NTFS-Volumes traegt `ntfs_volume.replaceFileAtomic` (Rename-Kette in einer
+Dirty-Klammer, 0.60.8) den Transfer, auf FAT32 der historische
+Ownership-Transfer. Payloads auf anderen gemounteten Volumes verwenden die
+Zielklasse `data` (0.60.8).
+
+Seit 0.60.12 materialisieren STATUS, APPLY und RESUME den Update-Baum
+verlaesslich: `ensureUpdateDirectories` legt `C:\R4OS\UPDATE`, `INBOX`
+und `STAGED` an und verifiziert die Existenz per fileInfo (die blosse
+dirCreate-Rueckgabe unterscheidet nicht zwischen "existiert schon" und
+"fehlgeschlagen"; ein frisches Systemimage traegt den Baum nicht).
+`SYSUPD STATUS` meldet den realen Zustand als ` dirs=ok|missing` am
+Zeilenende und ist damit der dokumentierte erste Schritt vor jedem
+SFTP-Upload; APPLY/RESUME brechen bei nicht materialisierbarem Baum
+sichtbar mit `update-dirs` ab. Seit 0.63.12 bleibt VERIFY dagegen vollstaendig
+seiteneffektfrei und setzt einen bereits final veroeffentlichten Inboxpfad
+voraus.
+
+Seit 0.60.11 ist auch das Kernelupdate ein regulaeres SYSUPD-Ziel: Die
+Payloadklasse `boot-kernel` adressiert `/boot/r4os.elf` letterlos. Der
+MBR-Scan mountet die buchstabenlose FAT32-Bootpartition intern
+(vfs.mountBootVolume); der /boot-Teilbaum des Systemlaufwerks routet in
+allen pfadbasierten R4SYS-Operationen und im Recovery-Boot auf dieses
+Bootvolume. SYSUPD staged, ersetzt und rollt Kernel-Payloads damit ueber
+denselben journalgestuetzten Pfad wie alle anderen Klassen; Stage- und
+Backupnamen liegen generationsgebunden in `/boot`. Der QEMU-Nachweis ist
+`Run-NtfsBootKernelRuntime0611.ps1` (unterbrochenes APPLY, RESUME mit
+echtem Kernel-Replace, Boot des ersetzten Kernels, byte-exakter
+`applied=2/2`-Nachweis).
+
+Paketjournal und Namen
+----------------------
+
+- Journal-Slots: `C:\R4OS\UPDATE\STAGED\SYSUPD0.JRN` und `SYSUPD1.JRN`
+- Phasen: `prepare`, `stage`, `commit`, `verify`, `inventory`, `applied`,
+  `post_boot`, `cleanup`, `rollback`, `rolled_back`
+- Generationen: monotone Transaktions- und Journalgenerationen; kein Wrap
+- Integritaet: FNV-Checksumme ueber den vollstaendigen Journalinhalt
+- Sperre: `SYSLOCK.LCK` verhindert parallele APPLY-/RESUME-Laufe
+- Stage-/Backupnamen: generationgebundene FAT-8.3-Namen direkt neben dem Ziel
+
+Jeder neue Zustand wird in den inaktiven Slot geschrieben, zurueckgelesen und
+validiert, bevor seine Generation den alten Slot ueberholt. Ein gerissener
+inaktiver Slot kann deshalb den letzten gueltigen Zustand nicht verdraengen.
+
+Seit 0.63.30 wiederholt die Engine nach einem mehrdeutigen Streamfehler auch
+den R4SYS-Abort des privaten Stages begrenzt. Abort bleibt an die konkrete
+Streamidentitaet gebunden; danach muss der Stage fehlen oder bereits
+bytegenau dem vollstaendigen Journalpayload entsprechen. Ein eigener
+Teil-Stage wird so vor dem Streamretry entfernt, waehrend ein gleichnamiges
+fremdes Objekt niemals per Pfad geloescht oder ueberschrieben wird.
+
+Seit 0.63.12 schreibt die gemeinsame typisierte Update-Engine Journal v4.
+Nach dem Paketpayload-Verify prueft sie die wirklich installierten R4M0- und
+Kernel-ELF-Identitaeten und erzeugt daraus den neuen `MODULES.JSON`-Stand.
+Das Inventar ist ein interner zusaetzlicher Journalpayload, niemals Inhalt
+des R4U. Die Phase `inventory` kann ohne erneutes Oeffnen des Transportpakets
+fortgesetzt werden; bei Boot-Recovery wird sie als Teil derselben Transaktion
+vor den Artefakten zurueckgerollt. `Installed` ist erst nach konsistentem
+Artefakt- und Inventarstand zulaessig.
+
+Seit 0.63.13 schreibt sie Journal v5. Ein Neustartbatch besitzt zusaetzlich
+die dualen Slots `SYSBCH0.JRN` und `SYSBCH1.JRN`, die alle unveraenderlichen
+Paketbindungen und die topologisch geplante Reihenfolge halten. Alle
+Transportpayloads des Batches und das einmal daraus abgeleitete
+`MODULES.JSON` bilden eine einzige Forward-/Rollback-Transaktion. Boot-
+Recovery darf diese Transaktion aus `stage` oder `commit` vorwaerts bis
+`post_boot` fortsetzen; andere nicht beweisbare Zustaende werden batchweit
+rueckwaerts behandelt.
+
+`VERSION.R4S` gehoert nicht zum Vor-Reboot-Commit. Erst `RESUME-BATCH` prueft
+nach dem Boot laufenden Kernel, konkrete Artefaktidentitaeten und Inventar.
+Danach wird die Releaseversion als letzter atomarer Journalpayload gebunden,
+committed und der Batch auf `Installed` gesetzt. Foundationstatus und
+Zielrelease koennen dadurch keinen nur teilweise aktiven Batch vortaeuschen.
+
+Nach einem erfolgreichen Paket bleibt pro ersetztem Ziel genau das neue
+last-good Backup erhalten. Beim naechsten erfolgreichen Replace desselben
+Ziels wird das vorherige Backup im neuen Journal mitgefuehrt und erst nach dem
+dauerhaften Gesamtzustand `applied` entfernt. Ein Abbruch waehrend dieses
+Cleanup wird anhand des weiterhin gueltigen `applied`-Journals idempotent
+beendet.
+
+Seit 0.60.23 ist dieser Cleanup nicht mehr ein blindes Loeschen der im Journal
+genannten Namen, sondern eine gepruefte Operation (`CleanupSpec` /
+`system_update_atomic.cleanupPayload`). Sie stellt Ziel, Stage, Backup und
+Vorgaengerbackup unter EINE fs-Gate-Klammer und entfernt nur, was auch
+wirklich zu dieser Transaktion gehoert. Der Grund ist ein reales Fenster: Ein
+Journalname ist nur so lange eindeutig, wie niemand anders denselben Namen
+neu publiziert hat. Ein Cleanup, der zwischen Lookup und Loeschung die
+Identitaet nicht mehr prueft, kann ein zwischenzeitlich neu entstandenes
+Fremdobjekt mitreissen. Geprueft wird gegen den Fingerabdruck, den der
+Forward-Pfad protokolliert hat; passt er nicht, bleibt das Objekt stehen und
+der Cleanup meldet das, statt zu raten.
+
+Damit gilt fuer beide Richtungen dieselbe Regel: Forward-Commit und Cleanup
+handeln identitaetsgebunden, nicht namensgebunden. Auf NTFS liefert
+`ntfs_volume` dafuer seit 0.60.21 die passenden Primitive
+(`lookupRecoveryEntryStatus`, `deleteRecoveryEntryIfIdentity`), die auch einen
+halb publizierten Zwischenstand noch eindeutig aufloesen koennen.
+
+Recovery und Rollback
+---------------------
+
+Solange R4OS weiterlaeuft, setzt `SYSUPD RESUME` eine kontrolliert
+unterbrochene Transaktion ab ihrem Journalstand fort. Bereits atomar
+installierte Payloads werden nicht erneut ersetzt.
+
+Nach einem Stromverlust liest der Kernel die beiden Journal-Slots direkt nach
+dem Einhaengen des Systemvolumes und vor IRQ-, Treiberpolicy-, Service- und
+Shellstart. Ein vollstaendig `applied`es Paket wird nur aufgeraeumt. Eine
+unvollstaendige Forward-Transaktion wird in umgekehrter Payloadreihenfolge auf
+das letzte gute System zurueckgerollt. Sind Journaldateien vorhanden, aber
+beide ungueltig, bootet R4OS fail-closed statt mit unbekannt gemischtem Stand.
+
+Nach `rolled_back` kann dasselbe verifizierte Paket mit einem neuen `APPLY`
+erneut installiert werden. Es gibt bewusst keinen allgemeinen Befehl, der ein
+semantisch schlechtes, aber erfolgreich installiertes Paket ohne eigenes
+bekannt-gutes R4U rueckgaengig macht.
+
+Kurze Abnahme
+-------------
+
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File Tests\Runtime\Run-SystemUpdateAtomicContract05914.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File Tests\Runtime\Run-SystemUpdateAtomic05914.ps1 -Tier Quick
+```
+
+Das Hostmodell injiziert Stromverlust und I/O-Fehler nach beziehungsweise vor
+jeder persistenten Forward- und Rollbackgrenze, prueft vollen Datentraeger,
+defekte Payloads, falsche Versionen, Paketwechsel, Generationsexhaustion sowie
+10 unabhaengige Testfamilien. Der optionale QEMU-Modus `-Tier Full` ist eine
+Tiefendiagnose und kein Abschlussblocker.
+
+Quick packt ein echtes Zwei-Payload-R4U in ein disposable Testimage. Eine
+einmalige, selbstloeschende Testmarke unter `TST05914.FLT` beendet APPLY nach
+dem ersten dauerhaft protokollierten Commit. Der Lauf verlangt `commit 1/2`,
+die alte Versionsdatei, ein erfolgreiches `RESUME`, danach `cleanup 2/2`, die
+neue Versionsdatei, die last-good Backups und `System poweroff.`.
+
+Historie und Hardwaregrenze
+---------------------------
+
+`SystemUpdater05510.txt` dokumentiert Paketformat und Transport. Den
+historischen Copy/Delete-Pfad gibt es fuer SYSUPD seit 0.59.14 nicht mehr. Die erste reale Abnahme des neuen Vertrags findet
+gebuendelt in 0.59.15 statt; bis dahin wird der Lenovo weder gebootet noch per
+SSH/RDP veraendert.

@@ -1,0 +1,111 @@
+﻿R4X Memory Pressure, OOM-Policy und Pagefile-Perspektive 0.53.10
+=================================================================
+
+Ziel
+----
+
+0.53.10 macht den Zustand nach VM V2 ehrlich sichtbar: R4OS kann mehrere GB
+virtuell reservieren und logisch committen, aber wirklich residente Bytes
+brauchen weiterhin physischen RAM. Solange es kein Pagefile, keinen Swap und
+keinen globalen Reclaim-/Writeback-Unterbau gibt, darf das System keinen
+scheinbaren Ausweichpfad vortaeuschen.
+
+Der Schritt fuehrt deshalb keinen Swap-Platzhalter ein. Stattdessen gibt es
+einen strukturierten R4DEV-Snapshot fuer Memory Pressure und OOM-Policy.
+
+
+ProgramApi v107
+---------------
+
+ProgramApi v107 haengt am Ende der grossen ProgramApi-Tabelle einen neuen
+R4DEV-Diagnoseslot an:
+
+    int32_t memory_pressure_snapshot(R4ProgramMemoryPressureSnapshot* out)
+
+Die Tabelle waechst von 1768 auf 1776 Byte. R4XStartR4Sys waechst nicht,
+weil der Vertrag Diagnosebesitz ist und kein R4SYS-Startadapter noetig ist.
+
+`ProgramMemoryPressureSnapshot` meldet:
+
+- `total_physical_bytes`, `free_physical_bytes`, `used_physical_bytes`
+  und `largest_free_physical_bytes` aus der PMM-/MemoryBlock-Sicht.
+- `app_system_reserve_bytes` und `app_available_bytes` als den
+  physikalischen Sicherheitsabstand, den R4X-Demand-Commit nicht antasten
+  soll.
+- `virtual_reserved_bytes`, `virtual_committed_bytes` und
+  `virtual_resident_bytes` aus der VirtualRange-Buchhaltung.
+- `committed_nonresident_bytes` als logischen Commit, der noch keine
+  residenten Frames belegt.
+- `commit_budget_bytes` und `commit_headroom_bytes` als aktuell ehrlichen
+  Commit-Spielraum ohne Swap.
+- `reclaimable_bytes` und `dirty_bytes`, aktuell beide 0.
+- `fault_count` und `failed_faults` fuer aggregierte VM-Fault-Diagnose.
+
+Der Snapshot besitzt ausserdem Flags fuer die aktuelle Policy:
+
+- kein Pagefile,
+- kein Swap,
+- Commit-Limit aktiv,
+- Demand-Commit aktiv,
+- R4X-Memory-Profile aktiv,
+- kein globaler Reclaim-Pfad.
+
+Die OOM-Policy-Flags machen den aktuellen Zustand explizit:
+
+- SDK-/Allocator-Aufrufe koennen als Allocation-Fehler enden,
+- explizite VM-Operationen liefern Fehlercodes,
+- Demand-Faults ohne Backing oder Budget eskalieren in den bestehenden
+  Fault-Pfad,
+- R4OS betreibt kein stilles Overcommit.
+
+
+Warum R4DEV?
+------------
+
+Memory Pressure ist Diagnose und Beobachtung. Die Zahlen sind fuer SYSINFO,
+MEMSUITE, MEMVIEW-nahe Werkzeuge und spaetere Planner gedacht. Sie sind kein
+Komfort-Allocator, keine App-Policy und kein Kernel-Pretty-Print.
+
+R4SYS bleibt Besitzer der produktiven VM-Operationen wie Reserve, Commit,
+Decommit und Release. R4DEV bleibt Besitzer der strukturierten Sicht darauf.
+
+
+Reclaim und Pagefile
+--------------------
+
+0.53.10 fuehrt bewusst keinen halbfertigen Reclaim und kein Pagefile ein.
+
+Ohne echten Storage-/Async-I/O-Unterbau waere ein Pagefile nur ein instabiler
+Fallback. Ein spaeteres Pagefile braucht mindestens:
+
+- klare Page-Owner- und Pinning-Regeln,
+- Dirty-/Clean-Tracking,
+- Writeback- und Flush-Semantik,
+- Storage-Timeouts,
+- I/O-Completion oder vergleichbare waitbare Semantik,
+- eine Policy, welche Pages ueberhaupt verdrangbar sind,
+- Diagnose fuer Page-ins, Page-outs, Fehler und Latenzen.
+
+Bis dahin bleibt das System ehrlich: Commit ist begrenzt, Resident braucht
+physischen RAM, und fehlende Ressourcen werden als Fehler oder Fault sichtbar.
+
+
+Abnahme
+-------
+
+BOOTDIAG prueft die Verfuegbarkeit des ProgramApi-v107-Snapshots und meldet
+`Memory pressure snapshot: OK`.
+
+MEMSUITE `/VMSTRESS` prueft die Zahlen strenger:
+
+- Snapshot-Version und Groesse,
+- no-pagefile/no-swap/commit-limited/demand-commit/profile-limit/no-reclaim,
+- OOM-Policy-Flags,
+- physisches Free-/Used-/Total-Accounting,
+- VirtualRange-Commit >= Resident,
+- committed-but-not-resident-Berechnung,
+- Commit-Budget und Headroom,
+- `reclaimable_bytes=0` und `dirty_bytes=0`.
+
+SYSINFO zeigt den Pressure-Level, App-Commit-Headroom und Reclaimable-Wert in
+der normalen Memory-Uebersicht an.

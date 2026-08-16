@@ -1,0 +1,110 @@
+﻿R4OS FAT32-/QEMU-Storage-Benchmark 0.55.10.13
+================================================
+
+Ziel
+----
+0.55.10.13 trennt drei Fragen sauber voneinander:
+
+- Wie viel Arbeit erzeugt der lokale R4SYS/FAT32-Pfad im System?
+- Wie verhaelt sich derselbe Pfad unter verschiedenen QEMU-Storageprofilen?
+- Wie stark ist SSHD/SFTP als eigener Connectivity-Pfad weiterhin beteiligt?
+
+Der Benchmark aendert bewusst kein produktives Standardprofil. `standard.conf`
+bleibt IDE mit `cache=none`.
+
+Harness
+-------
+Das Script liegt unter:
+
+`Tests/Gate/Run-Fat32StorageBenchmark0551013.ps1`
+
+Wichtige Aufrufe:
+
+- `Run-Fat32StorageBenchmark0551013.ps1 -Profile all -Suite Fat32,SysUpd`
+- `Run-Fat32StorageBenchmark0551013.ps1 -Profile ide-none -Suite Fat32`
+- `Run-Fat32StorageBenchmark0551013.ps1 -Suite Sshd -SshdSftpBytes 131072`
+
+Profile:
+
+- `ide-none`: produktives Standardprofil `DevTools/QEMU/Config/standard.conf`
+- `ahci-none`: AHCI-Vergleich ueber `DevTools/QEMU/Config/custom.conf`
+- `ide-writeback`: temporaere Kopie von `standard.conf` mit `cache=writeback`
+
+Das Script erzeugt eine temporaere TestInjection-Konfiguration, legt bei
+SYSUPD einen vorbereiteten `CORE05511.R4U`-Payload ins Testimage, startet QEMU
+headless und liest die Vertragsmarker aus dem COM1-Log. Vorhandene
+`TestInjection`-Dateien werden nach dem Lauf wiederhergestellt. Temporaere
+QEMU-Konfigurationen werden nach dem Lauf geloescht.
+
+Messmatrix
+----------
+Alle drei Storageprofile haben die gleichen lokalen FAT32- und SYSUPD-Marker
+erreicht:
+
+- `FSDIAG fat32 io`: `sectors=297/267 flush=4 failures=0`
+- `FSDIAG stream large metrics`: `requests=132 fat=384 allocSearch=256 walk=383 flush=2<=4 wbFlush=2 wbSectors=10 yield=275/275 runs=128/256 maxRun=2 fatSectors=514 flushFailures=0`
+- `FSDIAG fat32 synthetic 14mb metrics`: `requests=1794 writes=41271 fat=5376 allocSearch=3584 walk=5375 flush=2 wbFlush=2 wbSectors=62 runs=1792/3584 maxRun=2 fatSectors=7222 failures=0/0/0/0`
+- `SYSUPD VERIFY`: `bytes=15127065 streamed=15127065 reboot=yes`
+- `SYSUPD APPLY`: `bytes=15127065 streamed=15127065 applied=2 staged=33 reboot=yes`
+- `SYSUPD STATUS`: `state=applied applied=2/2 result=ok`
+
+| Profil | Storage-Treiber | Wandzeit | Log |
+|--------|-----------------|----------|-----|
+| IDE/cache=none | `ATAPIO.R4D` | ca. 462,8 s | `DevTools/Logs/qemu-benchmark0551013-ide-none-20260623-223744.log` |
+| AHCI/cache=none | `AHCI.R4D` | 399,636 s | `DevTools/Logs/qemu-benchmark0551013-ahci-none-20260623-224644.log` |
+| IDE/cache=writeback | `ATAPIO.R4D` | 406,430 s | `DevTools/Logs/qemu-benchmark0551013-ide-writeback-20260623-224644.log` |
+
+Hinweis: Beim ersten IDE/cache=none-Lauf hat der Harness nach beendetem QEMU
+wegen eines Parserfehlers keine Summary geschrieben. Der R4OS-Lauf selbst ist
+vollstaendig bis `System poweroff` durchgelaufen; die Wandzeit ist deshalb aus
+Log-Erzeugung und Log-Abschluss rekonstruiert.
+
+Bewertung
+---------
+AHCI/cache=none war in diesem Lauf etwa 13,6 Prozent schneller als das
+Standardprofil. IDE/cache=writeback war etwa 12,2 Prozent schneller als
+IDE/cache=none, aber noch etwa 1,7 Prozent langsamer als AHCI/cache=none.
+
+Der zentrale Befund ist nicht "writeback loest FAT32", sondern: QEMU-Profil
+und Controllerpfad beeinflussen die Wandzeit deutlich, waehrend R4OS intern
+dieselbe FAT32-Arbeit erledigt. Die FAT32-Zaehler sind in allen drei Profilen
+gleich. `cache=writeback` ist deshalb kein sauberer Ersatz fuer weitere
+FAT32-/Registry-/Streamarbeit und sollte nicht still als Standard aktiviert
+werden.
+
+SSHD/SFTP
+---------
+Der Netzwerkpfad wurde bewusst getrennt gemessen:
+
+`Run-Fat32StorageBenchmark0551013.ps1 -Suite Sshd -SshdSftpBytes 131072 -SshdTimeoutSeconds 360`
+
+Ergebnis:
+
+- Harness: OK, `qemuSeconds=60.257`, `child_exit=0`
+- SSHD/SFTP: `sftp-large=131072`, `sftp-seconds=23.002`
+- Durchsatz fuer den SFTP-Teil: ca. 5,56 KB/s
+- Log: `DevTools/Logs/qemu-test-ssh-transfer0559-20260623-230449.log`
+- SFTP-Trace: `DevTools/Logs/qemu-test-ssh-transfer0559-20260623-230449.sftp.err`
+
+Der SSHD/SFTP-Pfad bleibt damit ein eigener Connectivity-Flaschenhals. Er darf
+nicht mit dem lokalen FAT32-/SYSUPD-Ergebnis vermischt werden.
+
+Entscheidung
+------------
+- `standard.conf` bleibt unveraendert.
+- AHCI/cache=none bleibt ein sinnvoller Vergleichs- und Hardware-naeherer
+  Abnahmepfad, ersetzt aber noch nicht den Standard.
+- IDE/cache=writeback bleibt ein bewusstes Vergleichsprofil und keine
+  Produktiventscheidung.
+- Der Benchmark-Harness ist die Basis fuer Vorher-/Nachhermessungen in
+  spaeteren FAT32- und Registry-/Config-Unterversionen.
+
+Empfohlene Folgeschritte
+------------------------
+- 0.55.10.14 sollte die Registry-/Config-Schreiblast beim Oeffnen und
+  Schliessen typischer Apps inventarisieren.
+- Ein spaeterer Benchmark sollte Zeitmarker innerhalb von R4OS ausgeben,
+  damit Bootzeit, FSDIAG, SYSUPD VERIFY, SYSUPD APPLY und Poweroff nicht nur
+  als gemeinsame QEMU-Wandzeit sichtbar sind.
+- SSHD/SFTP braucht weiterhin eine eigene Pipeline-/Windowing-Abnahme mit
+  klar getrenntem Netzwerk-, R4SYS-Stream- und FAT32-Anteil.

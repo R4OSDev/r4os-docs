@@ -1,0 +1,264 @@
+﻿Dynamische ProgramRegistry 0.59.8
+=================================
+
+Ziel
+----
+
+Seit 0.59.8 besitzt R4OS keine einkompilierte 16er-Grenze fuer laufende
+Programme mehr. `ProgramInstance`-Kerne liegen in einzeln allokierten Chunks.
+Ein Chunk bleibt waehrend seiner gesamten Lebensdauer an derselben Adresse;
+Wachstum verschiebt deshalb keine lebende Instanz und macht keinen internen
+Pin ungueltig.
+
+Die Zahl 32 ist die Abnahmeuntergrenze und nach Erwerb das Retention-Ziel aus
+zwei warmen Chunks, keine eager Bootallokation und kein Laufzeitlimit. Weitere
+Chunks entstehen bei Bedarf, bis eine konkrete Heap-, VM-, Task- oder sonstige
+Ressourcenallokation scheitert. Seit 0.59.10 sind auch die Scheduler-eigene
+Task-Registry sowie die getrennt vom R4X-Runtimepfad besessenen
+ProgramThreads, Waiter und FPU-States ressourcenproportional. Ihr eigener
+Lebenszeit-, Reclaim- und Fehlervertrag steht in `DynamicTaskRegistry.txt`.
+
+Chunk- und Slotmodell
+--------------------
+
+Ein Registry-Chunk enthaelt 16 stabil adressierte Slots. Die Registry darf
+demand-driven mit einem einzelnen physischen Chunk beginnen; der
+Retention-Target von zwei warmen Chunks garantiert aber, dass einmal
+erworbene Kapazitaet fuer mindestens 32 Programminstanzen nicht sofort wieder
+abgebaut wird. Leere Chunks oberhalb dieses Floors duerfen erst nach der
+dokumentierten Shrink-Hysterese freigegeben werden. Ein Chunk ist zugleich
+sein eigener Listenknoten und benoetigt genau eine Heapallokation; es gibt
+keine zweite Directory- oder Pointertabellen-Allokation.
+
+Die normale Shrink-Hysterese betraegt 64 Registry-Mutationsepochen. Unter
+diagnostiziertem Speicherdruck gilt eine kuerzere, aber weiterhin positive
+Schwelle von acht Mutationsepochen. Speicherdruck darf die Alterspruefung also
+nicht umgehen. Wird die Heapfreigabe eines bereits ausgeketteten Chunks
+abgelehnt, wird derselbe weiterhin gueltige Chunk samt Kapazitaets- und
+Speicherzaehlern wieder erreichbar eingekettet. Dasselbe Restore-Prinzip gilt
+fuer einen konkurrierenden Growth-Kandidaten, den ein anderer Grow bereits
+ueberfluessig gemacht hat.
+
+Seit 0.59.9 befindet sich jeder Slot in genau einem Zustand der erweiterten,
+monotonen Lifecycle-Maschine. Die Details und Freigabereihenfolge stehen in
+`ProgramLifecycle.txt`:
+
+`free`
+  Wiederverwendbar und weder per ID sichtbar noch gepinnt.
+
+`create`
+  Einer privaten Spawntransaktion zugeordnet. ID und stabiler Kernplatz sind
+  festgelegt, der Eintrag ist fuer Enumeration und normale Lookups aber noch
+  unsichtbar.
+
+`publish`
+  Vollstaendig initialisiert und atomar publiziert; der Main-Task hat den
+  Programmeinstieg noch nicht betreten.
+
+`run`
+  Der Programmeinstieg laeuft unter einer generationengebundenen Execution-
+  Reference.
+
+`exit`
+  Ein einziger Exitpfad besitzt Exitcode und Shutdown.
+
+`done`
+  Beendet; Completion und Diagnoseeintrag sind genau einmal festgeschrieben.
+
+`retire`
+  Fuer neue Lookups gesperrt. Die endgueltige Freigabe wartet auf auslaufende
+  interne Pins, Scheduler-Detach und den sicheren Ressourcenabbau.
+
+`reap`
+  Die schweren Ressourcen sind abgebaut. Ein besitzender Completion-Knoten
+  darf unabhaengig vom bereits wieder freigebbaren Registry-Slot fortleben.
+
+`pinned_slots` ist kein weiterer Zustand, sondern die Zahl der Slots mit
+mindestens einem aktiven internen Pin. Ein Chunk darf nur verschwinden, wenn
+alle seine Slots `free` und ungepinnt sind.
+
+Spawntransaktion
+----------------
+
+Ein Start besteht aus klar getrennten Phasen:
+
+1. Eine kollisionsfreie, von Null verschiedene Instanz-ID, eine global
+   monotone Generation, ein Completion-Knoten und ein stabiler Slot werden als
+   `create` gebunden.
+2. Datei, R4M0-Image, Stack und private ProgramInstance-Payloads werden ohne
+   sichtbaren Halbeintrag vorbereitet. Kein Registry-Lock bleibt ueber I/O,
+   Yield, Wait oder Heapallokation gehalten.
+3. Erst die vollstaendig initialisierte Instanz wechselt in einem kurzen,
+   nicht yieldenden Commitfenster zu `publish`; erst danach wird der Main-Task
+   runnable.
+4. Jeder Fehler vor dem Publish rollt alle bereits erworbenen Ressourcen in
+   umgekehrter Reihenfolge zurueck und gibt den reservierten Slot frei.
+
+Wachstum allokiert genau einen neuen, selbstverketteten Chunk ausserhalb einer
+Registry-Mutation und verknuepft ihn erst nach vollstaendiger Initialisierung. Ein
+Allokatorfehler veraendert weder bestehende Chunks noch ihre Slots, IDs oder
+Adressen. `last_admission_error`, `growth_failures` und `rollback_count`
+machen die abgelehnte Admission diagnostizierbar.
+
+Scheitert die echte Heapallokation eines erforderlichen Chunks, faehrt der
+Admission-Pfad genau einen begrenzten Pressure-Recovery-Zyklus. Er waehlt
+jeweils nur eine bereits beendete, gehostete Console-Instanz aus, deren
+Storage-Teardown nicht blockiert ist, beendet deren Reap vollstaendig ohne
+Registry-Lock und beginnt die Suche danach mit einem neuen Cursor. Anschliessend
+laeuft der Chunk-Shrink mit der weiterhin positiven Acht-Epochen-Schwelle. Die
+Admission wird genau einmal erneut versucht; ein zweiter echter Growth-OOM
+kehrt als Fehler zurueck. Laufende Instanzen werden dabei weder beendet noch
+verschoben.
+
+Der kontrolliert injizierte Growth-OOM ist davon bewusst getrennt: Er wird
+ohne Reap, Pressure-Shrink oder Retry direkt an den Aufrufer gemeldet. So bleibt
+der QEMU-Nachweis des unveraenderten Live-Sets streng. Dieser Registry-Reclaim
+ist an einen konkreten Registry-Admission-Fehler gebunden. Er wird nicht als
+Quelle in den globalen synchronen Frame-Reclaim eingehangen, weil der Abbau
+einer Programminstanz kein passender, garantiert framezaehlbarer Reclaimer ist
+und dort eine reentrante Loader-/VM-Reclaim-Kaskade erzeugen koennte.
+
+IDs, Lookup und Pins
+--------------------
+
+Instanz-IDs sind nicht der Chunkindex und enthalten keinen oeffentlichen
+Kernelpointer. Die Vergabe ueberspringt Null sowie jede noch vorhandene ID oder
+offene Legacy-Completion; Wrap und Kollision werden gezaehlt. Seit 0.59.9
+ergaenzt eine global monotone, beim Chunk-Shrink nie zurueckgesetzte `u64`-
+Generation die ID. Bei Generationsueberlauf stoppt weitere Admission mit einem
+eigenen Fehler. Eine alte ID-/Generationskombination kann deshalb weder eine
+wiederverwendete Slotadresse noch eine neue Instanz treffen.
+
+Ein Zugriff, der eine Yield-/Wait- oder Retire-Grenze ueberlebt, braucht einen
+generationengeprueften Pin, eine Execution-Reference oder einen erneuten
+Handle-Lookup. Unter Registry-Schutz werden ID, Generation und Zustand
+geprueft. Der 0.59.9-Lifecycle haelt keinen ungepinnten `ProgramInstance`-
+Pointer ueber eine solche Grenze. Retire sperrt zuerst neue Lookups und darf
+Slot oder Chunk erst nach dem letzten Pin und dem sicheren Scheduler-Detach
+freigeben. Completion und Diagnosering sind davon getrennt; siehe
+`ProgramLifecycle.txt`.
+
+IRQ- und Exception-Kontext
+-------------------------
+
+Timer-Preemption, Page-Fault-Behandlung und Crash-Kontext duerfen keinen
+sleepable Registry-Lock erwerben. Ein Timer-IRQ kann R4X gerade innerhalb
+eines Service-, Page-Cache- oder Block-Locks unterbrechen; ein nachtraeglicher
+Registry-Lookup wuerde dort die Lockreihenfolge umkehren und koennte im IRQ
+auf den unterbrochenen Besitzer warten.
+
+Darum binden `ProgramThread` und `AsyncIoRequest` ihren Besitzer beim
+Erzeugen direkt an dessen stabilen Chunk-Slot. Diese Owneradresse wird vor
+dem Reclaim des Slots geloescht: zuerst werden Async-Requests abgebrochen,
+danach ProgramThread-Eintraege ueber ihren Retire-Vertrag entfernt, erst
+anschliessend duerfen Programmspeicher und Registry-Slot verschwinden. Der
+IRQ-/Exception-Helfer nimmt dabei weder den sleepable ProgramRegistry-Mutex
+noch Wait oder Yield.
+
+Seit 0.59.10 liegt jeder `ProgramThread` als stabil adressiertes Objekt in
+einer dynamischen intrusiven Registry des R4X-Runtimepfads. Der Eintrag bindet
+Task-ID und Task-Generation sowie eine eigene Threadgeneration. Link-, Lookup-
+und Retire-Metadaten werden unter einer kurzen IRQ-Grenze veraendert. Ein
+normaler Lookup erwirbt dort einen Pin; Join erwirbt eine atomare,
+generationengebundene Owner-Lease und den dazugehoerigen Pin. Es gibt keinen
+allgemeinen lockfreien oder ungepinnten ProgramThread-Verweis ueber Yield,
+Wait, Praeemption oder Retire.
+
+Nur der bereits an den exakten Current-Task gebundene ProgramThread darf die
+implizite Verankerung dieses noch laufenden Tasks verwenden. Der Reaper muss
+die konkrete Taskgeneration erfolgreich detach/reapen, bevor er den
+ProgramThread ausketten kann. Page Fault und Crashpfad laufen bereits unter
+IRQ-Schutz und duerfen diesen Current-Bezug beziehungsweise eine kurze
+IRQ-geschuetzte Traversierung verwenden; sie machen daraus keinen allgemeinen
+Lookup-Vertrag. Die getrennten Async-I/O-Bindungen werden vor dem Owner-
+Reclaim abgebrochen und begruenden keine Program- oder Taskkapazitaet. Der
+vollstaendige Task-/Threadvertrag steht in `DynamicTaskRegistry.txt`.
+
+R4DEV-Diagnosevertrag
+---------------------
+
+Die Gruppentabelle `R4XStartR4Dev` Version 3 (264 Bytes) fuehrte die optionalen
+Slots 29 und 30 ein. Diese Slots und ihre v1-Payloads bleiben seitdem binaer
+eingefroren: `ProgramRegistrySummary` ist exakt 160 Byte gross,
+`ProgramRegistrySelfTestResult` exakt 64 Byte. R4DEV Version 4 (280 Bytes)
+haengt fuer die volle 0.59.9-Telemetrie ausschliesslich die Slots 31 und 32
+mit getrennten V2-Typen an.
+
+Diese Trennung gilt auch fuer die Quell-API. Die bisherigen Zig-Namen
+`programRegistrySummary`, `programRegistrySelfTest` und
+`PerformanceView.programRegistry` sowie die bisherigen C-Namen
+`r4_program_registry_summary` und `r4_program_registry_self_test` bleiben auf
+v1/Slots 29/30 gebunden. V2 wird ausschliesslich ueber Namen mit explizitem
+`V2` beziehungsweise `_v2` angesprochen; `Legacy`-Namen sind nur Aliase der
+unveraenderten v1-Fassaden.
+
+`program_registry_summary`
+  Liefert weiterhin `ProgramRegistrySummary` Version 1 (160 Bytes). Der
+  eingefrorene Payload enthaelt Chunkgroesse,
+  physische Chunk-/Slotkapazitaet, alle Slotzustaende, Pins, warmen
+  Retention-Target, Peakwerte, Growth-/Publish-/Rollback-/Shrink-/ID-Zaehler
+  und den letzten Admission-Fehler. `live_id_hash` und
+  `live_address_hash` sind reihenfolgeunabhaengige Diagnosehashes. Sie dienen
+  nur dazu, in kontrollierten Tests ein unveraendertes Live-Set nachzuweisen;
+  sie sind keine stabilen IDs und keine Sicherheitsgrenze.
+
+`program_registry_summary_v2`
+  Liefert `ProgramRegistrySummaryV2` Version 2 (224 Bytes). Seine ersten
+  160 Byte sind feld-, offset- und typgleich zum v1-Payload. Nur dieser neue
+  Slot meldet im Suffix Generation, Completion-Bestand/-Output, Retire-Queue/
+  -Retries und den Head-/Count-/Sequenzvertrag der Exit-History.
+
+`program_registry_self_test`
+  Nimmt ausschliesslich `ProgramRegistrySelfTestResult` Version 1 (64 Bytes)
+  und ist ein kontrollierter Diagnosepfad. Operation
+  `arm_next_growth` wird nur akzeptiert, wenn CONFIG.R4S ausdruecklich
+  `OPTION PROGRAMREGISTRY selftest=yes` enthaelt. Sie schaltet genau den
+  naechsten erforderlichen Chunk-Growth auf einen Allokatorfehler. Der
+  Growthpfad konsumiert die Schaltung vor jeder echten Heapallokation;
+  `reset` loescht sie zusaetzlich bedingungslos und idempotent. Ein zweites
+  Arm waehrend einer scharfen Operation wird als busy abgelehnt. Damit gibt es
+  keinen allgemeinen externen Heap-Fault-Schalter und keine dauerhafte
+  Fehlerinjektion.
+
+`program_registry_self_test_v2`
+  Nimmt `ProgramRegistrySelfTestResultV2` Version 2 (136 Bytes). Der
+  64-Byte-Praefix ist exakt v1-kompatibel. Nur der V2-Suffix traegt
+  Lifecycle-Phase/-Ergebnis, Retire-/Completion-/Historywerte und die
+  INOUT-Parameter fuer die zusaetzlichen 0.59.9-Testoperationen.
+
+Aufrufer muessen das jeweils verwendete optionale Feld mit `hasFn` pruefen. Beim
+Selftest-Payload ist `operation` ein INOUT-Feld: Der Provider muss den
+Eingabewert erhalten und darf nur Ergebnisfelder, Version und Groesse
+ergaenzen. Die Legacy-Slots schreiben strikt nur 160 beziehungsweise 64 Byte;
+der 0.59.9-Lauf prueft das mit echten alten Caller-Payloads und Guardbytes.
+
+QEMU-Abnahme
+------------
+
+`CLEANUPD /PROGRAMREGISTRY` bildet zwei getrennte reale Belege:
+
+1. 24 gleichzeitig laufende, leichte `/REGISTRYHOLD`-Instanzen werden mit
+   normalem `program_spawn` erzeugt und ueber ihre Handles als `running`
+   nachgewiesen. Damit wird die alte 16er-Grenze reproduzierbar ueberschritten.
+2. Die aktuell physisch vorhandenen Chunks werden bis zur Growth-Grenze
+   belegt. Der bootoption-gebundene One-shot laesst genau den naechsten Spawn
+   am Registry-Growth scheitern. Livezahl, alle gehaltenen IDs und beide
+   Live-Set-Hashes muessen unveraendert bleiben. Nach Reap einer echten
+   Instanz muss ein Ersatzspawn sofort wieder funktionieren.
+
+Am Ende werden alle besitzenden Handles per Kill/Wait/Reap geschlossen. Das
+Live-Set, Ownerressourcen und die One-shot-Schaltung muessen zur Baseline
+zurueckkehren. Die Kapazitaet darf wegen des warmen Floors groesser als zu
+Beginn bleiben; das ist beabsichtigte Hysterese und kein Leak.
+
+Automatisierter Lauf:
+
+    Tests/Runtime/Run-DynamicProgramRegistryRuntime0598.ps1
+
+Statischer/Host-Vertrag:
+
+    Tests/Gate/Run-DynamicProgramRegistryContract0598.ps1
+
+Der Hostlauf verwendet mindestens 4.096 gleichzeitig registrierte
+Deskriptoren und 100.000 Create/Remove-Zyklen. Diese Werte sind nur
+Testschaerfe, keine Produktgrenzen.

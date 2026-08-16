@@ -1,0 +1,229 @@
+﻿R4X Virtual Memory V2 - Zielvertrag 0.53.1
+===========================================
+
+Zweck
+-----
+
+0.53.1 legt den Zielvertrag fuer den R4X-Speicherumbau fest. Die allgemeine
+Performanceanalyse aus 0.53.0 bleibt zurueckgestellt, bis dieser Speicherpfad
+nicht mehr vom alten AppHeap-Modell verfaelscht wird.
+
+Das Ziel ist kein groesserer AppHeap. R4X-Programme sollen grosse virtuelle
+Adressraeume besitzen koennen, mehrere GB pro Prozess reservieren duerfen und
+physischen RAM erst dann verbrauchen, wenn Speicher committed oder tatsaechlich
+beruehrt wird. Das ist die Grundlage fuer Browser-, R4CODE-, Build- und grosse
+Transfer-Workloads.
+
+Ist-Zustand 0.53.1
+------------------
+
+Der aktuelle produktive Speicherpfad ist AppHeap V1:
+
+- `Code/src/program/r4x.zig:82` reserviert pro normaler R4X-Instanz 128 MB
+  AppHeap.
+- `Code/src/program/r4x.zig:83` reserviert fuer Services nur 16 MB AppHeap.
+- `Code/src/program/r4x.zig:84` begrenzt die AppHeap-Blocktabelle auf 256
+  Eintraege pro Instanz.
+- `Code/src/program/r4x.zig:82-85` fuehrt den AppHeap in 4-KB-Seiten.
+- `Code/src/memory/virt.zig:133` gibt dem gesamten AppHeap-Fenster nur 1 GB
+  virtuellen Adressraum.
+- `Code/src/memory/virt.zig:138` begrenzt VirtualRanges insgesamt auf 256
+  aktive Eintraege.
+- `Code/src/program/r4x.zig:286-291` stellt die Speicherfunktionen als
+  `mem_alloc(u32)`, `mem_free(u32)`, `mem_realloc(u32)` und Statistikslots in
+  der alten ProgramApi-Tabelle bereit.
+- `Code/System/SDK/r4os/program.zig:201-219` laesst SDK-Aufrufe nur bis `u32`-
+  Groessen zu.
+- `Code/src/program/r4x.zig:2992-3026` nutzt auch die Kernel-seitige
+  Allocator-VTable direkt auf dem AppHeap und weist groessere `usize`-Werte
+  zurueck.
+- `Code/System/SDK/Contract/ABI/R4XStart.txt:125-126` und
+  `Code/System/SDK/Shared/C/include/r4os/r4xstart.h:25-26` tragen noch
+  `app_heap_base` und `app_heap_size` im R4XStart-Kontext.
+- `Code/System/SDK/r4os/r4sys.zig:15-23` holt R4SYS derzeit aus
+  `R4XStartContext.runtime` als ProgramApi-Pointer. Das ist eine interne
+  Migrationsbruecke, kein sauberer VM-V2-Vertrag.
+
+Die vorhandene VirtualRange-Schicht ist eine brauchbare Grundlage, aber noch
+zu klein und zu grob:
+
+- `Code/src/memory/virt.zig:5` setzt `MAX_RANGES` auf 256.
+- `Code/src/memory/virt.zig:130-135` definiert feste Fenster:
+  temp-kernel 16 MB, kernel-heap 32 MB, program-image 512 MB, app-heap 1 GB,
+  app-stack 1 GB und mmio 512 MB.
+- `Code/src/memory/virt.zig:183-215` committed Seiten sofort: Frame aus PMM,
+  Mapping, Zero-Fill, Commit-Zaehler.
+- `Code/src/memory/virt.zig:239-265` kann committed Seiten wieder uncommitten
+  und ein ganzes Range freigeben.
+- `Code/src/memory/virt.zig:494-499` schuetzt App-Commits ueber eine kleine
+  Systemreserve von 384 Frames vor kompletter PMM-Erschoepfung.
+- `Code/src/memory/blocks.zig:4` haelt 8192 MemoryBlocks und trennt bereits
+  Kind, Owner, Status, Reserve- und Commitwerte.
+
+Bewertung
+---------
+
+AppHeap V1 ist fuer kleine DOS-/Win98-nahe Programme ausreichend, aber kein
+modernes, belastbares Speichermodell:
+
+- Das Modell beantwortet "wie gross ist der Heap dieser App?", nicht "welche
+  virtuellen Regionen besitzt dieser Prozess?".
+- 128 MB beziehungsweise 16 MB sind Policies im Loader/Kernel, keine
+  flexiblen Vertrage aus Manifest, SDK oder Profil.
+- Das 1-GB-AppHeap-Fenster ist systemweit zu klein fuer mehrere grosse
+  Prozesse oder einen einzelnen Browser-artigen Prozess.
+- Die 256-Block-Tabelle pro AppHeap macht Fragmentierung und viele kleine
+  Allokationen zu einem Kernelproblem.
+- `mem_alloc(u32)` erzwingt 32-bit-Groessen an der ABI-Kante.
+- Der SDK-Allocator ist nur ein Adapter auf Kernel-AppHeap-Blockverwaltung.
+  Damit sieht der Kernel jede normale Userland-Allocation, statt nur VM-
+  Regionen und Commit-Zustaende zu verwalten.
+- Demand-Commit existiert fuer AppHeap V1 nicht als Page-Fault-Modell.
+  AppHeap-Seiten werden beim Wachsen des Heaps committed und genullt, nicht
+  erst beim ersten Zugriff.
+
+Zielentscheidung
+----------------
+
+R4OS bleibt fully trusted und bekommt durch VM V2 kein Sicherheitsmodell.
+0.53.X soll daher nicht mit Prozess-Isolation, User/Gruppen, Sandbox oder
+Capability-Checks vermischt werden.
+
+Fuer 0.53.X wird ein grosser gemeinsamer R4X-VM-Bereich mit per-Instanz-
+Ownership geplant. Das passt zum bestehenden fully-trusted System, vermeidet
+einen vorgezogenen CR3-/Address-Space-Umbau und behebt trotzdem das
+praktische Problem: grosse virtuelle Reserven, grosse committed Bereiche,
+sauberes Owner-Cleanup und klare Diagnose.
+
+Die ABI darf dabei nicht vom heutigen globalen `app-heap`-Fenster abhaengen.
+Anwendungen sehen VM-Regionen ueber Handles, Basisadressen und `u64`-/`usize`-
+Groessen. Ob der Kernel diese Regionen intern in einem gemeinsamen grossen
+R4X-Bereich oder spaeter in privaten Prozessadressraeumen abbildet, darf fuer
+R4X-Programme keinen erneuten API-Bruch erzwingen.
+
+Kernel-Besitzgrenze
+-------------------
+
+Der Kernel ist fuer VM V2 Mechanikbesitzer:
+
+- grosse R4X-VM-Arena beziehungsweise spaeter Address-Space-Backend
+- Region-Registry mit Region-ID, Besitzer, Basis, Laenge, Status, Flags,
+  Commit, Resident, Guard, Name/Tag und Diagnosezaehlern
+- Reserve und Release virtueller Regionen
+- Commit und Decommit von Pages
+- Page-Fault-Behandlung fuer Demand-Zero-Seiten
+- Page-Table-Mapping und Unmapping
+- Owner-Cleanup bei Exit, Kill und Loader-Fehlern
+- harte Commit-/Frame-/Tabellenlimits
+- Memory-Snapshot und Fehlerdiagnose
+
+Nicht in den Kernel gehoeren:
+
+- kleine malloc-Blockverwaltung
+- Arena-/Slab-/Freelist-Strategien fuer normale App-Allocations
+- Profile wie `browser`, `desktop`, `service` oder `build-tool` als Policy
+- Komfort-Wrapper fuer einzelne Anwendungen
+- Transfer-Policy fuer SFTP/SCP/HTTP
+- UI-Auswertung, Tabellenanzeigen und Entwicklerkomfort
+
+Diese Teile gehoeren nach Contract, SDK/R4L, Services, R4X-Anwendungen oder
+Diagnoseprogramme.
+
+VM-V2-Zielvertrag
+-----------------
+
+Die produktive neue Speicher-ABI wird als R4SYS/R4L-Vertrag gefuehrt, nicht
+als neue Monstertabelle im R4XStart-Kontext und nicht als AppHeap-V1-Wrapper.
+
+Geplante Kernoperationen:
+
+- `vm_reserve(size, alignment, flags, tag, out_region)`
+  Reserviert virtuellen Adressraum fuer die aktuelle R4X-Instanz. Verbraucht
+  keinen physischen RAM. `size` und `alignment` sind `u64`/`usize`-faehig.
+- `vm_commit(region_id, offset, length, flags)`
+  Markiert einen Teilbereich als committed. Die erste Implementierung darf
+  Frames sofort mappen; der Zielpfad ist Demand-Zero ueber Page Fault.
+- `vm_decommit(region_id, offset, length)`
+  Gibt residente Frames frei und nimmt den Bereich aus dem Commit-Set.
+- `vm_release(region_id)`
+  Gibt eine ganze Region frei. Danach sind Basisadresse und Region-ID
+  ungueltig.
+- `vm_query(region_id_or_address, out_info)`
+  Liefert Reserve, Commit, Resident, Flags, Status, Owner, Peaks und Fehler.
+- `vm_protect(region_id, offset, length, flags)`
+  Wird vorbereitet, aber erst aktiviert, wenn Schutzflags und Faultpfad stabil
+  sind.
+
+Geplante Region-Information:
+
+- Magic, Version und Struct-Groesse
+- Region-ID mindestens 64-bit-faehig
+- Basisadresse als `u64`
+- reservierte Bytes als `u64`
+- committed Bytes als `u64`
+- residente Bytes als `u64`
+- Peak resident und Fault-Zaehler
+- Flags: read, write, execute, guard, stack, shared, discardable, demand-zero
+- Status: reserved, committed, partially committed, guard, released, error
+- Owner-ID der R4X-Instanz
+- kurzer Diagnose-Tag
+
+Fehlercodes muessen unterscheidbar bleiben:
+
+- OK
+- invalid range
+- invalid alignment
+- invalid size
+- no current instance
+- region not found
+- owner mismatch
+- already committed
+- not committed
+- commit limit
+- physical OOM
+- table full
+- protection fault
+- unsupported flag
+
+Migrationsregel
+---------------
+
+`mem_alloc`, `mem_free`, `mem_realloc`, `mem_stats`, `mem_largest_free` und
+die Kernel-Allocator-VTable werden nicht als produktive Kompatibilitaets-
+schicht auf VM V2 weitergefuehrt.
+
+Der endgueltige Umzug braucht einen harten Schnitt:
+
+- neue R4X/R4SYS-Memory-ABI mit VM-V2-Metadatum, z.B.
+  `r4x.memory_abi=vm2`
+- alle mitgelieferten Programme, Services, Diagnosen, Templates, SDK-
+  Bindings, C-Header und R4CODE/R4BUILD/R4PACK/R4CC neu bauen
+- Loader akzeptiert produktiv nur Artefakte mit dem neuen Memory-ABI-
+  Metadatum, sobald 0.53.6 abgeschlossen wird
+- alte Memory-ABI-Artefakte werden sichtbar abgelehnt
+- alte AppHeap-Felder im R4XStart-Kontext werden fuer neue Builds nicht mehr
+  als produktiver Vertrag genutzt
+- kein stiller V1-auf-V2-Wrapper
+- kein zweiter SDK-Allocator, der heimlich weiter `mem_alloc(u32)` benutzt
+- kein AppHeap-Fallback fuer Services
+
+Folgepfad
+---------
+
+- 0.53.2 erweitert den virtuellen R4X-Bereich und fuehrt die VM-Region-
+  Registry als Kernelmechanik ein.
+- 0.53.3 fuehrt die 64-bit-R4SYS-/R4XStart-/SDK-/C-ABI fuer VM V2 ein.
+- 0.53.4 stabilisiert Commit, Decommit, Demand-Zero-Faults und Guard Pages.
+- 0.53.5 baut den SDK-/R4STD-Allocator V2 auf VM-Regionen.
+- 0.53.6 entfernt den produktiven AppHeap-V1-Pfad und migriert alle
+  mitgelieferten Artefakte.
+
+Nicht-Ziele fuer 0.53.1
+-----------------------
+
+- keine Implementierung des neuen VM-Backends
+- keine Aenderung an Page Tables
+- keine Erhoehung der AppHeap-Grenzen als Zwischenloesung
+- keine neue Kompatibilitaetsschicht
+- kein Pagefile/Swap
+- kein Sicherheitsmodell

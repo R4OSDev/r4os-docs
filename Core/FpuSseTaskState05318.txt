@@ -1,0 +1,79 @@
+﻿FPU/SSE/XSAVE Task-State 0.53.18
+================================
+
+Ziel
+----
+
+0.53.18 macht FPU/SSE fuer R4X-, R4D-, R4P- und R4L-Module produktiv
+nutzbar. Der Umbau ist kein Kompatibilitaetsmodus: Die SDK-Standardprofile
+bauen Module nicht mehr mit `soft_float` und nicht mehr mit pauschal
+deaktiviertem SSE. Mitgelieferte Artefakte werden neu gebaut.
+
+
+Kernel-Grenze
+-------------
+
+Der Kernel packt nur die zwingende Architektur- und Scheduler-Mechanik in
+den Kernelpfad:
+
+- `arch/x86_64/fpu.zig` initialisiert CR0/CR4, OSFXSR/OSXMMEXCPT und, wenn
+  vorhanden, OSXSAVE mit XCR0=x87+SSE.
+- Pro Task existiert ein fester, 64-Byte-ausgerichteter State-Slot mit
+  1024 Byte Reserve. Produktiv genutzt werden je nach Backend 512 Byte
+  FXSAVE oder die per CPUID gemeldete XSAVE-Groesse fuer x87+SSE.
+- Der Scheduler speichert den alten Task-State und stellt den neuen
+  Task-State direkt vor dem `r4os_context_switch` wieder her.
+- Kernel-Code selbst bleibt ohne SIMD/FPU gebaut. IRQ-, Exception-,
+  Storage-, FS-, Service- und Treiberpfade sollen weiterhin keine
+  XMM-/FPU-Register als versteckte Kernel-Abhaengigkeit benutzen.
+
+Alles andere bleibt ausserhalb des Kernels: Diagnose ueber R4DEV/PERFDIAG,
+Build-Policy im SDK, Toolchain-/Template-Vertrag in R4CODE/R4BUILD/R4PACK
+und Dokumentation in Docs/SDK beziehungsweise Contract.
+
+
+Backends
+--------
+
+R4OS nutzt in 0.53.18 zwei explizite Backends:
+
+- `xsave`, wenn CPUID XSAVE meldet und XCR0 x87+SSE nach OSXSAVE aktiv ist.
+- `fxsave`, wenn kein XSAVE-Backend aktiv ist, aber FXSR/SSE/SSE2 verfuegbar
+  sind.
+
+AVX wurde in 0.53.18 bewusst nicht freigegeben. Dafuer mussten XCR0-AVX-Bits,
+groessere XSAVE-State-Groessen, Buildprofile und Diagnosen gemeinsam
+erweitert werden. Dieser Folgeausbau ist seit 0.53.40 in
+`Docs/Core/AvxSimdState05340.txt` dokumentiert.
+
+
+ABI und Diagnose
+----------------
+
+ProgramApi v115 erweitert den R4DEV-Performance-Snapshot um FPU-State-Felder:
+
+- `performance_flag_fpu_state_ready`
+- `fpu_state_supported`, `fpu_state_enabled`
+- `fpu_state_backend`, `fpu_state_bytes`, `fpu_state_storage_bytes`
+- `fpu_task_state_count`, `fpu_task_init_count`, `fpu_task_state_bytes`
+- `fpu_save_count`, `fpu_restore_count`, `fpu_xcr0_mask`
+
+PERFDIAG prueft zusaetzlich:
+
+- lokale FPU/SSE-Arithmetik ueber mehrere `sleepTicks()`
+- aktives FPU/SSE-State-Backend
+- Task-State-Abdeckung
+- laufende Save-/Restore-Zaehler
+- dass `performance_preemption_gate_fpu_state` nicht mehr in der
+  Preemption-Gate-Maske steht
+
+
+Grenzen
+-------
+
+- Produktive Timer-Preemption bleibt in 0.53.18 weiterhin deaktiviert.
+- Userland-Threads sind Folgearbeit in 0.53.19.
+- AVX, AVX2 und erweiterte XSAVE-Komponenten bleiben in 0.53.18 deaktiviert;
+  der spaetere AVX/AVX2-Vertrag beginnt mit 0.53.40.
+- Lazy-FPU-Switching wird nicht eingefuehrt. R4OS nutzt absichtlich den
+  einfachen, deterministischen eager Save/Restore-Pfad pro Taskwechsel.

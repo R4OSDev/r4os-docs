@@ -1,0 +1,271 @@
+﻿R4OS Treiber-System - Leitbild
+==============================
+
+Leitidee
+--------
+
+R4OS-Treiber sollen sichtbare Dateien auf der Disk sein. Sie liegen unter
+/R4OS/DRIVERS/ als .R4D-Dateien. R4D steht fuer R4OS Driver.
+
+Der Kernel-Core bleibt klein und irreduzibel. Hardware-spezifische
+Funktionalitaet soll langfristig in Treiber wandern. Praktisch braucht der
+Kernel aber weiterhin einen kleinen Boot-Core, damit er ueberhaupt starten und
+Treiber laden kann:
+- Speicherverwaltung
+- Interrupt-Grundlage
+- minimale Boot-Ausgabe
+- Boot-Storage-Pfad
+- Boot-Dateisystem, aktuell FAT32
+
+Gerade Storage ist ein Bootstrapping-Sonderfall. Ein Treiber, der auf der
+Bootdisk liegt, kann nicht von genau dieser Disk gelesen werden, bevor ein
+minimaler Zugriffspfad existiert. Fuer fruehe Versionen darf Boot-Storage
+deshalb im Core bleiben oder spaeter vom Bootloader als vorab geladenes Modul
+bereitgestellt werden.
+
+Aktueller Zwischenschritt: Der Kernel wird weiter verschlankt, aber nicht auf Kosten des Bootpfads.
+PS/2-Input und Boot-Storage bleiben vorerst built-in, solange sie fuer fruehe Diagnose, Eingabe oder das Mounten von `C:\` noetig sein koennen.
+R4D-Treiber werden seit 0.4.35 als Herkunft r4d markiert; bestehende R4D-Pfade wie RTL8139, SID, OPL3 und MIDI zeigen den Zielzustand.
+So koennen DRIVERS, CONFIG.R4S und der Lifecycle schon mit echten Core- und R4D-Pfaden arbeiten, ohne den Bootpfad voreilig zu zerlegen.
+
+Das Modell ist DOS-inspiriert: Treiber sind sichtbare Dateien, der User hat
+Kontrolle, es gibt kein Sicherheitsmodell. Gleichzeitig wird das Konzept um
+moderne Elemente erweitert: klare Header, Auto-Detection, deterministische
+Boot-Planung und nachvollziehbare Boot-Logs.
+
+
+Datei-Layout
+------------
+
+Geplantes Layout:
+
+    /R4OS/DRIVERS/
+        AC97.R4D
+        HDA.R4D
+        AHCI.R4D
+        PS2.R4D
+        SID.R4D
+        OPL3.R4D
+
+    /CONFIG.R4S
+
+Der Dateiname ist die DOS-artige, sichtbare User-Schnittstelle. Der Kernel
+nutzt Dateinamen fuer Auswahl, Konfiguration und Kontrolle. Die Datei selbst
+wird aber ueber ihren R4D-Header validiert.
+
+Grundregel:
+- Dateiname: benutzerfreundliche Auswahl, z.B. AC97.R4D.
+- Header: technische Wahrheit, z.B. Magic, interner Name, Version, Typ,
+  API-Version und optionale Match-Tabellen.
+
+Damit bleiben einfache DOS-artige Kommandos moeglich, ohne spaeter an
+Versionsnamen, falschen Dateien oder mehreren Varianten desselben Treibers zu
+zerbrechen.
+
+
+R4D-Dateiformat
+---------------
+
+R4D ist analog zum R4X-Format fuer Anwendungen gedacht, bekommt aber eigene
+treiberspezifische Felder.
+
+Geplanter Header:
+
+    +0   Magic "R4D0"
+    +4   Version (uint32)
+    +8   Treibertyp (uint16: Audio, Storage, Input, Synth, Net, Misc)
+    +10  Reserviert (uint16)
+    +12  init-Funktion-Offset
+    +16  shutdown-Funktion-Offset
+    +20  Treiber-Name-Offset
+    +24  Match-Tabelle-Offset, optional
+    +28  API-Version
+
+init() und shutdown() sind Pflicht. Der Header wird beim Laden immer geprueft.
+
+R4X und R4D sollen sich spaeter moeglichst viel Lade-Infrastruktur teilen.
+Aktuell bedeutet das einen gemeinsamen Container-/Binary-Loader fuer die
+R4OS-eigenen Formate. Ein echter ELF-Loader ist damit nicht automatisch
+gemeint; ELF kann spaeter als zusaetzliches Eingabeformat geplant werden.
+
+
+Boot-Phasen
+-----------
+
+Geplantes Bootmodell:
+
+1. Kernel-Core
+   Speicher, IDT, Scheduler, Boot-FS.
+
+2. Hardware-Enumeration
+   Spaeter ACPI-Tabellen und PCIe-Scan, daraus eine Geraeteliste.
+
+3. CONFIG.R4S parsen
+   Direktiven einsammeln, ohne Side-Effects.
+
+4. Plan berechnen
+   Geraete und Direktiven ergeben eine finale Treiberliste. Diese Phase
+   schreibt nichts und laedt nichts. Sie soll deterministisch und loggbar sein.
+
+5. Treiber laden
+   R4D-Dateien lesen, validieren, init() pro Treiber aufrufen.
+
+6. Shell starten
+   Langfristig /BIN/DOSSHELL.R4X.
+
+
+CONFIG.R4S
+----------
+
+CONFIG.R4S ist optional. Fehlt sie, gelten sinnvolle Defaults:
+- AUTO=PCI
+- AUTO=ACPI
+- Pflicht-Treiber laden
+- Standard-Shell starten
+
+Geplante Direktiven:
+
+    AUTO=PCI
+    AUTO=ACPI
+    DISABLE=USB-XHCI
+    PREFER=AC97
+    DRIVER=PS2
+    OPTION HDA codec=stac9221
+    OPTION SID model=8580
+    SHELL=/BIN/DOSSHELL.R4X
+    LOG=verbose
+
+Regeln:
+- DISABLE entfernt einen Treiber aus dem Plan.
+- PREFER entscheidet bei Match-Konflikten.
+- DRIVER laedt einen Treiber explizit, auch ohne Auto-Match.
+- OPTION wird gespeichert und spaeter an init() verfuegbar gemacht.
+- Reihenfolge gleicher Direktiven folgt der Reihenfolge in CONFIG.R4S.
+- Pflicht-Treiber fuer Boot und Basiseingabe kommen zuerst.
+
+
+Treiber-Lifecycle
+-----------------
+
+Ein Treiber durchlaeuft diese Zustaende:
+
+    GELADEN
+    INITIALISIERT
+    AKTIV
+    SHUTDOWN
+    ENTLADEN
+
+shutdown() ist von Anfang an Pflicht. Es soll Hardware deinitialisieren,
+IRQ-Hooks freigeben, DMA-Puffer freigeben und den Treiber aus der passenden
+Registry austragen.
+
+
+Subsystem-Registry
+------------------
+
+Der Kernel soll Treiber nicht dauerhaft namentlich kennen. Stattdessen
+registrieren sich Treiber in Subsystem-Registries:
+
+- AudioBackend-Registry
+- StorageBackend-Registry
+- InputBackend-Registry
+- SynthEngine-Registry
+- NetBackend-Registry
+
+Treiber rufen im init() z.B. kernel_register_audio_backend(...) auf. Der
+Kernel weiss danach nur: fuer Audio ist Backend X aktiv.
+
+
+Kernel-API fuer Treiber
+-----------------------
+
+Beim init() erhaelt der Treiber einen Pointer auf eine versionierte KernelApi.
+
+Geplante Funktionen:
+- port_inb / port_outb
+- alloc_dma_buffer / free_dma_buffer
+- request_irq / release_irq
+- register_audio_backend und weitere Subsystem-Registrierungen
+- log_info / log_warn / log_error
+- get_option
+
+Seit 0.4.36 liest get_option die OPTION-Direktiven aus CONFIG.R4S aus. Der
+Treiber fragt mit internem Treibernamen und Key ab und erhaelt einen
+nullterminierten String oder einen leeren String, wenn nichts gesetzt ist.
+
+Die ABI wird ueber das API-Version-Feld im R4D-Header versioniert.
+
+
+Runtime-Loading
+---------------
+
+Treiber koennen auch aus der Shell geladen werden:
+
+    LOAD AC97
+    UNLOAD AC97
+    DRIVERS
+
+Das ist nicht klassisches DOS im engen Sinn, passt aber zum R4OS-Ziel:
+sichtbar, kontrollierbar und gut fuer schnelle Treiberentwicklung.
+
+LOAD name sucht /R4OS/DRIVERS/name.R4D, validiert den Header und ruft
+init() auf. UNLOAD name ruft shutdown() auf und markiert den Treiber als
+ENTLADEN. DRIVERS zeigt die zentrale Driver-Registry mit Herkunft (builtin
+oder r4d), Typname, Version und Lifecycle-Status.
+
+Seit 0.4.37 zeigt DMESG den dmesg-artigen Bootlog-Ringpuffer aus der Shell.
+Damit bleiben Treiberfehler, Boot-Plan-Meldungen und Runtime-LOAD/UNLOAD-
+Meldungen nach dem Boot nachvollziehbar.
+
+
+Fehlerbehandlung
+----------------
+
+R4OS soll tolerant, aber nie still scheitern:
+
+- Fehlende Treiberdatei: WARN, weiter.
+- init() schlaegt fehl: WARN, Treiber nicht aktiv, weiter.
+- DRIVER aus CONFIG.R4S ohne Match oder Datei: WARN, weiter.
+- Boot-FS oder Pflicht-Eingabe fehlt: FATAL, Halt.
+
+Alles geht ins Bootlog und spaeter in einen dmesg-artigen Puffer.
+
+
+Beispiel-Bootlog
+----------------
+
+    R4OS V0.4 booting...
+    [CORE] Memory: 256 MB usable
+    [ACPI] Tables loaded (MADT, MCFG, FADT)
+    [PCIE] 12 devices found
+    [CONF] /CONFIG.R4S loaded
+    [PLAN] 8 drivers selected
+    [LOAD] AHCI       SATA controller @ 00:1F.2     [OK]
+    [LOAD] HDA        HD Audio @ 00:1B.0            [OK]
+    [LOAD] PS2        PS/2 controller               [OK]
+    [LOAD] SID        synth engine                  [OK]
+    [SKIP] USB-XHCI   disabled by CONFIG.R4S
+    [WARN] AC97       no matching device, ignored
+    [SHELL] DOSSHELL.R4X started
+R4D-Lebenszyklus ab 0.31.1
+--------------------------
+
+Die Driver Registry ist die gemeinsame Statusliste fuer Built-in- und R4D-Treiber.
+Ein R4D-Treiber traegt sich nicht selbst direkt in diese Registry ein.
+Der Runtime-Loader legt den Registry-Eintrag an und ruft danach `DriverInit` im geladenen Modulimage auf.
+
+`discoverAll()` ist nur Erkennung: R4D-Dateien werden gefunden, validiert und als Module sichtbar.
+Dadurch ist ein Treiber noch nicht aktiv.
+Aktiv wird er erst durch echten Runtime-Load, zum Beispiel durch CONFIG.R4S/DRIVER= oder durch LOAD.
+
+Der normale Ablauf ist:
+- R4D-Datei finden.
+- Modulformat, Imports und Exports validieren.
+- Registry-Eintrag mit Herkunft `r4d` anlegen.
+- `DriverInit` aufrufen.
+- Bei Erfolg Status auf initialisiert und aktiv setzen.
+- Beim Entladen `DriverShutdown` aufrufen und Status auf shutdown oder entladen setzen.
+
+Fehler muessen sichtbar bleiben: fehlende Datei, kaputtes Modul, fehlender Export, Init-Fehler, volle Registry oder Shutdown-Fehler.
+Optionale Treiber duerfen dabei fehlschlagen, ohne den Boot zu stoppen.
+Boot-pflichtige Pfade sollen dagegen kontrolliert fatal abbrechen, statt ein halb initialisiertes System weiterlaufen zu lassen.

@@ -1,0 +1,334 @@
+﻿R4OS Changelog V0.25
+====================
+
+Version 0.25.0 Leitbild
+-------------------------------------------
+In 0.25.X geht es darum, dass R4OS das aktive Memory Management und Paging aus dem Bootloader-Kontext herausloest.
+
+- Limine bleibt Bootloader und liefert BootInfo-Daten: Memory Map, HHDM, Framebuffer und RSDP.
+- R4OS soll danach aber die aktive virtuelle Speicherwelt selbst besitzen.
+- Ziel sind eigene Page Tables, eigene PML4, eigener CR3-Wechsel und ein bewusst definiertes Kernel-Adressraumlayout.
+- Kernel, HHDM/direct-map, Heap, PMM, Page-Table-Frames, Framebuffer, ACPI und MMIO werden durch R4OS eindeutig gemappt und klassifiziert.
+- Reservierte, Firmware-, Bootloader-, ACPI-, MMIO- und Framebuffer-Bereiche duerfen niemals versehentlich als normaler RAM genutzt werden.
+- Limine-Page-Tables duerfen erst dann freigegeben werden, wenn bewiesen ist, dass keine aktive R4OS-Struktur mehr darauf zeigt.
+- Ziel ist technische Eigenstaendigkeit und Stabilitaet, kein Security-/Permission-Modell.
+- Ab 0.25.X gilt: erst korrekte Ownership und beweisbarer Mapping-Zustand, dann Optimierung.
+
+Version 0.25.1
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- --
+
+Erledigt:
+- BootInfo-Memory-Map als verbindliche physische Start-Landkarte fuer PMM und Paging geschaerft.
+- Memory-Map-Eintraege normalisiert: Ende, page-aligned usable range, Gueltigkeit und Ueberlaufpruefung.
+- PMM nutzt fuer freie Frames nur noch page-aligned usable ranges.
+- PMM-Bitmap wird im groessten page-aligned usable Bereich platziert und danach als Kernel/pmm-bitmap geclaimt.
+- Reserved, Bootloader, ACPI, Kernel, Framebuffer und Unknown bleiben ausserhalb des normalen PMM-Free-Pools.
+- HHDM-Helfer fuer physisch -> virtuell und virtuell -> physisch in BootInfo ergaenzt.
+- Memory-Map-Diagnose gibt page-aligned usable ranges, invalid/truncated und Overflow-Zustand aus.
+- KERNEL_VERSION in Injection/sys/CONFIG/VERSION.R4S auf 0.25.1 erhoeht.
+
+Abnahmen:
+- `DevTools/Scripts/Build.bat -norun` muss erfolgreich sein.
+- `DevTools/Scripts/Build.bat -test` muss bis `TEST OK` laufen.
+- BOOTINFO.R4X muss Memory Map, Framebuffer und HHDM weiterhin plausibel anzeigen.
+- Diagnose muss zeigen, dass keine reservierten/MMIO/Framebuffer/ACPI-Bereiche im PMM als frei landen.
+- Page-Table-Frame-Kind muss in MemoryBlock-/PMM-Diagnosen sichtbar oder intern eindeutig pruefbar sein.
+
+Notizen:
+- Diese Unterversion ist die Sicherheitsleine fuer alle spaeteren Paging-Schritte. Ohne korrekte Ownership koennen Page Tables sonst in reserviertem Speicher landen.
+- Eigene Page Tables und eigener CR3-Wechsel werden noch nicht gebaut; das folgt ab 0.25.3+.
+
+Version 0.25.2
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- --
+
+Erledigt:
+- R4OS-Adressraumlayout fuer 0.25.X definiert.
+- Zentrale Layout-Konstanten in Code/src/old/memory/layout.zig angelegt.
+- Page-Flag-Konstanten aus paging.zig auf layout.zig zentralisiert.
+- Cache-Policy-Begriffe fuer normalen RAM, Framebuffer, MMIO und ACPI/Firmware definiert.
+- Boot-Diagnose gibt das geplante R4OS-Adressraumlayout ueber paging.dumpStats() aus.
+- Dokumentation unter Docs/Core/MemoryManagement.txt angelegt.
+- KERNEL_VERSION in Injection/sys/CONFIG/VERSION.R4S auf 0.25.2 erhoeht.
+
+Abnahmen:
+- `DevTools/Scripts/Build.bat -norun` muss erfolgreich sein.
+- Eine neue oder aktualisierte Dokumentation unter Docs/ beschreibt das geplante R4OS-Adressraumlayout.
+- R4DEV/BOOTINFO oder eine Kernel-Diagnose kann das geplante Layout bzw. die wichtigsten Konstanten ausgeben.
+- Noch kein CR3-Wechsel in dieser Unterversion; das laufende System muss weiter auf den bestehenden Limine-Tabellen booten.
+
+Notizen:
+- Diese Unterversion beantwortet zuerst "wohin mappen wir was?", bevor Page Tables gebaut werden.
+- Der aktive CR3 bleibt weiterhin der von Limine eingerichtete CR3.
+Version 0.25.3
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- --
+
+Erledigt:
+- Eigenes Page-Table-Builder-Modul unter Code/src/old/memory/page_tables.zig angelegt.
+- Builder kann eine nicht aktive PML4 anlegen und untergeordnete Tabellen nach Bedarf erzeugen.
+- Mapping-Helfer fuer einzelne 4-KB-Pages und einfache Bereiche implementiert.
+- Table-Walk-Diagnose fuer virtuelle Adressen gegen erwartete physische Adressen implementiert.
+- Page-Table-Frames werden ueber PMM allokiert und als Kernel/PageTable in MemoryBlocks geclaimt.
+- Selbsttest baut eine Test-PML4, mappt eine Testseite, walkt sie und gibt Testseite/Tabellen wieder frei.
+- Bootpfad fuehrt den Page-Table-Builder-Selbsttest aus, ohne den aktiven CR3 zu wechseln.
+- Dokumentation unter Docs/Core/MemoryManagement.txt aktualisiert.
+- KERNEL_VERSION in Injection/sys/CONFIG/VERSION.R4S auf 0.25.3 erhoeht.
+
+Abnahmen:
+- `DevTools/Scripts/Build.bat -norun` muss erfolgreich sein.
+- `DevTools/Scripts/Build.bat -test` muss erfolgreich bleiben.
+- Ein Page-Table-Builder-Selbsttest muss eine nicht aktive Test-PML4 bauen, mappen, walken und wieder verwerfen koennen.
+- PMM-/MemoryBlock-Diagnose muss PageTable-Frames als belegt zeigen.
+- Keine neu gebauten Test-Tabellen duerfen in reserviertem, ACPI-, MMIO-, Framebuffer- oder Bootloader-Speicher liegen.
+
+Notizen:
+- Diese Unterversion baut das Werkzeug. Die CPU nutzt danach noch nicht die neuen Tabellen.
+- Der aktive CR3 bleibt weiterhin der von Limine eingerichtete CR3.
+Version 0.25.4
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- --
+
+Erledigt:
+- Eigene R4OS-PML4 wird als persistenter Trockenlauf-Adressraum erstellt.
+- Neue PML4 und alle Untertabellen werden aus eigenen Page-Table-Frames gebaut.
+- Limine-Tabellen werden nur lesend als Quelle fuer aktive virt->phys-Aufloesung genutzt.
+- HHDM/direct-map wird anhand der BootInfo-MemoryMap in die neue PML4 eingetragen.
+- Kernel-Image-Fenster wird anhand der Kernel-/Modulbereiche aus der BootInfo und aktiver Table-Walk-Aufloesung uebernommen.
+- Kernel-Code, RoData, Daten, BSS, aktueller Stack, BootInfo, PMM-Bitmap und Heap-Metadaten werden per Probe in der neuen PML4 nachgewiesen.
+- Diagnose zeigt neue R4OS-PML4, eigene Tabellen, Mapping-Zaehler, Probe-Status und dass keine Limine-Untertabellen uebernommen wurden.
+- Neue PML4 wird noch nicht aktiv geschaltet; kein CR3-Wechsel in 0.25.4.
+- Dokumentation unter Docs/Core/MemoryManagement.txt erweitert.
+- Zentrale Version auf 0.25.4 gesetzt.
+
+Abnahmen:
+- `DevTools/Scripts/Build.bat -norun` muss erfolgreich sein.
+- `DevTools/Scripts/Build.bat -test` muss erfolgreich bleiben.
+- Table-Walk-Diagnose muss Kernel-Code, Kernel-Daten, Stack, HHDM, PMM-Bitmap und BootInfo in der neuen PML4 finden.
+- Diagnose muss zeigen, ob die neue PML4 eigene Untertabellen nutzt oder noch Limine-Untertabellen referenziert.
+- Noch kein CR3-Wechsel in dieser Unterversion.
+
+Notizen:
+- Die physische Speicherlandkarte und der aktuelle aktive CR3 dienen in 0.25.4 nur als Eingabequellen. Ownership der neuen Tabellen liegt bei R4OS.
+- Genaue Segment-Symbole im Linker bleiben fuer eine spaetere Schaerfung sinnvoll; der aktuelle Trockenlauf verwendet die BootInfo-Kernel-/Modulbereiche plus aktive Table-Walk-Aufloesung als robuste Zwischenbasis.
+Version 0.25.5
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- --
+
+Erledigt:
+- Framebuffer wird in das geplante R4OS-Framebuffer-Fenster eingetragen.
+- Framebuffer-Mapping nutzt eine eigene Cache-Policy mit Write-Combining-Absicht und NX.
+- LAPIC, IOAPIC und HPET werden als MMIO-Fenster uncached und non-executable eingetragen, sofern ACPI die Adressen liefert.
+- PCIe-ECAM wird als MMIO-Fenster eingetragen.
+- Erkannte PCIe-Memory-BARs werden als Device-MMIO-Probes eingetragen.
+- ACPI-RSDP, XSDT/RSDT, MCFG, MADT, FADT, HPET-Tabelle und DSDT werden ueber Direct-Map geprueft und als Firmwarebereiche diagnostiziert.
+- Diagnose zeigt Mapping-Liste mit Name, physischer Adresse, virtueller Adresse, Laenge, Flags, Cache-Policy und Mapping-Status.
+- Diagnose zeigt Probe-Status fuer Framebuffer, LAPIC, IOAPIC, HPET, ACPI, ECAM und PCIe-BARs.
+- Neue PML4 wird weiterhin noch nicht aktiviert; kein CR3-Wechsel in 0.25.5.
+- Dokumentation unter Docs/Core/MemoryManagement.txt erweitert.
+- Zentrale Version auf 0.25.5 gesetzt.
+
+Abnahmen:
+- `DevTools/Scripts/Build.bat -norun` muss erfolgreich sein.
+- `DevTools/Scripts/Build.bat -test` muss erfolgreich bleiben.
+- Table-Walk-Diagnose muss Framebuffer, LAPIC/IOAPIC/HPET und relevante ACPI-Bereiche in der neuen PML4 finden.
+- Framebuffer- und MMIO-Mappings muessen in Diagnose als nicht normaler RAM erkennbar sein.
+- Cache-Policy fuer Framebuffer/MMIO muss ausgegeben oder intern pruefbar sein.
+- Noch kein CR3-Wechsel in dieser Unterversion.
+
+Notizen:
+- Framebuffer und MMIO sind keine normalen Speicherbereiche. Falsche Cache-Flags koennen Boot, Grafik oder Hardwarezugriffe brechen.
+- Die Write-Combining-Angabe fuer den Framebuffer ist in 0.25.5 die geplante Page-Table-Policy. Vor einem echten CR3-Wechsel muss PAT/CPU-Zustand erneut verifiziert werden.
+Version 0.25.6 - Eigener CR3-Wechsel auf R4OS-PML4
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `r4os_write_cr3` als x86_64-Helfer ergaenzt.
+- Aktuelle Limine-CR3 vor dem Wechsel gesichert und als Diagnose ausgegeben.
+- Neue R4OS-PML4 vor dem Wechsel validiert: physische Adresse vorhanden, 4-KB-ausgerichtet, vorbereiteter Builder-Root und als Page-Table-Block registriert.
+- Wechsel-Voraussetzungen gegen die neue PML4 geprueft: Kernel-Code, aktuelles Stack-Fenster, HHDM/direct-map, PMM-Bitmap, Page-Table-Zugriff, BootInfo und Framebuffer.
+- CR3 auf die eigene R4OS-PML4 gesetzt und danach direkt aus der CPU zurueckgelesen.
+- `paging.zig` uebernimmt nach erfolgreichem Wechsel die neue aktive Root-PML4, damit spaetere Mappings nicht mehr gegen Limines Tabellen laufen.
+- Post-Switch-Checks pruefen Kernel-Code, Stack, HHDM, PMM, Page Tables, BootInfo und Framebuffer erneut nach dem echten Wechsel.
+- Fallback/Fatal-Pfad implementiert: bei fehlender Voraussetzung oder fehlgeschlagenem Post-Check wird die alte CR3 wiederhergestellt und der Bootpfad bricht sauber ab.
+- TLB-Verhalten dokumentiert: CR3-Schreibzugriff verwirft aktive Uebersetzungen, Einzelmappings nutzen weiterhin INVLPG.
+- Sichtbare Version auf `KERNEL_VERSION=0.25.6` gesetzt.
+
+Abnahmen / Tests:
+- `DevTools/Scripts/Build.bat -norun`: erfolgreich.
+- `DevTools/Scripts/Build.bat -test`: erfolgreich, `TEST OK`.
+- Serial-/Bootlog zeigt alte, neue und aktive CR3 sowie `done=yes`.
+- Post-Checks melden `code`, `stack`, `hhdm`, `pmm`, `page-table`, `bootinfo` und `framebuffer` als `ok`.
+- `BOOTINFO.R4X /SUMMARY` laeuft nach dem CR3-Wechsel weiter.
+- Test-`POWEROFF` beendet QEMU sauber.
+
+Notizen:
+- Ab dieser Unterversion laeuft der Bootpfad nach der Memory-/Device-Initialisierung nicht mehr auf Limines aktiver Page Table, sondern auf der eigenen R4OS-PML4.
+- Die Limine-Tabellen werden noch nicht freigegeben; das folgt erst nach einer separaten Reclaim-/Freigabe-Abnahme.
+- Der CR3-Wechsel bleibt bewusst im fruehen Kernelpfad und ist noch kein allgemeiner Address-Space-Wechsel fuer Tasks.
+Version 0.25.7
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- --
+
+Erledigt:
+- Post-Switch-Paging stabilisiert: `paging.zig` fuehrt den aktuell verwendeten Paging-Root jetzt mit Besitzerstatus (`bootloader`/`r4os`) und vergleicht ihn vor Mapping-Operationen mit dem aktiven Hardware-CR3.
+- `mapPage`, `unmapPage`, `setWriteCombiningRange`, `isMapped` und `mappedFrame` arbeiten nicht mehr still gegen einen veralteten Root, sondern brechen bei CR3-/Root-Mismatch kontrolliert ab.
+- Der CR3-Wechsel markiert die neue PML4 explizit als R4OS-Root; die alte Limine-CR3-Adresse bleibt nur noch Boot-/Rollback-/Diagnosewert.
+- INVLPG-/TLB-Regeln fuer geaenderte Einzelpages sind zentralisiert und werden mit Zaehlern diagnostiziert.
+- Page-Table-Frames bleiben dauerhaft als `page_table`-MemoryBlocks mit Kernel-Ownership sichtbar.
+- Paging-Diagnose zeigt aktiven Root, Hardware-CR3, Root-Besitzer, R4OS-Aktivstatus, Mapping-Zaehler, INVLPG-Zaehler und Root-Mismatches.
+- Heap, PMM, R4X-Startpfad, Display-/Framebuffer-Ausgabe und MMIO-Nachmapping laufen nach dem CR3-Wechsel weiter ueber die aktive R4OS-PML4.
+
+Abnahmen:
+- `DevTools/Scripts/Build.bat -norun` muss erfolgreich sein.
+- `DevTools/Scripts/Build.bat -test` muss erfolgreich bis `TEST OK` laufen.
+- Kernel-Heap-Allokation, PMM-Allokation und ein einfacher R4X-Start muessen nach dem CR3-Wechsel funktionieren.
+- Display-/Framebuffer-Ausgabe muss nach dem CR3-Wechsel sichtbar bleiben.
+- R4DOS-Mode und Desktop-Start muessen in einer manuellen oder dokumentierten Abnahme geprueft werden.
+- Paging-Diagnose muss aktiven CR3 als R4OS-PML4 ausweisen.
+
+Notizen:
+- Nach dieser Unterversion laeuft das System nicht nur auf der eigenen PML4, sondern die zentrale Paging-Schnittstelle schuetzt auch spaetere map/unmap-Pfade gegen versehentliche Limine-/Altroot-Nutzung.
+
+Version 0.25.8
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- --
+
+Erledigt:
+- Alte Limine-Page-Table-Frames werden nach dem erfolgreichen R4OS-CR3-Wechsel rekursiv aus der alten CR3/PML4-Struktur ermittelt.
+- Die aktive R4OS-PML4 wird separat rekursiv gescannt, damit sichtbar ist, welche Frames weiterhin echte aktive Page-Table-Strukturen sind.
+- Alte Limine-Page-Table-Frames werden nicht blind freigegeben. Erst wird geprueft, ob die aktive R4OS-PML4 noch strukturell auf einen alten Limine-Table-Frame zeigt.
+- Wenn keine aktiven Strukturreferenzen gefunden werden und der Scan nicht abgeschnitten wurde, werden die alten Limine-Page-Table-Frames als `page_table`/`bootloader`/`limine-page-table` in MemoryBlocks quarantained.
+- Freigabe alter Limine-Frames bleibt bewusst deaktiviert: `released=0`. Stabilitaet und Beweisbarkeit bleiben wichtiger als frueher Reclaim.
+- Diagnose zeigt alte Table-Frames, aktive Table-Frames, referenzierte Frames, Release-Kandidaten, quarantined/released/retained Frames, Scan-/Quarantaene-Fehler, Truncation, old-active und Entscheidung.
+- BootInfo-Kopie, Framebuffer-Infos, Memory-Map-Auswertung und RSDP bleiben absichtlich als Kernel-/BootInfo-Daten erhalten.
+
+Abnahmen:
+- `DevTools/Scripts/Build.bat -norun` muss erfolgreich sein.
+- `DevTools/Scripts/Build.bat -test` muss erfolgreich bis `TEST OK` laufen.
+- Diagnose muss zeigen, ob Limine-Page-Table-Frames freigegeben, quarantined oder weiterhin referenziert sind.
+- Kein freigegebener Frame darf weiterhin in der aktiven R4OS-PML4 erreichbar sein; da 0.25.8 keine alten Limine-Page-Table-Frames freigibt, muss `released=0` gelten.
+- PMM-/MemoryBlock-Diagnose muss nach Quarantaene konsistent bleiben.
+
+Notizen:
+- Die Freigabe alter Limine-Tabellen bleibt optional und wird erst spaeter aktiviert, wenn die Ownership- und Reclaim-Regeln auch fuer BootloaderReclaimable-Speicher vollstaendig beweisbar sind.
+
+Version 0.25.9
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Dokumentation zum R4OS-Adressraumlayout unter Docs/Core/AdressraumLayout.txt erstellt.
+- Dokumentation zu PMM-Ownership, Page-Table-Frames, HHDM, CR3-Wechsel und Limine-Reclaim in Docs/Core/MemoryManagement.txt erweitert.
+- R4DEV/ProgramApi um `PagingSummary` erweitert.
+- BOOTINFO.R4X gibt aktive PML4, Hardware-CR3, Page-Table-Blocks und Limine-Reclaim aus.
+- SYSINFO.R4X prueft R4OS-PML4, CR3-Match und Page-Table-Zaehler.
+- MEMVIEW.R4X zeigt Paging-Status im Footer und prueft `paging=ok` im Selftest.
+- Boot-/Smoke-Abnahme fuer eigene Page Tables und eigenen CR3-Wechsel in Docs/Deployment/BuildUndTest.txt dokumentiert.
+- Kein zusaetzliches Test-Hilfsscript noetig; Build.bat -test deckt die automatische Abnahme ab.
+- KERNEL_VERSION in Injection/sys/CONFIG/VERSION.R4S auf 0.25.9 gesetzt.
+
+Abnahmen:
+- Build -norun successful
+- Build -test TEST OK
+- Diagnoseprogramme geben den neuen Paging-Zustand ohne Crash aus.
+
+Notizen:
+- Die neue Diagnose ist rein lesend. Page Tables werden weiterhin nur vom Kernel verwaltet.
+Version 0.25.10
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- --
+
+Erledigt:
+- `Code/src/kernel/log.zig` als zentrale Kernel-Logging-Fassade angelegt und alle alten `kprint`-Imports auf `kernel/log.zig` umgestellt.
+- `Code/src/driver/com.zig` als 16550-UART-Treiberbereich angelegt; COM1 bleibt Debug-/Kernel-Log-Kanal, COM2 bleibt fuer Serial-Link/R4SL reserviert.
+- `Code/src/kernel/bootlog.zig` als Bootlog-/DMESG-Ringpuffer aus `old/` herausgezogen.
+- `Code/src/kernel/font.zig` als Kernel-Font fuer fruehe sichtbare Console-Ausgabe aus dem alten Video-Baum herausgezogen.
+- `main.zig` importiert die fruehen Logging-/Textausgabe-Bausteine direkt: `kernel/log.zig`, `driver/com.zig`, `kernel/bootlog.zig` und `kernel/font.zig`.
+- `main.zig` initialisiert COM1/Serial frueh; `kernelold.zig` nutzt danach die vorbereitete Logging-Infrastruktur nur noch fuer Ausgabe/Redirect.
+- `kprint`/`log`-Output-Hook fuer Bootlog-Redirect beibehalten.
+- Font-Generator-Builds auf den neuen Kernel-Font-Pfad umgestellt.
+- Test-/Doku-Referenzen auf `log.zig`, `com.zig`, `bootlog.zig` und `font.zig` aktualisiert.
+- `KERNEL_VERSION` in `Injection/sys/CONFIG/VERSION.R4S` auf `0.25.10` gesetzt.
+
+Abnahmen:
+- `DevTools/Scripts/Build.bat -norun`: erfolgreich.
+- `DevTools/Scripts/Build.bat -test`: `TEST OK`.
+- Headless QEMU-Auswertung: `Boot: OK`, `Poweroff: OK`, `Errors: none`.
+- R4DOS-/COMMAND-/DMESG-Pfade bauen weiterhin; Boot-Smoke erreicht Poweroff ohne Fehler.
+
+Notizen:
+- `bootlog.zig` ist kein reiner Debug-Helfer, sondern ein Kernel-Ringpuffer fuer spaetere Diagnose. Der Name bleibt vorerst erhalten; eine spaetere Umbenennung zu `dmesg.zig` ist erst sinnvoll, wenn die Shell-/Diagnosebegriffe ebenfalls umgestellt werden.
+- Zielrichtung fuer den sequenziellen Kernelstart: `main.zig` besitzt die fruehe Verdrahtung von Bootloader, BootInfo, Serial/COM1, Kernel-Log, Bootlog und Kernel-Font; `kernelold.zig` startet danach mit bereits vorbereiteten Grunddiensten.
+Version 0.25.11
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- --
+
+Erledigt:
+- COM1-Debugausgabe ueber die Kernel-Buildoption `config.enable_com1_debug` optional schaltbar gemacht.
+- `Code/build.zig` um `-Dcom1-debug=true|false` erweitert; Default bleibt `true` fuer den bestehenden headless Smoke-Test.
+- `kernel/log.zig` importiert `driver/com.zig` nicht mehr direkt.
+- `kernel/log.zig` bietet mit `setSerialSink(null | sink)` einen optionalen Serial-Sink an.
+- `main.zig` importiert und initialisiert `driver/com.zig` nur im Compile-Time-Pfad `config.enable_com1_debug == true`.
+- Wenn COM1-Debug inaktiv ist, wird kein COM1-Sink gesetzt und `log.zig` schreibt nicht nach COM1.
+- Framebuffer-/Console-Ausgabe ueber `setConsole()` bleibt unabhaengig vom COM1-Sink erhalten.
+- `kernel/bootlog.zig` bleibt unabhaengig von COM1 und funktioniert weiter als DMESG-/Bootlog-Ringpuffer.
+- `KERNEL_VERSION` in `Injection/sys/CONFIG/VERSION.R4S` auf `0.25.11` gesetzt.
+
+Abnahmen:
+- Mit COM1-Debug aktiv: `DevTools/Scripts/Build.bat -norun` muss erfolgreich sein.
+- Mit COM1-Debug aktiv: `DevTools/Scripts/Build.bat -test` muss `TEST OK` liefern.
+- Mit COM1-Debug aktiv: QEMU-Serial-Auswertung muss `Boot: OK`, `Poweroff: OK` und `Errors: none` melden.
+- Mit COM1-Debug inaktiv: `DevTools/Zig/zig.exe build -Dcom1-debug=false` im Ordner `Code/` muss erfolgreich bauen.
+- Mit COM1-Debug inaktiv: `kernel/log.zig` darf `driver/com.zig` nicht direkt importieren; COM1 bleibt nur ueber `main.zig` im aktiven Compile-Time-Pfad erreichbar.
+- COM2-/Serial-Link-Pfade bleiben unveraendert.
+
+Notizen:
+- Der COM1-Schalter steuert nur den Debug-/Kernel-Log-UART. Er ist keine globale Serial-Abschaltung.
+- Da `Build.bat -test` aktuell COM1 als headless Abnahmekanal nutzt, bleibt COM1 im Standardprofil aktiv. Ein COM1-aus-Profil hat bewusst nur eine Build-Abnahme, bis es eine alternative headless Testmarke ohne Serial-Log gibt.

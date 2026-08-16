@@ -1,0 +1,374 @@
+﻿ProgramInstance-Speicher 0.59.7
+=================================
+
+Ziel und Umfang
+---------------
+
+Seit 0.59.7 besteht eine Programminstanz nicht mehr aus einem 118.664-Byte-
+Monolithen (rund 116 KB) mit immer eingebetteten Console- und GUI-Puffern. Ein
+kleiner, stabiler `ProgramInstance`-Kern verweist auf Heap-Payloads, die nur
+fuer die tatsaechliche Programmklasse und Nutzung angelegt werden.
+
+0.59.7 aenderte bewusst noch nicht die Registry-Kapazitaet; damals lagen die
+Kerne weiter in der statischen Tabelle mit 16 Eintraegen. Seit 0.59.8 ersetzt
+die in `DynamicProgramRegistry.txt` beschriebene, stabil adressierte
+Chunkregistry diese Tabelle. Die Aufteilung aus 0.59.7 ist deren
+speicherseitige Voraussetzung und kein eigener oeffentlicher Instanzvertrag.
+
+Interne Hierarchie
+------------------
+
+`ProgramInstance`
+  Heisser Kerndatensatz fuer ID, Task, Rolle, Klasse, Einstieg, Image-/Stack-
+  Referenzen, Speicherprofil/-limits, Payloadzeiger und Lifecycleflags.
+
+`ProgramRuntimePayload`
+  R4XStartContext, aufgeloeste Imports und deren Modul-/Symbolnamen.
+
+`ProgramProcessPayload`
+  Argumente, Arbeitslaufwerk/-verzeichnis, Umgebungslaenge und optionaler
+  Zeiger auf `ProgramEnvironmentPayload`.
+
+`ProgramEnvironmentPayload`
+  Der 2-KB-Umgebungsblock. Er wird bei vorhandener Elternumgebung fuer die
+  Vererbung oder sonst erst beim ersten erfolgreichen `ENV SET` angelegt.
+
+`ProgramConsolePayload`
+  Eingabequeue, Console-State, Host-/I/O-Zuordnung, Revision und Zeiger auf
+  `ProgramConsoleOutputPayload`.
+
+`ProgramConsoleOutputPayload`
+  Der 16-KB-Ausgabepuffer einer Console-Instanz. Er ist spawn-owned und wird
+  zusammen mit jeder Console-Instanz angelegt; der Write-Pfad muss dadurch
+  keine spaete grosse Heapallokation ausfuehren.
+
+`ProgramGuiPayload`
+  Fenster-/Event-/Text-/Titel-/Host-Launch-Zustand sowie die drei
+  Framezeiger `committed`, `building` und `retired`. GUI-Programme erhalten
+  ihn beim Spawn; andere Klassen erst bei einer tatsaechlichen GUI-/
+  Fensteroperation. Dadurch kann etwa eine gehostete Console ein
+  Desktopfenster bekommen, ohne dass jede reine Console den GUI-Zustand
+  dauerhaft bezahlt.
+
+`ProgramGuiFramePayload`
+  Ownergetaggte Wurzel einer unveraenderlichen committed Displayliste oder
+  einer privaten Aufbautransaktion. Sie besitzt verkettete Command- und
+  Ressourcenknoten, globale Generation, Readerzaehler und exakte logische
+  Command-/Bytewerte. Ein abgeloester committed Frame bleibt als `retired`
+  erhalten, bis der letzte bereits begonnene Snapshotread beendet ist.
+
+`ProgramGuiCommandPayload`
+  Variabel grosser Commandblock. Die Commands folgen direkt auf den Header;
+  die Blockkapazitaet ist nur Allokationsgranularitaet und nie eine
+  Displaylistenobergrenze. Weitere Bloecke werden append-only verkettet.
+
+`ProgramGuiResourcePayload`
+  Variabel grosser Knoten im gemeinsamen Frame-Byteblob. UTF-8, XRGB,
+  Alpha8 und versionierte native Form-/Pfaddaten verwenden dieselbe logische
+  Offsetkette.
+  Ein einzelner XRGB-Auftrag bleibt am oeffentlichen R4DRAW-Vertrag von
+  hoechstens 128x128 Pixeln begrenzt; Alpha8 erlaubt 512x512 Bytes. Fuer die
+  Summe aller Commands und Ressourcen eines Frames existiert kein fester
+  Aggregatpuffer.
+
+Compile-Zeit-Budgets
+--------------------
+
+Die Budgets sind harte Obergrenzen. Ein Ueberschreiten stoppt den Kernelbuild.
+Die tatsaechlichen Groessen meldet die R4DEV-Telemetrie.
+
+    ProgramInstance-Kern              <= 256 Bytes
+    ProgramPayloadHeader              == 16 Bytes
+    ProgramRuntimePayload             <= 2.112 Bytes
+    ProgramProcessPayload             <= 1.344 Bytes
+    ProgramEnvironmentPayload         <= 2.112 Bytes
+    ProgramConsolePayload             <= 256 Bytes
+    ProgramConsoleOutputPayload       <= 17 KB
+    ProgramGuiPayload                 <= 2 KB
+    ProgramGuiFramePayload            <= 256 Bytes
+    ProgramGuiCommandPayload-Knoten   <= 31 KB je Block
+    ProgramGuiResourcePayload-Knoten  <= 1.025 KB je Ressourcenknoten
+                                         (Legacy-Textmaximum)
+
+Die beiden letzten Werte sind ausschliesslich Per-Node-Budgets. Weder die
+Zahl der Bloecke noch die gesamte Command- oder Ressourcenzahl eines Frames
+wird daraus abgeleitet. Explizite Frame-Byteblobs werden in 64-KB-Zielbloecke
+geteilt; das 1.025-KB-Budget deckt den technisch begrenzten, historischen
+NUL-Textscan samt Header ab und ist keine Zielgroesse fuer neue Frameknoten.
+
+Ownerheader
+-----------
+
+Jeder Heap-Payload beginnt mit demselben exakt 16 Byte grossen Header:
+
+    magic            0x50343452
+    owner_id         reservierte Programminstanz-ID
+    requested_bytes  exakte Payloadgroesse
+    kind             runtime/process/environment/console/
+                     console_output/gui/gui_commands/gui_raster/
+                     gui_frame/gui_frame_data
+    reserved         0
+
+Die Instanz-ID wird vor der yieldenden Datei-/Imagephase reserviert und fuer
+Image, Stack und alle Payloads durchgereicht. Vor der ersten Mutation prueft
+der Teardown die gesamte Hierarchie; ein Parentheader wird dabei immer vor
+seinen Childpointern validiert. Erst danach prueft auch jeder einzelne
+`heap.free`-Schritt Magic, Groesse, Kind, reserviertes Feld und Owner erneut.
+Bei einem Header-/Ownerfehler findet keinerlei partielle Payloadfreigabe
+statt. Die vollstaendige Hierarchie und ihr Registry-Kern bleiben als
+`storage_teardown_blocked` enthalten und diagnostizierbar; auch Image und
+Hauptstack werden nicht freigegeben. Dadurch kann ein fremder Parentpointer
+weder dereferenziert noch genullt werden. Erst ein unerwarteter Heap-Free-
+Fehler nach erfolgreichem Preflight ueberfuehrt den betroffenen, bereits
+eindeutig besessenen Block in die gezaehlte Quarantaene.
+
+Allokationsmatrix
+-----------------
+
+    Ressource             Service       Console       GUI
+    ---------------------------------------------------------
+    Runtime               Spawn         Spawn         Spawn
+    Process               Spawn         Spawn         Spawn
+    Environment           Vererbung/    Vererbung/    Vererbung/
+                          erstes Set    erstes Set    erstes Set
+    Console-Kern          -             Spawn         -
+    Console-Ausgabe       -             Spawn         -
+    GUI-Kern              erste GUI-    erste GUI-/   Spawn
+                          Nutzung       Fensternutzung
+    GUI-Frame             erster Frame  erster Frame  erster Frame
+    Commandknoten         nach Bedarf   nach Bedarf   nach Bedarf
+    Ressourcenknoten      nach Bedarf   nach Bedarf   nach Bedarf
+
+`Environment` wird beim Spawn nur erworben, wenn die Elterninstanz eine nicht
+leere Umgebung besitzt. Ein Prozess ohne geerbte Umgebung bezahlt den Block
+erst bei einer schreibenden Umgebungsoperation. Frames, Commands und
+Ressourcen sind unabhaengig von der blossen Existenz eines GUI-Fensters. Ein
+Service oder Console-Programm ohne GUI-Aufruf bezahlt keinen GUI-Speicher;
+ein gehostetes Console-Fenster erwirbt den GUI-Kern lazy ueber den ersten
+Fensteraufruf. Die physische Speichermenge entspricht den wirklich
+angehaengten Commands und Bytes statt einem fuer jede GUI reservierten
+Maximalbild.
+
+Transaktion und Freigabe
+------------------------
+
+Der aeussere Startpfad reserviert seit 0.59.8 zuerst ID und stabilen
+Registry-Kern. Der Eintrag bleibt dabei privat. Danach folgen Datei-/Image-,
+Stack- und `createInstance`-Payloadarbeit sowie Task-/Threadregistrierung.
+Eager Payloads werden vollstaendig angelegt und initialisiert, bevor
+`publishProgramInstance` die Instanz atomar als `live` sichtbar macht. Ein
+Fehler rollt Payloads, Task-/Threadzustand, Stack und Image zurueck und loest
+zuletzt die Reservation; ein halber sichtbarer Registry-Eintrag bleibt nicht
+zurueck.
+
+Eine partielle Payloadallokation wird nach einem atomaren Gesamtpreflight in
+umgekehrter Reihenfolge zurueckgerollt. Dasselbe gilt fuer den normalen Exit-,
+Close- und Killpfad:
+
+1. Den Registry-Eintrag auf `retiring` setzen und damit fuer neue Lookups
+   sperren; ein interner Lease haelt Kern und Chunk bis zum Teardown stabil.
+2. Async-I/O der Instanz abbrechen und Zusatzthreads entfernen. Ein beim Kill
+   in `io_wait` blockierter Owner kann seinen Waiterzaehler nicht mehr selbst
+   abbauen; der exklusive Teardown cancelt deshalb zuerst einen eventuell
+   eingereihten Service-Request, beendet dessen Worker und leert den
+   Async-I/O-Slot unabhaengig vom verwaisten Diagnosezaehler.
+3. Committed-, Building- und Retired-Frames samt Ressourcen- und
+   Commandknoten, danach den GUI-Kern freigeben.
+4. Console-Ausgabe und Console-Kern freigeben.
+5. Environment, Process und Runtime freigeben.
+6. Stack vor Image sowie restliche VM-/Backing-Store-Ressourcen freigeben.
+7. Den Registry-Kern nach dem letzten Pin reclaimen; erst ein vollstaendig
+   leerer, ungepinnter Chunk darf die Shrink-Hysterese durchlaufen.
+
+Sind bei einer neuen Admission alle Slots belegt und scheitert die echte
+Chunk-Heapallokation, werden einmalig bereits beendete, nicht teardown-blockierte
+gehostete Console-Instanzen sicher gereap-t, danach gilt der positive
+Pressure-Shrink von acht Mutationsepochen und die Admission wird genau einmal
+wiederholt. Die Diagnose-Fehlerinjektion umgeht dieses Recovery absichtlich,
+damit sie unveraenderten Live-Zustand und einen sichtbaren Fehler beweist.
+
+Der neue R4DRAW-v2-Vertrag trennt Aufbau und Sichtbarkeit ausdruecklich:
+
+1. `gui_frame_begin` erzeugt einen leeren privaten `building`-Frame.
+2. `gui_frame_append` validiert einen ganzen Commandbatch und sein
+   Byteblob. Alle benoetigten Bloecke entstehen zuerst in einem privaten
+   Delta. Nur ein vollstaendiges Delta wird an den Building-Frame gespleisst.
+3. `gui_frame_commit` reserviert erst jetzt eine systemweit monoton
+   wachsende Framegeneration und tauscht `building` gegen `committed`.
+   Dieser Pointertausch selbst allokiert nicht.
+4. `gui_frame_cancel` verwirft ausschliesslich den privaten Aufbau.
+
+Ein Validierungs-, Overflow- oder OOM-Fehler markiert die laufende
+Transaktion terminal fehlerhaft. Der zuvor committed Frame bleibt
+bitidentisch sichtbar. Unreferenzierte Bytes im gemeinsamen Blob sind
+erlaubt; jeder bekannte Command muss seinen eigenen Bereich dagegen exakt
+und overflow-sicher beschreiben. Variable Texte sind weder NUL-terminiert
+noch auf das 64-Byte-Feld des historischen `GuiCommand` begrenzt.
+
+Die alten Zeichenfunktionen verwenden intern denselben Speicher: Ohne
+explizites BEGIN wird der committed Frame transaktional geklont, der neue
+Command angehaengt und erst `gui_present` committet ihn. Die alten
+`gui_command`- und `gui_raster_read`-Slots materialisieren bei Bedarf eine
+kompatible Sicht aus dem committed Frame; es existiert kein zweiter
+Legacy-Puffer. Diese Mehrfachaufrufe sind nur einzeln atomar und nicht der
+Snapshotvertrag fuer neue Consumer.
+
+Produktive GUI-Apps beginnen einen Renderdurchlauf ueber
+`app_gui.beginPaintForSize` beziehungsweise `Window.beginPaint`, halten bis
+zum Ende einen `PaintContext` und registrieren unmittelbar danach
+`defer paint.discard()`. `present()` committet genau den fertigen Frame;
+fruehe Rueckgaben, Validierungsfehler und OOM verwerfen ausschliesslich den
+privaten Aufbau. Der Desktop replayt im aktuellen Produktpfad ausschliesslich
+seine caller-owned `gui_frame_read`-Snapshots. Die alten Einzelread-Slots
+bleiben allein fuer binaere ABI-Kompatibilitaet und Diagnose vorhanden; der
+Desktop konsumiert sie nicht mehr. Der separate `gui_set_text`-Fallback
+bleibt fuer seinen eingefrorenen Textvertrag erhalten.
+
+`gui_frame_read` pinnt anhand des exakten ProgramProcessHandle und der
+erwarteten Framegeneration kurz den unveraenderlichen committed Frame. Es
+kopiert Commands und das gemeinsame Byteblob in einem einzigen
+all-or-nothing Aufruf in Callerbesitz. Stale Handle, stale Generation,
+ungueltige Pointer oder zu kleine Puffer veraendern beide Zielbereiche nicht.
+Ein waehrenddessen ersetzter Frame wandert auf die Retired-Liste und wird erst
+nach dem letzten Reader in umgekehrter Besitzreihenfolge freigegeben. R4DESK
+haelt pro Fenster doppelt gepufferte Snapshots; Replay, Clipping und Z-Order
+erfordern danach keinen Kernelzugriff und keinen Registrylock.
+
+CLEAR, CANCEL, Rollback, normaler Exit und Hard-Kill validieren die komplette
+ownergetaggte Hierarchie und geben Ressourcen, Commandbloecke und Framewurzeln
+in umgekehrter Anlagereihenfolge frei. Alle neuen Payloads werden
+vollstaendig genullt; ein wiederverwendeter Heapblock darf keine Daten der
+vorherigen Instanz offenlegen oder als gueltiger Zustand erscheinen.
+
+Telemetry
+---------
+
+`instanceStorageStats()` fuehrt current-/peak-Werte fuer Runtime-, Console-
+und GUI-Kategorien, aktive Instanzen je Klasse, aktive Payloads je Art,
+Allokationsversuche/-erfolge, Releases, Fehler, Rollbacks sowie Owner-,
+Header-, Free- und Quarantaenebefunde.
+
+Semantik der Bytewerte:
+
+- `live_core_bytes` zaehlt nur Kerne veroeffentlichter Instanzen.
+- `active_instance_bytes` umfasst lebende Kerne plus deren aktive, korrekt
+  besessene Payloads; Quarantaene ist nicht aktiv.
+- `peak_active_instance_bytes` wird ebenfalls nur aus veroeffentlichten
+  Instanzen und deren spaeteren Lazy-Payloads gebildet. Private beziehungsweise
+  fehlgeschlagene Spawntransaktionen und der Kernelselftest erhoehen diesen
+  Active-Peak nicht.
+- `registry_reserved_core_bytes` bezeichnete in 0.59.7 die komplette
+  statische 16er-Kerntabelle. Seit 0.59.8 zaehlt es die aktuell physisch
+  allokierten Registry-Chunkbytes.
+- `reserved_instance_bytes` umfasst den reservierten Registry-Kern plus alle
+  noch reservierten Payloadbytes, einschliesslich Quarantaene.
+- `current_*_bytes` und `current_payload_bytes` sind noch reservierte
+  Payloadbytes einschliesslich eventueller Quarantaene. Ihre Peaks sinken
+  nicht und erfassen bewusst auch private Reservierungen vor dem Publish.
+- Aktive Payloadzaehler enthalten nur korrekt besessene, nicht quarantinierte
+  Bloecke. `gui_command_payloads` und `gui_raster_payloads` bezeichnen fuer
+  Alttelemetrie weiterhin physische Command- beziehungsweise Rasterknoten und
+  koennen deshalb groesser als die Zahl aktiver GUI-Payloads sein. Knoten ohne
+  einen GUI-Owner bleiben ungueltig.
+- `current_gui_frame_bytes`, `commands` und `nodes` erfassen committed,
+  building und noch von Snapshotreadern gehaltene retired Frames. Die Peaks
+  sinken nicht. Commit-, Cancel-, OOM- und Snapshotreadzaehler sind kumulativ.
+- Payloadbytes sind die angeforderten Strukturbytes. Heapheader/-footer,
+  committed Heap-Seiten, Program-Image, Stack und App-VM gehoeren nicht zu
+  `current_payload_bytes`.
+- `current_runtime_bytes`, `current_console_bytes` und `current_gui_bytes`
+  sind Kategorien-Gesamtsummen ueber alle zugeordneten Payloadarten; nur
+  `core_bytes_per_instance` beschreibt die Groesse einer Einzelstruktur.
+
+Der seit 0.59.7 vorhandene R4DEV-Slot 27 ist fuer alte Binaerprogramme
+eingefroren. Deren C-Fassade uebergab einen nicht initialisierten 256-Byte-
+Ausgabepuffer; eine spaetere InOut-Auslegung desselben Slots waere deshalb
+nicht binaersicher. Die aktuelle R4DEV-v5-Tabelle besitzt 304 Bytes; ihr bis
+Byte 296 unveraenderter v4-Praefix trennt die beiden Sichten:
+
+- `program_instance_storage_summary` in Slot 27 liest den Eingabepuffer nie,
+  schreibt exakt den eingefrorenen v1-Prefix mit 256 Bytes und laesst jedes
+  nachfolgende Byte unberuehrt.
+- `program_instance_storage_summary_v2` in append-only Slot 34 ist von Anfang
+  an ein InOut-Vertrag. Der Aufrufer setzt mindestens Version 2 und Groesse
+  336; ungueltige Header veraendern den Puffer nicht. Ein hoeherer
+  Versionswunsch wird auf den vollstaendigen v2/336-Prefix heruntergehandelt.
+  Diese Sicht enthaelt zusaetzlich die Framewerte.
+- `program_instance_storage_self_test` liefert
+  `ProgramInstanceStorageSelfTestResult` Version 1 (64 Bytes). Der begrenzte
+  Test prueft reale Heapallokation, jeden eager und lazy Fehlerpunkt,
+  Reverse-Rollback, dynamische Framebloecke, Snapshotfehler,
+  Zaehlerbalance, Baseline und Nullinitialisierung.
+
+Die aktuelle Zig- und C-Fassade bevorzugt Slot 34, initialisiert dessen Header
+und faellt bei einer alten kleineren R4DEV-Tabelle sicher auf Slot 27 zurueck.
+Direkte Aufrufer pruefen optionale Felder mit `hasFn`. Extensible Typen wachsen
+nur am Ende; `ProgramStatus` und `ProgramInstanceInfo` bleiben fixed-layout
+und ihre VM-/Image-/Stackwerte werden nicht fuer Heap-Payloadtelemetrie
+umgedeutet.
+
+IRQ-, Yield- und Lockregeln
+---------------------------
+
+Der Kernel-Heap ist im aktuellen kooperativen Modell lockfrei. Deshalb gelten
+fuer die ProgramInstance-Payloads dieselben harten Regeln:
+
+- keine Allokation oder Freigabe im IRQ-Kontext;
+- kein Yield, Wait, blockierendes I/O oder Callback innerhalb einer Heap-
+  beziehungsweise Registry-Mutation;
+- Spawn-ID vor der yieldenden Ladephase reservieren;
+- private Payloads ohne sichtbaren Halbeintrag vorbereiten;
+- den Registry-Kern nur in einem yield-freien Commitfenster veroeffentlichen;
+- Telemetrie und Ownerheader im selben yield-freien Heapvorgang aktualisieren;
+- den no-sleep-Frame-Mutex nur fuer Pointer-, Generation- und Readerzaehler-
+  Mutationen halten, nie fuer Allokation, Freigabe oder Snapshotkopie;
+- keine App-, Registry- oder Frameallokation zwischen validiertem Commit und
+  dem sichtbaren Pointertausch ausfuehren.
+
+Soll der Scheduler diese Nicht-Praeemptierbarkeitsannahme spaeter aufgeben,
+brauchen Heap und Registry einen dazu passenden expliziten Synchronisations-
+vertrag; die 0.59.7-Aufteilung darf nicht still in IRQ- oder preemptierbare
+Pfade verschoben werden.
+
+Abnahme
+-------
+
+    Tests/Gate/Run-ProgramInstanceStorageContract0597.ps1
+    Tests/Gate/Run-GuiFacadeContract05824.ps1
+    Tests/Gate/Run-GuiFrameContract06243.ps1
+    Tests/Gate/Run-GuiShapeContract06244.ps1
+    Tests/Runtime/Run-ProgramInstanceStorageRuntime0597.ps1
+    DevTools/Scripts/Build.bat -test
+    DevTools/Scripts/Build.bat -norun
+
+Das permanente ProgramInstance-Contract-Gate prueft Struktur, Per-Node-
+Budgets, Allokationsmatrix, Parent-first-Gesamtpreflight, Ownerheader,
+Reverse-Release und das Hostmodell. Die dynamische Frameabnahme umfasst 0,
+1, 257 und 4096 Commands, variable Texte, gemischte unaligned Ressourcen,
+Cancel, terminales Growth-OOM ohne Teilmutation, stale Generationen,
+zu kleine Zielpuffer und Reader-retired-Freigabe. Diese Zahlen sind
+Belastungsuntergrenzen und keine Kapazitaeten.
+
+Das 0.62.43-Gate pinnt zusaetzlich die sechs append-only R4DRAW-Slots,
+Command-/Info-Layouts, fehlende Aggregatecaps, die einzige
+Committed-Speicherwahrheit und R4DESKs caller-owned Doppelpuffer. Desktoptests
+uebernehmen gueltige leere sowie 2048-Command-Snapshots, replayen lange
+UTF-8-Texte und pruefen unaligned XRGB sowie Alpha8-Geometrie. Stale Handle
+oder Generationen und OOM duerfen den aktiven Snapshot nicht veraendern.
+
+Der QEMU-Runtime-Lauf verwendet `CLEANUPD /PROGRAMSTORAGE` fuer reale
+Console-/GUI-/Service-Lifecycles, Fehlerinjektion und Churn. Neben der
+0.62.42-Sechsknotenkette committet eine echte GUI-Instanz 4116 Commands und
+138 Ressourcenbytes. Der Parent prueft eine exakte Gesamtcopy, unveraenderte
+Sentinelbereiche bei stale/too-small, CANCEL ohne Sichtwechsel, exaktes
+ID-Reuse mit neuer Generation, zwei parallele Owner und Hard-Kill. Danach
+muessen Frameknoten, Bytes, Registry, Heap, PMM und VM zur warmen Baseline
+zurueckkehren. Der bestehende Kill-in-`io_wait`-Lauf bleibt Bestandteil
+derselben Abnahme.
+
+Das 0.62.44-Gate haelt `GuiFrameCommand` v1/96 unveraendert und pinnt die
+versionierten Formressourcen fuer Pfade, abgerundete Rechtecke und Schatten.
+Kerneltests pruefen die vollstaendige Ressourcenvalidierung; Desktop-Goldens
+pruefen deterministische Pixelabdeckung, CSS-Radiennormalisierung, ungleiche
+Rahmen, Clips und begrenzten Blur. Die logische Form bleibt unabhaengig von
+ihrer Pixelausdehnung genau ein Displaylistencommand.

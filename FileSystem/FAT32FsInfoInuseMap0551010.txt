@@ -1,0 +1,106 @@
+﻿FAT32 FSInfo und Inusemap 0.55.10.10
+====================================
+
+Ziel
+----
+
+0.55.10.10 beseitigt den zweiten fundamentalen FAT32-Schmerz nach den
+grossen Schreib-/Lesepfadoptimierungen: freie Cluster werden nicht mehr fuer
+jede Abfrage und jede neue Allocation blind aus der FAT hergeleitet. R4OS
+liest FAT32-FSInfo beim Mount, validiert die Werte gegen einen einmaligen
+FAT-Scan und haelt danach eine RAM-Inusemap als schnelle Laufzeitstruktur.
+
+Die sichtbare Systemversion bleibt im FAT32-Sonderstrang weiterhin 0.55.10.
+
+
+Implementierung
+---------------
+
+Der FAT32-Treiber liest beim Mount die BPB-Felder fuer FSInfo-Sektor und
+Backup-Bootsektor. Ein FSInfo-Sektor gilt nur als verwertbar, wenn die
+Signaturen `0x41615252`, `0x61417272` und `0xAA550000` passen. Die Felder
+`Free_Count` und `Nxt_Free` werden nicht blind geglaubt:
+
+- `Free_Count` muss mit dem einmaligen FAT-Scan beim Mount uebereinstimmen.
+- `Nxt_Free` muss im gueltigen Datenclusterbereich liegen und in der
+  Laufzeit-Inusemap frei sein.
+- Ungueltige, unbekannte oder widerspruechliche Werte werden durch den
+  FAT-Scan ersetzt und als reparierte FSInfo zurueckgeschrieben.
+
+Der FAT-Scan baut pro gemountetem Volume zugleich eine RAM-Inusemap auf. Diese
+Map markiert belegte Cluster bitweise und zaehlt freie Cluster. Allokation
+sucht freie Runs zuerst in dieser Map; nur wenn fuer ein Volume keine Map
+bereitsteht, bleibt der alte FAT-Sektor-Scanner als interner Rueckfallpfad im
+Treiber erhalten. Das ist kein zweiter Dateisystempfad, sondern derselbe
+FAT32-Treiber mit anderer Suchquelle.
+
+
+Mutation und Persistenz
+-----------------------
+
+Allocation und Free aktualisieren die RAM-Inusemap und den freien Clusterzaehler
+direkt am bestehenden FAT32-Mutationspunkt. Nach solchen Mutationen schreibt
+FAT32 FSInfo ueber den normalen Page-Cache-Write-Pfad auf Primaer- und
+Backup-FSInfo, falls das Volume diese Sektoren besitzt.
+
+FSInfo bleibt dabei ein persistenter Hinweis fuer schnelle Mounts und externe
+Inspektion, nicht die alleinige Wahrheit. Die FAT und die daraus aufgebaute
+Inusemap entscheiden, ob ein Cluster im laufenden System als frei gilt.
+
+
+ImageCreator
+------------
+
+`Code/BuildTools/ImageCreator` erzeugt nicht mehr nur FSInfo mit unbekannten
+Werten. Nach dem Schreiben aller Dateien scannt ImageCreator die erzeugte FAT,
+berechnet `Free_Count` und `Nxt_Free` und schreibt dieselben gueltigen Werte in
+den primaeren FSInfo-Sektor und den Backup-FSInfo-Sektor.
+
+Die Abnahme des erzeugten Standardimages meldete:
+
+    Lead      : 0x41615252
+    Struct    : 0x61417272
+    FreeCount : 125162
+    NextFree  : 5396
+    Trail     : 0xAA550000
+
+
+R4DEV / ProgramApi
+------------------
+
+ProgramApi v148 erweitert `ProgramPerformanceSummary` append-only um:
+
+- `fat32_fsinfo_reads`
+- `fat32_fsinfo_valid_mounts`
+- `fat32_fsinfo_rebuilds`
+- `fat32_fsinfo_writes`
+- `fat32_inusemap_builds`
+- `fat32_inusemap_clusters`
+- `fat32_inusemap_alloc_hits`
+- `fat32_inusemap_alloc_misses`
+
+Der SDK-Helfer `supportsFat32FsInfoInuseMap()` prueft diesen Stand. Die
+ProgramApi-Tabelle, R4XStart und R4SYS wachsen nicht.
+
+
+Abnahme
+-------
+
+`FSDIAG.R4X` prueft seit 0.55.10.10 ProgramApi v148. Die Probe schreibt
+`C:\TEMP\FSINFO.BIN` mit 64 KB, liest die freie Clusterzahl vor, nach dem
+Schreiben und nach dem Delete und verlangt:
+
+- die erwartete Cluster-Differenz waehrend die Datei existiert,
+- Wiederherstellung der freien Clusterzahl nach Delete,
+- FSInfo-Mount- oder Repair-Zaehler,
+- Inusemap-Build-Zaehler,
+- FSInfo-Write-Delta,
+- Inusemap-Allocation-Hits.
+
+Die Standardabnahme meldete:
+
+    FSDIAG fat32 fsinfo result: OK bytes=65536 clusters=16/16 delete=yes map=yes fsinfo=yes
+    FSDIAG fat32 fsinfo metrics: free=124932/124916/124932 writes=17 mapBuilds=2 mapClusters=386556 mapHits=16 fsinfoMounts=2/0
+
+Damit ist belegt, dass Mount, Allocation, Delete, freie Clusterzahl,
+FSInfo-Persistenz und Inusemap-Suche zusammen funktionieren.

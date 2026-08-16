@@ -1,0 +1,443 @@
+﻿Klickifax Live-Abnahme und allgemeine Diagnose 0.62.29
+======================================================
+
+Zweck
+-----
+
+Diese Abnahme prueft den produktiven Klickifax-Transport gegen eine
+wechselhafte externe Webseite. Sie ist ausdruecklich kein Build-Gate. Reale
+Antwortgroesse, Consent-Ablauf und Bot-Abwehr koennen sich ohne Quellaenderung
+aendern.
+Deterministische HTML-, CSS-, Formular-, R4JS-, Ressourcen- und
+Lebenszyklusregressionen bleiben deshalb in den Offline-Fixtures und dem
+Webruntime-Gate.
+
+Diagnoseanzeige
+---------------
+
+Die Schaltflaeche `Trace` oder `Strg+D` schaltet zwischen der normalen
+Statuszeile und der letzten Diagnose um. Die Diagnose bleibt speicherintern
+und wird nicht in Cookies, Profil, Cache oder Tempdateien geschrieben.
+
+Nach einer Antwort nennt sie allgemeine Werte: HTTP-Status, Bytegruesse,
+Redirectanzahl und Content-Type. Wenn Seitenskripte fehlgeschlagen sind,
+folgen Anzahl sowie die letzte R4JS-Phase, Fehlername und Quellzeile. Bei
+einem Transport- oder Dokumentfehler zeigt sie dessen allgemeine Kategorie.
+Es gibt keine hostname- oder seitenabhaengige Auswertung.
+
+Automatisierte Live-Abnahme
+---------------------------
+
+`Tests/Runtime/Run-KlickifaxLiveFetch06229.ps1` baut ein gezieltes Testimage
+und startet QEMU ohne Anzeige. Das test-only Programm `KFXLIVE.R4X` verwendet
+dieselbe `r4_app.web().fetch`-Fassade wie Klickifax. Es besitzt keinen
+Host-Proxy und keine zweite TLS- oder HTTP-Implementierung.
+
+Liefert Google eine angeforderte `/search`-Seite direkt ohne vorgeschaltetes
+Consentformular, wird diese Antwort unmittelbar als Ergebnis- oder
+Challenge-Seite ausgewertet. Der GET-Suchbutton der normalen Startseite wird
+nicht als vermeintlicher Consent-POST behandelt.
+
+Der Lauf prueft maschinenlesbar:
+
+- DHCP, DNS und TCP ueber die normalen R4OS-Dienste,
+- TLS 1.2 ueber das produktive R4TLS-Protokollmodul,
+- einen sicheren HTTP-Erfolg mit nichtleerem Antwortkoerper,
+- HTML-Auswertung und Seitenskripte ueber dieselbe WebRuntime wie Klickifax,
+- die Uebernahme gesetzter Cookies und das Folgen einer Scriptnavigation,
+- sichtbare Ergebnislinks in der nachgeladenen Seite,
+- das Fehlen von Panic-, Fatal- und CPU-Exception-Markern,
+- einen sauberen Gast-Poweroff.
+
+Aufruf vom Repository-Root:
+
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File Tests/Runtime/Run-KlickifaxLiveFetch06229.ps1`
+
+Der vollstaendige Suchlauf wird ausdruecklich mit `-ConsentFlow -Url
+'https://www.google.com/search?q=R4OS'` gestartet. Ohne neue Imageverpackung
+verwendet `-SkipBuild` weiterhin die bereits im Testimage hinterlegte
+AUTOEXEC-Adresse und eignet sich daher nicht zum Wechseln des Testziels.
+Mit `-DiagnosticOnlyBuild` werden nur KFXLIVE und danach das Testimage neu
+gebaut. Das ist fuer wiederholte Diagnoselaeufe gedacht und ersetzt weder
+die Dauergates noch eine vollstaendige Abnahme.
+
+Zwei Laeufe vom 02.08.2026 erreichten fuer `https://www.google.com/` jeweils
+HTTP 200 mit 80076 beziehungsweise 80090 Byte, ohne Redirect und mit
+`secure=yes`. Die Bytegruesse ist nur ein Laufbefund und kein festes Soll.
+Damit kann der Transport ohne sichtbares QEMU-Fenster und ohne Bedienung
+durch den Benutzer weiterentwickelt werden. Die pixelgenaue optische Abnahme
+bleibt getrennt; Dokument-, Script-, Cookie- und Navigationsfortschritt sind
+hingegen maschinenlesbar.
+
+Am 03.08.2026 wurde eine reale ca. 90-KB-Suchantwort zusaetzlich auf dem Host
+mit der produktiven WebRuntime reproduziert. Alle fuenf Inline-Skripte liefen
+fehlerfrei. Der zuvor nach mehr als 16777216 Schritten abbrechende
+61948-Byte-Block endete nach einer allgemeinen Korrektur der abstrakten
+Nullish-Gleichheit nach 8186 Schritten. Der anschliessende Challenge-Task
+erzeugte ein regulaeres `SG_SS`-Cookie und eine `location.replace`-Aktion zur
+Such-URL mit `sei`.
+
+Zwei weitere allgemeine Laufzeitgrenzen wurden dabei sichtbar und behoben:
+Die realm-eigene Stringarena waechst nun allocator-basiert, und
+`Function.prototype.apply` kann den von der Seite verwendeten 8192er-Chunk
+an `String.fromCharCode` uebergeben. Direkte Regressionen decken beide Pfade
+ab. Es wurde keine Google-spezifische Semantik eingebaut.
+
+Live-Neupruefung vom 03.08.2026: Die Startseite war wieder direkt mit HTTP
+200 erreichbar. Der frisch verpackte Suchlauf erreichte erneut Consent-GET,
+`Alle ablehnen`, den 270-Byte-POST, den 303-Redirect, die ca. 90-KB-Challenge
+und alle fuenf Seitenskripte. R4JS erzeugte nach 2655830 Schritten das
+`SG_SS`-Cookie und die Suchnavigation mit `sei`. Die fruehere
+`unusual traffic`-CAPTCHA-Antwort trat nicht auf. Der damals noch allgemeine
+`follow_read_failed`-Befund ist inzwischen aufgeloest: Die erste Verbindung
+lief in einen 15-Sekunden-Lese-Timeout; der einmalige GET-Retry lieferte die
+vollstaendige Antwort.
+
+Im anschliessenden Lauf erreichte auch der `sei`-GET HTTP 200 mit rund 90 KB,
+ohne TCP-, TLS- oder HTTP-Abbruch. Google lieferte jedoch erneut eine Seite
+ohne sichtbare Ergebnislinks, die eine zweite JavaScript-Challenge startete.
+Dieser zweite R4JS-Durchlauf ueberschritt im QEMU-TCG-Gast den 600-Sekunden-
+Rahmen des ausdruecklichen Live-Tests. Der aktuelle Restbefund liegt daher
+nicht mehr im Transport, sondern in der Laufzeit beziehungsweise Auswertung
+der wiederholten Challenge. Er bleibt ausserhalb der Buildgates.
+
+Die nachfolgende per-Skript-Instrumentierung grenzt diesen Befund weiter ein:
+Auf beiden Challenge-Seiten beenden alle fuenf eingebetteten Skripte ihre
+direkte Dokumentausfuehrung. Der groesste Block umfasst 61948 Byte und endet
+jeweils nach 8186 VM-Schritten. Erst der erste queued Job in `pump round=0`
+beansprucht die lange TCG-Laufzeit. Zwischen beiden Seiten unterscheiden sich
+nur die Inhalte der kleinen Skripte an den DOM-Knoten 23 und 25; die drei
+anderen Skripthashes und ihre Schrittzahlen sind identisch.
+
+KFXLIVE meldet deshalb optional Skriptbeginn und -ende, Quellname,
+Quellgroesse, FNV-64-Diagnosehash, Schrittzahl sowie den aktiven Quellnamen
+des queued Jobs in Abstaenden von einer Million VM-Schritten. Nach dem
+Offline-Nachweis des endlichen Challengepfads verwendet der Live-Treiber wie
+der produktive Klickifax ein 16-Mi-Schrittbudget, amortisierte Stoppruefungen
+und den speed-optimierten R4X-Bau. Damit kann die headless Abnahme denselben
+Pfad vollenden, statt ihn an der frueheren Diagnosegrenze abzubrechen.
+
+Der unmittelbar folgende Live-Versuch erreichte Consent erneut, doch beide
+idempotenten GET-Versuche nach der Consentantwort endeten in einem
+Lese-Timeout. Es wurde kein dritter Abruf erzwungen. Dieser wechselhafte
+Transportbefund aendert die zuvor erfolgreiche Challenge-Eingrenzung nicht.
+
+Die Live-Neupruefung vom 04.08.2026 verwendete KFXLIVE 0.2.0 mit dem
+produktionsgleichen Speed-Bau und 16-Mi-Schrittbudget. Zwei getrennte
+headless Laeufe erreichten jeweils Consent-GET, sichtbares `Alle ablehnen`,
+270-Byte-POST, 303-Redirect und drei Cookies. Der anschliessende Such-GET und
+sein einziger idempotenter Retry endeten jedoch in beiden Laeufen nach 15
+Sekunden ohne ein HTTP-Byte (`follow_read_timeout`). Beide Gaeste fuhren
+sauber herunter. Da der Befund vor HTML und JavaScript liegt und die
+Gegenstelle wechselhaft ist, wurden keine weiteren schnellen Abrufe und kein
+zusaetzlicher Produkt-Retry erzwungen.
+
+Eine erneute Abnahme am 04.08.2026 nach Ende der begleitenden Hostlast
+erreichte bereits beim ersten Such-GET trotz erfolgreichem TLS-Handshake und
+Requestversand kein HTTP-Byte; der transportseitige einmalige Retry endete
+ebenfalls mit `read_timeout`. Der Befund ist damit weder ein Schrittbudget-
+noch ein TCG-Performanceproblem. KFXLIVE 0.2.1 legt um Consent- und Script-Folge-
+GETs keinen eigenen zweiten Retry mehr: Die WebTransport-Fassade besitzt die
+einzige idempotente Wiederholung, sodass ein Diagnoseabruf diese Policy nicht
+auf bis zu vier externe Verbindungen vervielfacht.
+
+`Run-KlickifaxHttpsFixture06229.ps1` trennt diesen wechselhaften Livebefund
+von einem allgemeinen R4OS-Transportfehler. Der Test startet auf dem Host eine
+begrenzte TLS-1.2-Gegenstelle, die zur Laufzeit ein Blattzertifikat fuer
+`10.0.2.2` aus dem bestehenden R4OS-Entwicklungsmaterial erzeugt. Es wird kein
+weiterer Vertrauensanker installiert und kein Zertifikat in Programmcode
+eingebettet. Der Server protokolliert fuer jede Verbindung Annahme,
+TLS-Version, Cipher, ALPN, vollstaendige Requestzeile und Antwortversand.
+
+Beide headless Gastmodi sind erfolgreich. `immediate` sieht genau eine
+Verbindung, den vollstaendigen `GET /fixture HTTP/1.1` und eine sofortige
+HTTP-200-Antwort mit 28 Byte Body. `retry-once` beendet die erste Verbindung
+erst nach dem vollstaendigen GET ohne Antwort; WebTransport stellt genau eine
+zweite Verbindung her und empfaengt dort dieselbe Antwort. In beiden Faellen
+werden TLS 1.2, ECDHE-RSA-AES128-GCM-SHA256, ALPN `http/1.1`, sicherer Fetch
+und sauberer Poweroff nachgewiesen. First-Byte-Empfang, Neuverbindung und die
+einmalige idempotente Wiederholung funktionieren damit deterministisch. Der
+aktuelle Google-Timeout bleibt eine externe Gegenstellenreaktion und ist kein
+reproduzierbarer Fehler dieses allgemeinen Pfads.
+
+Fuer die netzunabhaengige Wiederholung steht
+`Tests/Diagnostic/Run-WebRuntimeHtmlProbe06229.ps1` bereit. Der generische
+Host-Prober nimmt eine lokale HTML-Datei und eine Dokument-URL entgegen und
+verwendet direkt den produktiven R4OS-Parser, die WebRuntime und R4JS. Er
+protokolliert Skripthashes, abgeleitete Eval-Quellen, Bytecode-Ort,
+Allokationen, Collections, Zellbelegung, Navigationsaktionen und die Namen
+gesetzter Cookies. Nur ausdrueckliche `R4_`-Diagnosemarker werden mit ihrem
+Wert ausgegeben. Mit `-Profile` erfasst er zusaetzlich Opcode-,
+Knoten- und Identifiercache-Haeufigkeiten; ohne diesen Schalter bleibt der
+Lauf produktionsnaeher. Optional schreibt er nur die gerade aktive dynamische
+Quelle in einen ausdruecklich genannten lokalen Diagnosepfad.
+Webseitenantworten werden nicht versioniert.
+
+`Probe-ChromeWebRuntimeReference06229.py` fuehrt dieselbe lokale Antwort
+unabhaengig in headless Chrome aus, ersetzt nur das erste Dokument und sperrt
+alle weiteren Netzressourcen. Die Klickifax-Variante verwendet weiterhin den
+echten Klickifax-User-Agent. `New-GoogleChallengeFlowFixture06229.ps1` erzeugt
+bei Bedarf eine getrennte instrumentierte Kopie mit Markern fuer Promise,
+Challengeaufruf, Ergebnis, Cookie-Schranke und Navigation. Die Originalantwort
+bleibt unveraendert; weder Antwort noch Instrumentierung sind Buildgate oder
+Produktcode.
+
+Die vorhandene unversionierte 90396-Byte-Antwort reproduziert den Befund
+vollstaendig offline. Alle fuenf Inline-Skripte enden; Inline-Skript 3
+erzeugt ein 67826-Byte-Eval-Programm. Ein erster Lauf endete zwar regulaer
+nach 15856488 Schritten, erzeugte aber einen falschen 4796-Zeichen-Payload.
+Der Chrome-Referenzlauf lieferte nur etwa 1100 bis 1200 Zeichen. Ursache war
+der allgemeine HTML-Binaerstringvertrag: `atob` speicherte dekodierte Bytes
+nicht als U+0000 bis U+00FF, waehrend `btoa` interne UTF-8-Bytes statt
+einbytewertiger JavaScript-Zeichen kodierte. Die UTF-8-Aufblaehung ueberschritt
+Googles regulaere 4093-Zeichen-Cookiegrenze und vervielfachte zugleich die
+nachfolgende Rechenarbeit.
+
+Nach der standardkonformen Korrektur erzeugt die unveraenderte Antwort ein
+1080-Zeichen-Ergebnis, setzt `SG_SS` und fordert per `location.replace` die
+Such-URL mit `sei` an. Der komplette queued Pfad endet nach 1080443 statt
+15856488 Schritten; ein warmer ReleaseFast-Gesamtlauf benoetigte 9,4 Sekunden.
+Direkte Regressionen pruefen Latin-1-Rundlauf, Bytes 0, 128 und 255 sowie die
+Ablehnung von Codewerten oberhalb 255. `document.readyState` folgt ausserdem
+dem allgemeinen Lebenszyklus `loading`, `interactive`, `complete`; KFXLIVE
+sendet dieselben DOMContentLoaded- und Load-Ereignisse wie Klickifax.
+Das gezielte JavaScript-Dauergate ist mit 151/151 Tests gruen, das
+WebRuntime-Gate mit 248/248 Tests. R4JS, Klickifax und der aktualisierte
+KFXLIVE-0.2.0-Treiber bauen jeweils eigenstaendig.
+
+Ein allgemeiner adaptiver GC-Takt und die bedarfsgesteuerte Erzeugung des
+`arguments`-Objekts begrenzen Collections und Allokationen. Reine
+Number/Number-Operationen umgehen unnoetige allgemeine Typumwandlungen;
+Parsegeneration, Zellgeneration und Bindungszahl sichern den lokalen
+Identifiercache auch bei Wiederverwendung eines Programmobjekts ab.
+
+Das Opcodeprofil identifiziert anschliessend keinen Netzwerk- oder
+Seitensonderfall, sondern flach verschachtelte numerische Zustandsautomaten
+als dominanten Interpreterpfad. R4JS ueberspringt nun deklarationslose
+Block- und For-Umgebungen, cached ausschliesslich generationstreu aufgeloeste
+lokale Bindungen und fusioniert semantisch reine numerische Vergleichsketten
+und Schleifenbedingungen. Objektumgebungen, Getter und coercende Werte gehen
+weiter durch den vollstaendigen Pfad. In einem 4-Mi-Profillauf liegt der
+Zellpeak trotz wesentlich weiterem Programmfortschritt bei 6015 und es sind
+nur 23 Collections noetig. Nach der abschliessenden Checkpointkorrektur
+erreichen 1-Mi-Profile wesentlich spaetere Programmabschnitte bei begrenztem
+Zellpeak und hohem lokalem Identifiercache-Anteil. Die frueheren Vergleiche
+von 8,100 gegen 33,280 Sekunden bei einer Million Schritten sowie 438,358
+gegen 823,988 Sekunden fuer den vollstaendigen Lauf belegen den Vorteil des
+Speed-Baus, beschreiben aber den damals noch semantisch falschen UTF-8-Pfad.
+Sie sind keine aktuelle Seitenlaufzeit. Nach dem Binaerstring-Fix ist der
+produktionsnahe Abschluss mit 1080443 Schritten und 9,4 Sekunden die
+massgebliche lokale Messung.
+
+Nach den vielen automatisierten Diagnoseabrufen antwortete die zweite
+Live-Anfrage schliesslich mit Googles `unusual traffic`-CAPTCHA fuer die
+Host-IP. Dieser externe, temporaere Gegenstellenzustand darf nicht als
+deterministisches Gate behandelt oder durch weitere schnelle Abrufe
+verlaengert werden. Die lokale Challenge-Abnahme bleibt davon reproduzierbar;
+die sichtbaren Ergebnislinks werden nach Ablauf der externen Sperre erneut
+live geprueft.
+
+Referenzvergleich
+-----------------
+
+Das lokale Material unter `Reference/Browser/` enthaelt insbesondere RFC
+5077, RFC 5246, RFC 5280, RFC 5289, RFC 6066, RFC 7301, RFC 8422, RFC 9325
+und RFC 9525.
+`Probe-Tls12.py` prueft die allgemein erreichbare TLS-1.2-Gegenstelle mit dem
+Host-TLS-Stack. `Probe-Tls12Flight.py` zeichnet unabhaengig davon Recordfolge,
+Handshake-Nachrichten und die vom Server gelieferte Zertifikatskette auf.
+`TLS12-Vergleich.txt` ordnet die R4TLS-Schritte den Standardabschnitten zu.
+
+Der Host- und der Gastlauf erhielten dieselbe dreiteilige RSA-Kette. Alle drei
+DER-SHA-256-Werte stimmen bytegenau ueberein. Der Serverflight bestand aus
+vier TLS-Handshake-Records; R4OS setzt deren Fragmente vor der Protokollpruefung
+zu einem vollstaendigen Handshake zusammen. Der Endflight akzeptiert ausserdem
+ein optionales TLS-1.2-NewSessionTicket vor ChangeCipherSpec und nimmt dessen
+Handshakebytes in den Finished-Transcript auf.
+
+Der konfigurierte GlobalSign Root CA bleibt ein lokaler Trust Anchor. R4TLS
+prueft das letzte Serverzertifikat gegen diesen Anker, fuehrt aber keine
+Selbstvalidierung des Ankerzertifikats aus. Das entspricht RFC 5280 Abschnitt
+6.1.1: Der Trust Anchor ist ein vertrauenswuerdiger Eingang und nicht Teil des
+prospektiven Zertifizierungspfads. Dadurch wird auch vermieden, dass die
+zweistellige UTCTime-Jahreszahl `98` des alten Root-Zertifikats von der
+verwendeten Zig-Routine faelschlich als 2098 behandelt wird.
+
+Mehrbyte-Laengen in den R4CF- und R4CE-Uebergaben werden auf x86_64 aus ihrer
+nativen Bytefolge geschrieben. Ein direkter SDK-Test prueft dafuer explizit
+300 Byte State und 420 Byte Flight; der echte Google-Serverflight mit 4384
+Byte und der anschliessende Ready-State liefen danach vollstaendig durch.
+
+TLS-First-Byte-Diagnose vom 04.08.2026
+--------------------------------------
+
+Eine kontrollierte lokale HTTPS-Gegenstelle trennt den allgemeinen Transport
+von der wechselhaften Google-Antwort. Im Modus `immediate` verwendet der Gast
+genau eine Verbindung und erhaelt HTTP 200 mit 28 Byte. Im Modus `retry-once`
+nimmt die Gegenstelle den ersten vollstaendigen GET an, schliesst vor einer
+Antwort und beantwortet genau den einmaligen idempotenten Wiederholungsversuch.
+Beide Gaeste fahren sauber herunter. Der PCAP-Prober weist pro Verbindung den
+verschluesselten Clientrequest und nur auf der antwortenden Verbindung
+Server-Application-Data nach.
+
+Der fruehere Google-Timeout wurde ebenfalls paketweise eingegrenzt: Zwei
+vollstaendige TLS-Handshakes und zwei verschluesselte HTTP-Requests verliessen
+den Gast, waehrend die Gegenstelle danach weder Application-Data noch Alert,
+FIN oder Reset sendete. Damit gingen keine bereits empfangenen HTTP-Bytes in
+R4OS verloren. Die unabhaengige Hostprobe erhielt mit TLS 1.2, demselben
+ECDHE-RSA-AES128-GCM-SHA256-Cipher und den ehrlichen Klickifax-HTTP-Headern
+sofort eine HTTP-302-Antwort. Der verbleibende Unterschied lag im schmalen
+TLS-ClientHello-Profil.
+
+R4TLS 0.2.1 bietet deshalb standardsbasiert SessionTicket und RFC 7627
+ExtendedMasterSecret an. Bei ausgehandeltem EMS entsteht das Master Secret
+aus dem Handshake-Hash bis ClientKeyExchange; es wird nicht nur eine leere
+Erweiterung behauptet. RFC 5746 RenegotiationInfo wird ebenfalls im initialen
+Handshake gesendet und nach RFC 9325 zwingend beim Server verlangt, obwohl
+Klickifax selbst keine Neuverhandlung durchfuehrt. Die lokale OpenSSL-Fixture
+handelt beide Erweiterungen nachweislich in ClientHello und ServerHello aus
+und beendet Request, Finished-Pruefung und Antwort erfolgreich.
+
+Mit EMS war die Google-Startseite im Gast am 04.08.2026 wieder direkt
+erreichbar: HTTP 200, 82256 Bodybytes, kein Redirect und kein Retry. Ein
+nackter Aufruf von `/search?q=R4OS` blieb dagegen nach zwei vollstaendigen
+Requests antwortlos. Auch KFXLIVE 0.2.2 mit produktiver Cookieablage aenderte
+diesen Befund nicht: Der Warmup erhielt die Startseite mit 82169 Byte und drei
+Cookies; beide anschliessenden Suchversuche enthielten diese Cookies, Google
+sendete aber erneut weder Application-Data noch Alert, FIN oder Reset.
+Transport, First-Byte-Retry, Zertifikate, R4JS, fehlender Startseitenbesuch
+und fehlende Cookieuebernahme sind damit als lokale Ursache ausgeschlossen.
+
+`Reference/Browser/Probe-Tls12.py --client-hello-only` beschreibt den
+tatsaechlich erfolgreichen OpenSSL-ClientHello ohne Netzabruf. Dessen weitere
+Kurven und Signaturalgorithmen werden nicht in R4TLS kopiert: Ein eigener
+Klickifax-Client darf nur Implementiertes anbieten und behaelt seine eigene
+Kennung und sein eigenes Protokollprofil. Der offene Livepunkt bleibt eine
+allgemeine, standardskonforme Reifung des TLS-Clients oder eine spaetere
+erneute Gegenstellenpruefung, keine Google-Weiche und kein Browser-Spoofing.
+
+Unabhaengige Wikipedia-Abnahme vom 04.08.2026
+---------------------------------------------
+
+`https://www.wikipedia.org/` wurde als zweite, von Googles Consent- und
+Challengepfad unabhaengige Live-Gegenstelle geprueft. Der erste Gastlauf
+erhielt einen ausdruecklichen TLS-`handshake_failure`-Alert. Die Hostprobe
+mit demselben TLS-1.2-Cipher- und Klickifax-HTTP-Profil erhielt HTTP 200.
+Ein Kurven-A/B-Test grenzte die Ursache eindeutig ein: X25519 allein wurde
+abgelehnt, P-256 allein ausgehandelt. R4TLS 0.2.2 bietet deshalb beide
+implementierten ECDHE-Gruppen an und prueft P-256-Schluesselaustausch und
+SEC1-ClientKeyExchange im eigenen Harness.
+
+Nach dem P-256-Ausbau begann Wikipedia mit einem 16413 Byte grossen
+Application-Data-Record. Der alte 16384-Byte-Arbeitsbereich konnte dessen
+16408 Byte verschluesseltes Fragment samt 5-Byte-Header nicht vollstaendig
+aufnehmen. `r4os.app_web` definiert nun zentral drei 18-KB-Arbeitsbereiche;
+Klickifax und KFXLIVE verwenden diese Konstante. Der anschliessende
+produktive Gastlauf war erfolgreich: HTTP 200, 120361 Bodybytes, kein
+Redirect, sichere Verbindung und sauberer Poweroff.
+
+Die vierteilige Serverkette endet ueber ISRG Root X2 am ISRG Root X1. Der
+offizielle selbstsignierte ISRG-Root-X1-Anker ist als vierter Datenanker im
+R4OS-Katalog eingetragen; weder Zertifikat noch Webseitenname sind in R4TLS
+einkompiliert. Wikipedia dient damit als allgemeine Live-Abnahme, waehrend
+Google nur noch ein zusaetzlicher externer Kompatibilitaetstest ist.
+
+Allgemeine Seiten- und Suchabnahme vom 04.08.2026
+-------------------------------------------------
+
+KFXLIVE 0.2.4 besitzt mit `/PAGE` einen allgemeinen Seitenpfad. Er verwendet
+denselben HTML-, CSS-, Formular- und Layoutkern wie Klickifax und verlangt
+maschinenlesbar DOM-Knoten, Layout- und Textoperationen, sichtbare
+Ueberschriften sowie Links. `Run-KlickifaxLiveFetch06229.ps1 -PageFlow`
+wertet diesen allgemeinen Vertrag aus. Die zusaetzliche Option
+`-RequireSearchResults` verlangt fuer echte Suchseiten ausserdem
+Absatzauszuege und verlinkte Ueberschriften;
+`-ImageOnlyBuild` verpackt fuer URL-Wechsel nur das Testimage neu.
+
+Die Wikipedia-Hauptseite bestand diesen Pfad mit HTTP 200, 120361 Bodybytes,
+2568 DOM-Knoten, 704 Layoutoperationen, sechs sichtbaren Ueberschriften und
+374 sichtbaren Links. Dabei fiel die bisherige Grenze von 128 fokussierbaren
+Elementen auf. Die Fokusliste deckt nun alle maximal 4096 HTML-Knoten ab;
+eine Regression prueft 256 Links und das letzte fokussierbare Element.
+
+Die erneute Wikipedia-Abnahme vom 05.08.2026 nach den allgemeinen
+0.62.30-Reflowkorrekturen bestaetigte denselben stabilen Seitenvertrag:
+HTTP 200, 120361 Bodybytes, 2568 DOM-Knoten, 704 Layout- und Textoperationen,
+sechs Ueberschriften, 374 sichtbare Links, drei Absatzauszuege und sauberer
+Poweroff. Wikipedia besitzt auf der Hauptseite keine direkt in
+Ueberschriften liegenden Links; dies ist fuer einen allgemeinen Seitenlauf
+kein Fehler.
+
+Als unabhaengige Suchergebnis-Abnahme dient
+`https://marginalia-search.com/search?query=R4OS`. Dessen vierteilige
+Let's-Encrypt-Kette verwendet P-384/SHA-384. R4TLS 0.2.3 bietet und prueft
+deshalb den standardisierten TLS-1.2-Signaturalgorithmus
+`ecdsa_secp384r1_sha384`; die allgemeine X.509-Pruefung konnte diese Ketten
+bereits verarbeiten. Der abschliessende produktive Gastlauf lieferte HTTP
+200, 103237 Bodybytes, 1955 DOM-Knoten, 1261 sichtbare Textoperationen, 34
+Ueberschriften, 56 sichtbare Links, darunter 14 Ergebnislinks in
+Ueberschriften, sowie sieben Auszugsabsaetze mit sauberem Poweroff. Google und einzelne
+Wikipedia-CDN-Endpunkte bleiben wechselhafte zusaetzliche Liveabnahmen, sind
+aber nicht mehr der einzige Nachweis fuer Seiten- und Suchdarstellung.
+
+Eine weitere Interoperabilitaetsprobe validierte DuckDuckGo nach Aufnahme
+des offiziellen DigiCert Global Root G2 sicher im Gast. Die Gegenstelle
+lieferte fuer dieses Protokollprofil jedoch HTTP 202 mit einer Challenge-
+Seite statt Suchresultaten; dieser Inhalt gilt bewusst nicht als
+Ergebnisabnahme.
+
+Rasterbild-Abnahme vom 06.08.2026
+---------------------------------
+
+KFXLIVE 0.2.5 besitzt mit `/IMAGE` einen maschinenlesbaren Bildpfad. Er
+verwendet dieselbe R4IMG-Fassade, denselben Prozessallokator sowie dieselbe
+Skalierung wie Klickifax und meldet Format, Geometrie, Encodedaten-, Pixel-
+und Skalierungshash sowie Stichproben und Arena-Peak. Der Runner bietet dafuer
+`-ImageFlow`; optionale Sollwerte machen stabile Bildquellen bytegenau
+pruefbar, ohne einen manuellen Sichttest als Decoderdiagnose zu missbrauchen.
+
+Die urspruenglich blockartig verfaelschten W3C-JPEGs und das ganz
+fehlschlagende Eiffel-JPEG waren weder Netzwerk-, Scratch-, SIMD- noch
+R4DRAW-Fehler. Der R4M0-Loader durchsuchte nicht-ausfuehrbare Sections in
+8-Byte-Schritten und deutete normale Tabellenwerte im historischen festen
+Linkadressfenster als Pointer. Dadurch wurden unter anderem Deflate-Tabellen
+des PNG-Decoders und weitere Nutzdaten beim Laden des R4X veraendert. Der
+aktuelle Loader wendet nur noch deklarierte R4M0-Relocations an. LOADERD
+enthaelt eine volatile Kollisionsprobe, die eine Rueckkehr dieser Heuristik
+im Standard-Smoke erkennt.
+
+Die Gastwerte stimmen nach der Korrektur mit den unabhaengigen Hostwerten
+ueberein:
+
+    W3C PNG 72x48       pixels=208eff97364dca64
+    Eiffel 325x480      pixels=242131e33486a921
+    Saint Tropez 300x205 pixels=6f214b5a4b8d21a7
+    Cap Ferrat 250x166  pixels=1f3d10131d6c1083
+
+Alle vier Laeufe endeten ohne Arena-Allokationsfehler und mit sauberem
+Poweroff. Die Eiffel-Probe wird vom Runner zusaetzlich mit erwartetem
+Encodedaten- und Pixelhash abgenommen.
+
+Optionale visuelle Abnahme
+--------------------------
+
+1. Klickifax vom Desktop starten und `Trace` einschalten.
+2. `https://www.google.com/` in die Address-Zeile eingeben und laden.
+3. Falls ein echtes Consent-Formular erscheint, es ueber die normalen
+   Formularcontrols bedienen; Cookies und Redirects bleiben Teil desselben
+   Browserpfads.
+4. Einen Suchbegriff eingeben, absenden und die sichtbaren
+   Ergebnisueberschriften sowie Auszuege kontrollieren.
+5. Das erste Ergebnis als normalen Link oeffnen und danach Back pruefen.
+6. Die Trace-Zeile notieren. Jede reproduzierbare Luecke wird auf einen
+   allgemeinen Standardvertrag und eine lokale Fixture zurueckgefuehrt.
+
+Nicht zulaessige Loesungen
+--------------------------
+
+Klickifax sendet weiter seinen eigenen HTTP-User-Agent und seine eigene
+JavaScript-Identitaet. Weder Chrome-, Chromium-, Firefox-, Safari- noch
+Edge-Kennungen werden nachgebildet. Es gibt keinen Google-Parser, Host-Proxy,
+fest verdrahteten Ergebnisdienst oder eine Challenge-Umgehung. Liefert eine
+externe Seite eine neue Challenge, wird sie als Live-Befund dokumentiert und
+nicht als Anlass fuer eine seitenbezogene Sonderweiche verwendet.

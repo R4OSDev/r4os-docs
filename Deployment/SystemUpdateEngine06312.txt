@@ -1,0 +1,84 @@
+﻿R4OS 0.63.12 - gemeinsame Update-Engine und Inventarpflege
+================================================================
+
+Wahrheit und Aufrufer
+---------------------
+
+`Code/System/SDK/r4os/system_update_engine.zig` ist die einzige produktive
+Implementierung fuer VERIFY, APPLY, RESUME und STATUS. Die oeffentliche
+`Engine` liefert typisierte Operationen, Zustaende und Resultate.
+`SYSUPD.R4X` delegiert als duennes Terminal-Frontend an `runTerminal`; ein
+spaeterer Dienst verwendet dieselbe Engine und wertet keine Konsolentexte
+aus. APPLY und RESUME teilen den exklusiven `SYSLOCK.LCK`-Vertrag.
+
+VERIFY ist vollstaendig seiteneffektfrei. Es oeffnet nur ein bereits final
+unter `C:\R4OS\UPDATE\INBOX` sichtbares R4U und legt insbesondere den
+Updatebaum nicht an.
+
+
+MODULES.JSON
+------------
+
+Die Engine ist der einzige Update-Schreiber fuer
+`C:\R4OS\CONFIG\MODULES.JSON`. Nach dem paketweiten Artefaktcommit und
+Verify liest sie jede angebotene Komponentenidentitaet erneut aus dem
+tatsaechlich installierten R4M0-Container beziehungsweise aus der
+Kernel-ELF-Metadatensektion. Nur eine exakte Uebereinstimmung von Art, Name,
+Ziel und Version darf in das Inventar eingehen. Das gilt unveraendert fuer
+Upgrades und Downgrades.
+
+Der allocation-freie Parser in `system_update_inventory.zig` akzeptiert nur
+das kanonische Schema 2, bewahrt das vorhandene Profil `slim`, `full` oder
+`test` und erhaelt alle nicht betroffenen Eintraege. Versionswerte werden
+nicht berechnet oder aus Katalogangaben uebernommen.
+
+
+Durable Inventarphase
+---------------------
+
+Das aktuelle Journal v5 bindet bis zu 32 R4U-Payloads sowie alle konkreten
+Komponenten; die durable Inventarphase wurde mit Journal v4 eingefuehrt.
+`MODULES.JSON` wird nicht zum R4U-Payload, sondern bei Bedarf zum 33. internen
+Transaktionsschritt. Der Ablauf lautet:
+
+    prepare -> stage -> commit -> verify -> inventory -> applied -> cleanup
+
+Vor dem Inventar-Replace stehen Ziel-, Stage-, Backup-, alter und neuer
+Fingerabdruck im dualen Journal. Ein Abbruch vor dem Commit laesst die alten
+Inventarbytes sichtbar; ein Abbruch danach laesst den neuen Stand samt
+durablem Commitmarker sichtbar. RESUME kann beide Formen ohne das R4U erneut
+zu oeffnen abschliessen. Die fruehe Boot-Recovery rollt eine unvollstaendige
+Inventarphase zuerst und danach die Artefakte in umgekehrter Reihenfolge
+zurueck. `Installed` entsteht erst nach einem konsistenten Gesamtstand.
+
+
+Begrenzte transiente I/O-Wiederholung
+-------------------------------------
+
+Seit 0.63.27 behandelt die gemeinsame Engine kurzzeitige NTFS-/R4SYS-
+Rueckgaben nicht sofort als endgueltigen Paketfehler. Paketinformationen und
+Reads mit bekannter Laenge werden mit hoechstens drei Versuchen und einem
+Tick Abstand ausgefuehrt. Teilreads setzen am bestaetigten Offset fort. Seit
+0.63.29 gilt dieselbe Grenze fuer einen scheinbaren `not found`-Lookup: Ein
+zwischenzeitlicher Fund gewinnt sofort, erst der letzte Versuch entscheidet
+zwischen dauerhaftem Nichtfund und I/O-Fehler.
+
+Ein Fehler beim Oeffnen, Schreiben oder Abschliessen eines privaten
+Payload-Stages ist mehrdeutig. Die Engine bricht deshalb den nur fuer diese
+Transaktion gebundenen Stage ab und baut den Paketstream mit hoechstens drei
+Gesamtversuchen neu auf. Bereits vollstaendig nachgewiesene Stages duerfen
+dabei wiederverwendet werden. Checksum-, Format-, Abhaengigkeits- und
+Konfliktfehler sind nicht transient und werden nie automatisch wiederholt.
+Nach Ausschoepfung bleibt der vorbereitete Neustartbatch erneut bedienbar.
+
+
+Abnahme
+-------
+
+`Run-SystemUpdateEngineInventory06312.ps1` prueft Enginegrenze,
+Seiteneffektfreiheit, Inventarparser, Journalvertrag, einzigen Schreiber,
+begrenzte Exact-/Stage-Retries und Boot-Recovery hostseitig.
+`Run-SystemUpdateInventory06312.ps1` prueft in QEMU
+ein reales Downgrade, Unterbrechungen vor und nach Inventar-Commit, RESUME,
+Wiederaufstieg, ein Mehrkomponentenpaket, exakte Artefaktversionen und den
+unveraenderten `test`-Profilwert.

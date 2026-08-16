@@ -1,0 +1,676 @@
+﻿R4OS Roadmap 0.19.X - Memory Management
+========================================
+
+Leitbild
+--------
+
+R4OS soll beim Speicher weiter DOS-artig frei bleiben: Programme bekommen
+keine kuenstlichen Berechtigungs- oder Kontingentgrenzen. Gleichzeitig soll
+das Memory Management stabil genug werden, damit Anwendungen nicht vorab eine
+feste RAM-Groesse erraten muessen und beendete Programme ihren Speicher wieder
+sauber freigeben.
+
+Fuer 0.19.X bleibt der gemeinsame Kerneladressraum bewusst erhalten. Eigene
+Programmadressraeume, Swap, Copy-on-Write oder moderne Prozessisolation sind
+nicht Teil dieser Basisplanung. Stattdessen bekommt der bestehende trusted
+Flat-Ansatz saubere Buchhaltung: ProgramImage, AppHeap, Stack, DMA, MMIO,
+PageTables, Kernel und Reserven sollen als benannte, owner-getrackte
+Speicherbereiche sichtbar und freigebbar werden.
+
+Die DOS-Idee von einfachen, direkt nutzbaren Speicherbloecken wird in eine
+R4OS-eigene MCB-/MemoryBlock-Schicht uebertragen. R4OS unterscheidet dabei
+virtuelle Reservierung und echten RAM-Commit, schuetzt Kernel-, Treiber-/DMA-
+und Notfallreserven und laesst App-Allokationen kontrolliert fehlschlagen,
+statt den Kernel handlungsunfaehig zu machen.
+
+R4X-Anwendungen sollen keine Stack- oder RAM-Budgets mehr erraten. Das R4X-v2-
+Format entfernt die alte Stack-Semantik, der Loader laedt Code direkt in ein
+owner-getracktes ProgramImage, Stacks wachsen ueber Guard Pages und App-Speicher
+kommt ueber ProgramApi und SDK-Allocator. Beim Beenden, Kill oder Loaderfehler
+raeumt ein gemeinsamer Owner-Cleanup alle zugehoerigen Bereiche auf.
+
+Limine bleibt der Standard-Bootloader, darf aber nicht mehr die Kernel-
+Architektur praegen. Bootdaten wie Memory Map, HHDM, Framebuffer und RSDP
+laufen ueber eine bootloader-neutrale BootInfo-Schicht, damit spaeter ein
+anderer Bootloader nur einen neuen Adapter braucht.
+
+Diagnose ist Teil des Designs, nicht Beiwerk: MEM/MEM-C, strukturierte
+MemoryBlock-Daten und MemView.R4X sollen Speicherverbrauch sichtbar machen.
+Alle 0.19.X-Abnahmen muessen headless ueber die Build-/Test-Skripte ausfuehrbar
+sein, damit Codex die Memory-Suite ohne manuelle QEMU-Sichttests pruefen kann.
+
+Version 0.19.0
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine
+
+Abnahme:
+- DevTools/Scripts/Build.bat -test endet mit TEST OK.
+- Bootlog zeigt BootInfo mit Loader, HHDM, Framebuffer, RSDP und
+  Memory-Map-Zaehlern.
+- Memory Map, Physical Allocator, ACPI/RSDP und Framebuffer laufen ueber die
+  neue BootInfo-Sicht.
+- DevTools/Zig/zig.exe run
+  DevTools/Scripts/TestScripts/CheckBootInfoBoundary.zig endet mit
+  "BootInfo boundary check OK".
+- Statische Pruefung zeigt keine direkten Limine-Imports ausserhalb der
+  Boot-Schicht.
+
+Erledigt:
+- Roadmap fuer 0.19.X neu begonnen und konkretisiert.
+- Code/src/boot/info.zig als bootloader-neutrale Kernel-Sicht eingefuehrt.
+- R4OS-eigene BootInfo-, MemoryMap- und Framebuffer-Strukturen definiert.
+- Limine-Antworten und volatile Reads im Boot-Layer gekapselt.
+- main.zig, memory/map.zig, memory/phys.zig, platform/acpi.zig und
+  drivers/video/framebuffer.zig auf BootInfo umgestellt.
+- BootInfo-Dump fuer Loader, HHDM, Framebuffer, RSDP und Memory-Map-Zaehler
+  eingebaut.
+- Statisches Boundary-Script fuer direkte Limine-Abhaengigkeiten ausserhalb
+  von Code/src/boot/ ergaenzt.
+- Docs/Core/Architektur.txt und Docs/Deployment/BuildUndTest.txt um die
+  BootInfo-Grenze erweitert.
+- Code/src/version.zig auf 0.19.0 gesetzt.
+
+Notizen:
+- Limine bleibt Standard-Bootloader, aber nicht Teil der Kernel-Architektur.
+- Ein spaeterer Bootloaderwechsel soll nur einen neuen BootInfo-Adapter
+  brauchen.
+
+
+Version 0.19.1
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine
+
+Abnahme:
+- DevTools/Scripts/Build.bat -test endet mit TEST OK.
+- MemoryBlock-Selbsttest deckt Anlegen, Aktualisieren, Freigeben, Owner, Typ,
+  Status, Reserve-Bytes, Commit-Bytes, Snapshot, Owner-Lookup und Release ab.
+- Ungueltige oder ueberlappende MemoryBlock-Metadaten werden kontrolliert
+  abgelehnt.
+- Bootlog-Diagnose zeigt MemoryBlock-Summen ohne Ueberlauf, Fehlerbloecke oder
+  verlorene Owner.
+- Snapshot-API kopiert aktive Bloecke in einen Aufruferpuffer und meldet
+  Truncation statt interne Tabellen direkt offenzulegen.
+- MEM gibt die MemoryBlock-Zusammenfassung zusaetzlich zu den klassischen
+  R4DOS-Speicherzeilen aus.
+
+Erledigt:
+- Code/src/memory/blocks.zig als heap-unabhaengige MemoryBlock-/MCB-Schicht
+  eingefuehrt.
+- Blocktypen boot, kernel, kernel_heap, page_table, virtual_range,
+  program_image, app_heap, app_stack, dma, mmio, framebuffer, reserved, free
+  und unknown definiert.
+- Owner kernel, driver, protocol, r4x_instance, task, device, bootloader und
+  system definiert.
+- Status free, reserved, committed, guard, mapped, released und error
+  definiert.
+- APIs fuer register, claimPhysicalRange, update, commit, uncommit, release,
+  lookup-by-owner, count-by-owner, summary und snapshot eingebaut.
+- BootInfo-Memory-Map wird beim Start in MemoryBlocks gespiegelt.
+- PMM-Bitmap, PageTables und Kernel-Heap-Frames werden owner-getrackt.
+- Kernel-Heap besitzt einen virtuellen MemoryBlock mit Reserve/Commit-
+  Buchhaltung.
+- MemoryBlock-Selftest im Bootpfad eingebaut.
+- MEM und Bootlog geben MemoryBlock-Summen, groesste freie physische Region
+  und Kategoriezaehler aus.
+- PMM-Teilseiten-Reservierung korrigiert: benutzte Bereiche werden nach
+  aussen, freie Bereiche nach innen auf Frame-Grenzen gerundet.
+- Docs/Core/Architektur.txt um MemoryBlock als MCB-Schicht erweitert.
+- Code/src/version.zig auf 0.19.1 gesetzt.
+
+Notizen:
+- Diese Version schafft die gemeinsame Sprache fuer alle folgenden
+  Speicherbereiche.
+
+
+Version 0.19.2
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine
+
+Abnahme:
+- DevTools/Scripts/Build.bat -test endet mit TEST OK.
+- Virtual-Range-Selbsttest reserviert, committet, uncommittet und released
+  Bereiche; danach stimmen PMM-Free-Frames, aktive MemoryBlocks, Reserve-Bytes,
+  Commit-Bytes, freie physische Bytes und aktive VirtualRanges wieder mit dem
+  Ausgangszustand ueberein.
+- Ueberlappende Reservierungen, falsche Alignments, Commit in Guard Pages und
+  Release fremder Bereiche werden kontrolliert abgelehnt.
+- Guard-Page-Metadaten sind sichtbar und werden nicht als normaler Commit
+  gezaehlt.
+- App-nahe VirtualRanges haben eine Systemreserve-Regel, damit grosse App-
+  Commits sauber fehlschlagen koennen, bevor Kernel-/Notfallreserven
+  aufgebraucht werden.
+- Paging-Test und VirtualRange-Selbsttest laufen nacheinander ueber denselben
+  temporaeren virtuellen Bereich, ohne Paging- und VirtualRange-Zustand
+  gegeneinander inkonsistent zu machen.
+
+Erledigt:
+- Gemeinsamen Kerneladressraum als 0.19.X-Basis beibehalten; eigene
+  Programmadressraeume bleiben ausserhalb dieser Basisplanung.
+- Code/src/memory/virt.zig als heap-unabhaengigen Virtual-Range-Manager
+  eingefuehrt.
+- Feste virtuelle Fenster fuer temporaere Kernel-Mappings, Kernel-Heap,
+  ProgramImage, AppHeap, AppStack und MMIO definiert.
+- APIs fuer reserve, reserveAt, commit, uncommit, release und protectGuard
+  bereitgestellt.
+- Commit holt physische Frames aus dem PMM, mappt Seiten ueber Paging und
+  aktualisiert MemoryBlock-Commitwerte.
+- Uncommit/release unmappt Seiten, gibt Frames an PMM und MemoryBlock-Tabelle
+  zurueck und setzt VirtualRange-Metadaten zurueck.
+- MemoryBlock-Schicht um releasePhysicalRange erweitert, damit physische
+  Teilbereiche wieder frei und zusammengefuehrt werden koennen.
+- Paging um mappedFrame erweitert, damit Uncommit die gemappten Frames sicher
+  zurueckgeben kann.
+- Guard-Page-Metadaten fuer spaetere dynamische Stacks vorbereitet.
+- App-Systemreserve-Regel fuer app_heap, app_stack, program_image und
+  r4x_instance-Owner eingefuehrt.
+- Diagnosewerte fuer virtuelle Reservierung, Commit, Guard-Bytes, groesste
+  freie virtuelle Region und App-Systemreserve eingebaut.
+- MEM gibt VirtualRange-Diagnose zusaetzlich zu MemoryBlock-Daten aus.
+- Kernel-Heap auf VirtualRange-Reserve/-Commit umgestellt; bis R4X v2/
+  ProgramImage bleibt er bewusst noch ausfuehrbar, weil R4D/R4P/R4X-Code
+  aktuell noch aus Heap-Seiten laufen kann.
+- VirtualRange-Selbsttest im Bootpfad eingebaut.
+- Docs/Core/Architektur.txt um VirtualRange-Schicht erweitert.
+- Code/src/version.zig auf 0.19.2 gesetzt.
+
+Notizen:
+- Der gemeinsame Kerneladressraum bleibt fuer 0.19.X bestehen; eigene
+  Programmadressraeume gehoeren nicht zur Basisplanung.
+- Die NX-Einschraenkung fuer ProgramImage/AppHeap/Stack folgt erst, wenn Code
+  nicht mehr anonym aus dem Kernel-Heap laufen muss.
+
+
+Version 0.19.3
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine
+
+Abnahme:
+- DevTools/Scripts/Build.bat -test endet mit TEST OK.
+- Heap-Selbsttest prueft alloc, free, realloc, Alignment, grosse und kleine
+  Bloecke sowie Wiederverwendung freigegebener Bereiche.
+- Double-free, invalid-free, Size-Mismatch und OOM werden kontrolliert erkannt,
+  ohne die Runtime-Fehlerzaehler nach dem Selbsttest zu verschmutzen.
+- Nach wiederholten Heap-Testzyklen kehren aktive Allokationen und committed
+  Bytes auf den erwarteten Ausgangswert zurueck.
+- Der Bootstrap-Bump-Heap wird nach Kernel-Heap-V2-Init nicht mehr fuer neue
+  allgemeine Runtime-Allokationen verwendet.
+- Heap-Statistiken erscheinen in der Memory-Diagnose und widersprechen PMM-/
+  MemoryBlock-Zaehlern nicht.
+
+Erledigt:
+- Kernel-Heap V2 als freigebbaren Heap mit alloc, free, realloc und Alignment
+  bereitgestellt.
+- Alten Bump-Heap als allgemeine Runtime-Allokation ersetzt; neue
+  Kernel-Allokationen laufen ueber Free-List-Heap V2.
+- Heap V2 auf das Kernel-Heap-VirtualRange-Fenster gestellt.
+- Heap-Seiten werden bei Bedarf committed und volle freie Top-Seiten ueber
+  VirtualRange/PMM wieder zurueckgegeben.
+- Free-List-Modell mit Coalescing freier Nachbarbloecke eingebaut.
+- Kleine, mittlere und page-grosse Allokationen im Selbsttest abgedeckt.
+- Double-free, invalid-free, Size-Mismatch und OOM als Diagnosezaehler
+  eingebaut.
+- Selbsttest fuer alloc, free, realloc, Alignment, Wiederverwendung,
+  Coalescing, Double-free, invalid-free, Size-Mismatch und OOM eingebaut.
+- Selbsttest stellt absichtlich erzeugte Fehlerzaehler nach der Pruefung
+  wieder her, damit normale MEM-/Bootlog-Diagnose sauber bleibt.
+- Kernel-Heap-Statistiken fuer aktive Bloecke, freie Bloecke, reserved,
+  committed, used, free, largest_free, Fragmentierungshinweis und Fehlerzaehler
+  bereitgestellt.
+- MEM gibt Kernel-Heap-V2-Statistiken aus.
+- Kernel-API-interne alloc/free/realloc-Helfer auf Heap V2 gefuehrt.
+- Kurzlebige Kernel-Heap-Testbloecke in main.zig werden wieder freigegeben.
+- Bestehende Langzeitnutzer bleiben bewusst bestehen, bis ProgramImage,
+  AppHeap, Stack und Owner-Cleanup sie in spaeteren 0.19.X-Schritten abloesen.
+- Docs/Core/Architektur.txt um Heap V2 erweitert.
+- Code/src/version.zig auf 0.19.3 gesetzt.
+
+Notizen:
+- Nach dieser Version sollen Kernel-Allokationen nicht mehr automatisch bis zum
+  Reboot verloren sein.
+- R4X/R4D/R4P-Code kann aktuell noch aus Kernel-Heap-Seiten laufen; deshalb
+  bleibt der Kernel-Heap bis R4X v2/ProgramImage weiterhin ausfuehrbar.
+
+
+Version 0.19.4
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine
+
+Abnahme:
+- DevTools/Scripts/Build.bat -test endet mit TEST OK.
+- DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckR4Xv2.zig endet
+  mit "R4X v2 image check OK" und prueft die R4X-Dateien im fertigen
+  Release/disk.img.
+- Alle im Image mitgelieferten R4X-Dateien werden als R4X v2 gebaut und
+  enthalten kein Stack-Budget mehr.
+- R4XBuilder und SDK dokumentieren das neue Format; alte Stack-Semantik wird
+  nicht als Fallback weitergetragen.
+- Der Loader liest zuerst nur den Header und laedt Code per Range-Read direkt
+  in ein ProgramImage.
+- Der R4X-Loader-Selbsttest prueft negative Headerfaelle und ProgramImage-
+  Freigabe inklusive Mapping-Leak-Pruefung.
+- Testlog zeigt R4OS V0.19.4, "R4X loader selftest [OK]",
+  "LOADERD result: OK" und "R4DESK R4X smoke result: OK".
+- COMMAND.R4X, DESK.R4X, R4CONFIG.R4X als gehostete Console-App und
+  R4FILES.R4X als gehostete GUI-App starten im Test-Image erfolgreich.
+
+Erledigt:
+- R4X v2 als 32-Byte-Header ohne Stack-Budget definiert.
+- Header-Felder Magic, Version, Architektur, Headergroesse, Code-Offset,
+  Codegroesse, Entry-Offset, Flags und Reserved festgelegt.
+- R4XBuilder auf R4X v2 umgestellt; alte --stack-Option fuer R4X entfernt.
+- SDK-Build-Helfer und zentraler Code/build.zig auf R4X v2 ohne stack_size
+  migriert.
+- R4X-ABI-Version im SDK auf 2 gesetzt.
+- Loader liest den R4X-Header separat und laedt Code per FAT32-Range-Read
+  direkt in ein ProgramImage.
+- ProgramImage wird ueber das ProgramImage-VirtualRange-Fenster reserviert,
+  committed und als MemoryBlock kind=program_image owner=r4x_instance
+  sichtbar.
+- Programminstanzen speichern ProgramImage-Basis, Groesse, Range-ID und
+  zentralen Start-Stack, damit Fehlerpfade und Release freigeben koennen.
+- Loader-Fehlerpfade geben teilweise angelegte ProgramImages und Stacks wieder
+  frei.
+- R4X-Loader-Selbsttest prueft falsche Version, falsche Groesse,
+  ungueltigen Entry-Offset, Reserved-Feld und ProgramImage-Freigabe.
+- LOADERD.R4X auf R4X-v2-Headerpruefung umgestellt.
+- DevTools/Scripts/TestScripts/CheckR4Xv2.zig ergaenzt, um R4X-v2-Header im
+  fertigen Disk-Image headless zu pruefen.
+- TestInjection/AUTOEXEC.BAT fuer diese Etappe auf LOADERD und
+  DESK /SMOKE-R4X fokussiert.
+- DESK /SMOKE-R4X als fokussierte Headless-Abnahme fuer R4X-Console- und
+  R4X-GUI-Hosting ergaenzt.
+- HDA-MMIO von der alten festen ProgramImage-Adresse auf das zentrale
+  MMIO-Fenster verschoben.
+- Docs/Applications/R4X.txt, Docs/SDK/README.txt, Docs/Core/Architektur.txt
+  und weitere betroffene Projekt-/App-Dokumente auf R4X v2 aktualisiert.
+- Code/src/version.zig auf 0.19.4 gesetzt.
+
+Notizen:
+- Der Loader haelt keine komplette .R4X-Datei mehr als anonymen Kernel-Heap-
+  Puffer.
+- Die zentrale Start-Stack-Groesse ist ein Uebergang, bis 0.19.5 dynamische
+  Stacks mit Guard Pages umsetzt.
+- R4D/R4P-Module laufen noch aus ihren bisherigen Ladepfaden; ein eigenes
+  Modul-Image-Modell gehoert nicht zu 0.19.4.
+
+
+Version 0.19.5
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine
+
+Abnahme:
+- DevTools/Scripts/Build.bat -test endet mit TEST OK.
+- DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckR4Xv2.zig endet
+  mit "R4X v2 image check OK".
+- Ein R4X-Stack-Test erzeugt kontrolliertes Stack-Wachstum ueber mindestens
+  mehrere Guard-Page-Faults und beendet sich erfolgreich.
+- MEM-/MemoryBlock-Zaehler zeigen Stack-Reserve, Stack-Commit und Guard Page
+  getrennt.
+- Stack-Wachstum endet an der Reservegrenze oder bei OOM kontrolliert und
+  zerstoert keine Kernel-Reserve.
+- Nicht behandelbare Page Faults laufen weiter in den vorgesehenen
+  Fehler-/Haltpfad und werden mit Adresse, Owner und Typ diagnostiziert.
+- Nach Ende oder Kill des Stack-Testprogramms sind Stack-Reserve und
+  Stack-Commit der Instanz freigegeben.
+
+Erledigt:
+- Pauschalen Default-Stack fuer neue R4X-Anwendungen eingefuehrt.
+- Stack-Layout festgelegt: reservierter AppStack-Bereich, committed Bereich,
+  Guard Page, Stack-Top und Wachstum nach unten.
+- Defaultwerte fuer Reserve, initialen Commit, Wachstumsschritt und Guard Page
+  zentral in Code/src/program/r4x.zig definiert.
+- R4X-Programmstacks als app_stack-VirtualRanges mit Owner r4x_instance
+  reserviert.
+- Stack-Metadaten pro Programminstanz gespeichert: Range-ID, Basis, Reserve,
+  Commit-Basis, Commit-Groesse, Guard-Basis, Guard-Groesse und Stack-Top.
+- Page-Fault-Dispatcher so angepasst, dass behandelte R4X-Stack-Faults nach
+  dem Commit per iretq zur Anwendung zurueckkehren koennen.
+- R4X-Page-Fault-Handler eingebaut, der nur nicht-praesente Faults der
+  laufenden R4X-Instanz im eigenen AppStack-Reservebereich behandelt.
+- Stack-Wachstum committet echte Frames ueber den VirtualRange-Manager und
+  verschiebt die Guard Page danach nach unten.
+- Grosse Stack-Spruenge innerhalb der Reserve werden kontrolliert bis zur
+  faultenden Seite nachcommitted, statt nur exakt die alte Guard Page zu
+  akzeptieren.
+- Reservegrenze bleibt geschuetzt: die unterste Seite bleibt Guard Page; ein
+  weiteres Wachstum wird abgelehnt.
+- OOM beim Stack-Wachstum laesst die alte Guard Page bestehen und faellt in den
+  normalen Fault-Diagnosepfad zurueck.
+- Nicht behandelbare Page Faults geben CR2, Owner, MemoryBlock-Typ und Status
+  aus und halten danach weiter kontrolliert an.
+- MemoryBlock-Lookup fuer virtuelle Fault-Adressen ergaenzt.
+- VirtualRange-Manager um clearGuard ergaenzt, damit Guard Pages gezielt
+  verschoben werden koennen.
+- R4X-Loader-Selbsttest um Stack-Wachstum bis zur Reservegrenze und
+  Freigabepruefung erweitert.
+- STACKD.R4X als R4X-Diagnoseprogramm fuer echtes Stack-Wachstum ueber mehrere
+  Page Faults gebaut.
+- TestInjection/AUTOEXEC.BAT fuehrt MEM, LOADERD, STACKD, MEM und
+  DESK /SMOKE-R4X headless aus.
+- DevTools/Scripts/Build.bat kopiert STACKD.R4X nach C:\BIN.
+- Docs/Core/Architektur.txt, Docs/Applications/R4X.txt, Docs/SDK/README.txt
+  und Docs/Diagnostics/README.txt auf dynamische R4X-Stacks aktualisiert.
+- Code/src/version.zig auf 0.19.5 gesetzt.
+
+Notizen:
+- Anwendungen muessen keine Stack-Groesse mehr raten. Der R4X-v2-Header bleibt
+  frei von Stack-Budgets.
+- Der gemeinsame Kerneladressraum bleibt unveraendert; dynamische Stacks sind
+  eine Stabilitaets- und Buchhaltungsschicht, keine Isolation.
+
+
+Version 0.19.6
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine
+
+Abnahme:
+- DevTools/Scripts/Build.bat -test endet mit TEST OK.
+- R4X-AppHeap-Test prueft mem_alloc, mem_free, mem_realloc, Alignment und OOM
+  ueber die ProgramApi.
+- SDK-Allocator-Test nutzt normale Zig-Strukturen mit dynamischem Speicher und
+  laeuft als R4X erfolgreich.
+- Direkte ProgramApi-Allokation bleibt fuer Diagnoseprogramme nutzbar.
+- App-Allokationen koennen gross werden, schlagen aber sauber fehl, bevor
+  Kernel-, DMA- oder Notfallreserven verbraucht werden.
+- Ein migriertes reales R4X-Programm nutzt den SDK-Allocator im normalen
+  Laufpfad und besteht den Headless-Test.
+
+Erledigt:
+- AppHeap fuer R4X-Instanzen eingefuehrt.
+- Feste App-RAM-Budgets im R4X-Header bleiben abgeschafft; R4X-Anwendungen
+  nutzen Speicher dynamisch ueber AppHeap und wachsenden Stack.
+- AppHeap als app_heap-VirtualRange mit Owner r4x_instance, Reserve, Commit,
+  Free-List, Coalescing, realloc und Trailing-Page-Uncommit modelliert.
+- ProgramApi v76 um mem_alloc, mem_free, mem_realloc, mem_stats und
+  mem_largest_free erweitert.
+- ProgramApi-Fehlercodes fuer invalid pointer, invalid alignment, OOM, owner
+  mismatch, size mismatch, no instance und invalid size definiert.
+- SDK-Allocator fuer Zig-R4X-Anwendungen bereitgestellt; `ctx.allocator()`
+  liefert einen normalen std.mem.Allocator fuer dynamische Zig-Strukturen.
+- Allocator-VTable kommt aus dem Kernel, damit R4X-Flat-Binaries keine
+  statischen App-Funktionszeigertabellen mit fehlenden Relocations brauchen.
+- Direkte ProgramApi-Allokationen bleiben fuer Diagnostics und Spezialfaelle
+  nutzbar.
+- App-Allokationen committen physische Frames erst bei Bedarf und respektieren
+  die VirtualRange-App-Systemreserve.
+- APPHEAPD.R4X als Diagnoseprogramm fuer direkte ProgramApi-Allokation,
+  Alignment, realloc, OOM, mem_stats und SDK-Allocator gebaut.
+- EXAMPLE.R4X nutzt den SDK-Allocator im normalen Console-Laufpfad mit
+  std.ArrayList und dient als reale App-Referenz.
+- R4X-Loader-Selbsttest prueft AppHeap-Allokation, Alignment, realloc,
+  Freigabe und OOM-Grenze.
+- DevTools/Scripts/Build.bat kopiert APPHEAPD.R4X nach C:\BIN.
+- Docs/Core/Architektur.txt, Docs/Applications/R4X.txt,
+  Docs/SDK/README.txt und Docs/Diagnostics/README.txt auf AppHeap und
+  ProgramApi v76 aktualisiert.
+- Code/src/version.zig auf 0.19.6 gesetzt.
+
+Notizen:
+- Die ProgramApi bleibt der stabile Kernelvertrag; der SDK-Allocator ist die
+  bequeme App-Schicht darueber.
+- Der AppHeap ist eine Stabilitaets- und Buchhaltungsschicht im gemeinsamen
+  Kerneladressraum, keine Isolation oder Security-Grenze.
+
+
+Version 0.19.7
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine
+
+Abnahme:
+- DevTools/Scripts/Build.bat -test endet mit TEST OK.
+- DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckR4Xv2.zig endet
+  mit "R4X v2 image check OK".
+- Testlog zeigt "LOADERD result: OK", "STACKD result: OK",
+  "APPHEAPD result: OK", "CLEANUPD result: OK" und
+  "R4DESK R4X smoke result: OK".
+- Wiederholtes Starten und normales Beenden einer R4X-App laesst ProgramImage-,
+  AppHeap- und Stack-Zaehler auf den Ausgangswert zurueckkehren.
+- program_kill nutzt denselben Owner-Cleanup und hinterlaesst keine aktiven
+  App-Speicherbloecke fuer die gekillte Instanz.
+- Loader-Fehlerpfade laufen ueber denselben Teilressourcen-Cleanup fuer bereits
+  angelegte ProgramImages, Stacks und AppHeaps.
+- MEM und MEM /C zeigen Kernel, KernelHeap, PageTables, ProgramImages,
+  AppHeaps, AppStacks, Treiber, Protokolle, DMA, MMIO, Framebuffer, Reserven,
+  freien Speicher und groesste freie Bereiche.
+- Die Summen aus MEM stammen aus MemoryBlock-/VirtualRange-Snapshotdaten und
+  bleiben fuer aktive Bloecke konsistent.
+- Wiederholte Cleanup-Aufrufe fuer bereits leere Teilressourcen bleiben
+  harmlos und erzeugen keine Double-Frees.
+
+Erledigt:
+- Gemeinsamen R4X-Ressourcen-Cleanup fuer ProgramImage, AppStack und AppHeap
+  eingefuehrt.
+- Loader-Fehlerpfade, `finishInstance`, normales Task-Ende und `program_kill`
+  auf denselben Teilressourcen-Cleanup gefuehrt.
+- Cleanup idempotent fuer leere Range-IDs gemacht; Instanzen loeschen ihre
+  Resource-Metadaten vor dem Freigeben.
+- `program_kill` lehnt Selbst-Kill aus der laufenden App ab, weil der aktive
+  AppStack in diesem Moment nicht gefahrlos freigegeben werden kann.
+- ProgramApi v77 um `memory_summary`, `memory_block_count` und `memory_block`
+  erweitert.
+- SDK-Wrapper `ctx.memorySummary`, `ctx.memoryBlockCount`,
+  `ctx.memoryBlock` und `ctx.supportsMemorySnapshot` bereitgestellt.
+- MemoryBlock-Schicht um Iteration aktiver Bloecke per Index erweitert, ohne
+  die interne Tabelle direkt offenzulegen.
+- MEM um R4DOS-`MEM /C`-aehnliche Klassifikation und Detailmodus erweitert.
+- MEM zeigt groesste freie physische und virtuelle Bereiche.
+- APPHEAPD.R4X um `/HOLD` erweitert, damit Kill waehrend belegtem AppHeap
+  headless pruefbar ist.
+- CLEANUPD.R4X als Diagnoseprogramm fuer Memory-Snapshot und R4X-Cleanup
+  gebaut.
+- DevTools/Scripts/Build.bat kopiert Diagnostics zusaetzlich nach C:\DIAG,
+  damit die headless Memory-Abnahme sie stabil findet.
+- Docs/Core/Architektur.txt, Docs/Applications/R4X.txt, Docs/SDK/README.txt,
+  Docs/Diagnostics/README.txt und Docs/Deployment/BuildUndTest.txt auf
+  ProgramApi v77, MEM /C und CLEANUPD aktualisiert.
+- Code/src/version.zig auf 0.19.7 gesetzt.
+
+Notizen:
+- MEM soll echte Diagnose sein: Speicherlecks und groesste freie/reservierte
+  Bereiche muessen sichtbar werden.
+- Das enge C:\BIN-Verzeichnis im erzeugten FAT32-Image macht spaetere Eintraege
+  aktuell unsichtbar; fuer 0.19.7 werden Diagnostics deshalb zusaetzlich unter
+  C:\DIAG gespiegelt. Vor MemView muss das Image-Layout oder Directory-Growth
+  sauber geklaert werden.
+
+
+Version 0.19.8
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine
+
+Abnahme:
+- DevTools/Scripts/Build.bat -test endet mit TEST OK.
+- MemView.R4X startet als gehostete R4Desk-GUI-App und liest strukturierte
+  Speicherdiagnosedaten.
+- MemView.R4X besitzt einen headless Selftest-Modus, der Tortendiagramm-Daten,
+  Summen, Legende und Detailwerte ohne manuellen Sichttest prueft.
+- Diagramm-/Tortendiagramm-Helfer liegen in r4os.gui oder einem gemeinsamen
+  SDK-Modul, wenn sie mehr als MemView.R4X selbst sinnvoll nutzen kann.
+- Der Selftest erkennt Summenfehler, leere Kategorien und Ueberlauf bei grossen
+  Speicherwerten.
+- MemView.R4X kann auch dann starten, wenn nur wenige oder gar keine App-
+  Speicherbloecke vorhanden sind.
+
+Erledigt:
+- ImageCreator kann Image-Inhalte ueber --add-list laden; Build.bat nutzt diese
+  Add-Liste statt einer wachsenden Batch-Variable. Damit koennen C:\BIN und
+  andere Verzeichnisse ueber mehrere FAT32-Cluster wachsen, ohne dass spaetere
+  Tools unsichtbar werden.
+- MemView.R4X als R4Desk-GUI-App unter Code/Software/MemView angelegt und als
+  App-Klasse gui gebaut.
+- MemView liest ProgramApi MemorySummary/MemoryBlock-Daten strukturiert und
+  parst keinen MEM-Text.
+- MemView gruppiert Speicher in Kernel, Apps, Stacks, Heaps, ProgramImages,
+  DMA, MMIO, PageTables, Reserven und Free.
+- Tortendiagramm, stabile Farben, Legende, MB-Werte, Blockzahlen und grobe
+  Detailwerte fuer groesste freie physische/virtuelle Bereiche eingebaut.
+- Wiederverwendbarer SDK-Helfer r4os.chart fuer Pie-Segmente,
+  Ueberlaufpruefung, leere Kategorien und Raster-Pie-Rendering angelegt.
+- MEMVIEW /SELFTEST prueft Diagramm-Helfer, Summenfehler, leere Kategorien,
+  Ueberlaufpfad und Runtime-MemorySnapshot headless.
+- Startmenue- und Desktop-Eintrag fuer MemView.R4X vorbereitet.
+- DESK /SMOKE-R4X prueft C:\BIN\MEMVIEW.R4X und startet MemView als gehostete
+  R4Desk-GUI-App.
+
+Notizen:
+- MemView.R4X ist die visuelle Gegenprobe zur MEM-Textdiagnose.
+- Diagrammcode soll nicht als einmalige Inselloesung in der App verkleben.
+
+
+Version 0.19.9
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine
+
+Abnahme:
+- DevTools/Scripts/Build.bat -test endet mit TEST OK und fuehrt die komplette
+  0.19.X-Memory-Suite headless aus.
+- DevTools/Scripts/Build.bat -testonly kann die Memory-Suite auf dem
+  bestehenden Test-Image wiederholen.
+- Die Suite deckt wiederholtes Starten/Beenden, Alloc/Free-Schleifen,
+  Realloc, Stack-Wachstum, OOM und Kill waehrend belegtem Speicher ab.
+- MEM-Werte vor und nach der Suite sind stabil; bekannte permanente
+  Systemzuwachse muessen dokumentiert sein.
+- Testlogs melden bei Erfolg TEST OK; qemu-test-standard.log und .err muessen
+  nur bei TEST FAILED oder Detailfragen manuell gelesen werden.
+- Eine absichtlich fehlschlagende Testvariante meldet TEST FAILED und zeigt
+  genug Diagnose, um den Speicherbereich/Owner zu finden.
+
+Erledigt:
+- MEMSUITE.R4X als zentrale 0.19.X-Memory-Suite gebaut und in C:\BIN sowie
+  C:\DIAG aufgenommen.
+- Lokaler AppHeap-Stresstest fuer kleine Allokationen, Fragmentierung, grosse
+  zusammenhaengende Bloecke, realloc und OOM-Grenzen umgesetzt.
+- Wiederholtes Starten/Beenden von APPHEAPD und STACKD prueft, dass
+  ProgramImage, AppHeap und AppStack nach Prozessende wieder freigegeben sind.
+- Kill-Test mit zwei APPHEAPD /HOLD-Instanzen prueft Cleanup, waehrend Speicher
+  aktiv belegt ist.
+- MEMSUITE vergleicht R4X-Owner-Ressourcen vor und nach jedem Cleanup-Pfad und
+  meldet Abweichungen mit Block-/Owner-Diagnosewerten.
+- /STRICT macht Fehlschlaege fuer Build.bat -test sichtbar, indem die Suite eine
+  FATAL-Zeile schreibt und den Headless-Lauf beendet.
+- /EXPECTFAIL stellt eine absichtlich fehlschlagende Variante fuer die
+  Fehlerpfad-Abnahme bereit.
+- TestInjection/AUTOEXEC.BAT fuehrt MEMSUITE.R4X /STRICT im automatischen
+  Headless-Testlauf aus.
+- Permanente Diagnosezuwachse dokumentiert: freigegebene MemoryBlock-Slots
+  duerfen als released sichtbar bleiben; aktive R4X-Ressourcen muessen stabil
+  auf den Ausgangswert zurueckfallen.
+- Code/src/version.zig auf 0.19.9 erhoeht.
+
+Notizen:
+- Kein manueller QEMU-Sichttest darf fuer den 0.19.X-Abschluss erforderlich
+  sein.
+- MEMSUITE ist bewusst als Sammelabnahme gebaut, damit spaetere Memory-Fixes
+  nicht nur einzelne Spezialfaelle, sondern Start/Stop, AppHeap, Stack, OOM und
+  Kill-Cleanup gemeinsam absichern.
+
+
+Version 0.19.10
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine
+
+Abnahme:
+- DevTools/Scripts/Build.bat -test endet mit TEST OK.
+- MemView.R4X /SELFTEST unterscheidet physische RAM-Aufteilung, virtuelle
+  Reserven und virtuell committed Speicher.
+- Die grosse Haupttorte zaehlt nur physischen RAM und mischt AppHeap-/Stack-
+  Reserven nicht mehr in die RAM-Summe.
+- Virtuell reservierter Adressraum und virtuell committed Speicher sind als
+  eigene Zusatz-Torten sichtbar.
+- Nicht als RAM nutzbare physische Bereiche wie MMIO/grosse Reserven werden
+  separat ausgewiesen und nicht in RAM total eingerechnet.
+
+Erledigt:
+- MemView-Snapshot in physical_ram, virtual_reserved und committed_virtual
+  getrennt.
+- Physische Haupttorte auf RAM-relevante physische Bloecke beschraenkt; MMIO
+  und Reserven laufen in Non-RAM phys.
+- Zusatz-Torten fuer virtuell reservierten Adressraum und virtuell committed
+  Speicher eingebaut.
+- Grobe MB-Anzeige durch automatische B/KB/MB-Formatierung ersetzt, damit
+  kleine ProgramImages/PageTables nicht mehr als irrefuehrende 0 MB wirken.
+- MEMVIEW /SELFTEST um die getrennten Summen erweitert.
+- Docs/Applications/R4X.txt auf die neue MemView-Bedeutung aktualisiert.
+- Code/src/version.zig auf 0.19.10 erhoeht.
+
+Notizen:
+- MemView soll als Blickdiagnose zuerst RAM beantworten: Was ist physisch frei,
+  was nutzt der Kernel, was nutzen Apps wirklich. Virtuelle Reserven sind
+  wichtig, aber sie duerfen die RAM-Zahl nicht verfaelschen.
+
+
+Version 0.19.11
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine
+
+Abnahme:
+- DevTools/Scripts/Build.bat -test endet mit TEST OK.
+- MemView.R4X /SELFTEST meldet im 1G-QEMU-Profil `ramMB=1024`.
+- Reserved/Firmware ist als eigener Eintrag in der physischen RAM-Torte
+  sichtbar.
+- Grosse Device-/MMIO-Fenster werden nicht in RAM total gemischt, sondern als
+  `Device phys` separat gefuehrt.
+
+Erledigt:
+- MemView zaehlt Firmware-/Boot-/Reserved-Bereiche innerhalb des RAM-Fensters
+  zur physischen RAM-Haupttorte.
+- Kleine ungemeldete Low-Memory-Luecken werden als Reserved/Firmware-Anteil
+  ergaenzt, damit RAM total dem QEMU-/Installations-RAM entspricht.
+- Device-/MMIO-Bereiche wie Framebuffer, ECAM und hohe Plattformfenster bleiben
+  aus RAM total heraus und erscheinen als `Device phys`.
+- Reserved/Firmware als Legendenlabel statt allgemeinem `Reserven` gesetzt.
+- Docs/Applications/R4X.txt auf die neue RAM-Definition aktualisiert.
+- Code/src/version.zig auf 0.19.11 erhoeht.
+
+Notizen:
+- `RAM total` meint damit installierten/physisch vorhandenen RAM. Nicht jeder
+  Anteil davon ist frei verwendbar; Reserved/Firmware zeigt genau diese
+  reservierten RAM-Stuecke.

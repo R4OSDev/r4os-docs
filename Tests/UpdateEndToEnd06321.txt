@@ -1,0 +1,77 @@
+﻿Isolierte Update-End-to-End-Abnahme 0.63.21
+===========================================
+
+Zweck
+-----
+
+Diese Abnahme prueft die echte R4OS-Client-/Server-Kette vom Magic Key bis
+zum bestaetigten Zielrelease. Sie verwendet die produktiven Serverklassen,
+UPDSVC, R4TLS, R4U, die gemeinsame Update-Engine und echte QEMU-Bootgrenzen.
+Der produktive Server 10.0.0.5 und dessen Runtime werden nicht beruehrt.
+
+
+Isolation und Topologie
+-----------------------
+
+`Server/UpdateServer/tests/update_e2e_fixture.py` startet lokal die echte
+Authentifizierung und das echte Update-Gateway standardmaessig auf Port
+18338 und 18339. State, Incoming, Releases, Zertifikat, Audit und SQLite
+liegen in einem neuen Verzeichnis unter `DevTools/Logs/`. Der QEMU-Client
+erreicht diese Instanz ueber die Slirp-Gatewayadresse 10.0.2.2.
+
+Die Fixture publiziert ein absichtlich unterbrochenes Live-Paket, ein
+Einzelpaket, eine Abhaengigkeitsgruppe und einen Foundation-Batch aus realem
+Kernelartefakt, R4L und davon abhaengigem Service. Titel, Beschreibung,
+Komponenten, Reihenfolge, Groesse und SHA-256 stammen aus echten R4U2-Dateien
+und dem echten Katalog v2.
+
+
+Gepruefter Ablauf
+-----------------
+
+1. Ein altes Testimage mit Release 0.63.20 und Kernel 0.1.0 authentifiziert
+   sich, liest den Katalog und prueft Titel und Beschreibung bytegenau.
+2. Der Server trennt einen Download kontrolliert. UPDSVC behaelt den privaten
+   Teilstand, setzt ihn mit Range fort und veroeffentlicht nur den korrekten
+   SHA-256-Stand atomar als R4U.
+3. Das Live-Paket wird installiert, waehrend die Releaseversion noch 0.63.20
+   bleibt.
+4. Update All verifiziert alle Pakete vor der Installation, haelt die
+   Abhaengigkeits- und Foundation-Reihenfolge ein und meldet Foundation vor
+   der Bestaetigung nicht als installiert.
+5. Der explizite Restart-Auftrag commitet den Batch. Nach dem echten Reboot
+   werden Release 0.63.21, aktiver Kernel 0.1.1, Inventar, Service und GUI-
+   Artefakt im gestarteten Zielsystem geprueft.
+6. Ein zweiter QEMU-Prozess startet denselben aktualisierten Datentraeger mit
+   frischem virtuellen Netzadapter und verlangt eine leere Updatesuche.
+
+Der zweite Prozess ist eine Eigenschaft der Testumgebung: QEMU-Slirp behaelt
+nach einem internen Gast-Reboot eine nicht mehr verwendbare TLS/NAT-Verbindung
+zum Host-Gateway. Ein neuer QEMU-Prozess bildet den Netzadapter-Reset echter
+Hardware ab; der lokale Post-Boot-Abschluss wird bereits vor diesem zweiten
+Start im ersten Prozess nachgewiesen.
+
+
+Negative Abnahme
+----------------
+
+`test_update_e2e_fixture.py` prueft falschen Magic Key sowie die Folge
+`STOP NOW!`, `LAST CHANCE!` und Ban gegen getrennte State-Stores. Bestehende
+Dauergates pruefen TLS-/Katalogfehler, falschen Hash, unpassende Pakete,
+APPLY-Abbruch und die tiefen SYSUPD-Stromverlustgrenzen. Kein Negativfall kann
+die echte Allowlist, Blocklist oder produktive Runtime veraendern.
+
+
+Aufruf und Referenzlauf
+-----------------------
+
+    powershell -NoProfile -ExecutionPolicy Bypass -File Tests/Runtime/Run-UpdateEndToEnd06321.ps1 -TimeoutSeconds 480
+
+Der Lauf verwaltet Quellrelease, Kernel-Fixture und TestInjection als
+Overlays und restauriert sie auch bei Fehlern. Der erfolgreiche Referenzlauf
+vom 11.08.2026 liegt unter:
+
+    DevTools/Logs/update-e2e-06321-20260811-184851/
+
+Entscheidende Belege sind `qemu.log`, `qemu-postboot.log` und `report.json`.
+Die abschliessende reale Hardware- und Produktivserver-Abnahme bleibt 0.63.22.

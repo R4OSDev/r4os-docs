@@ -1,0 +1,609 @@
+﻿RDP-Plan 0.52.10
+=================
+
+Ziel
+----
+
+RDP wird in R4OS als Connectivity-Funktion fuer externen Desktop-Zugriff
+geplant. Der produktive Codebesitzer ist ein eigener R4X-Dienst:
+
+- Code: `Code/System/Services/RdpService/`
+- Image-Pfad: `C:\R4OS\SERVICES\RDPSVC.R4X`
+- Service-Name: `RDPSVC`
+- Registry-Pfad: `SYSTEM\Services\RDPSVC`
+- Gast-Port: 3389
+- QEMU-Hostforward: `127.0.0.1:13389 -> 10.0.2.15:3389`
+- Zielclient: Windows Remote Desktop Client (`mstsc`)
+
+RDP ist kein Kernel-Feature, kein WINSVC-Modus und kein Diagnose-Hack. Der
+Dienst nutzt die vorhandenen Systemgrenzen und verlangt nur dort neue APIs,
+wo ein allgemeiner Vertrag fehlt.
+
+Pausenstand nach 0.52.20
+------------------------
+
+Der 0.52.X-RDP-Block liegt eingefroren vor. `RDPSVC.R4X` besitzt den
+service-lokalen klassischen RDP-Pfad bis Negotiation, Activation, Bitmap-
+Ausgabe, Remote-Input und automatisiertem Reconnect-/Fehlerpfad-Test. Dieser
+Stand ist eine technische Grundlage, aber keine abgeschlossene
+Windows-`mstsc`-Produktfreigabe.
+
+Vor einer Fortsetzung sollen zuerst die allgemeinen Connectivity-Grenzen
+bearbeitet werden: Service-Responsiveness, blockierungsfreie
+Dienstsessions, Dead-Connection-Erkennung und sauberer Lifecycle bei
+`MaxSessions=1`. Der aktuelle RDPSVC-Pfad spricht klassisches RDP ohne TLS,
+NLA oder CredSSP; falls `mstsc` diese Erweiterungen fuer den geplanten
+Minimalpfad erzwingt, wird das als eigener Kompatibilitaetsblock geplant.
+
+Fortsetzung 0.55.14
+-------------------
+
+0.55.14 fuehrt RDPSVC nicht auf einen zweiten Remote-Desktop-Pfad, sondern
+macht die mstsc-Negotiation diagnostisch belastbar. Der Dienst zaehlt jetzt
+angeforderte Negotiation-Protokolle (`SSL`, `HYBRID`, `RDSTLS`,
+`HYBRID_EX`), waehlt weiterhin klassisches RDP (`selectedProtocol=0`) und
+zeigt im Status einen konkreten `compat_blocker`. Wenn Windows mstsc TLS,
+NLA oder CredSSP verlangt, lautet der sichtbare Blocker
+`tls-nla-credssp-not-implemented`.
+
+Die Host-Abnahme `Run-RdpServiceLiveTest.ps1` prueft neben Activation,
+Bitmap, Input, Reconnect und kaputtem TPKT jetzt auch eine mstsc-nahe
+Negotiation-Probe mit `SSL|HYBRID|HYBRID_EX`. Erwartet wird eine gueltige
+Classic-RDP-Negotiation-Response; TLS/NLA/CredSSP werden nicht simuliert und
+nicht als Fallback umgangen.
+
+Seit 0.55.21 ist dieser Blocker aus dem Happy Path entfernt: moderne
+Negotiation-Angebote werden nicht mehr auf Classic umgebogen, sondern als
+`SSL`, `HYBRID` oder `HYBRID_EX` bestaetigt und ueber R4TLS/R4AUTH-
+Kontrakte gefuehrt. Seit 0.55.22 erwartet der Host-Harness fuer die
+mstsc-nahe Probe `SSL|HYBRID|HYBRID_EX` konkret `HYBRID_EX`. Bis 0.55.28
+war danach der R4TLS-Alert `fatal/handshake_failure` der kontrollierte
+Negativabschluss; seit 0.55.29 erwartet der Harness im Happy Path keinen
+Alert mehr, sondern die RDPSVC-Modern-Aktivierung ueber R4TLS/R4AUTH-
+Vertraege.
+
+Manual mstsc bleibt damit ein dokumentierter Kompatibilitaetstest:
+`Start-RdpMstscManual05522.ps1` schreibt ein Classic-Profil ohne NLA/CredSSP
+und ein Modern-Profil fuer den kuenftigen TLS/NLA-Zielpfad. Funktioniert die
+Classic-RDP-Konfiguration nicht oder endet der Modern-Pfad wie erwartet mit
+einem echten Fehler, wird das nicht als Produktiv-Erfolg gewertet. RDPSVC bekommt
+weiterhin keinen Kernel-Framebuffer-, WINSVC-Pixel- oder Treiber-Input-
+Sonderpfad.
+
+
+Vertrauensmodell
+----------------
+
+R4OS bleibt single-user und fully trusted. `RDPSVC` fuehrt kein OS-
+Sicherheitsmodell ein. Die geplanten Zugangsdaten `r4os:rosebud` werden fuer
+Protokollkompatibilitaet, Bedienkomfort und Diagnose verwendet, nicht als
+User-/Rechte-Grenze.
+
+Registry-Defaults:
+
+- `Enabled=ON`
+- `ListenPort=3389`
+- `ClientTarget=WindowsMSTSC`
+- `UserName=r4os`
+- `Password=rosebud`
+- `MaxSessions=1`
+- `LogPasswords=ON`
+
+Wenn RDP-Clients Anmeldeinformationen senden, loggt `RDPSVC` die Versuche
+diagnostisch, inklusive getesteter Passwoerter. Das passt zum fully-trusted
+R4OS-Zielbild und hilft beim Debugging von Host-Clients.
+
+
+Protokollbesitz
+---------------
+
+RDP-Transport, Negotiation, MCS/GCC, Security/Activation, Bitmap-Encoding,
+Input-Mapping und Session-Lifecycle entstehen zunaechst service-lokal in
+`RDPSVC.R4X`.
+
+Keine geplanten Fallbacks:
+
+- kein RDP-Code im Kernel
+- kein paralleler R4P-RDP-Pfad unter `Code/Protocol/`
+- keine R4L-Auslagerung ohne zweiten echten Nutzer
+- kein WINSVC-Pixel- oder Desktop-Fernsteuerungsmodus
+- kein Host-Dateisystem- oder Host-GUI-Fallback
+
+Eine spaetere R4L-Auslagerung ist erst sinnvoll, wenn mehrere produktive
+Komponenten denselben RDP-Code wirklich teilen muessen.
+
+
+Genutzte bestehende APIs
+------------------------
+
+`R4NET`/`TCPSVC`:
+- TCP-Listen, Accept, Read, Write, Pacing, Close und Abort.
+- `RDPSVC` bekommt keinen direkten TCP-Fallback.
+
+`R4SYS`:
+- Registry, Service-Status, Zeit/Ticks, Speicher, Dateien und Logging.
+
+`WINSVC`:
+- Fenster-/Task-/Fokuszustand, soweit RDP Diagnose oder sichtbaren
+  Sitzungsstatus braucht.
+- Kein Pixel-Compositor und kein Remote-Desktop-Besitzer.
+
+`R4DESK`:
+- Desktop-nahe Vertraege, Fensterhost, GUI-Events, Eingabe- und
+  Console-Grenzen.
+- Hier gehoeren die neuen Remote-Frame- und Remote-Input-Vertraege hin.
+
+`R4DRAW`:
+- Pixel-/Raster- und Zeichenvertraege, soweit RDPSVC Format- oder
+  Rasterdaten benoetigt.
+
+`R4DEV`:
+- Display- und Service-Diagnose, aber keine Pixelquelle.
+
+
+Fehlende allgemeine Vertraege
+-----------------------------
+
+Remote Frame:
+- Desktop liefert den komponierten Desktop als XRGB32-Snapshot.
+- Metadaten: Breite, Hoehe, Pitch oder lineare Chunk-Regel, Pixelformat,
+  Frame-Revision, Dirty-Rect und Cursorstatus.
+- Lesen erfolgt chunkweise oder rechteckweise ueber eine stabile API.
+- Ein Revision-/Frame-Wait verhindert aggressives Polling.
+
+Remote Input:
+- Tastatur, Modifier, Mausposition, Buttons und Wheel werden als normale
+  Desktop-Eingaben beschrieben.
+- Desktop entscheidet Fokus, Capture und Zielzustellung.
+- RDPSVC injiziert keine IRQ-, PS/2- oder Treiberereignisse.
+
+Diese Vertraege sind R4DESK-/Desktop-Erweiterungen und keine RDP-
+Spezialpfade. Andere Remote- oder Diagnosewerkzeuge sollen sie spaeter
+ebenfalls verwenden koennen.
+
+
+Kernel-Grenze
+-------------
+
+Der Kernel behaelt die technischen Grundvertraege fuer Netzwerk, Display,
+Input, Tasks, Services und ABI-Bruecken. Nicht in den Kernel gehoeren:
+
+- RDP-Protokollparser
+- RDP-Sessionzustand
+- RDP-Login-/Security-Policy
+- RDP-Bitmap-Encoding
+- Desktop-Fernsteuerungslogik
+- Input-Injection in Treiber oder IRQ-Pfade
+- ein separater Framebuffer-Readback-Pfad nur fuer RDP
+
+Wenn RDPSVC eine Querschnittsfunktion braucht, wird sie als allgemeine API
+bei R4DESK, R4DRAW, R4NET, R4SYS oder R4DEV geplant.
+
+
+0.52.X Folgeplan
+----------------
+
+0.52.11:
+- Erledigt: RDPSVC-Service-Skelett, Registry, Status, Port 3389,
+  QEMU-Hostforward und TCP-Erreichbarkeit ueber `127.0.0.1:13389`.
+- `TCPSVC`/R4NET besitzen dafuer `ACCEPT_POLL`, damit RDPSVC seinen
+  Service-Endpoint ohne blockierende Accept-Wartefenster bedienen kann.
+- Der Dienst akzeptiert und schliesst TCP-Verbindungen, sendet aber noch
+  keine RDP- oder Dummy-Protokollbytes.
+
+0.52.12:
+- Erledigt: TPKT, X.224 und RDP-Negotiation service-lokal in RDPSVC.
+- Der Host-Test prueft die fruehe RDP-Transportkante bytegenau und deckt
+  einen kaputten TPKT-Header als sichtbaren Fehlerpfad ab.
+
+0.52.13:
+- Erledigt: klassische RDP-Security-/Activation-Strecke bis aktive Session
+  ohne Desktop-Pixel.
+- RDPSVC erzeugt MCS Connect Response mit `McDn`, Server Core, Server Net und
+  Security-none (`ENCRYPTION_METHOD_NONE`, `ENCRYPTION_LEVEL_NONE`).
+- RDPSVC verarbeitet Erect Domain, Attach User, Channel Join, Client Info,
+  Confirm Active, Synchronize, Control und Font List und sendet Demand Active,
+  Synchronize, Control/Granted Control und Font Map.
+- `r4os:rosebud` ist der Protokoll-Loginwert aus der Registry; Auth-Versuche
+  inklusive Passwoertern werden bei `LogPasswords=ON` diagnostisch sichtbar.
+- `Run-RdpServiceLiveTest.ps1` prueft die Aktivierungsstrecke ueber
+  `127.0.0.1:13389`, Statuszaehler, `size=1280x1024` und einen kaputten
+  TPKT-Fehlerpfad.
+
+0.52.14:
+- Erledigt: allgemeiner R4DESK-Remote-Frame-Vertrag.
+- Desktop publiziert den komponierten XRGB32-Snapshot ueber R4DESK v2:
+  Geometrie, Frame-Revision, Dirty-Rect, Cursorstatus, chunkweises Lesen und
+  Revision-Wait.
+- `RFDIAG.R4X` und `Run-RemoteFrameContract05214.ps1` pruefen den Vertrag
+  gegen den echten Desktop-Smoke.
+- Kein Kernel-Framebuffer-Readback, kein WINSVC-Pixelpfad und kein
+  RDPSVC-Import von Desktop-Interna.
+
+0.52.15:
+- Erledigt: RDPSVC importiert den oeffentlichen R4DESK-Vertrag und sendet
+  erste RDP-Bitmap-Updates aus dem Remote-Frame-Vertrag.
+- Die Ausgabe ist bewusst unkomprimiert: 32-bpp-XRGB, bottom-up,
+  full-width Dirty-/Frame-Streifen, korrekte Geometrie und Nutzdatenlaenge.
+- `Run-RdpServiceLiveTest.ps1` validiert die empfangenen Bitmap-PDUs
+  hostseitig inklusive ShareData-Payload, Rechteckfolge, Flags und
+  Pruefsumme.
+- Keine Desktop-Interna, kein Kernel-Framebuffer-Readback und kein
+  WINSVC-Pixelpfad.
+
+0.52.16:
+- Erledigt: allgemeiner R4DESK-Remote-Input-Vertrag.
+- R4DESK v3 besitzt `RemoteInputEvent`, `RemoteInputStatus`,
+  `remote_input_push`, `remote_input_poll` und `remote_input_status`.
+- Desktop pollt Remote-Input im normalen Eventloop und entscheidet weiter
+  Fokus, Capture, Zielzustellung und Neuzeichnung.
+- RDPSVC mappt RDP-Input-PDUs fuer Unicode-/Scancode-Tastatur, Mausbewegung,
+  Buttons und Wheel auf diesen Vertrag und sendet danach ein aktualisiertes
+  Bitmap aus dem Remote-Frame-Vertrag.
+- `Run-RdpServiceLiveTest.ps1` sendet eine deterministische Eingabesequenz und
+  prueft danach ein neues Bitmap-Update mit anderer Pruefsumme.
+- Die Abschlussabnahme lief im normalen RTL8139-IRQ-Pfad mit initialem
+  1280x720-Bitmap, Input-PDU und zweitem 1280x720-Bitmap. Der dabei
+  gefundene RTL8139-RX-Ring-Wrap-Verlust ist im Treiber behoben, nicht als
+  RDP- oder Testscript-Fallback umgangen.
+- Keine Treiber-, IRQ-, PS/2-, WINSVC- oder Kernel-Input-Injection.
+
+0.52.17:
+- Erledigt: automatisierter Lifecycle-Abschluss mit Disconnect-Erkennung,
+  Reconnect, Cleanup, Listener-Close, Fehlerpfaden und Statusdiagnose.
+- `RDPSVC` bleibt service-lokal und nutzt fuer die Disconnect-Erkennung den
+  bestehenden `R4NET.tcpConnection`-Detailpfad statt einer neuen Kernel- oder
+  TCPSVC-Sonder-ABI.
+- `SERVMAN STATUS RDPSVC` zeigt neben Transport, Security, Frame und Input
+  jetzt auch `completed`, `reconnects`, `disconnects`, `cleanup`,
+  `cleanup_errors`, `close_errors`, `listener_closed`,
+  `listener_close_errors`, `max_waits`, `session`, `session_result` und
+  `disconnect_state`.
+- `Run-RdpServiceLiveTest.ps1` fuehrt zwei vollstaendige Aktivierungen ueber
+  `127.0.0.1:13389` nacheinander aus und prueft danach einen kaputten TPKT-
+  Fehlerpfad. Damit sind Reconnect und Session-Cleanup bei `MaxSessions=1`
+  automatisiert belegt.
+- Die echte Windows-`mstsc`-Sichtpruefung bleibt als manueller User-Test
+  vorgesehen: `mstsc /v:127.0.0.1:13389`, Benutzer `r4os`, Passwort
+  `rosebud`.
+
+
+Nicht-Ziele fuer diesen Block
+-----------------------------
+
+- NLA
+- CredSSP
+- TLS
+- Mehrbenutzerbetrieb
+- Rechte oder Dateipermissions
+- Clipboard-Redirection
+- Audio-Redirection
+- Laufwerksumleitung
+- Druckerumleitung
+- RemoteApp
+- mehrere gleichzeitige RDP-Sitzungen
+- Bitmap-Kompression als erste Pflicht
+
+Falls `mstsc` fuer den geplanten Minimalpfad zwingend NLA, CredSSP oder TLS
+verlangt, wird das als konkreter Kompatibilitaetsblocker dokumentiert und
+nicht durch einen zweiten stillen Remote-Pfad umgangen.
+
+R4TLS/R4AUTH seit 0.55.16
+-------------------------
+
+Der moderne mstsc-Security-Pfad wird ab 0.55.16 nicht mehr als RDPSVC-
+Privatlogik geplant. `R4TLS.R4P` stellt die Rolle `security.tls` bereit,
+`R4AUTH.R4P` die Rolle `security.credssp` mit Dependency auf `security.tls`.
+RDPSVC bleibt Konsument dieser Protokolle und darf TLS, CredSSP, SPNEGO, NTLM
+oder ASN.1/DER nicht als parallelen privaten Codepfad aufbauen.
+Seit 0.55.18 plant R4TLS aus dem ClientHello den ersten ServerHandshake-
+Vertrag und erzeugt deterministische TLS-Handshake-Fixtures. Der ausgewaehlte
+Zielpfad ist TLS 1.2 mit `TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256`; die
+Zertifikat-/Key-Dateien gehoeren unter `C:\R4OS\CONFIG\TLS\` zu R4TLS, nicht
+zu RDPSVC.
+Seit 0.55.19 liegt zusaetzlich der Stream-I/O-Vertrag bei R4TLS: Record-
+Write/Read, Alert-Record, Buffer-/Ownership-Regeln und die Abbildung von
+TCPSVC-Status auf WouldBlock, Backpressure und Disconnect. RDPSVC soll diesen
+Vertrag konsumieren und weiterhin keine eigene TLS-Transportpolitik aufbauen.
+Die deterministischen Application-Data-Records sind Harness-Fixtures; echte
+TLS-Crypto bleibt ein eigener Schritt.
+Seit 0.55.23 liegt der produktive R4TLS-Krypto-Kern vor:
+`op_tls12_x25519`, TLS-1.2-PRF/HMAC-SHA256-Key-Schedule,
+AES-128-GCM-Record-Protect/Open, TLS-AAD mit Sequenznummer und Bad-Tag-
+Erkennung. Die Harness-Fixtures bleiben nur Diagnose. Zertifikat-/Key-Ladung
+aus `C:\R4OS\CONFIG\TLS\` laeuft ueber die read-only R4P-Protocol-API.
+Seit 0.55.24 parst R4TLS diese Dateien als TLS-Material, validiert
+X.509-DER-Payload, RSA-Modulus/Exponent und Key-Match und stellt
+`op19:R4SG->R4SR` fuer echte RSA-PKCS1-SHA256-ServerKeyExchange-Signaturen
+bereit. RDPSVC konsumiert diesen Pfad und besitzt keinen privaten Key-Parser
+oder RSA-Signaturcode.
+Seit 0.55.20 liegt bei R4AUTH die CredSSP-Basis: TSRequest-Parser/-Builder,
+SPNEGO NegTokenInit/NegTokenResp, NTLMSSP-Erkennung, NTLMv2-Profil fuer
+`r4os:rosebud` und feste Fehlercodes fuer falsches Passwort, kaputte Tokens,
+Kerberos/Domain und fehlenden TLS-Kontext. RDPSVC soll diese Kanten nutzen und
+weiterhin keine private ASN.1-/SPNEGO-/NTLM-Implementierung einfuehren.
+Seit 0.55.25 ist diese Basis zur R4AUTH-State-Machine verdichtet:
+`op_credssp_process_state` verarbeitet TLS-gebundene `R4CS`-Frames mit
+TSRequest, fuehrt Negotiate, Authenticate und PubKeyAuth als sichtbare Phasen,
+validiert NTLMv2 Type3 ueber NTProof/Blob und prueft PubKeyAuth gegen die
+TLS-Public-Key-Bindung. RDPSVC fragt den State-Machine-Vertrag ab und bleibt
+weiterhin ohne private CredSSP-/SPNEGO-/NTLM-Implementierung.
+
+Seit 0.55.26 ist der R4TLS-ServerKeyExchange-Public-Key kein Platzhalter mehr:
+R4TLS schreibt einen aus `server_x25519_secret` ableitbaren X25519-Public-Key in
+die `ecdh_params`, signiert diese Parameter weiter als RSA-PKCS1-SHA256 und
+prueft den erzeugten Wert im Selftest gegen `X25519.recoverPublicKey`. Der
+echte Windows-mstsc-Abschluss wird dadurch nicht vorgetaeuscht; die restlichen
+Schritte sind TLS-Sessionzustand, Windows-CredSSP-PubKeyAuth, RDPSVC-
+Aktivierung ueber den geschuetzten Stream und danach erst die manuelle mstsc-
+End-to-End-Abnahme.
+
+Seit 0.55.27 besitzt R4TLS den TLS-1.2-Session-Harness fuer diesen Pfad:
+ClientKeyExchange wird als X25519-Public-Key geparst, das Shared Secret mit dem
+R4TLS-Server-Secret berechnet, Master Secret und AES-GCM-Write-Keys werden per
+TLS-PRF abgeleitet, Client-Finished wird geoeffnet und gegen den Transcript-
+Hash geprueft und Server-Finished wird daraus erzeugt. Negative Faelle fuer
+kaputten ClientKeyExchange, manipulierten Finished-Tag und falschen Transcript
+bleiben ebenfalls R4TLS-Eigentum. RDPSVC darf diese Sessionlogik nicht privat
+nachbauen; die naechste offene Schicht ist Windows-CredSSP/PubKeyAuth in
+R4AUTH.
+
+Seit 0.55.28 besitzt R4AUTH diese Windows-CredSSP/PubKeyAuth-Schicht:
+`R4CW`-Frames tragen Phase, TLS-Status, Variante, TLS-Public-Key-Hash und
+TSRequest. R4AUTH verarbeitet damit Windows-nahe NegTokenInit- und
+NegTokenResp-Huellen, prueft NTLM Type3 gegen das feste Profil
+`r4os:rosebud` und bindet PubKeyAuth an den vom TLS-Pfad uebergebenen
+Public-Key-Hash. Falsche PubKeyAuth, Kerberos-Only, Domain-Anmeldung, kaputte
+TSRequests und fehlender TLS-Kontext haben stabile Fehlercodes.
+
+Seit 0.55.29 ist der RDPSVC-Streamaktivierungsvertrag angeschlossen: RDPSVC
+konsumiert R4TLS `op20/op21` und R4AUTH `op15/op17`, zaehlt
+`tls_session`, `credssp_windows` und `modern_active` und nutzt den
+R4TLS-Alert nicht mehr als erwarteten Happy-Path-Abschluss. Der Dienst
+preflightet diese Vertraege als ModernSecurityProfile beim Service-Start.
+
+Seit 0.55.21 ist der alte Happy-Path-Blocker
+`tls-nla-credssp-not-implemented` aus RDPSVC entfernt. Moderne
+Negotiation-Angebote (`SSL`, `HYBRID`, `HYBRID_EX`) werden nicht mehr auf
+Classic umgebogen, sondern als moderne Auswahl bestaetigt und danach ueber
+R4TLS/R4AUTH-Kontrakte gefuehrt. Seit 0.55.29 darf der Dienst den Modern-
+Pfad als `modern_active` zaehlen, wenn die R4TLS-Session- und R4AUTH-
+Windows-CredSSP-Vertraege erfolgreich konsumiert wurden; interne Readiness-
+Fehler bleiben ueber Blocker sichtbar, waehrend `tls_alert` echten TLS-Wire-
+Fehlern vorbehalten bleibt.
+
+Seit 0.55.30 besitzt R4TLS die Live-Session-Schnittstelle fuer diesen Pfad:
+`op_tls12_live_begin` (`op22`) akzeptiert einen echten ClientHello-Record und
+liefert `R4LB` mit `R4LS`-Sessionzustand plus ServerHandshake-Flight.
+`op_tls12_live_finish` (`op23`) verarbeitet danach `R4LS`, ClientKeyExchange,
+ChangeCipherSpec und Client Finished, verifiziert den Finished-Record und gibt
+`R4LF` mit `R4LK`-Streamzustand plus Server ChangeCipherSpec/Finished
+zurueck. `R4LK` enthaelt Sequenzen, AES-GCM-Keys/IVs, Master Secret und den
+TLS-Public-Key-Hash fuer CredSSP. RDPSVC ist noch nicht an diesen Live-Stream
+angeschlossen; die echte Windows-mstsc-End-to-End-Freigabe bleibt aufgeteilt
+in R4AUTH-Live-CredSSP, RDPSVC-Streamadapter, Modern-RDP-Aktivierung und
+danach die manuelle mstsc-Abnahme.
+
+Seit 0.55.31 besitzt R4AUTH den Live-CredSSP-Vertrag ueber diesem
+R4TLS-Streamzustand. `op18` beschreibt `R4CL` mit eingebettetem `R4LK`,
+`op19` verarbeitet Negotiate/Authenticate/PubKeyAuth als wiederaufnehmbaren
+Live-State und `op20` prueft den Windows-nahen Harness inklusive falschem
+Passwort, falscher PubKeyAuth, Kerberos, Domain, kaputter TSRequest und
+fehlendem TLS-Stream. Die PubKeyAuth-Bindung nutzt den Public-Key-Hash aus
+`R4LK`; RDPSVC bleibt bis zum Streamadapter-Anschluss Protokoll-Konsument.
+
+Seit 0.55.32 ist der RDPSVC-R4TLS-Streamadapter angeschlossen. R4TLS besitzt
+`op_tls12_app_write` (`op24`) fuer Server-Application-Records und
+`op_tls12_app_read` (`op25`) fuer Client-Application-Records ueber dem
+`R4LK`-Streamzustand. RDPSVC prueft diese Kante ueber R4TLS-Vertraege und
+Selftest-Marker, zaehlt `tls_live` und `tls_stream` und interpretiert weder
+Keys noch Sequenzen selbst. Die naechsten Schritte bleiben R4AUTH-Live-
+CredSSP-Schleife, Modern-RDP-Aktivierung und danach mstsc-End-to-End.
+
+Seit 0.55.33 konsumiert RDPSVC den R4AUTH-Live-CredSSP-Vertrag `op18`/`op20`
+als ModernSecurityProfile-Preflight. Der Dienst prueft Vertrag, Harness,
+R4LK-Public-Key-Bindung, die feste Anmeldung `r4os`/`rosebud` und die
+negativen Grenzen fuer falsches Passwort, Kerberos, Domain, kaputte TSRequest
+und fehlenden TLS-Kontext. Sichtbar sind die Zaehler `credssp_live` und
+`credssp_loop`. RDPSVC baut R4CL, R4LK, SPNEGO, NTLM und Kryptografie weiterhin
+nicht privat nach; die naechsten Schritte sind Modern-RDP-Aktivierung und
+danach die echte Windows-`mstsc.exe`-End-to-End-Abnahme.
+
+Seit 0.55.34 fuehrt RDPSVC die RDP-Aktivierung nach erfolgreichem
+ModernSecurityProfile ueber den expliziten Modus `modern_protected` weiter.
+Der fruehere Kurzschluss nach TLS/CredSSP ist entfernt: `modern_active` wird
+erst gesetzt, wenn MCS, Client Info, Demand/Confirm Active, Font Map, Bitmap
+und Input erfolgreich durchlaufen sind. `SERVMAN STATUS RDPSVC` zeigt dafuer
+`modern_stream`. Der Live-Harness prueft diesen Pfad mit `HYBRID_EX` und
+Bitmap/Input.
+
+Seit 0.55.35 ist der mstsc-Abschluss als Gate-Audit geschaerft: Der interne
+`HYBRID_EX`-Harness ist kein Ersatz fuer ein echtes Windows-`mstsc.exe`.
+RDPSVC nutzt die R4TLS-/R4AUTH-Vertraege aktuell als Readiness- und
+Harness-Schicht, aber der produktive Clientpfad fuehrt noch keine echten
+TLS-Records ueber R4TLS `op22`/`op23` und keine verschluesselten
+Application-Records ueber `op24`/`op25`. Deshalb wird die finale mstsc-
+Freigabe nicht als erledigt markiert. Die Roadmap trennt den Restpfad nun in
+RDPSVC-TLS-Wire (0.55.36), CredSSP-Live-Loop (0.55.37), RDP-Aktivierung ueber
+den geschuetzten Stream (0.55.38) und die echte mstsc-End-to-End-Abnahme
+(0.55.39).
+
+Seit 0.55.36 fuehrt RDPSVC den ersten echten mstsc-Wire-Schritt aus: Nach der
+Negotiation liest der Dienst TLS ClientHello, ClientKeyExchange, CCS und
+Finished als echte TLS-Records vom TCP-Stream, uebergibt sie an R4TLS
+`op22`/`op23` und sendet die resultierenden Server-Records zurueck. Der
+`R4LK`-Stream-State bleibt opak; RDPSVC kapselt ihn nur fuer spaetere
+Application-Records ueber R4TLS `op24`/`op25`. CredSSP und die eigentliche
+RDP-Aktivierung ueber diesen TLS-Stream bleiben getrennte Folgeschritte.
+
+Seit 0.55.37 fuehrt RDPSVC die CredSSP-Live-Schleife ueber diesen R4TLS-
+Wire-Adapter. Der Dienst liest verschluesselte TSRequest-Records, baut daraus
+nur den `R4CL`-Rahmen mit dem opaken `R4LK`-Streamzustand und delegiert
+NegTokenInit, Authenticate, PubKeyAuth, feste Anmeldung `r4os`/`rosebud` und
+alle Negativfaelle an R4AUTH. Die R4AUTH-Challenge wird ueber R4TLS `op24`
+zurueckgeschrieben. Damit ist NLA/CredSSP auf Wire-Ebene belastbar angebunden,
+ohne dass RDPSVC eigene TSRequest-, SPNEGO-, NTLM- oder PubKeyAuth-Parser
+bekommt. RDP-Aktivierung ueber denselben geschuetzten Stream bleibt 0.55.38.
+
+Seit 0.55.38 nutzt RDPSVC fuer die eigentliche RDP-Aktivierung einen
+gemeinsamen Plain/TLS-Transportvertrag. Classic-RDP liest und schreibt weiter
+TPKT direkt auf TCP; der Modern-Pfad fuehrt nach TLS und CredSSP dieselben
+MCS-, ClientInfo-, Demand/Confirm-Active-, Bitmap- und Input-Schritte ueber
+`tlsWireRead`/`tlsWireWrite` und damit ueber R4TLS `op24`/`op25`. Der
+Live-Harness beweist zwei Classic-Aktivierungen plus `modern-wire` ueber
+Windows/.NET `SslStream`, inklusive Initial-Bitmap, Input-Bitmap und
+CredSSP-Negativpfaden. Die finale Freigabe fuer Windows-`mstsc.exe` bleibt
+0.55.39.
+
+Seit 0.55.39 gibt es fuer diese finale Freigabe eine eigene manuelle
+End-to-End-Abnahmehilfe: `Run-RdpMstscManual05539.ps1`. Sie baut bei Bedarf
+ein Test-Image mit TCPSVC/WINSVC/RDPSVC, startet QEMU headless mit
+Hostforwarding auf `127.0.0.1:13389`, schreibt das Modern-NLA-Profil und
+launcht `mstsc.exe` nur mit explizitem `-LaunchMstsc`. Die Sichtabnahme ist
+erst bestanden, wenn der Nutzer zwei echte mstsc-Sitzungen mit Login
+`r4os`/`rosebud`, sichtbarem Desktop, Eingabe, Abbruch und Reconnect
+durchgefuehrt hat und das Script danach die RDPSVC-Marker fuer TLS-Wire,
+CredSSP-Live, geschuetzte Aktivierung, Bitmap/Input und Reconnect findet.
+Der erste echte mstsc-Test am 2026-06-26 erreichte die Passwortannahme und
+brach danach mit `0x904`/`0x7` ab. RDPSVC behandelt seitdem den naechsten
+Post-CredSSP-Blocker explizit: Der Dienst parst den Client-Network-Block
+`CS_NET` (`0xC003`) und bestaetigt alle vom Client angekuendigten statischen
+MCS-Kanaele statt nur starr User- und I/O-Channel. Der RDPSVC-Livetest nutzt
+dazu eine mstsc-nahe Fixture mit fuenf Channel-Joins.
+Der zweite echte mstsc-Test am 2026-06-26 17:40:33 UTC erreichte wieder die
+Passwortannahme und brach danach erneut mit `0x904`/`0x7` ab. Damit ist die
+naechste konkrete Kante Demand Active: RDPSVC sendet den Server-Demand-Active-
+PDU jetzt mit Share-, General-, Bitmap-, Order-, Control-, Activation-,
+Pointer-, Color-Cache-, Input-, Font- und Virtual-Channel-Capabilities und
+meldet den User-Channel als Share-Control-`pduSource`. Der MCS-Transport bleibt
+weiter der I/O-Channel. 0.55.39 bleibt bis zur echten Windows-`mstsc.exe`-
+Sichtabnahme `In Arbeit`.
+Der dritte echte mstsc-Test am 2026-06-26 18:58:50 UTC erreichte erneut die
+Passwortannahme und brach danach mit `0x904`/`0x7` ab. Damit rueckt die bisher
+fehlende Licensing-Phase zwischen Client Info und Demand Active in den Fokus.
+RDPSVC sendet jetzt einen License-Error-Alert `STATUS_VALID_CLIENT` mit
+`ST_NO_TRANSITION`, zaehlt diesen Schritt als `license=` und bleibt trotzdem
+ein single-user, fully trusted System ohne Lizenz- oder Rechteverwaltung.
+Der vierte echte mstsc-Test am 2026-06-26 19:27:59 UTC blieb trotz Licensing-
+Fix bei `0x904`/`0x7`. Seitdem schreibt RDPSVC fuer die Aktivierung
+stufengenaue `RDPSVC trace`-Serialmarker von MCS Connect ueber Client Info,
+Licensing, Demand/Confirm Active, Sync/Control, Font Map und Initial Bitmap.
+Der letzte erreichte Meilenstein steht zusaetzlich als `trace=` in
+`SERVMAN STATUS RDPSVC` und als LOGSVC-Service-Record bereit.
+`Run-RdpMstscManual05539.ps1` extrahiert serielle `last_trace`-Daten, wenn sie
+im Hostlog vorhanden sind, damit die naechste Kante nicht mehr aus dem
+Windows-Dialog geraten werden muss.
+
+Nach einem fehlgeschlagenen echten mstsc-Versuch zeigte sich zusaetzlich eine
+Koexistenzkante: SSH konnte ueber Hostforwarding noch TCP verbinden, aber der
+SSHD-Banner-/Shellpfad konnte nach einem RDP-Abbruch verhungern. RDPSVC nutzt
+deshalb fuer Accept, Read, Write, Poll, Retransmit, Close und Listener-Close
+bounded TCPSVC-Servicecalls ueber den Service-Handle und schliesst Sessions mit
+bounded Close plus Abort-Fallback. SSHD pumpt waehrend wartender
+verschluesselter Channel-Reads weiter Console-/Serviceausgabe. Der neue
+Hosttest `Run-RdpSshCoexistence05539.ps1` prueft SSH vor und nach drei
+synthetischen mstsc-modern-Abbruechen. Das ist eine Stabilitaetsabnahme der
+Service-Entkopplung, kein Ersatz fuer den offenen sichtbaren Windows-
+`mstsc.exe`-Pass.
+Der Nutzerlauf am 2026-06-28 08:41:20 UTC lieferte danach eine praezisere
+CredSSP-Kante: RDPSVC waehlte `selected=8`, kam aber mit
+`compat_blocker=credssp-bad-tsrequest`, `credssp_wire=0/0/0` und `mcs=0`
+nicht bis zur MCS-Aktivierung. R4AUTH akzeptiert fuer den Live-Pfad deshalb
+TSRequest-Versionen 2 bis 6 und prueft einen Windows-naeheren finalen
+TSRequest mit `authInfo` plus verschluesseltem `pubKeyAuth`. RDPSVC bleibt
+Konsument dieses Vertrags und wertet nur `complete=yes` aus.
+Der Nutzerlauf am 2026-06-28 09:11:29 UTC kam bis zur Windows-
+Zertifikatswarnung. Nach Zustimmung schlug mstsc erneut mit `0x904`/`0x7`
+fehl, aber die Statuskante hatte sich verschoben: `selected=1`,
+`tls_app=1/1`, `credssp_wire=1/0/0`, `compat_blocker=none`, `mcs=0`.
+Damit war der verbliebene Fehler der TLS-only-Fallback nach erfolgreicher
+Zertifikats-/TLS-Kante. RDPSVC fuehrt diesen `selectedProtocol=SSL/TLS-only`-
+Pfad jetzt ebenfalls in die geschuetzte Aktivierung ueber R4TLS-Application-
+Records; der fokussierte Live-Test `Run-RdpServiceLiveTest.ps1` mit
+`-TlsOnlyProtectedOnly` prueft TLS-Wire, Bitmap und Input.
+Der Nutzerlauf am 2026-06-28 09:54:23 UTC erreichte danach `trace=mcs-response`
+und Windows meldete Authentifizierungsfehler `0x609`. RDPSVC hatte TLS-AppData
+und den MCS Connect Response geschrieben (`tls_app=2/2`, `mcs=1`,
+`mcs_resp=1`), aber der Client sendete noch kein Erect Domain. Der Server Core
+Data Block wiederholt nun das echte `clientRequestedProtocols` aus der RDP-
+Negotiation statt immer `0`; der Host-Livetest prueft Classic `0`, HYBRID_EX
+`0x0000000B` und TLS-only `0x00000001`.
+Der Nutzerlauf am 2026-06-28 10:25:29 UTC verschob die Kante bis nach allen
+MCS-Channel-Joins: `trace=channel-joins`, `joins=6/6`, `static_ch=4`, aber
+`client_info=0`. RDPSVC konsumiert deshalb optional einen Security Exchange PDU
+(`SEC_EXCHANGE_PKT`) vor Client Info, macht ihn als `sec_exchange` sichtbar und
+liest Client Info korrekt aus dem MCS-UserData-Payload. Der TLS-only-
+Livetest sendet diese Sequenz jetzt explizit vor Client Info.
+Der Nutzerlauf am 2026-06-28 11:10:33 UTC kam danach bis
+`trace=license-valid-client`; Windows trennte mit Protokollfehler `0x2904`,
+waehrend RDPSVC `client_info=1`, `license=1` und noch `demand=0` meldete.
+RDPSVC sendet serverseitige MCS-`SendDataIndication`-Pakete jetzt mit dem
+User-Channel-Offset `1` als Initiator und dem I/O-Channel `1003` als Ziel.
+License, Demand Active, Share-Data-PDUs und Bitmap-Frames teilen sich diesen
+zentralen Header; der RDPSVC-Livetest prueft den Header fuer License und Demand
+Active explizit.
+Der anschliessende Full-Harness erreichte Classic, Reconnect, Modern-Wire und
+TLS-only bis zu Bitmap-Markern, zeigte dann aber erneut einen RDPSVC-Worker-
+Page-Fault mit `rip=0`. RDPSVC reserviert fuer Session-Worker deshalb 4 MB
+Stack, damit die grossen TLS-/CredSSP-/Aktivierungsframes in spaeten
+Negativpfaden nicht den Rueckkehrpfad korrupt machen.
+Mit dieser Stack-Haertung lief der RDPSVC-Full-Harness danach ohne Crash bis
+zum Abschluss: Classic/Reconnect, Modern-Wire, TLS-only, Bitmap/Input,
+Invalid-Packet und CredSSP-Negativfaelle sind automatisiert gruen. Die echte
+Windows-mstsc-Sichtabnahme bleibt weiterhin der letzte Abschluss fuer 0.55.39.
+Der Nutzerlauf am 2026-06-28 12:53:09 UTC erreichte danach
+`trace=demand-active`: `client_info=1`, `license=1`, `demand=1`, aber
+`confirm=0`. Damit ist Demand Active selbst beim Client angekommen; die naechste
+Kante liegt beim Lesen der Client-PDUs direkt danach. RDPSVC behandelt den
+geschuetzten RDP-Transport ueber TLS deshalb jetzt als Stream mit TPKT-
+Pending-Puffer. `tlsWireReadRdpPacket` liest aus R4TLS-Application-Plaintext
+genau ein TPKT und laesst uebrige Bytes fuer den naechsten RDP-Read stehen.
+Das bildet Windows-mstsc naeher ab, weil Confirm Active, Sync, Control und
+FontList in einem TLS-ApplicationData-Record zusammenfallen koennen. Der
+Livetest batcht diese Post-Demand-Pakete fuer Modern-Wire und TLS-only und lief
+danach wieder komplett bis Bitmap/Input, Invalid-Packet und CredSSP-
+Negativpfaden durch.
+
+Der echte mstsc-Lauf am 2026-06-28 13:37:58 UTC blieb trotz TPKT-Pending-Puffer
+noch bei `trace=demand-active`, `confirm=0`. Der naechste Schritt ist deshalb
+die vollstaendige MS-RDPBCGR-Connection-Finalization statt weiterer
+Einzel-Byte-Korrekturen: RDPSVC liest die Post-Demand-Phase als Zustandmaschine,
+akzeptiert optional Persistent Key List, sendet Server Sync/Control und Font Map
+in der vorgeschriebenen Reihenfolge und baut Share-Data-Header mit
+`uncompressedLength` inklusive `pduType2`/Compression-Feldern. Granted Control
+enthaelt nun die echten User-Channel-IDs. Der Host-Livetest validiert die Bodies
+von Server Synchronize, Control Cooperate, Granted Control und Font Map und
+lief danach sowohl fokussiert TLS-only-protected als auch vollstaendig durch.
+
+Die echten mstsc-Laeufe am 2026-06-29 09:32:53 UTC, 11:01:29 UTC,
+11:35:19 UTC und 12:12:59 UTC bestaetigten danach aber: Windows sendet
+weiterhin kein Confirm Active. RDPSVC steht bei `trace=demand-active`,
+`client_info=1`, `license=1`, `demand=1`, `confirm=0`. Damit ist nicht die
+neue Post-Demand-State-Machine erreicht; Server-Licensing und Demand Active
+muessen noch mstsc-naeher werden. Der XRDP-Abgleich unter `Reference/XRDP/`
+lieferte zwei konkrete Korrekturen: License Valid Client wird jetzt mit
+`SEC_LICENSE_PKT | SEC_LICENSE_ENCRYPT_CS` (`0x0280`) gesendet, und Demand
+Active bewirbt keine ungetragenen FastPath-/RemoteApp-Faehigkeiten mehr.
+RDPSVC nutzt dafuer ein ehrliches XRDP-Produktivprofil: 10 Capability-Sets mit
+`RDP\0`, Share-Pad `b5 e2`, General `extraFlags=0x0400`, Bitmap,
+header-only Font, Order mit Rev3-Cache-Flags `0x000006a1/0x0002`,
+Bitmap-Codecs, Color Cache, Pointer, Input-Flags `0x0115` und Bitmap-Cache-
+Rev3-CodecId. Die automatischen RDPSVC-Tests pruefen diese Werte und blocken
+ungewollte RAIL/Window/DrawGdiPlus/VirtualChannel-Werbung, ersetzen aber
+weiterhin nicht den echten Windows-`mstsc.exe`-Pass.
+
+Der reale Lenovo-Lauf mit 0.59.5 bestaetigte anschliessend die komplette
+Anmeldung und eine aktive Sitzung, zeigte nach dem Login aber nur Schwarz.
+Die neue Kante lag hinter Font Map: RDPSVC besass einen festen
+`rdp_bitmap_max_pixels=1280`-Zeilenpuffer und lehnte den 1920x1080-
+Remote-Frame mit `frame-width` ab, bevor ein Bitmap-PDU entstand.
+
+Seit 0.59.6 wird die gueltige R4DESK-Geometrie vor Demand Active als
+Sitzungsdesktop gebunden und bis 8192x8192 akzeptiert. Derselbe Vertrag gilt
+fuer Streifen, Dirty-/Cursorrechtecke und Mauseingabe; ein Geometriewechsel
+beendet die Sitzung kontrolliert. Der Wirepfad liest unabhaengig von der
+Framebreite 256-Pixel-Kacheln. 4-Pixel-ausgerichtete Kacheln bleiben RLE16,
+ein 1- bis 3-Pixel-Rest wird als unkomprimiertes RGB565 mit 4-Byte-
+Scanlinepadding gesendet. `rdp geometry` und die echte `nonblack`-
+Inhaltsmetrik stehen sofort in LOGSVC/RDPTRACE; der alte indexgemischte
+Checksum ist nicht mehr die Schwarzentscheidung.

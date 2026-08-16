@@ -1,0 +1,68 @@
+﻿R4DRAW - native Geometrie
+==========================
+
+Zweck
+-----
+
+R4DRAW transportiert gefuellte und gestrichene Pfade, abgerundete Rechtecke
+sowie einzelne aeussere oder innere Schattenlagen als versionierte
+Frame-Ressourcen. Eine Form bleibt genau ein logischer Displaylistenbefehl;
+Radius, Blur und Pixelausdehnung erzeugen keine Scanline- oder
+Einzelpixelbefehle.
+
+ABI
+---
+
+`GuiFrameCommand` bleibt unveraendert fixed-layout v1/96. Die append-only
+Command-Kinds 6 bis 9 referenzieren ueber `resource_offset` und
+`resource_bytes` genau eine `GuiShapeResource` v1/160. Pfadgeometrie haengt
+daran null bis 4.096 `GuiPathSegment`-Eintraege v1/32 an. Alle Koordinaten
+liegen als IEEE-754-f32-Bitmuster vor; NaN und Unendlich sind ungueltig.
+
+Die Segmentverben sind MOVE, LINE, QUADRATIC, CUBIC und CLOSE. Fill-Regeln
+sind Non-Zero und Even-Odd. Striche besitzen Breite, Miter-/Round-/Bevel-Join
+und Butt-/Round-/Square-Cap. Der rechteckige Clip gehoert zur Ressource und
+wird vor jedem Pixelzugriff geschnitten.
+
+Abgerundete Rechtecke
+---------------------
+
+Jede der vier Ecken besitzt getrennte horizontale und vertikale Radien.
+Ueberschreiten gegenueberliegende Summen die Rechteckgroesse, werden alle
+Radien mit dem kleinsten CSS-konformen Faktor normalisiert. Obere, rechte,
+untere und linke Rahmenbreite sind unabhaengig. Nullradien, sehr kleine
+Rechtecke und vollstaendig weggeklemmte Inhalte bleiben definiert.
+
+Schatten
+--------
+
+Eine Schattenressource enthaelt ARGB, X-/Y-Offset, positiven oder negativen
+Spread, einen Blurradius von hoechstens 64 Pixeln und das Inset-Flag. Jede
+Lage bleibt ein eigener Command. R4DESK erzeugt eine Formmaske und verwendet
+einen begrenzten deterministischen separierbaren Box-Blur. Mehrere Lagen
+werden vom Producer in ihrer CSS-Reihenfolge angehaengt.
+
+Grenzen und Validierung
+-----------------------
+
+Der Kernel dekodiert keine Formen. Er prueft vor der Frame-Uebernahme Owner,
+Laengen, Offsets, Versionen, reservierte Felder, Segmentfolge, Endlichkeit,
+Geometrieart und die festen Grenzen von 4.096 x 4.096 beziehungsweise
+4.194.304 Zielpixeln. Unvollstaendige oder fremde Ressourcen werden atomar
+abgewiesen; der letzte committed Frame bleibt unveraendert.
+
+R4DESK liest nur den caller-owned Snapshot aus 0.62.43. Es rastert mit vier
+festen Subpixelsamples pro Pixel in eine Alpha8-Maske und mischt diese
+source-over in den SceneBuffer. R4IMG bleibt ausschliesslich fuer Bildformate
+zustaendig; Pfad-, Rundungs- oder Schattenlogik liegt weder dort noch im
+Kernel.
+
+Abnahme
+-------
+
+`Tests/Gate/Run-GuiShapeContract06244.ps1` pinnt die ABI-Layouts, Kinds und
+Grenzen, prueft die Kernelvalidierung und baut den echten Desktoppfad. Seine
+Golden-Tests decken elliptische Eckradien, ungleiche Rahmen, Clipping, Alpha,
+quadratische und kubische Pfade, Striche, aeussere und innere Schatten sowie
+sehr kleine und groessere Formen ab. Negative Fixtures pruefen gekuerzte,
+uebergrosse, nicht endliche und semantisch fremde Ressourcen.

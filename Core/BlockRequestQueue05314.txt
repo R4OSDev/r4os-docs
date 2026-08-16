@@ -1,0 +1,140 @@
+﻿R4OS 0.53.14 - Blockdevice Request Queue und Storage-Completion
+=================================================================
+
+Ziel
+----
+
+0.53.14 macht den Blockdevice-Pfad schedulerfreundlicher und messbar. Das
+bisherige `queue_depth`-Feld war vor allem ein Descriptor-Metadatum. Ab
+dieser Stufe laufen `read`, `write` und `flush` im Storage-Core ueber einen
+gemeinsamen Request-/Completion-Pfad mit Queue-Slots, Backpressure,
+Timeout-/Completion-Zaehlern und R4DEV-Sichtbarkeit.
+
+Das Ziel ist nicht, alle Hardwaretreiber sofort asynchron zu machen. Das Ziel
+ist der belastbare gemeinsame Blockvertrag, auf dem FAT32-, Service-,
+Worker- und spaetere async-I/O-Arbeit aufsetzen kann, ohne einen zweiten
+alten Produktivpfad mitzuschleppen.
+
+
+Besitzgrenze
+------------
+
+- Kernel/Storage-Core: Request-Slots, Queue-Zustand, Completion-Wait,
+  Backpressure, Timeouts, allgemeine Blockdevice-Zaehler.
+- Built-in-Storage- und R4D-Treiber: Hardware-/Transportdetails und die
+  eigentlichen Read/Write/Flush-Callbacks.
+- R4DEV/SDK: ABI-Snapshot fuer Queue-, Request- und Completion-Metriken.
+- Diagnostics: PERFDIAG/STORDIAG pruefen und drucken die Werte.
+- Keine Scheduling-Policy, keine FS-Policy, keine Anzeige-Logik und kein
+  Komfort-Wrapper im Kernel.
+
+
+Produktiver Pfad
+----------------
+
+`Code/src/storage/block.zig` besitzt ab 0.53.14 pro Device bis zu
+`MAX_REQUEST_QUEUE_DEPTH` Request-Slots. Die oeffentlichen Blockfunktionen
+laufen so:
+
+1. Request validieren.
+2. Request-Slot in der Device-Queue reservieren.
+3. Device-Queue pumpen und den naechsten Request in den Backend-Callback
+   geben.
+4. Completion mit Ergebnis und Latenz-Ticks speichern.
+5. Auf Completion warten beziehungsweise vor Scheduler-Start synchron weiter
+   pumpen.
+6. Slot freigeben und Waiter wecken.
+
+Damit existiert kein separater produktiver `read`-/`write`-/`flush`-
+Direktpfad mehr neben der Queue. Die aktuellen Treiber-Callbacks bleiben
+synchron, haengen aber hinter derselben Request-/Completion-Kante. Vor dem
+Scheduler-Start funktioniert der Pfad weiterhin bootfaehig, weil er ohne
+schlafbare Locks synchron pumpt. Sobald Tasks laufen, nutzt das Device einen
+klassifizierten `block_device`-Mutex und WaitQueues fuer Slot- und
+Completion-Waits.
+
+
+R4D-Storage-Vertrag
+-------------------
+
+R4D-Storage-Backends muessen eine Queue-Depth von 1 bis
+`MAX_REQUEST_QUEUE_DEPTH` melden. Ungueltige oder zu grosse Werte werden in
+`Code/src/kernel/driver_api.zig` sichtbar abgelehnt. Der Storage-Core kappt
+R4D-Backends nicht mehr still auf ein internes Limit.
+
+Das ist Absicht: Ein externer Treiber soll den produktiven Blockvertrag
+erfuellen oder klar fehlschlagen. Ein stiller Normalpfad mit korrigierten
+Descriptor-Daten waere eine neue Fallbackkante und wuerde Abnahmen
+verfaelschen.
+
+
+R4DEV-v111-Snapshot
+-------------------
+
+Der Performance-Snapshot ist ab 0.53.14 ProgramApi v111. Neu sichtbar sind:
+
+- Summary-Zaehler fuer aktuell genutzte Queue-Slots, High-Water-Marke,
+  gequeueute/dequeueute Requests, Queue-Full-Waits und Queue-Full-
+  Rejections.
+- Summary-Zaehler fuer Completion-Waits, Completion-Timeouts, Summe,
+  Maximum und letzte sichtbare Completion-Latenz in Timer-Ticks.
+- Pro-Device-Werte in `ProgramStoragePerformanceInfo`: `queue_used`,
+  `queue_high_water`, `queued_requests`, `dequeued_requests`,
+  `queue_full_waits`, `queue_full_rejections`, `completion_waits`,
+  `completion_timeouts`, `completion_total_ticks`,
+  `completion_max_ticks`, `completion_last_ticks`.
+- `performance_flag_storage_request_queue_ready` markiert, dass der
+  Snapshot den produktiven Block-Request-Queue-Pfad beschreibt.
+
+Die Missing-Flag-Klasse fuer Treiber-Completion-Latenz wird vom Kernel nicht
+mehr gesetzt. Offene Messluecken bleiben Wait-/FS-/TCP-/Display-
+Latenzhistogramme; echte asynchrone Treiber-Interrupt-Completions sind
+Folgearbeit, aber der Blockvertrag dafuer ist jetzt vorhanden.
+
+
+Diagnose
+--------
+
+PERFDIAG.R4X prueft ab 0.53.14:
+
+- ProgramApi-v111-Performance-Snapshot.
+- Storage-Request-Queue-Ready-Flag.
+- Storage-Requests wurden gequeued, dequeued und ueber Completion-Waits
+  beobachtet.
+- Keine Storage-Completion-Timeouts im Standardpfad.
+- Per-Device-Queue-High-Water und Completion-Werte sind sichtbar.
+
+STORDIAG.R4X prueft zusaetzlich zur Inventar- und Datei-Smoke-Abnahme die
+Storage-Queue-Metriken und gibt pro Blockdevice Queue-/Completion-Zustand
+aus. Damit wird der neue Pfad nicht nur indirekt ueber Boot und FAT32,
+sondern als eigener Storage-Befund sichtbar.
+
+
+No-Fallback-Audit
+-----------------
+
+0.53.14 entfernt keine Treiber-Callbacks, weil sie der eigentliche
+Hardwarepfad sind. Entfernt ist aber die alte produktive Form: Block-I/O
+geht nicht mehr direkt als ein globaler aktiver Request in den Callback,
+sondern immer durch die Device-Queue.
+
+Erlaubt bleiben:
+
+- Boot-synchrones Pumpen vor Scheduler-Start.
+- Synchrone Treiber-Callbacks hinter der Queue.
+- Diagnoseausgaben in PERFDIAG/STORDIAG.
+
+Nicht erlaubt sind:
+
+- Stilles Kappen ungueltiger R4D-Queue-Depths.
+- Zweite produktive Block-I/O-Funktion neben `read`/`write`/`flush`.
+- Polling-Waits als neuer Normalpfad oberhalb der Blockdevice-Queue.
+
+
+Folgearbeit
+-----------
+
+0.53.15 kann darauf FAT32-Volume-Locks und eine FS-Request-Schicht aufbauen.
+Spaetere Versionen koennen Worker-I/O, echte async Handles und
+interruptnahe Treiber-Completions einfuehren, ohne den Blockdevice-Vertrag
+erneut zu ersetzen.

@@ -1,0 +1,184 @@
+TCPSVC Architektur-Audit 0.55.40
+================================
+
+Stand
+-----
+
+0.55.40 pausiert die offene mstsc-End-to-End-Abnahme aus 0.55.39 und
+behandelt zuerst den gemeinsamen TCP-Servicepfad. Der Ausloeser war ein echter
+Nutzerlauf, bei dem Windows mstsc weiter mit 0x904/0x7 abbrach und danach SSH
+zwar noch verband, aber Eingaben extrem langsam wurden und Reconnects nicht
+mehr moeglich waren. QEMU und die Hostforwards liefen weiter. Der erste Fix aus
+0.55.39 machte den TCPSVC-Read-Servicepfad nonblocking; 0.55.40 dokumentiert
+die Architekturgrenzen und die weiteren Unterversionen.
+
+Leitentscheidung
+----------------
+
+TCPSVC bleibt vorerst ein Singlethread-Reactor. Das ist nur dann tragfaehig,
+wenn alle direkt bearbeiteten Service-Requests kurz und nonblocking sind.
+Laengere Warteoperationen gehoeren nicht in den Reactor-Loop, sondern in
+bounded SDK-Wartehelfer oder spaeter in einen Deferred-Completion-Vertrag.
+
+Mehr Threads allein waeren keine saubere Loesung: Die aktuelle Implementierung
+nutzt globale Scratch- und Antwortpuffer sowie eine zentrale Front-Handle-
+Tabelle. Bevor TCPSVC echte Worker bekommt, muessen Pending-Operationen,
+Generationen, Ownership, Pufferbesitz und Late-Replies vertraglich feststehen.
+
+Gepruefte Codepfade
+-------------------
+
+- `Code/System/Services/TcpService/src/main.zig`
+  - Service-Loop: `runService` pollt den Endpoint, verarbeitet genau einen
+    Request mit `handleRequest` und schlaeft danach einen Tick.
+  - Request-Dispatch: `performOperation`, `performHandleOperation`,
+    `performListen`, `performAccept`, `cleanupService`.
+  - Zustand: 16 Front-Handles, 4 Listener, globale Puffer fuer Request,
+    Backend-Antwort, Read-Daten, uebersetztes Payload und Service-Reply.
+  - Diagnose: `req_ticks`, `long_req`, Handle-/Listenerzaehler, Lifecycle,
+    Backend-/Bad-Request-/Bad-Op-Zaehler und Op-Verteilung.
+
+- `Code/Kernel/kernel/services.zig`
+  - Service-Endpoint-Queue: 4 Slots je Endpoint.
+  - Slot-Zustaende: queued, delivered, responded.
+  - Der Kernel kann mehrere ausgelieferte Requests zaehlen, aber TCPSVC holt
+    aktuell nur einen Request pro Loop ab.
+  - Sichtbar ueber SERVMAN: queue used/high, active/max workers, busy,
+    timeout, cancel.
+
+- `Code/Kernel/net/ipc_services.zig`
+  - Backend-Bruecke fuer `net.tcp`.
+  - Front-Handle-Besitz im Kernel-Backend bleibt zusaetzlich zu TCPSVCs
+    Front-Handle-Schicht vorhanden.
+  - `TCP_READ_RESULT` nutzt seit 0.55.39 `net.tcpReadAvailable` und ist damit
+    service-seitig immediate/nonblocking.
+  - `TCP_ACCEPT_RESULT` und `TCP_ACCEPT_READ_RESULT` nutzen noch wartende
+    Kernel-Backend-Funktionen und duerfen fuer produktive Dienste nicht der
+    Zielpfad sein.
+
+- `Code/Kernel/net/core.zig`
+  - `tcpConnect` wartet auf SYN/SYN-ACK mit Retransmit.
+  - `tcpRead` ist historisch blockierend; `tcpReadAvailable` ist der neue
+    service-taugliche immediate-Pfad.
+  - `tcpAcceptOnListener` und `tcpAcceptReadOnListener` warten bis zum
+    Listen-Timeout.
+  - `tcpAcceptPollOnListener` ist der service-taugliche Accept-Pfad.
+  - `tcpClose` wartet auf FIN/Close und kann damit fuer den Reactor noch zu
+    lang sein.
+
+- `Code/System/SDK/r4os/program.zig` und `r4net.zig`
+  - SDK-Helfer kapseln Service-Calls, Read-Wait, Tx-Window-Wait und paced
+    Write.
+  - `tcpReadWaitServiceBounded` pollt zuerst Readiness und ruft den
+    immediate-Read nur mit bounded Service-Wait auf.
+  - Einige Convenience-Helfer ohne bounded Service-Wait bleiben fuer Tools
+    brauchbar, sind aber nicht der Zielpfad fuer robuste Dienste.
+
+Operationsmatrix
+----------------
+
+Connect:
+  Seit 0.55.45 laufen die SDK-Connect-Helfer ueber begrenzte Wait-Varianten.
+  Lange Dienste sollen `tcpConnectServiceWait` beziehungsweise die
+  strukturierten Result-Wait-Helfer mit eigenem Timeout nutzen.
+
+Listen:
+  Kurz, stateful, geeignet fuer den Reactor. Listener-Besitz wird in TCPSVC
+  gespiegelt.
+
+Accept:
+  Produktive Dienste nutzen `TCP_ACCEPT_POLL_RESULT`. SSHD, FTPSVC und RDPSVC
+  tun das bereits. Seit 0.55.45 fuehren auch die synchronen SDK-
+  Convenience-Helfer fuer Accept eine Accept-Poll-Schleife aus, statt den
+  alten wartenden Backend-Accept als normalen Arbeitsweg zu nehmen.
+
+AcceptRead:
+  Der direkte Backendpfad bleibt nur Low-Level-/Diagnosekompatibilitaet.
+  Einfache Tools wie TCPECHO, NETCAT und RECV nutzen seit 0.55.45
+  `tcpAcceptPollReadService`: Accept-Poll, bounded Read-Wait und sauberer
+  Abort, wenn nach dem Accept keine ersten Nutzdaten eintreffen.
+
+Read:
+  Servicepfad ist seit 0.55.39 immediate. Keine Daten bedeutet `would-block`,
+  nicht Timeout. Wartende Semantik gehoert in SDK-Helfer.
+
+Write:
+  Seit 0.55.44 ist der Servicepfad backpressure-faehig: TCPSVC pollt vor dem
+  Backend-Write, schreibt maximal bis `tx_window`, liefert Window-0 als
+  `would-block` oder haelt den Write als bounded Pending-TX.
+
+Poll:
+  Pollt Adapter und liefert Socket-Readiness. Dieser Pfad wird in 0.55.41 zur
+  verbindlichen Quelle fuer read/write/closed/reset/pending-rx/tx-window.
+
+Retransmit:
+  Kurz, aber muss an Write-Backpressure und Late-ACK-Diagnose gekoppelt werden.
+
+Close:
+  Seit 0.55.42 ist der TCPSVC-Close-Pfad reactor-sicher: Der Dienst gibt den
+  Frontend-Handle frei und nutzt den dokumentierten Abort-Fallback, statt den
+  Reactor auf FIN zu blockieren.
+
+Abort:
+  Kurz und als Cleanup-Fallback geeignet, muss aber Ownership und Generation
+  beachten.
+
+CloseListen:
+  Kurz und ueber die SDK-Wait-Varianten begrenzbar. Seit 0.55.45 nutzen
+  FTPSVC und RDPSVC `tcpCloseListenServiceResultWait` fuer Cleanup-Pfade.
+
+Aktuelle Grenzen
+----------------
+
+- TCPSVC hat weiter einen Service-Loop und keine eigenen Worker. Das ist jetzt
+  tragfaehig, weil Read, Write, Accept, Close und Tool-Accept-Pfade ueber
+  Poll/Deferred/bounded Waits gefuehrt werden.
+- Die Kernel-Service-Queue hat 4 Slots pro Endpoint. Unter Last kann ein
+  einzelner Dienst weiterhin Endpoint-Druck erzeugen; TCPSVC und die
+  Connectivity-Dienste melden diesen Druck inzwischen diagnostisch.
+- Low-Level-Backend-Ops wie `TCP_ACCEPT_READ_RESULT` existieren aus ABI- und
+  Diagnosegruenden weiter. Produktive SDK-Convenience-Helfer und
+  mitgelieferte Dienste sollen sie nicht mehr als normalen Wartepfad nutzen.
+- Echte Event-/Wait-Objekte fuer Socket-Readiness bleiben ein spaeterer
+  Architekturgewinn; 0.55.X nutzt bewusst Poll plus bounded Service-Waits.
+
+Folgeplan
+---------
+
+- 0.55.41: Readiness-/Socket-Status-Vertrag ausbauen und als Pflichtpfad fuer
+  wartende SDK-Helfer festlegen.
+- 0.55.42: Deferred-Completion-Grundlage fuer wartende Operationen planen und
+  implementieren.
+- 0.55.43: Fairness, per-Owner-/per-Handle-Limits, Queue-Druck und Cleanup
+  haerten.
+- 0.55.44: Write-/TX-Backpressure, Window-Ready, Pending-TX und keine
+  Doppelwrites.
+- 0.55.45: SDK und Dienste auf den finalen Vertrag migrieren.
+- 0.55.46: Connectivity-Stresssuite fuer paralleles SSH/FTP/RDP und QEMU-
+  Weiterlauf ist als headless Quick-/Full-Gate umgesetzt.
+- 0.55.47: mstsc-Sichtabnahme wieder aufnehmen, dann nur noch echte RDP-
+  Protokollmarker verfolgen.
+
+Abnahme 0.55.46
+---------------
+
+- `Run-ConnectivityStress05546.ps1` startet ein gemeinsames QEMU-User-Network-
+  Profil mit Hostforwarding fuer SSH, FTP, FTP-Passivdaten und RDP.
+- Der Lauf haelt eine SSH-Dauershell offen, startet parallele SSH-Execs, faehrt
+  FTP-Login/List/Store/Retrieve/Delete/Reconnect und setzt synthetische RDP-
+  Stalls sowie Modern-Negotiation-Abbrueche ab.
+- Der Report benennt Fehler nach Schicht: QEMU/Hostforward, Guest-TCP/TCPSVC,
+  SDK-Wait, SSHD, FTPSVC oder RDPSVC. Ein offener Hostport allein zaehlt nicht
+  als Erfolg; SSH-, FTP- und RDP-Nutzdaten muessen nach Stalls/Abbruechen weiter
+  fliessen.
+- `Run-ConnectivitySuite05515.ps1` bindet diesen Stresslauf seit 0.55.46 als
+  Regression-Gate ein.
+
+Abnahme 0.55.40
+---------------
+
+- TCPSVC-Status zeigt neben Queue-/Lifecycle-Daten auch Op-Verteilung und
+  Fehlerklassen.
+- Dieser Audit benennt alle bekannten Wartepfade und ordnet sie Folgeversionen
+  zu.
+- Build-Abnahme: `DevTools/Scripts/Build.bat -norun`.

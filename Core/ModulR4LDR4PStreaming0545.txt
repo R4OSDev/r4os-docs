@@ -1,0 +1,73 @@
+﻿R4OS 0.54.5 - R4L/R4D/R4P Streaming-Loader
+============================================
+
+Ziel
+----
+0.54.5 beendet den produktiven Voll-Datei-Puffer fuer R4L-, R4D- und
+R4P-Diskmodule. Discovery, Resolver und Image-Aufbau arbeiten fuer Dateien
+auf C: mit `module_file.FileSource` und dem gemeinsamen R4M0-Range-Reader.
+
+Der alte Ablauf:
+- komplette Moduldatei in einen temporaeren Kernelbereich lesen
+- Tabellen, Imports, Exports und Sections aus diesem Bytepuffer parsen
+- Nutzlast aus dem Bytepuffer ins finale Modulimage kopieren
+
+wurde fuer Diskmodule ersetzt durch:
+- Header und Metadata per gezieltem Range-Read pruefen
+- Tabellenrecords ueber `module_r4m` lesen
+- Imports ueber bounded Z-String-Reads aufloesen
+- Sections direkt aus der Datei ins finale Modulimage lesen
+- Relocations und Exports ueber denselben R4M0-Reader verarbeiten
+
+Betroffene Pfade
+----------------
+- R4L-Systemlibraries unter `C:\R4OS\LIBS`
+- R4D-Treiber unter `C:\R4OS\DRIVERS`
+- R4P-Protokolle unter `C:\R4OS\PROTOCOLS`
+
+R4L-Pending-Libraries speichern nur noch Dateiquelle, Dateigroesse, Header,
+Pfad und Modulnamen. Sie halten keinen kompletten Moduldateipuffer mehr.
+
+R4D-Discovery und Runtime-Load loesen die Datei auf und uebergeben den
+`FileSource` an den Modulmanager. R4P-Discovery liest nur Header/Metadaten
+vorab; das eigentliche Protokollmodul wird danach direkt aus der Datei ins
+Zielimage geladen.
+
+Preload-Grenze
+--------------
+`loadResolvedBytes(...)` bleibt fuer Preload-Speicherbilder erhalten. Das ist
+kein Disk-Fallback: Preload-Module liegen bereits als Speicherbytes aus dem
+Bootpfad vor und besitzen keine Dateiquelle fuer Range-Reads.
+
+Produktive Diskmodule muessen `loadResolvedFile(...)` verwenden. Neue R4L-,
+R4D- oder R4P-Diskpfade duerfen keine komplette Moduldatei ueber
+`readFullToTempRange(...)` puffern.
+
+Kernel-Grenze
+-------------
+Der Kernel bekommt nur die technische Lade- und Resolvermechanik:
+- R4M0-Header-/Tabellen-Reader
+- Section-Layout und finales Image
+- Import-/Export-Aufloesung
+- Relocation-Anwendung
+- Registry-Eintrag fuer geladene Module
+
+Policy, Stresstests und sichtbare Auswertung bleiben Aufgabe der vorhandenen
+Diagnostics, Roadmap-Abnahmen und spaeterer 0.54.X-Diagnosestufen.
+
+Abnahme
+-------
+- `DevTools/Scripts/Build.bat -norun`
+- `DevTools/Scripts/Build.bat -test`
+- QEMU-Log mit gruenen Loader-, R4D-, R4P-/Protocol-, Performance- und
+  MEMSUITE-Markern.
+- Code-Suche ohne produktive R4L/R4D/R4P-Vollpuffer:
+  `readFullToTempRange`, `r4l-module-file-buffer`,
+  `r4d-runtime-module-buffer`, `r4d-discovery-module-buffer`,
+  `r4p-module-file-buffer`.
+
+Folgearbeit
+-----------
+0.54.6 macht Loader-Speicherdruck und Fehlerdiagnose sichtbarer. 0.54.7
+erweitert die Stresstests fuer groessere synthetische Module und wiederholte
+Starts.

@@ -1,0 +1,86 @@
+﻿R4X Memory Stress 0.53.8
+========================
+
+Ziel
+----
+
+0.53.8 macht die VM-V2-Diagnose belastbarer, ohne neue Speicher-Policy in den
+Kernel zu schieben. Der Kernel liefert vorhandene Range-Zaehler strukturiert
+aus; die Auswertung, Stresstests und Abnahmelogik liegen in externen
+Diagnostics und Host-TestScripts.
+
+
+ProgramApi v105
+---------------
+
+`ProgramVmRegionInfo` wurde append-only erweitert:
+
+- `resident_bytes`
+- `peak_resident_bytes`
+- `fault_count`
+- `failed_faults`
+
+Die Funktionsslots bleiben unveraendert. `vm_reserve(..., out)` und
+`vm_query(region_id, out)` liefern die neuen Felder, wenn
+`supportsVmRegionStats()` beziehungsweise ProgramApi v105 verfuegbar ist.
+
+
+MEMSUITE
+--------
+
+`MEMSUITE.R4X` traegt das R4M0-Metadatenprofil
+`memory.profile=workstation` und `memory.tag=memsuite`. Damit kann die Suite
+mehrere GB virtuellen Adressraum reservieren, ohne das normale Console-Profil
+aufzuweichen.
+
+Neue Modi:
+
+- `/VMSTRESS /STRICT`: smoke-tauglicher Test fuer Reserve-Matrix,
+  Demand-Commit, Profil-Limits, Kill-while-Commit und Owner-Cleanup.
+- `/MULTIGB /SMALL|/NORMAL|/LARGE /STRICT`: gezielte Host/QEMU-Abnahme fuer
+  mehrere GB virtuelle Reserve mit kleinerem Commit und nur beruehrtem
+  resident working set.
+
+Die Ausgabe nennt standardisiert:
+
+- reserved
+- committed
+- resident
+- peak resident
+- touched pages
+- page faults
+- failed faults
+- decommits
+- limit errors
+- Tabellenlast vor/waehrend/nach dem Test
+- Owner-Cleanup
+
+
+APPHEAPD
+--------
+
+`APPHEAPD.R4X` prueft seit 0.53.8 ebenfalls die v105-Region-Statistiken.
+Der neue Modus `/HOLDVM` reserviert eine explizite R4X-VM-Region, committed
+einen Teilbereich, beruehrt Pages und wartet dann auf
+`program_request_close`. MEMSUITE nutzt diesen Modus, um Kill-while-Commit
+und Cleanup von residenten VM-Pages zu pruefen.
+
+
+Host-Abnahme
+------------
+
+Der normale Smoke bleibt leicht:
+
+    DevTools/Scripts/Build.bat -test
+
+Das Testoverlay startet `MEMSUITE.R4X /VMSTRESS /STRICT`.
+
+Schwere Multi-GB-Laeufe werden gezielt gestartet:
+
+    powershell -NoProfile -ExecutionPolicy Bypass -File Tests/Gate/Run-MemoryMultiGb0538.ps1 -Profile Small
+    powershell -NoProfile -ExecutionPolicy Bypass -File Tests/Gate/Run-MemoryMultiGb0538.ps1 -Profile Normal
+    powershell -NoProfile -ExecutionPolicy Bypass -File Tests/Gate/Run-MemoryMultiGb0538.ps1 -Profile Large
+
+Die Profile nutzen kleine, normale und grosse QEMU-RAM-Konfigurationen. Der
+Test erwartet, dass mehrere GB virtuell reservierbar sind, aber physischer
+Verbrauch nur durch beruehrte Pages entsteht.

@@ -1,0 +1,126 @@
+﻿R4CC Console-v1 Buildpfad 0.51.49
+=================================
+
+Ziel
+----
+
+0.51.49 ist der erste echte inside-R4OS-Compile-Pfad fuer C-Console-
+Programme. Ein `.R4CP`-Projekt mit Buildprofil `R4X_C_Console` wird im
+laufenden R4OS von R4BUILD gelesen, mit R4CC-v1 kompiliert, mit R4PACK als
+R4M0-R4X verpackt und in das projektlokale `out\`-Verzeichnis geschrieben.
+
+Der Pfad nutzt keine Host-IDE, kein `Build.bat`, keine DevTools-Compiler,
+keinen Host-R4XBuilder und keine vorgebaute Hello-World-Binaerdatei.
+
+
+Komponenten
+-----------
+
+R4CC liegt im installierten SDK:
+
+    C:\R4OS\SDK\Toolchains\C\bin\R4CC.R4X
+
+R4BUILD und R4PACK liegen im R4CODE-Paket:
+
+    C:\SOFTWARE\R4CODE\R4BUILD.R4X
+    C:\SOFTWARE\R4CODE\R4PACK.R4X
+
+R4BUILD prueft den installierten R4CC-Status:
+
+    C:\R4OS\SDK\Toolchains\C\R4CC.STATUS
+
+Da R4OS in dieser Stufe verschachtelte Console-Starts aus einem laufenden
+Worker blockiert, startet R4BUILD R4CC nicht als zweiten Prozess. R4BUILD
+nutzt denselben R4CC-Core und denselben R4PACK-Core direkt. Dadurch bleibt die
+Toolchain pruefbar, ohne einen neuen Kernel- oder ProgramRun-Sonderpfad zu
+erfinden.
+
+
+R4CC v1 Sprachvertrag
+---------------------
+
+R4CC v1 ist absichtlich klein. Er ist kein allgemeiner C-Compiler, sondern
+ein bootstrapfaehiger C-Subset-Compiler fuer das erste Terminal-Hello.
+
+Unterstuetzt wird:
+
+    #include <r4os/r4os.h>
+
+    R4OS_TEXT(hello_message, "HELLO");
+
+    int32_t r4_main(const R4XStartContext *ctx, R4Sys *sys)
+    {
+        (void)ctx;
+        return r4sys_write_line(sys, hello_message);
+    }
+
+Zulaessige Ausgaben in 0.51.49:
+
+- `r4sys_write_line(sys, text_symbol)`
+- `r4sys_write_cstr(sys, text_symbol)`
+
+`R4OS_TEXT` erzeugt den Text, den der Compiler in den R4X-Code legt. Der
+Write-Aufruf muss genau dieses Symbol verwenden. Der erzeugte Code validiert
+zur Laufzeit den R4XStart-Kontext, sucht `R4SYS:Query:1` in der Importtabelle
+und schreibt ueber die R4XStartR4Sys-Tabelle.
+
+Nicht unterstuetzte C-Konstrukte sind kein stiller Fallback. Sie muessen mit
+klaren Compilerfehlern enden. Beispiele:
+
+- fehlendes `#include <r4os/r4os.h>`
+- fehlendes oder fehlerhaftes `R4OS_TEXT`
+- fehlendes `r4_main`
+- fehlender unterstuetzter R4SYS-Write-Aufruf
+- Write-Aufruf auf ein anderes Symbol als das `R4OS_TEXT`-Symbol
+- zu lange Textliterale oder zu grosser erzeugter Code
+
+
+R4BUILD Ablauf
+--------------
+
+Fuer ein `R4X_C_Console`-Projekt macht R4BUILD:
+
+1. `.R4CP` lesen und mit `r4os.r4cp` validieren.
+2. SDK und Buildprofil unter `C:\R4OS\SDK\BuildProfiles` pruefen.
+3. `R4CC.STATUS` auf `R4CC 0.51.49`,
+   `target=x86_64-r4os-r4xstart`, `compile=R4X_C_Console-v1`,
+   `host_fallback=disabled` und `status=OK` pruefen.
+4. Projektquelle lesen.
+5. R4CC-v1-Core auf die Quelle anwenden.
+6. Codebytes mit R4PACK-Core als R4M0-R4X verpacken.
+7. `R4SYS:Query:1`, Export `R4XStart`, Console-AppClass und
+   R4XStart-Metadaten in das Artefakt schreiben.
+8. Das Artefakt nach `out\<Name>.R4X` schreiben.
+
+Die relevanten Loganker sind:
+
+    R4CC compile: OK
+    R4PACK package: OK
+    build result: OK
+
+
+Abnahmen
+--------
+
+Der automatische Testlauf fuehrt aus:
+
+    C:\R4OS\SDK\Toolchains\C\bin\R4CC.R4X /SELFTEST
+    C:\SOFTWARE\R4CODE\R4PACK.R4X /SELFTEST
+    C:\SOFTWARE\R4CODE\R4BUILD.R4X /SELFTEST
+    C:\TEMP\R4BUILD\HELLOC\out\HELLOC.R4X
+
+R4BUILD erzeugt dieses Artefakt aus der Selftest-Projektquelle:
+
+    C:\TEMP\R4BUILD\HELLOC\src\main.c
+
+Der anschliessende Start von
+
+    C:\TEMP\R4BUILD\HELLOC\out\HELLOC.R4X
+
+beweist, dass das Terminal-Hello aus der Projektquelle kommt. Der erwartete
+sichtbare Text lautet:
+
+    HELLO from R4BUILD selftest via R4CC
+
+Damit ist der erste Console-Self-Hosting-Pfad belegt. R4CODE-Build/Run folgt
+in 0.51.50; der erste C-GUI-Pfad `R4X_C_Desktop_OK` folgt in 0.51.51.

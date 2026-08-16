@@ -1,0 +1,1312 @@
+﻿R4OS 0.8 - R4Desk Desktop-Fundament
+===================================
+
+Status: Abgeschlossen
+
+Diese Datei archiviert die abgeschlossene Roadmap fuer Version 0.8.
+Die aktive Roadmap wurde danach geleert.
+
+Archivierte Roadmap
+===================
+
+Leitbild Version 0.8.X - Desktop
+=================================
+
+Version 0.8.X nimmt die Desktop-Arbeit nach der grossen 0.7-Aufraeum-,
+SDK- und Zig-Migration wieder auf. R4Desk ist inzwischen eine echte
+DESK.R4X-Anwendung aus Zig/SDK-Code unter Code/Software/Desk und wird zentral
+ueber Code/build.zig gebaut. Alte Script-Bruecken gelten nicht mehr als
+Zielpfad.
+
+Nach dem Boot soll nicht mehr automatisch eine Shell den ganzen Bildschirm
+uebernehmen. Stattdessen startet R4OS in eine grafische Arbeitsoberflaeche,
+von der aus Programme, Werkzeuge und bei Bedarf auch die DOS-artige Shell
+geoeffnet werden koennen.
+
+Der Desktop heisst R4Desk. Langfristig darf R4Desk intern wachsen und
+Kernel-nahe Dienste nutzen, soll nach aussen aber wie eine normale,
+austauschbare R4OS-Anwendung wirken.
+
+Der Desktop ist keine Abkehr vom DOS-artigen R4OS-Leitbild. Er ist die
+grafische Erweiterung derselben Idee: ein single-user, fully trusted System,
+in dem Programme frei und direkt arbeiten duerfen. Es gibt weiterhin kein
+User-/Permission-/Sandbox-Modell. Stabilitaetspruefungen bleiben erlaubt,
+wenn sie Abstuerze durch kaputte Parameter, ungueltige Fenster oder defekte
+Programmaufrufe vermeiden.
+
+Die erste Desktop-Version soll bewusst klein und robust bleiben. Die
+Aufloesung wird vorerst fest auf 1280 x 720 Pixel geplant. Dynamische
+Aufloesungswechsel, Multi-Monitor-Betrieb und komplexe Themes gehoeren nicht
+zum ersten Ziel. Wichtiger ist, dass der Desktop verlaesslich startet, Maus und
+Tastatur sauber routet, Fenster stabil verwaltet und mehrere Anwendungen
+parallel offen halten kann.
+
+Die Shell bleibt wichtig, wird aber zu einer normalen Desktop-Anwendung. Sie
+soll in einem Fenster gestartet werden koennen, jedoch nicht automatisch beim
+Desktop-Start erscheinen. So bleibt R4OS sowohl grafisch bedienbar als auch
+weiterhin DOS-artig erreichbar, ohne dass die Shell die Startoberflaeche
+dominiert.
+
+Der technische Kern von 0.8.X ist ein Fenstersystem mit klarer Trennung
+zwischen echtem Framebuffer, Desktop-Compositor, Fenstern und Anwendungen.
+Vollbild-R4X-Programme duerfen nicht dauerhaft der einzige Grafikpfad bleiben.
+Stattdessen sollen Anwendungen schrittweise eigene Fensterflaechen bekommen,
+in die sie zeichnen. Der Desktop setzt diese Flaechen zusammen, verwaltet
+Fokus, Z-Reihenfolge, Mausposition, Fensterrahmen und Eingabezustellung.
+
+Parallel offene Anwendungen brauchen zuerst saubere App-/Window-Kontexte,
+nicht sofort ein grosses preemptives Multithreading-Modell. Der vorhandene
+Task- und Scheduler-Unterbau kann fuer die ersten Desktop-Schritte
+kooperativ genutzt werden. Praeemption, feinere Synchronisation und staerkere
+Task-Isolation koennen spaeter folgen, wenn das Fenster- und App-Modell klar
+genug ist.
+
+Das Design orientiert sich stark am klassischen Windows-95-Desktop: unten eine
+Taskbar, links ein R4OS-Button mit aufklappendem Startmenue, rechts eine Uhr,
+Fenster mit Titelleiste und Buttons fuer Minimieren, Maximieren/Wiederherstellen
+und Schliessen. R4DOS soll im Startmenue liegen und von dort bewusst als
+Shell-Fenster gestartet werden koennen.
+
+Die GUI-Entwicklung soll zweistufig wachsen. Zuerst braucht R4OS eine kleine,
+stabile Low-Level-GUI-API fuer Fenster, Events, einfache Zeichenoperationen
+und Buffer-Praesentation. Danach kann ein echtes Framework entstehen, mit dem
+Desktop-Anwendungen komfortabler geschrieben werden koennen. NOTEPAD.R4X ist
+der erste wichtige Kandidat, der vom bisherigen Vollbildmodell in ein Fenster
+ueberfuehrt werden soll.
+
+Die vorhandene SDK-Struktur soll dabei aktiv mitwachsen. Neue R4Desk-,
+Software- und Treiberpfade sollen nicht neben dem SDK entstehen, sondern
+gemeinsame Typen, Build-Helfer, ABI-Konstanten und Beispiele nach Code/SDK
+zurueckfliessen lassen.
+
+Anwendungsklassen
+-----------------
+
+R4OS soll Anwendungen nicht nur nach Dateiendung behandeln, sondern nach ihrem
+Laufzeit- und Darstellungsmodell. Diese Trennung ist keine Security-Grenze,
+sondern ein technischer Vertrag zwischen R4Desk, R4DOS, R4X-Lader und App:
+
+- R4DOS-/Console-Anwendungen laufen textorientiert. Sie nutzen stdin/stdout,
+  Tastatur, Dateien, Audio und andere R4X-APIs, zeichnen aber keine eigene
+  Fenster-Grafik. Auf dem Desktop laufen sie in einem Terminal-Fenster. R4DOS
+  selbst ist so eine Anwendung; R4Synth ist ebenfalls ein guter Kandidat fuer
+  diesen Modus.
+- R4Desk-/GUI-Anwendungen bekommen ein eigenes Fenster, eine Zeichenflaeche
+  und strukturierte Events fuer Maus, Tastatur, Timer und Fensterzustaende.
+  NOTEPAD.R4X soll in diese Klasse wachsen.
+
+Damit gibt es als echte Anwendungsklassen nur `console` und `gui`. R4Desk
+braucht beim Start einer App trotzdem eine Launch-Policy: `console`, `gui` oder
+`auto`. `auto` ist keine Anwendungsklasse, sondern nur ein Start-Fallback, der
+vor dem Start auf `console` oder `gui` aufgeloest wird. Anfangs kann diese
+Information aus dem Startmenue, Desktop-Verknuepfungen oder Dateizuordnungen
+kommen. Spaeter kann R4XBuilder solche Eigenschaften auch als R4X-Flags oder
+Metadaten schreiben. Alte R4X-Dateien ohne neue Metadaten bleiben kompatibel
+und werden konservativ behandelt.
+
+Diese Anwendungsklassen sind auch fuer die spaetere Eigenentwicklung im
+laufenden R4OS wichtig. Wenn R4OS langfristig eigene Programme bearbeiten,
+bauen und installieren kann, muss ein neues Projekt bereits beim Erstellen ein
+Zielprofil waehlen koennen: R4DOS-/Console-App oder R4Desk-/GUI-App. Dieses
+Zielprofil soll dann Projektvorlage, verfuegbare APIs, Default-Entry-Point,
+Test-Host, Startmenue-Verknuepfung und R4X-Metadaten bestimmen. `auto` bleibt
+nur ein Start-Fallback fuer alte oder nicht markierte R4X-Programme, kein
+Entwicklungsziel fuer neue Projekte. Damit ist die Trennung nicht nur ein
+Desktop-Start-Detail, sondern wird ein durchgehender App-Vertrag von R4XBuilder
+bis zur spaeteren R4OS-Entwicklungsumgebung.
+
+Damit R4Desk wirklich bedienbar wird, braucht 0.8.X nicht nur Fenster, sondern
+auch die kleinen Alltagswege eines Desktops: Programme starten, Fenster
+wiederfinden, Dateien erreichen, einfache Einstellungen aendern, Text zwischen
+Anwendungen bewegen und Fehler verstaendlich anzeigen. Diese Funktionen sollen
+klein anfangen, aber frueh genug eingeplant werden, damit sie spaeter nicht als
+Fremdkoerper an den Window-Manager geklebt werden muessen.
+
+Wichtige Bedienfeatures fuer 0.8.X:
+
+- Desktop-Icons oder Verknuepfungen fuer zentrale Programme.
+- Startmenue-Konfiguration statt nur fest verdrahteter Menuepunkte.
+- Ausfuehren-Dialog fuer direkte Programm-/Pfadstarts.
+- Ein kleiner Dateimanager fuer Laufwerke, Ordner, Dateien und Programmstarts.
+- Gemeinsame Dialoge fuer Meldungen, Fehler, Open/Save und Bestaetigungen.
+- Einfache Desktop-Einstellungen fuer Farben, Hintergrund und Uhranzeige.
+- Tastaturkuerzel fuer Startmenue, App-Wechsel und Fenster-Schliessen.
+- Einfaches Text-Clipboard fuer Shell, Terminal, Notepad und spaetere Apps.
+- Startmenue-Systemaktionen fuer Neustart, Herunterfahren/Halt und bewusstes
+  Oeffnen von R4DOS.
+- Kleiner App-/Task-Ueberblick zum Anzeigen, Fokussieren und Schliessen
+  laufender Programme.
+- Persistente Desktop-Konfiguration mit sicheren Defaults, falls Konfigdateien
+  fehlen oder kaputt sind.
+- Einfaches natives Icon-/Cursor-Format, damit R4Desk nicht auf hart codierte
+  Symbole festgelegt bleibt.
+
+Font- und Textdarstellung
+-------------------------
+
+R4OS besitzt bereits ein erstes Font-System mit eingebautem 8x8-Fallback,
+R4F-Bitmap-Fonts, 8x8-/8x16-Darstellung und Codepage-437-nahem Textpfad fuer
+R4DOS. R4Desk soll dieses System weiterverwenden und nicht eigene
+Ad-hoc-Textausgabe einfuehren. Schrift ist ein gemeinsamer Systembaustein fuer
+Konsole, Shell, Desktop, Fenster, Menues, Dialoge und spaetere GUI-Controls.
+
+Fuer 0.8.X soll der vorhandene Font-Pfad zu einem kleinen Desktop-tauglichen
+Text-Renderer wachsen:
+
+- R4Desk verwendet den vorhandenen Glyph-/R4F-Pfad fuer Taskbar, Startmenue,
+  Fenstertitel, Buttons, Desktop-Icons, Dialoge und Statusmeldungen.
+- R4DOS-Terminalfenster nutzt weiterhin R4DOS-kompatible Fonts und Codepage
+  437, aber innerhalb eines Desktop-Fensters.
+- Systemweite Fonts bleiben bevorzugt unter SYS/FONTS/. R4DOS/ und R4DESK/
+  duerfen eigene Konfigurationen oder Overrides besitzen, sollen Fontdateien
+  aber nicht unnoetig duplizieren.
+- R4DESK/R4DESK.R4S oder Themes koennen UI-Font, Terminal-Font,
+  Titelzeilen-Font und Skalierung referenzieren.
+- Der erste R4Desk-UI-Font darf monospaced bleiben. Proportionale Fonts,
+  Unicode und Anti-Aliasing sind spaetere Themen.
+- Wichtig fuer 0.8.X sind stabile Textmetriken: Breite, Hoehe, Baseline,
+  Clipping und einfache Textmessung, damit Buttons, Menues und Titelleisten
+  nicht raten muessen.
+
+Treiberbedarf fuer 0.8.X
+------------------------
+
+Fuer den ersten Desktop braucht R4OS voraussichtlich keinen komplett neuen
+Grafiktreiber. Limine liefert bereits einen Framebuffer, und R4OS besitzt
+Framebuffer-, Konsolen-, Maus-, Tastatur-, PIT- und Task-Grundlagen. Trotzdem
+braucht 0.8.X mehrere Kernel-nahe Erweiterungen:
+
+- Framebuffer-/Videomodus-Pfad fuer die feste Zielaufloesung 1280 x 720
+  klaeren.
+- Maus- und Tastaturtreiber so erweitern, dass der Desktop Eingaben als Events
+  an fokussierte Fenster zustellen kann.
+- Einen RTC/CMOS-Zeitpfad oder eine einfache Systemzeit einbauen, damit die
+  Taskbar-Uhr echte Uhrzeit anzeigen kann.
+- Timer-/Scheduler-Nutzung fuer Desktop-Refresh, Cursor-Blinken,
+  Doppelklick-Zeitfenster und App-Wartezeiten stabilisieren.
+- Reboot-/Poweroff-Pfad pruefen, z.B. ACPI-Poweroff oder ein einfacher
+  Hardware-Reset, damit Startmenue-Systemaktionen sinnvoll verdrahtet werden
+  koennen.
+- Optional spaeter: spezifische Grafiktreiber fuer schnellere Blits,
+  Aufloesungswechsel oder Hardwarecursor. Das ist nicht Teil des ersten
+  Fundaments.
+
+
+Systeminterne Ordnerstruktur
+----------------------------
+
+Mit 0.8.X soll die systeminterne Ordnerstruktur klarer werden. Alles, was zur
+DOS-artigen Umgebung gehoert, wandert nach R4DOS/. Alles, was fuer R4Desk
+entwickelt wird, wandert nach R4DESK/. Dadurch werden Shell, Desktop,
+Konfigurationen, Assets und spaetere Framework-Bestandteile sichtbar getrennt.
+
+Geplante Zielstruktur im Boot-Image:
+
+- R4DOS/COMMAND.R4X fuer die DOS-artige Shell.
+- R4DOS/COMMAND.R4S fuer die Shell-Konfiguration.
+- AUTOEXEC.BAT bleibt wie CONFIG.R4S systemweit im Root des Images.
+- SYS/FONTS/ bleibt der bevorzugte Ort fuer gemeinsame Systemfonts.
+- R4DOS/FONTS/ nur fuer Shell-spezifische Font-Overrides, falls sie spaeter
+  gebraucht werden.
+- R4DESK/DESK.R4X fuer R4Desk.
+- R4DESK/R4DESK.R4S fuer Desktop-Konfiguration.
+- R4DESK/THEMES/ fuer Desktop-Farben, Rahmen, Cursor und spaetere
+  Designressourcen.
+- R4DESK/APPS/ oder R4DESK/MENU.R4S fuer Desktop-Startmenue-Eintraege und
+  Desktop-nahe App-Verknuepfungen.
+- R4DESK/ICONS/ fuer Desktop- und Startmenue-Icons.
+- R4DESK/CURSORS/ fuer Mauszeiger-Varianten.
+- R4DESK/DESKTOP.R4S fuer Desktop-Icons, Hintergrund und sichtbare
+  Verknuepfungen.
+- R4DESK/APPS/*.R4L oder ein vergleichbares Shortcut-/Launch-Format fuer
+  Zielpfad, Titel, Icon, Arbeitsverzeichnis und Anwendungsklasse.
+- R4DESK/ICONS/*.ICO fuer Windows-kompatible 16x16/32x32-Symbole mit
+  einfacher Transparenz.
+- R4DESK/FONTS/ nur fuer Desktop-spezifische Font-Overrides, falls SYS/FONTS/
+  nicht ausreicht.
+
+Bestehende Pfade wie /bin/command.r4x, /bin/notepad.r4x und Konfigurationsdateien
+im Wurzelverzeichnis koennen fuer eine Uebergangsphase als Kompatibilitaetspfad
+erhalten bleiben. Neue 0.8.X-Arbeit soll aber die R4DOS-/R4DESK-Struktur als
+Ziel behandeln.
+
+Normale Benutzerprogramme muessen nicht zwangsweise nach R4DESK/ verschoben
+werden. R4DESK/ enthaelt die Desktop-Umgebung selbst, ihre Konfigurationen,
+System-Apps und Verknuepfungen. Allgemeine R4X-Programme liegen im
+Projekt unter Code/Software und koennen im Image weiterhin an einem
+allgemeinen App-/Bin-Pfad liegen, solange R4Desk sie starten und im
+Startmenue verlinken kann.
+
+
+Version 0.8.0
+-------------
+
+Status: Erledigt
+
+Offene Punkte:
+
+Erledigt:
+- R4Desk als DESK.R4X in den Build aufgenommen und nach /R4DESK/DESK.R4X
+  kopiert.
+- R4Desk von der alten Script-/Emitter-Bruecke auf direkten Zig/SDK-Code
+  unter Code/Software/Desk umgestellt.
+- DESK.R4X wird zentral ueber Code/build.zig gebaut und verpackt.
+- Code/SDK dokumentiert und als Grundlage fuer R4OS-Anwendungen und Treiber
+  eingefuehrt.
+- Build-Pipeline auf DevTools/Scripts/Build.bat vereinheitlicht; -norun baut
+  nur das Image, -gui startet QEMU sichtbar fuer lokale Tests.
+- Projektstruktur nach 0.7 bereinigt: Code/ enthaelt Kernel, BuildTools,
+  Software, Driver, Fonts und SDK; DevTools/ enthaelt lokale Werkzeuge.
+- Injection/Temp ist der vorgesehene Temp-/Testdatei-Pfad im fertigen Image.
+- R4X/R4D-Module werden ohne FPU/SSE gebaut, solange der Kernel noch keine
+  vollstaendige FPU-/SSE-Umgebung fuer Anwendungen bereitstellt.
+- Boot-Konfiguration auf R4Desk als Standardoberflaeche gesetzt.
+- Nach dem Boot startet R4Desk, ohne COMMAND.R4X automatisch zu oeffnen.
+- Systemordner R4DOS/ und R4DESK/ im Boot-Image angelegt.
+- COMMAND.R4X und COMMAND.R4S zusaetzlich unter R4DOS/ ins Image kopiert.
+- R4Desk zeichnet einen ersten Desktop mit Hintergrund, Mauszeiger und unterer
+  Taskbar.
+- Limine-Startkonfiguration fordert fuer R4Desk 1280 x 720 x 32 bpp an.
+- Links unten ist ein R4OS-Button sichtbar, rechts unten ein Uhr-Platzhalter.
+- Vorhandenes Font-System fuer R4Desk-Textausgabe initial genutzt.
+- ProgramApi um task_yield und sleep_ticks erweitert, damit R4Desk
+  kooperativ dauerhaft laufen kann.
+- HDA-Startkonfiguration ebenfalls auf R4Desk umgestellt, damit
+  Build.bat -gui nicht mehr COMMAND.R4X als Start-Shell nutzt.
+
+Notizen:
+- 0.8.0 ist der konsolidierte Wiedereinstiegspunkt nach 0.7. Die alte
+  Desktop-Roadmap wird inhaltlich fortgesetzt, aber nicht mehr mit den alten
+  Script- und Ordnerannahmen.
+- 0.8.0 darf noch ohne echte App-Fenster starten. Wichtig ist, dass R4Desk der
+  neue Einstiegspunkt wird und stabil bedienbar bleibt.
+- R4Desk soll nicht wie ein Boot-Splash wirken, sondern wie die eigentliche
+  Arbeitsoberflaeche.
+- Headless-QEMU erreicht den Start von /R4DESK/DESK.R4X mit 1280 x 720
+  Framebuffer.
+- Die sichtbare QEMU-Abnahme wurde nach dem HDA-Config-Fix vom Nutzer
+  bestaetigt.
+
+
+Version 0.8.1
+-------------
+
+Status: Erledigt
+
+Offene Punkte:
+
+Erledigt:
+- R4Desk ist als direkte Zig-Anwendung in sinnvolle Module aufgeteilt:
+  main.zig, app.zig, draw.zig, window.zig, start_menu.zig, theme.zig und
+  model.zig.
+- R4Desk besitzt ein eigenes compositor.zig, das Desktop, Fenster, Taskbar,
+  Startmenue, Dialoge und Cursor in einer klaren Layer-Reihenfolge
+  zusammensetzt. app.zig bleibt damit fuer Zustand und Eingaben zustaendig,
+  waehrend draw.zig die Low-Level-Zeichenoperationen kapselt.
+- Event-getriebener Redraw reduziert das sichtbare Vollbildflackern gegenueber
+  dem alten Schleifen-Refresh deutlich.
+- Erste interne Demo-Fenster fuer Testzwecke erzeugt.
+- Fensterrahmen im Windows-95-inspirierten Stil gezeichnet.
+- Fenstertitel mit gemeinsamem R4Desk-Textpfad gezeichnet.
+- Titelleiste mit Buttons fuer Minimieren, Maximieren/Wiederherstellen und
+  Schliessen sichtbar eingebaut.
+- Aktives und inaktives Fenster optisch ueber Fokusfarbe unterschieden.
+- Taskbar zeigt erste Fenster-/Task-Eintraege als Spiegel der Fensterliste.
+- Desktop-Loop liest Mauszustand und erkennt linke Klicks mit einfachem
+  Rising-Edge-Check.
+- Fenster koennen per Maus fokussiert und in der Zeichenreihenfolge nach vorn
+  geholt werden.
+- Fenster koennen per Titelleiste verschoben werden; maximierte Fenster
+  bleiben fest, normale Fenster werden auf die Arbeitsflaeche oberhalb der
+  Taskbar begrenzt.
+- Fenster koennen per Rahmen und Ecken in der Groesse geaendert werden;
+  Mindestgroessen und Desktop-Arbeitsflaeche begrenzen das Resize stabil.
+- Erste Surface-Abstraktion angelegt: Desktop, Taskbar, Fensterrahmen,
+  Titelleiste und Clientflaeche laufen ueber gemeinsame Rechteck-/Surface-
+  Typen; spaetere Cursor-, Icon- und App-Surfaces haben damit einen
+  Andockpunkt.
+- Dirty-/Invalidierungslogik vorbereitet: R4Desk sammelt Damage-Rechtecke,
+  Move/Resize/Fokus/Taskbar markieren alte und neue Bereiche; der aktuelle
+  Renderer komponiert noch vollstaendig, hat aber die Basis fuer spaetere
+  Partial-Redraws.
+- Maus-Cursor in den R4Desk-Compositor gezogen: R4Desk liest nur noch den
+  Mauszustand aus der R4X-Maus-API, haelt den Kernel-Cursor verborgen und
+  zeichnet den sichtbaren Zeiger als eigene Cursor-Surface nach Desktop,
+  Fenstern, Taskbar, Menue und Dialogen.
+- Aktiver Taskbar-Eintrag wechselt passend zum fokussierten Fenster.
+- Taskbar-Schaltflaechen nehmen am Fokus-Hit-Test teil und koennen das
+  zugehoerige Demo-Fenster fokussieren.
+- Minimize-Buttons koennen Demo-Fenster verstecken.
+- Taskbar-Schaltflaechen koennen minimierte Demo-Fenster wiederherstellen.
+- Maximize-Buttons koennen Demo-Fenster zwischen Normalgroesse und maximierter
+  Arbeitsflaeche umschalten.
+- Close-Buttons koennen Demo-Fenster aus Desktop und Taskbar entfernen.
+- R4Desk nutzt intern getrennte Fokus-, Sichtbarkeits- und Task-Masken fuer
+  die ersten Demo-Fensterzustaende.
+- R4Desk nutzt intern eine Maximize-Maske fuer den ersten
+  Maximieren/Wiederherstellen-Zustand.
+- R4OS-Button kann ein erstes Startmenue aufklappen.
+- Startmenue zeichnet vorbereitete Eintraege fuer R4DOS, Notepad, R4Synth,
+  Run, Settings und Halt.
+- Startmenue-Eintrag R4DOS Terminal kann das Terminal-Demo-Fenster als Task
+  oeffnen oder wiederherstellen.
+- /R4DESK/MENU.R4S wird als vorbereitete Startmenue-Konfiguration ins
+  Boot-Image kopiert.
+
+Notizen:
+- In dieser Phase muessen Fenster noch keine echten R4X-Anwendungen hosten.
+  Entscheidend ist ein belastbares Fenstermodell.
+- 0.8.1 arbeitet bewusst noch mit internen Demo-Fenstern. Move-, Resize- und
+  App-Close-Request-Logik folgen darauf und sollen direkt in der neuen
+  Zig-Modulstruktur landen.
+
+
+Version 0.8.2
+-------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Taskbar zeigt sichtbare Demo-Fenster/Tasks und kann sie fokussieren oder
+  wiederherstellen.
+- Erste Taskbar-Fokus-/Restore-Mechanik fuer R4Desk-Demo-Fenster bereits in
+  0.8.1 vorbereitet.
+- Erste Minimieren-/Wiederherstellen-Mechanik fuer R4Desk-Demo-Fenster
+  bereits in 0.8.1 vorbereitet.
+- R4OS-Button mit erstem aufklappendem Startmenue bereits in 0.8.1
+  vorbereitet.
+- Startmenue-Eintraege fuer R4DOS, Notepad, R4Synth, Run, Settings, Tasks und
+  Halt als sichtbare Defaults vorbereitet.
+- Startmenue-Eintrag R4DOS Terminal stellt bereits in 0.8.1 das
+  Terminal-Demo-Fenster wieder her.
+- R4Desk-Startmenue-Konfiguration unter /R4DESK/MENU.R4S vorbereitet und ins
+  Boot-Image kopiert.
+- Startmenue aus /R4DESK/MENU.R4S geladen: R4Desk liest ITEM- und
+  ACTION-Zeilen beim Start, zeigt die enthaltenen Titel und Policy-Badges und
+  faellt bei fehlender oder unbrauchbarer Datei auf stabile eingebaute
+  Defaults zurueck.
+- Startmenue-/Shortcut-Eintraege mit erster Launch-Policy vorbereitet:
+  `console`, `gui` und `auto` koennen aus MENU.R4S gelesen werden; `action`
+  bleibt nur ein sichtbarer Marker fuer Desktop-Systemaktionen.
+- R4DOS/COMMAND.R4X aus /R4DOS/ als Console-Launch-Eintrag platziert:
+  R4Desk startet es nicht automatisch, liest aber Titel, Pfad und Policy aus
+  MENU.R4S und uebergibt diese Daten beim Klick an den vorbereiteten
+  Terminal-/Console-Host.
+- Console-Launch-Vertrag fuer Startmenue-Eintraege vorbereitet:
+  R4Synth nutzt denselben Console-Pfad wie R4DOS und zeigt im Terminal-
+  Demo-Fenster den aus MENU.R4S kommenden Zielpfad. Echte R4X-App-Instanzen
+  folgen spaeter.
+- Startmenue-Eintrag Run oeffnet einen ersten internen Ausfuehren-Dialog als
+  Desktop-Overlay mit Platzhalterpfad und OK/Cancel/Browse-Buttons.
+- Ausfuehren-Dialog um echte Texteingabe erweitert: Pfadtext wird in einem
+  kleinen wiederverwendbaren Textfeld gehalten, Backspace bearbeitet den
+  Inhalt, Enter oder OK uebergeben den Pfad an den vorbereiteten
+  Terminal-/Console-Host, Cancel/Escape schliessen den Dialog.
+- Ausfuehren-Dialog an echte R4X-Programmausfuehrung angebunden:
+  ProgramApi Version 14 haengt `program_run(path, args)` an, der Kernel
+  startet darueber ein R4X-Vordergrundprogramm ueber den bestehenden Loader
+  und R4Desk nutzt diese Funktion beim OK/Enter im Run-Dialog.
+- Ausfuehren-Dialog um einfache Argumentuebergabe und Fehlerdetails erweitert:
+  R4Desk trennt den eingegebenen Text in Programmpfad und Argumentstring,
+  unterstuetzt quoted paths fuer Pfade mit Leerzeichen und zeigt getrennte
+  Meldungen fuer ungueltige Eingaben, nicht gefundene Programme und
+  Loaderfehler.
+- Ausfuehren-Dialog um ersten Browse-Pfad erweitert: Browse scannt C:\BIN
+  ueber ProgramApi `dir_entry`, waehlt zyklisch das naechste `.R4X`-Programm
+  aus und traegt den Pfad direkt in das Eingabefeld ein. Mehrstufige
+  Ordnernavigation bleibt ein spaeterer Komfortausbau.
+- Startmenue-Eintraege Notepad, R4Synth und Settings zeigen erste modale
+  Hinweisdialoge, damit diese sichtbaren Default-Menuepunkte reagieren.
+- Halt ist an den echten Kernel-Halt-Pfad angebunden: ProgramApi Version 12
+  haengt `system_halt()` an, R4Desk ruft diese Funktion beim Halt-Menuepunkt
+  auf und kehrt danach nicht zur Anwendung zurueck.
+- Restart ist an einen echten x86-Resetpfad angebunden: ProgramApi Version 13
+  haengt `system_reboot()` an, der Kernel nutzt den Keyboard-Controller-
+  Resetbefehl 0xFE und R4Desk ruft diese Funktion beim Restart-Menuepunkt auf.
+- Poweroff ist an einen echten Abschaltpfad angebunden: ProgramApi Version 15
+  haengt `system_poweroff()` an, der Kernel versucht den QEMU/i440FX-
+  ACPI-PM-Control-Port 0x604 und verwandte Emulator-Poweroff-Ports und faellt
+  danach in den Kernel-Halt-Pfad zurueck. R4Desk ruft diese Funktion beim
+  Poweroff-Menuepunkt auf.
+- App-/Task-Ueberblick an den echten R4X-Laufzeitstatus angebunden:
+  ProgramApi Version 16 haengt `program_status(out)` an. R4Desk zeigt im
+  Tasks-Dialog neben den internen Desktop-Fenstern auch Shell-Task,
+  Vordergrundlauf, Display-Nutzung des letzten Programmlaufs und letzten
+  Exit-Code. Echte Desktop-App-Instanzen und Fensterhosting folgen in
+  spaeteren Versionen.
+- Startmenue-Eintrag Tasks oeffnet einen ersten App-/Task-Ueberblick, der
+  fuer die aktuellen R4Desk-Demo-Fenster Status und aktiven Fokus zeigt.
+- R4Desk zeichnet den Task-Ueberblick aus den vorhandenen Fokus-,
+  Sichtbarkeits- und Task-Masken statt als rein statischen Hinweistext.
+- Taskbar-Uhr rechts unten in 0.8.2 zunaechst von einem statischen
+  Platzhalter auf eine laufende Uptime-Anzeige umgestellt.
+- R4Desk nutzte dafuer ProgramApi ticks als erstes Redraw-/Taskbar-Fundament.
+- Taskbar-Uhr wurde spaeter ueber den RTC-/CMOS-Zeitpfad auf HH:MM
+  umgestellt.
+- Startmenue-Eintraege zeigen erste sichtbare Policy-Badges fuer console, gui
+  oder action passend zur vorbereiteten MENU.R4S-Struktur.
+- Startmenue verfolgt den Eintrag unter der Maus als menu_hover_id und zeichnet
+  ihn im klassischen blauen Auswahlstil neu.
+- Startmenue faengt Klicks modal ab: Innenklicks bleiben im Menue, Klicks
+  ausserhalb schliessen es ohne Durchklick auf Fenster dahinter.
+
+Notizen:
+- Das Startmenue ist der zentrale Einstieg fuer Desktop-Programme. Es ersetzt
+  nicht die Shell, sondern macht sie bewusst aufrufbar.
+- Der Ausfuehren-Dialog startet R4X-Programme als Vordergrundlauf ueber
+  ProgramApi `program_run()`. Echte Desktop-App-Instanzen und Fensterhosting
+  folgen weiterhin separat.
+- Die Hinweisdialoge sind bewusst Platzhalter fuer Launch-/Power-Pfade. Sie
+  verhindern, dass Menuepunkte tot wirken, ohne eine falsche App-Ausfuehrung
+  vorzutäuschen.
+- Die 0.8.2-Uptime war der erste Redraw-/Taskbar-Zwischenschritt; der
+  RTC-/CMOS-Zeitpfad ist inzwischen vorhanden und gehoert zum 0.8-Baseline-
+  Stand.
+- `action` ist keine Anwendungsklasse, sondern nur ein sichtbarer Hinweis auf
+  eine Desktop-Systemaktion. App-Klassen bleiben console und gui; auto bleibt
+  ein spaeterer Launch-Fallback.
+- Die Hover-Auswahl ist noch keine vollstaendige Menue-Navigation per
+  Tastatur, bereitet aber den gemeinsamen Auswahlzustand fuer Maus und
+  spaetere Tastaturbedienung vor.
+- Die Startmenue-Modalitaet ist bewusst klein gehalten. Sie schuetzt zunaechst
+  vor versehentlichen Fensteraktionen, ohne schon ein allgemeines
+  Modal-/Popup-Framework vorauszusetzen.
+
+
+Version 0.8.3
+-------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- RTC-/CMOS-Zeitpfad fuer Sekunden, Minuten und Stunden eingebaut.
+- ProgramApi auf Version 11 erweitert und
+  time_seconds_since_midnight() hinten angehaengt.
+- R4Desk-Uhr von Uptime MM:SS auf RTC-/CMOS-basierte HH:MM-Anzeige umgestellt.
+- Taskbar-Uhr aktualisiert minutenweise ueber den Desktop-Redraw-Pfad.
+- Escape schliesst als erste Desktop-Taste offene Startmenues, Run-Dialoge
+  und Hinweis-/Task-Dialoge.
+- Enter aktiviert im offenen Startmenue den aktuell hervorgehobenen Eintrag
+  ueber denselben Desktop-Aktionspfad wie ein Mausklick.
+- Pfeil hoch/runter bewegen die Startmenue-Auswahl zyklisch durch die
+  vorbereiteten Eintraege und erhalten die Tastaturauswahl auch dann, wenn die
+  Maus gerade nicht ueber einem Menueeintrag steht.
+- Ctrl+Esc als erster globaler Desktop-Shortcut eingebaut: Keyboard liefert
+  KEY_CTRL_ESC und R4Desk oeffnet oder schliesst damit das Startmenue.
+- F3 als Diagnose-Hotkey fuer denselben Startmenue-Toggle verdrahtet, damit
+  der Startmenuepfad unabhaengig vom Mauspfad getestet werden kann.
+- M als offenen Diagnose-Hotkey ergaenzt: oeffnet das Startmenue ohne Toggle,
+  damit Key-Repeat es beim Testen nicht sofort wieder schliesst.
+- Ctrl+Esc und F3 fuer die Diagnose ebenfalls auf Open-only gestellt; Escape
+  bleibt der kontrollierte Schliessen-Pfad.
+- Sichtbaren gelben Build-Marker `BUILD MARK 2026-05-01 A` auf dem Desktop
+  ergaenzt, damit alte Images und aktuelle DESK.R4X-Staende sofort
+  auseinandergehalten werden koennen.
+- Voruebergehend direkt geoeffnetes Startmenue plus KEY-/MOUSE-Diagnosefelder
+  ergaenzt, um Startmenue-Zeichnung, Tastaturpfad und Mauspfad getrennt zu
+  pruefen.
+- Diagnosepfad aus dem normalen Build herausgezogen:
+  R4Desk startet wieder mit geschlossenem Startmenue und ohne sichtbaren
+  Build-/KEY-/MOUSE-Marker. Lokale Diagnoseanzeigen und Test-Hotkeys sollen
+  bei Bedarf gezielt im Zig-Code aktivierbar bleiben; Ctrl+Esc bleibt der
+  normale globale Startmenue-Shortcut.
+- Startmenue-Prioritaet bei offener Menueflaeche ergaenzt: das offene
+  Popup konsumiert Mausereignisse vor dem globalen Router und verhindert
+  Durchklicks auf Fenster dahinter.
+- Startmenue-Mauspfad auf erste Press/Release-Semantik umgestellt:
+  Button-Down speichert ein stabiles UI-Ziel, Button-Release aktiviert nur,
+  wenn derselbe Menuepunkt wieder getroffen wird. Maus und Enter nutzen
+  damit dieselben Desktop-Command-Pfade.
+- Gemeinsamen Startmenue-Command-Dispatcher eingefuehrt:
+  Enter und Maus-Release laden nur noch eine Menue-Command-ID und nutzen fuer
+  R4DOS, Notepad, R4Synth, Run, Settings, Tasks, Restart, Poweroff und Halt
+  denselben
+  Dispatch-Pfad.
+- Gemeinsamen Desktop-Command-Dispatcher eingefuehrt:
+  Dialogbuttons, Fenster-Chrome, Fensterfokus, Taskbar-App-Buttons und
+  R4OS-Button laden beim Release nur noch eine Command-ID und laufen durch
+  `dispatchDesktopCommand`.
+- Enter aktiviert offene Desktop-Dialoge ueber denselben
+  `dispatchDesktopCommand`-Pfad wie der jeweilige OK-/Default-Button.
+- Ersten Dialog-Fokus eingefuehrt: Run-Dialog nutzt Tab zum Wechsel zwischen
+  OK und Cancel, Einzelbutton-Dialoge halten OK als Default-Fokus.
+- Dialogbuttons synchronisieren ihren Maus-Down mit `dialog_focus`: OK,
+  Cancel und Einzelbutton-Dialoge teilen sich dadurch denselben Fokuszustand
+  fuer Maus, Tab und Enter.
+- Shift+Tab als eigenen Keyboard-Systemcode `KEY_SHIFT_TAB` eingefuehrt und
+  im R4Desk-Dialogfokus akzeptiert. Run-Dialoge koennen dadurch vorwaerts und
+  rueckwaerts ueber denselben Fokuspfad wachsen.
+- Alt-Tastenstatus im Keyboard-Treiber eingefuehrt und `KEY_ALT_TAB` sowie
+  `KEY_ALT_F4` als System-Keycodes bereitgestellt.
+- R4Desk nutzt Alt+Tab zum Wechseln zwischen sichtbaren Demo-Fenstern und
+  Alt+F4 zum Schliessen des aktiven Fensters bzw. des offenen Menues oder
+  Dialogs.
+- `KEY_ALT_SHIFT_TAB` eingefuehrt und im R4Desk-Fensterwechselpfad
+  akzeptiert. Im aktuellen Zwei-Fenster-Desktop entspricht das noch Alt+Tab,
+  bereitet aber die spaetere Rueckwaertsrotation ueber echte Fensterlisten vor.
+- Fenster-Close-Kommandos von Maus-Hit-Rects getrennt: Maus-Release und
+  Alt+F4 laufen jetzt ueber dieselbe Close-Aktion, ohne dass der Mauszeiger
+  fuer Tastaturbedienung auf dem X liegen muss.
+- Eigenen `keyboard_focus`-Desktop-Lokalslot eingefuehrt. Fensterfokus setzt
+  ihn zunaechst synchron mit dem aktiven Fenster; der Tasks-Dialog zeigt
+  Active Focus und Keyboard Focus getrennt als Fundament fuer spaetere
+  App-/Control-Fokusziele.
+- Erste strukturierte Desktop-Event-Slots eingefuehrt:
+  `event_kind` und `event_key` kapseln gelesene Tastaturereignisse, waehrend
+  `last_key` nur noch als Diagnose-Spiegel bleibt. Die bestehenden
+  Tastaturpfade lesen damit nicht mehr direkt aus dem rohen Keybyte.
+- Mausflanken in denselben Event-Rahmen gezogen:
+  `event_kind` unterscheidet jetzt `none`, `keyboard`, `mouse_down` und
+  `mouse_up`. Die Startmenue- und Desktop-Mausrouter reagieren auf diese
+  vorbereiteten Events statt selbst Buttonflanken aus `prev_buttons` zu
+  berechnen.
+- Minutenwechsel der Taskbar-Uhr als ersten Timer-Event vorbereitet:
+  `event_kind=timer` wird gesetzt, sobald sich die RTC-Minute aendert; der
+  eigentliche Redraw laeuft danach ueber einen eigenen Timer-Event-Handler.
+- Tick-Snapshot fuer Event-Timing vorbereitet:
+  R4Desk speichert pro Loop `event_tick` aus ProgramApi `ticks()` und merkt
+  bei `mouse_down` `last_mouse_down_tick`. Darauf koennen Doppelklickfenster,
+  Key-Repeat und Blink-Timer aufsetzen.
+- Erstes Doppelklick-Zeitfenster vorbereitet:
+  Zwei `mouse_down`-Events innerhalb von 25 PIT-Ticks setzen
+  `double_click_pending`. Das Flag loest noch keine Aktion aus, sondern dient
+  spaeter Desktop-Icons und GUI-Controls als stabiler Eingabestatus.
+- Erstes Blink-Timing vorbereitet:
+  `blink_phase` wird aus `event_tick` abgeleitet und wechselt alle 50
+  PIT-Ticks zwischen 0 und 1. Noch ohne sichtbaren Effekt, aber bereit fuer
+  Textcursor, Fokusrahmen und spaetere Controls.
+- Ersten Key-Repeat-Anker vorbereitet:
+  Bei einem Keyboard-Event wird `last_key_tick` aus `event_tick` gesetzt und
+  `key_repeat_armed` markiert. Noch ohne automatische Wiederholung, aber als
+  Basis fuer spaetere Menue-/Control-Repeat-Logik.
+- Ersten expliziten Event-Verbrauchsstatus eingefuehrt:
+  `event_consumed` wird pro Desktop-Loop geloescht und von ausgefuehrten
+  Tastatur-, Maus- und Timer-Aktionen gesetzt. Aktionspfade springen dafuer
+  ueber eine gemeinsame `consumeEvent`-Marke in den Loop-Nachlauf.
+- Erste Event-Ziel- und Besitzer-Slots vorbereitet:
+  Maus-Hit-Zonen setzen nun `event_target` und `event_owner`. Damit kann der
+  spaetere Dispatcher Ziel-ID und Besitzerbereich wie Startmenue, Dialog,
+  Fenster, Taskbar oder Desktop getrennt auswerten.
+- Dialog-Backdrops als eigene Event-Ziele vorbereitet:
+  Run- und Hinweis-/Task-Dialoge setzen bei Modal-Klicks ausserhalb der
+  Buttons stabile Backdrop-Ziele und konsumieren diese als Dialog-Events.
+- Startmenue-Panel und -Backdrop als Popup-Ziele benannt:
+  Innen- und Aussenklicks im offenen Startmenue laufen nun ueber semantisch
+  getrennte Zielnamen, bleiben aber auf den stabilen IDs 50 und 51.
+- Erste Hit-Test-Z-Reihenfolge vorbereitet:
+  `event_layer` ordnet getroffene UI-Ziele den Layern Desktop, Taskbar,
+  Fenster, Dialog und Popup/Startmenue zu.
+- Desktop-Eventloop in der aktuellen Zig-R4Desk-Struktur weiter geordnet:
+  `app.zig` pollt Keyboard, Mouse und Timer jetzt als explizite Event-Frames
+  und verarbeitet sie ueber einen gemeinsamen `dispatchEvent()`-Pfad. Redraw
+  bleibt danach zentral im Loop-Nachlauf.
+- Doppelklick-/Klickzustand und einfache Repeat-/Blink-Timer aus dem alten
+  Modellstand in die aktive R4Desk-Runtime ueberfuehrt:
+  `app.zig` speichert pro strukturiertem Event eine fortlaufende Event-ID,
+  einen Tick-Snapshot, Quelle, Modifier, Mausposition, Ziel-ID, Klickanzahl
+  sowie vorbereitete Key-Repeat- und Blink-Anker.
+- Ersten Tastaturfokus in der aktiven R4Desk-Runtime eingefuehrt:
+  `keyboard_focus` folgt Dialogen, Fenstern und Taskbar-Fokus, waehrend
+  `dialog_focus` im Run-Dialog Eingabe, Browse, OK und Cancel unterscheidet.
+- Run-Dialog per Tastatur bedienbarer gemacht:
+  Tab und Shift+Tab wechseln zwischen Eingabe, Browse, OK und Cancel; Enter
+  aktiviert das fokussierte Ziel.
+- Alt+Shift+Tab als Rueckwaertsrotation fuer sichtbare Desktop-Fenster
+  verdrahtet; Alt+Tab rotiert weiter vorwaerts.
+- Direkten R4Desk-`click()`-Block durch erste Press/Release-Commands ersetzt:
+  MouseDown speichert `mouse_down_target`, bereitet Fokus, Menueauswahl oder
+  Drag/Resize vor, und MouseUp aktiviert nur bei gleichem Ziel ueber
+  `dispatchMouseCommand`.
+- Startmenue, Dialogbuttons, Taskbar-Schaltflaechen und Fenster-Chrome im
+  Mauspfad auf stabile Command-IDs umgestellt, statt Aktion und Hit-Test im
+  alten Direktklickblock zu mischen.
+- Sichtbare Pressed-Zustaende an den aktuellen Maus-Command-Pfad gehaengt:
+  `mouse_down_target` wird an den Compositor uebergeben, sodass Startbutton,
+  Startmenueeintraege, Dialogbuttons, Taskbar-Schaltflaechen und
+  Fensterbuttons im gedrueckten Zustand eingedrueckt gezeichnet werden.
+- Ersten sichtbaren Hover-Zustand an stabile UI-Ziele gehaengt:
+  `hover_target` folgt dem aktuellen Hit-Test-Ziel und wird an den Compositor
+  uebergeben, sodass Startmenue, Dialogbuttons, Taskbar und Fensterbuttons
+  vorbereitete Mausziele getrennt von Pressed markieren koennen.
+- Ersten Popup-/Modal-Capture-Pfad in der aktiven Runtime verdrahtet:
+  offene Dialoge setzen Event-Capture auf `dialog`, das Startmenue auf
+  `start_menu`; Backdrop-Ziele schliessen ueber denselben Mouse-Command-Pfad
+  das aktive Popup oder Modal.
+- Tastaturaktivierungen in den gemeinsamen Command-Pfad gezogen:
+  Enter, Escape, Ctrl+Esc, Leertaste sowie die Hotkeys R/T/D werden jetzt auf
+  stabile UI-Ziele abgebildet und laufen wie Maus-Release ueber
+  `dispatchCommand()`.
+- Event-Zielmetadaten fuer Keyboard- und Hotkey-Kommandos angeglichen:
+  `dispatchCommand()` setzt bei Bedarf Target, Owner und Layer, sodass Maus,
+  Enter und Hotkeys denselben Zielvertrag benutzen.
+- Ziel-/Command-Vertrag in das getestete R4Desk-Modell gezogen:
+  `Event.activateTarget()` setzt Zielmetadaten fuer Keyboard-Kommandos und
+  bewahrt vorhandene Maus-Hit-Test-Ziele; die Modelltests decken beide Faelle
+  ab.
+- Tastaturfokus, Popup-/Modal-Capture, Hover, Press/Release, Zielmetadaten
+  und gemeinsame Command-Aktivierung bilden jetzt den abgeschlossenen
+  0.8.3-Unterbau. Echte App-/Control-Fokusziele, zentrale Event-Queues,
+  gemeinsame Hit-Test-Registries und GUI-Control-Bausteine wachsen in 0.8.4
+  und 0.8.5 weiter, sobald App-Instanzen und GUI-API entstehen.
+- Ersten Hit-Test-Aktivstatus vorbereitet:
+  `event_flags` enthaelt ein Enabled-Bit fuer getroffene UI-Ziele, damit
+  spaetere disabled Controls im gleichen Ziel-/Layer-Pfad bleiben koennen.
+- Mausposition in den strukturierten Mouse-Event uebernommen:
+  `event_mouse_x` und `event_mouse_y` speichern bei `mouse_down` und
+  `mouse_up` eine Kopie der Position; andere Events behalten `-1/-1`.
+- Mausbutton in den strukturierten Mouse-Event uebernommen:
+  `event_button` unterscheidet zunaechst `0=none` und `1=left`, damit
+  spaetere weitere Maustasten denselben Event-Pfad nutzen koennen.
+- Command-Slot fuer Event-Aktivierungen vorbereitet:
+  `event_command` speichert den stabilen Command, den Startmenue- und
+  Desktop-Dispatcher aus Maus, Enter oder Hotkey ableiten.
+- Aktivierungsquelle fuer Events und Commands vorbereitet:
+  `event_source` unterscheidet none, mouse, keyboard, enter, hotkey und timer,
+  damit spaetere Dispatcher Aktionen nach Herkunft auswerten koennen.
+- Fortlaufende Event-ID vorbereitet:
+  `event_id` markiert echte Keyboard-, Maus- und Timer-Events eindeutig,
+  waehrend `0` fuer keinen aktiven Event steht.
+- Klickanzahl im Mouse-Event vorbereitet:
+  `event_click_count` markiert MouseDown als einfachen Klick oder
+  Doppelklick-Kandidaten und nutzt dafuer das bestehende Doppelklickfenster.
+- Dispatch-Phase fuer Events vorbereitet:
+  `event_phase` markiert none, captured, targeted, activated und consumed,
+  damit der spaetere Dispatcher Hit-Test, Command-Ableitung und Verbrauch
+  getrennt nachvollziehen kann.
+- Modifier-Bitfeld fuer Keyboard-Events vorbereitet:
+  `event_modifiers` bildet Ctrl, Shift und Alt fuer vorhandene System-Keycodes
+  ab. Echte Roh-Modifier fuer normale Textzeichen bleiben ein spaeterer
+  Keyboard-/Eventpfad.
+- Eingabe-Capture fuer Popup-/Modal-Zustand vorbereitet:
+  `event_capture_owner` und `event_capture_layer` markieren pro Loop, ob ein
+  Dialog oder das Startmenue die Eingabe besitzt. Dialoge haben Vorrang vor
+  dem Startmenue, sonst bleibt die Capture leer.
+- Desktop-Eventloop in Dispatch-Phasen geordnet:
+  Tastatur- und Mausereignisse laufen nun ueber eigene Keyboard-/Mouse-
+  Dispatch-Bloecke. Der Loop ist damit klarer in Poll, Merge, Capture,
+  Dispatch und Redraw gegliedert.
+- Verbrauchsschranken in die Dispatch-Phasen eingebaut:
+  Keyboard-/Mouse-Dispatcher pruefen nach jedem Handler `event_consumed` und
+  reichen verbrauchte Events nicht an spaetere Handler desselben Blocks
+  weiter.
+- `dialog_focus` als eigenen Desktop-Lokalslot eingefuehrt und den
+  MouseApiState-Scratchbereich dahinter verschoben, damit Dialogfokus und
+  Maussnapshot getrennt bleiben.
+- Alte direkte Dialog-Dismiss-Hit-Helfer entfernt; Dialoge nutzen nun
+  Hit-Test, Ziel-ID und Command-Dispatch getrennt.
+- Globale Desktop-Mausaktionen auf Press/Release-Ziel-IDs umgestellt:
+  Dialogbuttons, Fensterbuttons, Fensterfokus, Taskbar-App-Buttons und der
+  R4OS-Button loesen Aktionen erst auf Release desselben UI-Ziels aus.
+- Alten direkten Desktop-Click-Router entfernt; Startmenue und Desktop-Chrome
+  laufen jetzt ueber getrennte Down-/Release-Router mit gemeinsamem
+  `mouse_down_target`.
+- Erste sichtbare Pressed-Zustaende eingebaut: gedrueckte Startmenuepunkte
+  werden dunkler gezeichnet, Fenster- und Dialogbuttons erhalten beim
+  Button-Down ein klassisches eingedruecktes Win95-Overlay.
+- Taskbar-Schaltflaechen und R4OS-Button erhalten ebenfalls ein
+  eingedruecktes Win95-Overlay, relativ zur echten Taskbar-Position.
+- Button-Down auf UI-Zielen triggert sofort ein Redraw, damit
+  `mouse_down_target` nicht nur intern gesetzt ist, sondern sichtbar wird.
+- Enter-Aktivierung im Startmenue auf den tatsaechlichen Tastatur-Newline-Code
+  korrigiert.
+- Startbutton- und Taskleisten-Hitbereiche auf die echte Taskbar-Position
+  umgestellt, statt feste 720p-Y-Koordinaten zu verwenden.
+- Internen R4Desk Window Manager aus der Taskbar-App-Liste entfernt; die
+  Taskbar zeigt nur noch normale App-/Demo-Fenster.
+- MouseApiState in R4Desk in einen eigenen Stack-Scratchbereich verschoben,
+  damit mouse_state() nicht mehr prev_buttons und weitere Desktop-Lokaldaten
+  ueberschreibt.
+- R4OS-Button laeuft ueber eine saubere Klickflanke: das Startmenue wird nicht
+  mehr schon im gedrueckten Zustand geoeffnet und dadurch direkt wieder
+  zugetoggelt.
+- R4X-Maus-API liefert kurze Maustastendruecke gelatcht bis zum naechsten
+  `mouse_state()` aus, damit schnelle Klicks im Desktop-Loop nicht verloren
+  gehen.
+- Zentrale Click-Zone-Struktur im alten R4Desk-Modell vorbereitet: der
+  Click-Router ordnet Chrome, Startmenue, Modals, Fenster und
+  Taskbar-App-Buttons an einer Stelle.
+- Startbutton-Auswertung im Click-Router ans Ende verschoben, damit der
+  Klick, der das Startmenue oeffnet, nicht im selben Durchlauf auch
+  Startmenue-Eintraege ausloesen kann.
+- R4Desk-Zig-Modell unter Code/Software/Desk/src/model.zig als
+  Referenz-/Testanker fuer UI-Ziele, Besitzer, Layer, Eventphasen,
+  Aktivierung und Event-Verbrauch erhalten.
+- R4Desk laeuft inzwischen ohne Script-Emitter als direkte Zig/SDK-R4X.
+- Aktive R4Desk-Laufzeit ist in Code/Software/Desk/src/app.zig, draw.zig,
+  window.zig, start_menu.zig und theme.zig aufgeteilt.
+- SDK-R4X-Buildpfad verpackt aus Zig gebaute R4Desk-Codebytes direkt in
+  DESK.R4X.
+
+Notizen:
+- Die RTC-Zeit wird zunaechst als direkte CMOS-Zeit behandelt. Zeitzonen,
+  Datumseinstellungen und persistente Uhr-Konfiguration koennen spaeter
+  folgen.
+- Escape, Pfeile, Enter und Ctrl+Esc bilden die ersten kleinen
+  Tastaturbedienpfade. Tab und weitere globale Kuerzel folgen in weiteren
+  0.8.3-Schritten, soweit sie in der aktuellen Zig-Runtime noch fehlen.
+- Die aktuelle Startmenue-/Klicklogik gilt als Diagnose- und Prototypstand.
+  Das beobachtete Fehlerbild zeigt, dass ad-hoc Hit-Rects und sofortige
+  Aktionen fuer R4Desk nicht reichen. Vor weiteren groesseren Desktop-Apps
+  soll ein kleines, aber klares GUI-/Event-Fundament entstehen.
+- Die langen Event-/Hit-Test-Erledigt-Punkte beschreiben groesstenteils den
+  alten Zwischenstand vor der 0.7-Migration. Sie bleiben als fachliche
+  Referenz erhalten; fuer 0.8 zaehlt, welche Teile sinnvoll in die aktive
+  Zig-Runtime uebernommen werden.
+- Interaktive Tests werden am Ende des robusteren Event-/GUI-Schritts wieder
+  gesammelt durchgefuehrt. Bis dahin haben Roadmap-Fortschritt und saubere
+  Struktur Vorrang vor Feintuning einzelner Klickpfade.
+- Cut-/Wiederaufnahme-Checkpoint vom 2026-05-01:
+  Die Arbeit an 0.8.3 wird bewusst pausiert, damit gravierende strukturelle
+  Aenderungen am Projekt vorgenommen werden koennen. Letzter bekannter
+  Arbeitsstand ist Commit `575391d R4Desk Startmenue Modell nach Zig
+  verschieben`. Dieser Stand ist historisch; durch 0.7 wurde die Migration
+  inzwischen ueberholt.
+- Wiederaufnahme-Fokus:
+  Zuerst die aktive Zig-R4Desk-Struktur weiterentwickeln. Neue Event-,
+  Hit-Test-, GUI- und App-Vertragslogik soll in Code/Software/Desk/src/ und
+  bei allgemeinem Nutzen im SDK entstehen.
+- Technischer Stand fuer den Wiedereinstieg:
+  Docs/Desktop/R4DeskStand.txt beschreibt den aktuellen R4Desk-Aufbau,
+  bekannte Risiken, offene Baustellen und die zuletzt erfolgreich
+  durchgefuehrten Pruefungen.
+- Der normale Build laeuft ueber DevTools/Scripts/Build.bat. Fuer
+  Desktop-Abnahmen ist -gui praktisch; fuer reine Build-Pruefungen reicht
+  -norun.
+- Abschluss 0.8.3:
+  Die alten Event-/Hit-Test-Ideen wurden in die aktive Zig-R4Desk-Runtime
+  uebernommen, soweit sie ohne echte App-Instanzen sinnvoll sind. Der Rest
+  bleibt bewusst Anschlussarbeit fuer 0.8.4/0.8.5 statt 0.8.3 kuenstlich zu
+  verlaengern.
+
+
+Version 0.8.4
+-------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- R4X-Laufzeit von den alten globalen `active_run`-/`active_shell`-Slots auf
+  interne Programminstanzen umgestellt:
+  Der Kernel haelt jetzt eine kleine Instanztabelle mit stabiler Instanz-ID,
+  Task-ID, Rolle, Anwendungsklasse, eigenem API-Table-Snapshot und
+  Laufzeitstatus.
+- Pro R4X-Instanz eigene Argumentkopie, Arbeitsverzeichnis, Exit-Code,
+  Display-Nutzungsstatus sowie vorbereitete Input-Queue- und Fenster-Slots
+  eingefuehrt. `program_run(path, args)` bleibt in diesem Schritt noch
+  synchron, nutzt aber bereits die neue Instanzstruktur.
+- Pro R4X-Instanz eine erste Anwendungsklasse vorbereitet:
+  Shell-Instanzen laufen als `console`, synchrone Vordergrundlaeufe vorerst
+  als `gui`, bis Launch-Policy und R4X-Metadaten feiner unterscheiden.
+- Auto-Launch vor dem Erzeugen der R4X-Instanz auf `console` oder `gui`
+  aufgeloest:
+  `program_run(path, args)` bleibt als kompatibler Auto-Launch erhalten,
+  waehrend ProgramApi Version 17 `program_launch(path, args, policy)` als
+  expliziten Pfad fuer `auto`, `console` und `gui` anhaengt.
+- Launch-Policy aus R4Desk-Startmenue und Run-Dialog an den Kernel uebergeben:
+  Der Run-Dialog nutzt `auto`, der Notepad-Startmenueeintrag nutzt seine
+  `gui`-Policy; Console-Menueeintraege bleiben sichtbar als Terminal-
+  Platzhalter, bis echte Console-App-Instanzen/Terminal-Hosting folgen.
+- R4XBuilder-/R4X-Metadaten fuer Anwendungsklassen vorbereitet:
+  `--app-class auto|console|gui` schreibt bekannte Header-Flags. Der Loader
+  akzeptiert diese Flags, lehnt unbekannte oder widerspruechliche Flags ab
+  und nutzt sie beim Auto-Launch als Klassifizierungsquelle.
+- Erstes App-Ende-/Task-Aufraeumen fuer die neue Instanztabelle vorbereitet:
+  Beendete Shell-/Hintergrundinstanzen werden beim naechsten Laufzeitstatus
+  oder vor einem neuen Start per Reaper aus der R4X-Instanztabelle geloest.
+  Dadurch bleiben tote Tasks nicht dauerhaft als Shell-/App-Slot haengen.
+- Kleinen App-/Task-Ueberblick erweitert:
+  `ProgramStatus` nutzt das bisher reservierte Byte als aktive
+  Instanzanzahl. R4Desk zeigt diese Zahl im Tasks-Dialog an.
+- Ersten asynchronen Startpfad fuer parallele R4X-Instanzen eingefuehrt:
+  ProgramApi Version 18 haengt `program_spawn(path, args, policy)` hinten an.
+  Die Funktion startet eine weitere kooperative Instanz, gibt sofort eine
+  positive Instanz-ID zurueck und nutzt denselben Auto-/Console-/GUI-
+  Klassifizierungspfad wie `program_launch`.
+- Ersten Close-/Kill-Vertrag fuer R4X-Instanzen eingefuehrt:
+  ProgramApi Version 19 haengt `program_request_close(instance_id)`,
+  `program_should_close()` und `program_kill(instance_id)` hinten an.
+  Damit kann R4Desk spaeter Fenster zuerst kooperativ schliessen lassen und
+  haengende Instanzen danach ueber einen technischen Notfallpfad beenden.
+- Konkreten Instanz-Snapshot fuer Diagnose, Taskbar und spaeteres
+  Fensterhosting eingefuehrt:
+  ProgramApi Version 20 haengt `program_instance(index, out)` hinten an.
+  R4Desk liest beim Oeffnen des Tasks-Dialogs bis zu drei aktive Instanzen
+  und zeigt ID, Rolle, Anwendungsklasse und Zustand an.
+- Erste Fensterzuordnung fuer R4X-Instanzen vorbereitet:
+  ProgramApi Version 21 haengt `program_set_window(instance_id, window_id)`
+  hinten an. R4X-Instanzen halten damit eine sichtbare Fenster-ID im
+  Instanz-Snapshot, und R4Desk-Fenster koennen eine Instanz-ID merken und
+  beim Schliessen zuerst einen kooperativen Close-Request senden.
+- R4Desk-Fenster-Close-Pfad fuer gebundene R4X-Instanzen stabilisiert:
+  Gebundene Fenster werden beim Schliessen nicht mehr sofort aus der
+  Fensterliste entfernt, sondern markieren einen Close-Request und bleiben bis
+  zum Verschwinden der Instanz sichtbar. Der Timer-Sync liest regelmaessig
+  `program_instance()`, aktualisiert fehlende `window_id`-Bindungen und
+  entfernt Fenster erst, wenn die zugeordnete Instanz aufgeraeumt wurde.
+- Ersten sichtbaren GUI-App-Slot in R4Desk verdrahtet:
+  GUI-Startmenueeintraege wie Notepad laufen nun ueber `program_spawn()`,
+  werden an das vorbereitete R4Desk-App-Fenster gebunden und setzen ihre
+  `window_id` ueber ProgramApi Version 21. Notepad beachtet
+  `program_should_close()`, damit ein Fenster-Close-Request die App
+  kooperativ beenden kann.
+- Gehostete GUI-App-Erkennung fuer R4X-Anwendungen vorbereitet:
+  ProgramApi Version 22 haengt `program_window_id()` hinten an. Eine laufende
+  App kann damit erkennen, ob R4Desk sie bereits an ein Fenster gebunden hat.
+  Notepad nutzt diesen gehosteten Modus, wartet dann nur noch auf
+  Close-Requests und zeichnet nicht mehr als altes Vollbildprogramm direkt in
+  den globalen Framebuffer.
+- Zweiten sichtbaren GUI-App-Slot in R4Desk vorbereitet:
+  R4Desk fuehrt nun zwei getrennt adressierbare GUI-App-Fenster. Der zweite
+  Slot besitzt eigene `app2_*`-UI-Ziele fuer Fensterflaeche, Close, Minimize,
+  Maximize und Taskbar, damit mehrere Nicht-Terminal-Fenster nicht mehr alle
+  ueber dieselben `wm_*`-Targets auf Slot 1 zurueckfallen.
+- Ersten Low-Level-GUI-Vertrag fuer gehostete R4X-Apps eingefuehrt:
+  ProgramApi Version 23 haengt `gui_window_info`, `gui_set_window_info`,
+  `gui_poll_event` und `gui_push_event` hinten an. R4Desk setzt fuer gebundene
+  GUI-Instanzen Frame-/Client-Metriken und stellt `close`-/`resize`-Events in
+  eine kleine Instanzqueue. Notepad pollt diese Events im gehosteten Modus.
+- Erste Eingabezustellung fuer gehostete GUI-App-Fenster ergaenzt:
+  R4Desk schiebt Mausbewegung, MouseDown, MouseUp und normale Tastendruecke als
+  `R4GuiEvent` in die Queue der aktiven App-Instanz. Notepad verarbeitet diese
+  Events im gehosteten Modus intern, zeichnet aber noch nicht in eine eigene
+  Desktop-Zeichenflaeche.
+- Erste sichtbare Ausgabe fuer gehostete GUI-Apps ergaenzt:
+  ProgramApi Version 24 haengt `gui_set_text` und `gui_text` hinten an.
+  Notepad setzt im gehosteten Modus seinen Textpuffer als einfache Textflaeche,
+  R4Desk liest diese Flaeche beim Zeichnen des App-Fensters aus. Das ist noch
+  kein echtes Canvas, aber der erste sichtbare App-Output im R4Desk-Client.
+- Gezieltes Present-Signal fuer gehostete App-Ausgabe ergaenzt:
+  ProgramApi Version 25 haengt `gui_revision(instance_id)` hinten an.
+  `gui_set_text` erhoeht diese Revision; R4Desk vergleicht sie pro Fenster und
+  invalidiert gehostete App-Fenster nur bei echter Ausgabeveraenderung.
+- Gehostete Textflaeche sichtbarer gemacht:
+  R4Desk zeichnet `gui_text` mehrzeilig mit einfachem Umbruch an der
+  Clientbreite. Notepad verarbeitet Enter im gehosteten Modus als
+  Zeilenumbruch.
+- Dritten sichtbaren GUI-App-Slot in R4Desk vorbereitet:
+  R4Desk kann nun drei getrennt adressierbare GUI-App-Fenster hosten. Slot 3
+  besitzt eigene `app3_*`-UI-Ziele fuer Fensterflaeche, Fensterbuttons und
+  Taskbar, und der Tasks-Dialog liest vier Instanzzeilen statt drei.
+- Run-Dialog an App-Klassifizierung und GUI-Hosting angebunden:
+  ProgramApi Version 26 haengt `program_class(path, policy)` hinten an.
+  R4Desk klassifiziert Run-Pfade vor dem Start; GUI-Programme laufen ueber
+  `program_spawn()` in gehosteten App-Fenstern, Console-Programme bleiben bis
+  zum Terminal-Host beim bestehenden Vordergrundpfad.
+- GUI-Slot-Vergabe stabilisiert:
+  R4Desk synchronisiert vor jedem GUI-Start beendete Instanzen, damit frei
+  gewordene Slots sofort wiederverwendet werden. Wenn danach alle GUI-Slots
+  belegt sind, zeigt R4Desk einen Fehlerdialog statt still ein vorhandenes
+  Fenster zu fokussieren.
+- Close-/Kill-Fallback fuer gehostete App-Fenster aktiviert:
+  Beim Schliessen sendet R4Desk weiter zuerst einen kooperativen
+  Close-Request und zeigt das Fenster als `closing`. Bleibt die Instanz ueber
+  das Timeout hinaus aktiv, ruft R4Desk `program_kill()` auf, entfernt die
+  Fensterbindung und gibt den Slot wieder frei. Ein zweiter Close-Klick im
+  `closing`-Zustand nutzt denselben Fallback sofort.
+- Erste gehostete GUI-Zeichenliste eingefuehrt:
+  ProgramApi Version 27 haengt `gui_clear`, `gui_rect`, `gui_draw_text` und
+  `gui_command` hinten an. Apps zeichnen damit eine kleine Commandliste in
+  ihre Instanz, und R4Desk rendert diese relativ zur Clientflaeche. Hosted-
+  Notepad nutzt den neuen Pfad fuer Menueleiste, Textbereich und Textausgabe;
+  `gui_text` bleibt als Fallback erhalten.
+- Hosted-Notepad an Client-Metriken angepasst:
+  Notepad liest `GuiWindowInfo.client_w/client_h`, zeichnet Menueleiste und
+  Textbereich in der aktuellen Clientgroesse und bricht Text passend zur
+  Fensterbreite um.
+- Gehostete Text-Commands im R4Desk-Host begrenzt:
+  R4Desk kuerzt `gui_draw_text`-Commands auf die sichtbare Clientbreite und
+  verwirft vertikal ausserhalb der Clientflaeche liegenden Text.
+- Ersten SDK-GUI-Helfer ergaenzt:
+  `r4os.gui.Canvas` kapselt Client-Metriken und die duennen
+  Clear-/Rect-/Text-Wrapper fuer gehostete R4Desk-Apps. Hosted-Notepad nutzt
+  diesen Helfer als erstes echtes Beispiel.
+- SDK-GUI-Texthelfer ergaenzt:
+  `r4os.gui` kennt nun die aktuellen Bitmap-Font-Metriken, berechnet
+  Zeichenkapazitaeten aus Pixelbreiten und stellt Ellipsen-Clipping fuer
+  einfache Labels bereit. Hosted-Notepad nutzt diesen Pfad fuer seine
+  gehostete Textausgabe.
+
+Notizen:
+- 0.8.4 ist vermutlich der groesste technische Unterbau-Schritt. Ohne
+  App-Instanzen bleibt echtes Desktop-Multitasking kuenstlich.
+- Die Anwendungsklasse ist kein Berechtigungsmodell. Sie entscheidet nur, ob
+  R4Desk einen Terminal-Host oder ein GUI-Fenster bereitstellt.
+- Der erste 0.8.4-Schritt aendert die aeussere ProgramApi bewusst nicht.
+  Alte Programme behalten dieselben Offsets; die Instanzstruktur sitzt
+  zunaechst komplett im Kernel.
+- Version 17 bis 27 der ProgramApi sind weiterhin rueckwaertsvertraeglich im
+  Sinne der bestehenden ABI-Regel: `program_launch`, `program_spawn`, die
+  Close-/Kill-Funktionen, `program_instance`, `program_set_window` und
+  `program_window_id`, die ersten `gui_*`-Funktionen sowie `program_class`
+  und die GUI-Zeichenliste wurden hinten angehaengt, bestehende Offsets
+  bleiben stabil.
+- `program_spawn` ist bewusst noch kein R4Desk-Fensterhosting. Es erlaubt
+  mehrere Kernel-R4X-Instanzen; die ersten drei R4Desk-App-Slots binden
+  GUI-Instanzen sichtbar. Notepad vermeidet im gehosteten Modus bereits alte
+  Vollbild-Framebuffer-Ausgabe und pollt erste GUI-Events. Maus-/Tastatur-
+  Zustellung ist als erster Pfad vorhanden; `gui_set_text` liefert eine erste
+  sichtbare Ausgabe. Echte Desktop-Apps brauchen als naechsten Schritt
+  allgemeine Zeichenflaechen statt nur Text.
+
+
+Version 0.8.5
+-------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Erste SDK-Control-Bausteine vorbereitet:
+  `r4os.gui` stellt `Label`, `Button`, `ButtonState`, `Palette`,
+  gemeinsame Textausrichtung, Button-Hit-Test und einfache Win95-nahe
+  Button-Zeichnung ueber der vorhandenen GUI-Commandliste bereit.
+- SDK-Textfeld-Baustein ergaenzt:
+  `r4os.gui.TextField(capacity)` verwaltet einen kleinen NUL-terminierten
+  Textpuffer, Fokusstatus, Backspace und einfache druckbare Tasten. Die
+  Zeichnung nutzt denselben Canvas-/Textmetriken-Pfad wie Label und Button.
+- SDK-Listen-Baustein ergaenzt:
+  `r4os.gui.List` zeichnet einfache Zeilenlisten mit Auswahlhintergrund,
+  gemeinsamer Textkuerzung und Hit-Test von Mauskoordinaten auf stabile
+  Zeilenindizes.
+- SDK-Menue-Baustein ergaenzt:
+  `r4os.gui.Menu` und `MenuItem` zeichnen einfache Dropdown-Menues mit
+  Auswahlhintergrund, disabled Eintraegen, Separatoren und Hit-Test auf
+  aktivierbare Menuezeilen.
+- Erste Meldungsdialog-Basis ergaenzt:
+  `r4os.gui.MessageDialog` zeichnet einen einfachen modalen Dialog mit
+  Titelleiste, Meldung, OK-Button und Hit-Test auf Dialogaktionen. Das ist
+  der Startpunkt fuer gemeinsame Meldungs- und spaetere Dateidialoge.
+- Erste Dateidialog-Basis ergaenzt:
+  `r4os.gui.FileDialog` zeichnet einen einfachen modalen Dateidialog mit
+  Titelleiste, Pfadfeld, Dateiliste, OK/Cancel-Buttons und Hit-Test auf
+  Dateiauswahl sowie Dialogaktionen. Die echte Directory-Anbindung bleibt
+  Sache der jeweiligen App und kann spaeter in Notepad/R4Files wachsen.
+- Gehostete GUI-Commandliste erweitert:
+  Die Kernel-interne Commandliste pro R4X-Instanz fasst nun 96 statt 32
+  Eintraege, damit mehrere SDK-Controls und erste Dialoge in einem Frame
+  gerendert werden koennen. R4Desk liest entsprechend mehr Commands aus.
+- Gehostete App-Fenstertitel ergaenzt:
+  ProgramApi Version 28 haengt `gui_set_title(title)` und
+  `gui_title(instance_id, out, capacity)` an. Apps koennen ihren Titel selbst
+  setzen; R4Desk synchronisiert ihn in Titelleiste und Taskbar. EXAMPLE.R4X
+  nutzt den neuen Pfad fuer `SDK GUI Example`.
+- Mindestgroessen fuer gehostete GUI-Apps ergaenzt:
+  ProgramApi Version 29 haengt `gui_set_min_size(client_w, client_h)` und
+  `gui_min_size(instance_id, out)` an. Apps koennen damit ihre gewuenschte
+  Mindest-Clientflaeche anmelden; R4Desk setzt daraus die Frame-
+  Mindestgroesse beim Resize. EXAMPLE.R4X meldet eine Mindestgroesse fuer
+  das SDK-GUI-Beispiel an.
+- Explizites Present fuer gehostete GUI-Frames ergaenzt:
+  ProgramApi Version 30 haengt `gui_present()` an. `gui_clear`, `gui_rect`
+  und `gui_draw_text` bauen nur die Commandliste auf; erst `gui_present()`
+  erhoeht die GUI-Revision und laesst R4Desk den fertigen Frame neu zeichnen.
+  `r4os.gui.Canvas` bietet dafuer `present()`, EXAMPLE.R4X und NOTEPAD.R4X
+  nutzen den neuen Pfad.
+- `Code/Software/Example` als erstes kleines GUI-Testprogramm erweitert:
+  Im gehosteten R4Desk-Modus zeichnet EXAMPLE.R4X ein Label-/Button-/
+  Textfeld-/Listen-/Menue-/Meldungsdialog-/Dateidialog-Beispiel ueber das
+  SDK, nimmt Texteingabe an, zaehlt Klicks und zeigt Listen-, Menue- sowie
+  Dialogauswahl. Als nicht gehosteter Vordergrundlauf bleibt das bestehende
+  Konsolenbeispiel erhalten.
+
+Notizen:
+- Neue API-Funktionen werden wie bisher hinten an die R4X-API angehaengt,
+  damit alte handgebaute Programme ihre Offsets behalten.
+- Die ersten Controls sind bewusst SDK-Helfer oberhalb von ProgramApi v27.
+  Ein neuer ABI-Sprung ist erst noetig, wenn echte App-Surfaces oder
+  Host-seitige Control-Vertraege entstehen.
+
+
+Version 0.8.6
+-------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Erster Terminal-Host-Pfad fuer Console-R4X-Instanzen:
+  ProgramApi Version 31 haengt `console_output(instance_id, out, capacity)`
+  und `console_revision(instance_id)` an. R4Desk startet Console-
+  Menueeintraege als Hintergrundinstanz, bindet sie an das Terminalfenster
+  und rendert den Output-Puffer dort. Ein Kernel-`kprint`-Hook schreibt auch
+  erste COMMAND.R4X-/R4DOS-Ausgabe in diesen Puffer; Tastatureingabe und
+  Scrollback bleiben Folgeschritte.
+- R4DOS-Terminal ueber Startmenue oeffnen:
+  Der R4DOS-Menueeintrag startet `/R4DOS/COMMAND.R4X` nun als Console-
+  Instanz im Terminalfenster statt nur den alten Demo-Platzhalter zu zeigen.
+  Der vorhandene Fensterbutton-Pfad fordert die Instanz beim Schliessen
+  kooperativ an und faellt bei haengenden Tasks auf `program_kill()` zurueck.
+- Terminal-Tastatureingaben zugestellt:
+  ProgramApi Version 32 haengt `console_push_key(instance_id, key)` an.
+  R4Desk stellt normale Tasten aus dem fokussierten Terminalfenster an die
+  Console-Instanz zu; SDK-Console-Apps lesen diese Queue ueber `read_key()`.
+  COMMAND.R4X/R4DOS liest sie ueber einen Kernel-Keyboard-Hook. Desktop-
+  Systemtasten wie Alt-Tab, Alt-F4 und Ctrl-Esc bleiben beim Desktop.
+- Terminalausgabe bei langen Puffern robuster gemacht:
+  R4Desk rendert im Terminalfenster jetzt den Tail der letzten sichtbaren
+  Textzeilen aus dem Console-Output-Puffer. Das ist noch kein interaktives
+  Scrollback, verhindert aber, dass lange Ausgaben nur den Anfang statt des
+  aktuellen Prompt-/Tail-Bereichs zeigen.
+- R4Synth als Console-App-Test aus R4Desk heraus gestartet:
+  Startmenueeintraege koennen optionale `args=` aus MENU.R4S an R4X-Starts
+  weiterreichen. R4Synth startet als Console-Instanz mit C:\TEMP\TADA.WAV,
+  schreibt seine Textausgabe ins Terminalfenster und nutzt Audio weiter ueber
+  die bestehende ProgramApi.
+- Reine R4DOS-/Shell-Programme ohne eigene Grafik im Terminalfenster gestartet:
+  Der Run-Dialog klassifiziert Pfade ueber `program_class(..., auto)`.
+  Console-R4X-Programme laufen nun ueber `program_spawn(..., console)` im
+  Terminal-Host, GUI-Programme weiter im gehosteten Fensterpfad. Ist das
+  einzige Terminal bereits belegt, fokussiert R4Desk es und zeigt eine
+  Meldung statt einen zweiten Console-Start still zu verlieren.
+- Nach alten AppFB-/Vollbild-Ausgaben den Desktop sauber neu gezeichnet:
+  ProgramApi Version 33 haengt `display_revision()` an. Direkte AppFB-
+  Ausgabe ueber `clear`, `rect`, `text`, `mouse_show` oder `mouse_hide`
+  erhoeht diese Revision. R4Desk speichert den Wert nach jedem eigenen Redraw
+  und erzwingt einen Full-Redraw, sobald eine andere R4X-Instanz den globalen
+  Framebuffer auf dem alten Vollbildpfad beruehrt hat.
+- Terminal-Font ueber R4DOS-/R4Desk-Konfiguration geladen und
+  R4DOS-Codepage-Verhalten festgehalten:
+  R4Desk liest fuer das Terminal zuerst C:\R4DOS\COMMAND.R4S und danach
+  C:\R4DESK\R4DESK.R4S. TERMINAL_FONT, TERMINAL_FONT_SIZE und
+  TERMINAL_CODEPAGE konfigurieren den Terminal-Textvertrag; CODEPAGE=437
+  bleibt der einzige gueltige R4DOS-kompatible Codepage-Modus.
+
+Notizen:
+- Die Shell bleibt COMMAND.R4X/R4DOS. R4Desk stellt nur Terminal-Fenster,
+  Ein-/Ausgabeumleitung und Fensterverwaltung bereit.
+- Alte Shell-Pfade duerfen in dieser Phase noch als Fallback funktionieren,
+  aber der neue Hauptpfad ist R4DOS/.
+
+
+Version 0.8.7
+-------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- NOTEPAD.R4X vom Vollbildmodell in ein Fenster ueberfuehrt:
+  Im R4Desk-Kontext nutzt Notepad `program_window_id()` und laeuft als
+  gehostete GUI-App. Der alte Vollbildpfad bleibt nur als Kompatibilitaet
+  fuer Starts ausserhalb von R4Desk erhalten.
+- Notepad als R4Desk-/GUI-Anwendung klassifiziert:
+  NOTEPAD.R4X wird als `gui` gebaut und ueber den R4Desk-Startmenueeintrag
+  im gehosteten GUI-Fensterpfad gestartet, nicht als Console-App.
+- Menueleiste, Dropdown, Dateidialog und Textbereich im Hosted-Modus an
+  Fenster-Clientkoordinaten angepasst:
+  Hosted-Notepad zeichnet Menueleiste, Textbereich, Statuszeile, File-
+  Dropdown sowie Open-/Save-Dialog relativ zur R4Desk-Clientflaeche und nicht
+  mehr mit alten Vollbildkoordinaten.
+- Maus- und Tastaturereignisse ueber die Desktop-/GUI-API verwendet:
+  Hosted-Notepad verarbeitet `gui_poll_event()` fuer KeyDown, MouseDown,
+  MouseUp, Resize und Close. File-Menue, Dialogauswahl, OK/Cancel,
+  Texteingabe und ESC laufen damit im Fensterhost.
+- Fenstertitel und Mindestgroesse angemeldet:
+  Hosted-Notepad setzt per `gui_set_title("Notepad")` seinen Fenstertitel und
+  meldet per `gui_set_min_size()` eine kleine Mindest-Clientflaeche an.
+- Dateioperationen weiter ueber die bestehende R4X-Datei-API genutzt:
+  Hosted-Notepad verwendet fuer Directory-Liste, Dateiauswahl, Open und Save
+  weiter `dirList`, `dirEntry`, `fileRead` und `fileWrite`; Statusmeldungen
+  zeigen Erfolg und Fehler im Fenster an.
+- Notepad ueber das Startmenue gestartet:
+  Der bestehende R4Desk-Startmenuepfad startet Notepad als gehostete GUI-
+  Instanz ueber `program_spawn()`.
+- Mehrere Notepad-Fenster bzw. Notepad parallel zur Shell ermoeglicht:
+  R4Desk nutzt seine vorhandenen GUI-App-Slots fuer mehrere GUI-Instanzen.
+  Notepad-Instanzen halten Textpuffer, Dialogzustand und Dateipfade pro
+  Prozessinstanz, waehrend R4DOS/Console parallel im Terminal laufen kann.
+
+Notizen:
+- Notepad ist der wichtigste Beweis, dass R4Desk mehr als ein Demo-Desktop ist:
+  eine bestehende App muss real in einem Fenster nutzbar werden.
+- Notepad wird nicht als eigene Vollbild-Sonderklasse erhalten. Es soll zur
+  normalen R4Desk-/GUI-Anwendung umgebaut werden.
+
+
+Version 0.8.8
+-------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Desktop-Icons und Verknuepfungen aus R4DESK/DESKTOP.R4S anzeigen.
+- Wichtige Standard-Verknuepfungen vorbereitet: R4DOS, Notepad, R4Synth und
+  R4Config.
+- Icons per Mausklick auswaehlen und per Doppelklick starten.
+- Einfachen Ausfuehren-Dialog implementiert: Programmname oder Pfad eingeben,
+  Start ausloesen, Fehlermeldung anzeigen.
+- Ausfuehren-Dialog mit Auto-Erkennung vorbereitet, damit Console-Apps im
+  Terminal und GUI-Apps als normale Fenster starten.
+- Desktop-Refresh nutzt weiter den ereignisgesteuerten Redraw-Pfad; Icons,
+  Auswahlrahmen und Taskbar werden nicht permanent gegeneinander neu
+  gezeichnet.
+- R4Files als kleinen Dateimanager begonnen: C:\ anzeigen, Ordner oeffnen,
+  Dateien markieren und `.R4X`-Programme ueber den vorhandenen Auto-Launch-
+  Pfad starten.
+- Datei-zu-App-Grundregeln vorbereitet: R4Files startet Textdateien mit
+  Notepad und WAV-/MID-/SID-Testdateien mit R4Synth.
+- Dateizuordnungen geben eine Anwendungsklasse mit: Textdateien laufen ueber
+  den GUI-Pfad, Audio-/Medientests ueber den Console-Pfad.
+- `.ICO` als R4Desk-Iconformat festgelegt und ersten Parser fuer
+  unkomprimierte 32-bpp-BMP/DIB-ICO-Eintraege vorbereitet.
+- R4Desk rendert vorhandene 32-bpp-BMP/DIB-ICO-Dateien aus `icon=`-Pfaden und
+  nutzt weiter ein eingebautes Fallback-Icon, wenn keine passende ICO-Datei
+  verfuegbar ist.
+
+Notizen:
+- R4Files muss in 0.8.8 noch kein vollstaendiger Explorer sein. Ein stabiles
+  Fenster fuer Laufwerke, Ordnerlisten und Programmstarts reicht als Fundament.
+- Desktop-Verknuepfungen nutzen vorerst einfache native R4Desk-Fallback-Icons.
+  `.ICO` ist als kompatibles Zielformat vorbereitet; echter Bitmap-Renderpfad
+  ueber einen spaeteren schnellen Blit-/Bitmap-API-Pfad bleibt Anschlussarbeit.
+- App-zu-App-Starts nutzen aktuell direkt ProgramApi `program_launch()`. Ein
+  R4Desk-Launch-Dienst fuer neue gehostete Fenster bleibt spaetere Arbeit.
+
+
+Version 0.8.9
+-------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Gemeinsame Message-Box fuer Info, Warnung, Fehler und Ja/Nein-Fragen im SDK
+  vorbereitet: `r4os.gui.MessageDialog` kennt Message-Typen, OK- und
+  Ja/Nein-Buttons sowie passende Hit-Test-Aktionen.
+- Gemeinsame Open-/Save-Dialogbasis im SDK vorbereitet: `r4os.gui.FileDialog`
+  kennt Open-/Save-Modus, Pfad, Dateiliste, Dateiname-Feld und modusspezifische
+  Standard-Buttons.
+- Modale Dialoge fuer gehostete SDK-Apps vorbereitet: `MessageDialog` und
+  `FileDialog` liefern gemeinsame Tastaturaktionen fuer Enter, Escape,
+  Ja/Nein und Dateilisten-Navigation; das SDK-Example bindet diese Aktionen
+  modal vor der normalen App-Eingabe.
+- Einfaches systemweites Text-Clipboard ueber ProgramApi vorbereitet:
+  Programme koennen Text schreiben, lesen und eine Revision abfragen; R4Desk
+  kann Clipboard-Text per Ctrl+V ins R4DOS-Terminal einspeisen.
+- Copy/Paste-Tastaturkuerzel fuer Textfelder und Notepad vorbereitet:
+  gehostete Apps erhalten Ctrl+C/Ctrl+V/Ctrl+X, SDK-TextFields koennen den
+  Clipboard-Puffer nutzen, und Notepad kopiert, schneidet und fuegt Text ein.
+- Kleines R4Desk-Einstellungsfenster vorbereitet: Settings zeigt Desktop-
+  Hintergrund, Taskbar-Uhr, Terminal-Fontgroesse und die Konfigurationspfade
+  fuer Startmenue- und Desktop-Verknuepfungen.
+- R4Desk-Konfigurationen robuster gemacht: `R4DESK.R4S` liest nun
+  `DESKTOP_BG`, `TASKBAR_CLOCK`, Terminal-Font und Codepage, schreibt sichere
+  Defaults bei fehlender/ungueltiger R4Desk-Konfiguration zurueck und bleibt
+  bei `MENU.R4S` und `DESKTOP.R4S` auf stabilen eingebauten Defaults.
+- Einfache App-Fehler im Desktop sichtbar gemacht: wenn ein gehostetes
+  R4Desk-Fenster unerwartet mit Exit-Code ungleich 0 endet, zeigt R4Desk einen
+  Dialog mit Fenstertitel und Exit-Code, statt nur Serial/Konsole zu nutzen.
+- Kleines Fenster-Systemmenue umgesetzt: Rechtsklick auf ein sichtbares
+  Fenster oeffnet ein kompaktes Popup mit Restore/Fokus, Minimize,
+  Maximize/Restore und Close, ohne ein grosses Kontextmenue-System in 0.8.X
+  einzufuehren.
+- 0.8.9 durch Modelltests, R4Desk-Testbuild, zentralen Code-Build,
+  Image-Build mit `Build.bat -norun` und sauberen Git-Stand abgeschlossen.
+
+Notizen:
+- Diese Phase ist der Anfang eines echten GUI-Frameworks. Sie soll noch klein
+  bleiben, aber die wichtigsten wiederverwendbaren Bausteine aus dem App-Code
+  herausziehen.
+
+
+Version 0.8.10
+--------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Erste Standard-Icons im R4Desk-Stil erstellt und als Windows-kompatible
+  `.ICO`-Dateien unter `Injection/R4DESK/ICONS/` abgelegt: R4DOS, Notepad,
+  R4Synth, R4Files und R4Config.
+- Standard-Cursor in eine klarere R4Desk-/Win95-nahe Pfeilform umgezeichnet.
+- Desktop-Icon-Raster optisch abgerundet: echte Icons bleiben zentriert,
+  Labels werden zentriert und Auswahl/Hover hebt nur noch das Label bzw. die
+  Icon-Zelle hervor statt die ganze Desktop-Spalte grob zu fuellen.
+- Fensterbuttons optisch abgerundet: Minimize, Maximize und Close werden als
+  kleine native Glyphen statt als Textzeichen gerendert.
+- Startbutton mit kleinem R4OS-Farbsymbol und Taskbar-Oberkante optisch
+  naeher an den klassischen 3D-Stil gebracht.
+- Startmenue mit einfachen festen Kategorien strukturiert: Programs, System
+  und Power. Zeichnung und Hit-Test nutzen dieselbe gruppierte Geometrie.
+- Fenster-Maximieren, Wiederherstellen und Bildschirmgrenzen robuster gemacht:
+  Startgeometrie, maximierte Flaeche und Restore-Geometrie werden gegen die
+  Desktop-Arbeitsflaeche oberhalb der Taskbar normalisiert.
+- Systemaktionen funktional abgerundet: Restart, Poweroff und Halt fragen nun
+  per Yes/No-Dialog nach, bevor R4Desk `system_reboot`, `system_poweroff` oder
+  `system_halt` ausfuehrt. `No` ist der sichere Default.
+- App-/Task-Ueberblick optisch und funktional abgerundet: Desktop-Fenster und
+  R4X-Runtime stehen in getrennten Rahmen, aktive Fenster sind sichtbar
+  markiert, Instanzdaten sind tabellarisch ausgerichtet und der OK-Hitbereich
+  passt zur gezeichneten Schaltflaeche.
+- Taskbar-Bedienqualitaet verbessert: aktive, gehoverte und minimierte
+  Fenster sind unterscheidbarer, bekommen kleine Statussymbole und lange
+  Fenstertitel werden auf die Buttonbreite begrenzt.
+- R4Desk-Standardfont als R4F-Systemfont-Vertrag festgelegt:
+  `UI_FONT=C:\SYS\FONTS\R4DOS8.R4F` und `UI_FONT_SIZE=8` sind in
+  R4DESK.R4S, Parser, Defaults und Settings sichtbar. Die echte getrennte
+  UI-Font-Umschaltung bleibt bewusst als spaetere ProgramApi-/SDK-Erweiterung
+  dokumentiert.
+- Settings-Dialog erweitert und Hit-Test an die gezeichnete OK-Schaltflaeche
+  angepasst, damit der Dialog dieselben Abstaende und Klickflaechen nutzt wie
+  seine Darstellung.
+
+Notizen:
+- Der Stil soll stark Windows 95 atmen, aber R4OS bleiben: schlicht,
+  kantig, schnell und gut lesbar.
+
+
+Version 0.8.11
+--------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- R4Desk, Window-Manager, R4X-GUI-API und Startmenue in den stabilen Docs
+  beschrieben.
+- Docs/Core und Docs/Applications um das aktuelle Desktop-Modell erweitert:
+  R4Desk als trusted R4X-Desktop, Terminalhost, gehostete GUI-Apps,
+  ProgramApi-Fenstervertrag und Anwendungsklassen.
+- Anwendungsklassen `console` und `gui` als explizite Projekt-/Build-Ziele
+  dokumentiert; `auto` ist nur noch Kompatibilitaets- und Launch-Fallback.
+- Neue Systemordner R4DOS/ und R4DESK/ in Docs/Deployment und Docs/R4DOS
+  dokumentiert.
+- Bekannte Grenzen von 0.8.X festgehalten: ein Terminalslot, drei GUI-Slots,
+  einfache Commandlisten, noch keine echten Backbuffer, keine UI-Font-
+  Umschaltung im Zeichenpfad, keine Isolation.
+- Build- und Testablauf fuer R4Desk in Docs/Deployment beschrieben.
+- Smoke-Test-Checkliste fuer Boot, Desktop, Startmenue, Shell-Fenster,
+  Notepad-Fenster, Taskbar-Uhr, Desktop-Icons, Ausfuehren-Dialog, R4Files,
+  Clipboard, Basisdialoge, Fenster-Resize, App-/Task-Ueberblick,
+  Systemaktionen und Konfigurationsfallbacks angelegt.
+- Version 0.8.X als benutzbarer Desktop-Fundamentstand dokumentarisch
+  abgeschlossen.
+
+Notizen:
+- Vor dem Aufraeumen der Roadmap muessen die wichtigen Designentscheidungen in
+  Docs/ uebertragen werden.

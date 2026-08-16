@@ -1,0 +1,150 @@
+﻿Runtime-R4L 0.64.8 - New-R4L und zentrale Bereinigung
+========================================================
+
+Ergebnis
+--------
+
+0.64.8 schliesst die strukturelle Luecke zwischen dem generischen
+Runtime-R4L-Buildpfad und einer tatsaechlich neuen Library. Eine neue
+Zig-Runtime-R4L kann jetzt als vollstaendige Einheit angelegt, unabhaengig
+gebaut und getestet sowie ohne Aenderung an Kernel, zentralem Contract,
+Kern-SDK oder Root-Build vom Katalog entdeckt werden.
+
+Der zentrale ApiContract bleibt auf die sechs kernelimplementierten
+Plattformgruppen und gemeinsame ABI-Grundtypen begrenzt. `Inventory/API.json`
+wurde deshalb geprueft, aber bewusst nicht um R4L-Fachoperationen erweitert:
+Die API-Wahrheit einer optionalen Runtime-R4L ist ihr eigener Contract.
+
+
+New-R4L-Workflow
+----------------
+
+Der Einstieg liegt unter:
+
+    DevTools/Scripts/New-R4LProject.ps1
+
+Minimaler Aufruf:
+
+    powershell -NoProfile -ExecutionPolicy Bypass -File DevTools/Scripts/New-R4LProject.ps1 -Name R4MATH
+
+Der Generator validiert Name, Projektverzeichnis, Ziel und vorhandene
+Manifestidentitaeten. `-LibrariesRoot`, `-SdkRoot` und `-ZigPath` machen den
+gleichen Ablauf sowohl im integrierten Altprojekt als auch spaeter im DevKit
+nutzbar. Der lokale Zig-Paketpfad verlangt auf Windows dasselbe Volume; bei
+getrennten Repositories stellt das DevKit die Repositories deshalb in einem
+gemeinsamen Workspace bereit.
+
+Die erzeugte Einheit enthaelt:
+
+    module.R4MF
+    build.zig
+    build.zig.zon
+    README.txt
+    Contract/LibraryContract.json
+    Contract/LibraryContract.baseline.json
+    Contract/Generated/implementation_abi.zig
+    Source/main.zig
+    Bindings/Zig/<name>.zig
+    Bindings/C/<name>.h
+    Tests/runtime_test.zig
+    Tests/Generated/contract_conformance.zig
+    Tests/Generated/contract_conformance.c
+    Docs/API.md
+
+Eine aus dem Namen abgeleitete stabile Interface-ID verhindert zufaellige
+Identitaetswechsel beim erneuten Anlegen. R4LContractGen materialisiert den
+kanonischen Contractstand, die Baseline, beide Bindings, beide
+Conformance-Fixtures und die API-Referenz. Danach fuehrt jeder normale Build
+nur noch den schreibfreien bytegenauen Contractcheck aus.
+
+
+Eingecheckte Referenz
+---------------------
+
+`Code/System/Libraries/R4ECHO/` ist die mit dem Workflow erzeugte minimale
+Referenz. Sie besitzt `IMAGE_SCOPE=test`, exportiert `API_V1` und `Query` und
+liefert eine echte aufrufbare Additionsfunktion. Ihr Einzelbuild erzeugt ein
+R4M0 mit zwei Sections, null Imports, zwei Exporten und einer Relocation.
+
+R4ECHO ist keine Produktlibrary. ModuleCatalog entdeckt sie im normalen
+Quellkatalog und waehlt sie fuer das Testprofil, nicht aber fuer Full. Damit
+ist die komplette Kette aus neuer Einheit, Contractcheck, Providerbuild,
+R4M0-Verpackung und manifestbasierter Distributionsentscheidung ohne
+Namenseintrag im Root-Build belegt.
+
+
+Zentrale Bereinigung
+--------------------
+
+Der R4CP-Einmalkonverter enthielt noch eine alte optionale Library in seiner
+Liste zentraler Importgruppen. Diese Zuordnung ist entfernt; der Konverter
+kennt nur noch die sechs Plattformgruppen. Produktive Runtime-R4Ls werden wie
+alle anderen externen Interfaces ueber benannte Modul- und Exportsymbole
+adressiert.
+
+Das neue Dauergate leitet alle unabhaengigen Runtime-R4Ls aus
+`META=feature=runtime-r4l` ab. Es besitzt dadurch keine Liste konkreter
+Produktnamen. Fuer jede gefundene Einheit prueft es:
+
+- alle Source-, Contract-, Baseline-, Binding-, Conformance- und
+  Dokumentationspfade sind vorhanden und bleiben in der Librarywurzel;
+- der produktive Zig-Source besitzt den neutralen `r4l_entry`, den der
+  freestanding R4L-Linker als technischen Einstieg verlangt;
+- zentrale Kernel-, Contract-, SDK-, Generator-, Template-, Katalog- und
+  Root-Build-Quellen enthalten den Librarynamen nicht;
+- keine optionale Library erscheint als zentrale ApiContract-Gruppe;
+- eine wegwerfbare, frisch erzeugte Library validiert, baut und testet
+  eigenstaendig;
+- die eingecheckte Generatorreferenz wird genau einmal im Katalog und nur im
+  vorgesehenen Testprofil gefunden.
+
+Der erste vollstaendige Build machte dabei eine bestehende technische Luecke
+sichtbar: R4STD besass als einzige ausgelieferte unabhaengige Runtime-R4L noch
+keinen neutralen `r4l_entry`. Der Einstieg wurde librarylokal ergaenzt und das
+geaenderte Artefakt auf Modulversion 0.2.1 angehoben. Das Dauergate prueft die
+Entry-Invariante nun fuer jede manifestbasiert entdeckte Runtime-R4L und kommt
+weiterhin ohne Namensliste aus.
+
+
+Repository-Transfer
+-------------------
+
+Fachliche Sourcepfade verlassen die Libraryeinheit nicht. Contract und
+Implementierungs-ABI werden als logische Buildmodule eingebunden; Bindings
+und Tests liegen beim Besitzer. `build.zig.zon` enthaelt als einzige externe
+Hostverdrahtung das SDK-Paket. Bei der spaeteren Repo-Aufteilung muss das
+DevKit deshalb nur diese Paketabhaengigkeit auf den ausgecheckten oder
+versionierten SDK-Stand aufloesen. Es entsteht keine zweite Contractkopie und
+keine Anpassung an Kernel oder zentralem SDK-Code.
+
+
+Abnahme
+-------
+
+Gezielt bestanden:
+
+    zig build test                           in Code/System/Libraries/R4ECHO
+    zig build test und zig build             in Code/System/Libraries/R4STD
+    Build.bat -app R4ECHO
+    Tests/Gate/Run-NewR4LWorkflow0648.ps1
+    Build.bat -norun
+    Build.bat -test                          mit QEMU_TEST_TIMEOUT_SECONDS=600
+
+Das Gate erzeugte und entfernte eine zusaetzliche Wegwerf-Library, pruefte ihr
+echtes Artefakt und meldete vier manifestbesessene Runtime-R4Ls, drei
+ausgelieferte Slim-Libraries sowie eine Testprofil-Referenz ohne zentrale
+Namenskopplung.
+
+Der vollstaendige Produktionslauf endete mit Exitcode 0. ModuleCatalog fand
+159 aktuelle Manifeste; das Full-Inventar enthaelt 102 Komponenten inklusive
+Kernel und der konkrete Full-Imageplan 101 Module. R4ECHO blieb dabei wie
+vorgesehen ausserhalb der Produktdistribution.
+
+Der vollstaendige Testlauf endete ebenfalls mit Exitcode 0. Das Testinventar
+enthaelt 124 Komponenten inklusive Kernel und der konkrete Test-Imageplan 123
+Module. Im echten Gast wurden R4ECHO mit zwei Sections und R4STD 0.2.1 mit
+drei Sections als gepinnte Runtime-R4Ls der Generation 1 geladen. Alle
+produktiven R4STD-Imports wurden aufgeloest, `LOADERD result: OK` erschien und
+der Gast beendete sich selbst mit `System poweroff.`. Die abschliessende
+Auswertung meldete QEMU, Boot, Poweroff, SYSUPD und den vollstaendigen
+API-Diagnosevertrag als OK sowie `Errors: none`.

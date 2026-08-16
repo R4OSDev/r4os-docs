@@ -1,0 +1,265 @@
+﻿*** Kernel Refactor Roadmap Leitbild ***
+In dieser Roadmap befassen wir uns im Verlauf mehrerer großer Versionen mit der säuberung des Kernels.
+Aktuell wurden viele Funktionen nach
+kernelold.zig ausgelagert und in src/old/ verschoben.
+Wir holen die nach und nach zurück in main.zig, kontrollieren dabei aber alles.
+Was aus dem Kernel raus kann soll in Software, Treiber und Protokolle untergebracht werden.
+Im Zuge dieses Refactor ist auch die Dokumentation zu aktualisieren und pflegen.
+
+Grundsatz fuer alle Unterversionen:
+- Keine halben Umbauten: Eine Unterversion ist erst erledigt, wenn Code, Imports, Doku, Version und Abnahme zusammenpassen.
+- Keine stillen Doppelpfade: Wenn eine Initialisierung nach `main.zig` wandert, darf sie nicht weiterhin produktiv in `kernelold.zig` laufen.
+- Boot-kritische Pfade muessen konservativ behandelt werden. Was fuer Boot, `C:\`, Speicher, Interrupts oder fruehe Ausgabe noetig ist, bleibt built-in, bis ein stabiler Ersatz existiert.
+- Kernel-Verschlankung ist ein ausdrueckliches Ziel. Fallbacks und parallele Built-in-Pfade werden nur genutzt, wenn sie fuer Boot-Stabilitaet, Migration oder echte Abnahme noetig sind.
+- Nicht bootkritische Treiber sollen nach erfolgreicher R4D-Auslagerung aus dem Kernel entfernt werden, statt dauerhaft als Built-in-Fallback liegen zu bleiben.
+- Jeder Umzug braucht klare Modulgrenzen: Boot-Schicht, Runtime-Core, Treiber, API und Diagnose duerfen nicht unkontrolliert vermischt werden.
+- Jede neue Boot-Schicht braucht eine klare Zustands- und Fehlersemantik: entweder erfolgreich initialisiert, sauber uebersprungen oder fatal beendet. Stilles Weiterlaufen nach kaputten Pflichtpfaden ist kein erledigter Zustand.
+- `kernelold.zig` darf waehrend der Migration nur noch als Legacy-Bruecke dienen. Neu umgezogene Initialisierungen muessen aus `kernelold.zig` verschwinden oder dort explizit als bereits initialisierter Zustand konsumiert werden.
+- Zwischenversionen duerfen lauffaehig klein sein, aber nicht fachlich halb: Keine Unterversion wird abgeschlossen, wenn Besitzgrenzen, Boot-Reihenfolge oder Abhaengigkeiten noch absichtlich unklar bleiben.
+- Eine Unterversion darf bewusst nur Vertrag, Diagnose oder Probe liefern,
+  wenn sie klar als nicht-produktiver Ersatz gekennzeichnet ist. Produktive
+  Umschaltung und Entfernen des Altpfads passieren erst nach echter
+  Funktionsabnahme.
+- Vor jedem Abschluss wird gezielt nach Rest-Imports, Doppelaufrufen und verdeckten Abhaengigkeiten gesucht. Gefundene Altlasten werden entweder beseitigt oder in der Roadmap als bewusster Folgepunkt notiert.
+- Jede abgeschlossene Unterversion erhoeht `Injection/sys/CONFIG/VERSION.R4S` auf die passende Version und wird danach gepusht.
+- Mindestens `DevTools/Scripts/Build.bat -norun` gehoert zu jeder Code-Unterversion. Bei Boot-, IRQ-, Input-, Storage-, USB- oder R4D-Aenderungen gehoert `DevTools/Scripts/Build.bat -test` dazu.
+- GUI-/Hardware-nahe Punkte bekommen zusaetzlich eine klare manuelle Sichtabnahme durch den User, wenn QEMU-Smoke allein nicht reicht.
+
+-------------------------------------------
+Ab hier beginnen die Versionen und ab hier darf auch bereinigt werden.
+Das Refactor Leitbild muss bei einer Roadmap Bereinigung stehen bleiben
+-------------------------------------------
+
+Rahmen fuer 0.39.X:
+- 0.39.X zieht HDA nach, nachdem 0.38.X den Audio-R4D-Vertrag und AC97.R4D
+  produktiv gemacht hat.
+- HDA ist komplexer als AC97 und bekommt deshalb eine eigene Reifephase:
+  PCI/MMIO, Controller-Reset, CORB/RIRB oder Immediate Commands,
+  Codec-Discovery, Output-Pfad, Stream-DMA, Recovery und Diagnose muessen
+  schrittweise belastbar werden.
+- HDA bleibt bis zur erfolgreichen 0.39.X-Abnahme Built-in. Ein halb fertiger
+  `HDA.R4D` darf nicht als produktiver Ersatz gelten.
+- DriverApi-Erweiterungen fuer HDA duerfen nur append-only erfolgen und
+  muessen SDK und Dokumentation mitziehen.
+- AC97.R4D darf durch HDA-Arbeiten nicht regressieren.
+
+Version 0.39.0
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- HDA-spezifischen R4D-Vorvertrag gegen den aktuellen Built-in-HDA-Pfad
+  geprueft: MMIO-BAR64, volatile Registerzugriffe, DMA-Regionen,
+  CORB/RIRB/Immediate-Command-Wartepfade, Codec-Discovery, Output-Pfad,
+  Stream-DMA, Recovery und Diagnose sind im Built-in-Pfad vorhanden.
+- DriverApi v11 und SDK reichen fuer den kommenden HDA-Control-Plane-Port:
+  `pci_map_bar` liest intern BAR64, `MmioRegion` liefert physische und
+  virtuelle Adresse, `alloc_dma_region` liefert DMA-Buffer mit phys/virt,
+  `wait_ticks` deckt Hardware-Wartepfade ab und der Audio-Output-Backend-
+  Vertrag ist bereits vorhanden. Keine DriverApi-v12-Erweiterung noetig.
+- Statisches HDA-Gate
+  `DevTools/Scripts/TestScripts/CheckHdaR4D039.zig` angelegt. Es schuetzt den
+  HDA-Built-in-Umfang, DriverApi-v11, SDK-Helfer und das Q35/HDA-Standardprofil
+  gegen versehentliche Rueckschritte.
+- Q35/HDA-Testprofil bestaetigt:
+  `DevTools/QEMU/Config/standard.conf` nutzt `type = "q35"`,
+  `ich9-intel-hda` und `hda-duplex`.
+- HDA-Diagnoseanforderungen fuer die naechsten Unterversionen festgelegt:
+  Controller-/Codec-Status, DMA/BDL, Timeouts, Recovery und aktiver Pfad
+  muessen ueber `AUDIO`/`HDATEST` oder gleichwertige Smokes sichtbar bleiben.
+- AC97.R4D nicht geaendert; zusaetzliche AC97-Abschlusspruefung bleibt als
+  Regressiongate erhalten.
+- Dokumentation in `Docs/Audio/README.txt`, `Docs/Drivers/R4DFormat.txt`,
+  `Docs/Drivers/TreiberStand.txt`, `Docs/Core/KernelBereinigung.txt`,
+  `Docs/Deployment/BuildUndTest.txt` und `Docs/SupportedHardware.txt`
+  aktualisiert.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.39.0` gesetzt.
+- Abnahme: `DevTools/Zig/zig.exe run
+  DevTools/Scripts/TestScripts/CheckHdaR4D039.zig`,
+  `DevTools/Scripts/Build.bat -norun`, `DevTools/Scripts/Build.bat -test`
+  und AC97-R4D-Regressionsgate.
+
+Notizen:
+- Diese Unterversion ist bewusst kein halber `HDA.R4D`. Sie friert den
+  produktiven Built-in-HDA-Pfad als Vergleichsbasis ein und macht die
+  vorhandenen API-/SDK-Grundlagen pruefbar. Der echte R4D-Control-Plane-Port
+  beginnt erst in 0.39.1.
+
+Version 0.39.1
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `Code/Driver/HDA` als echten SDK-basierten R4D-Treiber angelegt.
+- `HDA.R4D` in den zentralen `Code/build.zig`-Build aufgenommen und im
+  normalen Image unter `C:\SYS\DRIVERS\HDA.R4D` ausgeliefert.
+- HDA-Control-Plane in den R4D-Treiber portiert: PCI-Erkennung ueber
+  Class/Subclass, Memory Space und Bus Mastering, MMIO-BAR0-Mapping,
+  volatile Registerzugriffe, passiver Reset mit optionaler
+  `OPTION HDA r4d_reset=...`-Freigabe, Immediate-Command-Transport,
+  Codec-Discovery, Widget-Sichtung und Output-Candidate-Erkennung.
+- `HDA.R4D` nutzt nur SDK-/DriverApi-Helfer und importiert keine
+  Kernel-internen HDA-, Audio- oder Kernelmodule.
+- `HDA.R4D` registriert in 0.39.1 bewusst noch kein Audio-Output-Backend.
+  Der produktive Playback-/Recovery-Pfad bleibt bis 0.39.2 beim
+  Built-in-HDA-Vergleichspfad.
+- `audio_boot` und `driver_plan` melden den geplanten HDA-R4D-Pfad sichtbar
+  als `HDA.R4D [loaded]`, `missing`, `init failed` oder `load failed`, ohne
+  den Built-in-Playbackpfad als stillen Ersatz umzuschalten.
+- Statisches Gate `DevTools/Scripts/TestScripts/CheckHdaR4D039.zig` um den
+  neuen HDA.R4D-Control-Plane-Vertrag erweitert.
+- Q35/HDA-Probe-Smoke
+  `DevTools/Scripts/TestScripts/Run-HdaR4DProbeTest.ps1` angelegt; er prueft
+  Image-Eintrag, Boot, Audio-Boot und `HDA.R4D [loaded]`.
+- Dokumentation aktualisiert:
+  `Docs/Audio/README.txt`, `Docs/Drivers/TreiberStand.txt`,
+  `Docs/Drivers/R4DFormat.txt`, `Docs/Core/KernelBereinigung.txt`,
+  `Docs/Deployment/BuildUndTest.txt` und `Docs/SupportedHardware.txt`.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.39.1` gesetzt.
+- Abnahme mit `DevTools/Scripts/Build.bat -norun`,
+  `DevTools/Scripts/Build.bat -test`, HDA-R4D-Probe-Smoke und AC97-
+  Regressiongate `DevTools/Scripts/TestScripts/Run-AudioR4DPlanTest.ps1`.
+
+Notizen:
+- Das ist ein belastbarer HDA-Control-Plane-Schritt, kein halber produktiver
+  HDA-Ersatz. Echte HDA-PCM-Ausgabe, Stream-DMA, Recovery und Umschaltung auf
+  den R4D-Backendpfad bleiben explizit 0.39.2.
+
+Version 0.39.2
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- HDA.R4D um echten Playbackpfad erweitert: Output-Pfad-Konfiguration,
+  Stream-DMA, BDL-Ring, PCM-Write, Stop, Drain, Refill, Recovery und
+  Statuscallback liegen nun im R4D-Treiber.
+- HDA.R4D registriert ein Audio-Output-Backend `HDA` ueber DriverApi und
+  nutzt die SDK-nahe PCM-Normalisierung aus `r4os.audio_pcm`, ohne
+  Kernel-interne HDA- oder Audio-Module zu importieren.
+- `DRIVER=HDA` aktiviert den R4D-Pfad sichtbar als `HDA.R4D [active]`.
+  Der Built-in-HDA-Quellpfad bleibt fuer 0.39.2 nur noch als
+  Migrationsvergleich vorhanden und wird in 0.39.3 entfernt.
+- HDA-R4D-Init blockiert den Boot nicht mehr durch tickbasierte Wartepfade:
+  Controller-Reset und Stream-Setup verwenden bounded MMIO-Polls, fehlende
+  oder fehlschlagende R4D-Zustaende bleiben nichtfatal.
+- Das statische Gate `DevTools/Scripts/TestScripts/CheckHdaR4D039.zig`
+  schuetzt nun den HDA.R4D-Playback-Vertrag inklusive Backend-Registrierung,
+  DMA/BDL, PCM-Konvertierung, Stop/Drain/Recovery und R4D-Aktivstatus.
+- Der Q35/HDA-Smoke
+  `DevTools/Scripts/TestScripts/Run-HdaR4DProbeTest.ps1` wurde zum
+  Playback-Smoke erweitert: Image-Eintrag, Boot, `HDA.R4D [active]`,
+  `BEEP.R4X /SELFTEST`, R4Synth/WAV-Playback und `AUDIOD.R4X` muessen
+  erfolgreich laufen.
+- Dokumentation in `Docs/Audio/README.txt`, `Docs/Drivers/TreiberStand.txt`,
+  `Docs/Software.md` und `Docs/SupportedHardware.txt` aktualisiert.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.39.2` gesetzt.
+- Abnahme: `DevTools/Zig/zig.exe run
+  DevTools/Scripts/TestScripts/CheckHdaR4D039.zig`,
+  `DevTools/Scripts/TestScripts/Run-HdaR4DProbeTest.ps1`,
+  `DevTools/Scripts/Build.bat -norun` und
+  `DevTools/Scripts/Build.bat -test`.
+
+Notizen:
+- 0.39.2 ist der erste produktive HDA-R4D-Playback-Schritt. Der alte
+  Built-in-HDA-Pfad ist damit kein produktiver Fallback mehr, bleibt aber bis
+  0.39.3 noch als Vergleichsquelle im alten Kernelbaum liegen.
+
+Version 0.39.3
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Produktiven Built-in-HDA-Pfad entfernt: `Code/src/old/drivers/audio/hda.zig`
+  ist geloescht.
+- Legacy-`command_runtime.zig` importiert keinen HDA-Kerneltreiber mehr.
+  `AUDIO` und `HDATEST` nutzen Audio-Core und `audio_boot.dumpStatus()` statt
+  `hda.dumpStatus()`.
+- `DRIVER=HDA` laeuft nur noch ueber `driver_plan` und `HDA.R4D`. Es gibt
+  keinen parallelen nativen HDA-Backend-Fallback mehr.
+- `DevTools/Scripts/TestScripts/CheckHdaR4D039.zig` prueft jetzt, dass die
+  alte Built-in-HDA-Datei fehlt und Code unter `Code/src`, `Code/Driver` und
+  `Code/SDK` keine direkten HDA-Built-in-Importe, `hda.probe`,
+  `hda.dumpStatus` oder native `registerNativeAudioBackend("HDA")`-
+  Fallbacks enthaelt.
+- `DevTools/Scripts/TestScripts/CheckAudioR4D038.zig` auf den heutigen
+  Audio-Bootstand korrigiert, damit es keinen alten HDA-Import mehr erwartet.
+- `DevTools/Scripts/TestScripts/Run-HdaR4DPlanTest.ps1` angelegt. Der Smoke
+  prueft fehlendes `HDA.R4D` und ungueltige `HDA.R4D`-Overlaydatei als
+  nichtfatale Zustaende mit `HDA.R4D [missing]` bzw.
+  `HDA.R4D [load failed]`.
+- Dokumentation in `Docs/Audio/README.txt`, `Docs/Drivers/README.txt`,
+  `Docs/Drivers/R4DFormat.txt`, `Docs/Drivers/TreiberStand.txt`,
+  `Docs/SupportedHardware.txt`, `Docs/Deployment/BuildUndTest.txt`,
+  `Docs/Core/Architektur.txt` und `Docs/Core/KernelBereinigung.txt`
+  aktualisiert.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.39.3` gesetzt.
+- Abnahme: `DevTools/Zig/zig.exe run
+  DevTools/Scripts/TestScripts/CheckHdaR4D039.zig`,
+  `DevTools/Zig/zig.exe run
+  DevTools/Scripts/TestScripts/CheckAudioR4D038.zig`,
+  `DevTools/Scripts/TestScripts/Run-HdaR4DPlanTest.ps1`,
+  `DevTools/Scripts/TestScripts/Run-HdaR4DProbeTest.ps1`,
+  `DevTools/Scripts/Build.bat -norun` und
+  `DevTools/Scripts/Build.bat -test`.
+
+Notizen:
+- Diese Unterversion schliesst die HDA-Auslagerung fachlich ab. Der alte
+  HDA-Built-in darf nicht als Diagnose- oder Fallbackpfad wieder eingefuehrt
+  werden; neue HDA-Arbeit gehoert nach `Code/Driver/HDA`.
+
+Version 0.39.4
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Neues Abschlussgate
+  `DevTools/Scripts/TestScripts/Run-AudioHardwareR4DFinalTest.ps1`
+  angelegt.
+- Das Abschlussgate fuehrt die statischen AC97-/HDA-R4D-Gates aus, prueft
+  einen Boot ohne geplante Hardware-Audio-R4D-Treiber, startet die AC97-
+  Missing-/Disabled-/No-Device-/Init-Failed-Matrix, den AC97-Probe-/Playback-
+  Smoke, die HDA-Missing-/Load-Failed-Matrix und den Q35/HDA-Playback-Smoke.
+- Der No-Hardware-Audio-Boot erwartet `Audio boot [OK]` und verbietet
+  gleichzeitig `active`, `missing`, `init failed` oder `load failed` fuer
+  nicht geplante HDA-/AC97-R4D-Treiber.
+- AC97 und HDA sind damit gemeinsam gegen stille Built-in-Rueckfaelle
+  abgesichert: `CheckAudioR4D038.zig` haelt den entfernten AC97-Built-in,
+  `CheckHdaR4D039.zig` den entfernten HDA-Built-in und beide produktiven
+  R4D-Backendvertraege fest.
+- Dokumentation in `Docs/Core/KernelBereinigung.txt`,
+  `Docs/Core/Architektur.txt`, `Docs/Audio/README.txt`,
+  `Docs/Drivers/TreiberStand.txt`, `Docs/SupportedHardware.txt`,
+  `Docs/Software.md` und `Docs/Deployment/BuildUndTest.txt` aktualisiert.
+- Naechste chronologische Kandidaten nach Audio-Hardware-Auslagerung konkret
+  benannt: zuerst Netzwerk-/IPC-Basis, danach USB-HID, allgemeine
+  Driver-Policy/R4D, R4P-Start, Task/Scheduler, DHCP-Boot-Acquire und
+  Launcher.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.39.4` gesetzt.
+- Abnahme mit `DevTools/Scripts/Build.bat -norun`,
+  `DevTools/Scripts/Build.bat -test` und
+  `DevTools/Scripts/TestScripts/Run-AudioHardwareR4DFinalTest.ps1`.
+
+Notizen:
+- 0.39.X ist damit als Audio-Hardware-R4D-Auslagerung abgeschlossen. Neue
+  AC97-/HDA-Arbeit gehoert in die jeweiligen R4D-Treiber, nicht zurueck in
+  `Code/src/old/drivers/audio`.

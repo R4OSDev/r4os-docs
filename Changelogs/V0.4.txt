@@ -1,0 +1,3420 @@
+﻿R4OS Roadmap
+============
+
+*** Version 0.4 ***
+Topic: R4D-Treibersystem
+Status: Erledigt
+
+Leitidee:
+- R4OS-Treiber sollen sichtbare Dateien auf der Disk sein.
+- Treiber liegen langfristig unter /SYS/DRIVERS/ als .R4D-Dateien.
+- R4D steht fuer R4OS Driver.
+- Der Kernel-Core bleibt klein und irreduzibel.
+- Hardware-spezifische Funktionalitaet soll langfristig in Treiber wandern.
+- Der Kernel behaelt trotzdem einen kleinen Boot-Core fuer Speicher,
+  Interrupt-Grundlagen, minimale Ausgabe, Boot-Storage und Boot-FS.
+- Das Modell ist DOS-inspiriert: sichtbare Treiberdateien, User-Kontrolle,
+  kein Sicherheitsmodell.
+- Modernisiert wird das Modell durch R4D-Header, Auto-Detection,
+  deterministische Boot-Planung und klare Boot-Logs.
+
+Grundsatz Dateiname vs. Header:
+- Der Dateiname ist die DOS-artige User-Schnittstelle, z.B. AC97.R4D.
+- Der Header ist die technische Wahrheit.
+- Der Kernel nutzt Dateinamen fuer Auswahl, Konfiguration und Kontrolle.
+- Der Kernel validiert jede .R4D-Datei ueber ihren Header.
+- Der Header enthaelt Magic, Version, Treibertyp, init/shutdown-Offsets,
+  internen Namen, optionale Match-Tabelle und API-Version.
+
+Geplantes Datei-Layout:
+- /SYS/DRIVERS/*.R4D
+- /CONFIG.R4S optional
+
+Geplante Boot-Phasen:
+1. Kernel-Core
+2. Hardware-Enumeration
+3. CONFIG.R4S parsen
+4. Plan berechnen
+5. Treiber laden
+6. Shell starten
+
+CONFIG.R4S-Leitidee:
+- AUTO=PCI und AUTO=ACPI fuer spaetere automatische Erkennung.
+- DISABLE=X entfernt Treiber aus dem Plan.
+- PREFER=Y entscheidet bei Match-Konflikten.
+- DRIVER=Z laedt einen Treiber explizit.
+- OPTION speichert Treiberparameter.
+- SHELL setzt spaeter die zu startende Shell.
+- Fehlt CONFIG.R4S, gelten sinnvolle Defaults.
+
+Treiber-Lifecycle:
+- GELADEN
+- INITIALISIERT
+- AKTIV
+- SHUTDOWN
+- ENTLADEN
+
+Subsystem-Registry:
+- AudioBackend-Registry
+- StorageBackend-Registry
+- InputBackend-Registry
+- SynthEngine-Registry
+- MixerBackend-Registry
+- NetBackend-Registry
+
+Audio-Leitbild:
+- Das Audio-System baut auf dem R4D-Treibersystem auf.
+- ProgramApi-Audio ist die stabile, sprachneutrale ABI.
+- libr4os.audio ist nur der Zig-Komfortwrapper ueber der ProgramApi.
+- C, BASIC und andere Sprachen koennen eigene Wrapper ueber dieselbe ABI
+  bekommen.
+- Der Kernel-Audio-Core bleibt klein: Stream-Registry, Ringpuffer,
+  DMA-Puffer-Pool, IRQ-Routing und Registry-Anbindung.
+- Hardware-Audio-Treiber wie AC97.R4D und HDA.R4D geben Samples aus.
+- Synth-Engines wie SID.R4D, OPL3.R4D und MIDI.R4D sind PCM-Producer, keine
+  Hardware-Treiber.
+- Der Mixer ist als austauschbares Kernel-Backend gedacht.
+- Erste Mixer-Implementierung: SimpleKernelMixer im Kernel.
+- Spaeter kann ein anderes Mixer-Backend dieselbe MixerBackend-Schnittstelle
+  registrieren, ohne Apps oder Hardware-Treiber umzubauen.
+- Erstes internes Zielformat: s16le, stereo, 48000 Hz.
+- Float32-Mixing bleibt eine spaetere Option.
+- SB16.R4D ist langfristig als DOS-Kompatibilitaets-Producer denkbar, nicht
+  als echter Hardwaretreiber.
+
+Runtime-Kommandos:
+- LOAD name
+- UNLOAD name
+- DRIVERS
+
+Fehlerbehandlung:
+- Fehlende optionale Treiberdateien erzeugen WARN und der Boot geht weiter.
+- init()-Fehler erzeugen WARN und der Treiber wird nicht aktiv.
+- Boot-FS oder Pflicht-Eingabe fehlt: FATAL und Halt.
+- Kein stilles Versagen; alles soll ins Bootlog und spaeter in dmesg.
+
+Implementierungsreihenfolge:
+- 0.4.1 bis 0.4.6: Treiber-Infrastruktur.
+- 0.4.7: erste Migration bestehender interner Treiber ins Registry-Modell.
+- 0.4.8: Audio-Core, MixerBackend und minimale R4X-Audio-API.
+- 0.4.9: AC97-Erkennung und erstes Hardware-Backend.
+- 0.4.10: AC97-Playback-DMA und erster hoerbarer BEEP-Test.
+- 0.4.11: AC97-Ping-Pong-DMA als Refill-Grundlage.
+- 0.4.12: libr4os-/C-Wrapper-Schicht, Audio-App-Konventionen und R4Synth.
+- 0.4.13: R4Synth WAV-Fallback und robustere Testdatei.
+- 0.4.14: R4Synth WAV-Parser, R4X-Pfadsemantik und Transfer-Import.
+- 0.4.15: R4Synth/AC97-Playback-Pacing und WAV-Chunkgroessen.
+- 0.4.16: AC97-Puffer-Timeout ohne stilles Sample-Dropping.
+- 0.4.17: AC97-DMA-Slotpuffer vergroessern.
+- 0.4.18: AUDIO-Diagnosekommando fuer Shell.
+- 0.4.19: R4Synth-Write-Pfad und Stream-Cleanup.
+- 0.4.20: R4Synth Prime-Write vor Playback-Loop.
+- 0.4.21: R4Synth stackbasierter Prime-Write.
+- 0.4.22: R4Synth WAV-Loop mit Stack-Stream-ID.
+- 0.4.23: R4Synth WAV-Loop mit Stack-Offset/Remaining.
+- 0.4.24: R4Synth erzwungener WAV-Write-Loop.
+- 0.4.25: R4Synth fester Sample-Loop nach Prime-Write.
+- 0.4.26: R4Synth WAV-Blockloop mit Stack-Dateilaenge.
+- 0.4.27: R4Synth RIP-relatives Patching und normaler WAV-Loop.
+- 0.4.28: PCM-Formatpipeline und Resampling.
+- 0.4.29: AC97-Treiber ausreifen.
+- 0.4.30: R4Synth als WAV-Mediaplayer.
+- 0.4.31: R4Synth Playback-Timing und Chunkgroessen.
+- 0.4.32: R4Synth Vorpuffer und AC97-Drain.
+- 0.4.33: Streaming-Resampler fuer PCM.
+- 0.4.34: Streaming-Resampler Chunk-Ende.
+- 0.4.35: Driver-Registry Herkunft und Anzeige.
+- 0.4.36: DriverApi get_option anbinden.
+- 0.4.37: DMESG-Shellkommando fuer Bootlog.
+- 0.4.38: Treiberinfrastruktur stabilisieren.
+- 0.4.39: LOAD erkennt bereits aktive Builtin-/R4D-Treiber.
+- 0.4.40: HDA fuer modernere/reale Hardware.
+- 0.4.41: HDA-MMIO-Registerprobe.
+- 0.4.42: HDA-Faehigkeiten dekodieren.
+- 0.4.43: Audio-Backend per DRIVER=AC97/HDA vorbereiten.
+- 0.4.44: AudioBackend-Registry fuer mehrere Backends.
+- 0.4.45: AudioBackend Auswahl- und Unregister-Helfer.
+- 0.4.46: HDA-QEMU-Testskripte.
+- 0.4.47: HDA-Controller-Reset und Betriebszustand.
+- 0.4.48: HDA-CORB/RIRB-Kommandotransport.
+- 0.4.49: HDA-Codec-Discovery.
+- 0.4.50: HDA-Output-Pfad konfigurieren.
+- 0.4.51: HDA-Stream-DMA-Grundlage.
+- 0.4.52: HDA-BEEP hoerbar machen.
+- 0.4.53: HDA-Refill, IRQ und Playback-Stabilitaet.
+- 0.4.54: HDA mit R4Synth, TEST.WAV und TADA.WAV.
+- 0.4.55: HDA-Diagnose, Fehlerbehandlung und Resetpfad.
+- 0.4.56: HDA-Ausreifung und Abnahme.
+- 0.4.57: HDA-Abnahmekommando.
+- 0.4.58: SynthEngine-Registry fuer SID.
+- 0.4.59: SID.R4D-Platzhalter.
+- 0.4.60: SID-Engine.
+- 0.4.61: SIDDEMO hoerbar machen.
+- 0.4.62: MIDI-ProgramApi und MIDIPLAY.
+- 0.4.63: OPL3 und MIDI-Playback.
+- 0.4.64: MIDIPLAY Track-Scanner.
+- 0.4.65: MIDI Note-On als einfacher PCM-Synth.
+- 0.4.66: MIDI-Playback sauber stoppen.
+- 0.4.67: MIDIPLAY einfacher Event-Pacer.
+- 0.4.68: MIDIPLAY Pacer-Opcode korrigieren.
+- 0.4.69: MIDIPLAY MIDI-Delta und Tempo.
+- 0.4.70: MIDI-Tonhoehen und Triangle-Wave.
+- 0.4.71: MIDIPLAY Tempo-Feinschliff.
+- 0.4.72: MIDI zustandsbasiert rendern.
+- 0.4.73: R4Synth spielt MIDI-Dateien.
+- 0.4.74: Driver-Projektstruktur.
+- 0.4.75: R4Synth als einziger Mediaplayer.
+- 0.4.76: Synth-Engine-ABI finalisieren.
+- 0.4.77: OPL3-Registermodell und Operatoren.
+- 0.4.78: OPL3-Huellkurven, Phase und Waveforms.
+- 0.4.79: OPL3-Kanaele, Feedback, Stereo und Rhythmusmodus.
+- 0.4.80: OPL3-PCM-Rendering als echte Synth-Engine.
+- 0.4.81: MIDI-Router finalisieren.
+- 0.4.82: General-MIDI-zu-OPL3-Mapping.
+- 0.4.83: R4Synth MIDI-Abnahme und MIDIPLAY entfernen.
+- 0.4.84: SID-Architektur und PSID/RSID-Parser.
+- 0.4.85: 6502/6510-Core fuer SID-Wiedergabe.
+- 0.4.86: C64-Laufzeitumgebung fuer SID-Dateien.
+- 0.4.87: SID-Oszillatoren und Registermodell.
+- 0.4.88: SID-ADSR, Gate, Sync, Ringmod und Noise.
+- 0.4.89: SID-Filter, Mixer und 6581/8580-Modelle.
+- 0.4.90: R4Synth SID-Player.
+- 0.4.91: SID-Genauigkeit nachziehen.
+- 0.4.92: SID-Referenzabnahme und Testmatrix.
+- 0.4.93: SID-CPU/C64-Kompatibilitaet nachziehen.
+- 0.4.94: SID-Filter, Mixer und D418-Grenzen.
+- 0.4.95: SID-Abschlussdokumentation und bekannte Grenzen.
+- 0.4.96: Roadmap-Abschluss und 0.4-Abnahme.
+
+
+0.4.1: R4D-Dateiformat und Dokumentation
+----------------------------------------
+Status: Erledigt
+
+Ziele:
+- R4D-Dateiformat final fuer die erste Implementierungsstufe festlegen.
+- Header-Spezifikation als eigene technische Dokumentation anlegen.
+- Header-Struktur analog zu R4X definieren.
+- Magic "R4D0" verwenden.
+- Treibertypen fuer Audio, Storage, Input, Synth, Net und Misc vorbereiten.
+- init() und shutdown() als Pflicht definieren.
+- API-Version im Header vorsehen.
+- Dateiname-vs-Header-Regel dokumentieren.
+- DevTools/R4XBuilder um einen R4D-Modus erweitern oder den Nachfolger so
+  planen, dass dieselbe Toolchain R4X- und R4D-Container erzeugen kann.
+
+Abnahme:
+- Docs/Drivers/Leitbild.txt beschreibt das Treibermodell.
+- Docs/Audio/Leitbild.txt beschreibt das Audio-Modell auf Basis von R4D.
+- Docs/Drivers enthaelt die erste technische R4D-Header-Spezifikation.
+- Roadmap.txt enthaelt Version 0.4 mit Zielen und Abnahme.
+- Der geplante Header ist so beschrieben, dass ein Builder/Loader ihn
+  implementieren kann.
+- Ein Host-Tool kann eine minimale HELLO.R4D-Testdatei mit gueltigem Header
+  erzeugen.
+
+Aktueller Test:
+- Docs/Drivers/R4DFormat.txt beschreibt Header Version 1.
+- DevTools/R4XBuilder unterstuetzt --r4d und --format r4d.
+- Driver/Hello/Build.ps1 erzeugt Driver/Hello/zig-out/HELLO.R4D.
+- BuildAndRun-Scripts kopieren HELLO.R4D nach /sys/drivers/hello.r4d.
+
+
+0.4.2: R4D-Loader-Grundlage
+---------------------------
+Status: Erledigt
+
+Ziele:
+- Loader fuer .R4D-Dateien vorbereiten.
+- Gemeinsamen Binary-/Modul-Loader-Kern fuer R4X und R4D herausarbeiten, wo
+  es sinnvoll ist.
+- Hinweis: aktuell ist R4X/R4D ein eigenes Containerformat, kein echter ELF-
+  Loader. ELF-Unterstuetzung bleibt spaeter moeglich, ist aber keine
+  Voraussetzung fuer 0.4.
+- Header lesen und validieren.
+- Magic, Version, Typ, API-Version, init-Offset und shutdown-Offset pruefen.
+- R4D-Codebereich laden und init-/shutdown-Entrypoints ableiten.
+- Fehler sauber als WARN oder ERROR loggen.
+- Noch keine echte Hardware initialisieren.
+
+Abnahme:
+- Gueltige Test-R4D-Datei wird erkannt.
+- HELLO.R4D kann geladen werden und "Hello from driver" ins Log schreiben.
+- Falsche Magic wird sauber abgelehnt.
+- Unbekannte API-Version wird sauber abgelehnt.
+- Ungueltige Offsets werden sauber abgelehnt.
+- Kernel bleibt nach Loader-Fehlern stabil.
+
+Aktueller Test:
+- Code/src/program/r4d.zig liest /sys/drivers/hello.r4d von FAT32.
+- Der Loader validiert Magic, Version, Typ, API-Version, Offsets und Namen.
+- Eine minimale DriverApi Version 1 stellt log_info bereit.
+- HELLO.R4D nutzt DriverApi.log_info und schreibt "Hello from driver".
+- Der Boot-Probe ruft init() und shutdown() auf und loggt den Erfolg.
+- QEMU-Smoke-Test erreicht danach R4OS V0.4.2, READY. und X:\>.
+
+
+0.4.3: Driver-Registry und Lifecycle
+------------------------------------
+Status: Erledigt
+
+Ziele:
+- Zentrale Driver-Registry einfuehren.
+- Zustaende GELADEN, INITIALISIERT, AKTIV, SHUTDOWN, ENTLADEN abbilden.
+- init() und shutdown() ueber Loaderpfad aufrufen.
+- Treibername, Typ, Version und Status anzeigen koennen.
+- Boot-Logger und dmesg-artigen Ringpuffer vorbereiten.
+- Treiber-Logs in Bootlog und dmesg-Puffer schreiben.
+
+Abnahme:
+- Ein Testtreiber kann geladen und initialisiert werden.
+- Ein Testtreiber kann shutdown() durchlaufen.
+- Statuswechsel werden geloggt.
+- HELLO.R4D registriert sich nicht in einem Subsystem, kann aber sauber
+  geladen, geloggt und wieder entladen werden.
+- Fehlerhafte init() hinterlaesst keinen aktiven Treiber.
+- DRIVERS-Statusdaten koennen aus der Registry gelesen werden.
+
+Aktueller Test:
+- Code/src/drivers/registry.zig fuehrt eine zentrale Driver-Registry ein.
+- Code/src/kernel/bootlog.zig bereitet einen dmesg-artigen Ringpuffer vor.
+- HELLO.R4D durchlaeuft beim Boot GELADEN, INITIALISIERT, AKTIV, SHUTDOWN und
+  ENTLADEN.
+- Die Registry kann den HELLO-Status als ENTLADEN dumpen.
+- QEMU-Smoke-Test erreicht danach R4OS V0.4.3, READY. und X:\>.
+
+
+0.4.4: KernelApi fuer Treiber
+-----------------------------
+Status: Erledigt
+
+Ziele:
+- Versionierte KernelApi-Struktur fuer Treiber definieren.
+- Logging-Funktionen bereitstellen.
+- Speicherfunktionen fuer einfache Treibertests bereitstellen.
+- port_inb/port_outb als privilegierte Treiber-API vorbereiten.
+- request_irq/release_irq als Ziel vorbereiten und, soweit moeglich,
+  funktional anbinden.
+- alloc_dma_buffer/free_dma_buffer als API-Flaeche vorbereiten.
+- get_option fuer CONFIG.R4S-Optionen vorbereiten.
+- Subsystem-Registries vorbereiten: AudioBackend, StorageBackend,
+  InputBackend, SynthEngine, MixerBackend und NetBackend.
+- MixerBackend-Registrierung als Konzept fuer Audio vorbereiten.
+
+Abnahme:
+- Testtreiber erhaelt KernelApi-Pointer.
+- Testtreiber kann log_info/log_warn/log_error nutzen.
+- API-Version wird gegen den R4D-Header geprueft.
+- ABI ist in Docs/Drivers dokumentiert.
+- Docs/Audio beschreibt ProgramApi-Audio und MixerBackend-Grenze.
+- Die KernelApi enthaelt klar versionierte Slots fuer Port-I/O, IRQ, DMA,
+  Logging, Optionszugriff und Subsystem-Registrierung.
+
+Aktueller Test:
+- Code/src/kernel/driver_api.zig definiert DriverApi Version 2.
+- HELLO.R4D wird mit API-Version 2 gebaut.
+- DriverApi enthaelt log_info, log_warn, log_error, port_inb, port_outb,
+  alloc_dma_buffer, free_dma_buffer, request_irq, release_irq, get_option und
+  Register-Funktionen fuer Audio, Storage, Input, Synth, Mixer und Net.
+- request_irq/release_irq sind bewusst noch Platzhalter und loggen WARN.
+- HELLO.R4D nutzt log_info/log_warn/log_error beim Boot.
+- QEMU-Smoke-Test erreicht danach R4OS V0.4.4, READY. und X:\>.
+
+
+0.4.5: ACPI/PCIe, CONFIG.R4S und Boot-Plan
+------------------------------------------
+Status: Erledigt
+
+Ziele:
+- ACPI-Statisch-Reader vorbereiten.
+- MCFG lesen, um PCIe-Konfigurationsraum spaeter sauber adressieren zu
+  koennen.
+- MADT lesen, um APIC-/Interrupt-Informationen sichtbar zu machen.
+- FADT lesen, um Shutdown-/Power-Management-Informationen fuer spaeter zu
+  kennen.
+- PCIe-Enumeration vorbereiten: Bus scannen, Geraeteliste aufbauen,
+  Vendor-ID, Device-ID und Class-Code lesen.
+- /CONFIG.R4S optional lesen.
+- Direktiven parsen, aber ohne Side-Effects.
+- Planphase bauen: Direktiven und Defaults ergeben eine finale Treiberliste.
+- Auto-Discovery-Vorschlaege und CONFIG.R4S-Direktiven deterministisch mergen.
+- DISABLE, DRIVER, OPTION und LOG vorbereiten.
+- AUTO=PCI und AUTO=ACPI als Direktiven akzeptieren, auch wenn echte
+  Enumeration spaeter kommt.
+
+Abnahme:
+- ACPI-Reader kann vorhandene MCFG/MADT/FADT-Tabellen finden oder sichtbar
+  melden, wenn sie fehlen.
+- PCIe-Enumeration kann mindestens Bus-/Device-/Function-Eintraege pruefen
+  und VID/PID/Class loggen, wenn PCIe-Konfigurationszugriff verfuegbar ist.
+- Fehlende CONFIG.R4S nutzt Defaults.
+- CONFIG.R4S wird als einfacher Zeilenparser umgesetzt.
+- DRIVER=TEST nimmt TEST in den Plan auf.
+- DISABLE=TEST entfernt TEST aus dem Plan.
+- OPTION TEST key=value wird gespeichert.
+- AUTO=PCI und AUTO=ACPI beeinflussen die Auto-Discovery-Phase sichtbar.
+- Plan wird geloggt, bevor Treiber geladen werden.
+- HELLO.R4D kann via CONFIG.R4S geplant und beim Boot geladen werden.
+
+Aktueller Test:
+- Code/src/platform/acpi.zig sucht RSDP und liest XSDT/RSDT, MCFG, MADT/APIC
+  und FADT/FACP, wenn ACPI-Tabellen auffindbar sind.
+- Code/src/platform/pcie.zig nutzt MCFG/ECAM, falls vorhanden, und loggt
+  VID/PID/Class fuer gefundene Funktionen.
+- Fehlende ACPI-/MCFG-Daten erzeugen WARN und blockieren den Boot nicht.
+- Code/src/kernel/boot_config.zig liest /CONFIG.R4S als einfachen
+  Zeilenparser.
+- CONFIG.R4S enthaelt AUTO=PCI, AUTO=ACPI, DRIVER=HELLO, OPTION HELLO
+  mode=boot und LOG=verbose.
+- Code/src/kernel/driver_plan.zig baut daraus einen Boot-Plan und laedt
+  HELLO.R4D ueber den normalen R4D-Loader.
+- QEMU-Smoke-Test erreicht danach R4OS V0.4.5, READY. und X:\>.
+
+
+0.4.6: Runtime-Kommandos
+------------------------
+Status: Erledigt
+
+Ziele:
+- Shell-Kommandos LOAD, UNLOAD und DRIVERS einfuehren.
+- LOAD name sucht /SYS/DRIVERS/name.R4D.
+- UNLOAD name ruft shutdown() und entfernt den Treiber.
+- DRIVERS zeigt Name, Typ und Status.
+- Runtime-Loading nutzt dieselbe Loader-/Lifecycle-Logik wie der Boot-Plan.
+
+Abnahme:
+- LOAD HELLO laedt /SYS/DRIVERS/HELLO.R4D und schreibt "Hello from driver" ins
+  Log.
+- UNLOAD HELLO beendet und entlaedt den Treiber sauber.
+- DRIVERS zeigt HELLO mit Status.
+- Fehler werden sichtbar in der Shell ausgegeben.
+
+Aktueller Test:
+- Code/src/program/r4d.zig kann R4D-Dateien jetzt persistent als Runtime-
+  Treiber laden.
+- Der Boot-Plan nutzt dieselbe Runtime-Ladelogik wie LOAD.
+- HELLO.R4D bleibt nach dem Boot AKTIV, bis UNLOAD HELLO ausgefuehrt wird.
+- UNLOAD HELLO ruft shutdown() auf, markiert den Treiber als ENTLADEN und
+  gibt den Runtime-Slot frei.
+- LOAD HELLO sucht /sys/drivers/hello.r4d und laedt den Treiber erneut.
+- DRIVERS gibt die zentrale Driver-Registry auf der Shell aus.
+- HELP listet LOAD, UNLOAD und DRIVERS.
+
+
+0.4.7: Interne Treiber ans Registry-Modell anbinden
+---------------------------------------------------
+Status: Erledigt
+
+Ziele:
+- Bestehende interne Treiber schrittweise in das neue Registry-/Backend-Modell
+  einhaengen.
+- PS2.R4D als Proof-of-Concept aus bestehendem PS/2-Keyboard-/Mouse-Code
+  herausarbeiten.
+- PS2.R4D als Input-Backend modellieren.
+- AT-PIO.R4D als Storage-Backend fuer QEMU-Test planen.
+- Bootstrapping-Grenze klar behandeln: Wenn AT-PIO.R4D von derselben
+  FAT32-Bootdisk geladen werden soll, braucht der Kernel vorher bereits einen
+  minimalen Boot-Storage-Pfad. Alternativen sind: Boot-Storage bleibt vorerst
+  Core, oder AT-PIO.R4D wird spaeter vom Bootloader/preloaded bereitgestellt.
+- CONFIG.R4S fuer einen Standard-Boot-Stack erstellen.
+- Standard-Boot-Stack soll PS2 und den passenden Boot-Storage-Pfad laden oder
+  aktivieren.
+- DISABLE=PS2 als absichtlicher Negativtest vorsehen.
+- FAT32 optional als Modul untersuchen; falls das Bootstrapping zu frueh
+  dagegen spricht, bleibt FAT32 vorerst im Kernel-Core.
+- Keine harte Auslagerung erzwingen, solange Bootstrapping dagegen spricht.
+
+Abnahme:
+- Bestehende Eingabe funktioniert weiter.
+- Bestehender Boot von FAT32 funktioniert weiter.
+- R4OS bootet fuer den Standardfall sichtbar identisch zu vorher.
+- PS/2 kommt im Proof-of-Concept aus /SYS/DRIVERS/PS2.R4D oder wird ueber
+  dieselbe Registry-/Lifecycle-Logik wie ein R4D-Treiber sichtbar gemacht.
+- ATA-PIO kommt entweder aus /SYS/DRIVERS/AT-PIO.R4D oder ist sauber als
+  Boot-Storage-Sonderfall dokumentiert, falls der Core ihn noch braucht.
+- CONFIG.R4S beschreibt den Standard-Boot-Stack.
+- Mit DISABLE=PS2 bootet das System, aber Tastatureingabe ist danach
+  erwartungsgemaess nicht verfuegbar.
+- Interne und migrierte Treiber koennen im DRIVERS-Status sichtbar gemacht
+  werden.
+- Architektur dokumentiert klar, welche Treiber intern bleiben und warum.
+
+Aktueller Test:
+- PS2 wird als Builtin-Input-Treiber in der Driver-Registry gefuehrt.
+- AT-PIO wird als Builtin-Storage-/Boot-Core-Treiber in der Driver-Registry
+  gefuehrt.
+- Beide durchlaufen dieselben sichtbaren Registry-Zustaende wie R4D-Treiber:
+  GELADEN, INITIALISIERT und AKTIV.
+- DRIVERS zeigt dadurch HELLO, PS2 und AT-PIO im gemeinsamen Statusbild.
+- DISABLE=PS2 aus CONFIG.R4S wird nach dem Config-Parse angewendet: IRQ1 und
+  IRQ12 werden maskiert, der PS2-Eintrag geht ueber SHUTDOWN nach ENTLADEN.
+- DISABLE=AT-PIO wird sichtbar als WARN gemeldet, weil AT-PIO aktuell noch
+  Boot-Storage ist und bereits gebraucht wurde, um CONFIG.R4S zu lesen.
+- ATA-PIO und FAT32 bleiben vorerst bewusst im Kernel-Core, bis ein
+  Bootloader-/Preload-Pfad oder ein anderer Boot-Storage-Mechanismus steht.
+
+
+0.4.8: Audio-Core und MixerBackend
+----------------------------------
+Status: Erledigt
+
+Ziele:
+- Kernel-Audio-Core vorbereiten.
+- Audio-Stream-Abstraktion einfuehren: Stream-Struct, Stream-ID,
+  Status, Format, Lautstaerke und Zielrouting.
+- Stream-Registry fuer einfache PCM-Streams einfuehren.
+- Ringpuffer pro Stream vorbereiten.
+- DMA-Puffer-Pool vorbereiten: physisch zusammenhaengende Speicherbereiche
+  ueber phys.zig/PMM allozieren und freigeben.
+- MixerBackend-Schnittstelle definieren.
+- SimpleKernelMixer als erstes austauschbares Kernel-Backend einbauen.
+- Erstes internes Zielformat verwenden: s16le, stereo, 48000 Hz.
+- AudioBackend-Registry fuer Hardware-Ausgabe vorbereiten.
+- AudioBackend-Slot fuer genau ein aktives Standard-Backend vorbereiten.
+- AC97.R4D als ersten echten Audio-Hardwaretreiber implementieren.
+- AC97-Init-Sequenz vorbereiten: Codec-Reset, Mixer-Grundzustand,
+  Stream-Setup.
+- AC97-DMA-Beschreibungs-Liste vorbereiten.
+- AC97-IRQ-Handler fuer Buffer-/Stream-Events anbinden.
+- AC97 in QEMU als bevorzugten Einstieg nutzen, wenn praktikabel.
+- Minimale R4X-Audio-API bereitstellen: audio_open_stream, audio_write,
+  audio_close und audio_set_volume.
+- BEEP.R4X als Test-App vorbereiten: 440-Hz-Sinus fuer ca. eine Sekunde.
+
+Abnahme:
+- Ein PCM-Teststream kann angelegt, beschrieben und geschlossen werden.
+- SimpleKernelMixer haengt hinter der MixerBackend-Schnittstelle.
+- Mixer-Ausgabe ist nicht hart in Apps oder Hardware-Treiber verdrahtet.
+- AC97-Backend kann sich registrieren.
+- AC97 kann in QEMU initialisiert werden, wenn die emulierte Hardware
+  verfuegbar ist.
+- BEEP.R4X kann aus der Shell gestartet werden.
+- BEEP.R4X spielt in QEMU hoerbar einen kurzen 440-Hz-Ton.
+- Bei fehlender AC97-Hardware gibt es eine sichtbare WARN-Meldung statt
+  stillem Versagen.
+
+Aktueller Test:
+- Code/src/audio/core.zig fuehrt den Kernel-Audio-Core ein.
+- Der Audio-Core verwaltet PCM-Streams mit Stream-ID, Format, Lautstaerke,
+  Ringpuffer und Status.
+- Erstes erlaubtes Format: s16le, mono/stereo, bis 192 kHz; Standardziel
+  bleibt s16le stereo 48000 Hz.
+- SimpleKernelMixer wird beim Boot als MixerBackend registriert.
+- AudioBackend- und MixerBackend-Registrierung laufen ueber die DriverApi in
+  den Audio-Core.
+- DMA-Puffer-Helfer fuer spaetere Hardwaretreiber liegen im Audio-Core und
+  nutzen phys.zig/PMM fuer Frame-Allokation.
+- Die R4X-ProgramApi enthaelt audio_open_stream, audio_write, audio_close und
+  audio_set_volume.
+- Software/Beep erzeugt BEEP.R4X als ersten Audio-ABI-Test. BEEP oeffnet
+  einen Stream, schreibt Samples und schliesst den Stream.
+- AC97.R4D und hoerbarer QEMU-Beep sind noch nicht umgesetzt; der Hardware-
+  Backend-Pfad folgt in 0.4.9.
+
+0.4.9: AC97-Erkennung und erstes Hardware-Backend
+-------------------------------------------------
+Status: Erledigt
+
+Ziele:
+- QEMU-Testlauf um ein AC97-Geraet erweitern.
+- Legacy-PCI-Konfigurationszugriff ueber CF8/CFC implementieren, weil MCFG in
+  der aktuellen QEMU-Konfiguration nicht verfuegbar ist.
+- PCI-Geraeteliste fuer klassische PCI-Geraete aufbauen.
+- AC97-kompatibles PCI-Audiogeraet finden.
+- AC97-I/O-BARs lesen und I/O-/Busmastering im PCI-Command-Register
+  aktivieren.
+- AC97 als AudioBackend im Audio-Core registrieren.
+- Codec-Grundreset vorbereiten.
+- Playback-DMA als naechsten Schritt klar abgrenzen.
+
+Abnahme:
+- QEMU stellt ein AC97-Geraet bereit.
+- Bootlog zeigt PCI-Legacy-Enumeration.
+- AC97-Geraet wird mit Bus/Device/Function und BARs geloggt.
+- Audio-Core registriert AC97 als AudioBackend.
+- Wenn kein AC97-Geraet vorhanden ist, gibt es eine WARN-Meldung.
+- BEEP.R4X bleibt lauffaehig, auch wenn noch kein hoerbarer DMA-Ausgang
+  existiert.
+
+Aktueller Test:
+- DevTools/Scripts/BuildAndRun.bat und BuildAndRunView.bat starten QEMU mit
+  -device AC97.
+- Code/src/platform/pci.zig scannt klassische PCI-Geraete ueber CF8/CFC.
+- QEMU-AC97 wird als 8086:2415, class 0x04/subclass 0x01 erkannt.
+- Code/src/drivers/audio/ac97.zig liest NAM/NABM-I/O-BARs und aktiviert
+  I/O-Space plus Busmastering im PCI-Command-Register.
+- AC97 setzt einen einfachen Codec-Grundzustand und registriert sich als
+  AudioBackend im Audio-Core.
+- Bootlog zeigt [AUDIO] audio backend AC97 [OK].
+- Playback-DMA ist bewusst noch offen und wird sichtbar als WARN geloggt.
+
+
+0.4.10: AC97-Playback-DMA und BEEP
+----------------------------------
+Status: Erledigt
+
+Ziele:
+- AC97-Playback-Pfad fuer PCM-Out vorbereiten.
+- Physische DMA-Puffer fuer AC97-Buffer-Descriptor-List und Sampledaten
+  allozieren.
+- AC97-PCM-Out-Register setzen: BDBAR, LVI, Status-Clear und Run/Pause.
+- BEEP.R4X von stillem ABI-Test zu einem echten Square-Wave-Test erweitern.
+- BEEP.R4X soll wiederholt PCM-Bloecke schreiben und per Timer warten, damit
+  AC97 Zeit zum Abspielen bekommt.
+- Audio-Core soll geschriebene PCM-Bloecke an das aktive native
+  AudioBackend weiterreichen.
+- Noch kein komplexer Ringpuffer-Refill oder IRQ-getriebener Mixer; das ist
+  der Schritt nach dem ersten Ton.
+
+Abnahme:
+- AC97 allokiert BDL und DMA-Samplepuffer sichtbar im Bootlog.
+- AC97 meldet Playback-DMA-Single-Buffer-Pfad als OK.
+- BEEP.R4X erzeugt echte s16le-stereo-Samples statt Stille.
+- BEEP.R4X bleibt als Shell-App startbar.
+- Bei funktionierendem QEMU-Audio ist ein einfacher Testton hoerbar.
+- Falls kein Ton kommt, bleibt der Kernel stabil und die AC97-Register-/DMA-
+  Initialisierung ist im Log nachvollziehbar.
+
+Aktueller Test:
+- Code/src/drivers/audio/ac97.zig allokiert physische Frames fuer BDL und
+  Sample-DMA-Puffer.
+- AC97 setzt NAM- und NABM-Register fuer PCM-Out und startet einen
+  Single-Buffer-DMA-Transfer pro geschriebenem PCM-Block.
+- Code/src/audio/core.zig reicht geschriebene PCM-Bloecke direkt an das
+  aktive native AudioBackend weiter.
+- Software/Beep erzeugt nun 4096 Byte grosse s16le-stereo-Square-Wave-Bloecke
+  und schreibt sie wiederholt mit Timer-Abstand.
+- QEMU-Smoke-Test bootet bis R4OS V0.4.10 und zeigt AC97-DMA-Initialisierung:
+  BDL-Adresse, Buffer-Adresse und playback DMA single-buffer path [OK].
+- Interaktiver Hoertest erfolgt ueber C:\>BEEP im QEMU-Fenster.
+
+
+0.4.11: AC97-Ping-Pong-DMA
+--------------------------
+Status: Erledigt
+
+Ziele:
+- AC97-Playback von Single-Buffer-DMA auf zwei DMA-Puffer umstellen.
+- BDL-Eintraege 0 und 1 als Ping-Pong-Queue verwenden.
+- Laufenden DMA-Pfad moeglichst nicht fuer jeden PCM-Block hart resetten.
+- AC97-CIV/LVI-Status nutzen, um den naechsten Puffer nicht waehrend der
+  Wiedergabe zu ueberschreiben.
+- Reset-Fallback behalten, falls der Stream stehenbleibt oder der Status nicht
+  rechtzeitig weiterlaeuft.
+- Damit eine bessere Grundlage fuer WAV/R4Synth und spaeter IRQ-getriebenen
+  Refill schaffen.
+
+Abnahme:
+- AC97 allokiert zwei physische Sample-DMA-Puffer.
+- Bootlog zeigt beide Buffer-Adressen.
+- AC97 meldet Playback-DMA-Ping-Pong-Pfad als OK.
+- BEEP.R4X bleibt hoerbar.
+- QEMU bootet weiterhin stabil bis zur Shell.
+- Der naechste Schritt kann IRQ-/Timer-getriebenen Refill oder R4Synth nutzen,
+  ohne wieder beim Einzelschuss-DMA anzufangen.
+
+Aktueller Test:
+- Code/src/drivers/audio/ac97.zig allokiert zwei Sample-DMA-Puffer und nutzt
+  BDL-Eintraege 0 und 1 als Ping-Pong-Queue.
+- AC97 liest CIV und setzt LVI, bevor der naechste Puffer freigegeben wird.
+- Bei blockierendem Status bleibt ein Reset-Fallback erhalten.
+- QEMU-Smoke-Test bootet bis R4OS V0.4.11 und zeigt beide Buffer-Adressen
+  sowie playback DMA ping-pong path [OK].
+- BEEP.R4X wird unveraendert ins Image gebaut und bleibt der manuelle
+  Hoertest.
+
+
+0.4.12: App-Wrapper, Template und R4Synth
+-----------------------------------------
+Status: Erledigt
+
+Ziele:
+- ProgramApi-Audio aus 0.4.8 stabilisieren und dokumentieren.
+- Software/libr4os/ als Zig-Package anlegen.
+- libr4os als Komfortschicht fuer Zig-Apps definieren, nicht als
+  Systempflicht oder ABI-Grenze.
+- Erstes Modul r4os.audio mit Stream-API bereitstellen.
+- Nebenmodule r4os.print und r4os.input vorbereiten, weil Apps diese
+  Grundfunktionen ohnehin brauchen.
+- r4os.fs als Wrapper fuer vorhandene Datei-API vorbereiten, damit Apps
+  Testdaten von Disk lesen koennen.
+- C-Wrapper-Konzept dokumentieren, ohne Zig zur Pflicht zu machen.
+- Standard-build.zig-Template fuer Apps unter Software/Template/ anlegen.
+- Audio-Beispielprogramme strukturieren.
+- R4Synth als zentrale Shell-Audio-Testanwendung planen.
+- R4Synth liegt unter Software/R4Synth/ und erzeugt synth.r4x.
+- Aufrufschema: SYNTH FILE.ENDUNG.
+- R4Synth laeuft bewusst als Shell-Anwendung, nicht als Vollbild-App.
+- Beim Start erkennt R4Synth anhand Dateiendung/Header das Format und startet
+  direkt die Wiedergabe.
+- Erste Pflichtformate: WAV fuer PCM/AudioBackend-Test, spaeter SID und MID,
+  sobald SID.R4D, MIDI.R4D und OPL3.R4D vorhanden sind.
+- Tastatur-Shortcuts waehrend der Wiedergabe: P fuer Play/Pause, Q fuer
+  Beenden.
+- R4Synth soll sichtbare Statuszeilen ausgeben: Datei, Format, Backend,
+  Wiedergabestatus und Fehler.
+- R4Synth soll die zentrale manuelle Test-App fuer Audio-Treiber, Mixer,
+  Synth-Engines und Formatdecoder werden.
+- WAVPLAY.R4X als erste echte Audio-App vorbereiten: WAV-Datei von Disk lesen
+  und abspielen. Kann als interner Zwischenschritt oder als abgespeckte
+  Vorstufe von R4Synth entstehen.
+- TONE.R4X vorbereiten: variable Frequenz, Tastatursteuerung.
+- Empfehlungen fuer Sample-Format, Blockgroessen und Fehlerbehandlung
+  dokumentieren.
+
+Abnahme:
+- Eine R4X-App kann ueber die dokumentierte ProgramApi einen PCM-Stream
+  oeffnen.
+- Eine Test-App kann einfache Samples schreiben.
+- libr4os.audio ist als Zig-Wrapper dokumentiert, aber nicht die ABI-Grenze.
+- Die Audio-ABI ist fuer C und andere Sprachen nutzbar beschreibbar.
+- App-Entwicklung mit Zig benoetigt nur Software/Template/ und
+  Software/libr4os/, kein Kernel-Wissen.
+- SYNTH TEST.WAV startet R4Synth aus der Shell und spielt eine WAV-Datei.
+- R4Synth reagiert auf P mit Play/Pause und auf Q mit sauberem Beenden.
+- R4Synth meldet unbekannte Formate sichtbar, ohne den Kernel zu zerlegen.
+- R4Synth ist so strukturiert, dass spaeter SID-, MID- und weitere Decoder
+  angeschlossen werden koennen.
+- WAVPLAY.R4X spielt eine Test-WAV von Disk.
+- TONE.R4X kann Frequenz oder Tonverhalten per Tastatur veraendern.
+- BEEP.R4X bleibt als Low-Level-Test erhalten.
+
+Aktueller Test:
+- Software/R4Synth erzeugt SYNTH.R4X und eine kleine TEST.WAV fuer manuelle
+  Tests.
+- BuildAndRun.bat und BuildAndRunView.bat bauen R4Synth und kopieren
+  synth.r4x nach /bin sowie TEST.WAV nach /test.wav.
+- R4Synth laeuft als Shell-App und nutzt api.args als Dateipfad.
+- Unterstuetztes erstes Format: kanonisches PCM-WAV, stereo, 16-bit.
+- R4Synth liest bis zu 64 KB, prueft RIFF/WAVE/fmt/data-Header, oeffnet einen
+  Audio-Stream mit der WAV-Samplerate und schreibt PCM-Daten in 4096-Byte-
+  Bloecken.
+- Tastatursteuerung im Playback-Loop: P toggelt Pause, Q beendet.
+- Manueller Testpfad: C:\>SYNTH \TEST.WAV.
+
+
+0.4.13: R4Synth WAV-Fallback
+----------------------------
+Status: Erledigt
+
+Ziele:
+- R4Synth soll bei strengen WAV-Header-Problemen nicht hart abbrechen.
+- Bei unbekannter/ungewohnter WAV-Struktur soll ein sichtbarer Fallback
+  versucht werden: PCM ab Offset 44, 48 kHz, stereo, 16-bit.
+- Die abgespielte Datenmenge darf nie ueber die tatsaechlich gelesene Datei
+  hinausgehen.
+- TEST.WAV soll klein genug bleiben, damit die erste 64-KB-R4Synth-Version sie
+  vollstaendig lesen kann.
+
+Abnahme:
+- R4Synth gibt bei Header-Abweichungen eine Fallback-Meldung aus statt
+  "Unsupported format" als Endzustand.
+- TEST.WAV bleibt unter 64 KB.
+- SYNTH \TEST.WAV kann weiterhin als manueller Audio-Test verwendet werden.
+
+
+0.4.14: R4Synth WAV-Parser, Pfade und Transfer
+----------------------------------------------
+Status: Erledigt
+
+Ziele:
+- R4Synth soll RIFF/WAVE-Chunks korrekt suchen statt nur den festen
+  44-Byte-Header anzunehmen.
+- Unterstuetzt werden PCM-WAV-Dateien mit 8-bit unsigned oder 16-bit signed
+  little endian, jeweils mono oder stereo.
+- Der Audio-Core und AC97-Pfad sollen diese Formate annehmen und fuer AC97
+  nach stereo signed 16-bit umwandeln.
+- R4X-Dateizugriffe sollen relative Pfade vom aktuellen Shell-Laufwerk und
+  Shell-Verzeichnis aus aufloesen.
+- Ein Projektordner Temp/ soll beim Build rekursiv nach C:\Temp\ ins
+  FAT32-Image kopiert werden.
+
+Abnahme:
+- SYNTH \TEST.WAV funktioniert weiterhin als schneller Test auf C:.
+- X:\>SYNTH TEST.WAV sucht nicht mehr heimlich auf C:, sondern scheitert
+  sauber, wenn die Datei auf X: nicht existiert.
+- X:\>SYNTH C:\TEMP\DATEI.WAV kann eine eigene Temp-Datei starten.
+- PCM-WAV mono/stereo und 8/16-bit werden ueber denselben R4Synth-Pfad
+  akzeptiert.
+
+0.4.15: R4Synth/AC97-Playback-Pacing
+------------------------------------
+Status: Erledigt
+
+Ziele:
+- Verzerrung und ueberlappend klingende Wiedergabe aus R4Synth reduzieren.
+- AC97-DMA-Puffer erst beschreiben, wenn der jeweilige Ping-Pong-Puffer
+  wieder frei ist.
+- R4Synth soll seine PCM-Chunkgroesse an WAV-Format und Kanalzahl anpassen,
+  damit 8-bit und mono beim Umwandeln nach stereo/16-bit keine Eingabedaten
+  ueberspringen.
+- Der bestehende R4Synth-WAV-Pfad soll weiter als Shell-Test fuer
+  Temp-Dateien nutzbar bleiben.
+
+Abnahme:
+- SYNTH \TEST.WAV klingt nicht mehr wie schnell ueberlappende Fragmente.
+- SYNTH C:\TEMP\DATEI.WAV spielt mono/stereo und 8/16-bit ohne
+  Format-bedingtes Datenspringen.
+- BEEP.R4X bleibt weiterhin nutzbar.
+
+
+0.4.16: AC97-Puffer-Timeout ohne stilles Dropping
+-------------------------------------------------
+Status: Erledigt
+
+Ziele:
+- Den 0.4.15-Backpressure-Fix korrigieren, damit der Treiber bei
+  Puffer-Timeout keine Samples still verwirft.
+- Bei Timeout wieder den AC97-Playback-Pfad resetten und den aktuellen Block
+  schreiben.
+- Die R4Synth-Chunkgroessen aus 0.4.15 beibehalten.
+
+Abnahme:
+- SYNTH \TEST.WAV erzeugt wieder hoerbare Ausgabe.
+- SYNTH C:\TEMP\DATEI.WAV erzeugt wieder hoerbare Ausgabe.
+- Audio-Aussetzer werden nicht durch stilles Verwerfen im AC97-Treiber
+  verursacht.
+
+
+0.4.17: AC97-DMA-Slotpuffer vergroessern
+----------------------------------------
+Status: Erledigt
+
+Ziele:
+- Den AC97-Playback-Pfad robuster gegen Timing-Jitter der Shell-App machen.
+- Statt nur zwei DMA-Samplepuffer mehrere Slots verwenden.
+- Die Buffer Descriptor List weiter nutzen, aber mehr Spielraum zwischen
+  Schreiben und Hardware-Verbrauch schaffen.
+- R4Synth und BEEP sollen ohne API-Aenderung weiter denselben Audio-Pfad
+  nutzen.
+
+Abnahme:
+- AC97 initialisiert mehrere DMA-Slots.
+- SYNTH \TEST.WAV und SYNTH C:\TEMP\DATEI.WAV bleiben lauffaehig.
+- BEEP.R4X bleibt lauffaehig.
+- Der naechste Hoertest hat weniger Risiko fuer Unterlauf/zu fruehes
+  Ueberschreiben.
+
+
+0.4.18: AUDIO-Diagnosekommando
+------------------------------
+Status: Erledigt
+
+Ziele:
+- Ein Shell-Kommando AUDIO bereitstellen.
+- Audio-Core-Status anzeigen: aktives Backend, Mixer, Write-Zaehler,
+  Backend-Erfolge und Backend-Fehler.
+- Offene Streams mit Rate, Kanalzahl, Format und geschriebenen Bytes anzeigen.
+- AC97-Status anzeigen: present, started, DMA-Slotzahl, naechster Slot,
+  Write-/Reset-/Timeout-Zaehler sowie CIV/LVI/SR/CR.
+- Den naechsten Hoertest leichter auswertbar machen.
+
+Abnahme:
+- HELP listet AUDIO.
+- AUDIO zeigt Audio-Core- und AC97-Diagnosewerte.
+- Nach SYNTH oder BEEP sind die Zaehler sichtbar erhoeht.
+
+
+0.4.19: R4Synth-Write-Pfad und Stream-Cleanup
+---------------------------------------------
+Status: Erledigt
+
+Ziele:
+- R4Synth soll den Audio-Write-Pfad nicht komplett ueberspringen, wenn der
+  Pausenzustand unerwartet aktiv ist.
+- Offene Audio-Streams sollen nach Ende eines R4X-Programms vom Kernel
+  geschlossen werden, damit Diagnosewerte keine alten offenen Streams zeigen.
+- AUDIO soll nach einem beendeten R4X-Programm keine verlassenen offenen
+  Streams mehr anzeigen.
+
+Abnahme:
+- Nach SYNTH steigen die Audio-Write-Zaehler oder es gibt eine sichtbar andere
+  Fehlerspur.
+- Nach dem Programmende bleiben keine offenen R4Synth-Streams im AUDIO-Status
+  haengen.
+- BEEP bleibt weiterhin nutzbar.
+
+
+0.4.20: R4Synth Prime-Write vor Playback-Loop
+---------------------------------------------
+Status: Erledigt
+
+Ziele:
+- Direkt nach audio_open_stream einen ersten audio_write ausfuehren, bevor der
+  Tastatur-/Playback-Loop laeuft.
+- Damit klaeren, ob R4Synth grundsaetzlich in die Audio-API schreiben kann.
+- Remaining/Offset vor dem Prime-Write absichern, falls die Fallback-Laenge
+  vorher nicht gesetzt wurde.
+
+Abnahme:
+- Nach SYNTH \TEST.WAV steigt der AUDIO-Write-Zaehler mindestens um 1.
+- Falls danach weiterhin kein Ton kommt, ist die naechste Fehlerspur klarer:
+  Prime-Write/API vs. Playback-Loop.
+- BEEP bleibt weiterhin nutzbar.
+
+
+0.4.21: R4Synth stackbasierter Prime-Write
+------------------------------------------
+Status: Erledigt
+
+Ziele:
+- Einen Diagnose-Write nach dem funktionierenden BEEP-Muster einbauen.
+- Stream-ID dafuer auf dem Stack halten statt in R4Synths Programmdaten.
+- Einen festen 4096-Byte-Sampleblock schreiben, bevor der WAV-Loop startet.
+- Damit klaeren, ob R4Synths API-Aufrufpfad grundsaetzlich funktioniert.
+
+Abnahme:
+- SYNTH \TEST.WAV zeigt "Prime write...".
+- Danach steigt AUDIO bei Writes/backend_ok mindestens um 1.
+- Wenn das funktioniert, kann der WAV-Loop anschliessend auf stackbasierte
+  Zustandswerte umgebaut werden.
+
+
+0.4.22: R4Synth WAV-Loop mit Stack-Stream-ID
+--------------------------------------------
+Status: Erledigt
+
+Ziele:
+- Den normalen R4Synth-WAV-Loop auf dieselbe Stack-Stream-ID umstellen, die
+  beim Prime-Write funktioniert.
+- audio_close ebenfalls ueber die Stack-Stream-ID ausfuehren.
+- Den Programmdaten-Stream-ID-Pfad nicht mehr fuer Writes/Close verwenden.
+
+Abnahme:
+- Nach SYNTH \TEST.WAV steigt AUDIO nicht nur um den Prime-Write, sondern um
+  mehrere Writes.
+- Der R4Synth-Stream wird beim Beenden geschlossen.
+- BEEP bleibt weiterhin nutzbar.
+
+
+0.4.23: R4Synth WAV-Loop mit Stack-Offset/Remaining
+---------------------------------------------------
+Status: Erledigt
+
+Ziele:
+- R4Synth soll Offset, Remaining und Chunk fuer den aktiven WAV-Loop auf dem
+  Stack halten.
+- Fuer den aktuellen Fallback-Pfad wird bewusst offset=44 und
+  remaining=file_len-44 gesetzt.
+- Damit soll der Loop mehr als nur den Prime-Write absetzen.
+
+Abnahme:
+- Nach SYNTH \TEST.WAV steigt AUDIO deutlich ueber backend_ok=1.
+- Wenn Ton noch nicht korrekt ist, liegt der naechste Fehler eher bei
+  Timing/Datenformat als beim Write-Loop.
+- BEEP bleibt weiterhin nutzbar.
+
+
+0.4.24: R4Synth erzwungener WAV-Write-Loop
+------------------------------------------
+Status: Erledigt
+
+Ziele:
+- Nach dem erfolgreichen Prime-Write mehrere WAV-Datenbloecke ohne
+  Tastatur-/Pause-Logik schreiben.
+- Den Test vom normalen interaktiven Loop trennen.
+- Zwischen den Bloecken kurz warten, damit AC97-Puffer Zeit zum Verbrauch
+  haben.
+
+Abnahme:
+- Nach SYNTH \TEST.WAV steigt AUDIO deutlich ueber backend_ok=1.
+- Wenn mehrere Writes sichtbar sind, wird anschliessend der interaktive Loop
+  auf diese einfache Schreiblogik zurueckgefuehrt.
+- BEEP bleibt weiterhin nutzbar.
+
+
+0.4.25: R4Synth fester Sample-Loop nach Prime-Write
+---------------------------------------------------
+Status: Erledigt
+
+Ziele:
+- Nach dem erfolgreichen Prime-Write mehrere feste Samplebloecke schreiben,
+  die nicht von WAV-Offset, Remaining oder Dateilaenge abhaengen.
+- Damit klaeren, ob Kontrollfluss und Stack nach dem ersten audio_write stabil
+  weiterlaufen.
+- Eine sichtbare Meldung "Fixed sample loop..." ausgeben.
+
+Abnahme:
+- SYNTH \TEST.WAV zeigt "Fixed sample loop...".
+- AUDIO steigt nach SYNTH auf deutlich mehr als backend_ok=1.
+- Wenn das funktioniert, wird der WAV-Datenpfad danach auf denselben
+  Kontrollfluss umgestellt.
+
+
+0.4.26: R4Synth WAV-Blockloop mit Stack-Dateilaenge
+---------------------------------------------------
+Status: Erledigt
+
+Ziele:
+- Die gelesene Dateilaenge direkt nach file_read auf dem Stack sichern.
+- Den funktionierenden Fixed-Loop-Kontrollfluss auf WAV-Daten umstellen:
+  filebuf + offset statt fester Samplebuffer.
+- Fuer den Test weiter offset=44 und remaining=file_len-44 verwenden.
+
+Abnahme:
+- SYNTH \TEST.WAV zeigt "WAV block loop...".
+- AUDIO steigt nach SYNTH deutlich ueber backend_ok=1.
+- Wenn Ton kommt, aber Format/Tempo nicht stimmt, wird danach der Parser- und
+  Timing-Pfad bereinigt.
+
+
+0.4.27: R4Synth RIP-relatives Patching und normaler WAV-Loop
+------------------------------------------------------------
+Status: Erledigt
+
+Ziele:
+- Den R4Synth-Codegenerator fuer RIP-relative Speicheroperanden mit
+  nachfolgendem Immediate korrigieren.
+- RIFF/WAVE-Header wirklich ab filebuf+0 pruefen, statt versehentlich einige
+  Bytes daneben zu lesen.
+- Globale R4Synth-Zustandswerte wie chunk_pos, fmt_found, data_found,
+  format_value und paused an die korrekte Adresse schreiben.
+- Den diagnostischen Prime-Write und die kuenstlichen Sample-/Blockloops aus
+  dem normalen SYNTH-Pfad entfernen.
+- Fuer echte WAV-Dateien keinen Header-Fallback mehr verwenden, sondern
+  fehlerhafte oder nicht unterstuetzte Dateien sichtbar ablehnen.
+- Den normalen Wiedergabe-Loop wieder aus dem geparsten data-Chunk starten:
+  offset/remaining kommen aus dem WAV-Parser, nicht aus einem festen
+  44-Byte-Fallback.
+- Die Wartezeit pro Playback-Chunk aus Chunkgroesse, Format, Kanalzahl und
+  Samplerate ableiten, damit 48-kHz-Stereo und 22-kHz-Mono nicht gleich
+  schnell geschrieben werden.
+- P pausiert die Wiedergabe wirklich, Q beendet sauber.
+
+Abnahme:
+- SYNTH \TEST.WAV zeigt keine Fallback-, Prime- oder Blockloop-Diagnosezeilen.
+- SYNTH \TEST.WAV spielt ueber den geparsten RIFF/WAVE/data-Pfad.
+- SYNTH C:\TEMP\TADA.WAV wird als PCM-WAV erkannt und nutzt die
+  tatsaechliche Samplerate, Kanalzahl und Bit-Tiefe.
+- TADA.WAV wird nicht durch einen festen 2-Tick-Loop zu schnell in AC97
+  geschoben.
+- AUDIO zeigt nach SYNTH mehrere Writes/backend_ok fuer laengere Dateien.
+- BEEP.R4X bleibt weiterhin nutzbar.
+
+Aktueller Teststand:
+- Nach TEST.WAV und TADA.WAV steigt AUDIO auf backend_ok=40.
+- TADA.WAV ist als korrektes Audio erkennbar, aber noch verzerrt.
+- Der Datenpfad gilt damit als grundsaetzlich repariert; die naechste offene
+  Baustelle ist Audioqualitaet, Formatkonvertierung, Resampling und Pacing.
+
+
+0.4.28: PCM-Formatpipeline und Resampling
+-----------------------------------------
+Status: Erledigt
+
+Ziele:
+- Eine zentrale PCM-Wandlung definieren, die nicht an R4Synth oder AC97
+  festklebt.
+- Internes Referenzformat festlegen: 48 kHz, stereo, signed 16-bit little
+  endian als erster stabiler Backend-Zielstrom.
+- WAV-Eingaben mit unterschiedlichen Sampleraten, 8-bit unsigned,
+  16-bit signed, mono und stereo sauber in das Referenzformat wandeln.
+- Lineares Resampling als erste robuste Stufe einbauen; einfache
+  Nearest-Neighbor- oder Rate-Register-Tricks vermeiden.
+- Frame-, Sample- und Byte-Zaehler sauber trennen, damit mono/stereo und
+  8/16-bit keine Daten ueberspringen oder doppelt spielen.
+- Konvertierung als wiederverwendbare Kernel-/Audio-Core-Komponente
+  vorbereiten, damit spaeter Mixer, AC97, HDA und Synth-Engines denselben
+  Pfad nutzen koennen.
+- Clipping/Saturation sauber behandeln, statt bei Wandlung ueberzulaufen.
+- Diagnosedaten fuer Formatpfade vorbereiten: Quellrate, Zielrate,
+  Quellformat, Zielformat, konvertierte Frames.
+
+Abnahme:
+- SYNTH \TEST.WAV bleibt klar hoerbar.
+- SYNTH C:\TEMP\TADA.WAV wird von 22050 Hz mono/8-bit auf den
+  48-kHz-stereo-16-bit-Pfad gewandelt und klingt deutlich weniger verzerrt.
+- Weitere PCM-WAV-Dateien mit gaengigen Frequenzen wie 8000, 11025, 22050,
+  32000, 44100, 48000 und 96000 Hz werden akzeptiert.
+- Mono und stereo werden ohne Kanalvertauschung oder Datenspruenge
+  wiedergegeben.
+- 8-bit unsigned und 16-bit signed little endian werden korrekt zentriert und
+  skaliert.
+- AUDIO oder AC97 zeigt nachvollziehbar, welcher Formatpfad genutzt wurde.
+- BEEP.R4X bleibt unveraendert lauffaehig.
+
+Aktueller Implementierungsstand:
+- Code/src/audio/pcm.zig enthaelt die erste zentrale PCM-Wandlung.
+- Ziel ist 48 kHz, stereo, signed 16-bit little endian.
+- 8-bit unsigned und 16-bit signed little endian, mono und stereo werden
+  angenommen.
+- Abweichende Sampleraten werden in der ersten Stufe linear resampelt.
+- AC97 nutzt die PCM-Pipeline statt das AC97-Variable-Rate-Register als
+  normalen Ausweg.
+- AC97-Diagnose zeigt Quellrate, Quellkanaele, Quellformat, Zielrate,
+  Zielformat, letzte Output-Frames und insgesamt konvertierte Frames.
+- Kernel-Build fuer 0.4.28 laeuft durch; Hoertest steht noch aus.
+
+
+0.4.29: AC97-Treiber ausreifen
+------------------------------
+Status: Erledigt
+
+Ziele:
+- AC97 vom experimentellen Playback-Pfad zu einem ausgereiften
+  Referenztreiber machen.
+- AC97 selbst konsequent mit dem Referenzformat 48 kHz stereo s16le
+  betreiben.
+- Buffer Descriptor List sauber als Ring verwenden, nicht als Folge von
+  Reset-/Timeout-Tricks.
+- IRQ-getriebenen oder klar getakteten Refill vorbereiten, damit der Treiber
+  nicht von Shell-App-Timing abhaengt.
+- CIV/LVI/SR/CR-Status sauber interpretieren und dokumentieren.
+- Underrun/Overrun sichtbar melden, aber nicht mit verzerrtem Altzustand
+  weiterlaufen.
+- Start, Stop, Pause, Resume und Shutdown als klare Treiberzustaende
+  behandeln.
+- DMA-Puffer-Lifetime sauber kapseln und beim Shutdown freigeben.
+- Reset nur noch als Fehlererholung verwenden, nicht als normaler
+  Playback-Mechanismus.
+- AC97-Diagnose erweitern: aktive BDL-Slots, IRQ-/Refill-Zaehler, Underruns,
+  Resets, letzte Fehlerursache.
+
+Abnahme:
+- BEEP.R4X spielt stabil.
+- SYNTH \TEST.WAV spielt stabil ohne haeufige Resets.
+- SYNTH C:\TEMP\TADA.WAV klingt nach der PCM-Wandlung deutlich sauberer.
+- AUDIO zeigt keine steigenden Reset-/Timeout-Zaehler im normalen Playback.
+- AC97 kann einen Stream sauber starten, laufen lassen, pausieren und
+  beenden.
+- Nach Q oder Programmende bleiben keine haengenden DMA-/Stream-Zustaende
+  sichtbar.
+- Der AC97-Code ist als Referenz fuer HDA nutzbar, ohne dessen Eigenheiten
+  nachbauen zu muessen.
+
+Aktueller Implementierungsstand:
+- Audio-Core kann einem nativen Backend beim letzten Stream-Close ein
+  Stop-Signal geben.
+- AC97 registriert neben writePcm nun auch stopPlayback.
+- Beim Stream-Ende stoppt AC97 den PCM-Out-DMA-Pfad, setzt den Stream zurueck,
+  loescht die BDL-Eintraege und faengt beim naechsten Stream sauber bei Slot 0
+  an.
+- AC97 sammelt erste Ereigniszaehler fuer Stops, Buffer-Completion,
+  DCH, echte Underrun-/LVBCI-Hinweise, FIFO-Fehler, Timeouts und Resets.
+- AC97 zaehlt Statusereignisse nun flankenbasiert statt denselben Status bei
+  jeder Abfrage erneut als Ereignis zu werten.
+- AUDIO/AC97 zeigt die neuen Zaehler sowie den zuletzt beobachteten
+  Statuswert an.
+- Kernel-Build fuer 0.4.29 laeuft durch.
+
+
+0.4.30: R4Synth als WAV-Mediaplayer
+-----------------------------------
+Status: Erledigt
+
+Ziele:
+- R4Synth vom Testprogramm zu einem zuverlaessigen Shell-Mediaplayer
+  ausbauen.
+- WAV als erstes voll unterstuetztes Format festigen.
+- RIFF/WAVE robuster parsen: fmt, data, LIST/JUNK/unknown Chunks,
+  Padding-Bytes und ungewoehnliche Chunk-Reihenfolgen tolerieren.
+- Unterstuetzte WAV-Formate sichtbar melden: Samplerate, Kanaele, Bit-Tiefe,
+  Dauer und Datei.
+- Nicht unterstuetzte WAV-Varianten sauber ablehnen, z.B. komprimierte
+  Codecs, 24/32-bit oder Float, bis sie spaeter explizit geplant sind.
+- P fuer Play/Pause und Q fuer Beenden beibehalten.
+- Statuszeile waehrend der Wiedergabe anzeigen: Playing/Paused/Done,
+  ungefaehre Position und Dauer, wenn berechenbar.
+- Fehlerausgaben benutzbar machen: Datei nicht gefunden, zu gross,
+  ungueltiger Header, nicht unterstuetztes Format, kein Audio-Backend.
+- Pfadverhalten DOS-artig beibehalten: relative Pfade vom aktuellen
+  Shell-Laufwerk, explizite Pfade wie C:\TEMP\TADA.WAV.
+- Keine kuenstliche Laengenbegrenzung fuer Audiodateien einfuehren.
+- WAV-Dateien stueckweise von Disk streamen: Header/Chunk-Metadaten lesen,
+  dann data-Chunk in kleinen Datei-/Decode-/Audio-Puffern nachladen.
+- Die praktische Laengengrenze soll vom Dateisystem und Medium kommen,
+  z.B. FAT32-Dateigroesse, freier Speicher auf Disk oder Lesefehler, nicht
+  von einem festen R4Synth-Dateipuffer.
+- ProgramApi/File-API bei Bedarf um seek/read-range oder Stream-Handles
+  erweitern, damit R4Synth nicht die komplette Datei im Speicher halten muss.
+- Pufferung so bauen, dass kurze Soundeffekte und lange Musikdateien denselben
+  Wiedergabepfad nutzen.
+
+Abnahme:
+- SYNTH FILE.WAV ist als normaler Player nutzbar, nicht nur als Debugpfad.
+- TEST.WAV und TADA.WAV spielen ohne Debug-Zwischenmeldungen.
+- P pausiert hoerbar und setzt ohne Neustart fort.
+- Q beendet sauber und kehrt zur Shell zurueck.
+- R4Synth meldet Format, Dauer/Position und Fehler nachvollziehbar.
+- Mehrere WAV-Dateien mit verschiedenen Sampleraten, mono/stereo und 8/16-bit
+  koennen nacheinander gestartet werden.
+- Lange WAV-Dateien muessen nicht komplett in den Speicher geladen werden.
+- R4Synth hat kein eigenes hartes Dateilaengenlimit; fuer WAV gelten nur
+  Dateisystem-/Mediumgrenzen und aktuell dokumentierte Formatgrenzen.
+- AUDIO zeigt nach dem Beenden keine offenen verlassenen Streams.
+
+Aktueller Implementierungsstand:
+- R4Synth schreibt WAV-Bloecke jetzt mit etwas Vorlauf weiter, statt nach
+  jedem Block dessen volle theoretische Laufzeit abzuwarten.
+- Dadurch soll AC97 mehr DMA-Puffer im Voraus bekommen und seltener zwischen
+  zwei WAV-Bloecken trockenlaufen.
+- Das ist ein erster Schritt zum Player-Puffer; echtes Disk-Streaming ohne
+  feste Dateipuffergrenze folgt noch.
+
+
+0.4.31: R4Synth Playback-Timing und Chunkgroessen
+-------------------------------------------------
+Status: Erledigt
+
+Ziele:
+- Den 0.4.30-Vorpuffer-Trick korrigieren, weil halbe Wartezeiten hoerbar zu
+  schnellem Playback fuehren koennen.
+- R4Synth soll wieder die volle Blockdauer aus Samplerate, Format, Kanalzahl
+  und Chunkgroesse verwenden.
+- Chunkgroessen vergroessern, damit der Resampler seltener an WAV-Blockgrenzen
+  neu ansetzt und Knacken zwischen Bloecken reduziert wird.
+- U8-mono-WAVs wie TADA.WAV weiter als Schwerpunkt testen, weil dort
+  Resampling, Mono-Duplizierung und 8-bit-Zentrierung gleichzeitig aktiv sind.
+- AC97-Diagnosewerte dch, underrun, fifo und timeouts zur Bewertung nutzen.
+
+Abnahme:
+- SYNTH C:\TEMP\TADA.WAV spielt nicht mehr zu schnell.
+- Knacken zwischen Bloecken ist reduziert oder klar einem verbleibenden
+  AC97/Emulator-/Resampler-Problem zuordenbar.
+- AUDIO zeigt nach TADA.WAV keine steigenden timeouts und keine FIFO-Fehler.
+- TEST.WAV und BEEP bleiben nutzbar.
+
+Aktueller Implementierungsstand:
+- R4Synth wartet wieder die volle berechnete Blockdauer.
+- Die interne WAV-Chunk-Basis wurde von 4096 auf 8192 Byte erhoeht. Fuer
+  8-bit-mono-WAVs ergibt das nach den Format-Anpassungen 2048 Quellframes pro
+  Write statt 1024.
+- Dadurch halbiert sich bei TADA.WAV die Zahl der Resampler-/Write-Grenzen,
+  ohne ein kuenstliches Dateilaengenlimit einzufuehren.
+
+
+0.4.32: R4Synth Vorpuffer und AC97-Drain
+----------------------------------------
+Status: Erledigt
+
+Ziele:
+- Knacken zwischen WAV-Bloecken reduzieren, ohne das Playback zu
+  beschleunigen.
+- R4Synth soll beim Start wenige Bloecke in den AC97-DMA-Pfad vorfuellen.
+- Danach soll R4Synth weiter mit voller, korrekter Blockdauer takten.
+- AC97 soll beim Stream-Close den noch laufenden DMA-Pfad kurz auslaufen
+  lassen, bevor Reset/Cleanup erfolgt.
+- Die Pufferung soll eine Player-Grundlage sein, kein Ersatz fuer spaeteres
+  echtes Disk-Streaming.
+
+Abnahme:
+- SYNTH C:\TEMP\TADA.WAV bleibt von der Laenge her korrekt.
+- Knacken zwischen Bloecken ist reduziert.
+- AUDIO zeigt nach TADA.WAV keine timeouts und keine FIFO-Fehler.
+- AC97 zeigt drains, wenn ein Stream nach vorgefuellten Bloecken sauber
+  geschlossen wurde.
+- TEST.WAV und BEEP bleiben nutzbar.
+
+Aktueller Implementierungsstand:
+- R4Synth schreibt beim Start zwei WAV-Bloecke ohne Wartezeit vor.
+- Danach nutzt R4Synth wieder die volle berechnete Blockdauer pro Block.
+- AC97 wartet beim Stop kurz auf Drain/DCH, bevor der PCM-Out-DMA-Pfad
+  zurueckgesetzt und die BDL bereinigt wird.
+- AUDIO/AC97 zeigt einen neuen drains-Zaehler.
+- Kernel- und R4Synth-Build fuer 0.4.32 laufen durch.
+
+
+0.4.33: Streaming-Resampler fuer PCM
+------------------------------------
+Status: Erledigt
+
+Ziele:
+- Den PCM-Resampler von chunk-lokaler Umrechnung auf Stream-Zustand
+  umstellen.
+- Fractional-Source-Position ueber audio_write-Grenzen hinweg erhalten.
+- Knacken an WAV-Blockgrenzen bei 22050-Hz-U8-Mono-Dateien reduzieren.
+- Formatwechsel sauber erkennen und den Resampler-State dann zuruecksetzen.
+- Diagnose um die Resampler-Phase erweitern.
+
+Abnahme:
+- SYNTH C:\TEMP\TADA.WAV bleibt von der Laenge her korrekt.
+- Knacken an Blockgrenzen ist deutlich reduziert.
+- AUDIO/AC97 zeigt weiterhin keine timeouts oder FIFO-Fehler.
+- phase zeigt einen nachvollziehbaren Restwert oder 0 nach Stream-Ende.
+- TEST.WAV und BEEP bleiben nutzbar.
+
+Aktueller Implementierungsstand:
+- Code/src/audio/pcm.zig enthaelt ResamplerState mit rate, channels, format
+  und phase_q16.
+- AC97 nutzt convertStreamingToStereoS16 statt pro Write wieder bei
+  Output-Frame 0 zu beginnen.
+- AC97 setzt den Resampler-State bei Reset/Stop zurueck.
+- AUDIO/AC97 zeigt die aktuelle Resampler-Phase.
+- Kernel-Build fuer 0.4.33 laeuft durch.
+
+
+0.4.34: Streaming-Resampler Chunk-Ende
+--------------------------------------
+Status: Erledigt
+
+Ziele:
+- Endlosschleife im Streaming-Resampler verhindern.
+- Pro audio_write-Chunk genau einmal durch die Eingabedaten laufen.
+- Fractional-Phase trotzdem fuer den naechsten Chunk erhalten.
+- AC97 darf den gleichen Eingabeblock nicht unbegrenzt erneut resamplen.
+
+Abnahme:
+- SYNTH C:\TEMP\TADA.WAV kehrt wieder zur Shell zurueck.
+- Tastatureingaben reagieren nach dem Player wieder normal.
+- AUDIO zeigt eine endliche Write-Zahl.
+- Die Wiedergabelaenge bleibt plausibel.
+- BEEP und TEST.WAV bleiben nutzbar.
+
+Aktueller Implementierungsstand:
+- ResamplerState hat chunk_done.
+- AC97 ruft vor jedem audio_write beginChunk() auf.
+- convertStreamingToStereoS16 liefert 0, sobald der aktuelle Chunk vollstaendig
+  verbraucht ist.
+- Die fractional phase_q16 bleibt fuer den naechsten Chunk erhalten.
+- Kernel-Build fuer 0.4.34 laeuft durch.
+
+
+0.4.35: Driver-Registry Herkunft und Anzeige
+--------------------------------------------
+Status: Erledigt
+
+Ziele:
+- Builtin-Treiber und R4D-Treiber im DRIVERS-Status besser unterscheiden.
+- Driver-Registry um eine Herkunft erweitern: builtin oder r4d.
+- R4D-Loader soll R4D-Treiber explizit als r4d registrieren.
+- Typnummern in DRIVERS durch lesbare Typnamen ergaenzen.
+- Versionen weiterhin anzeigen, damit spaeter API-/Treiber-Versionen sichtbar
+  bleiben.
+
+Abnahme:
+- DRIVERS zeigt fuer PS2, AT-PIO und AC97 die Herkunft builtin.
+- DRIVERS zeigt fuer HELLO die Herkunft r4d.
+- DRIVERS zeigt Typnamen wie input, storage, audio oder misc statt nur Zahlen.
+- LOAD/UNLOAD HELLO funktioniert weiter.
+- Kernel-Build laeuft durch.
+
+Aktueller Implementierungsstand:
+- Code/src/drivers/registry.zig enthaelt Source builtin/r4d.
+- beginLoad bleibt der Builtin-Pfad; beginLoadR4d markiert R4D-Treiber.
+- Code/src/program/r4d.zig nutzt beginLoadR4d.
+- DRIVERS-Ausgabe enthaelt src, type, version und state.
+- Kernel-Build fuer 0.4.35 laeuft durch.
+
+
+0.4.36: Treiberinfrastruktur stabilisieren
+------------------------------------------
+Status: Erledigt
+
+Ziele:
+- DriverApi.get_option mit CONFIG.R4S verbinden.
+- OPTION-Direktiven fuer Treiber nutzbar machen.
+- Treiber sollen Optionen ueber Treibername und Key abfragen koennen.
+- Nicht vorhandene Optionen sollen stabil einen leeren String liefern.
+- Die bestehende DriverApi-Struktur bleibt unveraendert; nur die Funktion wird
+  funktional.
+
+Abnahme:
+- OPTION AC97 key=value kann ueber get_option("AC97", "key") gefunden werden.
+- Gross-/Kleinschreibung bei Treibername und Key stoert nicht.
+- Fehlende Optionen liefern einen leeren C-String.
+- Kernel-Build laeuft durch.
+
+Aktueller Implementierungsstand:
+- Code/src/kernel/driver_api.zig liest boot_config.get().
+- get_option durchsucht die geparsten OPTION-Eintraege.
+- Der Rueckgabewert ist ein nullterminierter statischer Puffer.
+- Kein ABI-Bump noetig, weil die DriverApi-Tabelle unveraendert bleibt.
+- Kernel-Build fuer 0.4.36 laeuft durch.
+
+
+0.4.37: DMESG-Shellkommando fuer Bootlog
+----------------------------------------
+Status: Erledigt
+
+Ziele:
+- Bootlog/dmesg-Puffer aus der Shell sichtbar machen.
+- Treiberfehler, LOAD/UNLOAD-Meldungen und Boot-Plan-Logs nach dem Boot
+  nachvollziehbar machen.
+- HELP um DMESG erweitern.
+- Keine Dateiausgabe oder Paging; fuer die erste Stufe reicht eine direkte
+  Ausgabe des Ringpuffers.
+
+Abnahme:
+- DMESG zeigt den aktuellen Bootlog-Ringpuffer.
+- Wenn der Puffer leer ist, gibt es eine klare Meldung.
+- HELP listet DMESG.
+- Kernel-Build laeuft durch.
+
+Aktueller Implementierungsstand:
+- Code/src/shell/dos.zig importiert kernel/bootlog.zig.
+- DMESG kopiert bootlog.snapshot() in einen statischen Shell-Puffer und gibt
+  ihn aus.
+- HELP listet DMESG.
+- Kernel-Build fuer 0.4.37 laeuft durch.
+
+
+0.4.38: Treiberinfrastruktur stabilisieren
+------------------------------------------
+Status: Erledigt
+
+Ziele:
+- Vor HDA die gemeinsame Treiberinfrastruktur haerten.
+- R4D-Loader, Driver-Registry und Lifecycle mit realistischeren Treibern
+  testen, nicht nur mit HELLO.R4D.
+- Builtin-Treiber und R4D-Treiber im DRIVERS-Status konsistent darstellen.
+- Fehlerpfade fuer init(), shutdown(), mehrfaches LOAD/UNLOAD und fehlende
+  Dateien pruefen.
+- KernelApi-Versionierung fuer Treiber nachziehen, falls AC97/HDA mehr
+  stabile Funktionen brauchen.
+- IRQ- und DMA-API so vorbereiten, dass AC97/HDA nicht an internen
+  Sonderpfaden haengen.
+- CONFIG.R4S-Regeln fuer Audio-Backends festigen: DRIVER, DISABLE, PREFER,
+  OPTION und Default-Backend.
+- Runtime-LOAD/UNLOAD fuer Audiotreiber weiter planen, auch wenn AC97 fuer
+  den ersten Schritt noch builtin bleiben darf.
+- Bootlog/dmesg so ausbauen, dass Treiberfehler nach dem Boot aus der Shell
+  nachvollziehbar bleiben.
+- Dokumentieren, welche Teile vorerst Kernel-Core bleiben und welche spaeter
+  echte R4D-Dateien werden.
+
+Abnahme:
+- DRIVERS zeigt HELLO, PS2, AT-PIO und Audio-Backends konsistent.
+- LOAD/UNLOAD-Fehler bleiben sichtbar und lassen das System stabil.
+- CONFIG.R4S kann Audio-Backend-Entscheidungen nachvollziehbar beeinflussen
+  oder sauber dokumentiert warnen, wenn ein Pfad noch builtin ist.
+- Der Boot-Plan nutzt fuer DRIVER=X generisch /SYS/DRIVERS/X.R4D, statt nur
+  einzelne hart verdrahtete Testnamen zu kennen.
+- Wiederholte DRIVER-Zeilen werden im Plan sichtbar dedupliziert.
+- Bereits aktive Builtin-Treiber werden im Plan erkannt und nicht erneut als
+  R4D-Datei geladen.
+- AC97 nutzt soweit moeglich dieselben Registry-/Lifecycle-/Diagnosepfade wie
+  spaetere R4D-Treiber.
+- Der HDA-Schritt kann auf stabile DriverApi-, IRQ-, DMA- und Registry-
+  Grundlagen aufsetzen.
+
+Aktueller Implementierungsstand:
+- Code/src/kernel/driver_plan.zig laedt geplante DRIVER-Eintraege jetzt
+  generisch ueber den R4D-Runtime-Loader.
+- DRIVER=HELLO ist kein Sonderfall mehr; jeder Name wird auf
+  /sys/drivers/<name>.r4d abgebildet.
+- Der Plan dedupliziert gleiche DRIVER-Eintraege.
+- Bereits aktive Registry-Eintraege, z.B. builtin PS2, AT-PIO oder AC97,
+  werden erkannt und als bereits aktiv geloggt.
+- Fehlende Treiberdateien bleiben WARN-Pfade und blockieren den Boot nicht.
+
+
+0.4.39: LOAD erkennt aktive Treiber
+-----------------------------------
+Status: Erledigt
+
+Ziele:
+- Runtime-LOAD soll denselben Registry-Blick nutzen wie der Boot-Plan.
+- LOAD name soll bereits aktive Builtin-Treiber erkennen.
+- LOAD name soll bereits aktive R4D-Treiber erkennen, ohne die Datei erneut
+  zu lesen.
+- LOAD AC97, LOAD PS2 oder LOAD HELLO sollen eine klare Statusmeldung
+  ausgeben, wenn der Treiber schon geladen/aktiv ist.
+- Fehlende .R4D-Dateien sollen weiterhin nur dann gesucht und gemeldet werden,
+  wenn kein aktiver Registry-Eintrag existiert.
+
+Abnahme:
+- LOAD AC97 meldet den bereits aktiven Builtin-Audiotreiber.
+- LOAD PS2 meldet den bereits aktiven Builtin-Inputtreiber.
+- LOAD HELLO nach dem Boot liest HELLO.R4D nicht erneut, sondern meldet den
+  bereits aktiven R4D-Treiber.
+- LOAD UNKNOWN sucht weiterhin /sys/drivers/unknown.r4d und meldet sauber,
+  wenn die Datei fehlt.
+- UNLOAD bleibt auf Runtime-R4D-Treiber beschraenkt; Builtin-Treiber werden
+  nicht versehentlich ueber UNLOAD entfernt.
+
+Aktueller Implementierungsstand:
+- Code/src/program/r4d.zig prueft vor dem Dateizugriff die Driver-Registry.
+- Die Pruefung akzeptiert GELADEN, INITIALISIERT und AKTIV als bereits aktive
+  Zustaende.
+- Die Ausgabe nennt Name, Herkunft und Zustand, z.B. builtin/AKTIV oder
+  r4d/AKTIV.
+
+
+0.4.40: HDA fuer modernere Hardware
+-----------------------------------
+Status: Erledigt
+
+Ziele:
+- Intel-HD-Audio als spaeteren, komplexeren Audio-Hardwaretreiber angehen.
+- HDA.R4D als eigenes Backend hinter der AudioBackend-Registry planen.
+- HDA-Spezifikation gezielt auswerten: Codec-Discovery, Verb-Bus,
+  Stream-Descriptors, Buffer Descriptor Lists und Interruptmodell.
+- PCI/ACPI-Erkennungsdaten fuer HDA nutzen, soweit die Infrastruktur bereit
+  ist.
+- HDA.R4D als groesseren Treiber einplanen; deutlich komplexer als AC97.
+- Codec-Quirks-Tabelle fuer verschiedene Realtek/IDT/STAC-Varianten anlegen.
+- Testpfad fuer echte Hardware definieren.
+- Abhaengigkeit klaeren: Fuer normalen Boot auf echter Disk wird ein passender
+  Storage-Pfad benoetigt, z.B. AHCI.R4D oder ein anderer realer Boot-Storage-
+  Treiber.
+- Falls AHCI/realer Disk-Boot noch nicht bereit ist, HDA als USB-Live-Test
+  oder vorab geladenes Testsystem planen.
+- HDA getrennt von AC97 halten, damit AC97 einfacher Referenztreiber bleibt.
+
+Abnahme:
+- HDA.R4D wird als eigener Treiber erkannt oder sauber abgelehnt.
+- Ein vorhandener HDA-PCI-Controller wird ueber Klasse 0x04/Subklasse 0x03
+  erkannt und im Bootlog sichtbar gemacht.
+- AUDIO zeigt einen HDA-Abschnitt mit present=yes/no und BAR0-Informationen.
+- HDA-Backend nutzt dieselbe AudioBackend-Schnittstelle wie AC97.
+- Bei mehreren Audio-Backends kann ein Standardbackend gewaehlt oder
+  konfiguriert werden.
+- AC97-Pfad bleibt weiterhin nutzbar.
+- Auf mindestens einer realen Maschine spielt BEEP.R4X ueber HDA einen Ton.
+- Wenn echter Disk-Boot noch fehlt, ist klar dokumentiert, ob der Test ueber
+  USB-Live-Boot, vorab geladene Module oder spaeter nach AHCI erfolgt.
+
+Aktueller Implementierungsstand:
+- Code/src/drivers/audio/hda.zig fuehrt einen ersten HDA-Probe-Pfad ein.
+- Der Probe sucht PCI-Klasse Multimedia / HD Audio (0x04/0x03).
+- Der Probe liest BAR0 und loggt Bus:Device.Function, VID, DID und BAR0.
+- Es werden noch keine HDA-MMIO-Register beschrieben; der Pfad ist bewusst
+  probe-only.
+- AUDIO zeigt den HDA-Probe-Status zusaetzlich zu AC97 an.
+- AC97 bleibt weiterhin das aktive AudioBackend fuer QEMU-Beep/WAV-Tests.
+
+
+0.4.41: HDA-MMIO-Registerprobe
+------------------------------
+Status: Erledigt
+
+Ziele:
+- HDA-BAR0 als MMIO-Basis interpretieren.
+- 32-bit- und 64-bit-Memory-BARs fuer HDA auswerten.
+- Eine MMIO-Registerseite fuer den HDA-Controller in den Kernel-Adressraum
+  mappen.
+- MMIO als uncached markieren, soweit die aktuelle Paging-Schicht das kann.
+- Nur globale HDA-Register lesen, noch nichts initialisieren oder resetten.
+- Erste Diagnosewerte fuer echte Hardware sichtbar machen.
+- AC97 als aktives AudioBackend unveraendert lassen.
+
+Abnahme:
+- HDA-Probe erkennt Memory-BAR0 und bildet die erste Registerseite ab.
+- 64-bit-BARs werden als vollstaendige physische MMIO-Adresse gelesen.
+- Bootlog zeigt bei vorhandenem HDA-Controller GCAP und HDA-Version.
+- AUDIO zeigt HDA-MMIO-Basis, virtuelle Mapping-Adresse, GCAP, Version,
+  Input-/Output-Payload, GCTL und STATESTS.
+- Wenn kein HDA-Controller vorhanden ist, bootet R4OS unveraendert weiter.
+- Wenn BAR0 kein gueltiger MMIO-BAR ist, bleibt HDA probe-only ohne
+  Registerzugriff.
+- Es werden weiterhin keine HDA-Register geschrieben.
+
+Aktueller Implementierungsstand:
+- Code/src/memory/paging.zig exportiert PAGE_SIZE sowie PTE-Flags fuer
+  Write-Through und Cache-Disable.
+- Code/src/platform/pci.zig kann 64-bit-BARs auslesen.
+- Code/src/drivers/audio/hda.zig mappt BAR0 auf eine feste Kernel-MMIO-
+  Adresse und liest globale HDA-Register per volatile Read.
+- Der HDA-Pfad bleibt read-only und startet keinen Controller.
+
+
+0.4.42: HDA-Faehigkeiten dekodieren
+-----------------------------------
+Status: Erledigt
+
+Ziele:
+- GCAP-Rohwert in nutzbare Diagnosewerte zerlegen.
+- Anzahl Output-, Input- und bidirektionaler Streams anzeigen.
+- Serial-Data-Out-Faehigkeit anzeigen.
+- 64-bit-DMA-Faehigkeit anzeigen.
+- STATESTS als Codec-Praesenzmaske auswerten.
+- Codec-Anzahl fuer spaetere Codec-Discovery sichtbar machen.
+- HDA bleibt weiterhin probe-only und read-only.
+
+Abnahme:
+- Bootlog zeigt bei vorhandenem HDA-Controller Streamzahlen und Codec-Anzahl.
+- AUDIO zeigt oss, iss, bss, sdo, dma64, Codec-Maske und Codec-Anzahl.
+- Systeme ohne HDA bleiben unveraendert.
+- Es werden weiterhin keine HDA-Register geschrieben.
+
+Aktueller Implementierungsstand:
+- Code/src/drivers/audio/hda.zig dekodiert GCAP in Stream- und DMA-
+  Faehigkeiten.
+- STATESTS wird als Codec-Maske interpretiert.
+- Die Diagnose unterscheidet weiterhin klar zwischen Rohregistern und
+  dekodierten Faehigkeiten.
+
+
+0.4.43: Audio-Backend per DRIVER waehlen
+----------------------------------------
+Status: Erledigt
+
+Ziele:
+- Audio-Hardwareauswahl DOS-artig ueber CONFIG.R4S vorbereiten.
+- DRIVER=AC97 soll den aktuellen AC97-Builtin-Pfad aktivieren.
+- DRIVER=HDA bleibt als Zielmodell dokumentiert; HDA ist aktuell noch
+  probe-only.
+- AC97 soll nicht mehr bedingungslos beim Boot als AudioBackend starten.
+- HDA soll nicht mehr bedingungslos geprobt werden, sondern nur bei
+  DRIVER=HDA.
+- Fehlt CONFIG.R4S, bleibt AC97 fuer QEMU-Tests als Default aktiv.
+- Die spaetere Auslagerung von AC97.R4D und HDA.R4D wird dadurch vorbereitet:
+  beide liegen langfristig nebeneinander unter /SYS/DRIVERS/.
+
+Abnahme:
+- CONFIG.R4S enthaelt explizit DRIVER=AC97.
+- Der Kernel laedt CONFIG.R4S, bevor AC97 initialisiert wird.
+- AC97 initialisiert nur, wenn DRIVER=AC97 vorhanden und AC97 nicht per
+  DISABLE=AC97 deaktiviert ist.
+- HDA-Probe startet nur, wenn DRIVER=HDA vorhanden und HDA nicht per
+  DISABLE=HDA deaktiviert ist.
+- DRIVER=AC97 erscheint im Boot-Plan und wird dort als bereits aktiver
+  Builtin-Treiber erkannt.
+- Ohne CONFIG.R4S bleibt DRIVER=AC97 im Default-Plan enthalten.
+- HDA-Probe bleibt read-only und wird erst durch DRIVER=HDA ausgewaehlt.
+
+Aktueller Implementierungsstand:
+- Code/src/kernel/boot_config.zig bietet hasDriver() fuer direkte
+  DRIVER-Abfragen.
+- Die Defaults enthalten DRIVER=HELLO und DRIVER=AC97.
+- Code/src/main.zig laedt CONFIG.R4S vor HDA-Probe/AC97-Init.
+- AC97 wird nur noch bei DRIVER=AC97 gestartet.
+- HDA wird nur noch bei DRIVER=HDA geprobt.
+- CONFIG.R4S im Projekt enthaelt jetzt DRIVER=AC97.
+
+
+0.4.44: AudioBackend-Registry fuer mehrere Backends
+---------------------------------------------------
+Status: Erledigt
+
+Ziele:
+- Audio-Core von einem einzelnen AudioBackend-Slot auf eine kleine Registry
+  vorbereiten.
+- Registrierte Backends und aktives Output-Backend unterscheiden.
+- Nur ein Backend soll PCM-Ausgabe bekommen.
+- Weitere Backends sollen spaeter daneben registriert werden koennen, ohne
+  automatisch das aktive Backend zu ersetzen.
+- AUDIO soll registrierte Backends und das aktive Backend sichtbar machen.
+- AC97 bleibt fuer aktuelle Tests das aktive native Backend.
+
+Abnahme:
+- Audio-Core kann mehrere AudioBackends verwalten.
+- Erstes native Backend wird automatisch aktiv.
+- audio_write geht nur an das aktive Backend.
+- stream close/closeAll ruft nur stop() des aktiven Backends.
+- AUDIO zeigt aktive und registrierte Backends.
+- AC97-BEEP/R4Synth-Pfad bleibt unveraendert nutzbar.
+
+Aktueller Implementierungsstand:
+- Code/src/audio/core.zig enthaelt eine kleine AudioBackend-Registry.
+- Native Backends speichern write_pcm und stop_pcm pro Backend.
+- Generische Backends koennen registriert werden, ohne aktive PCM-Ausgabe zu
+  werden.
+- AUDIO zeigt Backends mit Stern fuer aktiv und Kennzeichnung native/generic.
+- AC97 registriert sich weiter als natives Backend und wird als erstes natives
+  Backend aktiv.
+
+
+0.4.45: AudioBackend Auswahl- und Unregister-Helfer
+---------------------------------------------------
+Status: Erledigt
+
+Ziele:
+- AudioBackend-Registry fuer spaetere Runtime-Treiber robuster machen.
+- Ein registriertes natives Backend per Namen aktivieren koennen.
+- Ein Backend per Namen deregistrieren koennen.
+- Beim Deregistrieren des aktiven Backends den PCM-Pfad stoppen.
+- Falls moeglich automatisch auf das naechste native Backend wechseln.
+- Re-Registrierung desselben Backend-Namens soll den aktiven Status korrekt
+  erhalten.
+
+Abnahme:
+- selectAudioBackend(name) aktiviert nur Backends mit PCM-Ausgabe.
+- unregisterAudioBackend(name) entfernt ein Backend sauber aus der Registry.
+- Wird das aktive Backend entfernt, wird dessen stop()-Funktion aufgerufen.
+- Nach Entfernen des aktiven Backends wird ein anderes natives Backend aktiv,
+  falls vorhanden.
+- AUDIO zeigt den aktiven Stern auch nach Re-Registrierung korrekt.
+- AC97 bleibt als aktuelles erstes natives Backend funktionsfaehig.
+
+Aktueller Implementierungsstand:
+- Code/src/audio/core.zig bietet selectAudioBackend() und
+  unregisterAudioBackend().
+- Die Registry bewahrt den Aktiv-Status bei Re-Registrierung desselben Namens.
+- Beim Unregister des aktiven Backends wird gestoppt und danach ein
+  vorhandenes natives Backend aktiviert.
+
+
+0.4.46: HDA-QEMU-Testskripte
+----------------------------
+Status: Erledigt
+
+Ziele:
+- Separaten QEMU-Testpfad fuer HDA bereitstellen.
+- AC97-Standardscripts unveraendert lassen.
+- HDA-Scripts sollen CONFIG_HDA.R4S als /CONFIG.R4S ins Image legen.
+- QEMU soll mit intel-hda und hda-duplex starten.
+- Klar dokumentieren, dass HDA aktuell nur Probe/Diagnose ist und noch keine
+  Audio-Ausgabe liefert.
+
+Abnahme:
+- DevTools/Scripts/BuildAndRunHDA.bat existiert fuer headless HDA-Probe.
+- DevTools/Scripts/BuildAndRunHDAView.bat existiert fuer HDA-Probe mit
+  QEMU-Fenster.
+- CONFIG_HDA.R4S enthaelt DRIVER=HDA statt DRIVER=AC97.
+- Die HDA-Scripts bauen dieselbe Software und dasselbe Image-Layout wie die
+  Standardscripts, ersetzen aber /CONFIG.R4S durch CONFIG_HDA.R4S.
+- QEMU startet in den HDA-Scripts mit -device intel-hda -device hda-duplex.
+
+Aktueller Implementierungsstand:
+- CONFIG_HDA.R4S ist als HDA-Testkonfiguration angelegt.
+- BuildAndRunHDA.bat und BuildAndRunHDAView.bat sind angelegt.
+- Docs/Deployment/BuildUndTest.txt beschreibt die HDA-Testskripte und die
+  erwartete AUDIO-Diagnose.
+
+
+0.4.47: HDA-Controller-Reset und Betriebszustand
+------------------------------------------------
+Status: Erledigt
+
+Ziele:
+- HDA vom Probe-only-Pfad in einen kontrollierten Initialisierungspfad
+  ueberfuehren.
+- Controller-Reset ueber GCTL.CRST implementieren.
+- Reset-Zeitlimits und Fehlerpfade sauber loggen.
+- Global-Interrupts und Stream-Interrupts zunaechst kontrolliert deaktiviert
+  halten.
+- HDA-Zustand im Treiber trennen: missing, probed, mmio_mapped, reset_ok,
+  transport_ready, codec_ready, playback_ready, failed.
+- AC97 bleibt als Rueckfall- und Vergleichspfad erhalten.
+
+Abnahme:
+- BuildAndRunHDA.bat bootet bis zur Shell.
+- DMESG zeigt HDA-Reset Start/OK oder einen klaren WARN/ERROR-Pfad.
+- AUDIO zeigt den HDA-Zustand und ob Reset erfolgreich war.
+- Keine Endlosschleife bei fehlendem/kaputtem HDA-Controller.
+- Noch keine Audioausgabe erforderlich.
+
+Aktueller Implementierungsstand:
+- Code/src/drivers/audio/hda.zig fuehrt eine HDA-State-Machine fuer missing,
+  probed, mmio_mapped, reset_ok und failed.
+- Der Controller-Reset setzt GCTL.CRST kontrolliert auf 0 und danach wieder
+  auf 1.
+- INTCTL wird waehrend dieses Schritts deaktiviert gehalten.
+- Reset-Wartezaehler und Fehleranzahl werden im AUDIO-Kommando angezeigt.
+- Der HDA-Pfad bleibt init-no-playback; Stream-DMA und Ton folgen spaeter.
+
+
+0.4.48: HDA-CORB/RIRB-Kommandotransport
+---------------------------------------
+Status: Erledigt
+
+Ziele:
+- CORB und RIRB als HDA-Command-Transport implementieren.
+- Physische DMA-Puffer fuer CORB/RIRB allozieren und registerseitig
+  einrichten.
+- CORB/RIRB-Groessen auslesen und konservativ waehlen.
+- Verbs senden und Responses lesen.
+- Timeouts, Ring-Reset und Diagnosezaehler einbauen.
+
+Abnahme:
+- Ein einfacher GetParameter-Verb liefert eine nachvollziehbare Response.
+- AUDIO zeigt CORB/RIRB-Status, Ringgroessen, gesendete Verbs, Responses und
+  Timeouts.
+- Fehler zerlegen den Kernel nicht und lassen HDA als failed/probe-only
+  sichtbar zurueck.
+
+Aktueller Implementierungsstand:
+- Code/src/drivers/audio/hda.zig richtet nach erfolgreichem Controller-Reset
+  CORB und RIRB ein.
+- CORB/RIRB nutzen physische DMA-Puffer aus dem Audio-DMA-Pool und werden
+  ueber die HDA-MMIO-Register verdrahtet.
+- Die Ringgroesse wird aus den Controller-Capability-Bits konservativ
+  gewaehlt.
+- Der Treiber sendet als ersten Transporttest GetParameter(VendorId) an den
+  ersten vorhandenen Codec und loggt die Response.
+- AUDIO zeigt Transportzustand, Ringgroessen, physische Ringadressen,
+  gesendete Verbs, Responses, Timeouts, Fehler und letzten Verb/Response.
+- Bei Transportfehlern bleibt der Kernel stabil; HDA bleibt sichtbar im
+  Zustand reset_ok oder failed, aber ohne Playback.
+
+
+0.4.49: HDA-Codec-Discovery
+---------------------------
+Status: Erledigt
+
+Ziele:
+- STATESTS-Codec-Maske in echte Codec-Adressen uebersetzen.
+- Fuer jeden vorhandenen Codec Vendor-ID, Revision und Node-Struktur lesen.
+- Audio Function Group finden.
+- Widgets erkennen: Audio Output Converter, Pin Complex, Mixer/Selector,
+  Amplifier.
+- Erste Codec-Diagnose fuer QEMU hda-duplex ausgeben.
+- Noch keine komplexe Quirk-Tabelle, aber Struktur dafuer vorbereiten.
+
+Abnahme:
+- BuildAndRunHDA.bat erkennt den QEMU-HDA-Codec.
+- AUDIO zeigt Codec-Adresse, Vendor/Device, Function Group und relevante
+  Output-Widgets.
+- Bei unbekanntem Codec gibt es klare Diagnose statt stiller Ablehnung.
+
+Aktueller Implementierungsstand:
+- Code/src/drivers/audio/hda.zig fuehrt nach erfolgreichem CORB/RIRB-
+  Transport eine Codec-Discovery aus.
+- STATESTS wird in Codec-Adressen uebersetzt; pro Codec werden Vendor-ID,
+  Revision-ID und Root-Subnode-Informationen gelesen.
+- Audio Function Groups werden ueber FunctionGroupType erkannt.
+- Unterhalb der Audio Function Group werden relevante Widgets gesammelt:
+  Audio Output Converter, Pin Complex, Mixer und Selector.
+- Pin Complex Widgets lesen zusaetzlich PinCaps.
+- AUDIO zeigt gefundene Codecs, AFG-Node, Widgetzaehler sowie die relevanten
+  NIDs mit Typ, Caps und PinCaps.
+- Unbekannte oder unvollstaendige Codecs werden mit no-afg bzw. Fehlerzaehlern
+  sichtbar gemacht, ohne den Kernel zu blockieren.
+
+
+0.4.50: HDA-Output-Pfad konfigurieren
+-------------------------------------
+Status: Erledigt
+
+Ziele:
+- Einen nutzbaren Output-Pfad vom Stream ueber DAC/Converter zum Pin finden.
+- Pin Control setzen, Output Enable aktivieren.
+- Converter Stream/Channel zuweisen.
+- Amplifier Gain/Mute fuer DAC und Pin setzen, mindestens unmute.
+- QEMU hda-duplex als erster Zielcodec.
+- Spaeteren Quirk-Pfad fuer Realtek/IDT/STAC vorbereiten.
+
+Abnahme:
+- AUDIO zeigt den gewaehlten Output-Pfad: codec, afg, converter, pin.
+- Der Pfad kann wiederholt initialisiert werden, ohne haengende Zustaende.
+- Kein Ton erforderlich, aber der Codec ist auf Output vorbereitet.
+
+Aktueller Implementierungsstand:
+- Code/src/drivers/audio/hda.zig waehlt nach der Codec-Discovery einen
+  einfachen Output-Pfad: erster Audio Output Converter plus erster
+  output-faehiger Pin Complex.
+- Wenn der Pin eine Connection-List anbietet, wird der passende Converter-
+  Eintrag gesucht und per SetConnectionSelect ausgewaehlt.
+- Der Converter bekommt Stream-ID 1 und Channel 0 per Converter Stream/Channel
+  Verb.
+- Der Pin wird per Pin Widget Control auf Output Enable gesetzt.
+- EAPD/BTL wird gesetzt, wenn der Pin diese Faehigkeit meldet.
+- Output-Amps von Converter und Pin werden, falls vorhanden, per
+  SetAmplifierGainMute ungemutet.
+- AUDIO zeigt Output-Pfad, Stream/Channel, Pin-Control, PinCaps,
+  Connection-Index, EAPD und Unmute-Status.
+- HDA erreicht bei Erfolg den Zustand path_ready. PCM-DMA und Ton folgen in
+  0.4.51/0.4.52.
+
+
+0.4.51: HDA-Stream-DMA-Grundlage
+--------------------------------
+Status: Erledigt
+
+Ziele:
+- HDA Output Stream Descriptor auswaehlen.
+- Buffer Descriptor List fuer HDA anlegen.
+- DMA-Puffer fuer PCM-Samples bereitstellen.
+- 48 kHz stereo s16le als erstes Hardwareformat verwenden.
+- Stream-Formatregister korrekt setzen.
+- HDA als natives AudioBackend registrieren, sobald der DMA-Pfad vorbereitet
+  ist.
+
+Abnahme:
+- AUDIO zeigt HDA als registriertes natives Backend, wenn DRIVER=HDA gesetzt
+  ist.
+- BDL-Adresse, Stream-Descriptor, Format und Pufferanzahl sind sichtbar.
+- Noch kein stabiler Ton erforderlich, aber Stream-DMA ist konfigurierbar.
+
+Aktueller Implementierungsstand:
+- Code/src/platform/pci.zig bietet enableMemoryAndBusMaster() fuer MMIO-
+  Geraete wie HDA.
+- Code/src/drivers/audio/hda.zig aktiviert Memory Space und Bus Mastering fuer
+  den HDA-PCI-Controller.
+- HDA waehlt den ersten Output-Stream-Descriptor nach den Input-Streams.
+- Eine HDA-BDL wird als physisch zusammenhaengender DMA-Puffer angelegt.
+- Acht PCM-DMA-Puffer zu je 4096 Bytes werden angelegt, genullt und in die
+  BDL eingetragen.
+- Der Stream-Descriptor wird resetet, mit BDL-Adresse, CBL, LVI und
+  Format 0x0011 konfiguriert (48 kHz, stereo, s16le).
+- HDA registriert sich nach erfolgreicher DMA-Vorbereitung als natives
+  AudioBackend.
+- AUDIO zeigt DMA-Status, Backend-Registrierung, Stream-Descriptor-Index,
+  BDL-Adresse, Pufferanzahl, CBL, LVI, Format, CTL/STS und LPIB.
+- Der Stream wird noch nicht gestartet; echter PCM-Start und BEEP folgen in
+  0.4.52.
+
+
+0.4.52: HDA-BEEP hoerbar machen
+-------------------------------
+Status: Erledigt
+
+Ziele:
+- Erste PCM-Ausgabe ueber HDA starten.
+- BEEP.R4X soll ueber DRIVER=HDA hoerbar sein.
+- Start/Stop des HDA-Streams sauber implementieren.
+- Nach Programmende zur Shell zurueckkehren.
+
+Abnahme:
+- BuildAndRunHDAView.bat startet R4OS mit HDA.
+- `BEEP` spielt hoerbar ueber QEMU-HDA.
+- `AUDIO` zeigt HDA als aktives Backend und steigende Write-/DMA-Zaehler.
+- Nach BEEP bleiben keine offenen Streams und kein haengender DMA-Zustand.
+
+Aktueller Implementierungsstand:
+- Code/src/drivers/audio/hda.zig nimmt ueber das native HDA-AudioBackend
+  erstmals PCM-Daten an.
+- Eingehende PCM-Daten werden ueber Code/src/audio/pcm.zig nach 48 kHz,
+  stereo, s16le konvertiert.
+- Pro audio_write wird der Output-Stream kontrolliert gestoppt/resetet, die
+  BDL neu programmiert, PCM in bis zu acht DMA-Puffer geschrieben und der
+  HDA-Stream gestartet.
+- CBL, LVI und Format werden pro Write passend zum tatsaechlich gefuellten
+  DMA-Bereich gesetzt.
+- Das HDA-Format fuer 48 kHz stereo s16le ist 0x0021.
+- AUDIO zeigt Playback-Status, Write-/Start-/Stop-/Reset-Zaehler, letzte
+  Quellformatdaten, ausgegebene Bytes, genutzte Puffer, Gesamtframes und
+  Resampler-Phase.
+- Nach dem ersten HDA-QEMU-Test wurde der Command-Transport erweitert:
+  Wenn CORB/RIRB nach der ersten Response keine weiteren Antworten liefert,
+  schaltet der Treiber auf den Immediate-Command-Pfad ueber ICOI/ICII/ICIS
+  um. AUDIO zeigt prefer/ok/fallback/fails fuer diesen Pfad.
+- Manuelle Abnahme mit BuildAndRunHDAView.bat erfolgreich: BEEP war ueber
+  QEMU-HDA hoerbar.
+- AUDIO nach BEEP zeigte Backend HDA, backend_ok=50, state=dma_ready,
+  discovery codecs=1, output ok=yes, dma ready=yes, writes=50, starts=50,
+  stops=1 und lpib=1152.
+
+
+0.4.53: HDA-Refill, IRQ und Playback-Stabilitaet
+------------------------------------------------
+Status: Erledigt
+
+Ziele:
+- HDA-Playback nicht nur als Einmalpuffer betreiben.
+- Refill-Strategie fuer mehrere BDL-Slots umsetzen.
+- IRQ-Pfad oder vorerst klar getakteten Polling-Pfad stabilisieren.
+- DCH/BCIS/FIFO-/Descriptor-Fehler sauber zaehlen und behandeln.
+- Underruns sichtbar melden und kontrolliert recovern.
+
+Abnahme:
+- Wiederholtes `BEEP` funktioniert ohne Neustart.
+- AUDIO zeigt Refill-/IRQ- oder Polling-Zaehler.
+- Keine haeufigen Resets im normalen BEEP-Betrieb.
+- Shell bleibt nach mehreren Audio-Tests bedienbar.
+
+Aktueller Implementierungsstand:
+- Code/src/drivers/audio/hda.zig nutzt den HDA-Output-Stream nun als
+  laufenden BDL-Ring statt als Einmalpuffer pro audio_write.
+- Alle acht BDL-Slots bleiben gueltig und zeigen auf 4096-Byte-Puffer; leere
+  Bereiche werden mit Stille gefuellt.
+- audio_write fuellt den naechsten DMA-Slot, laesst den Stream weiterlaufen
+  und startet Playback nur, wenn es noch nicht laeuft.
+- Der Treiber pollt den Streamstatus und zaehlt BCIS, FIFO-Fehler,
+  Descriptor-Fehler, Polls, Refills und Refill-Timeouts.
+- Stop setzt den Stream kontrolliert zurueck in den gestoppten Zustand,
+  resettet den naechsten DMA-Slot und den Resampler.
+- AUDIO zeigt nun Refills, Poll-/Event-Zaehler, Timeouts und next-Slot.
+- Manuelle Abnahme mit zwei direkt nacheinander ausgefuehrten BEEP-Laeufen
+  erfolgreich: beide BEEPs waren hoerbar, die Shell blieb danach bedienbar.
+- AUDIO zeigte danach Backend HDA, backend_ok=100, backend_fail=0,
+  writes=100, starts=2, stops=2, resets=3, refills=100, fifo=0, desc=0,
+  timeouts=0 und next=0.
+
+
+0.4.54: HDA mit R4Synth, TEST.WAV und TADA.WAV
+----------------------------------------------
+Status: Erledigt
+
+Ziele:
+- R4Synth ueber HDA als echtes Testwerkzeug verwenden.
+- `SYNTH \TEST.WAV` ueber HDA abspielen.
+- `SYNTH C:\TEMP\TADA.WAV` ueber HDA abspielen.
+- PCM-Formatpipeline fuer HDA nutzen: verschiedene Sampleraten, 8/16-bit,
+  mono/stereo.
+- Keine kuenstliche Dateilaengenbegrenzung einfuehren.
+
+Abnahme:
+- TEST.WAV spielt ueber HDA hoerbar und kehrt zur Shell zurueck.
+- TADA.WAV spielt ueber HDA hoerbar, nicht deutlich zu schnell und ohne
+  grobe Block-Wiederholungen.
+- P/Q in R4Synth bleiben nutzbar.
+- AUDIO zeigt nach R4Synth keine offenen Streams und nachvollziehbare HDA-
+  Zaehler.
+
+Aktueller Implementierungsstand:
+- Code/src/drivers/audio/hda.zig schuetzt den laufenden BDL-Ring gegen
+  alte Samples, indem nach jedem PCM-Refill ein Stille-Slot hinter den
+  geschriebenen Daten vorbereitet wird.
+- stopPlayback() fuehrt vor dem Stop einen kurzen Drain durch, damit R4Synth
+  das letzte WAV-Stueck nicht sofort abschneidet.
+- AUDIO zeigt zusaetzlich drains, silence-Refills und drain_ticks.
+- Manuelle Abnahme mit BuildAndRunHDAView.bat erfolgreich: SYNTH TEST.WAV
+  und SYNTH C:\TEMP\TADA.WAV waren ueber HDA hoerbar und kehrten zur
+  Shell zurueck.
+- TEST.WAV: backend_ok=6, backend_fail=0, writes=6, starts=1, stops=1,
+  drains=1, refills=12, silence=6, fifo=0, desc=0, timeouts=0.
+- TADA.WAV: backend_ok=20, backend_fail=0, writes=20, starts=2, stops=2,
+  drains=2, resets=3, refills=80, silence=20, fifo=0, desc=0, timeouts=0.
+- TADA.WAV lief mit 22050 Hz, mono, u8 ueber die PCM-Pipeline nach 48000 Hz,
+  stereo, s16le.
+
+
+0.4.55: HDA-Diagnose, Fehlerbehandlung und Resetpfad
+----------------------------------------------------
+Status: Erledigt
+
+Ziele:
+- HDA-Diagnose auf ausgereiften Treiberbetrieb erweitern.
+- Controller-, Codec-, CORB/RIRB-, Stream- und BDL-Status im AUDIO-Kommando
+  sichtbar machen.
+- Reset-/Recovery-Pfade fuer Transport, Codec und Stream trennen.
+- Timeouts und Fehler mit klaren WARN/ERROR-Meldungen loggen.
+- Keine stillen Fallbacks auf AC97, wenn DRIVER=HDA gesetzt ist.
+
+Abnahme:
+- AUDIO liefert genug Informationen, um HDA-Probleme ohne Debug-Spam beim
+  Start einzugrenzen.
+- DMESG zeigt HDA-Fehlerpfade nachvollziehbar.
+- Fehlerhafte HDA-Initialisierung laesst Shell und andere Treiber stabil.
+- HDA kann nach einem Playback-Fehler kontrolliert stoppen oder resetten.
+
+Aktueller Implementierungsstand:
+- Code/src/drivers/audio/hda.zig erweitert das AUDIO-Kommando um einen
+  Health-Block fuer Transport, Codec, Output, DMA und Playback.
+- Der HDA-Treiber merkt sich den letzten Fehler und die letzte Recovery-
+  Aktion und gibt beides im AUDIO-Kommando aus.
+- Der alte Diagnosezustand driver=init-no-playback wurde durch einen
+  echten Treiberstatus ersetzt, z.B. playback-ready, path-ready oder failed.
+- Die DMA-Diagnose zeigt jetzt zusaetzlich aktuellen BDL-Slot, RUN-Status,
+  erste BDL-Laengen und Stream-Recovery-Zaehler.
+- Refill-Timeouts werden ins Bootlog geschrieben und loesen einen
+  kontrollierten Stream-Recovery-Pfad aus: Stream stoppen/resetten, BDL und
+  DMA-Puffer neu programmieren, Resampler zuruecksetzen.
+- FIFO- und Descriptor-Fehler werden nicht mehr nur gezaehlt, sondern auch
+  als WARN im dmesg-/Bootlog-Puffer sichtbar.
+- Build-Abnahme mit `zig build` erfolgreich. Manuelle HDA-QEMU-Abnahme kann
+  mit 0.4.56 zusammen erfolgen.
+
+
+0.4.56: HDA-Ausreifung und Abnahme
+----------------------------------
+Status: Erledigt
+
+Ziele:
+- HDA als vollwertigen, stabilen Audio-Hardwaretreiber fuer 0.4 fertigstellen.
+- QEMU-HDA als Pflicht-Testpfad definieren.
+- Echte Hardware als zusaetzlichen Testpfad vorbereiten, soweit Boot/Storage
+  es erlauben.
+- AC97 bleibt Referenz und Fallback, aber HDA muss eigenstaendig nutzbar sein.
+- Vor Abschluss dieser Phase wird nicht mit SID begonnen.
+
+Abnahme:
+- BuildAndRunHDA.bat und BuildAndRunHDAView.bat booten reproduzierbar.
+- `BEEP` funktioniert ueber HDA.
+- `SYNTH \TEST.WAV` funktioniert ueber HDA.
+- `SYNTH C:\TEMP\TADA.WAV` funktioniert ueber HDA.
+- Mehrere Audio-Programme nacheinander funktionieren ohne Neustart.
+- AUDIO zeigt HDA als aktives Backend und stabile Zaehler ohne normale
+  Reset-/Timeout-Spam-Muster.
+- R4Synth kehrt nach Ende/Q sauber zur Shell zurueck.
+- HDA-Code ist so strukturiert, dass er spaeter als HDA.R4D aus dem Kernel
+  herausgeloest werden kann.
+
+Aktueller Implementierungsstand:
+- Code/src/drivers/audio/hda.zig zaehlt jetzt neben Refill-Timeouts auch
+  Drain-Timeouts und Stop-Timeouts.
+- stopPlayback() versucht bei einem haengenden RUN-Bit nicht still
+  weiterzumachen, sondern meldet den Fehler und nutzt den Stream-Recovery-
+  Pfad.
+- drainPlayback() erkennt, ob der erwartete Slot innerhalb des Zeitlimits
+  erreicht wurde, und macht einen Timeout im AUDIO-/DMESG-Pfad sichtbar.
+- preparePlaybackWrite() meldet fehlgeschlagene Stream-Resets explizit.
+- AUDIO zeigt die neuen Timeout-Zaehler zusammen mit den Event-Zaehlern.
+- Build-Abnahme mit `zig build` erfolgreich.
+
+
+0.4.57: HDA-Abnahmekommando
+---------------------------
+Status: Erledigt
+
+Ziele:
+- Wiederholbare HDA-Abnahme direkt aus der Shell starten koennen.
+- BEEP und R4Synth-WAV-Tests in einer festen Reihenfolge ausfuehren.
+- Nach der Testsequenz automatisch AUDIO anzeigen.
+- Das Kommando soll kein neues Testframework erzwingen, sondern DOS-artig
+  simpel bleiben.
+
+Abnahme:
+- HELP zeigt HDATEST.
+- HDATEST startet nacheinander BEEP, SYNTH \TEST.WAV und
+  SYNTH C:\TEMP\TADA.WAV.
+- Nach der Sequenz wird AUDIO ausgegeben.
+- Wenn TADA.WAV nicht vorhanden ist, bleibt die Shell stabil und der Fehler
+  kommt aus R4Synth/FAT32 statt aus dem Testkommando.
+
+Aktueller Implementierungsstand:
+- Code/src/shell/dos.zig enthaelt das neue Kommando HDATEST.
+- HDATEST ruft die vorhandene R4X-Programmlogik auf, statt einen zweiten
+  Loaderpfad einzufuehren.
+- Build-Abnahme mit `zig build` erfolgreich.
+
+
+0.4.58: SynthEngine-Registry fuer SID
+-------------------------------------
+Status: Erledigt
+
+Ziele:
+- SynthEngine-Registry im Audio-Core anlegen.
+- DriverApi.register_synth_engine an diese Registry anbinden.
+- AUDIO soll registrierte Synth-Engines sichtbar anzeigen.
+- SID.R4D bekommt damit einen sauberen Zielpunkt, bevor Klangemulation
+  beginnt.
+
+Abnahme:
+- DriverApi.register_synth_engine fuehrt zu einem Eintrag in der Registry.
+- AUDIO zeigt eine Synths-Zeile.
+- Ohne registrierte Engine zeigt AUDIO Synths: none.
+- Der Kernel baut weiter sauber.
+
+Aktueller Implementierungsstand:
+- Code/src/audio/core.zig enthaelt eine erste SynthEngine-Registry.
+- DriverApi.register_synth_engine registriert nicht mehr nur ins Log,
+  sondern traegt Engines in die Audio-/Synth-Registry ein.
+- AUDIO zeigt registrierte Synth-Engines ueber eine eigene Synths-Zeile.
+- Damit ist der sichtbare Zielpunkt fuer SID.R4D vorbereitet, bevor die
+  eigentliche SID-Emulation gebaut wird.
+
+
+0.4.59: SID.R4D-Platzhalter
+---------------------------
+Status: Erledigt
+
+Ziele:
+- Einen ersten SID.R4D-Treibercontainer erzeugen.
+- SID.R4D soll als Treibertyp synth gebaut werden.
+- SID.R4D soll sich ueber DriverApi.register_synth_engine als "SID"
+  registrieren.
+- BuildAndRun-Scripts sollen SID.R4D bauen und nach /SYS/DRIVERS/ kopieren.
+- CONFIG.R4S und CONFIG_HDA.R4S sollen DRIVER=SID laden koennen.
+- Noch keine SID-Klangerzeugung; dieser Schritt prueft nur den sichtbaren
+  R4D-/Synth-Registry-Pfad.
+
+Abnahme:
+- BuildAndRun-Scripts bauen Driver/SID/zig-out/SID.R4D.
+- /SYS/DRIVERS/SID.R4D liegt im Image.
+- DRIVER=SID laedt den Treiber beim Boot.
+- DRIVERS zeigt SID als synth-Treiber.
+- AUDIO zeigt Synths: SID.
+
+Aktueller Implementierungsstand:
+- Driver/SID erzeugt SID.R4D als ersten Synth-Platzhalter.
+- SID.R4D nutzt DriverApi.register_synth_engine("SID", ...).
+- BuildAndRun-Scripts bauen SID.R4D und kopieren ihn nach /sys/drivers/sid.r4d.
+- CONFIG.R4S und CONFIG_HDA.R4S laden SID ueber DRIVER=SID.
+- Build-Abnahme mit `zig build` erfolgreich.
+
+
+0.4.60: SID-Engine
+------------------
+Status: Erledigt
+
+Ziele:
+- SID.R4D vom Platzhalter zur echten Synth-Engine ausbauen.
+- Entscheidung treffen und dokumentieren: eigene SID-Implementierung oder
+  reSID-Port.
+- SID.R4D als PCM-Producer an Audio-Core/Mixer anbinden.
+- Drei SID-Stimmen emulieren.
+- Oszillatorformen vorbereiten: Saegezahn, Dreieck, Puls und Rauschen.
+- ADSR-Huellkurven implementieren.
+- Master-Volume implementieren.
+- Vollstaendige 24-Register-Map $D400 bis $D418 bereitstellen.
+- SID-Filter als Ziel einplanen: 12-dB-Multimode-Filter fuer Lowpass,
+  Bandpass und Highpass. Falls fuer die erste Version zu gross, klar als
+  eingeschraenkte Filter-Stufe dokumentieren.
+- SID-Registerzugriff fuer C64-nahe Programme vorbereiten.
+- ProgramApi-Audio erweitern: sid_acquire, sid_write_register und
+  sid_release.
+- High-Level-Voice-API vorbereiten, damit einfache R4X-Apps nicht direkt alle
+  Register setzen muessen.
+- Modell 8580 als erste Zielvariante verwenden; 6581 spaeter optional.
+- SIDDEMO.R4X als einfacher Synth-Demo vorbereiten, kein .sid-Player.
+- R4Synth um .sid-Erkennung und SID-Wiedergabepfad erweitern, sobald
+  SID-Engine und optionaler 6502/.sid-Parser weit genug sind.
+- Optionalen Pfad dokumentieren: 6502-Emulator und .sid-Datei-Parser fuer
+  spaetere echte SID-Musikdateien.
+
+Abnahme:
+- SID.R4D kann geladen und als Synth-Engine angezeigt werden.
+- Eine App kann SID erwerben, Register schreiben und wieder freigeben.
+- SID erzeugt PCM in Richtung Mixer/Audio-Core.
+- SIDDEMO.R4X spielt ein einfaches Pattern, z.B. Bass plus Lead.
+- Registerzugriff und High-Level-Voice-API sind beide nutzbar oder die
+  High-Level-API ist klar als Folgeschritt markiert.
+- Der .sid-Player ist nicht verpflichtend fuer 0.4.60. Falls der optionale
+  6502-Emulator und Parser fertig sind, spielt ein bekannter .sid-Titel
+  erkennbar.
+- Falls .sid-Wiedergabe umgesetzt ist, kann sie ueber SYNTH titel.sid aus der
+  Shell gestartet werden.
+- Wenn kein Audio-Hardwarebackend aktiv ist, wird der Fehler sichtbar
+  gemeldet.
+
+Aktueller Implementierungsstand:
+- ProgramApi Version 4 enthaelt weiterhin sid_acquire, sid_write_register und
+  sid_release.
+- Der Audio-Core verwaltet einen ersten exklusiven SID-Handle.
+- SID-Register 0..24 koennen geschrieben und im AUDIO-Status nachvollzogen
+  werden.
+- AUDIO zeigt SID available/acquired, Schreibzaehler und letztes
+  Register/letzten Wert.
+- Software/SidDemo erzeugt SIDDEMO.R4X als erste SID-ProgramApi-
+  Testanwendung.
+- SIDDEMO ruft sid_acquire auf, schreibt erste SID-Registerwerte und gibt
+  den SID-Handle wieder frei.
+- BuildAndRun-Scripts bauen SIDDEMO.R4X und kopieren es nach /bin/siddemo.r4x.
+- Dieser Punkt ist bewusst noch nicht abgeschlossen. Die endgueltige SID-
+  Umsetzung wird in 0.4.84 bis 0.4.91 konkret abgearbeitet. Ziel bleibt:
+  echte PSID/RSID-Wiedergabe ueber R4Synth, nicht nur ein Testpattern.
+- Abschlussnotiz: Die spaeteren Punkte 0.4.84 bis 0.4.90 liefern den
+  PSID/RSID-Parser, 6502/6510-Core, C64-Laufzeit, Registermodell,
+  Oszillatoren, ADSR, Filter/Mixer und R4Synth-Playback. Damit ist der
+  Dachpunkt SID-Engine fuer 0.4 erfuellt; Klangfeinschliff laeuft in 0.4.91.
+
+
+0.4.61: SIDDEMO hoerbar machen
+------------------------------
+Status: Erledigt
+
+Ziele:
+- SIDDEMO soll nach dem SID-Registertest ein erstes hoerbares Pattern
+  ausgeben.
+- Die Ausgabe nutzt vorerst die bestehende PCM-Audio-API, damit der gesamte
+  Pfad SID-App -> AudioBackend getestet wird.
+- Noch keine vollstaendige SID-Emulation; die echte Register-zu-Oszillator-
+  Engine bleibt Folgearbeit.
+
+Abnahme:
+- SIDDEMO.R4X baut erfolgreich.
+- SIDDEMO schreibt SID-Register, oeffnet einen PCM-Stream, schreibt Samples
+  und schliesst Stream und SID-Handle wieder.
+- AUDIO zeigt danach SID-Schreibzaehler und Audio-Backend-Writes.
+- Bei fehlender SID-Engine meldet SIDDEMO sichtbar SID NOT AVAILABLE.
+
+Aktueller Implementierungsstand:
+- Software/SidDemo erzeugt nun zusaetzlich ein einfaches PCM-Square-Pattern.
+- Das Pattern wird ueber audio_open_stream/audio_write/audio_close gespielt.
+- SIDDEMO bleibt absichtlich eine Shell-App und nutzt keine Vollbildausgabe.
+- R4Synth erkennt PSID/RSID- und MIDI-Dateien am Header und meldet sichtbar,
+  dass SID-/MIDI-Playback noch nicht implementiert ist.
+- Temp/ enthaelt mit Spellbound.sid und westworld.mid erste echte
+  Testdateien fuer die naechsten Decoder-Schritte.
+
+
+0.4.62: MIDI-ProgramApi und MIDIPLAY
+------------------------------------
+Status: Erledigt
+
+Ziele:
+- ProgramApi-Audio um MIDI-Funktionen erweitern: midi_open_synth,
+  midi_send und midi_close.
+- Die neuen MIDI-Funktionen hinten an die API-Tabelle anhaengen, damit
+  bestehende Programme ihre Offsets behalten.
+- Kernel-seitige MIDI-Handle-Verwaltung vorbereiten.
+- AUDIO soll MIDI-Zustand, letzten MIDI-Event und Zaehler anzeigen.
+- MIDIPLAY.R4X vorbereiten: .mid-Datei lesen, MThd-Header validieren und
+  MIDI-API ansprechen.
+- R4Synth soll MIDI-Dateien weiter erkennen und auf MIDIPLAY/MIDI-Backend als
+  kommenden Wiedergabepfad verweisen koennen.
+
+Abnahme:
+- API-Tabelle Version 4 enthaelt MIDI-Funktionen ab Offset 208.
+- Kernel baut mit den neuen ProgramApi-Funktionen.
+- MIDIPLAY.R4X wird gebaut und nach /BIN kopiert.
+- `MIDIPLAY C:\TEMP\WESTWORLD.MID` erkennt den MThd-Header.
+- Ohne MIDI-/OPL3-Backend meldet MIDIPLAY sichtbar, dass noch kein Backend
+  verfuegbar ist.
+- AUDIO zeigt eine MIDI-Zeile.
+
+Aktueller Implementierungsstand:
+- Code/src/program/r4x.zig enthaelt ProgramApi Version 4 mit
+  midi_open_synth, midi_send und midi_close.
+- Code/src/audio/core.zig verwaltet einen ersten MIDI-Handle, MIDI-Send-
+  Zaehler und den letzten MIDI-Event fuer Diagnose.
+- AUDIO zeigt MIDI available/acquired, Send-Zaehler und den letzten Event.
+- Software/MidiPlay erzeugt MIDIPLAY.R4X.
+- MIDIPLAY liest MIDI-Dateien, prueft MThd und ruft den MIDI-API-Pfad auf.
+- BuildAndRun-Scripts bauen MIDIPLAY.R4X und kopieren es nach /bin.
+
+
+0.4.63: OPL3 und MIDI-Playback
+------------------------------
+Status: Erledigt
+
+Ziele:
+- OPL3.R4D als FM-Synth-Engine implementieren.
+- OPL3 als 18-Operator-FM-Synthesizer vorbereiten.
+- MIDI.R4D als MIDI-Router oder Synth-Frontend implementieren.
+- MIDI-Nachrichten parsen und an ein Synth-Backend routen koennen.
+- OPL3 als moegliches MIDI-Backend vorsehen.
+- General-MIDI-Mapping fuer OPL3 anlegen: GM-Patches werden auf
+  OPL-Operator-Konfigurationen abgebildet.
+- Mapping darf in der ersten Version grob sein, muss aber musikalisch
+  erkennbar bleiben.
+- MIDIPLAY.R4X erweitern: .mid-Datei komplett lesen, Events schedulen und
+  ueber die MIDI-API senden. Kann als eigener Test oder als
+  R4Synth-Decoderpfad entstehen.
+- R4Synth um .mid-Erkennung erweitern und MIDI-Dateien ueber MIDI.R4D an ein
+  Synth-Backend wie OPL3.R4D routen.
+- DOS-Spielesound-Pfad langfristig vorbereiten.
+
+Abnahme:
+- OPL3.R4D kann als Synth-Engine registriert werden.
+- MIDI.R4D kann MIDI-Nachrichten entgegennehmen.
+- MIDI kann ein Backend auswaehlen oder sichtbar melden, wenn keines
+  vorhanden ist.
+- MIDIPLAY.R4X kann eine .mid-Datei von Disk lesen.
+- MIDIPLAY.R4X schedult Events in zeitlich erkennbarer Reihenfolge.
+- MIDIPLAY.R4X spielt eine .mid-Datei ueber MIDI.R4D -> OPL3.R4D erkennbar
+  und klangreich genug ab, auch wenn GM-Patches noch grobschlaechtig sind.
+- SYNTH song.mid spielt eine .mid-Datei ueber denselben MIDI-Pfad oder meldet
+  sichtbar, wenn MIDI/OPL3 nicht verfuegbar ist.
+- Die Architektur bleibt kompatibel mit einer spaeteren SB16.R4D-Bruecke fuer
+  den DOS-Emulator.
+
+Aktueller Implementierungsstand:
+- Driver/OPL3 erzeugt OPL3.R4D als ersten Synth-Platzhalter.
+- Driver/MIDI erzeugt MIDI.R4D als ersten MIDI-Router-Platzhalter.
+- Beide Treiber nutzen DriverApi.register_synth_engine und erscheinen dadurch
+  in der SynthEngine-Registry.
+- BuildAndRun-Scripts bauen OPL3.R4D und MIDI.R4D und kopieren sie nach
+  /sys/drivers.
+- CONFIG.R4S und CONFIG_HDA.R4S laden OPL3 und MIDI ueber DRIVER=OPL3 und
+  DRIVER=MIDI.
+- MIDIPLAY kann dadurch den MIDI-API-Pfad oeffnen und Testevents senden.
+- Dieser Punkt ist bewusst noch nicht abgeschlossen. Die endgueltige OPL3-/
+  AdLib- und MIDI-Umsetzung wird in 0.4.76 bis 0.4.83 konkret abgearbeitet.
+- Abschlussnotiz: 0.4.76 bis 0.4.83 liefern die SynthEngine-ABI, OPL3-
+  Registermodell, PCM-Rendering, MIDI-Routing, GM-zu-OPL3-Mapping und
+  R4Synth als einzigen normalen MIDI-Player. Damit ist dieser Dachpunkt
+  abgeschlossen; weitere Klangverbesserungen sind kuenftige Feinarbeit.
+  Ziel bleibt: echter FM-Synth, General-MIDI-Mapping und R4Synth-Wiedergabe
+  ueber OPL3/MIDI statt des aktuellen Kernel-Durchstichs. MIDIPLAY wird nur
+  noch als temporaeres Diagnosewerkzeug betrachtet und soll verschwinden,
+  sobald R4Synth diesen Pfad vollstaendig uebernimmt.
+
+
+0.4.64: MIDIPLAY Track-Scanner
+------------------------------
+Status: Erledigt
+
+Ziele:
+- MIDIPLAY soll nicht mehr nur feste Testevents senden.
+- Die App soll den ersten MTrk-Track einer Standard-MIDI-Datei finden.
+- Delta-Time-VLQs sollen uebersprungen werden.
+- Meta-Events sollen erkannt und uebersprungen werden.
+- Running Status soll fuer einfache MIDI-Dateien funktionieren.
+- Channel-Events sollen ueber midi_send an die MIDI-ProgramApi gehen.
+- Als erste Sicherheitsgrenze werden maximal 64 Channel-Events pro Lauf
+  gesendet, damit kaputte Dateien die Shell nicht lange blockieren.
+
+Abnahme:
+- `MIDIPLAY C:\TEMP\WESTWORLD.MID` erkennt MThd und MTrk.
+- AUDIO zeigt danach mehr als zwei MIDI-Sends, wenn die Datei Channel-Events
+  enthaelt.
+- Das letzte MIDI-Event in AUDIO stammt aus der Datei, nicht aus einem
+  hartcodierten Middle-C-Test.
+- Meta-Events wie Tempo blockieren den Parser nicht.
+- MIDIPLAY kehrt zur Shell zurueck.
+
+Aktueller Implementierungsstand:
+- Software/MidiPlay scannt den ersten Track ab Offset 14/22.
+- Der Parser ueberspringt Delta-Time-VLQs, Meta-Events und SysEx-Payloads.
+- Channel-Events mit ein oder zwei Datenbytes werden an midi_send
+  weitergereicht.
+- Running Status wird fuer Channel-Events beruecksichtigt.
+- Die App meldet nach dem Lauf "MIDI events scanned.".
+
+
+0.4.65: MIDI Note-On als einfacher PCM-Synth
+--------------------------------------------
+Status: Erledigt
+
+Ziele:
+- Der MIDI-Pfad soll erstmals hoerbar werden.
+- midi_send soll Note-On-Events erkennen.
+- Note-On mit Velocity > 0 erzeugt vorerst ein kurzes PCM-Square-Signal.
+- Die Ausgabe nutzt das aktive AudioBackend, z.B. HDA oder AC97.
+- AUDIO soll MIDI-PCM-Writes, OK- und Fehlerzaehler anzeigen.
+- Das ist noch kein OPL3-Klang und kein korrektes MIDI-Scheduling, sondern
+  ein bewusst einfacher Durchstich von MIDIPLAY zu AudioBackend.
+
+Abnahme:
+- `MIDIPLAY C:\TEMP\WESTWORLD.MID` erzeugt hoerbare kurze Toene oder
+  zumindest steigende AudioBackend-Writes.
+- AUDIO zeigt MIDI sends und MIDI pcm/ok/fail-Zaehler.
+- AUDIO zeigt steigende backend_ok-Zaehler, wenn ein aktives AudioBackend
+  vorhanden ist.
+- Nach MIDIPLAY bleiben keine offenen Streams.
+
+Aktueller Implementierungsstand:
+- Code/src/audio/core.zig erzeugt fuer MIDI Note-On-Events kurze
+  48-kHz-stereo-s16le-Square-Bloecke.
+- Der MIDI-Synth nutzt den aktiven nativen AudioBackend-Write-Pfad direkt.
+- AUDIO zeigt zusaetzlich MIDI pcm/ok/fail.
+
+
+0.4.66: MIDI-Playback sauber stoppen
+------------------------------------
+Status: Erledigt
+
+Ziele:
+- MIDIPLAY soll nach Programmende keinen laufenden HDA-/AC97-Playback-Zustand
+  hinterlassen.
+- Der direkte MIDI-PCM-Pfad muss beim midi_close das aktive AudioBackend
+  stoppen, wenn keine normalen Audio-Streams offen sind.
+- AUDIO soll nach MIDIPLAY `run=no` bzw. keinen weiterlaufenden Playback-
+  Zustand zeigen.
+
+Abnahme:
+- `MIDIPLAY C:\TEMP\WESTWORLD.MID` erzeugt weiterhin Toene.
+- Nach Rueckkehr zur Shell hoert der Ton auf.
+- AUDIO zeigt nach MIDIPLAY keine offenen Streams.
+- HDA-Status zeigt nach MIDIPLAY nicht dauerhaft `run=yes`.
+
+Aktueller Implementierungsstand:
+- midi_close ruft jetzt activeStopPcm(), wenn keine normalen Audio-Streams
+  offen sind.
+
+
+0.4.67: MIDIPLAY einfacher Event-Pacer
+--------------------------------------
+Status: Erledigt
+
+Ziele:
+- MIDIPLAY soll Note-On-Events nicht mehr ohne Pause in das AudioBackend
+  schieben.
+- Hoerbare MIDI-Events sollen mit einer einfachen Tick-Pause getrennt werden.
+- Das ist noch kein korrektes MIDI-Tempo-Scheduling, sondern ein erster
+  musikalischer Pacing-Schritt fuer den aktuellen PCM-Square-Durchstich.
+
+Abnahme:
+- `MIDIPLAY C:\TEMP\WESTWORLD.MID` erzeugt weiterhin Toene.
+- Die Toene wirken zeitlich getrennter als in 0.4.65/0.4.66.
+- MIDIPLAY kehrt weiter zur Shell zurueck.
+- AUDIO zeigt weiter MIDI pcm/ok und danach gestopptes Playback.
+
+Aktueller Implementierungsstand:
+- MIDIPLAY wartet nach Note-On-Events mit Velocity > 0 kurz ueber api.ticks.
+- Der Parser bleibt ansonsten unveraendert: erster Track, Meta-/SysEx-Skip,
+  Running Status und Channel-Event-Weitergabe.
+
+
+0.4.68: MIDIPLAY Pacer-Opcode korrigieren
+-----------------------------------------
+Status: Erledigt
+
+Ziele:
+- Page Fault beim Start des MIDIPLAY-Pacers beheben.
+- Den falsch emittierten x86-Vergleich im Pacing-Code korrigieren.
+- MIDIPLAY soll wieder zur Shell zurueckkehren.
+
+Abnahme:
+- `MIDIPLAY C:\TEMP\WESTWORLD.MID` loest keinen Page Fault mehr aus.
+- MIDI-Events werden weiter gescannt und hoerbar gepaced.
+- Nach Programmende stoppt der Ton.
+
+Aktueller Implementierungsstand:
+- Der Pacing-Code verwendet fuer `cmp dword [rip+...], imm32` jetzt Opcode
+  0x81 statt 0x83. 0x83 erwartet nur ein imm8 und hatte dadurch den
+  Instruktionsstrom verschoben.
+
+
+0.4.69: MIDIPLAY MIDI-Delta und Tempo
+-------------------------------------
+Status: Erledigt
+
+Ziele:
+- MIDIPLAY soll nicht mehr mit festen Pausen arbeiten.
+- Delta-Time-VLQs sollen als Werte gelesen werden.
+- Die MIDI-Division aus dem Header soll als Ticks-per-Quarter genutzt werden.
+- Tempo-Meta-Events FF 51 sollen das Scheduling beeinflussen.
+- Note-On-Events sollen anhand der berechneten Tick-Zeit abgespielt werden.
+- Der einfache PCM-Square-Synth bleibt vorerst bestehen, klingt aber durch
+  besseres Timing musikalischer.
+
+Abnahme:
+- `MIDIPLAY C:\TEMP\WESTWORLD.MID` loest keinen Page Fault aus.
+- Events werden weiterhin gescannt und gesendet.
+- Toene folgen der MIDI-Zeitbasis erkennbarer als mit fixer 0.4.67-Pause.
+- AUDIO zeigt MIDI sends und MIDI pcm/ok.
+- Nach Programmende stoppt Playback sauber.
+
+Aktueller Implementierungsstand:
+- MIDIPLAY liest die Division aus dem MIDI-Header.
+- Delta-Time-VLQs werden in delta_value gesammelt.
+- wait_ticks = delta_value * tempo_ticks / division.
+- Tempo-Meta-Events FF 51 mit drei Bytes setzen tempo_ticks.
+- Sehr grosse Wartezeiten werden vorerst auf 100 PIT-Ticks begrenzt, damit
+  die Shell bei auffaelligen Dateien nicht minutenlang blockiert.
+
+
+0.4.70: MIDI-Tonhoehen und Triangle-Wave
+----------------------------------------
+Status: Erledigt
+
+Ziele:
+- Der einfache MIDI-Synth soll nicht mehr nur grobe Tonhoehenbereiche nutzen.
+- Jede MIDI-Note 0..127 soll eine eigene 48-kHz-Sampleperiode bekommen.
+- Die harte Square-Wave soll durch eine einfache Triangle-Wave ersetzt werden.
+- Der Klang soll dadurch melodisch nachvollziehbarer und weniger hart werden.
+
+Abnahme:
+- `MIDIPLAY C:\TEMP\WESTWORLD.MID` spielt weiterhin hoerbar.
+- Die Melodie wirkt tonhoehenmaessig nachvollziehbarer als in 0.4.69.
+- AUDIO zeigt weiter MIDI pcm/ok und danach gestopptes Playback.
+
+Aktueller Implementierungsstand:
+- Code/src/audio/core.zig enthaelt eine 128er MIDI-Note-Periodentabelle fuer
+  48 kHz.
+- Der einfache MIDI-PCM-Synth erzeugt Triangle-Wave-Samples statt Square.
+- OPL3.R4D bleibt weiterhin Platzhalter; der bessere Klang liegt vorerst im
+  Kernel-Audio-Core als Durchstich.
+
+
+0.4.71: MIDIPLAY Tempo-Feinschliff
+----------------------------------
+Status: Erledigt
+
+Ziele:
+- MIDIPLAY soll nach dem ersten Timing-Durchstich weniger gehetzt klingen.
+- Delta-Time-Wartezeiten sollen leicht musikalisch gestreckt werden.
+- Laengere MIDI-Pausen sollen nicht mehr so frueh durch das Diagnose-Limit
+  abgeschnitten werden.
+
+Abnahme:
+- `MIDIPLAY C:\TEMP\WESTWORLD.MID` klingt etwas langsamer als 0.4.70.
+- Der erkennbare Rhythmus bleibt erhalten.
+- AUDIO zeigt weiterhin MIDI pcm/ok und HDA bleibt nach dem Abspielen
+  bedienbar.
+
+Aktueller Implementierungsstand:
+- MIDIPLAY skaliert berechnete MIDI-Wartezeiten um 1.25x.
+- Das temporaere Wartezeit-Limit wurde von 100 auf 300 PIT-Ticks angehoben.
+- Hinweis: 0.4.72 ersetzt diesen Feinschliff durch zustandsbasiertes Rendern
+  und entfernt den pauschalen Langsamer-Faktor wieder.
+
+
+0.4.72: MIDI zustandsbasiert rendern
+------------------------------------
+Status: Erledigt
+
+Ziele:
+- MIDI soll nicht mehr als kurzer Tonblock pro Note-On laufen.
+- Note-On, Note-Off und Note-On mit Velocity 0 sollen echte Stimmen im
+  Kernel-MIDI-Synth aktivieren und deaktivieren.
+- MIDIPLAY soll waehrend der Delta-Time-Wartezeit Audio fuer aktive Stimmen
+  rendern.
+- Die MIDI-Tempo-Berechnung soll wieder exakt aus Delta-Time, Division und
+  Tempo-Meta-Event kommen, ohne pauschalen Langsamer-Faktor.
+- Der erste Track soll nicht mehr nach 64 Channel-Events enden.
+
+Abnahme:
+- `MIDIPLAY C:\TEMP\WESTWORLD.MID` spielt gehaltene Noten statt kurzer
+  Blips.
+- AUDIO zeigt MIDI sends, pcm/ok, ticks und voices/steals.
+- Nach Programmende ist `voices=0` und HDA bleibt bedienbar.
+
+Aktueller Implementierungsstand:
+- Der Kernel-Audio-Core besitzt einen einfachen 8-Voice-MIDI-Synth.
+- `midi_send(... status=0 ...)` rendert einen 4096-Byte-Audioblock fuer
+  aktive Stimmen.
+- MIDIPLAY ruft diesen Render-Tick waehrend der MIDI-Delta-Wartezeit auf.
+- Der Event-Sicherheitszaehler wurde von 64 auf 16384 erhoeht.
+
+
+0.4.73: R4Synth spielt MIDI-Dateien
+-----------------------------------
+Status: Erledigt
+
+Ziele:
+- R4Synth soll MIDI-Dateien nicht mehr nur erkennen und ablehnen.
+- `SYNTH FILE.MID` soll denselben MIDI-API-Pfad nutzen wie MIDIPLAY.
+- Der Player soll den ersten MTrk-Track lesen, Delta-Time-VLQs auswerten,
+  Tempo-Meta-Events beachten und Channel-Events an midi_send weitergeben.
+- Waehrend Delta-Wartezeiten sollen aktive MIDI-Stimmen gerendert werden.
+- Q soll waehrend MIDI-Playback sauber abbrechen.
+
+Abnahme:
+- `SYNTH C:\TEMP\WESTWORLD.MID` spielt ueber HDA/AC97 hoerbar MIDI.
+- `Q` beendet MIDI-Wiedergabe und kehrt zur Shell zurueck.
+- AUDIO zeigt danach MIDI sends, pcm/ok, ticks und keine aktiven Voices.
+- WAV-Playback ueber R4Synth funktioniert weiterhin.
+
+Aktueller Implementierungsstand:
+- Software/R4Synth erkennt MThd und springt in einen eigenen MIDI-Playback-
+  Pfad statt in die alte Not-Implemented-Meldung.
+- Der MIDI-Pfad nutzt midi_open_synth, midi_send und midi_close.
+- Parsing und Timing entsprechen dem aktuellen MIDIPLAY-Durchstich fuer
+  einfache Format-0-Dateien mit erstem MTrk-Track.
+- Abnahme durch User bestaetigt: `synth westworld.mid` funktioniert.
+
+
+0.4.74: Driver-Projektstruktur
+------------------------------
+Status: Erledigt
+
+Ziele:
+- R4X-Anwendungen und R4D-Treiber im Projektverzeichnis klar trennen.
+- Externe Anwendungen bleiben unter Software/*/.
+- Ladbare Treiberprojekte wandern nach Driver/*/.
+- BuildAndRun-Skripte sollen Treiber aus Driver/* bauen und nach
+  /sys/drivers ins Boot-Image kopieren.
+- Dokumentation und Roadmap sollen die neue Struktur benennen.
+
+Abnahme:
+- Driver/Hello erzeugt HELLO.R4D.
+- Driver/SID erzeugt SID.R4D.
+- Driver/OPL3 erzeugt OPL3.R4D.
+- Driver/MIDI erzeugt MIDI.R4D.
+- BuildAndRun*.bat referenzieren keine alten Software/*Driver-Pfade mehr.
+- Normale R4X-Apps bleiben unter Software/*/.
+
+Aktueller Implementierungsstand:
+- Die bisherigen Software/*Driver-Projekte wurden nach Driver/* verschoben.
+- .gitignore erlaubt Driver/ als versionierten Projektordner.
+- BuildAndRun-Skripte nutzen die neuen Driver/*-Pfade.
+- Docs und AGENTS.md dokumentieren die Trennung zwischen Software/ und
+  Driver/.
+
+
+0.4.75: R4Synth als einziger Mediaplayer
+----------------------------------------
+Status: Erledigt
+
+Ziele:
+- R4Synth wird die einzige normale Mediaplayer-Anwendung.
+- Das Kommando bleibt `SYNTH FILE.EXT`.
+- R4Synth soll WAV, MIDI und SID ueber dieselbe Bedienoberflaeche starten.
+- MIDI laeuft ueber MIDI.R4D/OPL3.R4D, sobald diese final sind.
+- SID laeuft ueber SID.R4D mit 6502/C64-Emulation als Backend, sobald diese
+  final ist.
+- Gemeinsame Bedienung fuer alle Formate: P = Play/Pause, Q = Beenden.
+- Einheitliche Statusausgabe: Datei, Format, Backend, Titel/Metadaten,
+  Samplerate beziehungsweise Synth-Modell.
+- R4Synth soll Format-Erkennung primaer ueber Header machen; Dateiendungen
+  sind nur Komfort.
+- Fehler muessen sichtbar sein: unbekanntes Format, fehlender Backend-Treiber,
+  kaputte Datei, nicht unterstuetzter Subsong, kein AudioBackend.
+- MIDIPLAY soll aus dem normalen Build/Image entfernt werden, sobald R4Synth
+  den finalen MIDI-Pfad uebernimmt. Falls wir ein Diagnoseprogramm brauchen,
+  bekommt es einen klaren DevTools-/Test-Status und liegt nicht als normaler
+  Player in /bin.
+
+Abnahme:
+- `SYNTH TEST.WAV` spielt WAV.
+- `SYNTH C:\TEMP\WESTWORLD.MID` spielt MIDI.
+- `SYNTH C:\TEMP\SPELLBOUND.SID` startet den SID-Pfad, sobald SID fertig
+  ist, und meldet bis dahin eindeutig, welcher Backend-Schritt fehlt.
+- R4Synth reagiert bei abspielbaren Formaten einheitlich auf P und Q; SID
+  meldet bis zur echten SID-Engine sichtbar den fehlenden Backend-Pfad.
+- `/bin/midiplay.r4x` verschwindet spaetestens mit der finalen MIDI-Abnahme.
+- Die Dokumentation bezeichnet R4Synth als einzigen Mediaplayer.
+
+Aktueller Implementierungsstand:
+- R4Synth bleibt der normale Player fuer WAV, MIDI und spaeter SID.
+- Die BuildAndRun-Skripte bauen MIDIPLAY nicht mehr automatisch und kopieren
+  kein /bin/midiplay.r4x mehr ins Image.
+- Software/MidiPlay bleibt als nicht ausgeliefertes Diagnoseprojekt erhalten.
+- R4Synths MIDI-Pfad reagiert jetzt wie WAV auf P fuer Pause/Weiter und Q
+  fuer Beenden.
+- SID-Dateien melden klar, dass fuer echtes Playback noch das SID.R4D-
+  Player-Backend mit C64-Laufzeit fehlt.
+- Docs/ beschreiben R4Synth als einzigen normalen Mediaplayer.
+
+
+0.4.76: Synth-Engine-ABI finalisieren
+-------------------------------------
+Status: Erledigt
+
+Ziele:
+- Den aktuellen direkten Kernel-MIDI-Durchstich durch eine saubere Synth-
+  Engine-Schnittstelle ersetzen.
+- Synth-Engines sollen PCM produzieren koennen, ohne selbst Hardwaretreiber
+  zu sein.
+- OPL3.R4D, MIDI.R4D und SID.R4D sollen ueber klare Funktionsslots mit dem
+  Audio-Core kommunizieren.
+- ProgramApi bleibt sprachneutral; R4X-Apps sprechen weiterhin midi_* und
+  sid_* an.
+- AUDIO soll aktive Synth-Engines, Render-Zaehler, aktive Stimmen und letzte
+  Fehler getrennt anzeigen.
+
+Abnahme:
+- Der Kernel baut ohne direkten Sonderfall "MIDI erzeugt PCM im Audio-Core".
+- OPL3/MIDI/SID koennen als Engines registriert und eindeutig adressiert
+  werden.
+- `audio`, `drivers` und `synth` bleiben bedienbar. MIDIPLAY bleibt nur so
+  lange verfuegbar, wie es als Diagnosewerkzeug konkret gebraucht wird.
+
+Aktueller Implementierungsstand:
+- Die SynthEngine-Registry unterscheidet jetzt generische R4D-Engines und
+  native Engines mit Funktionsslots.
+- Neue interne Slots: midi_send, render, stop.
+- Der bisherige einfache MIDI-Testklang haengt nicht mehr direkt an der
+  ProgramApi, sondern als native Diagnose-Engine `MIDI-DIAG` hinter dieser
+  Schnittstelle.
+- MIDI.R4D und OPL3.R4D bleiben sichtbare R4D-Ziel-Engines; bis OPL3.R4D
+  echte FM-Synthese rendert, nutzt R4Synth fuer hoerbares MIDI den
+  Diagnose-Renderer.
+- AUDIO zeigt Synth-Engines mit Typen wie generic oder midi+pcm und zaehlt
+  sends/renders/stops pro nativer Engine.
+- Der naechste Schritt kann OPL3.R4D hinter dieselbe Engine-Schnittstelle
+  setzen, ohne R4Synths ProgramApi erneut umzubauen.
+
+
+0.4.77: OPL3-Registermodell und Operatoren
+------------------------------------------
+Status: Erledigt
+
+Ziele:
+- OPL3.R4D vom Platzhalter zur echten FM-Synth-Engine ausbauen.
+- OPL2/OPL3-Registerbereiche modellieren.
+- 18 Zwei-Operator-Kanaele und die OPL3-Erweiterungen vorbereiten.
+- Operatorparameter umsetzen: Multiple, Total Level, Key Scale Level,
+  Attack, Decay, Sustain, Release, Waveform Select.
+- Key-On/Key-Off, Frequenznummer, Block/Oktave und Kanalzustand korrekt
+  verwalten.
+
+Abnahme:
+- Ein OPL3-Testprogramm kann Register schreiben und sichtbare OPL3-Zustands-
+  aenderungen in AUDIO/DMESG erzeugen.
+- Keine Audioausgabe ist in diesem Schritt Pflicht, aber das Registermodell
+  muss deterministisch und nachvollziehbar sein.
+
+Aktueller Implementierungsstand:
+- Code/src/audio/opl3.zig modelliert 512 OPL2/OPL3-Register, 36 Operatoren
+  und 18 Zwei-Operator-Kanaele.
+- Decodiert werden Multiple, Tremolo, Vibrato, Sustain, KSR, KSL, Total
+  Level, Attack, Decay, Sustain-Level, Release, Waveform, F-Number, Block,
+  Key-On, Feedback, Algorithmus, Stereo-Panning, OPL3-Enable,
+  Waveform-Select und Rhythmus-Flag.
+- Die R4X-ProgramApi ist Version 5 und enthaelt opl3_write_register sowie
+  opl3_reset.
+- Software/Opl3Test erzeugt OPL3TEST.R4X und wird nach /bin kopiert.
+- AUDIO zeigt den OPL3-Modellzustand und bis zu vier programmierte Kanaele.
+- Noch keine FM-Audioausgabe; diese folgt in 0.4.78 bis 0.4.80.
+
+
+0.4.78: OPL3-Huellkurven, Phase und Waveforms
+---------------------------------------------
+Status: Erledigt
+
+Ziele:
+- Phasenakkumulator pro Operator implementieren.
+- Sinus- und OPL-Waveform-Varianten vorbereiten.
+- ADSR-Huellkurven mit OPL-Rate-Tabellen naeherungsweise korrekt abbilden.
+- Tremolo und Vibrato als globale OPL-LFOs vorbereiten.
+- Key-Scale-Rate und Key-Scale-Level beruecksichtigen.
+
+Abnahme:
+- Ein einzelner OPL3-Operator kann einen stabilen Ton erzeugen.
+- Attack/Decay/Sustain/Release sind hoerbar unterscheidbar.
+- Tonhoehen folgen F-Number/Block nachvollziehbar.
+
+Aktueller Implementierungsstand:
+- Das OPL3-Modell besitzt pro Operator einen Phasenakkumulator,
+  Huellkurvenzustand und Render-Alter.
+- opl3.renderBlock erzeugt 1024 Frames stereo s16le fuer den ersten Key-On-
+  Kanal.
+- Implementiert sind ein erster Frequenzpfad aus F-Number/Block/Multiple,
+  einfache Waveform-Varianten und eine Attack/Decay/Sustain-Huellkurve.
+- ProgramApi Version 6 enthaelt opl3_render_block und opl3_stop.
+- OPL3TEST.R4X schreibt Register und rendert anschliessend 50 PCM-Bloecke
+  mit Tick-Pacing. Danach stoppt es den Backend-Playback-Pfad.
+- AUDIO zeigt OPL3 render_blocks, frames, last_ch, last_sample und den
+  aktuellen Envelope-Wert des Carrier-Operators.
+- Release und echte OPL-Rate-Tabellen bleiben noch grob und werden mit dem
+  vollstaendigen Kanal-/FM-Pfad weiter verfeinert.
+
+
+0.4.79: OPL3-Kanaele, Feedback, Stereo und Rhythmusmodus
+--------------------------------------------------------
+Status: Erledigt
+
+Ziele:
+- Zwei-Operator-Kanaele mit Modulator/Carrier-Algorithmus umsetzen.
+- Additiven Algorithmus und Feedback je Kanal umsetzen.
+- OPL3-Stereo-Panning und 4-Operator-Pairing vorbereiten.
+- Rhythmusmodus fuer Bass Drum, Snare, Tom, Cymbal und Hi-Hat umsetzen.
+- Kanalallokation fuer polyphone MIDI-Wiedergabe vorbereiten.
+
+Abnahme:
+- OPL3.R4D kann mehrere Stimmen gleichzeitig rendern.
+- Stereo-Flags sind hoerbar.
+- Rhythmusmodus erzeugt unterscheidbare Drums.
+
+Stand:
+- Code/src/audio/opl3.zig rendert alle aktiven 2-Operator-Kanaele pro
+  PCM-Block statt nur den ersten Carrier.
+- Algorithmus 0 nutzt den Modulator als einfache FM-Phasenmodulation.
+  Algorithmus 1 mischt Modulator und Carrier additiv.
+- Kanal-Feedback speichert die letzten Modulator-Samples und beeinflusst den
+  naechsten Modulator-Durchlauf.
+- OPL3-Stereo-Flags werden beim Mischen beachtet; fehlen beide Flags, wird
+  wie im OPL2-kompatiblen Fall mittig ausgegeben.
+- Das 4-Operator-Pairing-Register wird erkannt und in AUDIO als fourop-Maske
+  angezeigt. Die eigentliche 4-Operator-Synthese folgt spaeter.
+- Register 0xBD aktiviert einen ersten Rhythmusmodus mit Bass Drum, Snare,
+  Tom, Cymbal und Hi-Hat als klar unterscheidbare PCM-Anteile.
+- AUDIO zeigt rhythm_bits, fourop, mixed_ch und getrennte L/R-Samplewerte.
+- OPL3TEST.R4X programmiert drei Stimmen mit unterschiedlichem Panning,
+  aktiviert Rhythmusmodus und rendert 50 PCM-Bloecke ueber HDA/AC97.
+
+
+0.4.80: OPL3-PCM-Rendering als echte Synth-Engine
+-------------------------------------------------
+Status: Erledigt
+
+Ziele:
+- OPL3.R4D rendert PCM-Bloecke ueber die Synth-Engine-ABI.
+- Der Audio-Core mischt oder leitet diese PCM-Bloecke an HDA/AC97 weiter.
+- Timing und Pufferung sollen keine Haenger, Endlosschleifen oder Nachklingen
+  nach Programmende erzeugen.
+- AUDIO zeigt OPL3 Render-Zaehler, aktive Stimmen, Drops und letzte Fehler.
+
+Abnahme:
+- Ein OPL3-Testprogramm spielt einen AdLib-artigen Akkord hoerbar.
+- Nach Ende des Tests stoppt Playback sauber.
+- HDA und AC97 bleiben als Hardwarebackends nutzbar.
+
+Stand:
+- Wenn OPL3.R4D sich ueber DriverApi.register_synth_engine("OPL3", ...)
+  registriert, haengt der Audio-Core native midi_send/render/stop-Callbacks
+  an diesen SynthEngine-Slot.
+- MIDI/Synth-Open bevorzugt nun den nativen OPL3-Slot vor dem alten
+  MIDI-DIAG-Testklang, sobald OPL3.R4D geladen ist.
+- OPL3 besitzt eine einfache MIDI-Voice-Allokation fuer bis zu 12 Stimmen,
+  Note-On/Note-Off, All-Notes-Off, Voice-Stealing und Default-Patch-
+  Programmierung.
+- OPL3-Render-Ticks schreiben PCM-Bloecke ueber das aktive HDA-/AC97-
+  AudioBackend; Fehler wie kein Backend oder keine Samples werden als Drops
+  gezaehlt.
+- AUDIO zeigt zusaetzlich OPL3-engine-Ticks, PCM-Writes, OK/Fail, Drops und
+  letzten Fehler sowie im OPL3-Modell voices, note_events und steals.
+- OPL3TEST.R4X nutzt jetzt midi_open_synth("OPL3"), sendet einen einfachen
+  C-Dur-Akkord, rendert 50 SynthEngine-Bloecke und schliesst per midi_close.
+
+
+0.4.81: MIDI-Router finalisieren
+--------------------------------
+Status: Erledigt
+
+Ziele:
+- MIDI.R4D wird vom Platzhalter zum echten MIDI-Router/Synth-Frontend.
+- Standard-MIDI-Dateien Format 0 und Format 1 unterstuetzen.
+- Multi-Track-Merge nach absoluter Tick-Zeit implementieren.
+- Delta-Time-VLQ, Running Status, Tempo-Meta-Events, Time Signature und
+  End-of-Track sauber behandeln.
+- MIDI-Events an OPL3.R4D routen statt an den bisherigen Kernel-Testklang.
+- Sustain, All Notes Off, Reset Controllers und Pitch Bend vorbereiten.
+
+Abnahme:
+- R4Synth spielt Format-0- und Format-1-Dateien in korrekter Event-
+  Reihenfolge.
+- Ein temporaerer MIDIPLAY-Test ist nur erlaubt, solange er konkret bei der
+  Diagnose hilft.
+- Tempoaenderungen im Song werden hoerbar beruecksichtigt.
+- Nach Ende bleiben keine haengenden Noten.
+
+Stand:
+- R4Synth beendet MIDI-Playback nach einem End-of-Track-Meta-Event nicht mehr
+  sofort, sondern prueft den naechsten Chunk.
+- Folgt ein weiterer MTrk-Chunk, setzt R4Synth midi_pos, midi_track_end und
+  Running Status fuer diesen Track neu und spielt weiter.
+- Damit funktionieren mehrteilige Dateien mit mehreren Track-Chunks besser,
+  insbesondere einfache Format-1-Dateien mit separatem Tempo-/Meta-Track vor
+  dem Musik-Track.
+- OPL3-SynthEngine-Render-Ticks schreiben bei Pausen jetzt explizite
+  Stille-Bloecke an das aktive AudioBackend, statt die Ausgabe durch
+  no-samples-Drops trockenlaufen zu lassen.
+- Der OPL3-MIDI-Default-Patch nutzt einen saubereren additiven Klang ohne
+  starkes Feedback; Feedback bleibt separat ueber OPL3TEST abgedeckt.
+- R4Synth routet im MIDI-Pfad vorerst nur musikalisch relevante Events an die
+  SynthEngine: Note On, Note Off und All-Sound-/All-Notes-Off. Program
+  Change, Pitch Bend und nicht ausgewertete Controller werden geparst, aber
+  bis 0.4.82 nicht mehr an OPL3 weitergereicht. Das reduziert CPU-Last und
+  verhindert lange stille Controller-Bursts.
+- Die R4Synth-Filtervergleiche nutzen jetzt 32-bit-Immediates fuer Status-
+  Werte oberhalb 0x7F, damit Note-On/Off-Events wie 0x90 korrekt durch den
+  Filter kommen.
+- Auch die Program-Change-/Channel-Pressure-Erkennung nutzt 32-bit-
+  Vergleiche. Dadurch werden 0xC0/0xD0 korrekt als Ein-Datenbyte-Events
+  behandelt und der MIDI-Stream verschiebt sich nicht vor den ersten Noten.
+- R4Synth fragt waehrend langer MIDI-Delta-Wartezeiten Q/P ab. Pause bleibt
+  innerhalb der aktuellen Wartezeit stehen; Resume setzt die Wartezeit fort.
+- Abschlussnotiz: Die nachfolgenden Punkte 0.4.82 und 0.4.83 schliessen den
+  sichtbaren Nutzerpfad ab: GM-zu-OPL3-Mapping, Controllerweitergabe,
+  R4Synth-MIDI-Abnahme und MIDIPLAY-Entfernung aus dem normalen Image.
+- Der OPL3-MIDI-Pfad transponiert Kanal 10/GM-Drums vorlaeufig nach oben,
+  damit Percussion-Dateien wie alliance2.mid bis zum echten Drum-Mapping
+  hoerbar bleiben.
+- Der echte simultane Multi-Track-Merge nach absoluter Tick-Zeit ist noch
+  offen und bleibt der naechste Schritt innerhalb 0.4.81.
+
+
+0.4.82: General-MIDI-zu-OPL3-Mapping
+------------------------------------
+Status: Erledigt
+
+Ziele:
+- Eine erste General-MIDI-Patch-Tabelle fuer OPL3 anlegen.
+- Mindestens Piano, Bass, Strings, Brass, Lead, Pad und einfache Effekte
+  unterscheidbar abbilden.
+- General-MIDI-Drums auf OPL3-Rhythmusmodus oder reservierte Kanaele mappen.
+- Program Change, Channel Volume, Expression, Pan und Velocity beruecksichtigen.
+- Polyphonie-Strategie definieren: freie Kanaele, Voice-Stealing, Drum-
+  Prioritaet.
+
+Abnahme:
+- `SYNTH C:\TEMP\WESTWORLD.MID` klingt nicht mehr wie ein generischer
+  Triangle-Testklang, sondern erkennbar nach AdLib/OPL.
+- Mehrere Instrumente sind unterscheidbar.
+- AUDIO zeigt MIDI->OPL3-Routing und Voice-Stealing-Zaehler.
+
+Stand:
+- R4Synth reicht Program Change sowie Channel Volume, Pan, Expression,
+  Reset Controllers, All Sound Off und All Notes Off an die MIDI-ABI weiter.
+- OPL3 merkt sich pro MIDI-Kanal Programm, Lautstaerke, Expression und Pan.
+- Eine erste GM-Gruppen-Tabelle bildet Piano, Chromatic/Bells, Organ,
+  Guitar, Bass, Strings/Ensemble, Brass, Reed, Pipe, Lead, Pad, Effekte und
+  Percussion auf unterscheidbare 2-Operator-OPL3-Patches ab.
+- Velocity, Channel Volume und Expression beeinflussen die Operator-
+  Total-Level; Pan beeinflusst die OPL3-Stereo-Flags.
+- Kanal 10 nutzt erste Drum-Patches fuer Kick, Snare, HiHat, Toms und
+  Cymbals statt nur pauschaler Hochtransposition.
+- AUDIO zeigt im OPL3-Block jetzt Program-Change- und Controller-Zaehler.
+- Nach erster Hoerprobe wird die Patch-Tabelle wieder staerker Richtung
+  AdLib/Sound-Blaster-OPL getrimmt: Sinus statt Dreieck als Grundwelle,
+  weniger harte Waveforms, weniger Feedback, leisere Drum-Patches und
+  einfache Mix-Skalierung gegen Clipping-Rauschen.
+- Langfristig sollen echte OPL-Instrument-Banks wie SBI/IBK/BNK oder ein
+  eigenes R4OS-Bankformat geladen werden, statt alle Timbres fest im Kernel
+  zu kodieren.
+- Nach Vergleich mit html-midi-player/Magenta.js wird der eingebaute
+  Bank-lose Fallback bewusst einfacher gehalten: ein klarer Standard-Patch
+  fuer fast alle Melodieinstrumente, ein eigener Bass-Patch fuer GM 32-39
+  und dedizierte Drums. Program Change bleibt fuer spaetere Banks erhalten,
+  erzeugt ohne Bank aber keine ueberambitionierten Preset-Farben.
+- Der Fallback orientiert sich jetzt staerker an der dortigen Synth-Art:
+  fast stummer Modulator, sauberer Carrier, Bass mit Dreieck-artiger Welle
+  und kurze Release-Phase nach Note-Off, damit Takte weniger hart abreissen.
+- Instrument-Banks und Mapping werden als eigener Ausbaupunkt geplant:
+  Unterstuetzung fuer historische Formate wie SBI/IBK/BNK pruefen und/oder
+  ein eigenes R4OS-Bankformat definieren.
+
+
+0.4.83: R4Synth MIDI-Abnahme und MIDIPLAY entfernen
+---------------------------------------------------
+Status: Erledigt
+
+Ziele:
+- R4Synth auf den finalen MIDI.R4D->OPL3.R4D-Pfad umstellen.
+- Den alten Kernel-MIDI-Testklang entfernen oder als expliziten Diagnosepfad
+  deaktiviert lassen.
+- `SYNTH FILE.MID` bleibt die normale User-Schnittstelle.
+- MIDIPLAY aus dem normalen BuildAndRun-Image entfernen.
+- Software/MidiPlay entweder loeschen oder klar als nicht ausgeliefertes
+  Diagnoseprojekt markieren, falls wir es wirklich noch brauchen.
+- Testfaelle fuer westworld.mid und weitere kleine MIDI-Dateien dokumentieren.
+
+Abnahme:
+- `SYNTH C:\TEMP\WESTWORLD.MID` spielt ueber OPL3.R4D.
+- Q beendet R4Synth sauber.
+- AUDIO zeigt nach Ende keine aktiven MIDI-/OPL3-Stimmen.
+- BuildAndRun*.bat kopieren kein MIDIPLAY.R4X mehr nach /bin.
+- Die normale Shell bietet nur noch R4Synth als Mediaplayer an.
+- Damit gilt 0.4.63 als abgeschlossen.
+
+Stand:
+- R4Synth ist weiterhin der einzige normale MIDI-Player im Image.
+- BuildAndRun.bat, BuildAndRunView.bat, BuildAndRunHDA.bat und
+  BuildAndRunHDAView.bat bauen/kopieren MIDIPLAY.R4X nicht ins Boot-Image.
+- Software/MidiPlay bleibt im Repo nur als altes Diagnoseprojekt erhalten.
+- Die interne MIDI-DIAG-SynthEngine wird beim Audio-Core-Init nicht mehr
+  automatisch registriert. R4Synth nutzt dadurch den nativen OPL3-Slot,
+  sobald OPL3.R4D geladen ist; AUDIO zeigt keinen MIDI-DIAG-Renderer mehr
+  im normalen Bootpfad.
+- Version 0.4.83 ist die Abnahmeversion fuer R4Synth als normalen
+  Mediaplayer fuer MIDI-Dateien.
+
+
+0.4.84: SID-Architektur und PSID/RSID-Parser
+--------------------------------------------
+Status: Erledigt
+
+Ziele:
+- SID.R4D auf echte SID-Wiedergabe ausrichten, nicht nur Registerdiagnose.
+- PSID- und RSID-Header parsen: Version, Load Address, Init, Play, Songs,
+  Start-Song, Speed, Name, Author, Released.
+- Load Address aus Header oder Datenstrom korrekt bestimmen.
+- PAL/NTSC-Flags auswerten; PAL als Standard verwenden.
+- R4Synth soll `.sid` laden und die Metadaten anzeigen.
+
+Abnahme:
+- `SYNTH C:\TEMP\SPELLBOUND.SID` erkennt PSID/RSID und zeigt Titelinfos.
+- Ungueltige SID-Dateien werden sichtbar abgelehnt.
+- Noch keine perfekte Wiedergabe erforderlich, aber Parser und Speicherlayout
+  muessen stimmen.
+
+Stand:
+- R4Synth unterscheidet PSID und RSID am Dateimagic.
+- Fuer gueltige SID-Header ab 118 Bytes zeigt R4Synth Format, Titel, Autor
+  und Released-Feld aus dem PSID/RSID-Header.
+- R4Synth zeigt zusaetzlich Version, Load-, Init- und Play-Adresse, Songs,
+  Start-Song und Speed-Word als Hexwerte. Damit sind die wichtigsten Daten
+  fuer den spaeteren 6502/6510- und C64-Laufzeitpfad sichtbar.
+- Der eigentliche Playerpfad bleibt sichtbar blockiert und meldet weiter,
+  dass SID.R4D mit C64-Laufzeit noch fehlt.
+
+
+0.4.85: 6502/6510-Core fuer SID-Wiedergabe
+------------------------------------------
+Status: Erledigt
+
+Ziele:
+- Einen 6502/6510-CPU-Core fuer SID-Player-Code implementieren.
+- Alle offiziellen Opcodes inklusive Adressierungsarten umsetzen.
+- Stack, Flags, Interrupt-/BRK-Grundverhalten und Page-Wrap-Semantik korrekt
+  behandeln.
+- Illegal Opcodes zunaechst erkennen und sichtbar melden; spaeter nach Bedarf
+  fuer reale SID-Dateien nachziehen.
+- CPU-Schrittbetrieb fuer Init- und Play-Routinen bereitstellen.
+
+Abnahme:
+- Kleine 6502-Testprogramme laufen deterministisch.
+- SID init/play-Adressen koennen aufgerufen werden, ohne den Kernel zu
+  zerlegen.
+- Fehlerhafte oder nicht unterstuetzte Opcodes erzeugen eine klare Meldung.
+
+Stand:
+- `Code/src/audio/sid.zig` enthaelt den ersten nativen 6502/6510-Core fuer
+  den SID-Pfad.
+- Der Core besitzt 64 KB C64-Speicher, Register A/X/Y/SP/P/PC, Stack,
+  Branches, JSR/RTS/RTI, Page-Wrap-Adressierung und die offiziellen
+  Basis-Opcodes fuer Load/Store, ALU, Compare, Shift/Rotate, Flag- und
+  Stackbefehle.
+- Illegal beziehungsweise noch nicht unterstuetzte Opcodes werden gezaehlt
+  und als `unsupported-opcode` sichtbar gemacht.
+- Beim SID-Core-Reset laeuft ein deterministischer Selbsttest mit Schleife,
+  JSR/RTS und Speicherzugriffen. Zusaetzlich werden kleine Init-/Play-Probes
+  gegen $D400 ausgefuehrt.
+- `AUDIO` zeigt den SID-Core-Status inklusive selftest, cpu_steps,
+  unsupported, brk, letztem PC/Opcode, Init-/Play-Probe und SID-
+  Registerschreibungen.
+
+
+0.4.86: C64-Laufzeitumgebung fuer SID-Dateien
+---------------------------------------------
+Status: Erledigt
+
+Ziele:
+- C64-Speicherraum fuer SID-Wiedergabe modellieren.
+- SID-Dateidaten an die korrekte Load Address laden.
+- Minimal notwendige I/O-Register fuer typische PSID/RSID-Player bereitstellen.
+- CIA-Timer und Raster-/Frame-Takt so weit emulieren, dass Play-Routinen im
+  richtigen PAL/NTSC-Rhythmus laufen.
+- Init einmalig, Play pro Frame ausfuehren.
+
+Abnahme:
+- SID-Player-Code ruft regelmaessig SID-Registerschreibungen aus.
+- Timing ist stabil: PAL ca. 50 Hz, NTSC ca. 60 Hz.
+- AUDIO zeigt SID-Frames, CPU-Zyklen und Registerschreibungen.
+
+Stand:
+- Die R4X-ProgramApi wurde hinten erweitert, ohne bestehende Offsets zu
+  verschieben: `sid_load_data`, `sid_init`, `sid_play_frame`, `sid_stop`.
+- R4Synth uebergibt PSID/RSID-Daten jetzt an den SID-Core: Data-Offset,
+  Header-Load-Adresse oder eingebettete Little-Endian-Load-Adresse werden
+  ausgewertet, die Daten werden in den 64-KB-C64-Speicher kopiert.
+- R4Synth fuehrt danach einen SID-Runtime-Probe aus: Init-Routine einmal,
+  Play-Routine fuer erste Frames. Noch ohne SID-Audioausgabe; Ziel ist der
+  korrekte C64-Laufzeitpfad.
+- Der SID-Core merkt Load-Adresse, Datenlaenge, Init-/Play-Adresse,
+  Start-Song, Frame-Hz, Frame-Zaehler, letzte Step-Zahl und Step-Limits.
+- `AUDIO` zeigt diese C64-Runtime-Werte im SID-Block an. Unsupported Opcodes
+  oder Step-Limits bleiben sichtbar, statt still zu scheitern.
+
+
+0.4.87: SID-Oszillatoren und Registermodell
+-------------------------------------------
+Status: Erledigt
+
+Ziele:
+- Vollstaendige SID-Register $D400-$D418 abbilden.
+- Drei Stimmen mit Frequenz, Pulsweite, Control, ADSR und Gate verwalten.
+- Oszillatoren fuer Dreieck, Saegezahn, Puls und Noise implementieren.
+- Kombinierte Waveforms vorbereiten.
+- Oscillator Sync und Ring Modulation vorbereiten.
+- Modell 8580 und 6581 als auswaehlbare Optionen planen.
+
+Abnahme:
+- SIDDEMO kann Register schreiben und die echte SID-Engine erzeugt Ton.
+- Frequenz und Pulsweite wirken hoerbar.
+- Drei Stimmen koennen gleichzeitig laufen.
+
+Stand:
+- Der SID-Core fuehrt jetzt ein echtes SID-Registermodell fuer $D400-$D418
+  mit drei Stimmen.
+- Frequenz, Pulsweite, Control/Waveform und Master-Volume werden aus den
+  Registern ausgewertet.
+- Erste Oszillatoren fuer Dreieck, Saegezahn, Puls und Noise erzeugen
+  48-kHz-Stereo-PCM. Kombinierte Waveforms werden in dieser ersten Stufe
+  additiv gemischt.
+- `sid_play_frame` rendert nach dem 6502-Play-Tick einen PCM-Block in das
+  aktive HDA/AC97-Backend. Dadurch koennen echte SID-Registerwrites aus
+  R4Synth erstmals hoerbaren Ton erzeugen.
+- AUDIO zeigt SID-PCM-Zaehler sowie Render-Blocks, Frames, aktive Stimmen,
+  Master-Volume und letzten Samplewert.
+- R4Synth druckt SID-Header-Hexwerte wieder korrekt; der Druckpfad nutzt nun
+  einen Speicher-Scratch statt eines call-clobbered Registers.
+
+
+0.4.88: SID-ADSR, Gate, Sync, Ringmod und Noise
+-----------------------------------------------
+Status: Erledigt
+
+Ziele:
+- ADSR-Huellkurven mit SID-Rate-Tabellen und Gate-Verhalten umsetzen.
+- Noise-LFSR implementieren.
+- Sync und Ring Modulation fuer typische SID-Sounds nutzbar machen.
+- Testpattern fuer Bass, Lead, Noise-Drums und Arpeggio anlegen.
+
+Abnahme:
+- SIDDEMO spielt ein Pattern mit Bass, Lead und Noise-Drums ueber die echte
+  SID-Engine.
+- Gate/Release verhalten sich musikalisch plausibel.
+- Sync/Ringmod sind in einem Test hoerbar.
+
+Stand:
+- Der SID-Core wertet jetzt Attack/Decay/Sustain/Release-Register je Stimme
+  aus und nutzt eine erste ADSR-Huellkurve statt fixer Lautstaerke.
+- Gate-On/Gate-Off schaltet zwischen Attack/Decay/Sustain und Release.
+- Noise nutzt weiterhin das SID-nahe LFSR-Modell und bleibt als Waveform im
+  Registermodell verfuegbar.
+- Sync und Ringmod sind als erste einfache Behandlung aktiv: Sync kann die
+  Phase an der vorherigen Stimme ausrichten, Ringmod invertiert Dreieck-
+  Anteile anhand der vorherigen Stimme.
+- R4Synth spielt SID-Dateien nun in einer laufenden 50-Hz-Schleife mit
+  P fuer Pause/Weiter und Q fuer Beenden, statt nur eine kurze Probe zu
+  starten.
+- Klangtreue ist noch nicht final; die Stufe macht ADSR/Gate/Sync/Ringmod
+  hoerbar und testbar.
+
+
+0.4.89: SID-Filter, Mixer und 6581/8580-Modelle
+-----------------------------------------------
+Status: Erledigt
+
+Ziele:
+- SID-Mixer mit Voice-Routing, Filter-Enable, Master-Volume implementieren.
+- Multimode-Filter fuer Lowpass, Bandpass und Highpass umsetzen.
+- Resonanz, Cutoff und Filtertyp aus $D415-$D418 beruecksichtigen.
+- Unterschiede zwischen 6581 und 8580 als Optionen modellieren.
+- OPTION SID model=8580 und OPTION SID model=6581 vorbereiten.
+
+Abnahme:
+- Filterfahrten in Test-SID-Dateien sind hoerbar.
+- 6581/8580-Option veraendert den Klang nachvollziehbar.
+- Keine Clipping-/Overflow-Artefakte bei normalen SID-Dateien.
+
+Stand:
+- Der SID-Core wertet $D415/$D416 als 11-Bit-Cutoff und $D417 als
+  Resonance- plus Voice-Routing-Register aus.
+- $D418 steuert Master-Volume, Lowpass/Bandpass/Highpass-Ausgabe und
+  Voice3-Off.
+- Gefilterte Stimmen laufen durch einen einfachen 12-dB-State-Variable-
+  Filter; direkte Stimmen werden separat gemischt.
+- `OPTION SID model=8580` und `OPTION SID model=6581` sind ueber CONFIG.R4S
+  vorbereitet. Die Standardkonfigurationen nutzen 8580.
+- AUDIO zeigt SID-Modell, Cutoff, Resonance, Routing, Filtermodus sowie
+  Direct-/Filter-Sample-Diagnose.
+- Die Filterstufe ist bewusst eine erste saubere Kernel-Implementierung,
+  noch keine vollstaendige reSID-genaue analoge Modellierung.
+
+
+0.4.90: R4Synth SID-Player
+--------------------------
+Status: Erledigt
+
+Ziele:
+- R4Synth soll `.sid` nicht nur erkennen, sondern abspielen.
+- Song-Auswahl vorbereiten: Standard-Subsong aus Header, spaeter Parameter.
+- P/Q-Steuerung fuer SID genauso wie bei WAV/MIDI anbieten.
+- R4Synth zeigt SID-Metadaten und aktives Modell 6581/8580.
+- Playback darf kein festes Dateilaengenlimit ausser FAT32/Heap-Grenzen
+  einfuehren.
+
+Abnahme:
+- `SYNTH C:\TEMP\SPELLBOUND.SID` spielt hoerbar.
+- Q beendet sauber und alle SID-Stimmen stoppen.
+- AUDIO zeigt nach Ende keine aktive SID-Wiedergabe.
+
+Stand:
+- Seit 0.4.88 hat R4Synth fuer SID-Dateien eine laufende Wiedergabeschleife
+  mit P/Q-Steuerung.
+- Seit 0.4.90 haengt ProgramApi Version 8 `sid_model_name` an. R4Synth zeigt
+  beim SID-Start das aktive Modell 6581 oder 8580 direkt nach den Metadaten.
+- Q beendet sauber, `sid_stop` laesst Diagnosewerte erhalten und AUDIO zeigt
+  danach `running=no` statt eine geloeschte Play-Adresse.
+- Subsong-Auswahl ist ueber den Header-Startsong vorbereitet; R4Synth nutzt
+  diesen Wert fuer `sid_init`.
+
+
+0.4.91: SID-Genauigkeit nachziehen
+----------------------------------
+Status: Erledigt
+
+Ziele:
+- SID-Wiedergabe gegen bekannte Referenzaufnahmen beziehungsweise Host-
+  Referenzrenderer vergleichen.
+- Timing, Tonhoehe, ADSR, Filter und Lautstaerke nachstimmen.
+- Mehrere PSID/RSID-Dateien testen, darunter Spellbound.sid aus Temp/.
+- Bekannte Grenzen dokumentieren, falls einzelne exotische SID-Tricks noch
+  nicht unterstuetzt werden.
+- Ziel ist nicht nur "spielt irgendwas", sondern eine SID-Wiedergabe, die
+  musikalisch und im Timing ueberzeugt.
+
+Abnahme:
+- Mindestens drei SID-Dateien spielen in R4Synth erkennbar und stabil.
+- Spellbound.sid klingt in Tempo, Tonhoehe und Klangcharakter plausibel nah
+  an der Referenz.
+- Keine haengenden Noten, kein Kernel-Haenger, kein weiterlaufendes Playback
+  nach Programmende.
+- Damit ist die technische SID-Nachstimmungsrunde fuer 0.4.91 abgeschlossen.
+
+Stand:
+- Seit 0.4.91 rendert der SID-Core pro PAL-Frame exakt 960 Stereo-Samples
+  bei 48 kHz statt 1024. Dadurch passt ein 50-Hz-SID-Frame zeitlich zu einem
+  20-ms-Audioblock und vermeidet Drift zwischen C64-Play-Tick und PCM-Laenge.
+- Die ADSR-Huellkurve nutzt jetzt SID-naehere Rate-Zeiten fuer Attack,
+  Decay und Release und speichert die Envelope intern als Fixed-Point-Wert,
+  damit lange Release-/Decay-Zeiten nicht auf grobe 1-Sample-Schritte
+  zusammenfallen.
+- Der SID-Mixer hat zusaetzlichen Headroom fuer zwei beziehungsweise drei
+  gleichzeitig aktive Stimmen. Kombinierte Waveforms innerhalb einer Stimme
+  werden nicht mehr stumpf addiert; nach einem kurzen Mittelungs-Zwischenstand
+  werden sie nun SID-naeher logisch verknuepft.
+- Die 0.4.91-Richtung ist jetzt klar: keine fremde SID-Engine und kein
+  kopierter Emulator-Code. R4OS bleibt eine eigene Implementierung, orientiert
+  sich aber an dokumentierten Hardware-Eigenschaften des 6581/8580.
+- Kombinierte SID-Waveforms werden nun hardware-naeher logisch verknuepft
+  statt addiert oder gemittelt. Das folgt der SID-Beschreibung, nach der
+  gleichzeitig gewaehlte Waveforms nicht additiv gemischt werden.
+- Das TEST-Bit setzt die Stimme zurueck und unterdrueckt Ausgabe, solange es
+  aktiv ist. Noise nutzt jetzt die SID-naeheren 23-Bit-LFSR-Ausgabebits statt
+  eines groben oberen Bitbereichs.
+- Attack und Decay/Release nutzen jetzt getrennte SID-Zeittabellen. Die
+  Decay-/Release-Werte folgen der laengeren Hardware-Tabelle statt der
+  kuerzeren Attack-Tabelle; dadurch fallen gehaltene Stimmen weniger zu
+  schnell ab.
+- SID-Reads fuer $D41B und $D41C sind angebunden. Player-Code kann nun OSC3
+  und ENV3 lesen, statt dort immer nur RAM-/Nullwerte zu bekommen. AUDIO zeigt
+  die letzten gelesenen OSC3-/ENV3-Werte zur Diagnose.
+- Der SID-I/O-Bereich $D400-$D7FF ist als 32-Byte-Spiegelung angebunden.
+  Gespiegelte Writes landen damit im gleichen SID-Registermodell, und
+  gespiegelte $D41B/$D41C-Reads liefern ebenfalls OSC3/ENV3.
+- POTX/POTY-Reads ($D419/$D41A) liefern bei nicht angeschlossenen Paddles
+  stabile offene Werte (0xFF). Unbenutzte SID-Read-Spiegel liefern ebenfalls
+  0xFF statt zufaellige RAM-Inhalte.
+- Die C64-Laufzeit hat erste VIC-/CIA-Read-Register fuer SID-Player erhalten:
+  $D011/$D012 liefern einen einfachen PAL-Rasterstand, $D019 kann als IRQ-
+  Status gelesen/acknowledged werden, und CIA-Timerwerte aus $DC04-$DC07 sowie
+  $DD04-$DD07 laufen aus ihren Latches herunter, wenn der jeweilige Timer
+  gestartet ist. VIC- und CIA-Spiegeladressen werden auf die kanonischen
+  Register abgebildet. AUDIO zeigt die letzten Raster-/CIA-Reads.
+- Naechste offene Genauigkeitspunkte: weitere Referenz-SIDs, ADSR-/Filter-
+  Nachstimmung und dokumentierte bekannte Grenzen.
+
+
+0.4.92: SID-Referenzabnahme und Testmatrix
+------------------------------------------
+Status: Erledigt
+
+Ziele:
+- Eine reproduzierbare SID-Testmatrix fuer den 0.4-Abschluss definieren.
+- Pflichtdateien: Spellbound.sid und Commando.sid aus Temp/; eine dritte
+  echte PSID/RSID-Datei wird ergaenzt, sobald sie fuer den Abnahmetest
+  bereitliegt.
+- Pro Datei die erwartete Abnahme festhalten: R4Synth startet, P/Q reagieren,
+  Playback stoppt sauber, AUDIO zeigt keine weiterlaufende SID-Wiedergabe.
+- Hoertest gegen eine bekannte Aufnahme oder einen Host-Player als
+  Orientierung dokumentieren, ohne fremden Emulatorcode zu uebernehmen.
+- Auffaelligkeiten je Datei konkret erfassen: Timing, Tonhoehe, Lautstaerke,
+  Filter, fehlende Stimmen, Haenger, unsupported Opcode oder Step-Limit.
+
+Abnahme:
+- Mindestens drei SID-Dateien haben einen dokumentierten Teststatus: ok,
+  auffaellig oder blockiert.
+- Spellbound.sid und Commando.sid laufen stabil genug, um als
+  Regressionsdateien fuer spaetere SID-Aenderungen zu dienen.
+- Ein Fehlschlag erzeugt einen konkreten Folgepunkt statt eines vagen
+  "klingt noch komisch".
+
+Stand:
+- Docs/Audio/SIDTestmatrix.txt definiert die reproduzierbare SID-Abnahme fuer
+  R4Synth.
+- Spellbound.sid und Commando.sid aus Temp/ sind als erste Pflichtdateien
+  eingetragen. Beide gelten noch als `auffaellig`, damit 0.4.93/0.4.94 nicht
+  versehentlich uebersprungen werden.
+- Eine dritte PSID/RSID-Datei ist als blockierter Platzhalter dokumentiert,
+  bis sie fuer die finale Abnahme bereitliegt.
+- Die Matrix beschreibt die Pflichtbefehle, P/Q-Test, AUDIO-Kriterien und
+  Folgepunkte fuer CPU/C64- sowie Filter/Mixer-Arbeit.
+
+
+0.4.93: SID-CPU/C64-Kompatibilitaet nachziehen
+----------------------------------------------
+Status: Erledigt
+
+Ziele:
+- Aus der Testmatrix konkrete CPU- und C64-Laufzeitluecken ableiten.
+- Falls noetig: fehlende offizielle 6502-Adressierungsdetails, Decimal-Mode
+  fuer ADC/SBC oder haeufig genutzte illegale Opcodes sichtbar entscheiden:
+  implementieren, warnen oder als bekannte Grenze dokumentieren.
+- VIC-/CIA-Minimalmodell fuer reale SID-Player festigen: Rasterreads,
+  CIA-Timer, IRQ-Acknowledge, Port-/Keyboard-Reads und Spiegeladressen.
+- Diagnose verbessern, damit AUDIO bei Problemen letzten Opcode, PC,
+  I/O-Read/Write-Art und Ursache fuer Abbruch oder Step-Limit eindeutig zeigt.
+
+Abnahme:
+- Die SID-Testmatrix laeuft ohne `unsupported-opcode` und ohne unerwartetes
+  Step-Limit, oder die betroffene Datei ist mit konkreter Ursache dokumentiert.
+- Q beendet auch bei CPU-/C64-Laufzeitproblemen sauber.
+- AUDIO reicht aus, um die naechste fehlende CPU-/I/O-Funktion direkt zu
+  erkennen.
+
+Stand:
+- Der SID-6502-Core behandelt ADC/SBC im Decimal-Mode, statt das D-Flag nur
+  zu setzen und die Arithmetik weiter binaer auszufuehren.
+- Haeufige inoffizielle 6502-NOP-Varianten werden als harmlose NOPs
+  akzeptiert. Das ist keine vollstaendige Illegal-Opcode-Emulation, verhindert
+  aber unnoetige Abbrueche bei Player-Code, der NOP-Fuellbytes nutzt.
+- Die minimale C64-Umgebung setzt typische Startwerte fuer Prozessorport und
+  CIA-Ports. CIA1/CIA2-Portreads liefern ohne modellierte Peripherie offene
+  Werte (0xFF), statt Nullwerte als gedrueckte Tastatur/Joystick zu melden.
+- AUDIO zeigt jetzt den letzten I/O-Read und I/O-Write mit Adresse und Wert.
+  Damit ist bei CPU-/C64-Problemen direkt sichtbar, ob Player-Code zuletzt
+  VIC, SID oder CIA beruehrt hat.
+
+
+0.4.94: SID-Filter, Mixer und D418-Grenzen
+------------------------------------------
+Status: Erledigt
+
+Ziele:
+- Filter, Voice-Routing, Voice3-Off, Master-Volume und Headroom gegen die
+  Testmatrix nachstimmen.
+- 6581/8580-Modellwahl ueber CONFIG.R4S weiter pruefbar machen und die
+  hoerbaren Unterschiede dokumentieren.
+- D418-Digi/Volume-Sample-Verhalten bewusst behandeln: entweder erste
+  Unterstuetzung fuer Volume-Digis einbauen oder klar als 0.4-Grenze
+  dokumentieren.
+- Clipping, zu leise Passagen und laute Filterspitzen gezielt pruefen.
+
+Abnahme:
+- Normale Drei-Stimmen-SIDs clippen nicht dauerhaft und fallen nicht auf
+  unbrauchbar niedrige Lautstaerke ab.
+- Filter- und Volume-Auffaelligkeiten aus Spellbound.sid und Commando.sid
+  sind entweder behoben oder als bekannte Grenze notiert.
+- 6581/8580-Option ist technisch wirksam und im AUDIO-Status sichtbar.
+
+Stand:
+- Direct- und Filter-Summen werden getrennt mit Headroom versehen, bevor sie
+  zusammengefuehrt werden. Dadurch uebersteuern geroutete Mehrstimmenpassagen
+  weniger hart in den Filter.
+- Der SID-Mixer zaehlt Output-Clipping und zeigt in AUDIO `clips`,
+  `block_clips` und den letzten Preclip-Wert. Damit sind Lautstaerke- und
+  Headroom-Probleme messbar.
+- Voice3-Off wird im Mixerstatus sichtbar. Voice 3 bleibt als OSC3/ENV3-
+  Quelle nutzbar, kann aber aus dem direkten Ausgang genommen werden.
+- D418-Volume-DAC wird als erster eigener Digi-/Klickanteil modelliert.
+  6581 bekommt dabei einen deutlich staerkeren DAC-Anteil als 8580; volle
+  hochfrequente Digi-Wiedergabe bleibt eine bekannte 0.4-Grenze.
+- 6581/8580 beeinflusst jetzt neben Filterkurve und Softclipping auch die
+  D418-Staerke und den Ausgangsgain.
+
+
+0.4.95: SID-Abschlussdokumentation und bekannte Grenzen
+-------------------------------------------------------
+Status: Erledigt
+
+Ziele:
+- SID-Stand nach 0.4.91 bis 0.4.94 in Docs/Audio und Docs/Applications
+  zusammenfassen.
+- Bekannte Grenzen ausdruecklich festhalten: keine fremde Engine, eigener
+  SID-Core, dokumentierte Hardwarewerte, aktueller Filtergrad, ggf. D418-
+  Digi/RSID-Grenzen.
+- R4Synth-Abnahme fuer WAV, MIDI und SID in einer kurzen manuellen
+  Testsequenz buendeln.
+- Roadmap-Status fuer den SID-Block bereinigen, damit vor der naechsten
+  grossen Version keine offenen 0.4-SID-Punkte mehr lose herumliegen.
+
+Abnahme:
+- Roadmap markiert den SID-Abschluss eindeutig und ohne offene Platzhalter.
+- Docs beschreiben, was R4Synth/SID in 0.4 kann und welche Grenzen bewusst
+  bleiben.
+- `SYNTH SPELLBOUND.SID`, `SYNTH COMMANDO.SID`, `SYNTH WESTWORLD.MID` und
+  ein WAV-Test sind als finale manuelle Audio-Regressionsrunde beschrieben.
+
+Stand:
+- Docs/Audio/SIDStand.txt fasst den SID-Stand fuer 0.4 zusammen:
+  Funktionen, bekannte Grenzen, Testdateien und Regressionsrunde.
+- Docs/Audio/SIDTestmatrix.txt verweist auf den Abschlussstand und bleibt die
+  konkrete Testmatrix fuer einzelne SID-Dateien.
+- Docs/Audio/README.txt, Docs/Applications/R4X.txt und Docs/README.txt
+  verweisen auf den aktuellen SID-Abschluss.
+- Bekannte Grenzen sind bewusst dokumentiert: einfacher Filter, keine fremde
+  Engine, kein vollstaendiger C64, keine vollstaendige D418-Digi-Emulation
+  und keine komplette Illegal-Opcode-Emulation.
+
+
+0.4.96: Roadmap-Abschluss und 0.4-Abnahme
+-----------------------------------------
+Status: Erledigt
+
+Ziele:
+- Roadmap-Kopf fuer Version 0.4 auf Erledigt setzen.
+- 0.4-Abschlusskriterien vom urspruenglichen Planungsstand auf den
+  tatsaechlich erreichten Stand bringen.
+- Dokumentation auf den Abschlussstand 0.4.96 synchronisieren.
+- Archivierung vorbereiten, aber noch nicht ausfuehren. Roadmap-Archivierung
+  erfolgt erst auf ausdrueckliche User-Anweisung.
+
+Abnahme:
+- Keine 0.4.x-Einzelpunkte stehen mehr auf Geplant oder In Arbeit.
+- Roadmap enthaelt einen aktuellen Abschlussblock.
+- Docs/README.txt nennt die aktuelle Version 0.4.96.
+
+Stand:
+- Alle Einzelpunkte von 0.4.1 bis 0.4.96 sind erledigt.
+- Die Roadmap kann im naechsten Schritt nach dem bekannten Workflow in
+  Docs/ und Changelogs/ ausgewertet und als Roadmap_Last.txt archiviert
+  werden, sobald der User das anfordert.
+
+
+0.4 Abschlusskriterien
+----------------------
+
+Abnahme:
+- R4D-Leitbild und R4D-Format sind dokumentiert.
+- HELLO.R4D wird als erster Testtreiber gebaut, ins Image kopiert, geladen,
+  initialisiert, angezeigt, per shutdown() beendet und wieder entladen.
+- Driver-Registry, Driver-Lifecycle, Bootlog/DMESG, CONFIG.R4S,
+  Boot-Planung, LOAD, UNLOAD und DRIVERS sind nutzbar.
+- Builtin-Treiber wie PS2 und AT-PIO werden in der Registry sichtbar von
+  R4D-Treibern getrennt.
+- Audio-Core, MixerBackend, ProgramApi-Audio und AudioBackend-Registry sind
+  implementiert.
+- AC97 und HDA sind als native AudioBackends vorhanden. HDA spielt in QEMU
+  BEEP und R4Synth/WAV ueber DRIVER=HDA.
+- R4Synth ist der normale Shell-Mediaplayer fuer WAV, MIDI und SID-Tests.
+- OPL3 und MIDI laufen ueber die SynthEngine-Struktur; MIDIPLAY bleibt nur
+  Diagnoseprojekt.
+- SID.R4D ist kein reiner Platzhalter mehr: R4Synth kann PSID/RSID-Dateien
+  laden, C64-Playercode ausfuehren und ueber den nativen SID-Core Ton
+  erzeugen.
+- Bekannte SID-Grenzen und die manuelle Audio-Regressionsrunde sind in
+  Docs/Audio/SIDStand.txt dokumentiert.
+- Fehler werden geloggt und zerlegen den Kernel nicht.
+- Der Kernel-Core bleibt bootfaehig und die bestehende Shell/FAT32/R4X-Basis
+  funktioniert weiter.

@@ -1,0 +1,190 @@
+﻿R4OS Changelog / archivierte Roadmap 0.30.X
+===========================================
+
+Quelle: Roadmap.txt nach Abschluss von 0.30.X.
+
+Version 0.30.X - Frühe Treiberbasis und PS/2-Eingabe
+-------------------------------------------
+
+Status: Geplant
+
+Leitbild:
+Nach Bootloader, BootInfo, BootDisplay, CPU-Boot und Timer-Boot wird der nächste frühe Kernelabschnitt aus `kernelold.zig` herausgelöst.
+Ziel ist eine chronologische Startkette in `main.zig`, ohne dabei Treiberlogik unnötig im Kernel-Einstieg zu vermischen.
+Driver Registry, Tastatur und Maus sollen klar abgegrenzt werden.
+
+Qualitaetsziel:
+0.30.X darf nicht nur Code verschieben.
+Am Ende muss der fruehe Startbereich klar lesbar sein: erst Boot-Grundlagen, dann Driver Registry, dann PS/2-Input, danach erst weitere Kernelbereiche.
+Input darf nicht halb in `main.zig`, halb versteckt in `kernelold.zig` initialisiert werden.
+
+Version 0.30.0 - Planung und Abgrenzung
+Status: Erledigt
+
+Erledigt:
+- Abhängigkeiten von `driver_registry.init()`, `keyboard.init()` und `mouse.init()` geprüft.
+- Zielpfad fuer Driver Registry Boot festgelegt: `src/kernel/driver_boot.zig`.
+- Zielpfad fuer die frühe PS/2-Boot-Orchestrierung festgelegt: `src/kernel/input_boot.zig`.
+- Festgelegt, dass `main.zig` nur die chronologische Boot-Kette sichtbar aufruft: `driver_boot.init()` nach `timer_boot.init()`, danach `input_boot.init(...)`.
+- Festgelegt, dass Keyboard/Mouse-Treiber selbst vorerst unter `src/old/drivers/input/` bleiben, bis die breiten Importabhängigkeiten sauber nachgezogen werden.
+- Nicht-Ziele dokumentiert: keine neue Input-API, keine R4D-Auslagerung von PS/2, kein Umbau von R4DOS-STDIO in 0.30.X.
+
+Notizen:
+- Die Driver Registry ist eine frühe Kernel-Statusliste fuer Built-in- und R4D-Treiber. Sie muss vor PS/2, USB, Storage und R4D-Ladevorgaengen initialisiert sein.
+- PS/2 ist aktuell eine gemeinsame Registry-Transaktion fuer Keyboard und Mouse. `input_boot.zig` soll den PS/2-Slot besitzen und erst nach Keyboard-/Mouse-Initialisierung den finalen Registry-Zustand setzen.
+- `keyboard.init()` braucht die CPU-/IRQ-Grundlage, PIC IRQ1, IO-Port-Zugriff und spaeter die IDT-Route auf `keyboard.onIrq()`.
+- `mouse.init(bounds)` braucht die CPU-/IRQ-Grundlage, PIC IRQ12, IO-Port-Zugriff und Display-Grenzen aus dem aktiven Display-Modus.
+- Keyboard/Mouse werden nicht sofort aus `old/` verschoben, weil IDT, R4X, R4Desk, Command, USB-HID, R4DRAW, Surface-Pipeline und Driver-Plan direkt darauf zugreifen.
+- `src/kernel/input_boot.zig` ist bewusst eine Boot-Schicht, kein fertiges allgemeines Input-Subsystem.
+
+Abnahme:
+- Roadmap beschreibt Reihenfolge, Modulgrenzen und Nicht-Ziele der frühen Treiber-/Input-Initialisierung nachvollziehbar.
+- Entscheidung fuer Zielpfade ist dokumentiert.
+- Kein Code-Umbau in dieser Unterversion.
+- Version steht auf `KERNEL_VERSION=0.30.0`.
+
+Version 0.30.1 - Driver Registry Boot-Schicht
+Status: Erledigt
+
+Erledigt:
+- Neues Modul `src/kernel/driver_boot.zig` angelegt.
+- `driver_registry.init()` aus `kernelold.zig` entfernt.
+- `main.zig` ruft `driver_boot.init()` nach `timer_boot.init()` auf.
+- `driver_boot.init()` idempotent gemacht, damit doppelte Aufrufe keinen Zustand zerstoeren.
+- Driver Registry semantisch unverändert gelassen; nur der Startpunkt wurde verschoben.
+- Dokumentation in `AGENTS.md` und Website-`kernel.md` ergänzt.
+
+Notizen:
+- `driver_boot.zig` lädt keine Treiber. Es initialisiert nur die zentrale Statusliste.
+- PS/2, USB, Storage und R4D nutzen danach weiter dieselbe Driver Registry.
+- Der eigentliche Registry-Code bleibt vorerst unter `src/old/drivers/registry.zig`, weil die spätere R4D-/Built-in-Treiberstruktur noch gemeinsam betrachtet wird.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` läuft erfolgreich.
+- `DevTools/Scripts/Build.bat -test` läuft erfolgreich.
+- Bootausgabe zeigt weiterhin den erwarteten frühen Ablauf bis mindestens `Timer core ... [OK]`.
+- Driver Registry wird genau einmal initialisiert und danach von PS/2, USB, Storage und R4D weiter genutzt.
+- `kernelold.zig` enthaelt keinen produktiven `driver_registry.init()`-Aufruf mehr.
+- Version steht auf `KERNEL_VERSION=0.30.1`.
+- Push ist erfolgt.
+Version 0.30.2 - PS/2 Keyboard Boot-Schicht
+Status: Erledigt
+
+Erledigt:
+- Neues Modul `src/kernel/input_boot.zig` angelegt.
+- Keyboard-Initialisierung aus `kernelold.zig` entfernt und nach `input_boot.initKeyboard()` verschoben.
+- `main.zig` ruft `input_boot.initKeyboard()` nach `driver_boot.init()` auf.
+- PS/2-Registry-Slot wird in `input_boot.zig` angelegt und fuer den spaeteren Mouse-Abschluss gehalten.
+- Keyboard-IRQ-Statusausgabe in `kernelold.zig` erhalten.
+- IDT/IRQ-Abhängigkeiten geprüft: Keyboard startet erst nach `cpu_boot.init()`, `timer_boot.init()` und `driver_boot.init()`.
+- Tastatur-API unverändert gelassen.
+
+Notizen:
+- `keyboard.zig` bleibt vorerst unter `src/old/drivers/input/`, weil IDT, R4X, R4Desk, Command, USB-HID, R4DRAW, Surface-Pipeline und Driver-Plan noch direkt damit arbeiten.
+- `input_boot.zig` ist aktuell eine Boot-Orchestrierung, kein neues allgemeines Input-Subsystem.
+- Die PS/2-Registry-Transaktion wird in `0.30.3` mit Mouse weiter geglaettet.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` läuft erfolgreich.
+- `DevTools/Scripts/Build.bat -test` läuft erfolgreich.
+- R4DOS/COMMAND kann weiterhin Tastatureingaben lesen.
+- Keyboard-IRQ wird weiterhin verarbeitet.
+- PS/2-Registry-Eintrag bleibt konsistent und wird nicht doppelt angelegt.
+- Version steht auf `KERNEL_VERSION=0.30.2`.
+- Push ist erfolgt.
+
+Version 0.30.3 - PS/2 Mouse Boot-Schicht
+Status: Erledigt
+
+Erledigt:
+- Mouse-Initialisierung aus `kernelold.zig` entfernt und nach `input_boot.initMouse()` verschoben.
+- `main.zig` ruft jetzt `input_boot.initMouse()` nach `input_boot.initKeyboard()` auf.
+- `main.zig` schließt die PS/2-Registry-Transaktion danach mit `input_boot.completePs2()` ab.
+- Display-Grenzen werden in `input_boot.zig` weiter aus dem aktiven Display-Modus abgeleitet.
+- Mouse-Statusausgabe `[OK]`, `[not found]`, `[no display]` oder `[not ready]` bleibt in `kernelold.zig` sichtbar.
+- Mouse-Ausfall bricht den Boot nicht ab.
+- Driver-Registry-Zustand fuer PS/2 wird erst nach Keyboard- und Mouse-Initialisierung gesetzt.
+
+Notizen:
+- `mouse.zig` bleibt vorerst unter `src/old/drivers/input/`, weil R4Desk, R4DRAW, USB-HID, Surface-Pipeline, Command und Driver-Plan noch direkt darauf zugreifen.
+- `input_boot.zig` kapselt jetzt die fruehe PS/2-Boot-Orchestrierung fuer Keyboard und Mouse, ist aber weiterhin kein neues allgemeines Input-Subsystem.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` läuft erfolgreich.
+- `DevTools/Scripts/Build.bat -test` läuft erfolgreich.
+- Desktop-Mausbewegung funktioniert weiterhin im GUI-Sichttest durch den User.
+- Boot ohne gefundene Maus bleibt erlaubt und dokumentiert.
+- PS/2-Registry-Eintrag landet nur dann auf `active`, wenn die Initialisierung konsistent abgeschlossen wurde.
+- Version steht auf `KERNEL_VERSION=0.30.3`.
+- Push ist erfolgt.
+Version 0.30.4 - Input-Modulgrenzen glätten
+Status: Erledigt
+
+Erledigt:
+- Zielpfad final festgelegt: `src/driver/input/` fuer produktive PS/2-Input-Treiber.
+- `keyboard.zig`, `mouse.zig`, `key_layout.zig`, `key_layout_types.zig` und `key_layouts/` aus `src/old/drivers/input/` nach `src/driver/input/` verschoben.
+- Importpfade in IDT, Kernel-Boot, R4X, R4Desk, Command, USB-HID, R4DRAW, Surface-Pipeline und Driver-Plan nachgezogen.
+- `input_boot.zig` bleibt unter `src/kernel/`, weil es Boot-Orchestrierung ist und kein eigentlicher Hardwaretreiber.
+- `AGENTS.md` Kernel-Struktur aktualisiert.
+- Begriffe in Doku vereinheitlicht: PS/2, Input-Boot, Driver Registry, IRQ, Keyboard, Mouse.
+
+Notizen:
+- Keyboard/Mouse sind jetzt nicht mehr produktiv unter `src/old/drivers/input/` verankert.
+- Die eigentlichen Treiber bleiben Built-in-Treiber. Eine R4D-Auslagerung von PS/2 ist weiterhin kein Ziel von 0.30.X.
+- `src/driver/input/` ist bewusst analog zu `src/driver/com.zig` gewaehlt.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` läuft erfolgreich.
+- `DevTools/Scripts/Build.bat -test` läuft erfolgreich.
+- R4DOS-Tastatur und Desktop-Maus funktionieren im User-Sichttest.
+- `rg "old/drivers/input/(keyboard|mouse)" Code/src` zeigt keine produktiven Altpfad-Treffer mehr.
+- Version steht auf `KERNEL_VERSION=0.30.4`.
+- Push ist erfolgt.
+Version 0.30.5 - Frühe Boot-Ausgaben nachziehen
+Status: Erledigt
+
+Erledigt:
+- Neues Modul `src/kernel/boot_status.zig` angelegt.
+- Frühe Statusausgaben fuer Limine-Boot, CPU/PIC, Timer und PS/2-Input aus `kernelold.zig` herausgezogen.
+- Bootlog-Detailumleitung nach `boot_status.zig` verschoben.
+- Bestehende sichtbare Sammelzeilen wie `Memory`, `Storage` und `Loader` laufen weiter ueber dieselbe Bootlog-/Display-Umschaltung.
+- Long-Mode-, Framebuffer-, Console- und Memory-Map-Ausgaben bewusst in `kernelold.zig` belassen, weil sie zur nächsten Speicher-/Display-Sequenz gehoeren.
+- Keine Display-/Memory-Logik mit der fruehen Driver/Input-Boot-Ausgabe vermischt.
+- Sichtbare Bootausgabe bleibt kurz, chronologisch und stabil.
+
+Notizen:
+- `boot_status.zig` ist nur Statusausgabe und Bootlog-Umschaltung, kein Initialisierungsmodul.
+- Statusmeldungen fuer CPU, Timer und Input werden erst nach den jeweiligen `main.zig`-Bootaufrufen ausgegeben.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` läuft erfolgreich.
+- `DevTools/Scripts/Build.bat -test` läuft erfolgreich.
+- Bootlog und sichtbare Bootausgabe bleiben verständlich und chronologisch.
+- `kernelold.zig` ist im frühen Startbereich weiter reduziert.
+- Keine Statusmeldung behauptet einen Erfolg, bevor das Modul wirklich initialisiert wurde.
+- Version steht auf `KERNEL_VERSION=0.30.5`.
+- Push ist erfolgt.
+
+Version 0.30.6 - Dokumentation und Abschluss
+Status: Erledigt
+
+Erledigt:
+- `AGENTS.md` Kernel-Struktur final aktualisiert.
+- Website-`kernel.md` mit aktueller Startreihenfolge, `driver_boot.zig`, `input_boot.zig`, `boot_status.zig`, Driver Registry, Keyboard und Mouse aktualisiert.
+- `Docs/Core/Architektur.txt` auf die neuen Boot- und Input-Pfade nachgezogen.
+- `Docs/Drivers/README.txt` um den aktuellen Built-in-PS/2-Pfad unter `Code/src/driver/input/` ergänzt.
+- 0.30.X-Ziele geprüft: Driver Registry, PS/2 Keyboard, PS/2 Mouse, Input-Pfade und frühe Bootstatusausgabe sind aus dem frühen `kernelold.zig`-Bereich herausgelöst bzw. klar gekapselt.
+- Offene Legacy-Reste bewusst festgehalten: Registry-Code, USB/Storage/Audio/Video und breite Kernelbereiche bleiben Folgearbeit ab 0.31.X.
+
+Notizen:
+- `kernelold.zig` bleibt weiterhin Legacy-Brücke, enthält aber nicht mehr die eigentliche frühe Driver-Registry- oder PS/2-Initialisierung.
+- PS/2 bleibt Built-in, weil Keyboard/Mouse frühe Eingabegrundlage sind; eine R4D-Auslagerung ist erst nach stabiler Boot-Storage- und Modul-Ladebasis sinnvoll.
+- `boot_status.zig` ist reine Ausgabe-/Bootlog-Schicht und initialisiert keine Hardware.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -test` läuft erfolgreich.
+- Doku beschreibt den Stand ohne veraltete `old/`-Pfade für bereits verschobene Module.
+- Website-`kernel.md` beschreibt Driver Registry und PS/2-Input kurz und korrekt.
+- Roadmap-Unterversionen sind abgeschlossen und können später archiviert werden.
+- Version steht auf `KERNEL_VERSION=0.30.6`.
+- Push ist erfolgt.

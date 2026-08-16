@@ -1,0 +1,140 @@
+﻿Driver Workqueue und Completion 0.53.41
+=======================================
+
+Ziel
+----
+
+0.53.41 fuehrt einen allgemeinen, kleinen R4D-Workqueue- und Completion-
+Vertrag ein. Treiber-IRQs sollen nur noch kurze Hardware-Acks, Statussicherung
+und Work-Submit machen; laengere Protokoll-, Storage-, Audio- oder Recovery-
+Arbeit wandert in einen waitbaren Worker-Kontext.
+
+Der Kernel besitzt dabei nur die Mechanik: feste Queue, Worker-Task,
+Completion, Timeout, Owner-Cleanup und harte IRQ-Regel. Treiberspezifische
+Policy bleibt im R4D-Treiber, in den jeweiligen Subsystemen oder in
+Diagnostics.
+
+
+Kernelmechanik
+--------------
+
+`Code/src/kernel/driver_work.zig` stellt den gemeinsamen Kern bereit:
+
+- feste Queue mit 16 Slots, ohne Heap-Allokation im Submit-Pfad
+- ein Kernel-Worker `r4d-work`
+- `submit(owner, handler, context, flags, out_handle)`
+- `cancel(handle)`
+- `completionWait(handle, timeout_ticks, out_result)`
+- `completionStatus(handle, out)`
+- `completionRelease(handle)`
+- owner-basierter Cleanup fuer Runtime-R4D-Entladen
+- Summary-Zaehler fuer Depth, High-Water, Submit-Quelle, Completion-Waits,
+  Timeouts, Drops, Queue-Latenz, Run-Latenz und IRQ-verbotene Waits
+
+Der Submit-Pfad erkennt IRQ-Kontext ueber den IRQ-Router und markiert
+`driver_work_flag_from_irq`. Waits aus IRQ-Kontext werden abgelehnt und als
+`wait_denied_irq` sichtbar gezaehlt.
+
+Der Worker nutzt die vorhandenen Scheduler-/Sync-Grundlagen. Es gibt keinen
+zweiten Scheduler, keine Treiberpolicy im Kernel und keinen dynamischen
+Komfort-Threadpool.
+
+
+DriverApi v15
+-------------
+
+DriverApi v15 haengt am Tabellenende folgende Slots an:
+
+- `driver_work_submit`
+- `driver_work_cancel`
+- `driver_completion_wait`
+- `driver_completion_status`
+- `driver_completion_release`
+- `driver_work_summary`
+
+Das SDK spiegelt die Funktionen in `r4os.driver.Context` als:
+
+- `workSubmit`
+- `workCancel`
+- `completionWait`
+- `completionStatus`
+- `completionRelease`
+- `workSummary`
+
+Der Vertrag ist bewusst allgemein. Ein R4D bekommt Handles und Statusdaten,
+aber keine Subsystem-Sonderlogik. Hardware-spezifische Timeout-/Recovery-
+Entscheidungen gehoeren weiterhin in den jeweiligen Treiber oder das
+Subsystem, das den Treiber nutzt.
+
+
+IRQ-Regeln
+----------
+
+0.53.41 macht die bisherige implizite Regel explizit:
+
+- IRQ-Handler duerfen keine blockierenden Waits ausfuehren.
+- IRQ-Handler duerfen keine langen Protokoll-, Storage- oder Audioarbeiten
+  erledigen.
+- IRQ-Handler duerfen Work in die Driver-Workqueue legen.
+- Completion-Waits muessen aus Task-/Worker-Kontext kommen.
+- `wait_ticks` in DriverApi v15 schlaeft im Task-Kontext schedulerfreundlich
+  und wird im IRQ-Kontext sichtbar abgelehnt statt zu blockieren.
+
+Der IRQ-Router misst zusaetzlich Handler-Dauer:
+
+- `handler_total_ticks`
+- `handler_max_ticks`
+- `handler_last_ticks`
+- `last_owner`
+
+Damit koennen spaetere Treiberunterversionen lange IRQ-Pfade finden, ohne
+Treiberpolicy in den Kernel zu verschieben.
+
+
+R4DEV und Diagnosen
+-------------------
+
+ProgramApi v136 erweitert `ProgramPerformanceSummary` append-only um Driver-
+Workqueue-Zaehler. R4DEV meldet `performance_flag_driver_workqueue_ready`,
+wenn die Queue initialisiert ist und der Worker gestartet wurde.
+
+Neue Diagnosefelder umfassen:
+
+- Kapazitaet, aktuelle Queue-Depth und High-Water
+- submitted/started/completed/failed/cancelled/dropped
+- submitted aus IRQ- oder Task-Kontext
+- Completion-Waits, Wait-Timeouts und IRQ-verbotene Waits
+- Queue-, Run- und Wait-Latenzen
+- Releases, invalid handles und owner-basierter Cleanup
+- DriverApi-`wait_ticks`-Nutzung und IRQ-Ablehnungen
+
+`DRVDIAG.R4X` ist die fokussierte 0.53.41-Diagnose. Der Standard-Smoke plant
+`EXAMPLE.R4D` im Testoverlay per `DRIVER=EXAMPLE`; der Treiber erzeugt
+mindestens ein IRQ-submitted Work-Item, wartet auf die Completion, prueft
+Status/Release und laesst danach PERFDIAG den globalen R4DEV-v136-Snapshot
+mitpruefen.
+
+
+Abnahme-Marker
+--------------
+
+Die Standardabnahme muss mindestens folgende Marker liefern:
+
+    EXAMPLE.R4D deferred work ok
+    DRVDIAG result: OK
+    R4DEV performance snapshot v136: OK
+    Driver workqueue completion: OK
+    PERFDIAG result: OK
+
+
+Grenzen
+-------
+
+- Keine Storage-/USB-/Netzwerk-spezifische Completion-Policy in dieser Stufe.
+- Keine dynamische Threadpool-Policy.
+- Kein MSI/MSI-X- oder Interrupt-Controller-Umbau.
+- Kein zweiter produktiver Pollingpfad als Erfolgsausweichroute.
+- Keine User-/Security-Policy; R4OS bleibt single-user und fully trusted.
+
+0.53.42 kann auf diesem Vertrag Storage- und USB-Pollingpfade abbauen. 0.53.41
+selbst stellt nur den allgemeinen R4D-Mechanismus und die Messbarkeit bereit.

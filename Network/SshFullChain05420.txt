@@ -1,0 +1,102 @@
+﻿R4OS 0.54.20 - SSH-/SFTP-/SCP-Gesamtabnahme
+============================================
+
+Ziel
+----
+
+0.54.20 nimmt nach der SSHD-Worker-Scratch-Reparatur aus 0.54.18 und der
+Host-Harness-Haertung aus 0.54.19 die komplette Windows-OpenSSH-Kette erneut
+fachlich ab:
+
+- falsches Passwort
+- korrektes Passwort
+- interaktive SSH-Shell
+- SSH-Exec inklusive `SERVMAN STATUS SSHD`
+- SFTP-v3 mit Upload, Download und Bytevergleich
+- klassisches SCP ueber `scp -O` mit Download, Upload und Bytevergleich
+
+Fixes in dieser Stufe
+---------------------
+
+- `SERVMAN STATUS SSHD` arbeitet fuer Statusantworten mit einem kurzlebigen
+  Snapshot und mischt aktive Worker-Statistiken hinein. Dadurch sieht eine
+  laufende Session ihre Auth-, Shell-/Exec-, SFTP-/SCP- und Byte-Zaehler,
+  ohne dass der Mainloop alte Join-Daten abwarten muss.
+- Der Shell-/Exec-Close-Pfad nutzt `drainConsoleOutputForClose`. Vor
+  Exitstatus, EOF und Channel-Close wird Console-Ausgabe ausgedraint und fuer
+  einige Ticks weiter zum SSH-Client gepumpt. Groessere Exec-Ausgaben wie
+  `SERVMAN STATUS SSHD` erreichen damit Windows OpenSSH vollstaendig.
+- Die Hostdiagnose wertet `worker_spawn_fail` und `worker_join_err` nur bei
+  Nonzero-Werten rot. `scratch_fail` bleibt ein sichtbarer Warmup-/Retry-
+  Zaehler; harte Scratch-Fehler bleiben `last=scratch` und
+  `scratch-missing`.
+
+Abnahme
+-------
+
+Ausgefuehrte Befehle:
+
+    DevTools/Scripts/Build.bat -norun
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File Tests/Runtime/Run-SshLoginLiveTest.ps1
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File Tests/Runtime/Run-SshSessionLiveTest.ps1
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File Tests/Runtime/Run-SftpLiveTest.ps1
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File Tests/Runtime/Run-ScpLiveTest.ps1
+
+Abnahmelogs:
+
+- `DevTools/Logs/qemu-test-sshd-login-20260621-172052.log`
+- `DevTools/Logs/qemu-test-sshd-login-20260621-172052.good.err`
+- `DevTools/Logs/qemu-test-sshd-session-20260621-171927.log`
+- `DevTools/Logs/qemu-test-sshd-session-20260621-171927.status.out`
+- `DevTools/Logs/qemu-test-sftp-20260621-171956.log`
+- `DevTools/Logs/qemu-test-sftp-20260621-171956.sftp.err`
+- `DevTools/Logs/qemu-test-scp-20260621-172026.log`
+- `DevTools/Logs/qemu-test-scp-20260621-172026.download.err`
+- `DevTools/Logs/qemu-test-scp-20260621-172026.upload.err`
+
+Ergebnis
+--------
+
+- Login: falsches Passwort wird abgelehnt, `rosebud` wird akzeptiert, PTY-
+  Enter funktioniert. Status: `auth_ok=1`, `auth_fail=3`,
+  `failed_password=wrongbud`.
+- Session: Shell, Exec mit Exitstatus 0 und fehlerhaftes Exec mit Exitstatus
+  1 funktionieren. `SERVMAN STATUS SSHD` kommt als SSH-Exec vollstaendig in
+  stdout an. Status: `shells=1`, `execs=3`.
+- SFTP: Verzeichnisliste, Download, 40-KB-Upload nach `C:\TEMP`, Rueckdownload
+  und Bytevergleich funktionieren. Status: `sftp=1`, `sftp_open=6`,
+  `sftp_read=15`, `sftp_write=2`, `sftp_ls=6`.
+- SCP: Klassisches `scp -O` kann eine Datei aus R4OS herunterladen, 32 KB nach
+  `C:\TEMP` hochladen, die Datei zurueckholen und die Bytes vergleichen.
+  Status: `scp=3`, `scp_read=2`, `scp_write=1`, `scp_in=32802`,
+  `scp_out=32844`.
+- Worker-Fehler bleiben null: `worker_spawn_fail=0`, `worker_join_err=0`.
+
+Fehlergrenzen
+-------------
+
+Die frischen Abnahmelogs enthalten keine harten SSHD-Fehlmarker:
+
+- kein `kex_exchange_identification`
+- kein `Program task create failed`
+- kein `Program module file allocation failed`
+- kein `[CRASH]`, `PANIC`, Page Fault oder General Protection Fault
+- kein `last=scratch` und kein `scratch-missing`
+- kein Connection reset oder reset by peer
+
+`scratch_fail=1` kann im Status als Warmup-/Retry-Zaehler auftauchen. Das ist
+fuer diese Stufe kein roter Marker, solange ein vorbereiteter Slot-Scratch
+vorhanden ist und der letzte Fehler nicht `scratch` lautet.
+
+Bewertung
+---------
+
+Die SSHD-Kette ist wieder belastbar genug fuer die aktuelle Connectivity-
+Abnahme. Es wurde kein Kernel-SSH-, SFTP- oder SCP-Pfad eingefuehrt und kein
+alter synchroner SSHD-Normalpfad als Fallback reaktiviert.
+
+Die Dateitransfer-Grenze ist noch nicht final modern: SFTP und SCP nutzen
+weiterhin monolithische 64-KB-Transferpuffer. Wenn groessere produktive
+Transfers das Ziel werden, muss eine Folgeversion Streaming, Windowing und
+Backpressure sauber als Dienst-/R4SYS-Pfad ausarbeiten, statt nur ein Limit
+anzuheben.

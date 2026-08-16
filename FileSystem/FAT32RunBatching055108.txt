@@ -1,0 +1,107 @@
+﻿FAT32 Run-Allokation und FAT-Sektor-Batching 0.55.10.8
+======================================================
+
+Ziel
+----
+
+0.55.10.8 reduziert die FAT32-Metadatenarbeit bei wachsenden Dateien. Der
+produktive Datei-I/O-Pfad bleibt unveraendert R4SYS -> FAT32 ->
+Page-Cache/Blockdevice. Es gibt keinen zweiten Datei-I/O-Pfad und keinen
+direkten Spezialpfad fuer SSHD oder SYSUPD.
+
+Die sichtbare R4OS-Version bleibt im FAT32-Sonderstrang unveraendert bei
+`KERNEL_VERSION=0.55.10`.
+
+Technischer Stand
+-----------------
+
+Vor dieser Unterversion hat `allocateChainFrom()` neue Cluster einzeln
+gesucht, einzeln mit `EOC` markiert und den jeweils vorherigen Cluster danach
+einzeln auf den neuen Cluster umgebogen. Bei grossen fortlaufenden Dateien
+bedeutete das viele wiederholte FAT-Sektor-Reads und FAT-Sektor-Writes,
+obwohl die freien Cluster meist direkt nebeneinander lagen.
+
+0.55.10.8 fuehrt deshalb zwei interne FAT32-Hilfen ein:
+
+- Run-Allokation:
+  `findFreeClusterRun()` scannt FAT-Sektoren nach zusammenhaengenden freien
+  Clusterlaeufen. `allocateChainFrom()` kann dadurch ganze Runs auf einmal
+  vergeben und erst dann bei Bedarf mehrere Runs miteinander verbinden.
+
+- FAT-Sektor-Batching:
+  `writeFatChainRunAll()` schreibt zusammenhaengende FAT-Ketten sektorweise.
+  Mehrere benachbarte FAT32-Eintraege im selben FAT-Sektor werden in einem
+  gelesenen Sektor geaendert und danach pro FAT-Kopie einmal geschrieben.
+
+Der neue FAT-Schreibpfad erhaelt die oberen vier reservierten Bits eines
+FAT32-Eintrags. Das ist wichtig fuer Kompatibilitaet mit dem FAT32-Vertrag
+und war in der alten Einzelwrite-Hilfe noch nicht sauber gekapselt.
+
+Metriken
+--------
+
+ProgramApi v146 ist ein reiner R4DEV-Diagnosestand. Die ProgramApi-Tabelle
+waechst nicht; `ProgramPerformanceSummary` bekommt append-only diese Felder:
+
+- `fat32_alloc_runs`
+- `fat32_alloc_run_clusters`
+- `fat32_alloc_run_max_clusters`
+- `fat32_fat_sector_writes`
+
+Die bestehenden Felder bleiben gueltig:
+
+- `fat32_fat_writes` zaehlt weiter logische FAT-Eintragsaenderungen.
+- `fat32_fat_mirror_writes` zaehlt weiter tatsaechliche FAT-Sektorwrites ueber
+  die FAT-Kopien.
+- `fat32_alloc_search_steps` zaehlt weiter gepruefte Allocation-Eintraege.
+
+FSDIAG nutzt die neuen Felder zunaechst in der 1-MB-Streamprobe. Die Probe
+ist erst OK, wenn neben Flush-/Writeback-/Yield-Guards auch echte
+Run-Allokation und FAT-Sektor-Batching sichtbar sind:
+
+- `batching=yes`
+- `runs=<Anzahl>/<Cluster>`
+- `maxRun>=2`
+- `fatSectors>0`
+
+Zusaetzlich fuehrt FSDIAG einen synthetischen 14-MB-FAT32-Schreibtest ohne
+SSHD/SFTP aus. Dieser Test schreibt `C:\TEMP\FS14MB.BIN` ueber den normalen
+R4SYS-Streamvertrag, liest die Datei per `fileReadAt` fuer eine Checksumme
+zurueck und loescht sie danach. Erfolgreiche Abnahme meldet:
+
+- `FSDIAG fat32 synthetic 14mb result: OK`
+- `checksum=yes`
+- `batching=yes`
+- `dirtyClean=yes`
+- `FSDIAG fat32 synthetic 14mb metrics: ... runs=... maxRun=... fatSectors=...`
+
+Warum das noch nicht alle Performance-Probleme loest
+----------------------------------------------------
+
+Diese Unterversion reduziert lokale FAT32-Metadatenarbeit. Sie loest noch
+nicht:
+
+- den kleinen SSH-Channel/SFTP-Windowing-Pfad,
+- mehrfaches SYSUPD-Verify/Staging grosser Pakete,
+- fehlende per-Datei-Extent-Caches fuer wiederholte ReadAt-/Checksum-Walks,
+- fehlende FSInfo-/Inusemap-Nutzung,
+- Registry-/Config-Responsiveness kleiner synchroner Writes.
+
+Genau diese Punkte bleiben als 0.55.10.9 bis 0.55.10.14 in der Roadmap.
+
+Abnahme
+-------
+
+Erwartete Abnahme fuer diese Unterversion:
+
+- `DevTools/Scripts/Build.bat -norun`
+- `DevTools/Scripts/Build.bat -test`
+- FSDIAG meldet bei der 1-MB-Streamprobe `batching=yes`.
+- `git diff --check`
+
+No-Fallback-Audit
+-----------------
+
+SSHD, SYSUPD, Registry, Terminal und andere Programme bleiben auf den
+bestehenden R4SYS-Datei- und Stream-APIs. Die Aenderung sitzt ausschliesslich
+im FAT32-Allokations- und FAT-Schreibunterbau.

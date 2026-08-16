@@ -1,0 +1,161 @@
+﻿Runtime-R4L 0.64.1 - Bestand, Zielgrenze und Migration
+=========================================================
+
+Zweck
+-----
+
+Dieses Dokument ist der versionierte Bestands- und Entscheidungsbericht fuer
+den Beginn des Runtime-R4L-Umbaus. Der normative allgemeine Zielvertrag steht
+in `Code/System/SDK/Contract/ABI/R4LInterface.txt`.
+
+Gruener Referenzstand
+---------------------
+
+Vor der ersten produktiven Umbauaenderung wurde am 13.08.2026 der Stand
+R4OS 0.63.30 mit Kernel 0.1.7 abgenommen:
+
+    DevTools/Scripts/Build.bat -norun
+    Ergebnis: Exitcode 0, 163,4 Sekunden
+
+    DevTools/Scripts/Build.bat -test
+    Ergebnis: Exitcode 0, 218,5 Sekunden
+
+Der QEMU-Lauf endete kontrolliert mit `System poweroff.`. Die bisherigen
+Contract-, Library-, Consumer- und Systemtests waren gruen. Dieser Stand ist
+die Vergleichsbasis fuer den schrittweisen Umbau; er ist kein alternativer
+ABI-Contract.
+
+Ist-Zustand vor der Migration
+-----------------------------
+
+Die drei optionalen Systemlibraries sind im R4M0-Image vorhanden, tragen aber
+noch keine fachliche Funktionstabelle. Der Referenzbuild meldete fuer jedes
+dieser R4L-Artefakte nur 39 Codebytes, zwei Sections, einen Import, einen
+Export und eine Relocation. Der Export ist jeweils nur Query:1. Die
+eigentliche Implementierung wird heute in den Consumer gelinkt.
+
+Library  Modulversion  zentrale ID  heutiger Implementierungsbesitz
+R4STD    0.1.1         8            SDK date/time/settings/config
+R4IMG    0.2.1         9            SDK r4img/r4img_svg und SDK ThirdParty/stb
+R4FONT   0.1.1         10           SDK r4font/app_fonts und SDK ThirdParty/r4font
+
+Die Kopplungen liegen an folgenden Grenzen:
+
+- ApiContract.json und ApiContractGen kennen die drei Namen, IDs, generierten
+  Query-Identitaeten, Dokumentationsausgaben und fuer R4STD auch die
+  fachlichen Operationen.
+- `Code/Kernel/program/r4x.zig` ordnet die Namen in `r4lGroupId` festen IDs zu.
+  Der darunterliegende R4M0-Modulresolver kann Modul, Symbol und
+  Mindestversion bereits generisch aufloesen, aber der R4X-Startpfad verlangt
+  danach noch die feste Gruppenabbildung.
+- `Code/Kernel/kernel/modules.zig` erlaubt direkte KernelProvider-Imports nur
+  fuer eine feste System-R4L-Liste. Die heutigen Marker-R4Ls verwenden diesen
+  Sonderweg fuer KernelPing.
+- `Code/System/SDK/r4os/app_contract.zig` importiert die drei konkreten
+  Fassaden direkt und macht sie zu Bestandteilen des zentralen App-Bundles.
+- `Code/System/SDK/r4os/build.zig` erkennt die zwei Decoder-Libraries anhand
+  fester Query-Importstrings und linkt deren C-/Fremdcode in den Consumer.
+- Die Libraryverzeichnisse besitzen bereits Manifest, Query-Quelle und Tests,
+  aber Implementierung, fachlicher Contract und Bindings liegen noch im SDK.
+- Mehrere dauerhafte Gates pruefen ausdruecklich dieses alte
+  SDK-eingelinkte, tabellenlose Modell. Sie werden mit der jeweiligen
+  Migration entfernt oder auf die neue Eigentumsgrenze reduziert, statt als
+  historische Parallelarchitektur erhalten zu bleiben.
+
+Heutige Verbraucher
+-------------------
+
+R4STD wird importiert von:
+
+- Diagnostics/R4CfgDiag
+- Diagnostics/StdDiag
+- Services/TimeService
+- Software/Appearance
+- Software/Clock
+- Software/Desktop
+- Software/Terminal
+- Software/TimeSettings
+
+R4IMG wird importiert von:
+
+- Diagnostics/KlickifaxLive
+- SDK/Smoke/R4FONT/Consumer
+- Software/Klickifax
+
+R4FONT wird importiert von:
+
+- SDK/Smoke/R4FONT/Consumer
+- Software/Klickifax
+
+Der gemeinsame Smoke-Consumer zaehlt in beiden Decoderlisten. Insgesamt sind
+elf Manifeste und dreizehn Library-Importzeilen zu migrieren.
+
+Bereits vorhandene generische Grundlage
+---------------------------------------
+
+R4M0 beschreibt Imports schon als Modul, Symbol und Mindestversion. Der
+Kernelresolver sucht Modulnamen und Exporte case-insensitive, lehnt doppelte
+Provider ab und liefert Exportadresse plus aufgeloeste Version. R4XStartImport
+transportiert bereits `module_name`, `symbol_name`, `min_version`,
+`resolved_version` und `table`.
+
+Der Umbau braucht deshalb keinen zweiten Loader und keinen fachlichen
+Kerneldispatcher. Er entfernt die feste optionale Gruppenabbildung, erlaubt
+direkte benannte Interface-Exporte und setzt darauf libraryeigene Tabellen und
+Bindings.
+
+Verbindliches Zielbild
+----------------------
+
+Plattformbesitz:
+
+- R4M0, R4LQuery, R4XStart und der gemeinsame 32-Byte-Interface-Header;
+- generische Aufloesung nach Modul, Export und Mindestrevision;
+- Speicher-, Relocation-, Versions- und Lebensdauerpruefung;
+- generische SDK-Helfer ohne Kenntnis konkreter optionaler Libraries.
+
+Librarybesitz:
+
+- Name, Interface-ID, Funktionstabellen, fachliche Typen und Fehler;
+- Ownership-, Buffer-, Handle-, Callback- und Threadingvertrag;
+- Implementierung und ausschliesslich benoetigter Fremdcode;
+- Contractschema, akzeptierte Baseline, Generatorausgaben, Zig-/C-Bindings;
+- Manifest, eigenstaendiger Build, Tests und API-Dokumentation.
+
+Eine normale kompatible Libraryaenderung erhoeht ihre Modulversion und bleibt
+vollstaendig in ihrer Einheit. Eine Anwendung muss nur dann angepasst und neu
+gebaut werden, wenn sie eine neue Funktion verwenden oder auf einen neuen
+ABI-Major wechseln will. Ein kompatibles Implementierungsupdate kann nach dem
+naechsten sicheren Aktivierungspunkt von einem bereits gebauten Consumer
+verwendet werden.
+
+Migrationsreihenfolge
+---------------------
+
+1. Allgemeinen ABI- und Lebensdauervertrag einfrieren.
+2. Beliebige benannte Exporte ohne optionale Kernel-Whitelist bis R4XStart
+   transportieren.
+3. Librarylokales Contract-/Binding- und Buildmuster bereitstellen.
+4. Eine unbekannte Referenz-R4L mit echter Funktionstabelle abnehmen.
+5. R4IMG, danach R4FONT und zuletzt R4STD migrieren.
+6. Zentrale IDs, SDK-Implementierungen, Buildsonderwege und obsolete Gates
+   entfernen.
+7. Gesamtbuild, QEMU-Systemtest und Transferbereitschaft abnehmen.
+
+Teststrategie
+-------------
+
+0.64.1 besitzt genau ein neues Vertragsgate. Sein Designmodell prueft das
+32-Byte-Headerlayout, Namen, Implementierungsupdate, append-only Revision,
+neuen Major, fehlende Revision, zu kleine Tabelle, Revisionsdrift,
+Pflichtflags, falsche Identitaet und Nullslots. Das Modell fuehrt bewusst noch
+keinen Produktivcode aus. Sein Produktgegenstueck folgt mit dem generischen
+Resolver und der Referenz-R4L; dann werden alte, widersprechende Gates entfernt.
+
+Keine Live-Aktivierung
+----------------------
+
+0.64.X laedt keine neue Librarygeneration unter laufenden Funktionspointern
+ein. Das Update stellt ein Artefakt atomar fuer einen sicheren spaeteren
+Aktivierungspunkt bereit. Bereits geladener Code bleibt gueltig; die neue
+Generation wird spaetestens beim naechsten R4OS-Start aktiv.

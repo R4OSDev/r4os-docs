@@ -1,0 +1,113 @@
+﻿R4X Virtual Memory V2 - 0.53.4
+================================
+
+Ziel
+----
+
+0.53.4 trennt fuer R4X-VM-Regionen den logischen Commit-Zustand von
+physisch residenten Pages. `vm_commit` bedeutet damit nicht mehr "sofort alle
+Frames allokieren", sondern "dieser virtuelle Bereich darf bei Zugriff
+physisch hinterlegt werden". Das ist die notwendige Basis, damit R4OS spaeter
+Browser-, Build-Tool- oder grosse Service-Prozesse mit mehreren GB virtuellem
+Adressraum tragen kann, ohne RAM im Voraus zu verbrennen.
+
+Die ABI bleibt in diesem Schritt unveraendert: ProgramApi bleibt v103 mit
+1736 Bytes, R4XStartR4Sys bleibt v3 mit 264 Bytes. Geaendert hat sich das
+Verhalten der bestehenden VM-API.
+
+
+Commit-Spans statt Eager Frames
+-------------------------------
+
+`memory/virt.zig` fuehrt fuer `r4x_vm`-Regionen eine interne Commit-Span-
+Tabelle. Eine Region kann dadurch folgende Werte getrennt fuehren:
+
+- reserviert: virtuelle Region existiert und gehoert einer R4X-Instanz.
+- committed: Teilbereiche sind gueltig, besitzen aber noch nicht zwingend
+  physische Frames.
+- resident: Pages, die durch Zugriff bereits einen Frame erhalten haben.
+
+`vm_commit(region, offset, len)` prueft weiterhin Alignment, Owner, Guard-
+Bereiche und bereits committed Bereiche. Fuer `r4x_vm` wird danach nur der
+Commit-Span eingetragen und `committed_bytes` der Region gesetzt. Es wird kein
+Frame allokiert und keine Page gemappt.
+
+`vm_decommit` entfernt Commit-Spans wieder und gibt bereits resident gewordene
+Pages frei. `vm_release` entfernt alle Spans und residenten Pages einer Region.
+
+
+Page-Fault-Backing
+------------------
+
+Der Page-Fault-Pfad laeuft weiter ueber die bestehende Kernelbruecke:
+
+    arch/x86_64/idt.zig -> r4x.handlePageFault -> mem_virt.handleDemandFault
+
+Behandelt werden nur Non-Present-Faults. Der Demand-Fault wird nur akzeptiert,
+wenn die faultende Adresse:
+
+- in einer aktiven `r4x_vm`-Region liegt,
+- der aktuell laufenden R4X-Instanz gehoert,
+- nicht in einer Guard-Range liegt,
+- in einem committed Span liegt,
+- noch nicht gemappt ist.
+
+Dann allokiert der VM-Manager genau eine Zero-Page, claimed den physischen
+Frame als `virtual_range` fuer den R4X-Owner, mappt die Page mit den
+Region-Flags und nullt sie. Faults ausserhalb reservierter/committed Bereiche
+bleiben unhandled und laufen weiter in den bestehenden Crash-/Diagnosepfad.
+
+
+Diagnosewerte
+-------------
+
+Intern fuehrt jede VirtualRange nun zusaetzlich:
+
+    resident_bytes
+    peak_resident_bytes
+    fault_count
+    failed_faults
+
+Diese Werte sind noch keine neue oeffentliche ABI-Struktur. Sie sind bewusst
+im VM-Manager verankert, damit eine spaetere Diagnose-API oder MemView-
+Erweiterung denselben Zustand nutzen kann, statt wieder eine zweite
+Speicherwahrheit aufzubauen.
+
+
+Nicht geaendert
+---------------
+
+Der alte AppHeap-V1-Pfad bleibt bis zur geplanten 0.53.6-Migration vorhanden.
+0.53.4 erweitert ihn nicht und baut keinen Fallback. R4X-VM-Regionen sind der
+neue Zielpfad.
+
+App-Stacks nutzen weiterhin das bestehende `app_stack`-VirtualRange- und
+Guard-Modell. Stack-Growth bleibt damit in derselben VirtualRange-Verwaltung,
+wird aber in 0.53.4 nicht auf sparse Demand-Commit umgestellt. Dieser Schritt
+bleibt bewusst eng, damit R4X-VM-Demand-Faults belastbar abgenommen werden.
+
+
+Abnahme
+-------
+
+BootCoreDiag prueft im Smoke-Test:
+
+- 128 MB R4X-VM-Region reservieren.
+- 64 MB logisch committen.
+- Nach Commit keinen physischen Verbrauch sehen.
+- Nur Anfang, Mitte und Ende der Region beruehren.
+- Danach nur den physischen Verbrauch der wenigen residenten Pages sehen.
+- Decommit und Release der Region erfolgreich ausfuehren.
+
+Gemessene Abnahme aus `Build.bat -test`:
+
+    R4SYS VM demand commit: OK
+    R4SYS VM commit/query: OK
+    R4SYS VM sparse resident: OK
+    R4SYS VM decommit: OK
+    R4SYS VM release: OK
+    VM API region=114 reserve MB=128 committed KB=65536 commit-drop=0 touch-drop=32768
+
+Damit ist der wichtige Unterschied nachgewiesen: 64 MB committed, aber 0 Bytes
+physischer Drop beim Commit und nur 32 KB physischer Drop nach den Sparse-
+Touches.

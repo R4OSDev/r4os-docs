@@ -1,0 +1,125 @@
+﻿R4OS 0.11 Abschluss
+===================
+
+Einordnung
+----------
+
+Version 0.11.X hat den modernen Storagepfad von R4OS bis zu einem echten
+NVMe-Bootpfad ausgebaut und gleichzeitig die alten Rueckwege erhalten. Der
+Abschluss gilt nur fuer die dokumentierten QEMU-Profile, nicht als pauschale
+Zusage fuer beliebige echte Hardware.
+
+Die detaillierte Storage-Matrix steht in
+`Docs/Deployment/V0.11-Storage-Abnahme.txt`.
+
+
+Wichtige Ergebnisse
+-------------------
+
+- NVMe:
+  R4OS kann im lokalen Q35-Profil direkt von NVMe booten. Das Bootimage
+  haengt als NSID 1, das Datenimage als NSID 2 an einem QEMU-NVMe-
+  Controller. C: wird ueber `nvme0`, D: ueber `nvme1` gemountet.
+
+- NVMe-Staging:
+  Das Profil `modern-q35 -storage nvme` bleibt als Mischprofil erhalten:
+  C:/D: laufen bewusst weiter ueber AHCI, das separate NVMe-Testimage wird
+  als E: gemountet. Dadurch bleiben NVMe-Entwicklung und AHCI-Fallback in
+  einem Lauf sichtbar getrennt.
+
+- Fallbacks:
+  `modern-q35 -storage ahci` mountet C:/D: ueber AHCI. `legacy-pc` mountet
+  C:/D: ueber AT-PIO/Legacy-IDE. Alte Hardwareprofile bleiben damit nicht
+  vom neuen NVMe-Pfad abhaengig.
+
+- Diagnosevertrag:
+  `HARDWARE`, `DEVICES`/`DEVMGR`, `DRIVES`, `BLOCK`, `NVME`, `NVMETEST`,
+  `AHCI TEST`, `BLOCKTEST` und `FSDIAG` muessen denselben Pfad bestaetigen.
+  Ein Profil gilt nicht als bestanden, wenn der Name NVMe/AHCI/Legacy sagt,
+  die Laufwerke aber heimlich ueber einen anderen Treiber gemountet werden.
+
+- Desktop-Bugfixes:
+  Der Desktop-Smoke deckt den R4Config-Start aus R4Desk, R4Files, Cursor-
+  Damage am oberen Bildschirmrand und den sichtbaren App-Host-Pfad ab. Der
+  Nutzer hat den blinkenden R4DOS-Cursor manuell geprueft und nach der
+  letzten Y-Korrektur freigegeben.
+
+- FSDIAG-Robustheit:
+  Waehrend der Abschlussabnahme wurde FSDIAG auf 16 KB R4X-Stack angehoben
+  und die Ausgabe begrenzt, damit Directory- und Pfadpuffer die Diagnose
+  nicht durch Stackdruck oder ungebundene C-Strings verfaelschen.
+
+
+Reproduzierbare Abnahme
+-----------------------
+
+Getestet am 03.05.2026:
+
+    DevTools\Scripts\Build.bat -test -profile modern-q35 -storage nvme-boot
+    DevTools\Scripts\Build.bat -test -test-shell desktop -profile modern-q35 -storage nvme-boot
+    DevTools\Scripts\Build.bat -test -profile modern-q35 -storage nvme
+    DevTools\Scripts\Build.bat -test -profile modern-q35 -storage ahci
+    DevTools\Scripts\Build.bat -test -profile legacy-pc
+
+Erwartete und erreichte Kernergebnisse:
+
+- NVMe-Boot:
+  `Storage: blocks=2 C=mounted D=mounted ... nvme=found/active`,
+  `storage nvme0 ... mounted-C`, `storage nvme1 ... mounted-D`,
+  `BLOCKTEST` fuer beide NVMe-Blockdevices OK, `NVMETEST result: OK`,
+  `BLOCKTEST FAT C:`, `FSDIAG C:`, `BLOCKTEST FAT D:` und `FSDIAG D:` OK.
+
+- R4Desk auf NVMe-Boot:
+  `R4Config window: 1 ok`, `R4Files window: 1 ok`,
+  `R4DESK render cursor-top-edge ... last=cursor rect=8,0,12,19 pixels=228`
+  und `R4DESK smoke result: OK`.
+
+- NVMe-Staging:
+  `ahci0`/`ahci1` bleiben C:/D:, `nvme0` wird E:, `NVMETEST result: OK`,
+  `BLOCKTEST FAT E:` und `FSDIAG E:` OK, `AHCI TEST result: OK`.
+
+- AHCI-Fallback:
+  `Storage: blocks=2 C=mounted D=mounted legacy-ide=missing
+  ahci=found/active nvme=not-found`, `storage ahci0 ... mounted-C`,
+  `storage ahci1 ... mounted-D`, `BLOCKTEST`, `FSDIAG` und `AHCI TEST` OK.
+
+- Legacy-IDE-Fallback:
+  `Storage: blocks=2 C=mounted D=mounted legacy-ide=found
+  ahci=not-found nvme=not-found`, `storage ata0 ... mounted-C`,
+  `storage ata1 ... mounted-D`, `BLOCKTEST`, `BLOCKTEST FAT D:` und
+  `FSDIAG` OK.
+
+Alle Abschlusslaeufe endeten ohne bekannte Crash-Marker:
+
+- `CPU EXCEPTION`
+- `General Protection Fault`
+- `PANIC`
+- `FATAL:`
+
+
+Grenzen
+-------
+
+- NVMe nutzt weiterhin synchrone polling-basierte I/O-Queues.
+- Kein NVMe-Interruptbetrieb, kein MSI/MSI-X-Zwang und kein Multi-Queue-
+  Performancepfad.
+- Kein PRP2-/PRP-Listen-Pfad fuer groessere Transfers.
+- Direktes NVMe-C:/D: ist lokal mit einem QEMU-NVMe-Controller und mehreren
+  Namespaces abgenommen; mehrere NVMe-Controller bleiben spaeter.
+- `bootfb` bleibt der aktive Displaypfad; native Displaytreiber sind nicht
+  Teil von 0.11.
+- Netzwerk wird erkannt, hat aber noch keinen aktiven Treiber.
+- PCI-GSI-/MSI-Bindung fuer AHCI, Netzwerk und weitere PCIe-Geraete bleibt
+  Diagnose beziehungsweise spaeterer Treiberunterbau.
+- Der HDA-Pfad ist als Builtin-Audiobackend aktiv; ein dynamisch ladbarer
+  `hda.r4d` ist noch nicht vorhanden.
+
+
+Bewertung
+---------
+
+0.11.X ist als NVMe-/Fallback- und Bugfix-Version abgeschlossen. Der moderne
+Q35-Pfad kann direkt ueber NVMe laufen, AHCI bleibt als moderner Rueckweg
+erhalten, Legacy-IDE/AT-PIO bleibt fuer alte Hardwareprofile nutzbar, und die
+sichtbaren Desktop-/R4DOS-Bugfixes sind in Smoke-Tests oder durch manuelle
+Sichtpruefung abgedeckt.

@@ -1,0 +1,119 @@
+﻿R4OS 0.53.31 - Page-I/O-Haertung ohne automatische Eviction
+=============================================================
+
+Ziel
+----
+
+0.53.31 haertet den in 0.53.30 eingefuehrten expliziten Page-I/O-
+Diagnosepfad. Der Pfad bleibt bewusst synchron, explizit und diagnosegetrieben:
+keine automatische Eviction, kein Page-Fault-getriebenes Page-In, kein Swap-
+Stub, keine globale Pager-Policy und kein zweiter Block-I/O-Pfad.
+
+Die Aenderung schliesst die wichtigsten Datenintegritaetsluecken vor spaeterer
+Eviction-Arbeit: Slotbesitz muss passen, Generationen muessen frisch sein,
+Fehler-Slots blockieren I/O, doppelte Page-Outs auf valide Slots werden
+abgelehnt, Recover setzt einen Slot reproduzierbar auf einen sauberen
+Reserved-Zustand zurueck, und die Diagnose kann zusammenhaengende Multi-Page-
+Transfers pruefen.
+
+Neuer ABI-Stand
+---------------
+
+ProgramApi v127 ersetzt die v126-Signatur von
+`memory_page_io_probe(...)` vollstaendig. Es gibt keinen Fallback auf die alte
+Einseiten-Signatur; mitgelieferte Programme werden neu gebaut.
+
+Aktuelle Signatur:
+
+`memory_page_io_probe(path, backing_bytes, operation, region_id,
+region_offset, reservation_id, slot_index, page_count, owner_id,
+expected_generation, page, flags, out)`
+
+Neue Eingaben:
+
+- `page_count`: Anzahl zusammenhaengender 4096-Byte-Seiten ab `slot_index`.
+- `owner_id`: erwarteter Besitzer der Slot-Reservierung; `0` bleibt nur fuer
+  explizite diagnoseinterne Wildcard-Pruefungen erlaubt.
+- `expected_generation`: erwartete Slot-Generation. Ein Wert ungleich 0
+  muss mit der aktuellen Slot-Generation uebereinstimmen.
+
+Neue Ergebnis- und Summary-Felder:
+
+- `owner_id`
+- `page_count`
+- `transfer_bytes`
+- `expected_generation`
+
+Neue Status-/Blocker-Grenzen:
+
+- `slot_error`: Slot ist als Fehler markiert und blockiert Page-In/Page-Out.
+- `owner_mismatch`: angeforderter Owner passt nicht zur Reservierung.
+- `stale_generation`: erwartete Generation ist veraltet.
+- `slot_already_valid`: Page-Out auf bereits validen Slot wird abgelehnt.
+
+Kernel-Besitzgrenze
+-------------------
+
+Der Kernel besitzt weiterhin nur die allgemeine Mechanik in
+`Code/src/memory/backing_store.zig`: Slot-Tabelle, Owner-/Generation-Pruefung,
+Range-Grenzen, Status/Blocker, Prepare/Complete und Slotzustand.
+
+R4DEV und die Diagnostics besitzen die Szenarien und Abnahme. Es gibt keine
+neue Pager-Policy im Kernel, keine automatische Opferauswahl, keine
+Hintergrundworker und keine Sonderroute am Storage vorbei. Datei-I/O laeuft
+weiter ueber die vorhandenen R4SYS-/FAT32-/Storage-Pfade.
+
+Wiederanlaufregeln
+------------------
+
+- Page-In ohne validen Slot bleibt ein sichtbarer Fehler.
+- Page-Out auf einen validen Slot wird als Duplicate blockiert.
+- Error-Mark setzt den Slot in einen blockierten Fehlerzustand.
+- Page-In oder Page-Out auf Error-Slot liefert `slot_error`.
+- Recover loescht valid/dirty/error und stellt `reserved` wieder her.
+- Erst nach Recover darf ein erneuter Page-Out erfolgreich sein.
+- Der erfolgreiche Retry darf danach wieder per Page-In gelesen werden.
+
+Multi-Page-Diagnose
+-------------------
+
+PERFDIAG, MEMSUITE und STORDIAG pruefen nun zwei zusammenhaengende Seiten
+beziehungsweise 8192 Byte. Die Probe validiert, dass der angeforderte
+Transfer in die VM-Region, die Slot-Reservierung und die Backing-Datei passt.
+Die Flags enthalten bei diesen Tests `multi_page`, `owner_matched` und
+`generation_checked`.
+
+Nicht-Ziele
+-----------
+
+0.53.31 fuehrt weiterhin nicht ein:
+
+- automatische Eviction,
+- Page-Fault-getriebenes Page-In,
+- Memory-Pressure-getriebenes Page-Out,
+- globale Pager-Policy,
+- Swap-/Pagefile-Autostart,
+- Program-Ende- oder VM-Release-gebundene Slot-Lifecycle-Policy.
+
+Der letzte Punkt wird bewusst als Folgearbeit behandelt. Aktuell sind
+Backing-Store-Slots explizite Diagnose-Reservierungen mit eigenem Owner-Wert,
+nicht produktive, instanzgebundene VM-Ressourcen. Bevor automatische Eviction
+kommt, muss eine eigene Unterversion den Slotbesitz an R4X-VM-Regionen und
+Programmlifecycle binden.
+
+Abnahme
+-------
+
+Erwartete sichtbare Linien im Smoke-Test:
+
+- `R4DEV performance snapshot v127: OK`
+- `Page I/O stale generation: OK`
+- `Page I/O duplicate out: OK`
+- `Page I/O error gate: OK`
+- `Page I/O recover: OK`
+- `Page I/O recovered invalid: OK`
+- `Page I/O page out retry: OK`
+- `Page I/O page in: OK`
+- `MEMSUITE pressure ... pageIO=... pager=0`
+- `STORDIAG pageIO: OK ... eviction=0 pages=2`
+

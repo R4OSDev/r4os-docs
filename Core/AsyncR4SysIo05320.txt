@@ -1,0 +1,85 @@
+﻿Async R4SYS I/O 0.53.20
+=======================
+
+Ziel
+----
+
+0.53.20 fuehrt einen belastbaren Request-/Completion-Pfad fuer R4SYS-I/O ein.
+Der Umbau soll Datei-, Stream- und Service-Operationen aus sichtbaren
+Eventloops herausziehen, ohne neue Policy in den Kernel zu packen. Der Kernel
+stellt nur Task-, Wait- und Completion-Grundlagen bereit; R4SYS, SDK,
+Desktop und Services besitzen Komfort-API, Queuing-Policy und Nutzerfuehrung.
+
+
+ABI
+---
+
+- ProgramApi ist v117.
+- R4XStartR4Sys ist v5 und 400 Byte gross.
+- Neue append-only Slots:
+  `io_file_read`, `io_file_read_at`, `io_file_write`, `io_file_append`,
+  `io_file_stream_begin`, `io_file_stream_write`, `io_file_stream_finish`,
+  `io_file_stream_abort`, `io_service_call`, `io_status`, `io_wait`,
+  `io_close`.
+- `R4ProgramIoInfo` ist 80 Byte gross und beschreibt Request-ID, Zustand,
+  Typ, Besitzer-Instanz, Flags, Bytezaehler, Ergebnis, Worker-Task-ID und
+  Submit-/Start-/End-Ticks.
+
+Der Umzug ist hart: Datei-/Stream-Sync-APIs und `serviceCall` sind nur noch
+Komfort-Wrapper, die intern einen Request einreichen, auf Completion warten
+und den Request-Slot schliessen. Ein zweiter produktiver Altpfad bleibt nicht
+Teil des Vertrags.
+
+
+Runtime-Vertrag
+---------------
+
+- Jeder Async-Request gehoert der aufrufenden R4X-Instanz.
+- R4X-Worker erhalten ihre Instanzzuordnung, damit R4SYS-/R4L-Aufrufe aus dem
+  Worker denselben Kontext wie der Main-Thread sehen.
+- Requests durchlaufen `pending`, `running`, `completed` oder `failed`.
+- `io_wait` liefert Timeout sichtbar als `io_error_timeout`; abgeschlossene
+  Requests muessen mit `io_close` freigegeben werden.
+- Instanz-Exit/Kill cancelt und raeumt offene Requests auf.
+- Service-Calls laufen ueber denselben Completion-Pfad wie Dateioperationen.
+
+
+Desktop-Writeback
+-----------------
+
+Der Desktop schreibt Layout-Aenderungen nicht mehr synchron im sichtbaren
+Timer-/Eventloop-Pfad. Beim Faelligwerden wird ein Snapshot der Layoutdaten
+gebaut und ein R4X-Worker gestartet. Der UI-Tick pollt die Completion spaeter.
+Neue Aenderungen waehrend eines laufenden Saves werden ueber eine Generation
+erkannt und bleiben dirty, bis ein neuer Snapshot gespeichert wurde.
+
+Vor Poweroff, Reboot oder anderen harten Systemaktionen wird derselbe Worker
+explizit gejoint. Dadurch bleibt der Atomic-Save-Vertrag durable, ohne einen
+alten sync Writeback-Fallback in der normalen UI-Schleife zu behalten.
+
+
+Nicht-Ziele
+-----------
+
+- keine POSIX-/pthread-API
+- keine neue Sandbox- oder Capability-Policy
+- keine Page-Cache-/Pagefile-Policy
+- keine Kernel-Policy fuer Retry, Anzeigen oder Nutzerfuehrung
+- keine zweite alte sync Datei-/Service-Implementierung als Fallback
+
+Page Cache, Writeback-Cache, Pagefile und breitere Netzwerk-Async-Komfort-APIs
+bleiben Folgearbeit auf diesem Request-/Completion-Fundament.
+
+
+Abnahme
+-------
+
+Standardabnahme:
+
+- `ASYNIOD.R4X` meldet `ASYNIOD result: OK`.
+- `THREADD.R4X` meldet weiter `THREADD result: OK`.
+- `PERFDIAG.R4X` meldet `PERFDIAG result: OK` und akzeptiert Service-
+  Timeout/Cancellation-Zaehler nur, wenn sie konsistent zu den Service-
+  Diagnoseereignissen passen.
+- `Build.bat -norun` baut Kernel, R4XStart-/SDK-Programme und Image.
+- `Build.bat -test` startet den headless QEMU-Standardlauf bis Poweroff.

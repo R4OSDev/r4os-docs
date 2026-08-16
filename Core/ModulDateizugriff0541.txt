@@ -1,0 +1,98 @@
+﻿Modul-Dateizugriff 0.54.1
+=========================
+
+Ziel
+----
+
+0.54.1 fuehrt den gemeinsamen Modul-Dateizugriff ein, ohne bereits den
+vollstaendigen Streaming-Loader umzusetzen. Der bisherige R4X-Spezialpfad
+fuer den temporaeren Moduldatei-Vollpuffer wurde entfernt. R4X nutzt nun den
+gemeinsamen Helfer `Code/src/kernel/module_file.zig`.
+
+Diese Stufe ist bewusst klein:
+- keine neue Modulregistry,
+- keine neue Dateisystemschicht,
+- keine neue Kernel-Policy,
+- kein Fallback auf alte Voll-Datei-Reads,
+- kein Demand-/file-backed-Laden vor 0.54.8.
+
+
+Implementierter Vertrag
+-----------------------
+
+`module_file.zig` kapselt fuer Modulquellen:
+- `FileSource`: FAT32-Volume, Directory-Entry und Drive-Letter.
+- `readRange(...)`: Range-Read ueber `fat32.readFileRange(...)`.
+- `readExact(...)`: Range-Read mit harter Laengenpruefung.
+- `readFullToTempRange(...)`: temporaerer Vollpuffer ueber
+  `mem_virt.reserve(.temp_kernel)`, `mem_virt.commit(...)` und
+  `readExact(offset=0, ...)`.
+- `releaseTempBuffer(...)`: zentrale Freigabe des temporaeren Virtual-Range-
+  Puffers.
+- `stats()`: interne Zaehler fuer aktive Puffer, reservierte/committed Bytes,
+  Peaks und Fehlerarten.
+
+Der Vollpuffer ist damit noch vorhanden, aber nicht mehr als privater
+R4X-Loaderpfad. Er ist eine zentrale Uebergangsfunktion, die in 0.54.4 aus dem
+normalen R4X-Startpfad verschwinden muss.
+
+
+R4X-Umzug
+---------
+
+Geaendert:
+- `Code/src/program/r4x.zig` importiert `kernel/module_file.zig`.
+- `readProgramStartContractQuiet(...)` nutzt direkt
+  `module_file.readFullToTempRange(...)`.
+- `loadR4MProgramImage(...)` nutzt direkt
+  `module_file.readFullToTempRange(...)`.
+- Die alten privaten Helfer `readProgramModuleFile(...)`,
+  `freeProgramModuleFile(...)` und der lokale `ProgramModuleFile`-Typ wurden
+  geloescht.
+
+Der R4X-Loader nutzt fuer Header weiterhin kleine Range-Reads. Fuer den
+transitionalen Vollpuffer wird keine `fat32.readFile(...)`-Dateilesung mehr
+verwendet; auch der Vollpuffer laeuft ueber `readFileRange(...)`.
+
+
+Fehler- und Cleanup-Regeln
+--------------------------
+
+Der neue Helfer besitzt genau einen Besitzer fuer die temporaere Range:
+- Reserve-Fehler erhoehen `reserve_failures`.
+- Commit-Fehler erhoehen `commit_failures` und geben die Reserve wieder frei.
+- Read-Fehler erhoehen `read_failures`; Short-Reads erhoehen `short_reads`.
+- Jeder Fehlerpfad nach erfolgreicher Reserve laeuft durch zentrale Release-
+  Logik.
+- Release-Fehler bleiben sichtbar und lassen `active_buffers` nicht
+  faelschlich sinken.
+
+Logmeldungen verwenden den Prefix `[MODFILE]`, damit Loader-nahe Fehler in
+QEMU-Logs eindeutig von alten R4X-Spezialmeldungen unterscheidbar sind.
+
+
+Grenzen
+-------
+
+0.54.1 loest noch nicht:
+- R4L/R4D/R4P-Vollpuffer im Kernel-Heap,
+- R4M0-Tabellen-/Metadata-Reader ohne Vollpuffer,
+- direktes Section-Laden ins Zielimage,
+- Loader-Diagnoseexposition ueber R4DEV/Diagnostics,
+- file-backed/lazy Loading.
+
+Diese Punkte bleiben in den geplanten Folgeversionen 0.54.2 bis 0.54.8.
+
+
+Abnahme
+-------
+
+Abgeschlossen ist 0.54.1, wenn:
+- R4X keine privaten Vollpuffer-Helfer mehr besitzt,
+- R4X-Vollpufferung nicht ueber `kernel_heap` und nicht ueber
+  `fat32.readFile(...)` laeuft,
+- `module_file.zig` Range-Reads, Reserve/Commit/Release und Fehlerzaehler
+  zentral kapselt,
+- `DevTools/Scripts/Build.bat -norun` erfolgreich ist,
+- `DevTools/Scripts/Build.bat -test` erfolgreich ist,
+- das QEMU-Log kein `Program module file allocation failed` enthaelt.

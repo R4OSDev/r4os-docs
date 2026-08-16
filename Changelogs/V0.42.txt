@@ -1,0 +1,351 @@
+﻿*** Kernel Refactor Roadmap Leitbild ***
+In dieser Roadmap befassen wir uns im Verlauf mehrerer großer Versionen mit der säuberung des Kernels.
+Aktuell wurden viele Funktionen nach
+kernelold.zig ausgelagert und in src/old/ verschoben.
+Wir holen die nach und nach zurück in main.zig, kontrollieren dabei aber alles.
+Was aus dem Kernel raus kann soll in Software, Treiber und Protokolle untergebracht werden.
+Im Zuge dieses Refactor ist auch die Dokumentation zu aktualisieren und pflegen.
+
+Grundsatz fuer alle Unterversionen:
+- Keine halben Umbauten: Eine Unterversion ist erst erledigt, wenn Code, Imports, Doku, Version und Abnahme zusammenpassen.
+- Keine stillen Doppelpfade: Wenn eine Initialisierung nach `main.zig` wandert, darf sie nicht weiterhin produktiv in `kernelold.zig` laufen.
+- Boot-kritische Pfade muessen konservativ behandelt werden. Was fuer Boot, `C:\`, Speicher, Interrupts oder fruehe Ausgabe noetig ist, bleibt built-in, bis ein stabiler Ersatz existiert.
+- Kernel-Verschlankung ist ein ausdrueckliches Ziel. Fallbacks und parallele Built-in-Pfade werden nur genutzt, wenn sie fuer Boot-Stabilitaet, Migration oder echte Abnahme noetig sind.
+- Nicht bootkritische Treiber sollen nach erfolgreicher R4D-Auslagerung aus dem Kernel entfernt werden, statt dauerhaft als Built-in-Fallback liegen zu bleiben.
+- Jeder Umzug braucht klare Modulgrenzen: Boot-Schicht, Runtime-Core, Treiber, API und Diagnose duerfen nicht unkontrolliert vermischt werden.
+- Jede neue Boot-Schicht braucht eine klare Zustands- und Fehlersemantik: entweder erfolgreich initialisiert, sauber uebersprungen oder fatal beendet. Stilles Weiterlaufen nach kaputten Pflichtpfaden ist kein erledigter Zustand.
+- `kernelold.zig` darf waehrend der Migration nur noch als Legacy-Bruecke dienen. Neu umgezogene Initialisierungen muessen aus `kernelold.zig` verschwinden oder dort explizit als bereits initialisierter Zustand konsumiert werden.
+- Zwischenversionen duerfen lauffaehig klein sein, aber nicht fachlich halb: Keine Unterversion wird abgeschlossen, wenn Besitzgrenzen, Boot-Reihenfolge oder Abhaengigkeiten noch absichtlich unklar bleiben.
+- Eine Unterversion darf bewusst nur Vertrag, Diagnose oder Probe liefern,
+  wenn sie klar als nicht-produktiver Ersatz gekennzeichnet ist. Produktive
+  Umschaltung und Entfernen des Altpfads passieren erst nach echter
+  Funktionsabnahme.
+- Jede Pruefung endet mit einer Entscheidung. Ein Punkt bleibt offen, bis das
+  Ergebnis in Code, Doku oder als konkret versionierter Folgepunkt festgehalten
+  ist.
+- Testluecken werden vor dem Abschluss geschlossen. Vorhandene Testskripte
+  werden namentlich genutzt; wenn keines den neuen Vertrag abdeckt, gehoert
+  ein gezieltes Testskript zur Unterversion.
+- Diagnose-Altpfade duerfen nicht still im normalen Produktivpfad erreichbar
+  bleiben. Sie brauchen einen expliziten Diagnose-/Kompatibilitaetsvertrag,
+  sichtbare Statusausgabe und eine eigene Abnahme.
+- Vor jedem Abschluss wird gezielt nach Rest-Imports, Doppelaufrufen und verdeckten Abhaengigkeiten gesucht. Gefundene Altlasten werden entweder beseitigt oder in der Roadmap als bewusster Folgepunkt notiert.
+- Jede abgeschlossene Unterversion erhoeht `Injection/sys/CONFIG/VERSION.R4S` auf die passende Version und wird danach gepusht.
+- Mindestens `DevTools/Scripts/Build.bat -norun` gehoert zu jeder Code-Unterversion. Bei Boot-, IRQ-, Input-, Storage-, USB- oder R4D-Aenderungen gehoert `DevTools/Scripts/Build.bat -test` dazu.
+- GUI-/Hardware-nahe Punkte bekommen zusaetzlich eine klare manuelle Sichtabnahme durch den User, wenn QEMU-Smoke allein nicht reicht.
+
+-------------------------------------------
+Ab hier beginnen die Versionen und ab hier darf auch bereinigt werden.
+Das Refactor Leitbild muss bei einer Roadmap Bereinigung stehen bleiben
+-------------------------------------------
+
+Archivierte Roadmap 0.42.X - USB-HID-Bootschnitt
+-------------------------------------------
+Diese Datei archiviert den abgeschlossenen 0.42.X-Stand. Die aktive Roadmap
+wurde danach bereinigt; das Refactor-Leitbild bleibt in `Roadmap.txt` stehen.
+
+Rahmen fuer 0.42.X
+-------------------------------------------
+Ziel ist der naechste chronologische Besitzschnitt nach `network_boot`: die
+USB-HID-Boot-Initialisierung aus `kernelold.kmain()`. Der Block bleibt bewusst
+auf USB-HID begrenzt, weil Driver-Plan/R4D-Policy, R4P-Load, Task/Scheduler,
+DHCP-Boot-Acquire und Launcher jeweils eigene spaetere Besitzgrenzen sind.
+0.42.X ist kein Auslagerungsblock; der produktive USB-HID-Bootpfad bleibt
+zunaechst built-in und wird nur aus der Legacy-Bruecke herausgezogen.
+
+Umfang:
+- USB-HID-Boot-Initialisierung in eine neue Kernel-Boot-Orchestrierung
+  ueberfuehren, z.B. `kernel/usb_hid_boot.zig`.
+- `main.zig` ruft den neuen Bootschnitt nach `network_boot.init()` auf, bevor
+  `kernelold.kmain()` die verbleibenden spaeteren Legacy-Schritte ausfuehrt.
+- Der neue Bootschnitt besitzt den Driver-Registry-Besitz fuer `USBHID`:
+  `beginLoad("USBHID", ...)`, Status `initialized`, `active` oder `failed`
+  und eine klare Diagnose fuer "kein USB-HID-Bootgeraet gefunden".
+- Der neue Bootschnitt ist mehr als ein Durchreiche-Wrapper: Er besitzt
+  Vorbedingungen, Idempotenz, Statusmodell, Registry-Uebersetzung,
+  Bootlog-Ausgabe und sichtbare Bootstatus-Zeilen.
+- Fehlendes USB-HID bleibt nicht fatal. USB-HID ist ein Input-Erweiterungspfad;
+  PS/2 bleibt parallel der fruehe robuste Basispfad.
+- Der Bootschnitt dokumentiert und meldet seinen Zustand eindeutig:
+  initialisiert, uebersprungen, gebundenes Keyboard, gebundene Maus,
+  Setup-Warnungen, fehlender Endpoint, Fehler.
+
+Nicht Umfang:
+- Driver-Plan/R4D-Policy und `driver_plan.buildAndLoad(...)`.
+- `r4p.loadAll()` und R4P-Protokollstart. USBHID darf weiter Runtime-R4P fuer
+  Diagnose/Decode nutzen, aber 0.42.X zieht den R4P-Load nicht vor.
+- Task-/Scheduler-Start.
+- DHCP-Boot-Acquire.
+- Launcher-/Shell-Start.
+- Neue Auslagerungen nach R4D, R4X oder R4P. USB-HID bleibt fuer diesen Block
+  built-in, weil Eingabe, USB-Controllerzustand, Poll-Hooks und
+  Keyboard-/Mouse-Injection bootnah sind.
+- Ausbau der vorhandenen `HIDREPORT.R4P`-/`USBHID.R4P`-Rollen. Sie duerfen
+  weiter genutzt und abgegrenzt werden, aber 0.42.X verschiebt keine weitere
+  USB-HID-Logik aus dem Kernel.
+
+0.42.X gilt erst als belastbar abgeschlossen, wenn:
+- `kernelold.kmain()` keine direkten USB-HID-Initialisierer und keinen
+  `usb_hid`-Import mehr besitzt.
+- `kernelold.kmain()` erst mit Driver-Plan/R4D-Policy beginnt; USB-HID ist
+  vorher vollstaendig ueber `main.zig`/`usb_hid_boot` entschieden.
+- Der neue Bootschnitt erklaert und bildet alle eigenen Zustaende ab:
+  nicht gestartet, Abhaengigkeit fehlt, kein HID gefunden, Keyboard gebunden,
+  Maus gebunden, Keyboard+Maus gebunden, Warnung, Fehler.
+- USB-HID ohne xHCI, ohne HID-Geraet, nur Keyboard, nur Maus und
+  Keyboard+Maus stabil und sichtbar diagnostiziert wird.
+- Driver-Registry-Status fuer `USBHID` nach Erfolg, Fehlschlag und
+  "nicht vorhanden" reproduzierbar ist.
+- Kein R4P-Load, kein Scheduler und kein Launcher als verdeckte Abhaengigkeit
+  in den neuen Bootschnitt gewandert ist.
+- `old/program/command_runtime.zig`, `old/platform/device_inventory.zig` und
+  die USB-Diagnosen konsumieren den Zustand weiter korrekt; es gibt keine
+  zweite USB-HID-Wahrheit neben `usb_hid_boot`/`usb_hid.status()`.
+- Testluecken werden nicht als "bekannt" akzeptiert. Wenn ein USB-HID-Profil
+  nicht automatisiert pruefbar ist, wird es als konkrete manuelle Abnahme oder
+  Folgeversion festgehalten.
+- Mindestens `DevTools/Scripts/Build.bat -norun`,
+  `DevTools/Scripts/Build.bat -test` und ein gezielter USB-HID-Boot-Smoke
+  erfolgreich ausgefuehrt wurden. Falls noch kein passender Smoke existiert,
+  gehoert ein neues Testskript nach `DevTools/Scripts/TestScripts/`.
+
+Version 0.42.0
+-------------------------------------------
+Status: Erledigt
+
+Ziel:
+- USB-HID-Bootvertrag, Besitzgrenze und Abnahmematrix festlegen, ohne den
+  produktiven Init-Pfad bereits halb umzuschalten.
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Aktuellen USB-HID-Block in `kernelold.zig` und seine Abhaengigkeiten
+  inventarisieren: Driver-Registry, xHCI/USB-Core, Keyboard-/Mouse-Core,
+  R4P-Dispatch, Diagnosebefehle und Device-Inventory.
+- Inventar als belastbare Entscheidungsgrundlage festhalten, entweder in den
+  bestehenden Docs oder als gezieltes Test-/Audit-Skript. Reine Notizen im
+  Kopf zaehlen nicht.
+  Erledigt in `Docs/Core/UsbHidBoot042.txt`.
+- Bootposition verbindlich festlegen: nach `network_boot.init()` und vor
+  Driver-Plan/R4D-Policy.
+- Statusmodell fuer `usb_hid_boot` definieren:
+  nicht gestartet, Abhaengigkeit fehlt, initialisiert ohne HID, Keyboard
+  gebunden, Maus gebunden, Keyboard+Maus gebunden, Warnung, fehlgeschlagen.
+- Driver-Registry-Vertrag fuer jeden Status festlegen, inklusive der Frage, ob
+  "kein USB-HID-Geraet" als failed, uebersprungen oder sichtbar-inaktiv
+  erscheinen soll.
+- Klaeren, welche Zustaende fatal sind. Erwartung: fehlendes USB-HID ist nicht
+  fatal; kaputte Pflichtabhaengigkeiten vor dem Bootschnitt sind fatal.
+- Doku- und Testauswirkungen notieren, bevor produktive Aufrufe verschoben
+  werden.
+- Neues statisches Audit-Gate
+  `DevTools/Scripts/TestScripts/CheckUsbHidBoot042.zig` angelegt. Es prueft
+  Inventardoku, Roadmap, Version, Dokuanker, aktuelle USB-HID-Konsumenten,
+  vorhandene HID-R4P-Helfer und die aktuelle/eindeutige Bootbesitzgrenze.
+- `Docs/Core/KernelBereinigung.txt`, `Docs/Core/Architektur.txt` und
+  `Docs/README.txt` dokumentieren den 0.42.0-Vertrag.
+- Der produktive USB-HID-Init bleibt fuer 0.42.0 vollstaendig in
+  `kernelold.zig`; es gibt keinen halb verschobenen Aufruf.
+- Sichtbare Kernel-Version auf 0.42.0 gesetzt.
+
+Abnahme:
+- Rest-Import-Suche fuer USB-HID in `kernelold.zig` und konsumierende Module.
+- Abhaengigkeits- und Testmatrix fuer 0.42.1/0.42.2 ist konkret genug, dass
+  kein produktiver Umzug ohne passende Abnahme beginnt.
+- `git diff --check`.
+- `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckUsbHidBoot042.zig`.
+- `DevTools/Scripts/Build.bat -norun`.
+
+Notizen:
+0.42.0 ist bewusst kein produktiver USB-HID-Umzug. Der naechste Schritt ist
+0.42.1: `usb_hid_boot.zig` anlegen, aus `main.zig` starten und den direkten
+USB-HID-Init aus `kernelold.zig` entfernen.
+
+Version 0.42.1
+-------------------------------------------
+Status: Erledigt
+
+Ziel:
+- Produktiven USB-HID-Bootbesitz von `kernelold.zig` nach `main.zig`
+  ueberfuehren.
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `Code/src/kernel/usb_hid_boot.zig` mit idempotentem `init()`,
+  Statusabfrage und Bootlog-/sichtbarer Statusausgabe anlegen.
+- `main.zig` importiert und ruft `usb_hid_boot.init()` nach
+  `network_boot.init()` auf.
+- `kernelold.zig` verliert `usb_hid`-Import und direkten `usb_hid.init()`-
+  Block.
+- Der neue Bootschnitt prueft seine Vorbedingungen explizit und beendet nur
+  echte Pflichtverletzungen fatal. Normale Abwesenheit von USB-HID bleibt ein
+  sauberer Nicht-gefunden-Zustand.
+- Driver-Registry-Status bleibt fachlich gleichwertig zum alten Pfad:
+  aktive HID-Bindings werden aktiv, echte Init-Fehler werden failed,
+  nicht vorhandenes HID wird sichtbar, aber nicht fatal.
+- Doppelte Initialisierung wird verhindert und sichtbar diagnostiziert; ein
+  spaeterer Aufruf darf den alten USB-HID-Zustand nicht zuruecksetzen.
+- Kein Driver-Plan, kein R4P-Load, kein Scheduler und kein Launcher wandern in
+  diesen Bootschnitt.
+- Bestehende USB-/Input-Diagnosen kompilieren und bleiben fachlich mit dem
+  neuen Besitzschnitt konsistent.
+- Sichtbare Kernel-Version auf 0.42.1 setzen.
+- `DevTools/Scripts/TestScripts/CheckUsbHidBoot042.zig` auf den produktiven
+  Besitzschnitt erweitert: `main.zig` muss importieren und aufrufen,
+  `kernelold.zig` darf keinen direkten USB-HID-Init mehr besitzen, und
+  `usb_hid_boot.zig` darf keinen R4P-Load, Driver-Plan, Scheduler oder
+  Launcher vorziehen.
+
+Abnahme:
+- `git diff --check`.
+- `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckUsbHidBoot042.zig`.
+- `DevTools/Scripts/Build.bat -norun`.
+- `DevTools/Scripts/Build.bat -test`.
+- Rest-Import-Suche belegt, dass `kernelold.zig` keinen USB-HID-Initpfad mehr
+  enthaelt.
+
+Notizen:
+0.42.1 ist der produktive Besitzwechsel. `USBHID` wird nun vor
+`kernelold.kmain()` entschieden: aktiv bei gebundenem Keyboard/Maus-Pfad,
+initialisiert aber nicht aktiv bei "not found"/Warnpfaden und `failed` bei
+echten Bindfehlern. Der Boot bricht nur ab, wenn eine Pflichtabhaengigkeit der
+Bootreihenfolge fehlt.
+
+Version 0.42.2
+-------------------------------------------
+Status: Erledigt
+
+Ziel:
+- USB-HID-Bootstatus und negative/positive Pfade belastbar pruefen.
+
+Erledigt:
+- Bootlog-/DMESG-Ausgabe fuer USB-HID so haerten, dass Ursache und Ergebnis
+  ohne manuelles Nachverfolgen sichtbar sind: `outcome`, `registry_slot` und
+  `boot_continue` sind im Bootlog-Status vorhanden; die sichtbare
+  Konsolen-Diagnose zeigt zusaetzlich `continue=...`.
+- `DevTools/Scripts/TestScripts/Run-UsbHidBootTest.ps1` angelegt. Das Skript
+  baut reproduzierbare Test-Images, restauriert `TestInjection/AUTOEXEC.BAT`
+  und prueft Crash-Marker, Poweroff und USBHID-Statuszeilen.
+- Gezielt geprueft: kein xHCI, xHCI ohne HID, HID-Keyboard, HID-Maus,
+  HID-Keyboard+Maus und kombinierter Storage+Keyboard+Maus-Boot.
+- Positive HID-Pfade muessen sichtbar `USBHID ... [active]` melden; negative
+  Pfade muessen sichtbar `USBHID [not found]` melden und duerfen nicht als
+  `failed` enden.
+- Das Storage+Keyboard+Maus-Profil haengt ein zweites Systemimage als
+  USB-Storage an und prueft, dass `D:` als zweites Systemvolume sowie `E:` als
+  Datenvolume sichtbar werden, waehrend USBHID Keyboard+Maus aktiv bleibt.
+- `SYSINFO.R4X /TEST` prueft in den xHCI-Profilen den R4DEV-
+  Device-Inventory-Zugriff. Die direkte DEVMGR-/Legacy-Diagnoseausgabe ist
+  bewusst nicht als 0.42.2-Erfolg verbucht: externe COMMAND.R4X startet
+  GUI-DEVMGR nicht als Console-Dump, und alte Diagnosebefehle wie `USB`,
+  `USBGATE`, `USBREGRESS` und `USBHIDTEST` sind keine produktiven
+  COMMAND.R4X-Befehle mehr. Dieser Konsumentenrand gehoert zu 0.42.3.
+- Sichtbare Kernel-Version auf 0.42.2 setzen.
+
+Abnahme:
+- `git diff --check`.
+- `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckUsbHidBoot042.zig`.
+- `DevTools/Scripts/Build.bat -norun`.
+- `DevTools/Scripts/Build.bat -test`.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  DevTools/Scripts/TestScripts/Run-UsbHidBootTest.ps1`.
+
+Version 0.42.3
+-------------------------------------------
+Status: Erledigt
+
+Ziel:
+- R4P-/Runtime-Grenze und Diagnose-Konsumenten sauber gegen den neuen
+  USB-HID-Bootschnitt absichern.
+
+Erledigt:
+- Sicherstellen, dass `r4p.loadAll()` chronologisch spaeter bleibt und
+  USB-HID-Boot nicht heimlich vom R4P-Load abhaengt:
+  `usb_hid_boot` zieht weiterhin keinen R4P-Load vor.
+- Pruefen, ob USBHID nach spaeterem R4P-Load weiterhin Runtime-R4P fuer
+  Decode/Diagnose nutzen kann, ohne dass der Bootschnitt seinen Besitz
+  verliert: `SYSINFO.R4X /USBHID` laeuft erst nach Loader/R4P-Load und prueft
+  zugleich `USBHID`-Inventarbesitz und aktive `usb.hid_report`/
+  `usb.hid_boot`-R4P-Rollen.
+- `HIDREPORT.R4P` und `USBHID.R4P` bleiben vorhandene Runtime-Helfer. Diese
+  Unterversion erweitert sie nicht, sondern prueft nur, dass ihr spaeterer
+  Load den Bootbesitz nicht verwischt.
+- Den Diagnose-/Konsumentenrand nach 0.42.2 sauber entscheiden: externe
+  COMMAND.R4X-Befehle werden nicht aus alten `command_runtime.zig`-Kommandos
+  wiederbelebt. Der produktive Konsument fuer diesen Schritt ist das bereits
+  vorhandene SYSINFO-Konsolenprogramm im USB-HID-Selftestmodus.
+- Diagnose- und Inventar-Konsumenten gegen den neuen Statuspfad pruefen:
+  `old/platform/device_inventory.zig` liest weiter `usb_hid.status()` und
+  meldet fuer gebundene HID-Geraete `driver=USBHID`, `status=bound-input`
+  sowie `runtime R4P active`; `Run-UsbHidBootTest.ps1` prueft das in allen
+  xHCI-Profilen.
+- Sichtbare Kernel-Version auf 0.42.3 gesetzt.
+
+Abnahme:
+- `git diff --check`.
+- `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckUsbHidBoot042.zig`.
+- `DevTools/Scripts/Build.bat -norun`.
+- `DevTools/Scripts/Build.bat -test`.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  DevTools/Scripts/TestScripts/Run-UsbHidBootTest.ps1`.
+- `SYSINFO.R4X /USBHID` ersetzt fuer 0.42.3 die alten produktiven
+  `USBHIDTEST`-/`HIDREPORTTEST`-/`USB`-/`USBGATE`-Altbefehle und prueft den
+  neuen Bootbesitz ohne versteckte Altpfadannahmen.
+
+Version 0.42.4
+-------------------------------------------
+Status: Erledigt
+
+Ziel:
+- 0.42.X als belastbaren Besitzwechsel abschliessen, dokumentieren und fuer
+  den naechsten chronologischen Block vorbereiten.
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Rest-Imports, Doppelinitialisierung und verdeckte Abhaengigkeiten final
+  suchen: `kernelold.zig`, `main.zig`, `kernel/usb_hid_boot.zig`, USB-Core,
+  xHCI, Keyboard-/Mouse-Core, Device-Inventory, COMMAND-Diagnosen und R4P-
+  Vertraege.
+- `kernelold.zig` besitzt keinen `usb_hid`-Import, keinen direkten
+  `usb_hid.init()`-Aufruf und keinen `USBHID`-Registry-Besitz mehr.
+- `main.zig` startet `usb_hid_boot.init()` weiter nach `network_boot.init()`
+  und vor `kernelold.kmain()`; `usb_hid_boot.zig` zieht keinen R4P-Load,
+  Driver-Plan, Scheduler oder Launcher vor.
+- Der Shell-Launcher haengt nicht mehr als toter Quellimport an
+  `command_runtime.zig`; die dort verbliebenen `USB`, `USBHIDTEST`,
+  `HIDREPORTTEST`, `USBGATE` und `USBREGRESS` bleiben isolierte Legacy-
+  Diagnosen und werden nicht in COMMAND.R4X reaktiviert.
+- Externe COMMAND.R4X enthaelt keine produktiven USB-HID-Altbefehle. Der
+  produktive Konsument fuer diesen Block bleibt `SYSINFO.R4X /USBHID` mit
+  R4DEV-Device-Inventory und aktiven Runtime-R4P-Rollen.
+- Doku aktualisiert: Kernel-Bereinigung, Architektur, USB-HID-Inventar,
+  Treiberstand, Supported Hardware, Driver-README und Docs-README beschreiben
+  denselben Stand ohne Auslagerungsversprechen.
+- `DevTools/Scripts/TestScripts/CheckUsbHidBoot042.zig` auf den
+  Abschlussstand erweitert: Version 0.42.4, Roadmap-/Dokuanker,
+  Shell-Launcher-Grenze und produktive COMMAND-Grenze werden statisch
+  geprueft.
+- Sichtbare Kernel-Version auf 0.42.4 gesetzt.
+
+Abnahme:
+- `git diff --check`.
+- `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckUsbHidBoot042.zig`.
+- `DevTools/Scripts/Build.bat -norun`.
+- `DevTools/Scripts/Build.bat -test`.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  DevTools/Scripts/TestScripts/Run-UsbHidBootTest.ps1`.
+- Gezielte Rest-Import-Suche belegt, dass `kernelold.zig` keinen
+  USB-HID-Bootbesitz mehr hat.
+- Roadmap und Docs enthalten keine widerspruechlichen Aussagen zu
+  USB-HID-Boot, R4P-Helfern und nicht geplanter Auslagerung.
+
+Notizen:
+0.42.X ist damit als USB-HID-Besitzschnitt abgeschlossen. Nicht umgezogen
+werden Driver-Plan/R4D-Policy, R4P-Load, Task/Scheduler, DHCP-Boot-Acquire
+und Launcher; sie bleiben eigene spaetere chronologische Bloecke.

@@ -1,0 +1,1700 @@
+﻿R4OS 0.63.X - Update-Server-Infrastruktur
+===========================================
+
+Leitbild
+--------
+
+R4OS kann veroeffentlichte R4U-Systemupdates sicher anfragen und beziehen.
+SYSUPD bleibt ausschliesslich fuer VERIFY, APPLY, Recovery und Rollback
+zustaendig; der Server verteilt nie Dateien direkt in ein R4OS-Systemziel.
+
+0.63.0
+------
+
+Titel: Update-Server Grundstruktur
+Status: Erledigt
+
+Offene Punkte: -
+
+Erledigt:
+- Repository `R4OS_UpdateServer` angelegt.
+- Lokale Serverstruktur sowie Push- und Bootstrap-Deployment-Skripte angelegt.
+- Initialen Commit nach Gitea gepusht und den Bootstrap auf dem echten Server
+  ausgefuehrt.
+- Ports, externe Runtime-Verzeichnisse und die initiale IP-Policy als
+  versionsfreie Beispielkonfiguration festgelegt.
+
+Abnahme:
+- Push-Skript erstellt einen Commit und pusht nach Gitea.
+- Bootstrap klont oder aktualisiert den Server-Checkout und legt nur die
+  vorgesehenen Runtime-Verzeichnisse an.
+- Es werden keine Listener gestartet und keine Firewall-Regeln veraendert.
+
+Notizen:
+- Der echte Dienst folgt erst in den nachstehenden Unterversionen.
+- Blocklist und Allowlist sind Serverzustand ausserhalb von Git; Fail2Ban ist
+  hoechstens ein spaeterer Firewall-Zusatz, nicht die Datenwahrheit.
+
+0.63.1
+------
+
+Titel: Internes Update ControlCenter
+Status: Erledigt
+
+Offene Punkte: -
+
+Erledigt:
+- Web-ControlCenter auf `10.0.0.5:1337` implementiert.
+- Eingehende und veroeffentlichte R4U-Pakete mit Version, Groesse, SHA-256
+  und Validierungszustand sichtbar gemacht.
+- Persistente SQLite-Sicht auf Allowlist, Blocklist und Audit umgesetzt.
+- Gezieltes Entsperren mit Auditnotiz sowie atomare Paketveroeffentlichung
+  aus dem ControlCenter implementiert.
+
+Abnahme:
+- Port 1337 ist von ausserhalb des internen Netzes nicht erreichbar.
+- Das ControlCenter liest ausschliesslich den gemeinsamen Serverzustand und
+  entsperrt eine IP ohne den Releasebestand zu veraendern.
+- Lokale und serverseitige Handler-Abnahme gruen; Live-API liefert HTTP 200.
+
+Notizen:
+- Dienstbindung ist exakt `10.0.0.5:1337`; die zusaetzliche Firewall-Policy
+  bleibt Serverbetrieb.
+
+0.63.2
+------
+
+Titel: IP-Registrierung auf Port 1338
+Status: Erledigt
+
+Offene Punkte: -
+
+Erledigt:
+- TCP-Dienst auf `0.0.0.0:1338` mit konstantem Magic-Number-Vergleich gebaut.
+- Richtige Magic Number registriert die normalisierte TCP-Quell-IP und
+  antwortet mit `R4OS-AUTH OK`.
+- Falsche oder unvollstaendige Eingaben bleiben ohne Antwort, entfernen eine
+  vorhandene Freigabe und blockieren die IP fuer 24 Stunden.
+
+Abnahme:
+- Richtige Magic Number registriert genau die TCP-Quell-IP.
+- Eine falsche Eingabe liefert keine Antwort und erzeugt einen sichtbaren
+  Blocklist-Eintrag.
+- Unit-, Socket- und Live-Abnahme gruen.
+
+Notizen:
+- Fail2Ban ist nicht die fachliche Datenwahrheit; alle Sperren bleiben im
+  gemeinsamen SQLite-Zustand und sind im ControlCenter aufhebbar.
+
+0.63.3
+------
+
+Titel: Update-Gateway auf Port 1339
+Status: Erledigt
+
+Offene Punkte: -
+
+Erledigt:
+- Nginx-TLS auf Port 1339 vor dem lokalen Python-Upstream auf 8139 aktiviert.
+- JSON-Katalog sowie GET-/HEAD-/Range-Download fuer veroeffentlichte R4U-
+  Pakete implementiert.
+- Erste unbekannte Anfrage liefert HTTP 401 `Authenticate!`; die zweite im
+  15-Minuten-Fenster erzeugt Blocklist und HTTP 403.
+- R4U-Header, Manifest, ABI, Zielklassen, Payloadlayout, FNV-Pruefsummen und
+  SHA-256 werden vor atomarer Veroeffentlichung geprueft.
+
+Abnahme:
+- Eine Allowlist-IP kann nur vollstaendig veroeffentlichte Pakete sehen und
+  beziehen.
+- Eine nicht registrierte IP kann keine Paketbytes lesen.
+- Die zweite nicht registrierte Anfrage erzeugt einen nachvollziehbaren
+  Blocklist-Eintrag.
+- Acht Tests lokal und unter Python 3.13 auf dem Server gruen; echter
+  R4UPack-Vertrag, TLS-Livepfad, 401 -> 403, Entsperren und Freigabe abgenommen.
+
+Notizen:
+- Der R4OS-Client und sein Streaming-Download werden bewusst erst danach
+  eingeplant.
+- `r4os-update-server.service` ist aktiv und beim Boot aktiviert; Nginx- und
+  Dienstkonfiguration liegen als Quellen im UpdateServer-Checkout.
+
+0.63.4
+------
+
+Titel: Dreistufige Update-Server-Zugriffspolicy
+Status: Erledigt
+
+Offene Punkte: -
+
+Erledigt:
+- Port 1338 antwortet auf den gueltigen Magic Key exakt mit `OK`, traegt die
+  Quell-IP bei Bedarf in die Allowlist ein und setzt ihre 1339-Retries zurueck.
+- Jede andere Eingabe auf Port 1338 blockiert die Quell-IP fuer 24 Stunden und
+  bleibt ohne Antwort.
+- Port 1339 liefert fuer unbekannte IPs zuerst `STOP NOW!`, danach
+  `LAST CHANCE!` und blockiert beim dritten Versuch fuer 24 Stunden.
+- Der 1339-Retryzaehler bleibt bis zur erfolgreichen Authentifizierung, zum
+  Ban oder zum manuellen Entsperren erhalten.
+
+Abnahme:
+- Unit- und Socket-Tests pruefen beide Warnstufen, den dritten Ban, die
+  24-Stunden-Sperre und das Zuruecksetzen durch den gueltigen Magic Key.
+- Serverseitige Socket-Abnahme bestaetigt `OK`, Retry-Reset und
+  Allowlist-Zugriff; die laufende 1339-Instanz liefert beide Warnungen und den
+  dritten Ban exakt wie festgelegt.
+
+Notizen:
+- Port 1337 bleibt unveraendert und ist nur ueber den internen Tunnel
+  erreichbar.
+
+0.63.5
+------
+
+Titel: Antwortloser Ban auf den oeffentlichen Ports
+Status: Erledigt
+
+Offene Punkte: -
+
+Erledigt:
+- Port 1338 bleibt bei falschen Eingaben und fuer bereits gebannte IPs
+  vollstaendig antwortlos.
+- Nginx verwirft auf Port 1339 den internen Blockstatus und schliesst die
+  Clientverbindung beim dritten sowie bei jedem weiteren Versuch ohne
+  HTTP-Antwort.
+- `STOP NOW!` und `LAST CHANCE!` bleiben ausschliesslich dem ersten und zweiten
+  Versuch vorbehalten.
+
+Abnahme:
+- Serverseitige Tests pruefen den dauerhaften Nginx-Drop-Vertrag.
+- Die Live-Abnahme bestaetigt zwei HTTP-401-Warnungen und danach eine leere
+  Verbindung ohne HTTP-Status oder Antworttext.
+
+Notizen:
+- Der Block bleibt weiterhin 24 Stunden in SQLite bestehen; die
+  Firewall-Spiegelung durch Fail2Ban ist davon getrennt.
+
+0.63.6
+------
+
+Titel: Dynamischer Flooding-Schutz fuer Port 1339
+Status: Erledigt
+
+Offene Punkte: -
+
+Erledigt:
+- Ein threadsicheres rollendes Ein-Sekunden-Limit begrenzt Port 1339 pro
+  Quell-IP standardmaessig auf 60 Anfragen/s, auch fuer Allowlist-IP-Adressen.
+- Ueberzaehlige Anfragen werden vor Allowlist-, SQLite- und Paketarbeit
+  abgewiesen und von Nginx ohne oeffentliche Antwort verworfen.
+- Der Initialwert liegt zentral in `config/r4os-update-server.toml` und wird
+  beim ersten Start in die persistente SQLite-Settings-Tabelle uebernommen.
+- Das ControlCenter zeigt und aendert das Limit zwischen 1 und 10000
+  Anfragen/s ohne Dienstneustart; Aenderungen erscheinen im Audit.
+
+Abnahme:
+- Unit-Tests pruefen Pro-IP-Trennung, rollendes Zeitfenster, dynamische
+  Aenderung, Wertebereich und Persistenz ueber einen Neustart.
+- Handler- und Live-Abnahme pruefen das neue ControlCenter-Setting, exakt 60
+  erfolgreiche Anfragen und den antwortlosen Drop weiterer Anfragen.
+
+Notizen:
+- Das ist ein einfacher Anwendungsschutz vor Allowlist-Missbrauch. Ein
+  volumetrischer DDoS muss weiterhin vor der Serverleitung abgefangen werden.
+
+0.63.7
+------
+
+Titel: Tab-basiertes Neon-Blue ControlCenter
+Status: Erledigt
+
+Offene Punkte: -
+
+Erledigt:
+- Das ControlCenter in die Tabs Overview, Updatepacks, Access, Settings und
+  Audit Log aufgeteilt.
+- Overview mit kompakten Paket-, Allowlist-, Blocklist- und Gateway-Metriken
+  sowie sichtbarer Portpolicy umgesetzt.
+- Modernes responsives Hacker-Design mit dunklem Raster, Neon Blue,
+  Statusfarben, Scanlines und monospaced Typografie erstellt.
+- Publish, Unblock und Settings leiten nach der Aktion in den jeweils
+  passenden Tab zurueck; unbekannte Tabs fallen auf Overview zurueck.
+- Die bestehende JSON-API und alle Serverfunktionen bleiben unveraendert.
+
+Abnahme:
+- Handler-Tests pruefen alle Tabs, genau einen aktiven Navigationspunkt,
+  Inhaltsaufteilung, Fallback und Settings-Redirect.
+- Desktop- und schmale Browseransicht werden auf Lesbarkeit, Tabellenzugriff,
+  aktive Tabs und sichtbare Settings-Steuerung geprueft.
+
+Notizen:
+- Das Dashboard verwendet keine externen Assets oder Webfonts und bleibt im
+  internen Tunnel vollstaendig eigenstaendig.
+
+0.63.8
+------
+
+Titel: Betriebs- und Entwickleranleitung fuer den R4OS Server
+Status: Erledigt
+
+Offene Punkte: -
+
+Erledigt:
+- `Docs/Agents/Server.txt` als zentrale Referenz fuer lokale Repositories,
+  Serverbaum, Update-Dienst, Ports und Laufzeitdaten angelegt.
+- Den sicheren Weg vom R4U-Upload ueber die Validierung bis zur atomaren
+  Veroeffentlichung und den spaeteren Download dokumentiert.
+- Push-, Deployment-, Betriebs-, Diagnose- und Sicherheitsregeln erfasst.
+- Die Anleitung in AGENTS.md und im Dokumentationsinventar verlinkt.
+
+Abnahme:
+- Dokumentation gegen Konfiguration, Deployment-Skripte, Implementierung und
+  laufenden Serverzustand auf der internen IP abgeglichen.
+- JSON-Inventar, BOM-Konvention und Versionsstand geprueft.
+
+Notizen:
+- Geheimnisse und konkrete Magic Keys bleiben bewusst ausserhalb der
+  versionierten Dokumentation.
+
+0.63.9
+------
+
+Titel: Slim-, Full- und Test-Imagevertrag im R4MF
+Status: Erledigt
+
+Offene Punkte: -
+
+Erledigt:
+- `IMAGE_SCOPE=slim|full|test|none` ist die einzige Imagezuordnung; alte
+  Werte werden current-only abgewiesen.
+- ModuleCatalog, gemeinsamer Parser, SDK-Build, Imageplan, Generatoren und
+  Vorlagen verwenden denselben fail-closed Profilvertrag samt
+  Abhaengigkeitsabschluss.
+- Alle 151 In-Tree-Manifeste sind bewusst klassifiziert und ihre geaenderten
+  Modulversionen wurden erhoeht.
+- Der normale Build erzeugt Full, `-slim` erzeugt Slim und Testimage-Modi
+  erzeugen `slim + test`.
+- `Inventory/Modules.json` bleibt der vollstaendige Quellkatalog;
+  `MODULES.JSON` ist Schema 2, traegt das konkrete Profil und enthaelt exakt
+  die Module des jeweiligen Imageplans.
+- R4X-, R4L-, R4D- und R4P-Testfixtures werden ausschliesslich als zusaetzliche
+  Manifeste in denselben Plan eingespeist; feste Modullisten wurden entfernt.
+- New-R4XProject erzeugt Full standardmaessig, akzeptiert alle vier Scopes und
+  liefert eigenstaendig baubare Zig-/C-Projekte, deren lokale Builddateien nur
+  an Manifest und SDK delegieren.
+- R4MF-, R4M0-, SDK-, Build-, Anwendungs- und Inventardokumentation wurde an
+  Auswahlmatrix, Profilinventar und Standalone-Projektvertrag angepasst.
+
+Abnahme:
+- Katalog- und Imageplantests weisen bytegenau nach: Slim enthaelt nur
+  `slim`, Full genau `slim + full`, Test genau `slim + test` und `none`
+  erscheint in keiner Variante.
+- Slim-, Full- und Testimage bauen erfolgreich; fehlende Abhaengigkeiten,
+  unbekannte Werte und die alten Werte `normal` und `both` werden sichtbar
+  abgewiesen.
+- Jedes In-Tree-Manifest besitzt genau einen gueltigen neuen Scope, und kein
+  Modulziel erscheint doppelt in einem erzeugten Image.
+- Fuer jede Variante stimmen Profil sowie Identitaeten und Ziele aller
+  R4X-/R4L-/R4D-/R4P-Eintraege in der abgeleiteten `MODULES.JSON` exakt mit
+  dem erzeugten Imageplan ueberein; kein nicht installiertes Modul erscheint
+  im lokalen Anfangsinventar.
+- Inventartests weisen die neue Schemakennung nach und lehnen ein fehlendes,
+  unbekanntes oder nicht zum erzeugten Image passendes Profil ab.
+- `Docs/Agents/R4M0-Container.txt` erklaert den neuen Vertrag und alle
+  Auswahlmengen korrekt; `Inventory/Docs.json` ist aktualisiert.
+
+Notizen:
+- Optionale Full-Module werden nicht automatisch in Testimages aufgenommen.
+  Ein spaeterer ausdruecklicher Zusatzmechanismus ist nicht Bestandteil
+  dieser Unterversion und erzeugt keinen fuenften Scope-Wert.
+- `IMAGE_SCOPE` beschreibt Imagezugehoerigkeit, nicht Laufzeitabhaengigkeiten
+  oder die spaetere Installierbarkeit eines Moduls.
+- Abnahme 2026-08-09: Full 99, Slim 45 und Test 96 Module; Plan,
+  `MODULES.JSON` und Image-Zugaben waren je Profil identisch. Der Acceptance-
+  Gate bestaetigte Wegwerf-Zig/C-Projekte sowie die Pre-Write-Ablehnung von
+  ungueltigen, fehlenden und manipulierten Artefakten ohne Aenderung des
+  bestehenden `disk.img`.
+
+0.63.10
+-------
+
+Titel: Getrennte Release-, Kernel- und Komponenten-Versionierung
+Status: Erledigt
+
+Offene Punkte: -
+
+Erledigt:
+- Die zentrale fortlaufende R4OS-Releaseversion beibehalten. Sie folgt wie
+  bisher der abgeschlossenen Roadmap-Unterversion und identifiziert den
+  gemeinsam abgenommenen Release-Stand.
+- `VERSION.R4S` als einzige maschinenlesbare Wahrheit dieser Releaseversion
+  behalten, das bisher irrefuehrende Feld `KERNEL_VERSION` jedoch eindeutig
+  in `RELEASE_VERSION` umbenennen.
+- Im Kernelprojekt genau eine eigene maschinenlesbare semantische
+  Versionsquelle festlegen; sie wird nur geaendert, wenn sich das
+  Kernelartefakt aendert.
+- Die Kernelversion beim Build validieren und als selbstbeschreibenden
+  Metadatensatz in `r4os.elf` einbetten, damit Quellstand, Datei und laufender
+  Kernel nicht auseinanderlaufen koennen.
+- Die Version des LAUFENDEN Kernels ueber eine append-only R4DEV-Funktion und
+  die gemeinsame SDK-Fassade bereitstellen.
+- Den Kernel als eigene Inventarkomponente `KERNEL` mit Ziel
+  `/boot/r4os.elf` und derselben eingebetteten Version in `MODULES.JSON`
+  aufnehmen, ohne ihn faelschlich als R4M0-Modul auszugeben.
+- Die bestehenden eigenen R4M0-Modulversionen unveraendert als jeweilige
+  Komponentenwahrheit behandeln.
+- Desktop, Terminal und SYSINFO so umstellen, dass R4OS-Releaseversion und
+  laufende Kernelversion getrennt und eindeutig bezeichnet werden.
+- AGENTS-, Build- und Roadmapregeln festhalten: Jede abgeschlossene
+  Unterversion erhoeht die Releaseversion; Kernel- und Modulversionen steigen
+  nur, wenn sich das jeweilige Artefakt geaendert hat.
+
+Abnahme:
+- Ein Release mit Aenderungen an mehreren Modulen erhoeht die zentrale
+  Releaseversion, waehrend die unveraenderte Kernelversion gleich bleibt.
+- Build-, Runtime- und Inventartests weisen fuer denselben Kernel exakt
+  dieselbe Kernelversion in Versionsquelle, ELF-Metadaten, R4DEV und
+  `MODULES.JSON` nach.
+- Ein reiner R4X-, R4D-, R4P-, R4L-, Server- oder Dokumentationsschritt
+  erhoeht die Releaseversion, aber veraendert die Kernelversion nicht.
+- Ein auf Platte aktualisierter, aber noch nicht gebooteter Kernel ist als
+  `Restart required` vom weiterhin laufenden Kernelstand unterscheidbar.
+- Keine Anzeige oder API bezeichnet die Releaseversion als Kernelversion oder
+  umgekehrt.
+
+Notizen:
+- Die zentrale Releaseversion bezeichnet den gemeinsam freigegebenen
+  R4OS-Stand. Sie ist keine Artefaktversion und darf von jeder
+  Komponentenversion abweichen.
+- Der Kernel ist kein R4M0-Modul; nur Versions- und Inventarverhalten sind den
+  Modulen gleichgestellt.
+- Abnahme 2026-08-09: Full-Image mit 100 Komponenten erzeugt. Quelle,
+  ELF-Metadaten, R4DEV und MODULES.JSON melden den Kernel exakt als 0.1.0;
+  der fokussierte QEMU-Boot meldet Release 0.63.10, aktiven und installierten
+  Kernel 0.1.0 und schaltet kontrolliert ab.
+
+0.63.11
+-------
+
+Titel: Releasemanifest und komponentenbasierter R4U-Vertrag
+Status: Erledigt
+
+Offene Punkte: -
+
+Erledigt:
+- Ein Releasemanifest festlegen, das eine zentrale R4OS-Releaseversion und den
+  dazu freigegebenen Sollstand der Profile `slim`, `full` und `test`
+  verbindet.
+- Je Profil genau die Komponenten als erforderlich ausweisen, die dessen
+  Imagevertrag umfasst. Der lokale Profilwert aus `MODULES.JSON` entscheidet,
+  welcher Sollstand fuer das jeweilige Geraet einen Release abschliesst.
+- Unveraenderte Komponenten, insbesondere der Kernel, mit ihrer bisherigen
+  Version in den neuen Release-Stand uebernehmen.
+- Die bisherigen R4U-Felder `MIN_VERSION` und `TARGET_VERSION` durch eine
+  eindeutige Releasezuordnung sowie explizite Komponentenangebote und
+  Komponentenanforderungen ersetzen.
+- Die Releasezuordnung eines R4U dient der Gruppierung und Nachverfolgung,
+  niemals als Ersatz fuer technische Komponentenabhaengigkeiten.
+- Eine Paketversion nur als Version des R4U-Pakets fuehren und klar von
+  Release- und Komponentenversionen trennen.
+- `TITLE` und `DESCRIPTION` als verbindliche Paketmetadaten direkt in das
+  UTF-8-R4U-Manifest aufnehmen. Beide sind reiner Anzeigetext und Bestandteil
+  der Manifest- und Paketpruefsummen.
+- Fuer Titel und Beschreibung eindeutige Bytegrenzen sowie Plain-Text-Regeln
+  ohne NUL, Steuerzeichen oder Markup festlegen; R4UPack nimmt laengere
+  Beschreibungen sicher aus einer UTF-8-Datei entgegen.
+- Fuer jedes versionierte Payload `kind`, `name`, kanonisches Inventarziel,
+  angebotene Version und erlaubte Installationsart im Manifest binden.
+- Abhaengigkeiten ausschliesslich gegen konkrete Komponenten formulieren,
+  beispielsweise Kernel oder R4SYS mit einer Mindestversion.
+- Aus den enthaltenen Komponenten eine verbindliche Aktivierungs- und
+  Prioritaetsklasse ableiten. Kernel- und R4L-Pakete sind `foundation`,
+  verlangen einen Neustartabschluss und haben vor normalen Paketen Vorrang.
+- Bei Mehrkomponentenpaketen gilt immer die strengste enthaltene Klasse;
+  R4UPack, Server und SYSUPD leiten sie unabhaengig her und weisen eine
+  widerspruechliche Manifestangabe ab.
+- Komponentenanforderungen bei Bedarf zwischen `installed` und `active`
+  unterscheiden, insbesondere fuer einen bereits abgelegten, aber noch nicht
+  laufenden neuen Kernel.
+- SYSUPD gegen lokale R4M0-Metadaten, Kernel-ELF-Metadaten und das reparierbare
+  Inventar pruefen lassen, statt Releaseversionen als Kompatibilitaetsbeweis
+  zu verwenden.
+- Den lokalen Release-Stand erst auf die Zielreleaseversion setzen, wenn alle
+  erforderlichen Komponenten des Releasemanifests erfolgreich installiert
+  und verifiziert sind; einen Teilstand sichtbar als unvollstaendig fuehren.
+- Journal, VERIFY, APPLY und RESUME an Release-, Paket-, Komponentenbindung
+  und die bestehenden Payloadfingerabdruecke binden.
+- Konfigurations- und Datenpayloads ohne erfundene Modulversion erlauben, aber
+  ueber konkrete Komponentenabhaengigkeiten und Paketbindung absichern.
+- Technisch gueltige Downgrades in R4UPack und SYSUPD ausdruecklich erlauben.
+  Ob ein solches Paket verteilt wird, ist Release- beziehungsweise
+  Serverpolicy und keine Sperre des lokalen Installationsvertrags.
+
+Abnahme:
+- R4UPack- und SYSUPD-Tests pruefen Modul-, Kernel-, Konfigurations- und
+  Mehrkomponentenpakete mit eindeutiger Releasezuordnung und konkreten
+  Komponentenanforderungen.
+- Fehlende, zu lange, ungueltige oder manipulierte Titel und Beschreibungen
+  werden abgewiesen; gueltiges UTF-8 bleibt bytegenau erhalten.
+- Ein Release ohne Kernelaenderung erhaelt eine neue Releaseversion und
+  verweist weiterhin auf exakt dieselbe Kernelversion.
+- Ein nur teilweise installiertes Release darf sich lokal nicht als
+  vollstaendig erreichter Zielrelease-Stand ausgeben.
+- Fehlende oder zu alte konkrete Abhaengigkeiten, falsche Artefaktversionen
+  und manipulierte Komponentenmetadaten werden abgewiesen; ein bewusst
+  gebautes gueltiges Downgrade kann lokal VERIFY und APPLY durchlaufen.
+- Tests pruefen abgeleitete Foundation-Prioritaet, erzwungenen
+  Neustartabschluss, gemischte Pakete sowie installierte gegen aktive
+  Kernelanforderungen.
+- Alle bisherigen Journal-, Stromverlust-, Rollback- und Resume-Garantien
+  bleiben mit getrennten Release-, Paket- und Komponentenversionen erhalten.
+
+Notizen:
+- Eine Kernelanforderung ist nur erlaubt, wenn ein Paket technisch genau diese
+  Kernelversion braucht. Sie darf niemals nur aus der zentralen
+  Releaseversion abgeleitet werden.
+- Beispiel: Release `0.63.11` kann Kernel `0.4.2`, R4SYS `0.8.1` und R4NET
+  `0.6.0` enthalten. Der naechste Release darf Kernel `0.4.2` unveraendert
+  weiterverwenden.
+- Abnahme 2026-08-09: Vollbuild und fokussierter QEMU-Lauf gruen. Das
+  Releasemanifest bindet 0.63.11 an 46 Slim-, 100 Full- und 97
+  Testkomponenten; der unveraenderte Kernel bleibt 0.1.0. R4U2 prueft
+  Paketmetadaten, Komponenten, Anforderungen, abgeleitete Klassen,
+  Downgrades, geschuetzte Zustandsdateien und Journal-v3-Bindung.
+
+0.63.12
+-------
+
+Titel: Gemeinsame SYSUPD-Engine und Inventarpflege
+Status: Erledigt
+
+Offene Punkte: -
+
+Erledigt:
+- VERIFY/APPLY/RESUME/STATUS aus dem monolithischen SYSUPD-Frontend in eine
+  typisierte, gemeinsam verwendete Update-Engine ohne zweite Vertragswahrheit
+  ueberfuehren.
+- Eine typisierte Engine-Schnittstelle fuer spaetere Dienstaufrufer
+  bereitstellen und `SYSUPD.R4X` als Terminal-Frontend darauf erhalten; kein
+  Aufrufer muss Consoletexte auswerten.
+- Installation weiterhin paketweit, seriell und unter dem bestehenden
+  SYSLOCK-/Journal-/Recoveryvertrag ausfuehren.
+- VERIFY als seiteneffektfreie Engine-Operation im laufenden Betrieb
+  bereitstellen und nur vollstaendig veroeffentlichte Inbox-Pakete annehmen.
+- Die gemeinsame Update-Engine als einzigen Update-Schreiber fuer das lokale
+  `MODULES.JSON` festlegen. Desktop-App, UPDSVC und SYSUPD-Frontend duerfen
+  die Datei nicht jeweils selbst veraendern.
+- Das beim Voll-Build eingetragene Imageprofil bei Inventarupdates erhalten;
+  eine Modulinstallation oder Versionsaenderung darf es nicht still aus den
+  gerade vorhandenen Eintraegen neu ableiten.
+- Nach erfolgreichem Ersetzen eines Moduls Identitaet, Art, Ziel und Version
+  aus den tatsaechlich installierten R4M0-Metadaten lesen und den lokalen
+  Eintrag exakt anlegen beziehungsweise aktualisieren. Katalogangaben werden
+  niemals ungeprueft als installierter Stand uebernommen.
+- Die Inventaraktualisierung als durable, wiederaufnehmbare Abschlussphase
+  derselben Transaktion behandeln. `Installed` darf erst gemeldet werden,
+  wenn Artefakte und `MODULES.JSON` konsistent sind.
+- Kernelstaende entsprechend gegen die Kernel-ELF-Metadaten nachziehen; das
+  lokale `MODULES.JSON` niemals als R4U-Payload ausliefern.
+- Einen unterbrochenen Inventarnachlauf beim naechsten Start gegen die
+  installierten R4M0-Container und Kernel-ELF-Metadaten reparieren koennen.
+- Technisch gueltige Downgrades durch denselben VERIFY-/APPLY-Pfad fuehren;
+  der Inventareintrag uebernimmt auch dabei exakt die Artefaktversion.
+
+Abnahme:
+- Alle bestehenden SYSUPD-Vertrags-, Journal-, Resume- und Recoverytests
+  bleiben ohne Verhaltensregression gruen und laufen gegen die gemeinsame
+  Engine.
+- Terminal- und direkte Engine-Aufrufe koennen keine parallelen Transaktionen
+  starten; ein erfolgreicher Installationslauf aktualisiert Paket und
+  Inventar sichtbar.
+- Einzel-, Mehrkomponenten- und Downgradepakete weisen danach exakt die
+  eingebetteten Artefaktversionen in `MODULES.JSON` aus; nicht betroffene
+  Eintraege bleiben inhaltlich unveraendert.
+- Abbrueche vor, waehrend und nach der Inventarphase werden per RESUME oder
+  Recovery ohne falschen Erfolgsstatus zu einem konsistenten Stand gebracht.
+- Jede Inventaraktualisierung erhaelt das vom Voll-Build eingetragene
+  Imageprofil unveraendert.
+
+Notizen:
+- Versionen werden nicht rechnerisch erhoeht. Das Inventar uebernimmt immer
+  die verifizierte Version des wirklich installierten Artefakts.
+- Abnahme 2026-08-09: Hostvertraege und fokussierter QEMU-Lauf gruen. Der
+  Gast prueft Terminal-Downgrade und -Wiederaufstieg, ein Foundation-
+  Mehrkomponentenpaket, Abbrueche vor und nach dem Inventarcommit sowie das
+  unveraenderte `test`-Profil. Journal v4 bindet den internen Inventarschritt;
+  die bestehende Recoveryabnahme bleibt regressionsfrei.
+
+0.63.13
+-------
+
+Titel: Live-Aktivierung und journalisierter Neustart-Batch
+Status: Erledigt
+
+Offene Punkte: -
+
+Erledigt:
+- Die Paketaktivierung anhand des R4U-Vertrags in einen Live- und einen
+  Neustartpfad trennen; Download und VERIFY bleiben vorbereitend im laufenden
+  Betrieb moeglich.
+- Nur ein reines Anwendungsupdate live anwenden, wenn keine betroffene
+  Programminstanz laeuft und keine Abhaengigkeit auf einen ausstehenden
+  Neustart wartet. Andernfalls das Paket fuer den Neustartpfad stagen.
+- Kernel-, R4L-, Treiber-, Protokoll- und laufende Serviceupdates sowie alle
+  davon abhaengigen Pakete nie waehrend des normalen Betriebs aktivieren.
+- Fuer den Neustartpfad einen durablen Batch mit fest gebundenen Paketpfaden,
+  Hashes und Reihenfolge journalisieren. Vor dem Commit alle Pakete erneut
+  verifizieren und erst danach den exklusiven Update-Lock beziehen.
+- Den Batch zuerst topologisch nach konkreten Abhaengigkeiten und nur zwischen
+  gleichzeitig installierbaren Paketen nach Prioritaet ordnen. Kernel und R4L
+  bilden dabei die hoechste Klasse; Prioritaet darf nie eine Abhaengigkeit
+  verletzen.
+- Nach einem expliziten Commitauftrag den vorbereiteten Batch unter dem
+  Update-Lock vollstaendig anwenden und unmittelbar neu starten. Bei einem
+  Fehler nicht rebooten, sondern den Batch sichtbar resumierbar oder
+  recoverbar lassen.
+- Alte Artefakte und den vorherigen Inventarstand fuer den gesamten Batch bis
+  zur erfolgreichen Post-Boot-Pruefung gebunden behalten. Scheitert der
+  Commit vor dem Reboot, alle bereits angewendeten Pakete des Batches in
+  umgekehrter Reihenfolge zurueckrollen.
+- Nach Stromverlust zuerst ausschliesslich den journalgebundenen Batch
+  vorwaerts fortsetzen. Ist dessen vollstaendiger Commit nicht mehr beweisbar
+  oder moeglich, den gesamten Batch statt nur des letzten Pakets zurueckrollen.
+- Die Zustaende `Verifying`, `Installing`, `Installed`, `Failed`, `Staged`,
+  `Pending restart` und `Restart required` samt Fehlergrund und Fortschritt
+  ausgeben.
+- Nach einer Live-Installation den Sollstand des Zielrelease erneut pruefen.
+  Bei einem Neustart-Batch den Zielrelease zunaechst nur als ausstehend
+  journalisieren und erst nach dem naechsten Boot laufenden Kernel,
+  Artefaktinventar und Batchabschluss verifizieren.
+- `VERSION.R4S` und den Foundation-Status erst nach dieser Post-Boot-Pruefung
+  atomar auf Zielrelease beziehungsweise `Installed` setzen.
+
+Abnahme:
+- Laufende Anwendungen verhindern ihren Live-Replace; nicht laufende reine
+  R4X-Pakete koennen ohne Neustart vollstaendig installiert werden.
+- Abhaengigkeiten schlagen jede Prioritaet; zwischen gleichzeitig
+  installierbaren Paketen werden Kernel und R4L zuerst committed.
+- Stromverlust- und Fehlerproben an jeder Batchgrenze enden nach Recovery in
+  einem konsistenten, eindeutig fortsetzbaren Stand und loesen niemals einen
+  automatischen Neustart nach einem fehlgeschlagenen Commit aus.
+- Ein Fehler nach dem ersten von mehreren Paketen stellt Artefakte,
+  `MODULES.JSON` und Releasezustand des vollstaendigen Ausgangsbatches wieder
+  her; kein erfolgreiches Teilpaket bleibt ungebunden zurueck.
+- Vor erfolgreicher Post-Boot-Pruefung meldet das System weder den neuen
+  Zielrelease noch Foundation-Pakete als vollstaendig installiert.
+
+Notizen:
+- Der spaetere UPDSVC und das Terminal verwenden ausschliesslich die
+  typisierten Stage-, Commit-, Resume- und Statusoperationen dieser Engine.
+- Abnahme 2026-08-09: Hostgates, Vollbuild und fokussierter QEMU-Lauf gruen.
+  Der Gast installiert ein nicht laufendes R4X live, erkennt das laufende
+  SYSUPD exakt, ordnet einen Drei-Paket-Batch mit noch nicht installierter
+  Abhaengigkeit vor Foundation und schliesst ihn nach einem realen Reboot erst
+  in der Post-Boot-Pruefung als Release 0.63.13 und `Installed` ab.
+
+0.63.14
+-------
+
+Titel: Komponentenfaehiger Updatekatalog und Installationsvertrag
+Status: Erledigt
+
+Offene Punkte: -
+
+Erledigt:
+- Katalogschema v2 fuer R4OS-Releases mit zentraler Releaseversion,
+  Releasemanifest und atomaren Installationspaketen mit Paket-ID, Titel,
+  Dateiname, Groesse, SHA-256 und Rebootbedarf festlegen.
+- Je Installationspaket alle versionierten Komponenten mit `kind`, `name`,
+  `target`, angebotener Version und Installationsart ausweisen.
+- Den Katalog ausschliesslich aus freigegebenen Releasemanifesten und
+  validierten R4U-Manifesten erzeugen; keine zweite manuell gepflegte
+  Vertragswahrheit einfuehren.
+- `TITLE` und `DESCRIPTION` beim Einlesen eines R4U validieren, im
+  ControlCenter fuer eingehende und veroeffentlichte Pakete anzeigen und als
+  Paketmetadaten in den Katalog uebernehmen.
+- Abgeleitete Aktivierungs- und Prioritaetsklasse im ControlCenter anzeigen
+  und unveraendert als Katalogmetadaten an den Client uebertragen.
+- R4M0-Metadaten von Modulen und ELF-Metadaten des Kernels beim
+  Veroeffentlichen gegen die angebotenen Komponentenversionen pruefen.
+- Den Kernel als Komponente `KERNEL` abbilden; Konfigurations- und
+  Datenpayloads paketgebunden ohne erfundene Modulidentitaet ausweisen.
+- Abhaengigkeiten, Installationsreihenfolge, Rebootgrenzen und unveraenderliche
+  Release-Dateinamen verbindlich definieren.
+- ControlCenter und `/catalog` auf den neuen Vertrag erweitern und unbekannte
+  Schemas fail-closed behandeln.
+
+Abnahme:
+- Serverseitige Tests pruefen Einzelmodul-, Kernel-, Mehrkomponenten- und
+  Konfigurationspakete, falsche Artefaktversionen, doppelte Komponenten und
+  unaufloesbare konkrete Abhaengigkeiten.
+- Ein Roundtrip weist Titel und Beschreibung bytegenau vom R4U-Manifest ueber
+  Servercache, ControlCenter und Katalog-JSON nach; Oberflaechen behandeln
+  beide Felder ausschliesslich als escapten Plain Text.
+- Derselbe Roundtrip weist die serverseitig neu abgeleitete Aktivierungs- und
+  Prioritaetsklasse nach; manipulierte oder widerspruechliche Angaben werden
+  nicht veroeffentlicht.
+- Ein neuer Release mit unveraendertem Kernel weist im Katalog die neue
+  Releaseversion und weiterhin dieselbe Kernelversion aus.
+- Ein publiziertes Paket ist genau eine atomar installierbare Einheit; einzelne
+  Payloads eines Pakets sind nie separat als Update auswaehlbar.
+
+Notizen:
+- Ein Ein-Modul-R4U erscheint als einzelne Komponente. Ein technisch
+  untrennbares Mehrkomponenten-R4U erscheint als Gruppe mit gemeinsamer Aktion
+  und gemeinsamem Status.
+- Ein Release kann aus mehreren atomaren R4U-Paketen bestehen; erst der
+  vollstaendige erforderliche Sollstand erreicht die Zielreleaseversion.
+- Abschluss 2026-08-09: 24 lokale und serverseitige Tests pruefen R4U2,
+  Releasemanifest, Katalog, ControlCenter, Gateway und Deploymentvertrag.
+  Zusaetzlich wurden echte von R4UPack erzeugte Einzel- und
+  Kernel-/R4L-Mehrkomponentenpakete gegen ihre Artefaktmetadaten gelesen.
+- UpdateServer-Commit `0e71149` wurde ueber die interne IP auf
+  `/root/R4OS/UpdateServer` deployt. Checkout und Dienst laufen auf diesem
+  Stand; Nginx sowie die Listener 1337, 1338 und 1339 sind aktiv und der
+  ControlCenter-Zustand meldet Schema 3 ohne Katalogfehler.
+
+0.63.15
+-------
+
+Titel: Streaming-HTTPS-Downloadpfad im SDK
+Status: Erledigt
+
+Offene Punkte: -
+
+Erledigt:
+- Die gemeinsame `App.web()`-Fassade um einen begrenzten Streaming-Download
+  mit caller-owned Puffern beziehungsweise durablem Dateisink erweitern.
+- TLS-Zertifikatspruefung, GET/HEAD, Content-Length, 206 Content-Range, 416,
+  Abbruch, Timeout, Fortschritt und einen einzelnen Range-Resume abbilden.
+- Grosse Antworten direkt schreiben, statt ein vollstaendiges R4U im Speicher
+  oder im bisherigen begrenzten Fetch-Body zu sammeln.
+- Redirects und Zielwechsel nur nach dem bestehenden Autorisierungsvertrag
+  zulassen; keine private TCP-, HTTP- oder TLS-Implementierung im Updater.
+
+Abnahme:
+- SDK- und R4HTTP/R4TLS-Tests pruefen grosse Bodies, kurze Reads, Disconnect,
+  Resume, falsche Content-Range, falsches Zertifikat und expliziten Abbruch.
+- Ein mehrstelliges Megabyte-R4U wird mit konstant begrenztem Arbeitsspeicher
+  bytegenau in einen Dateisink geschrieben.
+
+Notizen:
+- Der vorhandene synchrone Komplettabruf bleibt fuer kleine Antworten wie den
+  JSON-Katalog bestehen; Paketdownloads verwenden ausschliesslich Streaming.
+- Abschluss 2026-08-10: Der gemeinsame HTTP-Kern streamt Content-Length mit
+  begrenztem Headerpuffer und validiert 206/416 samt Content-Range. Der
+  `DownloadSink` bindet jedes Segment an seinen absoluten, dauerhaft
+  uebernommenen Offset;
+  GET/HEAD, erwartete Groesse, Stop, Fortschritt, Redirect-Policy und genau
+  ein globaler Range-Resume sind Teil von `App.web().download`.
+- Fetch und Download verwenden dieselben extrahierten R4TLS-Session-,
+  Application-Write- und Application-Read-Funktionen. R4HTTP 0.1.2 weist den
+  Streamingvertrag auch im Protokoll-Selbsttest aus.
+- Abnahme: 11 HTTP-Kerntests und 33 SDK-Webtransporttests gruen. Ein
+  deterministischer 11-MB-R4U2-Fixturebody durchlaeuft mit 16-KB-Header- und
+  4093-Byte-I/O-Puffer bytegenau den Offset-Sink. Das Dauergate baut
+  zusaetzlich R4HTTP, R4TLS und Klickifax und prueft die negativen
+  Zertifikatsfaelle.
+- Der abschliessende selektive Modulbuild hat das zentrale Imageartefakt neu
+  erzeugt; dessen eingebettete R4M0-Identitaet ist `R4HTTP 0.1.2`. Das danach
+  erzeugte Full-Image und Releasemanifest enthalten 100 Komponenten und
+  weisen ebenfalls `R4HTTP 0.1.2` aus.
+
+0.63.16
+-------
+
+Titel: UPDSVC-Grunddienst und Clientvertrag
+Status: Erledigt
+
+Offene Punkte: -
+
+Erledigt:
+- `UPDSVC.R4X` als eigenstaendigen Slim-R4X-Service unter
+  `Code/System/Software/UpdateService/` mit manuellem Start bis zur
+  Desktopintegration angelegt.
+- Server, Ports, Magic Key, Kanal, Timeouts und Redirect-Policy in die
+  nicht einkompilierte `C:\R4OS\CONFIG\UPDATE.R4S` ausgelagert.
+- Den versionierten UPDSVC-v1-Wirevertrag fuer Status, Search, Download,
+  Install, Update All, Cancel und Ergebnisse im SDK festgelegt.
+- Einen dienstweiten Coordinator, genau einen ProgramThread-Worker, durable
+  Auftragsannahme, Job-gebundenen Abbruch und Neustartrekonstruktion
+  umgesetzt.
+- Installation direkt an `system_update_engine.Engine.stage` gebunden; es
+  existiert kein SYSUPD-Prozess-, Ausgabe- oder zweiter Manifestpfad.
+
+Abnahme:
+- Servicevertragstests pruefen Register/Open/Call/Close, parallele Aufrufer,
+  Busy-, Cancel- und Neustartverhalten sowie unbekannte Operationen.
+- Mehrere geoeffnete Clients koennen keine parallelen Updateablaeufe oder
+  mehrfachen 1339-Fehlversuche erzeugen.
+- Gleichzeitige Terminal- und Dienstaufrufe werden durch denselben Engine-Lock
+  serialisiert und koennen keinen zweiten Commit oder Neustart-Batch anlegen.
+
+Notizen:
+- Die Trennung zwischen Dienst und Desktop-App ist eine Lebenszyklus-, keine
+  Sicherheitsgrenze; R4OS bleibt single-user und fully trusted.
+- Enthaelt ein Paket UPDSVC selbst, muss es einen Neustart verlangen. Der
+  Dienst versucht niemals, sich selbst zu stoppen oder neu zu starten.
+- Abschluss 2026-08-10: Wirevertrag und Coordinator bestehen sieben
+  Unittestfamilien. Acht parallele Aufrufer erzeugen genau einen Auftrag;
+  das Register/Open/Call/Close-Modell, Busy, Cancel, Restart und unbekannte
+  Operationen sind abgedeckt. Das Dauergate baut das eigenstaendige
+  `UPDSVC 0.1.0`; der regulaere selektive Build pruefte den auf 152 Manifeste
+  gewachsenen Katalog und erzeugte das zentrale aktuelle R4X-Artefakt.
+- Search, Download und Update All sind absichtlich bereits versioniert, aber
+  bis 0.63.17, 0.63.18 beziehungsweise 0.63.20 noch `not-ready`.
+
+0.63.17
+-------
+
+Titel: Updatesuche und lokaler Inventarabgleich
+Status: Erledigt
+
+Offene Punkte: -
+
+Erledigt:
+- Die Suche authentifiziert genau einmal ueber Port 1338 und greift erst nach
+  `OK` ueber HTTPS auf Port 1339 zu; Serverwarnungen brechen sichtbar ab.
+- Katalog v2 wird strikt, groessenbegrenzt und ueber das vorhandene JSON.R4P
+  gelesen; die SDK-Auswertung besitzt keine zweite produktive JSON-Wahrheit.
+- Release-, Modul- und aktive Kernelversion werden getrennt gelesen und als
+  lokaler Installationsstand ausgewertet.
+- Profil, Komponentenidentitaeten, semantische Versionen, Anforderungen,
+  Abhaengigkeiten und Installationsreihenfolge werden deterministisch
+  validiert und verglichen.
+- Der Dienst liefert nur echte Upgrades installierter oder fehlender
+  profilpflichtiger Komponenten und unterdrueckt optionale Neuinstallationen
+  sowie Pakete mit Downgrades.
+- Der versionierte Ergebnisendpunkt liefert das Zielrelease und die
+  vollstaendigen Paketangebote einschliesslich Titel, Beschreibung, Hash,
+  Groesse, Aktivierungsart und Komponenten.
+
+Abnahme:
+- Tests pruefen kein Update, ein Update, mehrere Versionen, fehlende lokale
+  Komponenten, gleichnamige Modularten, unerfuellte konkrete Anforderungen,
+  Abhaengigkeiten und unbekannte Katalogfelder.
+- Profiltests pruefen Slim-, Full- und Test-Sollstaende, die Reparatur eines
+  fehlenden Pflichtmoduls und das Ausblenden nicht installierter optionaler
+  Komponenten sowie niedrigerer angebotener Versionen.
+- Ein neuer R4OS-Release mit unveraendertem Kernel wird korrekt anhand seiner
+  geaenderten Module erkannt.
+- Ein installierter neuer Kernel wird vor dem Neustart als `Restart required`
+  erkannt, ohne ihn bereits als laufenden Kernel auszugeben.
+- Eine erfolgreiche erneute Authentifizierung setzt den serverseitigen
+  1339-Versuchszaehler zurueck, ohne dass der Client die Warnkette ausreizt.
+
+Notizen:
+- `MODULES.JSON` ist der schnelle veraenderliche Installationsstand. Weicht es
+  vom Artefakt ab, bleiben R4M0- beziehungsweise Kernel-ELF-Metadaten die
+  jeweilige Komponentenwahrheit.
+- `VERSION.R4S` bezeichnet nur einen vollstaendig erreichten Release-Sollstand
+  und ersetzt niemals den Einzelvergleich der Komponenten.
+- Abschluss 2026-08-10: 13 Katalog- und Inventartests sowie drei
+  Vertragstests sind gruen. Das Dauergate baut `UPDSVC 0.1.1`; der komplette
+  Full-Build erzeugte ein Image fuer Release 0.63.17 mit 101 Komponenten.
+
+0.63.18
+-------
+
+Titel: Paketdownload, Resume und Integritaet
+Status: Erledigt
+
+Offene Punkte: -
+
+Erledigt:
+- Operation 3 an Suchjob und stabilen Ergebnisindex gebunden; freie URLs oder
+  Paketnamen des Aufrufers werden nicht akzeptiert.
+- Den unveraenderlichen Downloadsatz mit Paketidentitaet, Release, URL,
+  Groesse, SHA-256, Zustand und Fortschritt persistent gemacht und aktive
+  Auftraege nach einem Dienstneustart rekonstruiert.
+- R4U-Daten ausschliesslich unter `.PART` gestreamt und vorhandene plausible
+  Teilstaende ueber den zentralen HTTP-Range-Transport fortgesetzt.
+- Unpassende Range-, Groessen- und Objektstaende verworfen; Netzabbrueche und
+  explizite Abbrueche behalten nur einen plausiblen Teilstand.
+- Exakte Endgroesse und streaming SHA-256 vor der create-only atomaren
+  Veroeffentlichung des finalen `.R4U` geprueft.
+- Paketstatus und Fortschritt im Status- und Ergebnisvertrag sichtbar
+  gemacht; neue Suchen erkennen bereits verifizierte Inbox-Pakete erneut.
+
+Abnahme:
+- QEMU-/Fixture-Tests unterbrechen den Download an mehreren Bytegrenzen,
+  starten den Dienst neu, verbinden den Testaufrufer erneut und verlangen am
+  Ende ein bytegleiches R4U.
+- Beschaedigte, zu kurze, zu lange oder serverseitig gewechselte Pakete werden
+  nie unter einem finalen `.R4U`-Namen veroeffentlicht.
+
+Notizen:
+- Veroeffentlichte Serverpakete bleiben unveraenderlich. SHA-256 ist die
+  abschliessende Bindung eines fortgesetzten Downloads.
+- Abschluss 2026-08-10: Das 11-MB-Neustartfixture ist an fuenf Bytegrenzen
+  bytegleich und SHA-256-identisch. Kurze, lange, korrupte und gewechselte
+  Objekte erhalten keinen finalen Namen. Alle Host-Gates, der vollstaendige
+  Build und das abschliessende selektive UPDSVC-/Image-Repack sind gruen;
+  Release 0.63.18 enthaelt `UPDSVC 0.1.2` im Full-Image mit 101 Komponenten.
+
+0.63.19
+-------
+
+Titel: R4OS Update Desktop-Anwendung
+Status: Erledigt
+
+Offene Punkte: -
+
+Erledigt:
+- `UPDATE.R4X` 0.1.0 als eigenstaendige, manifestgetriebene Full-
+  Desktop-Anwendung unter `Code/System/Software/UpdateCenter/` angelegt.
+- Sichtbare Suche, Verbindungs-, Such- und Fehlerstatus sowie paketgebundene
+  Download-/Install-Schaltflaechen ausschliesslich ueber UPDSVC umgesetzt.
+- Pakete zeigen Manifesttitel und -beschreibung, Paketgruppe, Paketversion,
+  Aktivierungsart, Foundation-Prioritaet, Zustand und Bytefortschritt.
+- Operation 8 und paginierte Komponentenseiten liefern Name, Art, Ziel,
+  installierte und angebotene Version; beim Kernel wird die laufende Version
+  getrennt dargestellt.
+- Aktuelle und angebotene Releaseversion bleiben von allen
+  Komponentenversionen getrennt.
+- Alle vereinbarten Zustaende samt Buttonpolicy umgesetzt; Neustartpakete
+  enden sichtbar in `Staged` beziehungsweise `Pending restart`.
+- Installierte Sitzungsresultate bleiben bis zur naechsten Suche erhalten.
+- Wiederanbindung ueber Suchjob und Ergebnisindex umgesetzt; Fensterschluss
+  schliesst nur den Handle und sendet nie Cancel. Mehrdeutige Timeouts werden
+  durch weiteres Statuspolling aufgeloest.
+- Automatisches 0.63.19-Gate mit Modell-, Wire-, Grenz-, Wiederanbindungs- und
+  Standalone-R4M0-Tests angelegt und in den zentralen Build aufgenommen.
+- Vollstaendiger `Build.bat -norun`, gezielter UPDATE-Nachbau und erneuter
+  Full-Imagebau erfolgreich; UPDATE und UPDSVC stehen im Imageplan und in der
+  abgeleiteten MODULES.JSON.
+- Fehlenden manuellen UPDSVC-Eintrag in SERVICES.R4S nach dem ersten Sichtlauf
+  ergaenzt, im Dienstgate abgesichert und das Full-Image erneut erzeugt.
+- Ersten Live-Suchfehler eingegrenzt: Der Server authentifizierte korrekt,
+  waehrend UPDSVC ein vorlaeufiges R4NET-`would-block` als fehlende Antwort
+  abbrach. ASCII-Zeilenframing und begrenztes Warten bis zur Auth-Deadline in
+  UPDSVC 0.1.4 umgesetzt; der Server haelt `OK` bis zum Clientabschluss offen.
+- Zweiten Live-Suchfehler auf den 50-ms-Timeout eines aufgeschobenen
+  TCPSVC-Reads eingegrenzt. Dieser Zwischenzustand wird in UPDSVC 0.1.5 wie
+  `would-block` bis zur absoluten Auth-Deadline weitergefuehrt.
+- Den anschliessenden HTTPS-Abbruch vor dem ersten Nginx-Request auf dieselbe
+  falsche Timeoutdeutung im gemeinsamen Webtransport zurueckgefuehrt. Der
+  zentrale TLS-/HTTP-Lesepfad fuehrt `would-block` und interne TCPSVC-Timeouts
+  nun unter einer absoluten Aufruferdeadline weiter; das bestehende
+  Let’s-Encrypt-ECDSA-Zertifikat bleibt der produktive Abnahmefall. Die
+  betroffenen Artefakte werden als UPDSVC 0.1.6, KLICKIFAX 0.29.2 und
+  KFXLIVE 0.2.7 versioniert.
+- Da der Livefehler danach weiterhin vor dem ersten HTTP-Request lag, gibt
+  UPDSVC 0.1.7 den konkreten `app_web.Error` im Auftragsstatus aus, statt
+  DNS-, TCP-, TLS- und Zertifikatsfehler als `catalog-network-failed`
+  zusammenzufassen.
+- Der dadurch sichtbare Fehler `request_too_large` lag an vorformatierten
+  CRLF-Wireheadern am sicheren `app_web`-Headervertrag. UPDSVC 0.1.8 nutzt
+  fuer Katalog und Paketdownload das erwartete `name:value`-plus-LF-Format;
+  erst die zentrale Web-Fassade erzeugt daraus HTTP-Wirezeilen.
+- Den folgenden Livefehler `tls_certificate_rejected` auf eine falsche
+  TLS-1.2-Annahme in R4TLS eingegrenzt: Nginx signiert mit SHA-384 und seinem
+  gueltigen P-256-Zertifikat. R4TLS 0.2.5 entkoppelt ECDSA-Hash und
+  Zertifikatskurve und prueft P-256/P-384 mit SHA-256/SHA-384 allgemein.
+- `LAST CHANCE!` danach als getrennte Quell-IP-Pfade erkannt: 1338 lief zur
+  internen Adresse ueber Twingate, 1339 zum oeffentlichen Host. UPDSVC 0.1.9
+  loest nun fuer beide Ports `r4os.r4server.eu` auf und lehnt Konfigurationen
+  ab, in denen `SERVER` und der Host von `CATALOG_URL` auseinanderlaufen.
+- Manuellen Full-Image-Sichttest abgeschlossen: UPDSVC startet, UPDATE.R4X
+  sucht ueber den produktiven oeffentlichen 1338/1339-Pfad, authentifiziert
+  dieselbe Quell-IP, validiert das ECDSA-Zertifikat und zeigt bei leerem
+  Katalog `R4OS is up to date`.
+
+Abnahme:
+- GUI-Tests pruefen leere, kurze und lange Listen, Paketgruppen, alle Status,
+  Fortschrittswechsel, Fehlertexte, Buttonzustand und erneutes Oeffnen.
+- Ein einzelner Update-Button fuehrt genau die zugehoerige atomare R4U-Einheit
+  je nach Aktivierungsart bis `Installed`, `Pending restart` oder zu einem
+  sichtbaren Fehler.
+- Automatische Abnahme, Produktbuild und manueller GUI-/Netzwerksichttest sind
+  gruen.
+
+Notizen:
+- Einzelne Payloads eines Mehrkomponentenpakets erhalten keinen irrefuehrenden
+  eigenen Installationsbutton.
+- Abschluss 2026-08-10: Release 0.63.19 enthaelt UPDATE 0.1.0, UPDSVC 0.1.9
+  und R4TLS 0.2.5; der produktive Leerkatalog wurde erfolgreich erreicht.
+
+0.63.20
+-------
+
+Titel: Update All, Neustartabschluss und Startmenue
+Status: Erledigt
+
+Offene Punkte: -
+
+Erledigt:
+- Den UPDSVC-Vertrag um snapshotgebundene `Update All`- und `Restart`-
+  Auftraege erweitert. Der Suchjob bleibt die unveraenderliche Listen- und
+  Auswahlwahrheit der ganzen Queue.
+- Einen dreiphasigen seriellen Ablauf umgesetzt: alle Pakete herunterladen
+  und per Katalog-SHA-256 pruefen, alle R4U ueber die gemeinsame Engine
+  verifizieren, erst danach in Planreihenfolge live anwenden oder gemeinsam
+  stagen. Der erste Fehler stoppt; bereits erreichte Zustaende bleiben fuer
+  den erneuten Versuch erhalten.
+- Den vorhandenen Engine-Batchvertrag direkt genutzt: Abhaengigkeiten schlagen
+  Foundation-Prioritaet, gleich installierbare Kernel/R4L werden vor normalen
+  Paketen geordnet, und ohne expliziten Commit bleibt der Batch vorbereitet.
+- Reine Live-Releases werden erst nach erneutem Inventar-/Katalogabgleich mit
+  einer journalisierten `confirmLiveRelease`-Transaktion bestaetigt.
+  Neustartreleases erhalten `VERSION.R4S` erst durch `resumeBatch` nach Boot.
+- UPDATE 0.2.0 um `Update All` und den nur bei vollstaendig vorbereitetem
+  Batch sichtbaren `Restart R4OS`-Button erweitert. UPDATE traegt jetzt Icon,
+  Helpfile und Slim-Scope.
+- `R4OS Update` in `MENU.R4S` und im Desktop-Fallback als ersten Eintrag vor
+  `Programs` aufgenommen; R4DESK auf 0.1.6 erhoeht.
+- UPDSVC 0.2.0 in `SERVICES.R4S` und seinem Manifest auf Autostart gesetzt;
+  Post-Boot-Abschluss erfolgt damit automatisch ueber die gemeinsame Engine.
+- Dokumentation, Dauergates und abgeleitete Modul-/Releaseinventare gepflegt.
+
+Abnahme:
+- Tests pruefen Reihenfolge, Teilerfolg, Fehlerstopp, erneuten Versuch,
+  Rebootaggregation, optionalen Neustart und eine unveraenderte Liste waehrend
+  eines laufenden Update-All-Auftrags.
+- Abhaengigkeiten schlagen jede Prioritaet; unter gleich installierbaren
+  Paketen werden Kernel und R4L vor normalen Komponenten committed.
+- Ohne Klick auf `Restart R4OS` bleiben Foundation-Pakete nur vorbereitet.
+  Ein fehlgeschlagener Batch-Commit rebootet nicht und meldet keinen
+  installierten Zielrelease.
+- Desktop-Abnahme bestaetigt `R4OS Update` als ersten sichtbaren Eintrag ganz
+  oben im Startmenue und den erfolgreichen GUI-Start.
+- `Run-UpdateServiceContract06316.ps1`,
+  `Run-UpdateCenter06319.ps1`, das Engine-/Inventargate, das Batchgate und die
+  17 Desktop-Menue-/Modelltests sind gruen. Der Standalone-Build bestaetigt
+  UPDATE mit zwei Ressourcen und alle drei geaenderten R4X-Artefakte.
+- `DevTools/Scripts/Build.bat -all` ist mit allen Host-Gates, 153 Manifesten,
+  Full-Imageplan und erzeugtem `Release/disk.img` erfolgreich abgeschlossen.
+
+Notizen:
+- Ein Reboot wird nur angeboten, wenn mindestens ein erfolgreich installiertes
+  oder vollstaendig vorbereitetes Paket ihn verlangt und der aktuelle Auftrag
+  nicht mehr arbeitet.
+- Abschluss 2026-08-11: Die produktiven Queue- und UI-Vertraege stehen. Der
+  echte Mehrpaket-/Neustartlauf bleibt bewusst Teil der isolierten
+  End-to-End-Abnahme 0.63.21.
+
+0.63.21
+-------
+
+Titel: Isolierte Update-End-to-End-Abnahme
+Status: Erledigt
+
+Offene Punkte: -
+
+Erledigt:
+- Einen isolierten Fixture-Updateserver mit eigener IP-/Blocklist und
+  reproduzierbaren echten R4U2-Katalogen fuer Host- und QEMU-Tests erstellt.
+- Die gesamte Kette Magic Key, Katalog, Inventarvergleich, Einzelupdate,
+  Download, Resume, SHA-256, SYSUPD VERIFY/APPLY und Statuswechsel geprueft.
+- Titel und Beschreibung auf dem Weg vom gepackten R4U bis zur sichtbaren
+  Paketliste des Clients bytegenau und escaped geprueft.
+- Update All mit Einzelmodulen, Paketgruppe und Systempaketen geprueft.
+- Ein nicht laufendes reines R4X live aktualisieren sowie einen getrennten
+  Foundation-Batch aus Kernel, R4L und abhaengiger Anwendung bis zum
+  bestaetigten Neustart und Post-Boot-Inventar geprueft.
+- Negative Faelle fuer falschen Key, 401-Warnung, Katalogfehler, TLS-Fehler,
+  Downloadabbruch, falschen Hash, inkompatibles Paket und APPLY-Abbruch in
+  isolierten Servertests und bestehenden Dauergates abgedeckt.
+- Fehler und Stromverlust vor dem Batch, zwischen Foundation-Paketen und vor
+  dem Reboot durch die bestehenden tiefen SYSUPD-Gates abgedeckt; der echte
+  Transportlauf rebootet erst nach dem vollstaendigen expliziten Commit.
+- Reboot und anschliessenden Kernel-, Inventar-, Service- und GUI-Stand im
+  gestarteten Zielsystem sowie eine leere Folgesuche nachgewiesen.
+- UPDSVC auf 0.2.1 erhoeht: private deterministische 8.3-Stagedateien,
+  abschliessende HTTP-206-Akzeptanz nach strengem Range-Resume und
+  batchbewusste Vorabverifikation konkreter Anforderungen.
+- Das Testimage um kataloggepruefte explizite optionale Full-Module erweitert,
+  ohne die Scope-Wahrheit `slim + test` oder produktive Profile zu veraendern.
+- R4JS auf 0.54.2 erhoeht: Der Gastselbsttest prueft die VM-Turnstatistik vor
+  dem Job-Drain, der den Zaehler fuer den naechsten Turn zuruecksetzt.
+
+Abnahme:
+- `Run-UpdateEndToEnd06321.ps1` aktualisiert ein isoliertes altes Testimage
+  von Release 0.63.20/Kernel 0.1.0 auf Release 0.63.21/Kernel 0.1.1, kreuzt
+  einen echten internen Reboot und einen frischen QEMU-Netzboot und endet
+  ohne verbleibendes Update.
+- Referenzlauf gruen unter
+  `DevTools/Logs/update-e2e-06321-20260811-184851/`; Protokoll und Serverreport
+  belegen Abbruch/Range-Resume, Live-Zwischenstand, Abhaengigkeits- und
+  Foundation-Reihenfolge sowie Post-Boot-Kernel, Inventar, Service und GUI.
+- Server-Unitabnahme `test_update_e2e_fixture.py` mit falschem Key,
+  `STOP NOW!`, `LAST CHANCE!`, Ban, Katalog und Range ist gruen.
+- WebTransport-, R4U-, Engine-/Inventar-, Batch-, UPDSVC-, Suche-, Download-
+  und Update-Center-Dauergates sind gruen.
+- `DevTools/Scripts/Build.bat -all` ist mit 153 Manifesten, allen Host-Gates,
+  Full-Imageplan und erzeugtem `Release/disk.img` gruen.
+- Der Standard-QEMU-Smoke ist mit dem echten Testprofil gruen (`TEST OK`);
+  darunter Klickifax/R4JS, LOADERD und die API-Diagnosemarker.
+- Alle Serverfaelle verwenden eigene temporaere SQLite-Stores; 10.0.0.5 und
+  die produktive Runtime wurden nicht angesprochen oder veraendert.
+
+Notizen:
+- Die bestehenden tiefen SYSUPD-Stromverlustmodelle bleiben eigene Gates; der
+  neue Lauf schliesst erstmals den echten Client-/Server-Transport ein.
+- QEMU-Slirp behaelt nach einem internen Gast-Reboot eine unbrauchbare
+  TLS/NAT-Verbindung zum Host-Gateway. Deshalb wird der lokale Post-Boot-
+  Abschluss noch im ersten Prozess belegt und die abschliessende Netzsuche
+  mit demselben aktualisierten Datentraeger in einem frischen QEMU-Prozess
+  gefahren; dies entspricht dem Netzadapter-Reset auf echter Hardware.
+- Der produktionsnahe Dynamic-Execution-Stressvertrag wurde an den seit
+  0.63.16 vorhandenen vierzehnten Autostart-Dienst UPDSVC angeglichen.
+
+0.63.22
+-------
+
+Titel: Reales Update ueber den produktiven Server
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Produktivserver read-only geprueft: Dienst und Listener 1337/1338/1339/8139
+  aktiv, Incoming und Releases vor der Canary-Freigabe leer.
+- UPDSVC als risikoarmen Neustart-Canary gewaehlt und Zielversion 0.2.3 sowie
+  Release 0.63.22 festgelegt; Kernel bleibt unveraendert 0.1.0.
+- Der reale Hardware-Iststand wurde vor der Veroeffentlichung gelesen: Release
+  0.63.22, Kernel 0.1.0, UPDSVC 0.2.2, SYSUPD idle und UPDSVC running.
+- Weil die Hardware bereits den zuerst vorgesehenen Stand 0.2.2 besass, wurde
+  der Canary vor Veroeffentlichung auf 0.2.3 angehoben.
+- Bekannt-gutes Rueckrollpaket mit dem laufenden UPDSVC 0.2.2 vor dem Neubau
+  erzeugt.
+- R4UPack akzeptiert nun die uebliche einzelne abschliessende Zeilentrennung
+  einer Beschreibungsdatei, ohne Mehrzeilentexte zuzulassen.
+- Vollbuild, Standard-QEMU-Smoke und anschliessende Wiederherstellung des
+  Full-Images fuer 0.63.22 sind erfolgreich.
+- Alle 26 Update-Server-Tests sowie die isolierte produktive Parser- und
+  Katalogpruefung fuer Canary, Releasemanifest und Rueckweg sind erfolgreich.
+- Canary und Releasemanifest liegen hashgeprueft und als gueltig erkannt im
+  Incoming des Produktivservers, sind jedoch noch nicht veroeffentlicht.
+- Die erste reale Suche deckte einen UPDATE-Zustandsfehler auf: Die bei Annahme
+  vorzeitig gebundene Job-ID verhinderte den spaeteren Ergebnisabruf. Ein
+  read-only Gastprobe bestaetigte gueltige Status-, Paket- und Komponentenseiten;
+  UPDATE 0.2.1 laesst das Modell nun bis zur fertigen Ergebnisseite ungebunden.
+- Der produktive Client authentifizierte Port 1338 und bezog Katalog sowie
+  Pakete auf Port 1339 ueber denselben Hostnamen `r4os.r4server.eu`.
+- Restart-Payload, wiederholbare Paketleser, retrybarer Batchvorlauf und der
+  Abschluss bereits angewendeter `applied`-/`cleanup`-Journale korrigiert;
+  SYSUPD endet auf 0.1.7 und UPDSVC auf 0.2.5.
+- Den 512-Seiten-Page-Cache bei Saettigung koharent gemacht: Lese- und
+  Schreibzugriffe umgehen Dirty-Seiten nicht mehr ungecacht, sondern drainen
+  und reservieren die angefragte Cacheidentitaet.
+- NTFS-Pfadfehler fuer `fileReadAt`, `fileInfo` und `fileDelete` mit exaktem
+  Lookup-Zweig, Operation und Task diagnosefaehig gemacht.
+- Einen realen Komplettfreeze auf `file_update_atomic_checked` eingegrenzt:
+  lange Kernel-Pruefsummen geben nun nach jedem 64-KB-Block kooperativ an den
+  Scheduler ab; FSGATE bewertet nur Intervalle ohne Fortschritt als Stall und
+  zeigt dabei Phase sowie Blockzaehler.
+- Kernel 0.1.7, UPDATE 0.2.1, SYSUPD 0.1.7 und UPDSVC 0.2.5 als finalen
+  Komponentenstand in Image- und Releaseinventare uebernommen.
+- `Docs/Deployment/ProductionCanary06322.txt` vom Vorbereitungsplan zum realen
+  Abschlussbericht mit finalen Hashes, Fehlerkette und Hardwarebefunden
+  aktualisiert.
+- Die abschliessende leere Folgesuche meldet auf der realen Hardware
+  `R4OS is up to date`.
+
+Abnahme:
+- UPDATE zeigte die reale Paket- und Komponentenliste, aktivierte `Update All`
+  und erreichte nach dem expliziten Restart den Post-Boot-Zustand.
+- Kernel 0.1.7 wurde hashgeprueft, durch SYSUPD verifiziert, gestagt und
+  committed; Batch 7 endete nach dem Neustart automatisch als `installed`.
+- Eine neutrale 19094568-Byte-Probe durchlief unter Kernel 0.1.7 denselben
+  grossen checked-atomic-Pfad in 54 Sekunden bis zum geplanten Neustart.
+  Batch 8 endete automatisch als `installed`; DMESG enthielt danach weder
+  FSGATE, PGCACHE, DEADMAN, Blockfehler noch Panic-/Fatalmarker.
+- SYSINFO weist Release 0.63.22 und Kernel aktiv/installiert 0.1.7 nach;
+  MODULES.JSON weist UPDATE 0.2.1, SYSUPD 0.1.7 und UPDSVC 0.2.5 nach.
+- UPDSVC laeuft nach dem Abschluss im Autostart. Die temporaere Probedatei
+  und ihr Inbox-R4U wurden wieder geloescht.
+- `DevTools/Scripts/Build.bat -norun` ist mit allen Host-Gates, 153
+  Manifesten, Full-Inventar, Kernel 0.1.7 und neuem `Release/disk.img` gruen.
+
+Notizen:
+- Ban- und falscher-Key-Negativfaelle werden vorher nur gegen den isolierten
+  Fixture-Server getestet, nicht gegen den produktiven Hardwarepfad.
+- Die Diagnosekernel 0.1.1 bis 0.1.6 waren lokale Zwischenstaende der realen
+  Ursachenanalyse; allein 0.1.7 ist der finale Kernelstand von 0.63.22.
+- Die atomare Probe war keine Komponente und erscheint deshalb bewusst nicht
+  in MODULES.JSON.
+- Das bereits publizierte Releasemanifest 0.63.22 ist unveraenderlich. Der
+  zusaetzliche Live-Canary gehoert deshalb sauber zum Folgerelease 0.63.23;
+  0.63.22 bleibt bis zu dessen manueller Installation in Arbeit.
+
+0.63.23
+-------
+
+Titel: Manueller Live-Canary im Update Center
+Status: Erledigt
+
+Offene Punkte:
+- Keine; der dabei gefundene Releaseabschlussfehler wird in 0.63.24
+  korrigiert.
+
+Erledigt:
+- BEEP als kleine, nicht bootkritische und live installierbare R4X-Anwendung
+  fuer den manuellen Test gewaehlt.
+- Zentrale Releaseversion auf 0.63.23 und die eingebettete BEEP-Version auf
+  0.1.2 erhoeht; Kernel bleibt unveraendert 0.1.7.
+- `DevTools/Scripts/Build.bat -norun` ist mit allen Host-Gates, 153
+  Manifesten, Full-Inventar und neuem Full-Image gruen.
+- `BEEP-0.1.2-0.63.23.R4U` als eine 10183 Byte grosse Live-Transaktion ohne
+  Neustartbedarf erzeugt; R4AUDIO 0.1.1 und R4SYS 0.1.1 sind konkrete
+  Anforderungen.
+- Paket und unveraendertes Build-Releasemanifest bytegleich in den
+  Produktivserver-Incoming uebertragen und dort unabhaengig als gueltig
+  erkannt.
+- Paket zuerst und `R4OS-RELEASE-0.63.23.JSON` zuletzt ueber das
+  ControlCenter veroeffentlicht; Incoming und Katalogfehler sind danach leer.
+- Der echte HTTPS-Katalog auf Port 1339 liefert genau das BEEP-Paket fuer
+  0.63.23; der Rueckdownload ist mit 10183 Byte und SHA-256
+  `cf630d12837537682872c3c7daffb227b2dc6e5569f15a69363c416e3cfb71c7`
+  bytegleich.
+- Der User installierte BEEP ueber dessen einzelnen Paketbutton erfolgreich;
+  die Anwendung erreichte ohne Neustart den sichtbaren Status `Installed`.
+- Die SSH-Postpruefung weist Full-Profil, BEEP 0.1.2, UPDATE 0.2.1,
+  SYSUPD 0.1.7 und UPDSVC 0.2.5 nach; SYSUPD-Transaktion 9 steht mit
+  `applied=2/2`, `reboot=no` und Releasebindung 0.63.23 auf `cleanup`.
+
+Abnahme:
+- Server-, Katalog- und Downloadpfad sind vollstaendig gruen.
+- Download, Verify, atomare Live-Installation und Inventarpflege sind auf
+  realer Hardware gruen.
+- Die Postpruefung fand den beabsichtigten Canary-Befund: Der einzelne
+  Paketpfad pflegte BEEP auf 0.1.2, bestaetigte `VERSION.R4S` jedoch nicht;
+  sie blieb auf 0.63.22. Der Fehler ist damit reproduziert und nach 0.63.24
+  uebernommen.
+
+Notizen:
+- Das Update soll bewusst ueber den normalen Such-, Download-, Verify- und
+  Installationspfad des Update Centers laufen; es gibt keinen Sonderweg.
+
+0.63.24
+-------
+
+Titel: Releaseabschluss fuer einzelne Live-Pakete
+Status: Erledigt
+
+Offene Punkte:
+- Keine; der vor der Installation gefundene Katalog-Transportfehler wird im
+  supersedierenden Release 0.63.25 korrigiert.
+
+Erledigt:
+- Einzelinstallation bindet den Releaseabschluss nun an den exakten
+  Download- und Suchsnapshot und bestaetigt nur einen vollstaendig erreichten
+  Live-Zielstand.
+- Eine spaetere leere Suche schliesst die Crashluecke zwischen letztem
+  Live-Artefaktcommit und journalisierter `VERSION.R4S`-Bestaetigung.
+- Administrative Installationspfade ohne aktuellen Suchsnapshot koennen die
+  zentrale Releaseversion weiterhin nicht veraendern.
+- UPDSVC auf 0.2.6 erhoeht und Dauergate sowie Betriebsdokumentation um beide
+  Abschlusswege erweitert.
+- `DevTools/Scripts/Build.bat -norun` ist mit allen Host-Gates, 153
+  Manifesten, Full-Inventar und neuem Full-Image fuer 0.63.24 gruen.
+- `UPDSVC-0.2.6-0.63.24.R4U` als 3184358 Byte grosses Neustartpaket mit drei
+  konkreten R4L-Anforderungen erzeugt und zusammen mit dem unveraenderten
+  Build-Releasemanifest bytegleich in den Produktivserver-Incoming uebertragen.
+- Paket zuerst und `R4OS-RELEASE-0.63.24.JSON` zuletzt ueber das
+  ControlCenter veroeffentlicht; Incoming und Katalogfehler sind danach leer.
+- Der echte HTTPS-Katalog und Rueckdownload auf Port 1339 sind mit SHA-256
+  `6152bd5d0035b0e9ac87b5df8119cd1bcb6fb18026aff2e84032afa08a83f099`
+  bytegleich.
+- Die reale Suche brach vor dem Download sichtbar mit `catalog-too-large`
+  ab: Drei vollstaendige historische Releases ergaben 72425 Byte, waehrend
+  UPDSVC fuer die rohe HTTPS-Antwort nur 64 KB reservierte.
+
+Abnahme:
+- Standalone-Build von UPDSVC ist gruen.
+- Vollbuild, Serverparser, Katalog und oeffentlicher Download sind gruen.
+- Der Canary hat den Katalog-Grenzfehler vor einer Systemaenderung erfolgreich
+  sichtbar gemacht; 0.63.24 wurde deshalb bewusst nicht installiert.
+
+Notizen:
+- Das unveraenderliche Servermanifest 0.63.23 bleibt unangetastet; die
+  Korrektur ist deshalb der separate Folgerelease 0.63.24.
+
+0.63.25
+-------
+
+Titel: Begrenzter oeffentlicher Katalog und voller Clientpuffer
+Status: Erledigt
+
+Offene Punkte:
+- Keine; der beim Einzelbutton entdeckte Restart-Uebergabefehler wird in
+  0.63.26 korrigiert.
+
+Erledigt:
+- Update-Server liefert aus allen weiterhin gespeicherten Freigaben nur noch
+  den hoechsten gueltigen Release im oeffentlichen Katalog; historische
+  Pakete, Manifeste, ControlCenter- und Downloadpfade bleiben erhalten.
+- Serververtrag entsprechend erweitert; alle 26 isolierten Tests sind gruen,
+  Commit `46f6c04` ist produktiv deployt und Dienst sowie Nginx sind aktiv.
+- Produktivkatalog von 72425 auf 23711 Byte und genau Release 0.63.24
+  reduziert; fuenf Pakete und drei Manifeste bleiben gespeichert,
+  `catalog_errors` bleibt leer.
+- Den rohen UPDSVC-HTTPS-Puffer an die vorhandene 512-KB-Kataloggrenze plus
+  maximalen HTTP-Header gekoppelt und Dienstversion auf 0.2.7 erhoeht.
+- Katalog-, Server- und Agentdokumentation an die neueste sichtbare Freigabe
+  und die einheitliche Transport-/Parsergrenze angepasst.
+- Vollbuild einschliesslich aller Host-Gates und Full-Image fuer 0.63.25 ist
+  gruen; Releaseinventar enthaelt Kernel 0.1.7 und UPDSVC 0.2.7 konsistent in
+  Slim, Full und Test.
+- `UPDSVC-0.2.7-0.63.25.R4U` als 3659507 Byte grosses Neustartpaket mit
+  SHA-256 `c64f7cc9ac832ed657a1336ab41fb14a9e820b5dd78e0c81fd0ba76baf5d80dc`
+  validiert, atomar publiziert und das unveraenderte Releasemanifest zuletzt
+  freigegeben.
+- Oeffentlicher TLS-Katalog zeigt genau 0.63.25 mit 23686 Byte; der direkte
+  Paketdownload stimmt in Groesse und SHA-256 bytegenau mit dem Hostpaket
+  ueberein.
+- Reale Suche verarbeitet den verkleinerten Katalog ohne `catalog too large`
+  und laedt sowie verifiziert UPDSVC 0.2.7 erfolgreich.
+- Das einzeln betaetigte Neustartpaket wurde dauerhaft als Batch 9 gestagt.
+  Weil der alte Einzelpfad den Restart-Button noch nicht freigab, den exakt
+  geprueften Batch mit `SYSUPD COMMIT` ueber SSH abgeschlossen.
+- Nach dem automatischen Neustart meldet `VERSION.R4S` 0.63.25,
+  `MODULES.JSON` Full/102 und UPDSVC 0.2.7; Transaktion 10 ist mit 3/3 und
+  Batch 9 mit 1/1 installiert, UPDSVC laeuft automatisch mit ExitCode 0.
+
+Abnahme:
+- Serverseitige Unit-, Integrations-, Konfigurations- und Deploymenttests sind
+  gruen; produktive Antwortgroesse und gespeicherte Historie sind geprueft.
+- Client-Vollbuild, R4U-Validierung, Servervalidierung, Latest-only-Katalog
+  und oeffentlicher TLS-Download sind gruen.
+- Hardwareinstallation, atomarer Commit, Neustart, Release-, Inventar- und
+  Servicestand sind per SSH geprueft.
+
+Notizen:
+- 0.63.25 supersediert das nie installierte 0.63.24, damit auf der Hardware
+  nur ein Dienstneustart fuer Abschluss- und Pufferkorrektur noetig ist.
+- `Staged` war kein Paket- oder Enginefehler: Der Dienst setzte seine
+  snapshotgebundene Restartbereitschaft nur in `Update All`, und UPDATE.R4X
+  wertete sie ebenfalls nur fuer diese Operation aus.
+
+0.63.26
+-------
+
+Titel: Einzelpaket macht vollstaendigen Neustartbatch bedienbar
+Status: Erledigt
+
+Offene Punkte:
+- Keine; die noch ausstehenden Einzelcanarys und die waehrend des realen
+  Commits gefundenen transienten I/O-Fehler werden in 0.63.27 abgenommen.
+
+Erledigt:
+- UPDSVC prueft nach einem erfolgreichen Einzel-Stage den gesamten
+  unveraenderlichen Suchsnapshot. Erst wenn jeder Eintrag installiert,
+  gestagt oder bereits neustartbereit ist, bindet es den Restart-Auftrag an
+  den Suchjob und liefert `Pending restart`; unvollstaendige Mehrpaketreleases
+  bleiben `Staged`.
+- UPDATE.R4X leitet den Restart-Button nun fuer erfolgreiche Einzel-Install-
+  und Update-All-Abschluesse aus demselben Dienststatus ab; ein blosses
+  `Staged`, ein Fehler oder ein noch aktiver Dienst reichen nicht.
+- Dienstversion auf 0.2.8, Desktopversion auf 0.2.2 und zentralen Release auf
+  0.63.26 erhoeht; Manifestfeatures, Gates und Update-Dokumentation angepasst.
+- Vollbuild samt saemtlichen Host-Gates und Full-Image gruen; Releaseinventar
+  enthaelt Kernel 0.1.7, UPDSVC 0.2.8 und UPDATE 0.2.2 in Slim, Full und Test.
+- `UPDSVC-0.2.8-0.63.26.R4U` mit 3659522 Byte und SHA-256
+  `908cb4f44b2ecc5e625add9db6bf2bfdf61544a16af91b5f59c2761092fd3a9f`
+  sowie `UPDATE-0.2.2-0.63.26.R4U` mit 907874 Byte und SHA-256
+  `55e7e1ce6d06b206c0cbaa50e438a0b32eea339795bc1d526fcce4c001157ea4`
+  lokal und serverseitig validiert und atomar publiziert.
+- Unveraendertes Releasemanifest mit Slim 48, Full 102 und Test 99 zuletzt
+  freigegeben; oeffentlicher TLS-Katalog zeigt als einzigen Release 0.63.26
+  mit zwei Paketen und 24599 Byte.
+- Beide oeffentlichen Paketdownloads stimmen in Groesse und SHA-256 bytegenau
+  mit den Hostpaketen ueberein.
+- Update All hat beide Pakete als Batch 10 dauerhaft vorbereitet. Der erste
+  Versuch brach bei einer transienten Anforderungslesung ab; der unveraenderte
+  zweite Versuch erreichte `Pending restart` fuer 2/2 Pakete.
+- Der erste explizite Restart traf `package-info`, ein anschliessender
+  administrativer COMMIT blieb nach einem transienten Stagefehler korrekt als
+  `prepare-retry` bedienbar. Derselbe gebundene Batch wurde im zweiten COMMIT
+  vollstaendig angewendet und startete R4OS neu.
+- Post-Boot-Stand auf echter Hardware: Release 0.63.26, Full-Inventar mit 102
+  Eintraegen, SYSUPD 0.1.7, UPDATE 0.2.2 und UPDSVC 0.2.8. Batch 10 ist
+  `installed` mit 2/2, Transaktion 11 `cleanup` mit 4/4 und UPDSVC laeuft per
+  Autostart ohne Fehler.
+
+Abnahme:
+- UPDSVC-Vertrag mit 5 Wire-, 8 Coordinator-Tests und Standalone-R4M0-Build
+  gruen.
+- UPDATE-Vertrag mit 7 Modelltests einschliesslich positiver Einzel-/
+  Update-All- und negativer Staged-/Fehler-/Busy-Faelle, 5 Wiretests,
+  17 Startmenue-/Desktoptests und Standalone-R4M0-Build gruen.
+- Such- und Downloadgates mit 13 beziehungsweise 18 Tests weiterhin gruen.
+- Vollbuild, Servervalidierung, Releasemanifest, Latest-only-Katalog und beide
+  oeffentlichen TLS-Downloads sind gruen.
+- Reale Mehrpaketinstallation, automatischer Neustart, Release-, Inventar-,
+  Batch-, Transaktions- und Dienststand sind per SSH geprueft.
+
+Notizen:
+- 0.63.26 ist ein eigener Release, weil beide korrigierten Artefakte bereits
+  nach der Freigabe und Hardwareinstallation von 0.63.25 geaendert wurden.
+- `requirement-read`, `package-info` und der einmalige Stageabbruch waren
+  transiente Hardware-I/O-Befunde, keine Paket- oder Bindungsfehler: Beide R4U
+  liessen sich unveraendert verifizieren und derselbe Batch wurde erfolgreich
+  committed. Die gemeinsame Enginehaertung folgt deshalb vor den noch
+  ausstehenden Einzelcanarys in 0.63.27.
+
+0.63.27
+-------
+
+Titel: Begrenzte Update-I/O-Retries vor den Einzelcanarys
+Status: Erledigt
+
+Offene Punkte:
+- Keine; die beiden gezielten Einzelcanarys folgen getrennt in 0.63.28 und
+  0.63.29.
+
+Erledigt:
+- Paketinformationen werden bei negativen R4SYS-Rueckgaben mit hoechstens
+  drei Versuchen und einem Tick Abstand gelesen; ein echter Nichtfund bleibt
+  sofort ein Nichtfund.
+- Alle Engine-Reads mit bekannter Laenge verwenden den fortsetzbaren
+  Exact-Read-Pfad. Teilfortschritt bleibt erhalten, drei Versuche ohne
+  Fortschritt liefern weiterhin einen sichtbaren I/O-Fehler.
+- Private Payload-Stages werden nach einem mehrdeutigen Open-, Write- oder
+  Finish-Fehler abgebrochen und hoechstens dreimal neu aufgebaut. Bereits
+  vollstaendig passende Stages werden wiederverwendet; Format-, Checksum- und
+  Konfliktfehler werden nicht wiederholt.
+- Gemeinsame Engine in SYSUPD und UPDSVC eingebunden, Komponentenversionen auf
+  0.1.8 beziehungsweise 0.2.9 und zentralen Release auf 0.63.27 erhoeht.
+- Manifestfeatures, Dauergates, Modul- und Deploymentdokumentation sowie
+  Agent-Referenz an den begrenzten Retryvertrag angepasst.
+- Standalone-R4M0-Builds von SYSUPD und UPDSVC sind gruen.
+- `DevTools/Scripts/Build.bat -norun` ist mit allen Host-Gates, 153
+  Manifesten, Full-Inventar und neuem Full-Image fuer 0.63.27 gruen;
+  Releaseinventar enthaelt Kernel 0.1.7, SYSUPD 0.1.8, UPDATE 0.2.2 und
+  UPDSVC 0.2.9 konsistent in Slim, Full und Test.
+- `SYSUPD-0.1.8-0.63.27.R4U` als 2242108 Byte grosses Live-Paket mit SHA-256
+  `23d418ac03d01093b7da5bcbcf4662c2cb705f2f86fe06cfadea2f08173c4e4c`
+  und `UPDSVC-0.2.9-0.63.27.R4U` als 3659576 Byte grosses Neustartpaket mit
+  SHA-256 `c70bc8c93cb9274586e619baca6fa9b20a433b73ad9b2d4456363a82c22a4632`
+  lokal und serverseitig streng validiert.
+- Beide Pakete zuerst und das unveraenderte 27088-Byte-Releasemanifest mit
+  SHA-256 `94524b24018d7f22b2aa4ad163f2c6fbbc784e33382838ac82f006342824c6b9`
+  zuletzt atomar veroeffentlicht; Server-Incoming und `catalog_errors` sind
+  leer.
+- Oeffentlicher TLS-Katalog zeigt genau Release 0.63.27 mit zwei Paketen und
+  24553 Byte. Beide oeffentlichen Paketdownloads stimmen in Groesse und
+  SHA-256 bytegenau mit den Hostpaketen ueberein.
+- Der reale Update-All-Lauf traf beim ersten Live-Apply von SYSUPD 0.1.8
+  `payload-read`. Paket und vorbereitete Transaktion 12 blieben unveraendert;
+  VERIFY war unmittelbar gruen und `SYSUPD RESUME` schloss Payload, Inventar
+  und Cleanup mit 2/2 erfolgreich ab.
+- Eine neue Suche erkannte danach nur noch UPDSVC 0.2.9, bereitete Batch 11
+  vollstaendig als `restart-ready` vor und zeigte `Pending Restart` im
+  Desktopclient.
+- Der explizite Restart lief bootstrapbedingt noch in UPDSVC 0.2.8 und traf
+  vor dem Commit einmalig `target-info`; Batch 11 blieb als `prepare-retry`
+  unveraendert bedienbar. Das bereits live installierte SYSUPD 0.1.8
+  committed denselben Batch, worauf R4OS automatisch neu startete.
+- Post-Boot-Stand auf echter Hardware: Release 0.63.27, Full-Inventar mit 102
+  Eintraegen, Kernel 0.1.7, SYSUPD 0.1.8, UPDATE 0.2.2 und UPDSVC 0.2.9.
+  Transaktion 13 ist `cleanup` mit 3/3, Batch 11 `installed` mit 1/1 und
+  UPDSVC laeuft automatisch mit einem registrierten Worker ohne Fehler.
+- Die anschliessende produktive Suche wurde im Desktopclient manuell
+  bestaetigt und meldet `R4OS is up to date`; es bleiben keine Angebote oder
+  ausstehenden Releasekomponenten fuer 0.63.27.
+
+Abnahme:
+- Direkte Standalone-Kompilierung beider Engineverbraucher ist gruen.
+- Engine-/Inventar-, Restartbatch-, UPDSVC-, Such- und Download-Dauergates
+  sowie der vollstaendige Hostbuild sind gruen.
+- Serverparser, Releasemanifest, Latest-only-Katalog und beide oeffentlichen
+  TLS-Downloads sind gruen.
+- Reale Suche, Download, Live-Resume, Restartvorbereitung, Commit mit der
+  neuen Engine, automatischer Neustart sowie Release-, Inventar-, Batch-,
+  Transaktions- und Dienststand sind per SSH geprueft.
+- Leere Folgesuche im echten Desktopclient manuell bestaetigt.
+
+Notizen:
+- Kernel 0.1.7 bleibt unveraendert; die Korrektur betrifft nur die beiden die
+  gemeinsame Zig-Engine einbettenden R4X-Artefakte.
+- Die Retries verdecken keinen dauerhaften Speicherfehler. Nach Ausschoepfung
+  bleibt der Neustartbatch wie bisher als `prepare-retry` erneut bedienbar.
+- Beim erstmaligen Einspielen kann der laufende UPDSVC 0.2.8 die in 0.2.9
+  eingebetteten Retries noch nicht verwenden. Das vorab live installierte
+  SYSUPD 0.1.8 ist der sichere Bootstrap- und Wartungspfad; ab diesem Boot
+  besitzen Dienst und Terminal denselben gehaerteten Enginecode.
+
+0.63.28
+-------
+
+Titel: Manueller Einzel-Neustart-Canary im Update Center
+Status: Erledigt
+
+Offene Punkte:
+- Keine; der gefundene falsche Paket-Nichtfund wird in 0.63.29 korrigiert und
+  der positive Einzel-Neustart-Canary danach in 0.63.30 wiederholt.
+
+Erledigt:
+- UPDSVC als kleinster produktiver selbstbezogener Neustart-Canary gewaehlt.
+  Nur seine eingebettete Version steigt; Kernel, SYSUPD und UPDATE bleiben
+  unveraendert.
+- UPDSVC-Version auf 0.2.10 und zentralen Release auf 0.63.28 erhoeht;
+  Dienst-, Such- und Downloadgates an die neue Artefaktidentitaet angepasst.
+- Gezielte UPDSVC-, Such- und Downloadvertraege samt Standalone-R4M0-Build
+  sind gruen.
+- `DevTools/Scripts/Build.bat -norun` ist mit allen Host-Gates, 153
+  Manifesten, Full-Inventar und neuem Full-Image fuer 0.63.28 gruen.
+  Releaseinventar enthaelt in Slim, Full und Test weiterhin Kernel 0.1.7,
+  SYSUPD 0.1.8 und UPDATE 0.2.2; allein UPDSVC steigt auf 0.2.10.
+- Der maschinelle Vergleich zum echten Full/102-Hardwarestand 0.63.27 weist
+  genau UPDSVC 0.2.9 -> 0.2.10 als Differenz aus.
+- `UPDSVC-0.2.10-0.63.28.R4U` als 3659577 Byte grosses einzelnes
+  Neustartpaket mit SHA-256
+  `6b26e1d89e30d65ffb905981bb4ba7a1a3b53821b2edc360a1e31bad38b6d744`
+  lokal und serverseitig streng validiert.
+- Paket zuerst und das unveraenderte 27091-Byte-Releasemanifest mit SHA-256
+  `6544343737b96c3d338a12144264e0a9ecb486ac377454ad8a12df2642a95ea9`
+  zuletzt atomar publiziert; Server-Incoming und `catalog_errors` sind leer.
+- Oeffentlicher TLS-Katalog zeigt genau Release 0.63.28 mit einem Paket und
+  23689 Byte. Der oeffentliche Rueckdownload stimmt in Groesse und SHA-256
+  bytegenau mit dem Hostpaket ueberein.
+- Die reale Suche zeigte genau UPDSVC 0.2.10. Der User verwendete
+  ausdruecklich dessen einzelnen `Update`-Button; der persistierte Auftrag 23
+  weist `OPERATION=4`, `STATE=9` und `REASON=restart-ready` nach. Batch 12 war
+  vollstaendig als 0/1 `staged` gebunden und der Restart-R4OS-Button aktiv.
+- Der erste GUI-Restart brach vor jeder Systemaenderung mit
+  `package-not-found` ab. Das Paket stand gleichzeitig sichtbar in der Inbox
+  und liess sich unmittelbar danach mit voller Payloadlaenge erfolgreich
+  verifizieren. Damit ist ein transienter falscher NTFS-Nichtfund bewiesen.
+- Derselbe unveraenderte Batch 12 wurde administrativ erneut committed und
+  startete R4OS automatisch neu. Post-Boot-Stand: Release 0.63.28,
+  UPDSVC 0.2.10, Transaktion 14 `cleanup` mit 3/3, Batch 12 `installed` mit
+  1/1 und der Dienst laeuft automatisch.
+
+Abnahme:
+- Automatische Build-, Server-, Katalog- und Downloadabnahme ist gruen.
+- Einzelbutton, snapshotvollstaendiges `Pending Restart` und aktiver
+  GUI-Restart sind auf Hardware gruen.
+- Der Ein-Klick-Commitcanary ist negativ: Ein falscher Metadaten-Nichtfund
+  wurde sichtbar statt wiederholt. Der sichere zweite Commit und gesamte
+  Post-Boot-Stand sind gruen, zaehlen aber nicht als positiver Canaryabschluss.
+
+Notizen:
+- Der Einzelbutton muss den vollstaendigen Einpaket-Suchsnapshot selbst als
+  restartbereit freigeben. Ein administrativer SYSUPD-Wartungsweg waere kein
+  positiver Canaryabschluss.
+- 0.63.27 wiederholte negative `file_info`-Fehler, akzeptierte aber eine
+  einzelne `0/not found`-Beobachtung sofort. Reale Hardware kann auch diese
+  Beobachtung transient falsch liefern.
+
+0.63.29
+-------
+
+Titel: Falschen Metadaten-Nichtfund begrenzt wiederholen
+Status: Erledigt
+
+Offene Punkte:
+- Keine; die waehrend der Hardwareabnahme gefundenen Folgefehler werden in
+  0.63.30 korrigiert.
+
+Erledigt:
+- `fileInfoStatus` wiederholt nun auch `0/not found` und `exists=0` innerhalb
+  derselben auf drei Versuche begrenzten Metadatenpruefung. Erst der letzte
+  Versuch entscheidet zwischen dauerhaftem Nichtfund und I/O-Fehler; ein
+  zwischenzeitlicher gueltiger Fund beendet sofort erfolgreich.
+- SYSUPD auf 0.1.9, UPDSVC auf 0.2.11 und zentralen Release auf 0.63.29
+  erhoeht; Engine-, Batch-, Dienst-, Such- und Downloadgates sowie
+  Dokumentation an den False-Miss-Vertrag angepasst.
+- Alle fuenf gezielten Dauergates und beide Standalone-R4M0-Builds sind
+  gruen.
+- `DevTools/Scripts/Build.bat -norun` ist mit allen Host-Gates, 153
+  Manifesten, Full-Inventar und neuem Full-Image fuer 0.63.29 gruen.
+  Releaseinventar enthaelt in Slim, Full und Test Kernel 0.1.7,
+  SYSUPD 0.1.9, UPDATE 0.2.2 und UPDSVC 0.2.11.
+- `SYSUPD-0.1.9-0.63.29.R4U` als 2242092 Byte grosses Live-Paket mit SHA-256
+  `f61563f020c5fccb1a7b88614a6a2386d358d0c27be3b9d274344d769752ac4f`
+  und `UPDSVC-0.2.11-0.63.29.R4U` als 3659554 Byte grosses Neustartpaket mit
+  SHA-256 `7dc1cf479429ccf80502e1754da258d8f759f354b3df2672f146d6616e900831`
+  lokal und serverseitig streng validiert.
+- Beide Pakete zuerst und das unveraenderte 27091-Byte-Releasemanifest mit
+  SHA-256 `74c5a25afc94c484a823612c7d58f332d7186eeb975108bed771028d5cfeb662`
+  zuletzt atomar publiziert; Server-Incoming und `catalog_errors` sind leer.
+- Oeffentlicher TLS-Katalog zeigt genau Release 0.63.29 mit zwei Paketen und
+  24519 Byte. Beide oeffentlichen Rueckdownloads stimmen in Groesse und
+  SHA-256 bytegenau mit den Hostpaketen ueberein.
+- Der reale Update-All-Lauf hinterliess nach einem transienten Streamfehler
+  den eigenen privaten Stage `S54021D7.R4U` mit 2031616 von erwarteten
+  2241138 Bytes. Der folgende Streamversuch wies diesen Teilstand sichtbar
+  als `stage-conflict` ab; Paket, Ziel und Journal blieben unveraendert.
+- Die Teil-Datei wurde per SFTP bytegenau gesichert und gegen das vorbereitete
+  Journal als dessen eigener unvollstaendiger Stage nachgewiesen. Nach
+  Dienststopp und gezielter Entfernung genau dieses Pfads schloss
+  `SYSUPD RESUME` Transaktion 15 mit 2/2 und Cleanup erfolgreich ab.
+- Reale Zwischenpruefung: Release bleibt bis zum fehlenden Dienstupdate
+  korrekt auf 0.63.28; Full-Inventar 102 enthaelt Kernel 0.1.7,
+  SYSUPD 0.1.9, UPDATE 0.2.2 und noch UPDSVC 0.2.10. Der Dienst laeuft wieder.
+- Die neue Suche 27 fand erwartungsgemaess nur UPDSVC 0.2.11. Dessen
+  Einzelinstallation legte Batch 13 mit 0/1 `staged` korrekt an, blieb aber
+  ohne Restartfreigabe: Der wiederverwendete Downloadsatz war noch an
+  Suchsnapshot 25/Ergebnis 1 gebunden, waehrend das identische Angebot nun
+  Snapshot 27/Ergebnis 0 war. Der persistierte Gesamtstatus meldete deshalb
+  `install: staged`, waehrend die Paketzeile den alten Zustand `Installing`
+  behielt. Es erfolgte noch kein Commit oder Neustart.
+- Nach ausdruecklicher Userfreigabe wurde derselbe unveraenderte Batch 13
+  administrativ ueber `SYSUPD COMMIT` abgeschlossen. Alle 3658544
+  Payloadbytes wurden gestreamt und R4OS startete automatisch neu.
+- Post-Boot-Stand: Release 0.63.29, Full-Inventar mit 102 Eintraegen,
+  Kernel 0.1.7, SYSUPD 0.1.9, UPDATE 0.2.2 und UPDSVC 0.2.11. Transaktion 16
+  steht auf `cleanup` mit 3/3, Batch 13 auf `installed` mit 1/1; UPDSVC laeuft
+  automatisch ohne Endpointfehler.
+
+Abnahme:
+- Automatische Engine-, Build-, Server-, Katalog- und Downloadabnahme sowie
+  reale Live-/Resume- und Neustartinstallation sind gruen.
+- Release-, Inventar-, Journal-, Batch- und Dienststand nach dem Neustart per
+  SSH geprueft.
+
+Notizen:
+- Ein echter fehlender Pfad kostet dadurch hoechstens zwei Ticks mehr. Format-,
+  Checksum- und Konfliktfehler bleiben weiterhin ohne Retry.
+- Der Konflikt war kein fremder Namensbeleger. Der einmalige
+  identitaetsgebundene Stream-Abort war selbst transient fehlgeschlagen und
+  wurde ignoriert; die dauerhafte Korrektur folgt getrennt in 0.63.30.
+
+0.63.30
+-------
+
+Titel: Stage-Abort- und Snapshot-Zustandshaertung
+Status: Erledigt
+
+Offene Punkte:
+- Keine; die nicht abgeschlossene Hardwareaktivierung und die weiterhin
+  sporadischen NTFS-/R4SYS-Befunde sind unten ausdruecklich festgehalten.
+
+Erledigt:
+- Nach jedem mehrdeutigen privaten Stage-Streamfehler wird R4SYS Abort nun
+  selbst hoechstens dreimal wiederholt. Jeder Versuch bleibt an den konkreten
+  live Streamslot gebunden und darf niemals nach Pfad loeschen.
+- Vor einem Streamretry wird bewiesen, dass der private Stage fehlt oder
+  bereits bytegenau dem vollstaendigen Payload entspricht. Ein eigener
+  Teil-Stage kann dadurch nicht mehr als scheinbar fremder `stage-conflict`
+  in den naechsten Versuch gelangen.
+- Ein ungebundener abweichender Inhalt bleibt fail-closed unangetastet;
+  nicht abschliessbare Ownership-Bereinigung meldet sichtbar `stage-abort`.
+- Dieselbe Bereinigung fuer Transportpayloads, generierte Release- und
+  Inventarpayloads eingebunden.
+- Ein vollstaendig heruntergeladenes Paket darf in einem neueren Suchsnapshot
+  nur wiederverwendet werden, wenn Paket-ID, Paket- und Releaseversion,
+  Dateiname, Groesse, SHA-256 und Download-URL exakt uebereinstimmen. Die
+  Installation bindet es dann an die neue Such-ID und deren Ergebnisindex.
+- Jeder neue UPDSVC-Auftrag setzt Such-ID und Ergebnisindex explizit;
+  Einzelinstallationen publizieren ihre aktuelle Zeilenbindung bereits beim
+  `installing`-Uebergang. Beide Werte werden im Dienststatus dauerhaft
+  gespeichert, statt Altwerte eines frueheren Downloads zu erben.
+- SYSUPD auf 0.1.10, UPDSVC auf 0.2.12 und zentralen Release auf 0.63.30
+  erhoeht; Manifestfeatures, Dauergates, Modul-, Deployment-, Agent- und
+  Inventardokumentation angepasst.
+- Beide geaenderten R4X bauen eigenstaendig; die fokussierten Engine-, Batch-,
+  Dienst-, Such- und Downloadgates sind nach der Korrektur gruen.
+- Der abschliessende Vollbuild nach Stage-Abort- und Snapshot-/Zeilenhaertung
+  ist mit allen Host-Gates, 153 Manifesten, Full-Inventar 102 und neuem
+  Full-Image fuer 0.63.30 gruen. Slim enthaelt 48, Full 102 und Test 99
+  Komponenten; SYSUPD 0.1.10 und UPDSVC 0.2.12 sind in allen drei Profilen.
+- `SYSUPD-0.1.10-0.63.30.R4U` als 2242146 Byte grosses Live-Paket mit
+  SHA-256 `728cffebdcac9d45630770268c804bed8d8db9cbe61cd357782c2c510ff96c22`
+  und `UPDSVC-0.2.12-0.63.30.R4U` als 3663775 Byte grosses Neustartpaket mit
+  SHA-256 `130dc9d5e47a506b3e58e0c56c9691556852f8e5983294507ab2a0ab70ef2b1c`
+  lokal gebaut und serverseitig streng validiert.
+- Beide Pakete zuerst und das unveraenderte 27094-Byte-Releasemanifest mit
+  SHA-256 `96b0f3d183d4ebfa3a1759c4aaa8fe514f7d4e1c91a7e1c62a00d9a06e455988`
+  zuletzt atomar publiziert. Incoming, eingehende Releasemanifeste und
+  `catalog_errors` sind leer.
+- Der oeffentliche TLS-Katalog liefert ausschliesslich Schema 2 und Release
+  0.63.30 mit SYSUPD an Installationsposition 0 sowie UPDSVC an Position 1.
+  Beide Pakete wurden vollstaendig oeffentlich zurueckgeladen; Groesse und
+  SHA-256 stimmen bytegenau mit den Hostpaketen ueberein.
+- Das SSH-Abnahmewerkzeug versieht seine temporaeren Dateien nun zusaetzlich
+  mit Prozess-ID und GUID. Parallele Aufrufe koennen dadurch keine Ausgaben
+  mehr ueber einen millisekundengleichen Zeitstempel vermischen; ein realer
+  `VER`-Aufruf gegen die Hardware ist gruen.
+- Der erste reale Update-All-Versuch lief noch in UPDSVC 0.2.11 und damit in
+  der alten eingebetteten Engine. Job 30 brach beim Livepaket SYSUPD 0.1.10
+  sichtbar mit `stage-write` ab; Transaktion 17 blieb sicher in `prepare`
+  bei 0/1 und der private Stage war nach dem Abort nicht vorhanden.
+- Das heruntergeladene Paket wurde auf der Hardware vollstaendig mit
+  2241173 Payloadbytes verifiziert. Der vorgesehene Recovery-Pfad
+  `SYSUPD RESUME` streamte 1048576, 2097152 und schliesslich alle 2241173
+  Bytes und schloss Transaktion 17 mit 2/2 in `cleanup` erfolgreich ab.
+  Das Full-Inventar fuehrt danach SYSUPD 0.1.10, UPDATE 0.2.2 und noch
+  UPDSVC 0.2.11; der Dienst laeuft fehlerfrei weiter.
+- Die anschliessende neue Suche bot nur noch UPDSVC 0.2.12 an. Update All
+  bereitete Batch 14 mit 0/1 `staged` vor; Dienstjob 32 meldet konsistent
+  `Pending Restart`, ein abgeschlossenes Paket und `restart-ready`.
+- Der anschliessende GUI-Restart startete R4OS nicht neu, sondern brach beim
+  Commit von Batch 14 sichtbar mit `stage-conflict` ab. Zu diesem Zeitpunkt
+  lief weiterhin UPDSVC 0.2.11 mit der alten eingebetteten Engine;
+  UPDSVC 0.2.12 wurde deshalb nicht aktiviert und die neue Abort-Haertung im
+  Dienstpfad nicht real abgenommen.
+- Auf ausdrueckliche Userentscheidung wird 0.63.30 trotz dieses bekannten
+  Restbefunds als erledigt abgeschlossen. Der Fehlerzustand bleibt fuer eine
+  spaetere Ursachenanalyse dokumentiert; es wird kein positiver Neustart-
+  oder NTFS-Abnahmenachweis behauptet.
+
+Abnahme:
+- Standalone-R4M0-Builds und fuenf fokussierte Dauergates sind gruen.
+- Vollbuild sowie Paket-, Server-, Katalog- und Rueckdownloadvertrag sind
+  gruen.
+- Reale Suche, Download, SYSUPD-Liveinstallation ueber den dokumentierten
+  Recovery-Pfad und Restartvorbereitung sind belegt. Der abschliessende
+  UPDSVC-Commit und Neustart sind mit `stage-conflict` negativ; der User
+  akzeptiert diesen klar dokumentierten Abnahmerest fuer den Abschluss.
+
+Notizen:
+- Die Korrektur gehoert in beide Artefakte, weil SYSUPD und UPDSVC dieselbe
+  Engine einbetten. Kernel 0.1.7 bleibt unveraendert.
+- Der erste `stage-write` testete noch nicht die neue Abort-Wiederholung:
+  Der zu diesem Zeitpunkt laufende Dienst 0.2.11 enthielt naturgemaess die
+  0.63.29-Engine. Erst nach Installation und Neustart von UPDSVC 0.2.12 ist
+  die neue Engine in beiden Ausfuehrungspfaden aktiv.
+- Die schweren frueheren Page-Cache-/FSGATE-Haenger sind separat behoben und
+  auf Hardware nachgewiesen. Sporadische NTFS-/R4SYS-I/O- und
+  Metadatenfehler sind dagegen nur begrenzt abgefedert, nicht abschliessend
+  ursachenseitig beseitigt.
+
+0.63.31
+-------
+
+Titel: Entfallener manueller Einzel-Neustart-Canary
+Status: Erledigt
+
+Offene Punkte:
+- Keine; der Canary entfaellt mit dem ausdruecklich angeordneten Abschluss
+  von 0.63.X.
+
+Erledigt:
+- Der geplante positive Wiederholungstest wurde nicht ausgefuehrt und auf
+  Userentscheidung aus dieser Versionslinie genommen.
+- Es wurden weder Release 0.63.31 noch neue Komponentenartefakte erzeugt.
+
+Abnahme:
+- Nicht ausgefuehrt. Es wird kein erfolgreicher GUI-Commit, Neustart oder
+  Post-Boot-Abschluss behauptet.
+
+Notizen:
+- Der technische Restbefund bleibt im Abschluss von 0.63.30 dokumentiert und
+  muss bei einer spaeteren Wiederaufnahme neu eingeplant werden.
+
+0.63.32
+-------
+
+Titel: Entfallener manueller Einzel-Live-Canary
+Status: Erledigt
+
+Offene Punkte:
+- Keine; der Canary entfaellt mit dem ausdruecklich angeordneten Abschluss
+  von 0.63.X.
+
+Erledigt:
+- Der vom positiven Neustartcanary abhaengige Live-Test wurde folgerichtig
+  nicht begonnen und auf Userentscheidung aus dieser Versionslinie genommen.
+- Es wurden weder Release 0.63.32 noch neue Komponentenartefakte erzeugt.
+
+Abnahme:
+- Nicht ausgefuehrt. Es wird kein positiver Live-Canary oder atomarer
+  Releaseabschluss fuer 0.63.32 behauptet.
+
+Notizen:
+- BEEP wurde nicht angehoben. Ein spaeterer Live-Canary benoetigt einen neuen
+  Roadmap-Punkt und einen neuen Release statt einer rueckwirkenden 0.63.32.

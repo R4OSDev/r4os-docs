@@ -1,0 +1,89 @@
+﻿R4OS 0.53.22 - FS-Page-Cache und Write-through-Grundlage
+=========================================================
+
+Ziel
+----
+
+0.53.22 fuehrt eine kleine gemeinsame Cache-Grundlage fuer FAT32-Sektoren
+ein. Das Ziel ist nicht ein fertiger Pagefile- oder Writeback-Cache, sondern
+ein stabiler Read-through-Pfad fuer wiederholte Datei-, Directory-, FAT- und
+Loader-Zugriffe.
+
+Besitzgrenze
+------------
+
+Der Cache liegt unter `Code/src/fs/page_cache.zig` und wird in
+`storage_boot.initFoundation()` initialisiert. FAT32 ist weiterhin die
+einzige Dateisystem-Wahrheit; `Code/src/fs/fat/fat32.zig` nutzt nur
+Sector-Wrapper fuer Read, Write und Flush.
+
+Die produktive Grenze bleibt:
+
+- R4SYS, Loader, R4D-/R4P-Discovery und R4NET-Dateipfade laufen ueber den
+  bestehenden FS-Request-Guard.
+- FAT32 entscheidet weiter ueber Pfadauflösung, FAT-Ketten, Directory-
+  Eintraege und Flush-Zeitpunkte.
+- Die Blockdevice-Queue bleibt Besitzer der echten Storage-I/O-Requests.
+- R4DEV liefert nur Diagnosezaehler.
+
+Vertrag
+-------
+
+Der Cache ist ein 64-Eintrag-Read-through-Sector-Cache mit 512-Byte-Sektoren.
+Wiederholte Reads desselben Device/LBA-Paares liefern Cache-Hits. Bei einem
+Miss liest der Cache genau einen Sektor ueber `storage/block.zig` und nimmt
+ihn danach in den LRU-Cache auf.
+
+Schreibpfade sind Write-through. FAT32 schreibt weiterhin synchron ueber die
+Blockdevice-Queue. Wenn der betroffene Sektor bereits gecacht ist, wird der
+Cache-Eintrag mit dem geschriebenen Inhalt aktualisiert. Dadurch gibt es
+keinen stillen Dirty-Cache und keinen zweiten Dateisystemzustand.
+
+Nicht-Ziele
+-----------
+
+- kein asynchroner Dirty-Writeback
+- kein Pagefile oder Swap
+- keine globale Reclaim-Policy
+- keine UI-/Desktop-Flush-Policy im Kernel
+- kein Dateiobjekt-Cache neben FAT32
+- kein Komfort-API fuer Anwendungen
+
+R4DEV-Metriken
+--------------
+
+ProgramApi v118 erweitert `ProgramPerformanceSummary` um:
+
+- `fs_cache_capacity`, `fs_cache_sector_bytes`, `fs_cache_entries_used`
+- `fs_cache_dirty_entries`
+- `fs_cache_reads`, `fs_cache_hits`, `fs_cache_misses`, `fs_cache_fills`
+- `fs_cache_evictions`, `fs_cache_invalidations`
+- `fs_cache_write_through_requests`, `fs_cache_write_through_updates`
+- `fs_cache_flushes`
+- `fs_cache_read_errors`, `fs_cache_write_errors`
+- `fs_cache_writeback_waits`, `fs_cache_writeback_errors`
+
+Im aktuellen Vertrag muessen `fs_cache_dirty_entries` und
+`fs_cache_writeback_waits` 0 bleiben. Das ist bewusst: R4OS zeigt damit
+ehrlich, dass noch kein Dirty-Writeback existiert.
+
+Abnahme
+-------
+
+PERFDIAG liest eine kleine Systemdatei wiederholt und prueft, dass
+Read-through-Hits steigen, Kapazitaet/Sektorgroesse sichtbar sind und keine
+Dirty-/Writeback-Fehler auftreten.
+
+FSDIAG prueft denselben Cache-Vertrag aus dem Dateisystem-Blickwinkel und
+meldet `FSDIAG cache result: OK`.
+
+STORDIAG zeigt neben Storage-Queue-Werten auch `STORDIAG cache: OK`, wenn
+der Cache aktiv ist, Eintraege und Hits besitzt und keine Cache-Fehler
+sichtbar sind.
+
+Fortschreibung
+--------------
+
+Seit 0.53.23 ist dieser Write-through-Stand nicht mehr der aktuelle
+Schreibpfad. `Docs/Core/FsWritebackQueue05323.txt` beschreibt den
+nachfolgenden Dirty-/Writeback-Vertrag mit explizitem Flush.

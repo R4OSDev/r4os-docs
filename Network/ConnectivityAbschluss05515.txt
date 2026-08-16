@@ -1,0 +1,306 @@
+﻿Connectivity-Abschluss 0.55.15
+==============================
+
+Ziel
+----
+
+0.55.15 fasst den 0.55.X-Connectivity-Stand als belastbaren Arbeitsstand fuer
+echte Hardware zusammen. QEMU-User-Network ist ein Host-Testprofil, nicht die
+Architektur. Die Dienste selbst kennen keine Hostforward-Ports und keine
+QEMU-Adressen; diese Annahmen bleiben in Build.bat, Testskripten und Doku.
+
+Besitzgrenzen
+-------------
+
+- TCP: R4NET/TCPSVC.
+- Dienststeuerung und Status: R4SYS-Service-Endpoints, sichtbar ueber
+  SERVMAN.
+- Datei-I/O: R4SYS-Datei- und Dateistream-APIs.
+- Systemdatei-Update: SYSUPD entscheidet ueber VERIFY/APPLY/RESUME/STATUS.
+  SSH, SFTP, SCP und FTP bleiben Transportpfade.
+- Remote Desktop: RDPSVC nutzt R4DESK/R4DRAW/R4NET/R4SYS. Es gibt keinen
+  Kernel-SSH-/SFTP-/SCP-/FTP-/RDP-Pfad und keinen parallelen
+  Protokoll-Fallback.
+
+QEMU-Hostprofil
+---------------
+
+Das Standard-Connectivity-Profil nutzt RTL8139 mit QEMU-User-Network:
+
+- SSH/SFTP/SCP: `127.0.0.1:10022 -> 10.0.2.15:22`
+- FTP Control: `127.0.0.1:10021 -> 10.0.2.15:21`
+- FTP Passive: `127.0.0.1:10020 -> 10.0.2.15:2020`
+- RDP: `127.0.0.1:13389 -> 10.0.2.15:3389`
+
+Autostart im Standardimage:
+
+- `SSHD.R4X`, `FTPSVC.R4X` und `RDPSVC.R4X` sind in
+  `C:\R4OS\SERVICES` installiert.
+- `C:\R4OS\CONFIG\SERVICES.R4S` registriert alle drei Dienste mit
+  `start=auto` und `enabled=yes`.
+- Die Projektmanifeste fuer SSHD, FTPSVC und RDPSVC tragen denselben
+  Autostart-Vertrag, damit Image-Konfiguration und Modulmetadaten nicht
+  auseinanderlaufen.
+
+Der normale Windows-FTP-Client-Smoke nutzt `ftp.exe` ueber den Control-Port.
+Er prueft Greeting, Login, `PWD`, `STAT /` fuer die virtuelle Laufwerkswurzel
+und `SYST`. Die Datenkanaele bleiben im separaten FTPSVC-Transfervertrag
+abgenommen.
+
+Host-Client-Suite
+-----------------
+
+Der gebuendelte Einstieg ist:
+
+    powershell -ExecutionPolicy Bypass -File Tests\Runtime\Run-ConnectivitySuite05515.ps1 -Tier quick
+
+Die Suite prueft:
+
+- Tool-Preflight fuer `ssh.exe`, `sftp.exe`, `scp.exe`, `ftp.exe` und
+  `mstsc.exe`.
+- `CheckConnectivityFinal05515.zig` als statischen Architektur- und
+  No-Fallback-Audit.
+- SSHD-Adminpfad mit Windows OpenSSH.
+- SFTP und klassisches `scp -O` mit kleineren, aber echten Dateitransfers.
+- FTPSVC mit normalem Windows-`ftp.exe`-FTP-Client.
+- RDPSVC ueber den bestehenden Wire-Test inklusive mstsc-naher
+  Negotiation-Probe.
+
+Die breite Runde ist:
+
+    powershell -ExecutionPolicy Bypass -File Tests\Runtime\Run-ConnectivitySuite05515.ps1 -Tier full
+
+`-Tier full` ergaenzt den vollstaendigen FTPSVC-Transfervertrag,
+SYSUPD-Apply mit vorab ins Testimage gelegtem Paket und die User-Network-
+NetMatrix. Mit `-IncludeTap` kommt die TAP/ICS-NetMatrix hinzu, wenn das
+Hostprofil dafuer wirklich bereit ist.
+
+Aktueller Abnahmebefund
+-----------------------
+
+Die 0.55.15-Quick-Suite ist gegen QEMU-User-Network gruen:
+
+    powershell -ExecutionPolicy Bypass -File Tests\Runtime\Run-ConnectivitySuite05515.ps1 -Tier quick
+
+Report:
+
+    DevTools\Logs\connectivity-suite05515-20260624-212531-217-5896.txt
+
+Damit sind der Architektur-Audit, SSHD-Adminpfad, SFTP/SCP, Windows-FTP-
+Client-Smoke und RDPSVC-Wire-/mstsc-Negotiation-Probe gemeinsam abgenommen.
+
+Die breite Full-Suite ohne TAP ist ebenfalls gruen:
+
+    powershell -ExecutionPolicy Bypass -File Tests\Runtime\Run-ConnectivitySuite05515.ps1 -Tier full
+
+Report:
+
+    DevTools\Logs\connectivity-suite05515-20260624-220958-304-9652.txt
+
+Diese Runde umfasst zusaetzlich FTPSVC-Transfervertrag, SYSUPD-Apply-Preseed
+und NetMatrix-User-Network.
+
+Zusaetzlich wurde ein echter SFTP-Leerdatei-Fall repariert: OpenSSH-SFTP darf
+eine Datei mit `OPEN` und direktem `CLOSE` ohne Datenpaket anlegen. SSHD
+startet den R4SYS-Dateistream fuer Uploads nun erst beim ersten `WRITE` oder
+bei `CLOSE` als leeren Stream. Der isolierte SFTP/SCP-Lauf danach war gruen:
+
+    DevTools\Logs\qemu-test-ssh-transfer0559-20260624-212341.log
+
+TAP/ICS und LAN-naeheres Profil
+-------------------------------
+
+TAP/ICS bleibt der naechste automatische Schritt in Richtung echter Hardware:
+
+    powershell -ExecutionPolicy Bypass -File Tests\Runtime\Run-NetMatrix.ps1 -Profile tap -Tier quick
+
+Erwartetes Windows-Referenzsetup:
+
+- TAP-Adapter: `OpenVPN TAP-Windows6`
+- Host/Gateway: `192.168.137.1`
+- R4OS statisch oder per DHCP im `192.168.137.0/24`-Netz
+- DNS ueber `192.168.137.1` oder einen externen Resolver
+
+Ein LAN-/Hardwareprofil ohne QEMU-Hostforwarding benutzt dieselben Dienste
+direkt auf der R4OS-IP:
+
+- `ssh.exe -p 22 r4os@<r4os-ip>`
+- `sftp.exe -P 22 r4os@<r4os-ip>`
+- `scp.exe -O -P 22 ...`
+- FTP gegen `<r4os-ip>:21`, passive Daten auf Port `2020`
+- RDPSVC gegen `<r4os-ip>:3389`
+
+Damit darf sich im Dienstcode nichts auf `10.0.2.15`, `10.0.2.2`,
+`127.0.0.1`, `10022`, `10021`, `10020` oder `13389` stuetzen.
+
+Der aktuelle Hostlauf am 24.06.2026 ist bewusst nicht als gruene TAP-Abnahme
+gewertet: `Run-NetMatrix.ps1 -Profile tap -Tier quick` scheiterte bereits im
+DHCP-Livetest. Der OpenVPN-TAP-Adapter war unter Windows `Disconnected`, die
+Hostadresse `192.168.137.1/24` stand auf `Deprecated`, und R4OS meldete
+`DHCP live acquire: backend-error` mit `Last Error: r4x-service-unavailable`.
+Das ist ein Hostprofil-/Readiness-Blocker fuer die automatische TAP-Matrix,
+kein produktiver Dienstfallback.
+
+Die User-Network-NetMatrix zeigte DHCP und DNS gruen. TCP Echo selbst war
+funktional (`TCPECHO result: ok`), der alte Harness verlangte aber
+kumulativ `poll=0`, obwohl `Backend IRQ/Poll` bereits
+`registered=yes hits=12` meldete und der Pollzaehler vor dem ersten IRQ
+steigen kann. Der Live-Harness prueft deshalb ab 0.55.15 IRQ-Nutzung ueber
+registrierte IRQ-Hits statt ueber einen starren Null-Poll-Zaehler. Ausserdem
+nutzt `Run-TcpLiveTest.ps1` nun ein eigenes minimales AUTOEXEC, damit TCP-
+Livetests nicht an unrelated Standarddiagnosen scheitern, bevor DHCP/TCPECHO
+ueberhaupt laufen.
+
+Status- und Fehlerbilder
+------------------------
+
+SERVMAN muss fuer die Connectivity-Dienste lesbare Endpunktbilder liefern:
+
+    SERVMAN STATUS SSHD
+    SERVMAN STATUS FTPSVC
+    SERVMAN STATUS RDPSVC
+
+Wichtige Statusanker:
+
+- SSHD: Sessions, Worker, Auth, Shell/Exec, SFTP/SCP-Zaehler,
+  Channel-Window, Transferbytes und letzter Transferpfad.
+- FTPSVC: Control-/Data-Bytes, passive/aktive Datenkanaele, RETR/STOR,
+  Rename/Delete/Mkdir/Rmdir, letzter Befehl, letzter Pfad und letzter Fehler.
+- RDPSVC: Listener, Accept, Sessions, Reconnect, Bitmap/Input,
+  `classic_sel`, `modern_req`, `tls_req`, `nla_req`, `compat_mask`,
+  `compat_blocker`, `sec_state`, `sec_tls`, `sec_credssp`, `sec_auth_ok`,
+  `sec_auth_fail`, `tls_alert`, `tls_session`, `credssp_windows` und
+  `modern_active`.
+
+RDP/mstsc-Stand
+---------------
+
+RDPSVC ist service-lokal sauber und spricht den Classic-RDP-Pfad im Hosttest:
+TPKT, X.224, MCS/GCC, Classic Security, Demand/Confirm Active, Bitmap,
+Input, Reconnect und Fehlerpfad.
+
+Windows `mstsc` bleibt der Zielclient, aber die produktive Freigabe ist noch
+nicht erreicht. Seit 0.55.21 biegt RDPSVC moderne mstsc-Negotiation
+(`SSL`, `HYBRID`, `HYBRID_EX`) nicht mehr auf Classic RDP um. Der Dienst
+selektiert den modernen Security-Pfad und ruft R4TLS/R4AUTH-Kontrakte auf.
+Seit 0.55.29 ist der erwartete Happy-Path-Alert entfernt: der Dienst zaehlt
+`modern_active`, wenn R4TLS-Session- und R4AUTH-Windows-CredSSP-Vertrag
+erfolgreich konsumiert wurden. Der Check wird als ModernSecurityProfile beim
+Service-Start vorgeprueft; interne Fehler bleiben ueber Blocker sichtbar,
+waehrend `tls_alert` echten TLS-Wire-Fehlern vorbehalten bleibt.
+
+Seit 0.55.30 besitzt R4TLS mit `op_tls12_live_begin` (`op22`) und
+`op_tls12_live_finish` (`op23`) den Live-Vertrag fuer echte Client-Flights.
+Der Begin-Aufruf liefert `R4LB` mit `R4LS`-Sessionzustand und ServerHandshake,
+der Finish-Aufruf verifiziert Client Finished und liefert `R4LF` mit
+`R4LK`-Streamzustand plus Server ChangeCipherSpec/Finished. RDPSVC ist damit
+noch nicht Windows-`mstsc`-fertig. Seit 0.55.31 besitzt R4AUTH den
+Live-CredSSP-Vertrag `R4CL` ueber `R4LK`; offen bleiben RDPSVC-Streamadapter,
+Modern-RDP-Aktivierung und die finale mstsc-Sichtabnahme.
+Seit 0.55.32 ist der RDPSVC-Streamadapter an R4TLS angeschlossen: R4TLS
+besitzt `op24`/`op25` fuer verschluesselte Application-Records ueber `R4LK`,
+der RDPSVC-Preflight prueft `tls_live` und `tls_stream`, dupliziert aber keine
+TLS-Kryptografie oder TLS-Parserlogik im Dienst.
+Seit 0.55.33 konsumiert RDPSVC den R4AUTH-Live-CredSSP-Vertrag `op18`/`op20`
+ueber diesem R4TLS-Streamprofil. Der Preflight prueft R4LK-Public-Key-Bindung,
+feste Zugangsdaten `r4os`/`rosebud` und die negativen Grenzen fuer Passwort,
+Kerberos, Domain, TSRequest und fehlenden TLS-Kontext. `credssp_live` und
+`credssp_loop` sind sichtbar, ohne dass RDPSVC eigene R4CL-, R4LK-, NTLM- oder
+Kryptografie-Logik bekommt.
+Seit 0.55.34 fuehrt RDPSVC die RDP-Aktivierung nach dem ModernSecurityProfile
+ueber `modern_protected` weiter. Der fruehe Preflight-Erfolg zaehlt nicht mehr
+als `modern_active`; erst MCS, Client Info, Demand/Confirm Active, Bitmap und
+Input setzen `modern_active` und `modern_stream`. Der RDPSVC-Live-Harness
+enthaelt dafuer eine Modern-Aktivierungsrunde mit `HYBRID_EX`.
+Seit 0.55.35 ist der finale Windows-`mstsc.exe`-Pfad als separates Gate
+festgehalten. Der `HYBRID_EX`-Harness ist kein mstsc-End-to-End-Ersatz,
+solange RDPSVC den produktiven Clientpfad noch nicht ueber echte R4TLS-
+Wire-Records (`op22`/`op23`) und verschluesselte Application-Records
+(`op24`/`op25`) fuehrt. Die Freigabe bleibt deshalb auf 0.55.39 geplant;
+0.55.36 bis 0.55.38 bauen die fehlenden Wire-Schichten.
+Seit 0.55.36 ist der TLS-Wire-Adapter im Dienst vorhanden: RDPSVC fuehrt nach
+der Negotiation den TLS-1.2-Handshake ueber echte Client-/Server-Records und
+R4TLS `op22`/`op23`, haelt den `R4LK`-State nur opak und stellt
+`tlsWireWrite`/`tlsWireRead` fuer die spaetere R4TLS-Application-Schicht
+`op24`/`op25` bereit. Der Host-Harness nutzt dafuer `SslStream`; CredSSP und
+RDP-Activation ueber diesen Stream sind bewusst noch separate Gates.
+Seit 0.55.37 fuehrt RDPSVC die CredSSP-Live-Schleife ueber diese
+verschluesselte Application-Schicht. R4AUTH verarbeitet Negotiate,
+Authenticate und PubKeyAuth inklusive fester Anmeldung `r4os`/`rosebud`;
+RDPSVC rahmt nur `R4CL` mit opakem `R4LK`, sendet die R4AUTH-Challenge zurueck
+und meldet Bad-Password, Bad-PubKeyAuth, Kerberos, Domain und Bad-TSRequest
+als sichtbare Fehlerpfade. Die finale RDP-Aktivierung ueber denselben TLS-
+Stream bleibt der naechste Gate-Schritt.
+Seit 0.55.38 ist dieser Gate-Schritt fuer den Host-Harness umgesetzt:
+RDPSVC nutzt einen gemeinsamen RDP-Transport fuer Plain-TCP und R4TLS-
+Application-Records. Der Live-Test fuehrt nach CredSSP `modern-wire` ueber
+Windows/.NET `SslStream` weiter und prueft MCS, ClientInfo, Bitmap-Updates und
+Input ueber denselben geschuetzten Stream. Die Windows-`mstsc.exe`-
+End-to-End-Sichtabnahme bleibt als separates Gate 0.55.39.
+Seit 0.55.39 besitzt dieses Gate eine reproduzierbare manuelle
+Abnahmehilfe. `Run-RdpMstscManual05539.ps1` schreibt das Modern-NLA-Profil,
+startet QEMU headless mit RDPSVC-Hostforwarding und startet `mstsc.exe` nur
+bei explizitem `-LaunchMstsc`. Die Connectivity-Suite ruft diesen Pfad nur
+als Preflight ohne sichtbares Fenster auf; die echte Freigabe bleibt eine
+bewusste Nutzer-Sichtabnahme mit Login, Bitmap, Input, Abbruch und Reconnect.
+Die ersten echten mstsc-Versuche kamen bis zur Passwortannahme und brachen
+danach mit `0x904`/`0x7` ab. RDPSVC behandelt diese Post-CredSSP-Kante jetzt
+mit dynamischen MCS-Channel-Joins und einem vollstaendigeren Demand-Active-
+Capability-Satz; die Freigabe bleibt trotzdem offen, bis Windows `mstsc.exe`
+den Desktop sichtbar erreicht.
+Nach dem dritten unveraenderten `0x904`/`0x7` fuehrt RDPSVC ausserdem den
+fehlenden Licensing-Schritt ein: `STATUS_VALID_CLIENT` wird vor Demand Active
+gesendet, ohne daraus eine R4OS-Lizenz- oder Rechteverwaltung zu machen.
+Nach dem vierten unveraenderten `0x904`/`0x7` schreibt RDPSVC zusaetzlich
+stufengenaue Aktivierungsmarker. `SERVMAN STATUS RDPSVC` zeigt den letzten
+Meilenstein als `trace=`, LOGSVC speichert ihn als Service-Record und die
+manuelle Abnahmehilfe uebernimmt serielle `last_trace`-Daten in den Report,
+wenn der Host sie spiegelt. Die QEMU-GUI-Ausgabe allein ist fuer diese Kante
+nicht ausreichend.
+Zusaetzlich ist die Koexistenz von RDPSVC und SSHD nach RDP-Abbruechen
+abgenommen: RDPSVC verwendet bounded TCPSVC-Servicecalls fuer Accept, Read,
+Write, Poll, Retransmit, Close und Listener-Close, SSHD pumpt Console-
+Ausgabe waehrend wartender verschluesselter Channel-Reads weiter, und
+`Run-RdpSshCoexistence05539.ps1` prueft SSH vor/nach drei synthetischen
+mstsc-modern-Abbruechen. Damit bleibt der Administrationspfad nach einem
+fehlgeschlagenen RDP-Versuch erreichbar; die sichtbare mstsc-Freigabe bleibt
+dennoch offen.
+
+Der RDPSVC-Harness behandelt fruehe `attach-confirm-read`-Timeouts seit
+0.55.15 als retrybaren Warmup-Fall. Hintergrund: Wenn noch kein RDPSVC-
+Readiness-Marker im Log steht und der Test nur ueber den Launcher-Warmup
+startet, kann ein erster Client zu frueh in den Handshake laufen. Nach Retry
+bleibt die Abnahme hart: zwei Aktivierungen, Bitmap/Input, Reconnect, kaputtes
+TPKT und mstsc-modern-Probe muessen gruen sein.
+
+Abschluss-Audit
+---------------
+
+Der statische Abschluss-Audit:
+
+    DevTools\Zig\zig.exe run Tests\Policy\CheckConnectivityFinal05515.zig
+
+prueft, dass:
+
+- QEMU-Hostforwarding nur im Build-/Testvertrag steht.
+- SERVMAN alle Connectivity-Endpunkte zusammenfasst.
+- SSHD, FTPSVC und RDPSVC ueber R4NET/TCPSVC lauschen und akzeptieren.
+- SSHD/SFTP/SCP und FTPSVC R4SYS-Dateistreams statt eigener Dateipfade nutzen.
+- SYSUPD den Systemdatei-Replace ueber R4SYS besitzt und SFTP/SCP nur als
+  Transport betrachtet.
+- RDPSVC die mstsc-nahe Modern-Probe sichtbar als `HYBRID_EX` plus
+  erfolgreiche Modern-Aktivierung ohne erwarteten `tls_alert` behandelt.
+- in den Dienstquellen keine QEMU-Hostports, Hostadressen, Kernelprotokoll-
+  Imports oder produktiven Altpfade auftauchen.
+
+Naechste harte Linie
+--------------------
+
+Nach 0.55.15 sind die naechsten grossen Connectivity-Schritte:
+
+- TAP/ICS-Full-Matrix regelmaessig auf einem echten Hostprofil fahren.
+- RDP TLS/NLA/CredSSP als echte RDPSVC-Erweiterung planen, nicht als
+  Kernel- oder Host-Hack.
+- FTP mit weiteren Standardclients gegen ein echtes LAN-Profil pruefen.
+- SYSUPD-Updatepakete ueber reale Netzwerkstrecken und danach Neustart/
+  Rollback-Pfad abnehmen.

@@ -1,0 +1,131 @@
+﻿UPDSVC-Updatesuche und Inventarabgleich 0.63.17
+=================================================
+
+UPDSVC fuehrt die produktive Updatesuche als Auftrag des einzigen Workers
+aus. Die Suche veraendert noch keine Systemdatei und laedt keine R4U-Datei
+herunter. Ihr Ergebnis ist eine deterministische, paketweise Angebotsliste
+fuer den spaeteren Desktop-Client.
+
+
+Netzwerkfolge
+-------------
+
+Jede Suche loest den Serverhostname aus
+`C:\R4OS\CONFIG\UPDATE.R4S` auf, baut genau eine TCP-Verbindung auf Port
+1338 auf und sendet den dort konfigurierten Magic Key. Nur die exakte Antwort
+`OK` erlaubt den naechsten
+Schritt. Keine Antwort, eine andere Antwort oder ein Netzfehler brechen den
+Auftrag sichtbar ab; UPDSVC versucht weder 1338 noch 1339 blind erneut.
+Der Schluessel wird als ASCII-Zeile gesendet. Ein vorlaeufiges
+`would-block` oder der interne 50-ms-Timeout eines aufgeschobenen TCPSVC-Reads
+ist noch keine fehlende Antwort: UPDSVC wartet mit Yield bis zur absoluten
+konfigurierten Auth-Deadline weiter. Erst deren Ablauf oder ein
+Verbindungsabschluss ohne die zwei Bytes `OK` ergibt `auth-no-response`.
+
+Nach `OK` laedt UPDSVC `CATALOG_URL` ueber den zentralen HTTPS-Transport.
+`SERVER` muss dabei demselben Hostnamen wie `CATALOG_URL` entsprechen. Damit
+laufen 1338 und 1339 ueber denselben oeffentlichen Netzwerkpfad und der
+IP-basierte Serverzustand sieht dieselbe Quelladresse; eine interne IP oder
+Twingate ist keine Clientvoraussetzung. Redirects sind standardmaessig
+verboten. `STOP NOW!` und `LAST CHANCE!` werden als sichtbarer Zugriffshinweis
+beendet und niemals durch einen weiteren 1339-Versuch beantwortet. Die
+erfolgreiche 1338-Anmeldung setzt serverseitig zuvor gezaehlte 1339-Versuche
+zurueck.
+
+Der gemeinsame Webtransport behandelt den internen 50-ms-Timeout eines
+aufgeschobenen TCPSVC-Reads wie `would-block`, solange die absolute
+Aufruferdeadline nicht erreicht ist. Das gilt auch fuer die einzelnen
+TLS-Records eines ECDSA- oder RSA-Handshakes; der Server benoetigt kein
+abweichendes Zertifikat fuer den Update-Client.
+
+Scheitert der zentrale Webtransport dennoch, uebernimmt UPDSVC den konkreten
+`app_web.Error` in den sichtbaren Auftragsgrund. DNS-, TCP-, TLS-,
+Zertifikats- und HTTP-Lesefehler werden nicht zu einem allgemeinen
+`catalog-network-failed` zusammengefasst.
+
+Eigene HTTP-Header werden der Web-Fassade im serialisierten SDK-Format
+`name:value` plus LF uebergeben. Die Fassade validiert sie und erzeugt daraus
+selbst die HTTP-Wirezeilen mit CRLF. UPDSVC reicht weder beim Katalog noch
+beim Paketdownload bereits vorformatierte Wireheader ein.
+
+Der produktive Nginx waehlt fuer sein P-256-Let's-Encrypt-Zertifikat bei der
+vom Client angebotenen Reihenfolge ECDSA/SHA-384. TLS 1.2 bindet diesen Hash
+nicht an eine P-384-Zertifikatskurve. R4TLS 0.2.5 prueft daher die
+unterstuetzten P-256-/P-384-Schluessel getrennt vom ausgehandelten
+SHA-256-/SHA-384-Hash; der P-256-plus-SHA-384-Fall besitzt einen eigenen
+Regressionstest.
+
+
+Lokale Wahrheiten
+-----------------
+
+Der Vergleich liest drei voneinander getrennte Staende:
+
+- `C:\R4OS\CONFIG\VERSION.R4S` liefert die zentrale Releaseversion.
+- `C:\R4OS\CONFIG\MODULES.JSON` liefert Profil sowie exakt die im Image
+  installierten Komponenten mit Art, Name, Ziel und Artefaktversion.
+- R4DEV liefert die Version des aktuell laufenden Kernels.
+
+MODULES.JSON wird strikt als Schema 2 und nur bis 64 KB beziehungsweise 192
+Eintraege angenommen. Das lokale Profil `slim`, `full` oder `test` waehlt
+genau die gleichnamige Required-Liste des Releasemanifests. Die installierte
+Kernelversion stammt aus MODULES.JSON; weicht sie vom laufenden R4DEV-Kernel
+ab, meldet die Suche `restart-required`, auch wenn kein Download angeboten
+wird.
+
+
+Katalog und Auswahl
+-------------------
+
+Katalog v2 wird bis maximal 512 KB durch JSON.R4P tokenisiert. Der rohe
+HTTPS-Antwortpuffer umfasst dieselbe Kataloggrenze plus den maximalen
+HTTP-Header; damit kann eine gueltige Antwort nicht bereits vor dem
+JSON-Parser an einer kleineren Transportgrenze scheitern. Der Client
+akzeptiert nur die vollstaendigen bekannten Objektfelder, eindeutige Felder,
+Semantic Versions und die fest begrenzten Release-, Paket-, Komponenten- und
+Anforderungslisten. Unbekannte Felder, doppelte Releases, ungueltige Hashes,
+Ziele oder Profilzaehler brechen fail-closed ab.
+
+Der Produktivserver behaelt historische Freigaben unveraendert fuer Audit,
+ControlCenter und direkte Downloads, liefert in `releases` aber nur den
+hoechsten gueltigen Zielrelease. Das entspricht der Clientauswahl: Ein
+uebertragener aelterer Release konnte nie als Fallback dienen, wurde dennoch
+vollstaendig validiert und liess die Antwort ohne Nutzen anwachsen.
+
+Die Komponentenidentitaet besteht aus Art, Name und kanonischem Ziel. Ein
+Paket wird angeboten, wenn mindestens eine bereits installierte Komponente
+eine hoehere Serverversion besitzt oder eine fuer das lokale Profil
+erforderliche Komponente fehlt. Nicht installierte optionale Komponenten und
+Downgrades werden nicht angeboten. Pakete bleiben atomar; wuerde ein Paket
+neben dem Update ein unzulaessiges optionales Modul oder Downgrade einspielen,
+wird es nicht ausgewaehlt.
+
+Konkrete Anforderungen werden gegen den installierten Stand, bereits
+ausgewaehlte Provider und bei `active` gegen den laufenden Kernel geprueft.
+Fehlende Provider, Zyklen oder eine falsche `install_order` sind sichtbare
+Katalogfehler. Foundation-Pakete und Abhaengigkeiten bleiben in der vom
+Server validierten topologischen Reihenfolge.
+
+
+Ergebnisvertrag
+---------------
+
+Der Servicezustand endet in `available`, `up-to-date` oder bei einem bereits
+installierten, noch nicht aktiven Kernel in `pending-restart`. Operation 7
+liefert die Ergebnisliste an die Job-ID gebunden und indexweise. Eine Seite
+enthaelt genau ein Paket und bleibt dadurch trotz maximal 2048 Byte langer
+R4U-Beschreibung, Titel, SHA-256, Dateiname und HTTPS-URL unter dem 4-KB-
+Servicepayload. JSON-Escapes werden einmal in einfachen UTF-8-Text dekodiert;
+die Beschreibung wird weder als HTML noch als Markdown interpretiert.
+
+Operation 8 liefert fuer jedes Paketergebnis die Komponenten ebenfalls
+indexweise. Jede Komponente enthaelt Name, Art, Ziel, installierte und
+angebotene Version. Beim Kernel kommt die laufende Version hinzu; Flags
+kennzeichnen fehlende Komponenten, Neustartaktivierung und eine Abweichung
+zwischen installierter und laufender Version. Die aktuelle Releaseversion
+wird getrennt davon in den Paketseiten transportiert.
+
+Download, Resume und SHA-256-Pruefung sind seit 0.63.18 ueber die an Suchjob
+und Ergebnisindex gebundene Operation 3 verfuegbar. Der persistente
+Datei- und Zustandsvertrag steht in
+`Docs/Deployment/UpdateDownload06318.txt`.

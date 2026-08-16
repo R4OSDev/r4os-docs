@@ -1,0 +1,109 @@
+﻿# R4OS 0.62.33 - SVG-Darstellung in Klickifax
+
+Besitz und Schichten
+--------------------
+
+SVG bleibt vollstaendig im Userland. Der begrenzte Parser, die Geometrie
+und der Software-Rasterizer liegen im Zig-SDK-Pfad von R4IMG. Klickifax
+besitzt die dokumentgebundenen Quell-, Pixel-, Skalierungs- und
+Linktrefferdaten. R4DRAW bekommt nur das fertige begrenzte Raster; Kernel
+und R4DRAW speichern weder SVG-Quellen noch SVG-DOM oder Pfade.
+
+Gemeinsamer Bildpfad
+--------------------
+
+Externe IMG-Ressourcen mit `image/svg+xml` und eingebettete SVG-Elemente
+verwenden denselben R4IMG-Parser und Rasterizer. Fuer Inline-SVG
+serialisiert Klickifax den aktuellen HTML-DOM-Teilbaum in einen begrenzten
+XML-Puffer. Dadurch werden DOM-Aenderungen aus R4JS vor dem folgenden
+Reflow neu gerastert, ohne eine zweite SVG-Implementierung zu erzeugen.
+
+Probe, Decode, Alpha-Komposition, CSS-Groesse, Seitenverhaeltnis,
+Skalierungsplanung, R4DRAW-Ausgabe, Abbruch und Freigabe folgen dem bereits
+vorhandenen Bildressourcen-Lebenszyklus. Klickifax behaelt SVG-Encodedaten
+begrenzt bis Navigation, Dokumentwechsel oder Programmende, damit R4IMG bei
+einer geaenderten CSS-Anzeigegroesse direkt in die Zielgroesse neu rastert.
+Scratcharena, intrinsisches ARGB-Raster und Zielraster bleiben Besitz des
+Browserprozesses. Rasterbilder verwenden weiterhin den vorhandenen
+Skalierungspfad.
+
+Der Zielstand 0.62.33 war durch den damaligen R4DRAW-GUI-Transport auf maximal
+128 x 128 Pixel je Rasterkommando und 16384 Rasterpixel je Frame begrenzt. Ein
+320 x 200 grosses Seitenelement wurde deshalb beispielsweise als ungefaehr
+106 x 66 Pixel geplant und mit Faktor 3 ausgegeben. Seit 0.62.42 kann ein
+Frame mehrere dynamisch besessene 128x128-XRGB-Kacheln enthalten; die feste
+Gesamtgrenze ist damit entfallen. Der allgemeine SVG-Bildpfad wird im Rahmen
+der dynamischen Displaylistenserie auf diesen gekachelten Transport
+migriert. Das war und ist keine SVG- oder R4IMG-Decodergrenze.
+
+Unterstuetzter Zielstand
+------------------------
+
+- Elemente: svg, g, defs, a, use, clipPath, path, rect, circle, ellipse,
+  line, polyline, polygon und einfacher horizontaler text
+- ViewBox, PreserveAspectRatio meet/slice/none und CSS-/HTML-Groessen
+- verschachtelte Matrix-, Translate-, Scale-, Rotate- und Skew-Transformation
+- Vollfarben, currentColor, Fill, Stroke, Opazitaet und Alpha
+- Nonzero- und Evenodd-Fuellregel
+- einfache Clip-Pfade mit userSpaceOnUse
+- M/L/H/V/C/S/Q/T/A/Z-Pfadbefehle mit begrenzter Kurven- und Arc-Abflachung
+- R4OS-Fontglyphen ueber den vorhandenen R4DRAW-Fontkatalog
+- Linktreffer fuer A-Elemente in eingebettetem SVG
+
+Linktreffer
+-----------
+
+Die Inline-Bruecke versieht SVG-A-Elemente beim Serialisieren mit der
+stabilen Nummer ihres vorhandenen HTML-DOM-Knotens. Der Rasterizer meldet
+die transformierte und auf Clip-Grenzen beschraenkte Rasterregion ueber
+einen optionalen Callback. Klickifax skaliert Mauskoordinaten in die
+intrinsische SVG-Flaeche zurueck und uebergibt danach den urspruenglichen
+A-Knoten an denselben Ereignis- und Navigationspfad wie normale HTML-Links.
+SVG innerhalb eines IMG-Elements ist wie im Web ueblich nicht selbst
+interaktiv.
+
+Grenzen und Fehler
+------------------
+
+- hoechstens 256 KB SVG-Quelle
+- hoechstens 1024 SVG-Knoten und 8192 Attribute
+- hoechstens 64 Baumebenen, 16 USE-Ebenen und 8 Clip-Ebenen
+- hoechstens 32768 Pfadpunkte und 2048 Teilpfade
+- hoechstens 4096 Pixel je Achse und vier Millionen Ausgabepixel
+- hoechstens 64 geladene Dokumentbildressourcen plus 32 eingebettete
+  SVG-Wurzeln und 32 Linkregionen je SVG-Bild in Klickifax
+
+Ungueltiges XML, ungueltige Dimensionen, Grenzueberschreitungen und
+erkannte nicht unterstuetzte Funktionen liefern unterscheidbare Fehler.
+Externe USE-Folgeressourcen sowie Filter, Masken und Pattern werden nicht am
+normalen Dokument-Ressourcenvertrag vorbei geladen und bleiben eindeutige
+nicht unterstuetzte Funktionen. Ein IMAGE-Element innerhalb eines ansonsten
+gueltigen SVG wird dagegen als isolierte, derzeit nicht gezeichnete
+Teilressource uebersprungen. Gueltige Pfade, Formen und Texte desselben SVG
+bleiben sichtbar; das optionale Teilbild darf nicht das ganze Symbol in einen
+Broken-Image-Fallback verwandeln.
+
+Bewusst ausserhalb dieses Zielstands liegen Animation, Filter, Masken,
+Pattern, Marker, Fremdobjekte, TSPAN, Textpfade, komplexe Textformung,
+SVG-Stylesheets, Webfonts und externe SVG-Folgeressourcen. Diese Punkte
+werden weder als vollstaendig noch als stiller Kompatibilitaetsfallback
+behauptet.
+
+Abnahme
+-------
+
+Der R4IMG-Testbestand prueft Probe, ViewBox, Formen, Pfade, Transformation,
+Clipping, Alpha, Textglyphen, Linkregionen, isolierte IMAGE-Teilressourcen sowie
+Quell-, Tiefen- und Dimensionsgrenzen. Ein eigenstaendiger Klickifax-Test
+prueft die begrenzte HTML-DOM-Serialisierung samt Entity-/CDATA-Erhalt und
+den gemeinsamen R4IMG-Decode auch mit einem nicht verfuegbaren IMAGE-Kind.
+Das allgemeine `Run-WebImageResourceContract06238.ps1` verbindet diesen
+Nachweis mit PICTURE, SRCSET/SIZES, Data-URLs und dem Dokumentressourcen-
+Lebenszyklus. `KLICKIFAX image selftest: OK` dekodiert im Gast zusaetzlich
+eine sichtbare Vektorflaeche neben einem nicht verfuegbaren IMAGE-Knoten
+ueber den ausgelieferten R4IMG-Kontext. KFXLIVE `/IMAGE` bleibt der produktive
+headless Gastpfad fuer reale HTTPS-SVG-Ressourcen.
+
+Normative Referenz ist W3C SVG 2. Der lokal gepinnte PlutoSVG-/PlutoVG-Stand
+dient nur zum informativen Implementierungsvergleich und ist kein
+Produktbestandteil.

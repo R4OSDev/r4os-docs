@@ -1,0 +1,332 @@
+﻿*** Kernel Refactor Roadmap Leitbild ***
+In dieser Roadmap befassen wir uns im Verlauf mehrerer großer Versionen mit der säuberung des Kernels.
+Aktuell wurden viele Funktionen nach
+kernelold.zig ausgelagert und in src/old/ verschoben.
+Wir holen die nach und nach zurück in main.zig, kontrollieren dabei aber alles.
+Was aus dem Kernel raus kann soll in Software, Treiber und Protokolle untergebracht werden.
+Im Zuge dieses Refactor ist auch die Dokumentation zu aktualisieren und pflegen.
+
+Grundsatz fuer alle Unterversionen:
+- Keine halben Umbauten: Eine Unterversion ist erst erledigt, wenn Code, Imports, Doku, Version und Abnahme zusammenpassen.
+- Keine stillen Doppelpfade: Wenn eine Initialisierung nach `main.zig` wandert, darf sie nicht weiterhin produktiv in `kernelold.zig` laufen.
+- Boot-kritische Pfade muessen konservativ behandelt werden. Was fuer Boot, `C:\`, Speicher, Interrupts oder fruehe Ausgabe noetig ist, bleibt built-in, bis ein stabiler Ersatz existiert.
+- Kernel-Verschlankung ist ein ausdrueckliches Ziel. Fallbacks und parallele Built-in-Pfade werden nur genutzt, wenn sie fuer Boot-Stabilitaet, Migration oder echte Abnahme noetig sind.
+- Nicht bootkritische Treiber sollen nach erfolgreicher R4D-Auslagerung aus dem Kernel entfernt werden, statt dauerhaft als Built-in-Fallback liegen zu bleiben.
+- Jeder Umzug braucht klare Modulgrenzen: Boot-Schicht, Runtime-Core, Treiber, API und Diagnose duerfen nicht unkontrolliert vermischt werden.
+- Jede neue Boot-Schicht braucht eine klare Zustands- und Fehlersemantik: entweder erfolgreich initialisiert, sauber uebersprungen oder fatal beendet. Stilles Weiterlaufen nach kaputten Pflichtpfaden ist kein erledigter Zustand.
+- `kernelold.zig` darf waehrend der Migration nur noch als Legacy-Bruecke dienen. Neu umgezogene Initialisierungen muessen aus `kernelold.zig` verschwinden oder dort explizit als bereits initialisierter Zustand konsumiert werden.
+- Zwischenversionen duerfen lauffaehig klein sein, aber nicht fachlich halb: Keine Unterversion wird abgeschlossen, wenn Besitzgrenzen, Boot-Reihenfolge oder Abhaengigkeiten noch absichtlich unklar bleiben.
+- Eine Unterversion darf bewusst nur Vertrag, Diagnose oder Probe liefern,
+  wenn sie klar als nicht-produktiver Ersatz gekennzeichnet ist. Produktive
+  Umschaltung und Entfernen des Altpfads passieren erst nach echter
+  Funktionsabnahme.
+- Jede Pruefung endet mit einer Entscheidung. Ein Punkt bleibt offen, bis das
+  Ergebnis in Code, Doku oder als konkret versionierter Folgepunkt festgehalten
+  ist.
+- Testluecken werden vor dem Abschluss geschlossen. Vorhandene Testskripte
+  werden namentlich genutzt; wenn keines den neuen Vertrag abdeckt, gehoert
+  ein gezieltes Testskript zur Unterversion.
+- Diagnose-Altpfade duerfen nicht still im normalen Produktivpfad erreichbar
+  bleiben. Sie brauchen einen expliziten Diagnose-/Kompatibilitaetsvertrag,
+  sichtbare Statusausgabe und eine eigene Abnahme.
+- Vor jedem Abschluss wird gezielt nach Rest-Imports, Doppelaufrufen und verdeckten Abhaengigkeiten gesucht. Gefundene Altlasten werden entweder beseitigt oder in der Roadmap als bewusster Folgepunkt notiert.
+- Jede abgeschlossene Unterversion erhoeht `Injection/sys/CONFIG/VERSION.R4S` auf die passende Version und wird danach gepusht.
+- Mindestens `DevTools/Scripts/Build.bat -norun` gehoert zu jeder Code-Unterversion. Bei Boot-, IRQ-, Input-, Storage-, USB- oder R4D-Aenderungen gehoert `DevTools/Scripts/Build.bat -test` dazu.
+- GUI-/Hardware-nahe Punkte bekommen zusaetzlich eine klare manuelle Sichtabnahme durch den User, wenn QEMU-Smoke allein nicht reicht.
+
+-------------------------------------------
+Ab hier beginnen die Versionen und ab hier darf auch bereinigt werden.
+Das Refactor Leitbild muss bei einer Roadmap Bereinigung stehen bleiben
+-------------------------------------------
+
+Archivierte Roadmap 0.44.X - Legacy-Brueckenabschluss und old-Aufloesung
+-------------------------------------------
+Diese Datei archiviert den abgeschlossenen 0.44.X-Stand. Die aktive Roadmap
+wurde danach bereinigt; das Refactor-Leitbild bleibt in `Roadmap.txt` stehen.
+
+Rahmen fuer 0.44.X
+-------------------------------------------
+0.44.X beendet die bisherige Entkernelungs-/Legacy-Brueckenphase. Der Block
+zieht nicht nur den naechsten kleinen Bootschnitt um, sondern fuehrt den
+verbleibenden `kernelold.zig`-Rest nach `main.zig` und loest anschliessend den
+gesamten `Code/src/old/`-Namespace auf.
+
+Danach soll am Kernel wieder als einem zusammenhaengenden Codebestand
+weitergearbeitet werden. `old/` ist dann kein produktiver Strukturanker mehr,
+sondern hoechstens noch historische Information in Changelogs.
+
+Vor 0.44.1 lag folgender Rest in `kernelold.zig`:
+- `r4p.loadAll()`
+- `r4p.dumpStatus()`
+- Task-System-Start
+- Scheduler-Start
+- optionaler Page-Fault-Test
+- optionaler DHCP-Boot-Acquire
+- Detail-Redirect-Abschluss
+- Launcher-Start ueber `shell_launcher.start(...)`
+
+Seit 0.44.1 liegt dieser Startpfad direkt in `main.zig`;
+`Code/src/kernelold.zig` ist entfernt.
+
+Zielstruktur fuer die Aufloesung von `Code/src/old/`:
+- `old/arch/x86_64/*` -> `arch/x86_64/*`
+- `old/platform/*` -> `platform/*`
+- `old/kernel/*` -> `kernel/*` oder bei klarer API-Grenze `api/*`
+- `old/sched/*` -> `sched/*`
+- `old/program/*` -> `program/*`
+- `old/protocol/*` -> `protocol/*`
+- `old/net/*` -> `net/*`
+- `old/audio/*` -> `audio/*`
+- `old/drivers/registry.zig` -> `driver/registry.zig`
+- `old/drivers/storage/*` -> `driver/storage/*`
+- `old/drivers/usb/*` -> `driver/usb/*`
+- `old/drivers/video/*` -> `display/*`, sofern es Display-/Surface-
+  Infrastruktur ist
+- `old/fs/*` -> `fs/*`
+- `old/storage/*` -> `storage/*`
+
+Leitplanken:
+- Kein Compatibility-`old/` mit Forwarder-Dateien. Nach Abschluss von 0.44.X
+  soll `Code/src/old/` nicht mehr existieren.
+- Keine stillen Alias-Imports. Alle produktiven Imports muessen auf die neuen
+  Zielpfade zeigen.
+- Keine neue Funktionsauslagerung nach R4D/R4P/R4X in diesem Block, ausser sie
+  ist zwingend noetig, um einen bereits bestehenden Vertrag korrekt
+  beizubehalten. 0.44.X ist ein Strukturabschluss, keine neue
+  Treiber-Portierungswelle.
+- Keine groesseren fachlichen Neuentwicklungen nebenbei. Verhalten bleibt
+  gleich, Pfade und Besitzgrenzen werden bereinigt.
+- Wenn beim Umzug echte zyklische Abhaengigkeiten sichtbar werden, werden sie
+  im Zielpfad sauber aufgeloest. Ein neuer `legacy/`-Ersatzordner zaehlt nicht
+  als erledigt.
+- Dokumentation darf alte `Code/src/old/`-Pfade nur noch in historischen
+  Changelogs nennen. Aktive Dokumente muessen die neuen Pfade beschreiben.
+- Abnahme fuer jede Code-Unterversion: mindestens `Build.bat -norun` und
+  `Build.bat -test`. Bei Runtime-/Netzwerk-/R4P-/Treiberpfaden werden die
+  passenden bestehenden Smokes mitgenommen.
+
+0.44.X gilt erst als abgeschlossen, wenn:
+- `Code/src/kernelold.zig` entfernt ist oder keinerlei produktiver Buildpfad
+  mehr darauf verweist. Ziel ist Entfernung.
+- `main.zig` den kompletten Kernelstart bis zum Launcher sichtbar und in
+  stabiler Reihenfolge besitzt.
+- `Code/src/old/` nicht mehr existiert.
+- `rg "old/" Code/src` keine produktiven Importtreffer mehr liefert.
+- Aktive Dokumentation keine aktuellen `Code/src/old/`-Pfade mehr nennt.
+- Ein neues statisches Gate, z.B.
+  `DevTools/Scripts/TestScripts/CheckLegacyRemoval044.zig`, diese Punkte
+  prueft.
+
+Version 0.44.0
+-------------------------------------------
+Status: Erledigt
+
+Ziel:
+- Abschlussvertrag und Umzugsplan fuer `kernelold.zig` und `Code/src/old/`
+  festlegen, bevor mechanisch verschoben wird.
+
+Ergebnis:
+- `Docs/Core/LegacyRemoval044.txt` dokumentiert den Abschlussvertrag, die
+  `kernelold.zig`-Restreihenfolge, 84 Dateien unter `Code/src/old/`, die 74
+  aktuellen produktiven `old/`-Importtreffer und die Zielpfadmatrix fuer alle
+  alten Unterbaeume.
+- `CheckLegacyRemoval044.zig` ist als statisches Gate angelegt. Fuer 0.44.0
+  prueft es Version, Roadmap-/Dokuanker, BOM-Konvention, Datei- und
+  Importzaehler, die unveraenderte `kernelold.zig`-Reihenfolge sowie die
+  vereinbarte Smoke-Matrix.
+- Die Pflicht-Smokes fuer die folgenden Code-Unterversionen sind benannt:
+  R4P-Runtime, DHCP/Netzwerk, Driver-Lifecycle, Driver-Policy,
+  Driver-Policy-Konsumentenrand, USB-HID/USB-Storage, Audio/R4D und die
+  normalen Build-/Boot-Smokes.
+- `Docs/Core/KernelBereinigung.txt` und `Docs/README.txt` verweisen auf den
+  neuen 0.44.0-Abschlussvertrag.
+- Sichtbare Kernel-Version ist 0.44.0.
+
+Abnahme:
+- `git diff --check`.
+- `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckLegacyRemoval044.zig`.
+- `DevTools/Scripts/Build.bat -norun`.
+
+Version 0.44.1
+-------------------------------------------
+Status: Erledigt
+
+Ziel:
+- Den restlichen produktiven Code aus `kernelold.zig` nach `main.zig`
+  ueberfuehren und `kernelold.zig` aus dem Bootpfad entfernen.
+
+Ergebnis:
+- `main.zig` uebernimmt nach `driver_policy_boot.init()` direkt:
+  `r4p.loadAll()`, `r4p.dumpStatus()`, Task-Init, Scheduler-Init,
+  optionalen Page-Fault-Test, optionalen DHCP-Boot-Acquire,
+  `boot_status.endDetailRedirect()` und Launcher-Start.
+- Fatal-Bootausgaben, Page-Fault-Test und Launcher-Start liegen nun im
+  direkten Bootpfad von `main.zig`.
+- `main.zig` importiert `kernelold.zig` nicht mehr.
+- `Code/src/kernelold.zig` ist entfernt.
+- Bootstatus und serielle Ausgabe bleiben fachlich gleichwertig.
+- `CheckLegacyRemoval044.zig` prueft seit 0.44.1: kein `kernelold`-Treffer
+  unter `Code/src`, kein `Code/src/kernelold.zig`, neue
+  R4P/Task/Scheduler/DHCP/Launcher-Startreihenfolge in `main.zig` und die auf
+  73 gesunkene produktive `old/`-Importkante.
+- `Run-NetBootStatusTest.ps1` und `Run-UsbHidBootTest.ps1` erwarten seit
+  0.44.1 das entfernte `kernelold.zig`, statt den alten Brueckenquelltext zu
+  lesen.
+- Sichtbare Kernel-Version ist 0.44.1.
+
+Abnahme:
+- `git diff --check`.
+- `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckLegacyRemoval044.zig`.
+- `DevTools/Scripts/Build.bat -norun`.
+- `DevTools/Scripts/Build.bat -test`.
+- Passende R4P-/Netzwerk-/Launcher-Smokes, falls bestehende Tests diese
+  Startpfade abdecken.
+
+Version 0.44.2
+-------------------------------------------
+Status: Erledigt
+
+Ziel:
+- Niedrige Kernelgrundlagen aus `Code/src/old/` in echte Zielordner
+  verschieben.
+
+Ergebnis:
+- 34 Dateien aus `old/arch`, `old/platform`, `old/kernel` und `old/sched`
+  sind in normale Zielpfade umgezogen:
+  `arch/x86_64/`, `platform/`, `kernel/` und `sched/`.
+- `cpu.S` und `isr.S` liegen nun unter `Code/src/arch/x86_64/`; `Code/build.zig`
+  verlinkt `cpu.S` und `isr.S` aus `src/arch/x86_64/`.
+- `main.zig`, CPU-/Timer-/IRQ-/Input-/COM-/Memory-/Bootmodule sowie die
+  verbleibenden `old/`-Module importieren die verschobenen Grundlagen ueber
+  die neuen Pfade.
+- Keine Forwarder unter `old/` angelegt.
+- Die leeren alten Besitzordner `old/arch`, `old/platform`, `old/kernel` und
+  `old/sched` sind entfernt.
+- `Code/src/old/` enthaelt danach noch 50 Dateien.
+- Die produktive `old/`-Importkante steht nach dem Low-Level-Umzug bei
+  68 produktive `old/`-Importtreffer.
+- `CheckLegacyRemoval044.zig` prueft seit 0.44.2: fehlende alte
+  Low-Level-Ordner, keine produktiven Imports auf die verschobenen alten
+  Teilbaeume, neue Zielpfade, Dateizaehler 50 und Importzaehler 68.
+- Sichtbare Kernel-Version ist 0.44.2.
+
+Abnahme:
+- `git diff --check`.
+- `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckLegacyRemoval044.zig`.
+- `DevTools/Scripts/Build.bat -norun`.
+- `DevTools/Scripts/Build.bat -test`.
+- `DevTools/Scripts/TestScripts/Run-NetBootStatusTest.ps1`.
+- `DevTools/Scripts/TestScripts/Run-UsbHidBootTest.ps1`.
+
+Version 0.44.3
+-------------------------------------------
+Status: Erledigt
+
+Ziel:
+- Treiber-, Storage-, Dateisystem-, Display- und Audio-Pfade aus
+  `Code/src/old/` in normale Zielordner verschieben.
+
+Ergebnis:
+- 23 Dateien aus `old/drivers`, `old/fs`, `old/storage` und `old/audio`
+  sind in normale Zielpfade umgezogen:
+  `driver/registry.zig`, `driver/storage/`, `driver/usb/`, `display/`,
+  `fs/`, `storage/` und `audio/`.
+- Alle produktiven Imports auf diese Bereiche zeigen auf die neuen Pfade.
+  R4P-/Netzwerk-/Programm-Imports bleiben bewusst fuer 0.44.4 unter `old/`.
+- Keine Forwarder unter `old/` angelegt.
+- Die leeren alten Besitzordner `old/drivers`, `old/fs`, `old/storage` und
+  `old/audio` sind entfernt.
+- `Code/src/old/` enthaelt danach noch 27 Dateien.
+- Die produktive `old/`-Importkante steht nach dem Driver-/Storage-/FS-/
+  Display-/Audio-Umzug bei 29 produktiven `old/`-Importtreffern.
+- `CheckLegacyRemoval044.zig` prueft seit 0.44.3: fehlende alte Driver-,
+  Storage-, FS-, Display- und Audio-Ordner, keine produktiven Imports auf
+  diese alten Teilbaeume, neue Zielpfade, Dateizaehler 27 und Importzaehler
+  29.
+- Sichtbare Kernel-Version ist 0.44.3.
+
+Abnahme:
+- `git diff --check`.
+- `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckLegacyRemoval044.zig`.
+- `DevTools/Scripts/Build.bat -norun`.
+- `DevTools/Scripts/Build.bat -test`.
+- Relative-Import-Pruefung fuer `Code/src`.
+- `DevTools/Scripts/TestScripts/Run-UsbHidBootTest.ps1`.
+- `DevTools/Scripts/TestScripts/Run-DriverPolicyBootTest.ps1`.
+- `DevTools/Scripts/TestScripts/Run-AudioHardwareR4DFinalTest.ps1`.
+
+Version 0.44.4
+-------------------------------------------
+Status: Erledigt
+
+Ziel:
+- Runtime-, Programm-, Netzwerk- und Protokollpfade aus `Code/src/old/`
+  verschieben.
+
+Ergebnis:
+- 27 Dateien aus `old/program`, `old/net` und `old/protocol` sind in normale
+  Zielpfade umgezogen: `program/`, `net/` und `protocol/`.
+- Alle produktiven Imports in `main.zig`, Bootmodulen, Kernel-APIs,
+  Services, Netzwerkdiensten, Device Inventory, USB-/Audio-R4P-Bruecken und
+  Legacy-Diagnosen zeigen auf die neuen Pfade.
+- Historische COMMAND-/Legacy-Diagnosen bleiben isoliert unter
+  `program/command_runtime.zig`, werden aber nicht mehr ueber einen
+  `old/program`-Pfad versteckt.
+- Keine Forwarder unter `old/` angelegt.
+- `Code/src/old/` existiert danach nicht mehr.
+- `rg "old/" Code/src` liefert keine produktiven `old/`-Importtreffer mehr.
+- `Run-NetIpcServiceTest.ps1` prueft den aktuellen externen `NETSVC.R4X`-Pfad
+  (`STATUS`, `RESTARTTEST`, `DRIVERLIFETEST`) plus SDK-Netzwerktools und
+  erwartet keine alten COMMAND-internen Diagnosen mehr.
+- `CheckLegacyRemoval044.zig` prueft seit 0.44.4: fehlendes `Code/src/old/`,
+  keine produktiven `old/`-Importe, neue Program-/Net-/Protocol-Zielpfade,
+  Dateizaehler 0 und Importzaehler 0.
+- Sichtbare Kernel-Version ist 0.44.4.
+
+Abnahme:
+- `git diff --check`.
+- Relative-Import-Pruefung fuer `Code/src`.
+- `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckLegacyRemoval044.zig`.
+- `DevTools/Scripts/Build.bat -norun`.
+- `DevTools/Scripts/Build.bat -test`.
+- `DevTools/Scripts/TestScripts/Run-NetBootStatusTest.ps1`.
+- `DevTools/Scripts/TestScripts/Run-NetR4pRuntimeTest.ps1`.
+- `DevTools/Scripts/TestScripts/Run-NetServiceFirstTest.ps1`.
+- `DevTools/Scripts/TestScripts/Run-NetIpcServiceTest.ps1`.
+
+Version 0.44.5
+-------------------------------------------
+Status: Erledigt
+
+Ziel:
+- 0.44.X abschliessen: finaler Audit, aktive Dokumentation bereinigen und den
+  Kernel wieder als einen normalen Codebestand behandeln.
+
+Ergebnis:
+- `Code/src/old/` fehlt weiterhin.
+- `rg "old/" Code/src` liefert keine produktiven Treffer.
+- `rg "kernelold" Code/src` liefert keine produktiven Treffer.
+- Aktive Dokumente sind auf den Abschlusszustand aktualisiert:
+  `Docs/Core/KernelBereinigung.txt`, `Docs/Core/Architektur.txt`,
+  `Docs/Core/MemoryManagement.txt`, `Docs/README.txt`,
+  `Docs/SupportedHardware.txt`, Driver-/Network-/Audio-/Filesystem- und
+  Display-Dokus. Die Website-Doku wurde gemaess Regel nicht ohne
+  ausdrueckliche User-Aufforderung angepasst.
+- `CheckLegacyRemoval044.zig` ist das 0.44.5-Abschlussgate: kein
+  `kernelold.zig`, kein `Code/src/old/`, keine produktiven `old/`-Imports,
+  keine `kernelold`-Treffer im produktiven `Code/src`, neue Zielpfade
+  dokumentiert und Version 0.44.5.
+- Sichtbare Kernel-Version ist 0.44.5.
+
+Abnahme:
+- `git diff --check`.
+- `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckLegacyRemoval044.zig`.
+- `DevTools/Scripts/Build.bat -norun`.
+- `DevTools/Scripts/Build.bat -test`.
+- `DevTools/Scripts/TestScripts/Run-NetBootStatusTest.ps1`.
+- `DevTools/Scripts/TestScripts/Run-NetR4pRuntimeTest.ps1`.
+- `DevTools/Scripts/TestScripts/Run-NetServiceFirstTest.ps1`.
+- `DevTools/Scripts/TestScripts/Run-NetIpcServiceTest.ps1`.
+- `DevTools/Scripts/TestScripts/Run-UsbHidBootTest.ps1`.
+- `DevTools/Scripts/TestScripts/Run-DriverPolicyBootTest.ps1`.
+- `DevTools/Scripts/TestScripts/Run-AudioHardwareR4DFinalTest.ps1`.

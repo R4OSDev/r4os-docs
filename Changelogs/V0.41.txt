@@ -1,0 +1,435 @@
+﻿*** Kernel Refactor Roadmap Leitbild ***
+In dieser Roadmap befassen wir uns im Verlauf mehrerer großer Versionen mit der säuberung des Kernels.
+Aktuell wurden viele Funktionen nach
+kernelold.zig ausgelagert und in src/old/ verschoben.
+Wir holen die nach und nach zurück in main.zig, kontrollieren dabei aber alles.
+Was aus dem Kernel raus kann soll in Software, Treiber und Protokolle untergebracht werden.
+Im Zuge dieses Refactor ist auch die Dokumentation zu aktualisieren und pflegen.
+
+Grundsatz fuer alle Unterversionen:
+- Keine halben Umbauten: Eine Unterversion ist erst erledigt, wenn Code, Imports, Doku, Version und Abnahme zusammenpassen.
+- Keine stillen Doppelpfade: Wenn eine Initialisierung nach `main.zig` wandert, darf sie nicht weiterhin produktiv in `kernelold.zig` laufen.
+- Boot-kritische Pfade muessen konservativ behandelt werden. Was fuer Boot, `C:\`, Speicher, Interrupts oder fruehe Ausgabe noetig ist, bleibt built-in, bis ein stabiler Ersatz existiert.
+- Kernel-Verschlankung ist ein ausdrueckliches Ziel. Fallbacks und parallele Built-in-Pfade werden nur genutzt, wenn sie fuer Boot-Stabilitaet, Migration oder echte Abnahme noetig sind.
+- Nicht bootkritische Treiber sollen nach erfolgreicher R4D-Auslagerung aus dem Kernel entfernt werden, statt dauerhaft als Built-in-Fallback liegen zu bleiben.
+- Jeder Umzug braucht klare Modulgrenzen: Boot-Schicht, Runtime-Core, Treiber, API und Diagnose duerfen nicht unkontrolliert vermischt werden.
+- Jede neue Boot-Schicht braucht eine klare Zustands- und Fehlersemantik: entweder erfolgreich initialisiert, sauber uebersprungen oder fatal beendet. Stilles Weiterlaufen nach kaputten Pflichtpfaden ist kein erledigter Zustand.
+- `kernelold.zig` darf waehrend der Migration nur noch als Legacy-Bruecke dienen. Neu umgezogene Initialisierungen muessen aus `kernelold.zig` verschwinden oder dort explizit als bereits initialisierter Zustand konsumiert werden.
+- Zwischenversionen duerfen lauffaehig klein sein, aber nicht fachlich halb: Keine Unterversion wird abgeschlossen, wenn Besitzgrenzen, Boot-Reihenfolge oder Abhaengigkeiten noch absichtlich unklar bleiben.
+- Eine Unterversion darf bewusst nur Vertrag, Diagnose oder Probe liefern,
+  wenn sie klar als nicht-produktiver Ersatz gekennzeichnet ist. Produktive
+  Umschaltung und Entfernen des Altpfads passieren erst nach echter
+  Funktionsabnahme.
+- Jede Pruefung endet mit einer Entscheidung. Ein Punkt bleibt offen, bis das
+  Ergebnis in Code, Doku oder als konkret versionierter Folgepunkt festgehalten
+  ist.
+- Testluecken werden vor dem Abschluss geschlossen. Vorhandene Testskripte
+  werden namentlich genutzt; wenn keines den neuen Vertrag abdeckt, gehoert
+  ein gezieltes Testskript zur Unterversion.
+- Diagnose-Altpfade duerfen nicht still im normalen Produktivpfad erreichbar
+  bleiben. Sie brauchen einen expliziten Diagnose-/Kompatibilitaetsvertrag,
+  sichtbare Statusausgabe und eine eigene Abnahme.
+- Vor jedem Abschluss wird gezielt nach Rest-Imports, Doppelaufrufen und verdeckten Abhaengigkeiten gesucht. Gefundene Altlasten werden entweder beseitigt oder in der Roadmap als bewusster Folgepunkt notiert.
+- Jede abgeschlossene Unterversion erhoeht `Injection/sys/CONFIG/VERSION.R4S` auf die passende Version und wird danach gepusht.
+- Mindestens `DevTools/Scripts/Build.bat -norun` gehoert zu jeder Code-Unterversion. Bei Boot-, IRQ-, Input-, Storage-, USB- oder R4D-Aenderungen gehoert `DevTools/Scripts/Build.bat -test` dazu.
+- GUI-/Hardware-nahe Punkte bekommen zusaetzlich eine klare manuelle Sichtabnahme durch den User, wenn QEMU-Smoke allein nicht reicht.
+
+-------------------------------------------
+Ab hier beginnen die Versionen und ab hier darf auch bereinigt werden.
+Das Refactor Leitbild muss bei einer Roadmap Bereinigung stehen bleiben
+-------------------------------------------
+
+Rahmen fuer 0.41.X
+-------------------------------------------
+Ziel ist der separate Netzwerk-Fallback-Abbau nach dem 0.40.X-Bootschnitt.
+0.41.X darf erst produktiv angegangen werden, wenn die fruehe Netzwerk-/IPC-
+Basis nicht mehr in `kernelold.kmain()` initialisiert wird.
+
+Umfang:
+- Alte kernelinterne Net-IPC-Fallbacks fuer `net.dhcp`, `net.dns`,
+  `net.tcp` und `net.udp` bewerten, haerten und aus dem produktiven
+  Standardpfad entfernen, sobald die echten R4X-Dienste belastbar tragen.
+- R4X-Service-first fuer `DHCPSVC.R4X`, `DNSSVC.R4X`, `TCPSVC.R4X` und
+  `UDPSVC.R4X` zum verbindlichen Normalpfad machen.
+- R4P-Protokollpfad fuer `NETETH.R4P`, `NETARP.R4P`, `NETIPV4.R4P`,
+  `NETICMP.R4P`, `NETUDP.R4P`, `NETDHCP.R4P`, `NETDNS.R4P`, `NETTCP.R4P`
+  und `NETR4SL.R4P` so pruefen, dass Built-in-Protokollfallbacks nicht mehr
+  still als produktive Parallelwelt laufen.
+- Fehlende Dienste oder Protokollmodule muessen sichtbare, stabile Fehler
+  liefern. Ein stiller Rueckfall auf alte Kernelpfade zaehlt nicht als
+  erledigt.
+
+Nicht Umfang:
+- Neue Netzwerktreiber. Hardware bleibt R4D-Thema; RTL8139 bleibt der
+  produktive R4D-Pfad.
+- Allgemeine NetConfig-Persistenz und `CONFIG.R4S`-Schreiblogik. Dieser
+  Bereich wird nach 0.41.X separat bewertet, wenn die Kernel-Verschlankung
+  dort weitergehen soll.
+- USB-HID, Driver-Plan, Scheduler und Launcher.
+
+0.41.X gilt erst als belastbar abgeschlossen, wenn:
+- Jeder alte Netzwerk-Fallback einen Endzustand hat: entfernt,
+  explizit diagnose-only oder mit Blocker und konkreter Folgeversion neu
+  geplant.
+- R4X-/SDK-Normalpfade fuer DHCP, DNS, TCP und UDP nicht mehr still auf
+  kernelinterne Net-IPC-Fallbacks ausweichen.
+- Fehlende Dienste, fehlende Protokollmodule und Dispatch-Fehler sichtbare,
+  reproduzierbare Fehlerbilder liefern.
+- R4P-Protokollquellen im Net-Core unterscheidbar sind: aktiv, fehlt,
+  Dispatch-Fehler, Diagnose-Fallback.
+- Mindestens `Run-NetMatrix.ps1`, `Run-NetNegativeMatrix.ps1`,
+  `Run-NetR4pRuntimeTest.ps1`, `Run-NetIpcServiceRestartTest.ps1`,
+  `Run-NetTcpServiceLiveTest.ps1`, `Run-DhcpLiveTest.ps1` und
+  `Run-DnsLiveTest.ps1` ausgefuehrt oder durch dokumentiert passendere
+  0.41-spezifische Smokes ersetzt wurden.
+
+Version 0.41.0
+-------------------------------------------
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Vollstaendiges Inventar der Netzwerk-Fallbacks erstellt und als
+  `Docs/Network/FallbackMatrix041.txt` dokumentiert.
+- Kernelinterne Net-IPC-Handler fuer `net.dhcp`, `net.dns`, `net.tcp` und
+  `net.udp` als Legacy-Fallbacks mit Ziel 0.41.1/0.41.2 eingeordnet.
+- SDK-Service-first-Pfade fuer `DHCPSVC`, `DNSSVC`, `TCPSVC` und `UDPSVC`
+  inventarisiert: aktueller Kompatibilitaetsfallback, Zielzustand und
+  fehlender-Dienst-Abnahme sind je Bereich festgelegt.
+- R4P-Protokollfallbacks fuer `net.ethernet`, `net.arp`, `net.ipv4`,
+  `net.icmp`, `net.udp`, `net.dhcp`, `net.dns`, `net.tcp` und
+  `net.serial_link` mit Entscheidungspfad fuer 0.41.3/0.41.4 erfasst.
+- Legacy-Diagnosen wie alte COMMAND-Built-ins als separater Diagnose-/NETDIAG-
+  Folgepunkt eingeordnet, nicht als produktiver 0.41-Normalpfad.
+- Treiberinterne Robustheitsfallbacks wie RTL8139 IRQ-first/Poll-Fallback aus
+  dem 0.41-Fallback-Abbau ausgeklammert, weil sie keine doppelte Service- oder
+  Protokollwelt bilden.
+- Abnahmematrix festgelegt: Standardboot ohne NIC, R4X-Service-Autostart,
+  fehlender Dienst, fehlendes R4P-Modul, RTL8139.R4D-Liveprofil und kein
+  oeffentliches Internet.
+- Doku- und API-Auswirkungen vor dem ersten Entfernen markiert:
+  Netzwerk-README, Service-Dokumentation, R4P-Protokolldoku, SDK-README und
+  zentrale README verweisen auf die 0.41.0-Matrix.
+- Neues statisches Audit-Skript
+  `DevTools/Scripts/TestScripts/CheckNetworkFallback041.zig` angelegt. Es
+  prueft Matrix, Roadmap, aktuelle Kernel-/SDK-/Service-/R4P-Anker und die
+  wichtigsten Matrix-IDs.
+- Sichtbare Kernel-Version auf 0.41.0 gesetzt.
+- Abnahme erfolgreich:
+  `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckNetworkFallback041.zig`,
+  `git diff --check`,
+  `DevTools/Scripts/Build.bat -norun`,
+  `DevTools/Scripts/Build.bat -test`.
+
+Notizen:
+0.41.0 ist der belastbare Vertragsschnitt. Es wurde bewusst kein produktiver
+Fallback entfernt. Entfernen, Diagnose-Isolierung und harte Fehlerbilder
+passieren erst in 0.41.1 bis 0.41.5 nach der jeweils passenden Abnahme.
+
+Version 0.41.1
+-------------------------------------------
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `SERVMAN.R4X` wird vom Build-Image nach `/bin/servman.r4x` kopiert und ist
+  damit im normalen Bootpfad verfuegbar.
+- Der Launcher startet nach verfuegbarem `C:` und vor der konfigurierten Shell
+  `/BIN/SERVMAN.R4X BOOT`, sodass `DHCPSVC`, `DNSSVC`, `TCPSVC` und `UDPSVC`
+  automatisch aus `SERVICES.R4S` anlaufen.
+- `SERVMAN BOOT` startet valide Auto-Dienste auch dann, wenn die Config
+  einzelne ungueltige manuelle Testeintraege enthaelt. Harte Config-Fehler wie
+  zu grosse oder komplett unbrauchbare Dateien bleiben sichtbar fatal fuer den
+  Managerlauf.
+- SDK-Service-first fuer `DHCPSVC`, `DNSSVC`, `TCPSVC` und `UDPSVC` gehaertet:
+  Wenn die Service-API vorhanden ist, aber der passende R4X-Dienst fehlt oder
+  keinen Endpunkt liefert, erzeugen die strukturierten Status-/Result-Helfer
+  `r4x-service-unavailable` mit fehlgeschlagenem Service-Status statt still
+  auf alte Kernel-IPC- oder direkte ProgramApi-Pfade auszuweichen.
+- Die alten Kernel-IPC-Pfade bleiben fuer 0.41.1 noch im Code, sind im
+  modernen Service-API-Normalpfad aber nicht mehr der stille Ersatz fuer einen
+  fehlenden R4X-Dienst.
+- `R4CONFIG NETTEST` prueft jetzt DNS-, DHCP-, TCP- und UDP-Service-SDK-
+  Vertraege ueber die laufenden R4X-Dienste.
+- `R4CONFIG NETMISSINGTEST` beziehungsweise `NETSVCMISSING` prueft fehlende
+  `DNSSVC`-, `DHCPSVC`-, `TCPSVC`- und `UDPSVC`-Eintraege und erwartet je
+  Dienst ein sichtbares `r4x-service-unavailable`-Fehlerbild.
+- Neue gezielte Smokes:
+  `DevTools/Scripts/TestScripts/Run-NetServiceFirstTest.ps1` fuer
+  Service-Autostart, laufende Netzwerkdienste, R4CONFIG-Service-SDK und
+  `IPCONFIG /ALL`;
+  `DevTools/Scripts/TestScripts/Run-NetServiceMissingTest.ps1` fuer entfernte
+  Netzwerkdienst-Eintraege, `R4CONFIG NETMISSINGTEST`, `DNSLOOKUP` und
+  `DHCP STATUS` ohne stillen Kernel-Fallback.
+- Doku aktualisiert: Netzwerk-Fallback-Matrix, Netzwerk-README, SDK-README,
+  Service-Dokumentation und zentrale README.
+- Sichtbare Kernel-Version auf 0.41.1 gesetzt.
+- Abnahme erfolgreich:
+  `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckNetworkServiceFirst041.zig`,
+  `DevTools/Scripts/Build.bat -norun`,
+  `DevTools/Scripts/Build.bat -test`,
+  `DevTools/Scripts/TestScripts/Run-NetServiceFirstTest.ps1`,
+  `DevTools/Scripts/TestScripts/Run-NetServiceMissingTest.ps1`.
+
+Notizen:
+0.41.1 bereitet das Entfernen vor. Produktive R4X-Dienste laufen jetzt
+service-first und ein fehlender Dienst ist sichtbar. Das Entfernen oder
+Diagnose-Isolieren der alten Kernel-IPC-Handler bleibt bewusst 0.41.2, damit
+vorher die breiteren Live-Tool-Smokes fuer TCP, UDP, DHCP und DNS erneut gegen
+den Service-first-Pfad laufen koennen.
+
+Version 0.41.2
+-------------------------------------------
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Normale SDK-/R4X-Pfade fuer DNS, DHCP, TCP und UDP auf service-only
+  umgestellt: Nach `DNSSVC`, `DHCPSVC`, `TCPSVC` oder `UDPSVC` gibt es keinen
+  Rueckfall mehr auf `net.dhcp`, `net.dns`, `net.tcp`, `net.udp` oder direkte
+  UDP-ProgramApi-Fallbacks.
+- Alte Text-/IPC-Fallbackhelfer im SDK entfernt:
+  `netDnsResolveServiceTextOp`, `netDhcpServiceTextAction`,
+  `parseNetServiceFields`, `checkedNetServicePayload` und zugehoerige
+  Text-Result-Parser.
+- `udpBind`, `udpSendTo`, `udpRecvFrom`, `udpRecvFromWait`, `udpClose` und
+  `udpStatus` nutzen nun den `UDPSVC`-Pfad ohne stillen direkten
+  ProgramApi-Rueckfall.
+- `TCPSVC.R4X` und `UDPSVC.R4X` bleiben bewusst als explizite Backend-/
+  Diagnosebruecke zum noch kernelinternen TCP-/UDP-Core dokumentiert. Das ist
+  kein normaler SDK-Fallback und nicht im Autostart als zweite Service-Welt
+  sichtbar.
+- `NETSVC.R4X` als externe Diagnose fuer IPC-Service-Restart/Status angelegt
+  und in das Boot-Image nach `C:\DIAG` aufgenommen. Der alte COMMAND-Builtin-
+  Pfad bleibt deaktiviert; die Restart-Abnahme laeuft nun ueber die R4X-
+  Diagnose.
+- `net_ipc_services.init()` bleibt fuer diese Backendbruecke aktiv; eine
+  komplette Entfernung waere erst sinnvoll, wenn TCP-/UDP-Core oder Service-
+  Backend selbst aus dem Kernel geloest beziehungsweise durch einen neuen
+  Backendvertrag ersetzt sind.
+- Neues statisches Audit-Skript
+  `DevTools/Scripts/TestScripts/CheckNetworkServiceOnly041.zig` angelegt. Es
+  prueft den service-only-SDK-Vertrag, verbietet die alten SDK-Fallbackanker
+  und verankert die absichtliche TCP-/UDP-Backendbruecke.
+- Doku aktualisiert: Netzwerk-Fallback-Matrix, Netzwerk-README, SDK-README,
+  Service-Dokumentation, R4NET-API-Doku und zentrale README.
+- Sichtbare Kernel-Version auf 0.41.2 gesetzt.
+- Abnahme erfolgreich:
+  `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckNetworkServiceOnly041.zig`,
+  `git diff --check`,
+  `DevTools/Scripts/Build.bat -norun`,
+  `DevTools/Scripts/Build.bat -test`,
+  `DevTools/Scripts/TestScripts/Run-NetServiceFirstTest.ps1`,
+  `DevTools/Scripts/TestScripts/Run-NetServiceMissingTest.ps1`,
+  `DevTools/Scripts/TestScripts/Run-IpConfigLiveTest.ps1`,
+  `DevTools/Scripts/TestScripts/Run-DhcpLiveTest.ps1`,
+  `DevTools/Scripts/TestScripts/Run-DnsLiveTest.ps1 -IncludePing`,
+  `DevTools/Scripts/TestScripts/Run-NetcatLiveTest.ps1`,
+  `DevTools/Scripts/TestScripts/Run-TcpEchoToolLiveTest.ps1`,
+  `DevTools/Scripts/TestScripts/Run-HttpGetLiveTest.ps1`,
+  `DevTools/Scripts/TestScripts/Run-SendLiveTest.ps1`,
+  `DevTools/Scripts/TestScripts/Run-RecvLiveTest.ps1`,
+  `DevTools/Scripts/TestScripts/Run-NetIpcServiceRestartTest.ps1`.
+
+Notizen:
+0.41.2 macht R4X-Dienste zum einzigen normalen Weg fuer laufzeitverwaltete
+DNS-/DHCP-/TCP-/UDP-Operationen. Die verbleibenden kernelinternen TCP-/UDP-
+IPC-Handler sind Backendbruecke fuer `TCPSVC.R4X` und `UDPSVC.R4X`; ihr
+vollstaendiges Entfernen braucht einen spaeteren Backend-/Core-Schnitt.
+
+Version 0.41.3
+-------------------------------------------
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- R4P-Runtime-Status auf alle neun Netzwerkrollen erweitert: Ethernet, ARP,
+  IPv4, ICMP, UDP, DHCP, DNS, TCP und R4SL.
+- `net.serial_link` ist in `r4pRuntimeStatus()`, `r4pRuntimeSelfTest()`,
+  R4NET-Detailstatus, `IPCONFIG` und `DEVMGR` als eigene Protokollquelle
+  sichtbar.
+- Externe Diagnose `NETR4P.R4X` angelegt und nach `C:\DIAG` kopiert. Sie
+  ersetzt fuer diese Abnahme den alten COMMAND-Builtin `NETR4PTEST`.
+- `Run-NetR4pRuntimeTest.ps1` prueft den vollstaendigen R4P-Satz mit
+  `active=9/9`.
+- `Run-NetR4pMissingModuleTest.ps1` prueft ein gezielt fehlendes
+  `NETR4SL.R4P` ueber den Build-Schalter `R4OS_SKIP_NETR4SL_R4P=1`; der
+  Status muss `active=8/9 missing=1` und `source=fb missing=yes` zeigen.
+- Fuer alle neun R4P-Netzwerkrollen ist in
+  `Docs/Network/FallbackMatrix041.txt` entschieden: Kein Built-in-
+  Protokollfallback ist ohne weitere Missing-Module-/Live-Abnahme in 0.41.4
+  entfernbar. Jeder Fallback hat einen Blocker und die Folgeversionen
+  0.41.4/0.41.5 fuer Haertung und erneute Entfernungsentscheidung.
+- Statische Abnahme `CheckNetworkR4p0413.zig` angelegt.
+
+Notizen:
+0.41.3 entfernt bewusst noch keinen Built-in-Protokollfallback. Der
+R4P-Ladezeitpunkt ist sichtbar und testbar, aber der belastbare Missing-
+Module-Nachweis existiert erst fuer `NETR4SL.R4P`. Darum wird 0.41.4 als
+Haertungsschnitt geplant, bevor 0.41.5 ueber Entfernen oder Recovery-Vertrag
+entscheidet.
+
+Version 0.41.4
+-------------------------------------------
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- R4P-Dependency-Aufloesung gehaertet: R4P-Module betrachten nur aktive
+  R4P-Rollen als erfuellte Dependency. Built-in-Fallbacks halten weiter den
+  Kernel stabil, zaehlen aber nicht mehr als gesunder R4P-Abhaengigkeitspfad.
+- `registry.zig` und `r4p.zig` liefern einen expliziten Runtime-Status pro
+  Rolle: aktive R4P-Quelle, vorhandener Built-in-Fallback, fehlendes R4P,
+  geladen, blockiert, Fehler oder deaktiviert.
+- Net-Core und R4NET-Detailstatus um `r4p_state` und `builtin_fallback`
+  erweitert. ProgramApi auf v87 gehoben; SDK und Kernel-ABI sind synchron.
+- `IPCONFIG`, `DEVMGR` und `NETR4P.R4X` zeigen nicht mehr nur `r4p`/`fb`,
+  sondern unterscheiden `miss`, `block`, `err`, `load` und `off`.
+- `NETR4P.R4X` akzeptiert generische Missing-Module-Profile per
+  `/EXPECT-MISSING=net.<rolle>` und validiert die erwartete Dependency-
+  Kaskade ohne statische Slice-Tabellen.
+- `Run-NetR4pMissingModuleTest.ps1` prueft alle neun Netzwerk-R4P-Rollen:
+  Root (`NETETH.R4P`), Zwischenrollen (`NETARP.R4P`, `NETIPV4.R4P`,
+  `NETUDP.R4P`) und Blattrollen (`NETICMP.R4P`, `NETDHCP.R4P`,
+  `NETDNS.R4P`, `NETTCP.R4P`, `NETR4SL.R4P`).
+- Fehlende Root-/Zwischenrollen erzeugen sichtbare `state=blocked`-
+  Folgerollen; fehlende Blattrollen erzeugen nur die direkte
+  `state=missing`-Rolle.
+- Lokale Ersatzabnahme fuer fehlende Live-Profile festgelegt: Solange keine
+  echte NIC-/COM2-Live-Umgebung aktiv ist, ist die vollstaendige
+  Missing-/Dependency-Matrix das verbindliche lokale Gate fuer 0.41.4.
+- Neue statische Abnahme `CheckNetworkR4p0414.zig` angelegt.
+- Dokumentation aktualisiert: Netzwerk-Fallback-Matrix, Netzwerk-README,
+  Protokoll-README, R4NET-API, SDK-README und Diagnose-README.
+- Sichtbare Kernel-Version auf 0.41.4 gesetzt.
+- Abnahme erfolgreich:
+  `DevTools/Scripts/Build.bat -norun`,
+  `DevTools/Scripts/Build.bat -test`,
+  `Run-NetR4pRuntimeTest.ps1`,
+  `Run-NetR4pMissingModuleTest.ps1`,
+  `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckNetworkR4p0414.zig`
+  und `git diff --check`.
+
+Notizen:
+0.41.4 entfernt bewusst noch keinen Built-in-Protokollfallback. Die Abnahme
+zeigt, dass fehlende R4P-Dateien und blockierte R4P-Dependencies jetzt
+sichtbar, reproduzierbar und pro Rolle unterscheidbar sind. Damit wird 0.41.5
+zum Vertragsschnitt: Entweder bleibt ein Fallback als dokumentierter
+Recovery-/Diagnosepfad erhalten, oder er wird erst nach echter Live-Abnahme
+entfernt.
+
+Version 0.41.5
+-------------------------------------------
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Finalentscheidung fuer alle neun Netzwerk-R4P-Built-in-Fallbacks getroffen:
+  Sie werden in 0.41.5 nicht entfernt, sondern als `recovery-only`-Vertrag
+  behalten. Das gilt fuer `net.ethernet`, `net.arp`, `net.ipv4`, `net.icmp`,
+  `net.udp`, `net.dhcp`, `net.dns`, `net.tcp` und `net.serial_link`.
+- Entscheidung begruendet: 0.41.4 hat Missing-/Dependency-Fehlerbilder
+  lokal belastbar gemacht, aber keine echte RTL8139-/COM2-Liveumgebung als
+  Entfernungsgate freigegeben. Entfernen ohne diese Abnahme waere weiterhin
+  eine halbe Sache.
+- R4NET-Detailvertrag groessenneutral erweitert: Die bisherigen Reservebytes
+  in `NetDetailProtocolRuntime` tragen nun `fallback_policy` und
+  `fallback_decision`.
+- ProgramApi auf v88 gehoben. SDK und Kernel-ABI sind synchron; neue
+  Konstanten dokumentieren `net_detail_fallback_policy_recovery_only` und
+  `net_detail_fallback_decision_keep_recovery`.
+- Net-Core setzt fuer alle vorhandenen Built-in-Protokollfallbacks den
+  Recovery-Vertrag. R4P kann weiterhin gewinnen, fehlende oder blockierte
+  R4P-Module bleiben aber als Recovery-Fallback statt als stiller Normalpfad
+  sichtbar.
+- `NETR4P.R4X` validiert den Recovery-Vertrag in Runtime- und Missing-
+  Module-Profilen und gibt pro Rolle `policy=recovery-only` sowie
+  `decision=keep-recovery-0.41.5` aus.
+- `IPCONFIG /ALL` und `DEVMGR` zeigen die Anzahl der Recovery-Fallback-
+  Vertraege im R4P-Runtime-Status; DEVMGR-Detailausgaben zeigen die Policy
+  je Rolle.
+- Lokale Ersatzabnahme fuer nicht verfuegbare Live-Profile festgelegt:
+  Die 0.41.4-Missing-/Dependency-Matrix plus voller R4P-Runtime-Smoke ist das
+  lokale Gate fuer den Recovery-Vertrag. Echte RTL8139-/COM2-Entfernungstests
+  werden nach 0.41.X als eigener Live-/Hardwareblock neu geplant, statt als
+  offene 0.41.5-Restarbeit zu gelten.
+- Neue statische Abnahme `CheckNetworkR4p0415.zig` angelegt.
+- Dokumentation aktualisiert: Netzwerk-Fallback-Matrix, Netzwerk-README,
+  Protokoll-README, R4NET-API, SDK-README, Diagnose-README und Softwareliste.
+- Sichtbare Kernel-Version auf 0.41.5 gesetzt.
+- Abnahme erfolgreich:
+  `DevTools/Scripts/Build.bat -norun`,
+  `DevTools/Scripts/Build.bat -test`,
+  `Run-NetR4pRuntimeTest.ps1`,
+  `Run-NetR4pMissingModuleTest.ps1`,
+  `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckNetworkR4p0415.zig`
+  und `git diff --check`.
+
+Notizen:
+0.41.5 ist der Entfernungs-/Vertragsschnitt fuer Protokollfallbacks. Keine
+Rolle bleibt ohne Entscheidung: Alle neun Built-ins sind sichtbar
+Recovery-only und duerfen erst in einem spaeteren Live-/Hardwareblock erneut
+auf Entfernung bewertet werden.
+
+Version 0.41.6
+-------------------------------------------
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- 0.41.6 schliesst den 0.41.X-Netzwerk-Fallback-Block ab.
+- Abschlussaudit fuer normale SDK-/R4X-Netzwerkpfade durchgefuehrt: DNS,
+  DHCP, TCP und UDP laufen im Normalpfad service-only ueber `DNSSVC`,
+  `DHCPSVC`, `TCPSVC` und `UDPSVC`. Ein fehlender R4X-Dienst bleibt als
+  `r4x-service-unavailable` sichtbar.
+- Restliche stille Normalpfad-Ausweichstellen entfernt: `netResolveA` faellt
+  nicht mehr auf direkte DNS-ProgramApi zurueck; `DHCP.R4X` und
+  `IPCONFIG.R4X` nutzen fuer sichtbaren DHCP-Status keinen direkten
+  Kernelstatus-Fallback mehr.
+- Direkte ProgramApi-/Net-IPC-Funktionen bleiben als explizite
+  Kompatibilitaets-, Diagnose- und Service-Backend-Kanten erhalten. Das gilt
+  insbesondere fuer `DHCPSVC.R4X`, `DNSSVC.R4X`, `TCPSVC.R4X`, `UDPSVC.R4X`
+  und `NETSVC.R4X`; sie sind kein stiller SDK-Fallback.
+- Keine doppelte Service-Welt im normalen Pfad: R4X-Dienste registrieren
+  Service-API-Endpunkte, waehrend `net_ipc_services` nur die dokumentierte
+  Backend-/Diagnosebruecke fuer noch kernelinterne Net-Core-Funktionen bleibt.
+- Protokollquelle abgeschlossen: Alle neun Netzwerk-R4P-Rollen haben seit
+  0.41.5 `policy=recovery-only` und
+  `decision=keep-recovery-0.41.5`; 0.41.6 bestaetigt, dass keine Rolle ohne
+  Entscheidung uebrig bleibt.
+- Neues statisches Abschlussaudit
+  `DevTools/Scripts/TestScripts/CheckNetworkClosure0416.zig` angelegt.
+- Dokumentation aktualisiert: Netzwerk-Fallback-Matrix, Netzwerk-README,
+  Services-README, R4NET-API, SDK-README und Softwareliste.
+- Sichtbare Kernel-Version auf 0.41.6 gesetzt.
+- Abnahme erfolgreich:
+  `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckNetworkClosure0416.zig`,
+  `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckNetworkServiceOnly041.zig`,
+  `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckNetworkR4p0415.zig`,
+  `DevTools/Scripts/Build.bat -norun`,
+  `DevTools/Scripts/Build.bat -test`,
+  `Run-NetServiceFirstTest.ps1`,
+  `Run-NetServiceMissingTest.ps1`,
+  `Run-NetR4pRuntimeTest.ps1`,
+  `Run-NetR4pMissingModuleTest.ps1` und `git diff --check`.
+
+Notizen:
+0.41.X ist ein Verschlankungs- und Verlaesslichkeitsblock. Ziel ist nicht,
+moeglichst viel Kernelcode auf einmal zu loeschen, sondern alte Parallelpfade
+erst dann zu entfernen, wenn R4X/R4P/R4D die Last nachweisbar tragen.
+0.41.6 macht daraus einen geschlossenen Stand: Die lokalen Fallback-
+Entscheidungen sind dokumentiert, getestet und ohne offene 0.41.X-Restarbeit.

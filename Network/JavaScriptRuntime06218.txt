@@ -1,0 +1,209 @@
+﻿JavaScript-Laufzeitbasis 0.62.18
+================================
+
+Zweck
+-----
+
+R4JS ist die gemeinsame JavaScript-Laufzeit fuer Klickifax und kuenftige
+Webverbraucher. Die Implementierung liegt in
+`Code/System/SDK/r4os/javascript.zig`; das ladbare Protokollmodul liegt
+unter `Code/System/Protocols/R4Js` und registriert die Rolle
+`application.javascript`.
+
+Die Laufzeit liegt ausdruecklich nicht im Kernel, nicht in R4DRAW und nicht
+als private Kopie in Klickifax. R4JS importiert nur den bestehenden
+R4DEV-Protokollvertrag. Damit entsteht in 0.62.18 keine zweite API- oder
+ABI-Wahrheit.
+
+Besitz und Grenzen
+------------------
+
+Eine `Runtime` besitzt ihre Werte, Heapzellen, Strings, Umgebungen,
+Roots und Aufgabenwarteschlangen vollstaendig selbst. Modulprogramme und
+resumierbare Generatorzustaende werden ueber einen vom Verbraucher
+bereitgestellten Allocator erst bei Bedarf angelegt und bei Reset, GC oder
+Ende der Runtime wieder freigegeben.
+Statische Arbeitsbereiche besitzen feste sichtbare Grenzen. Modulprogramme
+und Generatorzustaende wachsen dagegen bedarfsgesteuert ueber den
+bereitgestellten Userland-Allocator; Allokationsfehler werden sichtbar
+gemeldet:
+
+- Quelltext: 128 KB je Programm
+- Tokens: 65536
+- AST-Knoten: 49152
+- Heapzellen: 32768
+- Runtime-Strings: 1536 KB
+- Module je Realm: 8
+- Tasks und Microtasks: je 128
+- Aufruftiefe: 64
+- Standard-Schrittbudget: 2000000
+
+R4JS besitzt keine Kernelobjekte und behaelt keine geliehenen
+`ProtocolBuffer`-Zeiger. Das R4P-Modul serialisiert seinen internen
+Workspace. Der seit 0.62.19 vorhandene Seiten-Realm-Vertrag ist
+generationengebunden und unter `WebRuntimeSecurity06219.txt` beschrieben.
+
+R4M0-Metadaten bleiben ein kompakter Identitaetsindex. Der produktive Loader
+liest sie mit einem auf 2 KB begrenzten Bootstrap-Puffer, daher enthaelt das
+R4JS-Manifest nur Rolle, Version und wenige zusammenfassende Features. Die
+vollstaendige Sprach- und Built-in-Abnahme liegt stattdessen in den
+versionierten ECMAScript-Matrizen und im JavaScript-Dauergate. Dieses Gate
+prueft zusaetzlich, dass die Metadaten deutlich unter der Loadergrenze bleiben.
+
+Parser und Bytecode-VM
+----------------------
+
+Der Lexer verarbeitet Bezeichner, Zahlen, Strings, einfache
+Template-Strings ohne Interpolation, Kommentare, Schluesselwoerter und die
+implementierten Operatoren. Der Parser erzeugt einen begrenzten AST und
+unterstuetzt in der Laufzeitbasis:
+
+- `let`, `const` und `var`
+- Block, `if`, `while`, `for`, `break` und `continue`
+- Funktionsdeklarationen, Funktionsausdruecke und Arrow-Funktionen
+- Closures und lexikalische Umgebungen
+- `return`, `throw`, `try`, `catch` und `finally`
+- Zahlen, Booleans, Null, Undefined und Strings
+- Objekt- und Arrayliterale, Properties, Indexzugriff und Zuweisungen
+- arithmetische, Vergleichs-, Gleichheits- und logische Operatoren
+- Default-, Namespace- und Named-Imports, lokale und weitergereichte Exports,
+  Live-Bindings, Modulzyklen, dynamische Imports und import.meta ueber die
+  realm-eigene Modulregistry
+- synchrone Generatoren mit yield, yield-star, next, return und throw
+- Async-Funktionen mit await, Thenable-Adoption und Promise-Microtasks
+- Async-Generatoren, Symbol.asyncIterator, for-await-of und AsyncFromSync
+
+Der Compiler uebersetzt den AST vor der Ausfuehrung in validierte
+Bytecodesegmente; der produktive Pfad fuehrt keine AST-Knoten aus. Jede
+Instruktion verbraucht Budget und prueft den kooperativen Stop-Callback. Endlosschleifen
+enden deshalb sichtbar mit `StepLimit` oder `Cancelled`.
+
+Die VM vermeidet reine Verwaltungsarbeit in heissen Interpreterpfaden:
+deklarationslose Blocke und klassische For-Schleifen teilen die vorhandene
+lexikalische Umgebung, waehrend Let-, Const-, Klassen- und
+Funktionsdeklarationen weiterhin ihre vorgeschriebene Blockumgebung erhalten.
+Lokale Identifierzugriffe besitzen einen durch Programm, Knoten,
+Umgebungsindex und Zellgeneration abgesicherten Direktcache. Numerische
+Vergleichsketten sowie reine numerische If-, While- und For-Bedingungen
+koennen ohne die sonst getrennten Lade- und Vergleichsbytecodes ausgewertet
+werden. Sobald eine Objektumgebung, ein Getter, Typumwandlung oder ein
+anderer Ausdruck beteiligt ist, bleibt der vollstaendige semantische Pfad
+aktiv.
+
+Dynamisch per `eval` erzeugte Programme erben den Quellnamen ihres
+aufrufenden Programms und erhalten den Suffix `#eval`. Optional kann ein
+Diagnoseverbraucher den aktuell ausgefuehrten Bytecode-Ort mit Quellname,
+AST-Knotenart, Opcode und Quellposition abfragen. Diese Sicht aendert weder
+Ausfuehrungsreihenfolge noch JavaScript-Semantik.
+
+Standardtypen
+-------------
+
+Die Basis stellt Object, Array, String, Number, Boolean, Math und Promise
+sowie `parseInt`, `isNaN`, `queueTask` und `queueMicrotask` bereit.
+Enthalten sind die fuer die Fixtures benoetigten Kernmethoden wie
+Object.keys, Array.isArray, push, join, String.includes, indexOf, slice und
+Gross-/Kleinschreibung.
+
+Das ist noch keine Behauptung vollstaendiger ECMAScript-Kompatibilitaet.
+Map/Set, Proxy, Typed Arrays, das vollstaendige Objektsystem und
+weitere Standardbibliotheks- und Webanforderungen werden anhand der
+Sprachmatrix und End-to-End-Fixtures weiter ausgebaut. Der Browser-
+Inventarpunkt `ECMAScript-Kompatibilitaet` bleibt deshalb geplant.
+
+Speicherverwaltung
+------------------
+
+Objekte, Arrays, Funktionen, Native-Funktionen, Umgebungen und Promises
+liegen als typisierte Zellen in einem realm-eigenen Heap. Mark-and-Sweep
+startet an:
+
+- globaler und aktiver Umgebung
+- expliziten temporaeren Roots
+- Modulexportobjekten
+- Task- und Microtask-Warteschlangen
+- Promisewerten und Reaktionen
+
+Closures markieren ihre eingefangene Umgebung. Nicht erreichbare Zellen
+werden deterministisch freigegeben und die Statistik zaehlt Allokationen,
+Collections, freigegebene sowie aktuelle und maximale Zellen. Der
+automatische Collection-Abstand passt sich an die freien Zellen an und
+bleibt zwischen 512 und 4096 Allokationen. Bei knappem Heap wird damit frueh
+gesammelt; bei grosser Reserve werden unnoetige Vollscans vermieden. Eine
+Allokation bei voll belegtem Heap erzwingt weiterhin unmittelbar eine
+Collection und scheitert danach sichtbar mit `CellLimit`.
+
+Der Stringarena-Speicher gehoert dem Realm und wird beim Realm-Reset komplett
+freigegeben; er wird nicht als versteckter globaler Pool geteilt. Seit
+0.62.29 liegt die Arena nicht mehr als fester 1,5-MB-Block in jeder Runtime.
+Sie waechst ueber den Programmallokator von 1,5 MB bis zu einer technischen
+Obergrenze von 64 MB. `StringRef` bleibt dabei offsetbasiert und wird durch
+das Umziehen der Arena nicht ungueltig.
+
+Deklarierte Funktionsparameter und Aufrufargumente besitzen getrennte
+Grenzen. Die kompakte Parser- und Parameterabbildung bleibt auf 128
+deklarierte Parameter begrenzt; `apply`, Spread-Aufrufe und native Funktionen
+akzeptieren bis zu 8192 Argumente. Grosse Array-like-Argumentlisten werden in
+einer GC-verwalteten temporaeren Arrayzelle materialisiert und nicht auf dem
+C-/Zig-Stack eingebettet. Damit funktioniert unter anderem der uebliche
+Browserpfad `String.fromCharCode.apply` mit 8192er-Bytechunks.
+
+Die abstrakte Gleichheit folgt auch an der Nullish-Grenze ECMA-262: Nur
+`null == undefined` ist wahr; `null` oder `undefined` sind weder gleich
+`false` noch gleich `0`. Eine Regression deckt die verschachtelte Form in
+einem zustandsautomatenartigen `while`-Abbruch ab.
+
+Der Zellspeicher ueberlagert die nur je Zellart benoetigten Bindings,
+Arrayelemente und Promise-Reaktionen. Properties bleiben getrennt, weil sie
+auch an Arrays und Promises vorkommen koennen. Die Grenzen bleiben dabei
+unveraendert. Ein Groessenregressionstest haelt eine Zelle unter 12 KB, ein
+Programm unter 6 MB und die komplette Runtime unter 64 MB; insbesondere
+duerfen die acht moeglichen Modulprogramme und die bedarfsgesteuerten
+Generatorstacks nicht wieder gleichzeitig in die Runtime eingebettet werden.
+
+Ein aktiver synchroner oder asynchroner Generator besitzt einen beim ersten
+`next` separat angeforderten 1-MB-x86_64-Fiberstack. Async-Funktionen fordern
+ihren gleich grossen Stack beim Aufruf an. Jeder Stack wird direkt nach
+Abschluss wieder freigegeben. Es gibt keinen festen Fiberpool. Der Collector
+markiert Funktion, Receiver, Argumente, Anfragepromises und beide pausierbaren
+VM-Sichten und gibt den kompletten Zustand frei, sobald Generator oder Async-
+Funktionspromise nicht mehr erreichbar sind.
+
+Event Loop und Promises
+-----------------------
+
+Tasks und Microtasks besitzen getrennte FIFO-Ringe. `drainJobs` leert vor
+dem naechsten Task alle vorhandenen Microtasks und leert danach erneut
+Microtasks. Promise-Reaktionen landen immer in der Microtask-Warteschlange.
+Fulfillment, Rejection, `then`, `catch`, statische Resolve/Reject-Pfade,
+Thenable-Adoption und der Promise-Executor sind an denselben deterministischen
+Scheduler gebunden. Await-Fortsetzungen und Async-Generator-Anfragen sind
+eigene interne Microtaskarten und koennen den Desktop nicht ueber einen
+zweiten Scheduler umgehen.
+
+Das Schrittbudget gilt fuer einen einzelnen Ausfuehrungsturn. `drainJobs`
+setzt seine Ausfuehrungsstatistik deshalb vor jedem Task und jeder Microtask
+zurueck; ein frueherer begrenzter Job darf spaetere Timer- oder Promise-Jobs
+nicht bereits vor deren erster Instruktion abbrechen. Die FIFO-Grenzen und
+das maximale Jobkontingent eines Drain-Aufrufs bleiben davon unberuehrt.
+
+Webgrenze
+---------
+
+0.62.18 fuehrte absichtlich noch keine fremden Seitenskripte gegen DOM oder
+Netzwerk aus. Seit 0.62.19 stellt `r4os.web_runtime` Window, Document, Timer,
+Fetch/XHR, Streams, Cookies, Storage und History bereit; `r4os.web_security`
+erzwingt davor die Origin-Regeln. Der Sprachkern selbst bleibt frei von
+Browser- und Netzwerkbesitz.
+
+Abnahme
+-------
+
+`Run-JavaScriptRuntimeContract06218.ps1` fuehrt den eingebetteten
+Conformance-Korpus aus, baut R4JS und Klickifax und prueft Architektur,
+Inventar und Gast-Harness. Der Korpus deckt positive Sprachfaelle, Module,
+Closures ueber GC, Ausnahmen ueber Funktionsgrenzen, Task-/Microtaskordnung,
+Promise-Verkettung, await, Thenables, Async-Generator-Anfragen, for-await-of
+sowie Syntax-, Const-, Schrittlimit- und Abbruchfehler ab. Zusaetzliche
+Regressionen pruefen den kompakten Zell- und Runtimeaufbau.
+Das Gate enthaelt keine festgeschriebene Modulzahl.

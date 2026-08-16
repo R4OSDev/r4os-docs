@@ -1,0 +1,779 @@
+﻿R4D Treiberformat
+=================
+
+R4D ist das native Treiber-Containerformat von R4OS.
+
+Seit 0.21.6 ist der regulaere R4D-Dateivertrag ein R4M0-Modulcontainer mit
+ModuleKind `r4d`. Die alte Header-Version `R4D0` bleibt in diesem Dokument als
+historischer Legacy-Vertrag beschrieben. Seit 0.21.10 wird `R4D0` vom Loader
+abgelehnt; R4M0 ist der einzige regulaere R4D-Build- und Loadervertrag.
+
+Dateiendung
+-----------
+
+    .R4D
+
+Geplanter Standardpfad:
+
+    /R4OS/DRIVERS/NAME.R4D
+
+
+R4M0-Standard seit 0.21.6
+------------------------
+
+Eine aktuelle R4D-Datei ist ein R4M0-Modul mit:
+- Magic `"R4M0"`.
+- ModuleKind `r4d`.
+- mindestens einer `.text`-Section.
+- Import `R4DEV:Query:1`.
+- Export `DriverInit` Version 1.
+- Export `DriverShutdown` Version 1.
+- Metadaten `r4d.name=<NAME>` und `r4d.type=<TYPE>`.
+
+Der Dateiname bleibt die sichtbare DOS-Schnittstelle, zum Beispiel
+`EXAMPLE.R4D` oder `RTL8139.R4D`. Der Modulname in der R4M0-Metadaten-/
+Diagnosesicht ist namespaced, zum Beispiel `R4D_EXAMPLE`. So kollidieren
+Treiber nicht mit R4L- oder R4P-Modulen desselben Anzeigenamens.
+
+Der Kernel scannt beim Boot `/R4OS/DRIVERS`, laedt R4M0-R4D-Dateien ueber die
+zentrale Modulregistry und merkt die exportierten Entrypoints in einer
+R4D-Descriptor-Tabelle. Das Scannen erkennt die Datei nur. Initialisiert wird
+ein Treiber erst durch den Boot-Plan oder `LOAD`, damit Erkennung,
+Moduldiagnose und Runtime-Lifetime getrennt bleiben.
+
+Geladene R4M0-Images bleiben auch nach einem Runtime-UNLOAD gemappt. Ein
+regulaeres Modul-Image-Unload gibt es nicht. Runtime-UNLOAD beendet den
+aktiven Treiberzustand ueber Storage-Preflight, `DriverShutdown` und den
+ownergebundenen Ressourcenabbau; erst danach wird der Runtime-Eintrag als
+entladen markiert. Der zugehoerige R4M0-Modulslot und sein Image bleiben fuer
+einen spaeteren erneuten LOAD erhalten.
+
+
+Historischer Header Version 1
+-----------------------------
+
+Dieser Header ist nicht mehr ladbar. Er bleibt als Referenz fuer alte
+Artefakte und Negativtests erhalten.
+
+Alle Zahlen sind little endian.
+
+Offset  Groesse  Bedeutung
+0       4        Magic: "R4D0"
+4       4        Version: 1
+8       2        Treibertyp
+10      2        reserviert, 0
+12      4        init-Funktion-Offset ab Dateianfang
+16      4        shutdown-Funktion-Offset ab Dateianfang
+20      4        Treiber-Name-Offset ab Dateianfang, nullterminiert
+24      4        Match-Tabelle-Offset ab Dateianfang, 0 wenn nicht vorhanden
+28      4        KernelApi-Version
+
+Header-Groesse:
+
+    32 Bytes
+
+
+Treibertypen
+------------
+
+1
+  Audio-Hardware-Backend.
+
+2
+  Storage-Backend.
+
+3
+  Input-Backend.
+
+4
+  Synth-Engine.
+
+5
+  Netzwerk-Backend.
+
+255
+  Misc/Test/sonstige Treiber.
+
+
+Payload
+-------
+
+Alles hinter dem Header ist Payload. In der ersten Implementierungsstufe
+enthaelt die Payload rohen x86_64-Code und optionale Daten wie den internen
+Treibernamen.
+
+Der Header enthaelt bewusst keine eigene Code-Groesse. Gueltige Offsets muessen
+innerhalb der Datei liegen. Der Loader kann die Gesamtgroesse der Datei als
+Grenze verwenden.
+
+
+Entrypoints
+-----------
+
+init() und shutdown() sind Pflicht.
+
+Aktuelle Signatur:
+
+    int init(struct R4DriverApi* api);
+    int shutdown(void);
+
+Die erste KernelApi fuer R4D war absichtlich minimal. Die aktuelle DriverApi ist rueckwaerts append-only gewachsen:
+- Magic "DPI1"
+- API-Version 15
+- Groesse der API-Tabelle
+- log_info(const char* text)
+- log_warn(const char* text)
+- log_error(const char* text)
+- port_inb / port_outb
+- alloc_dma_buffer / free_dma_buffer
+- request_irq / release_irq
+- get_option
+- register_audio_backend
+- register_storage_backend
+- register_input_backend
+- register_synth_engine
+- register_mixer_backend
+- register_net_backend
+- alloc_dma_region / free_dma_region
+- PCI-Geraetesuche, Config-Zugriff, BAR-Lesen und Bus Mastering
+- irq_register / irq_unregister / irq_stats
+- pci_map_bar
+- port_inw/outw/inl/outl
+- net_receive_frame
+- register_audio_output_backend / unregister_audio_backend
+- tick_count / timer_frequency / wait_ticks
+- register_synth_engine_v2
+- unregister_storage_backend
+- register_usb_host_controller / unregister_usb_host_controller
+- driver_work_submit / driver_work_cancel
+- driver_completion_wait / driver_completion_status / driver_completion_release
+- driver_work_summary
+
+R4D-Treiber nutzen init(), um sich ueber die DriverApi zu initialisieren und
+koennen ueber log_info/log_warn/log_error ins Bootlog schreiben.
+request_irq/release_irq sind noch Platzhalter. CONFIG.R4S-Optionen und echte
+Subsystem-Backends werden schrittweise angebunden.
+
+Hinweis zum Storage-Slot: `register_storage_backend` ist seit DriverApi/SDK
+v13 ein echter Blockdevice-Backend-Vertrag mit Read-/Write-/Flush-Callbacks,
+Source-Besitz, Queue-/Timeout-Metadaten, Recovery-Helfern und Owner-Cleanup.
+Seit DriverApi/SDK v14 gibt es zusaetzlich den USB-Hostcontroller-Vertrag.
+Seit DriverApi/SDK v15 gibt es zusaetzlich den generischen Workqueue-/
+Completion-Vertrag fuer kurze IRQ-Pfade und deferred work.
+Seit 0.45.52 gilt fuer Boot-Storage: Standardbesitz ist Preload/R4D; alte
+AHCI-/NVMe-/xHCI-/USBMSC-Datenpfade duerfen nur als dokumentierte Legacy
+Rescue laufen, bis der jeweilige R4D-Treiber die komplette Transferlast
+selbst traegt.
+
+0.13.10 USB-/Bootstorage-Entscheidung
+-------------------------------------
+
+Der erste USB-Bootstick-Pfad bleibt in 0.13.x builtin im Kernel: xHCI, USB
+Core, USB HID und USB Mass Storage muessen laufen, bevor C: gemountet wird und
+bevor `/R4OS/DRIVERS/*.r4d` geladen werden kann. Ein `USBXHCI.R4D` oder
+`USBMSC.R4D` waere fuer diesen ersten Zugriff daher zu spaet.
+
+R4D bleibt trotzdem das Ziel fuer spaetere auslagerbare Treiber. Der konkrete
+Ausbaupunkt ist nicht das R4D-Dateiformat, sondern der fehlende Storage-
+Backend-Vertrag in der DriverApi. Bis dieser Vertrag existiert, duerfen
+Storage-Pfade zwar modular im Kernel gebaut werden, gelten aber nicht als
+ladbare R4D-Storage-Treiber.
+
+
+Loader-Status
+-------------
+
+Seit Version 0.4.2 gibt es Code/src/program/r4d.zig als erste
+Kernel-Loader-Grundlage.
+
+Vorhanden:
+- /R4OS/DRIVERS/*.r4d von FAT32 lesen
+- Header Magic, Version, Typ, API-Version, Offsets und Namen validieren
+- init() mit minimaler DriverApi aufrufen
+- shutdown() als Probe aufrufen
+- LOAD/UNLOAD aus der Shell fuer manuell geladene R4D-Dateien
+- Loaderfehler als sichtbare Bootlog-Meldungen ausgeben
+- seit 0.4.3: Statuswechsel ueber Code/src/drivers/registry.zig loggen
+- seit 0.4.3: R4D-/Driver-Logs in einen dmesg-artigen Bootlog-Puffer
+  spiegeln
+- CONFIG.R4S-Optionen ueber DriverApi.get_option lesen
+- R4D-Dateien ueber /CONFIG.R4S und Boot-Plan laden
+
+Aktuell vorhanden:
+- Runtime-LOAD/UNLOAD mit Storage-Preflight, Shutdown-Veto und
+  transaktionalem Owner-Cleanup
+- Owner-Cleanup fuer Storage, IRQ, Deferred Work, DMA, Audio,
+  USB-Hostcontroller und R4D-NetBackends
+- echte IRQ-Handler-Registrierung ueber irq_register/irq_unregister
+- NetBackend-Registrierung und RX-Frame-Uebergabe fuer Netzwerktreiber
+- Audio-Output-Backend-Vertrag fuer R4D-Treiber
+- Timer-/Wait-Helfer fuer Hardware-Wartepfade
+- SynthEngine-Descriptor-Vertrag fuer R4D-Synthesizer seit DriverApi-v12:
+  `register_synth_engine_v2` registriert Status, `midi_send`, `render`,
+  `stop` und optionale OPL3-/SID-Operationen. Der alte
+  `register_synth_engine`-Markerpfad bleibt nur als Legacy-/Migrationsbruecke.
+- `AC97.R4D` als echter Audio-Hardwaretreiber fuer PCI/I/O/DMA/Reset,
+  AudioBackend-Registrierung und PCM-Ausgabe; seit 0.38.4 ohne parallelen
+  Built-in-AC97-Fallback
+- `HDA.R4D` als HDA-Playback-Treiber fuer PCI/MMIO, Reset,
+  Immediate Commands, Codec-/Widget-Sichtung, Output-Pfad, Stream-DMA,
+  BDL-Ring, AudioBackend-Registrierung und PCM-Ausgabe; seit 0.39.3 ohne
+  parallelen Built-in-HDA-Fallback
+
+
+Dateiname und Header
+--------------------
+
+Der Dateiname ist die sichtbare, DOS-artige User-Schnittstelle:
+
+    SID.R4D
+    PS2.R4D
+    AC97.R4D
+
+Der Header ist die technische Wahrheit. Der Kernel darf eine Datei nur laden,
+wenn Magic, Version, Typ, Offsets und API-Version plausibel sind.
+
+
+R4XBuilder
+----------
+
+Code/System/SDK/Tools/R4XBuilder kann R4D-Dateien fuer R4OS erzeugen. Neue
+Zig-Treiber sollen Code/System/SDK/r4os nutzen: Der SDK-Build-Helfer baut
+freestanding Zig-Code als gelinktes ELF und ruft R4XBuilder zentral im
+R4M0-/R4D-Modus auf. Seit 0.52.5 werden dabei loadbare ELF-Sections und
+ELF-Relocations in den R4M0-Container uebernommen; der alte rohe
+Codebyte-Eingang ist nur noch fuer bewusst einfache Testfixtures gedacht.
+
+Die SDK-R4D-Module werden seit 0.53.18 wie R4X-Module mit aktivem
+x87/SSE-Standardprofil gebaut. Seit 0.59.10 erhaelt nur ein tatsaechlicher
+SIMD-Task einen zum aktiven Backend exakt dimensionierten und 64-Byte-
+ausgerichteten FPU-/XSAVE-State; reine Kernel-Worker besitzen keinen
+ungenutzten State. Ein produktiver soft-float/no-SIMD-Fallback bleibt nicht
+erhalten. Seit 0.53.40 ist AVX/AVX2 bei aktivem XSAVE-YMM-State Teil des
+Standardprofils; eine SSE-only-R4D-Produktivroute bleibt nicht erhalten.
+Lebenszeit, Save/Restore und OOM-Rollback stehen in
+`../Core/DynamicTaskRegistry.txt`.
+
+Aktueller R4M0-Beispielpfad:
+
+    r4xbuilder --r4m --kind r4d --name R4D_DRIVER --output DRIVER.R4D --code driver.code.bin --import R4DEV:Query:1 --export DriverInit:.text:0:1 --export DriverShutdown:.text:5:1 --meta r4d.name=DRIVER --meta r4d.type=misc
+
+Der Builder schreibt:
+- den R4M0-Header
+- Section-, Import-, Export-, Entry- und Metadaten-Tabellen
+- die Codebytes als `.text`-Section
+- den R4DEV-Import und die Driver-Exports als sprachneutrale R4OS-Symbole
+
+Fuer R4X bleibt der bestehende Modus erhalten:
+
+    r4xbuilder --r4x --output PROGRAM.R4X --code program.code.bin --app-class console
+
+SDK-Smoke-Build:
+
+    cd Code\System\SDK
+    ..\..\DevTools\Zig\zig.exe build
+
+Dieser Build erzeugt zig-out\SDKSMOKE.R4D als minimalen R4D-Treiber aus Zig.
+
+SDK-Example:
+
+    cd Code
+    ..\DevTools\Zig\zig.exe build
+
+Dieser Build erzeugt zusaetzlich Code\zig-out\EXAMPLE.R4D aus
+Code/System/Driver/Example/src/main.zig und Code\zig-out\RTL8139.R4D aus
+Code/System/Driver/RTL8139/src/main.zig. Das normale Build-Script kopiert diese
+Dateien nach /R4OS/DRIVERS/example.r4d beziehungsweise /R4OS/DRIVERS/rtl8139.r4d ins Image.
+
+Manueller Test in R4OS:
+
+    C:\>LOAD EXAMPLE
+    C:\>UNLOAD EXAMPLE
+
+Das Beispiel zeigt init/shutdown-Entries, log_info/log_warn/log_error und
+das Lesen einer optionalen CONFIG.R4S-Option wie:
+
+    OPTION EXAMPLE mode=manual
+
+Seit 0.21.6 erzeugt der normale SDK-Build-Helfer R4M0-Artefakte mit
+ModuleKind R4D. Der Inspector kann diese Dateien pruefen:
+
+    r4xbuilder --r4m --kind r4d --output DRIVER.R4D --code driver.code.bin
+    r4xbuilder --r4m --kind r4d --output DRIVER.R4D --elf driver.o
+    r4xbuilder --inspect DRIVER.R4D
+
+Details zu Header, Sections, Imports, Exports und Relocations stehen in
+Docs/Core/Modulsystem.txt.
+
+
+DriverApi Version 3: Netzwerk-Backend-Vertrag
+---------------------------------------------
+Marker: 0.12-driverapi-v3-netbackend
+
+Ab DriverApi Version 3 ist register_net_backend kein reiner Log-Platzhalter
+mehr. Der zweite Parameter zeigt auf einen NetBackend-Descriptor:
+
+- version/size fuer ABI-Pruefung
+- flags fuer Link/Broadcast/Trusted-Hinweise
+- mtu, bus_kind, bus/device/function, vendor_id/device_id
+- mac als verpflichtende Adapteradresse
+- context fuer den Treiberzustand
+- transmit/poll/shutdown/status als optionale Funktionspointer
+
+Der Kernel validiert Version, Descriptor-Groesse, MTU und MAC. Gueltige
+Backends werden als echte Net-Core-Adapter registriert. transmit und poll laufen
+ueber Kernel-Thunks, damit der Net-Core weiterhin seinen eigenen TxResult- und
+Adapter-Vertrag behaelt.
+
+DriverApi Version 4: DMA-Regionen
+---------------------------------
+Marker: 0.12-driverapi-v4-dma
+
+DriverApi Version 4 haengt alloc_dma_region und free_dma_region hinten an die
+Tabelle an. Der neue DmaBuffer liefert phys_addr, virt_addr, bytes, alignment,
+flags und reserved. Der Kernel allokiert zusammenhaengende physische Frames,
+mappt sie ueber HHDM in den Kerneladressraum und nullt den gesamten Bereich vor
+der Rueckgabe.
+
+Der alte alloc_dma_buffer/free_dma_buffer-Slot bleibt erhalten und nutzt intern
+denselben contiguous-Frame-Pfad, liefert aber weiterhin nur die physische
+Adresse zurueck. Neue Treiber sollen den DmaBuffer-Weg bevorzugen.
+
+DriverApi Version 5: PCI-Zugriff
+---------------------------------
+
+Version 5 erweitert die R4D-DriverApi um einen bewusst kleinen PCI-Vertrag.
+Ziel ist nicht Plug-and-Play-Komplexitaet, sondern genug Kontrolle fuer echte
+Treiber wie RTL8139: Geraet finden, BARs lesen, Config-Space anfassen und Bus
+Mastering einschalten.
+
+Neue Struktur:
+
+PciDeviceInfo
+- bus_kind: 1 = Legacy PCI, 2 = PCIe/ECAM.
+- bus, device, function: physische PCI-Adresse.
+- vendor_id, device_id: Hardware-Kennung.
+- class_code, subclass, prog_if: PCI-Klasseninformation.
+- interrupt_line, interrupt_pin: klassische Interrupt-Zuordnung, falls vom
+  Host bereitgestellt.
+- command: aktueller Wert des PCI Command Registers.
+
+Neue Funktionen:
+- pci_device_count(): liefert die Zahl der vom Kernel bekannten PCI-/PCIe-
+  Geraete.
+- pci_device_at(index, out): kopiert ein PciDeviceInfo fuer den angegebenen
+  Index.
+- pci_find_by_class(class, subclass, start_index, out): sucht ab start_index
+  nach einem passenden Geraet und liefert den gefundenen Index oder -1.
+- pci_read_config32(bus_kind, bus, device, function, offset): liest einen
+  32-Bit-Wert aus dem PCI-Config-Space.
+- pci_write_config32(...): schreibt einen 32-Bit-Wert in den PCI-Config-Space.
+- pci_read_bar(..., index): liest BAR0..BAR5 als Rohwert.
+- pci_enable_bus_master(..., flags): setzt Bus Master Enable; optional auch
+  I/O-Space und Memory-Space, wenn der Treiber die passenden Flags setzt.
+
+Die API schuetzt nicht vor absichtlich falschen Zugriffen. Sie validiert aber
+technisch offensichtliche Fehler wie ungueltige BAR-Indizes oder unbekannte
+Bus-Arten, damit kaputte Treiber nicht aus Versehen triviale Kernel-Abstuerze
+ausloesen. Das bleibt Crash-Vermeidung, keine Sicherheitsgrenze.
+
+Noch offen fuer spaetere Versionen ist ein komfortabler MMIO-Mapping-Pfad fuer
+BAR-Speicherbereiche. Version 5 liefert dafuer die notwendigen Rohdaten, mapped
+aber noch keinen BAR-Bereich automatisch in eine stabile Treiberadresse.
+
+DriverApi Version 6: IRQ-Router fuer R4D
+----------------------------------------
+
+Version 6 fuehrt den ersten funktionierenden IRQ-Vertrag fuer ladbare Treiber
+ein. Der alte request_irq/release_irq-Platzhalter bleibt aus ABI-Gruenden im
+Tabellenlayout, neue Treiber sollen aber die v6-Funktionen verwenden.
+
+Neue Konstanten:
+- irq_flag_shared = 1: der Handler darf sich eine Legacy-IRQ-Leitung mit
+  anderen R4D-Handlern teilen.
+- irq_flag_level_low = 2: die IOAPIC-Route wird fuer PCI-INTx als
+  level-triggered, active-low programmiert.
+- irq_result_handled = 1: Rueckgabewert eines Handlers, wenn er den Interrupt
+  als bearbeitet betrachtet.
+
+Handler-Signatur:
+
+fn handler(irq: u8, context: usize) callconv(.c) u32
+
+Neue Funktionen:
+- irq_register(irq, handler, context, flags): registriert einen Handler fuer
+  IRQ/GSI 0..31. Pro IRQ sind bis zu vier dynamische Handler moeglich. Exklusive
+  und Shared-Registrierungen werden nicht gemischt.
+- irq_unregister(irq, handler, context): entfernt genau diese Registrierung.
+- irq_stats(irq, out): liefert registrierte Handler, Shared-Zaehler, Masken-
+  Status, Dispatch-Zaehler, Handled-Zaehler und den letzten Handler-Rueckgabewert.
+
+Der Kernel ruft dynamische R4D-Handler im zentralen IDT-IRQ-Dispatch nach den
+festen Kernel-Treibern auf. Das bestehende EOI-Verhalten bleibt beim Kernel:
+Treiber bestaetigen den Interrupt nicht selbst am PIC/LAPIC.
+
+Bei aktivem IOAPIC kann der Router Legacy-IRQ-Leitungen dynamisch programmieren
+und entmasken. Fuer klassische PIC-Systeme wird die passende 8259-Leitung
+entmaskt. Das ist ein Kompatibilitaetsweg fuer alte Hardware und QEMU-PCI-INTx,
+kein MSI/MSI-X-Ersatz.
+
+EXAMPLE.R4D nutzt seit 0.20.11 die sichtbaren R4DEV-Namen
+`r4os.r4dev.DriverApi`, `DriverContext` und `driverEntriesAsm`.
+
+EXAMPLE.R4D nutzt IRQ0 als Smoke-Test: Handler registrieren, auf echten
+Timer-Dispatch warten, Stats lesen und wieder deregistrieren. Das prueft die
+Dispatch-Strecke ohne einen echten Fremdgeraete-Interrupt erzwingen zu muessen.
+
+R4D Runtime-Lifecycle: stabiler Modulname
+-----------------------------------------
+
+Der Runtime-Loader kopiert den R4D-Modulnamen jetzt vor dem Aufruf der Init-
+Funktion in einen Kernel-Puffer. Der Name aus dem geladenen R4D-Image darf nach
+dem Sprung in Modulcode nicht mehr als stabil betrachtet werden, weil Modulcode
+und Moduldaten im selben geladenen Speicherabbild leben koennen.
+
+Damit sind LOAD und UNLOAD fuer Runtime-Treiber wieder symmetrisch:
+- LOAD EXAMPLE legt einen Runtime-Eintrag mit stabiler Namenskopie an.
+- UNLOAD EXAMPLE findet diesen Eintrag anhand der Kopie wieder und serialisiert
+  den Ownerkontext.
+- Vor dem Top-Level-Shutdown stoppt ein transaktionaler Storage-Preflight neue
+  Admission und kann den gesamten UNLOAD ohne Teilabbau ablehnen.
+- Erst nach erfolgreichem `DriverShutdown` werden Storage und die weiteren
+  ownergebundenen Ressourcen abgebaut und die Driver-Registry als ENTLADEN
+  markiert.
+- Das R4M0-Image bleibt dabei gemappt; Runtime-UNLOAD ist kein Modul-Unmap.
+
+DriverApi Version 7: PCI-BAR-MMIO Mapping
+-----------------------------------------
+
+Version 7 ergaenzt pci_map_bar(). Damit kann ein R4D-Treiber einen PCI-MMIO-BAR
+nicht nur als Rohwert lesen, sondern als stabile virtuelle Adresse nutzen.
+
+Neue Struktur:
+
+MmioRegion
+- phys_addr: physische Basisadresse des MMIO-BARs ohne Flagbits.
+- virt_addr: gemappte virtuelle Adresse inklusive BAR-Offset.
+- bytes: vom Treiber angeforderte Nutzlaenge.
+- mapped_bytes: tatsaechlich gemappte Seitenlaenge inklusive Page-Offset.
+- bar_index: BAR0..BAR5.
+- flags: aktuell gesetzte Mapping-Flags.
+
+Neue Funktion:
+- pci_map_bar(bus_kind, bus, device, function, bar, bytes, flags, out)
+
+Die Funktion akzeptiert nur Memory-BARs. I/O-BARs bleiben ueber port_inb/
+port_outb zugaenglich. Der Kernel mapped die benoetigten Seiten mit
+Cache-Disable und No-Execute in den Higher-Half-Direktbereich. Optional kann
+mmio_map_write_combining gesetzt werden, wenn ein Treiber bewusst Write-
+Combining fuer einen Bereich moechte.
+
+Wichtig: Die API ermittelt die BAR-Groesse nicht per Write-all-ones-Probing.
+Das ist absichtlich so, weil R4OS Treiber einfach und direkt halten will und
+laufende Geraete nicht durch Diagnose-Probing stoeren soll. Der Treiber gibt die
+benoetigte Bytezahl explizit an; bytes=0 mapped mindestens eine Seite.
+
+R4D Runtime-Owner und automatischer Cleanup
+------------------------------------------
+
+Runtime-geladene R4D-Treiber erhalten intern einen Owner, der aus dem Driver-
+Registry-Slot abgeleitet wird. Der Loader setzt diesen Owner waehrend Init- und
+Shutdown-Aufrufen in der DriverApi. Ressourcen, die ueber die DriverApi angelegt
+werden, koennen dadurch dem Runtime-Treiber zugeordnet werden.
+
+Aktuell getrackte Owner-Ressourcen:
+- Storage-Backends samt stabilen Blockdevice-Tombstones.
+- IRQ-Handler aus `irq_register()`.
+- Deferred-Work-Auftraege aus der Driver-Workqueue.
+- DMA-Regionen aus `alloc_dma_region()` und `alloc_dma_buffer()`.
+- externe Audio-Output-Backends.
+- USB-Hostcontroller.
+- R4D-NetBackends aus `register_net_backend()`.
+
+UNLOAD laeuft in einer festen Reihenfolge:
+
+1. Der Loader setzt den Registryzustand auf Shutdown und erwirbt den
+   generationengebundenen R4D-Ownerkontext.
+2. `prepareOwnerCleanup` bereitet alle Storage-Unregister atomar vor. Ein
+   Mount, Operationspin, eine Backend-Ausfuehrung, ein Requestslot, ein
+   gehaltener Queue-Lock oder ein Waiter ist ein nicht destruktives Unload-
+   Veto. Bereits vorbereitete Devices werden bei einem spaeteren Veto wieder
+   geoeffnet.
+3. Erst nach diesem Preflight wird der Top-Level-`DriverShutdown` aufgerufen.
+   Sein Fehler bricht den Vorgang ab und rollt die vorbereiteten Storage-
+   Barrieren zurueck; andere Owner-Ressourcen bleiben bestehen.
+4. Nach erfolgreichem Shutdown laufen zuerst die Storage-Backend-Finalizer
+   bei gestoppter Admission, danach der Blockdevice-Commit. Anschliessend
+   entfernt der generische Cleanup in dieser Reihenfolge IRQ, Deferred Work,
+   DMA, Audio, USB-Hostcontroller und Netzwerk-Backends.
+5. Erst nach erfolgreichem Commit wird der Ownerkontext freigegeben, der
+   Registryeintrag als ENTLADEN markiert und der Runtime-Descriptor geloescht.
+   Der R4M0-Modulslot samt gemapptem Image bleibt erhalten.
+
+Der Cleanup ist keine Sicherheitsbarriere; er ist ein Stabilitaetsnetz fuer
+Runtime-Treiber im fully-trusted Modell. Die Storage-Vorpruefung ist dagegen
+eine technische Lebenszeitgrenze: Sie stoppt vor dem Top-Level-Shutdown jede
+neue Admission und beweist, dass kein alter Bezug mehr laeuft. Bei Rueckkehr
+des erfolgreichen UNLOAD zeigt kein Blockdevice mehr auf Treiberkontext oder
+Callbacks.
+
+Der EXAMPLE.R4D-Smoke laesst bewusst einen IRQ0-Handler und eine DMA-Region bis
+zum UNLOAD offen. Die aktuelle Cleanup-Zeile meldet alle Ressourcenklassen:
+
+[R4D] cleanup owner=<id> irq=<n> work=<n> dma=<n> audio=<n> storage=<n> usb-host=<n> net=<n>
+
+Zusaetzlich reserviert der Physical Frame Allocator Frame 0 dauerhaft und
+ueberspringt ihn bei normalen Allokationen. Damit koennen Treiber-DMA-Puffer
+nicht mehr versehentlich auf physische Adresse 0 zeigen.
+
+DriverApi Version 8: Breite Port-I/O
+------------------------------------
+
+Version 8 haengt 16- und 32-bit-Portzugriffe an die DriverApi an:
+
+- port_inw / port_outw
+- port_inl / port_outl
+
+Damit muessen R4D-Treiber fuer klassische PCI-/ISA-Hardware nicht mehr auf
+8-bit-Portzugriffe beschraenkt bleiben. RTL8139.R4D nutzt diese Funktionen fuer
+ISR/IMR, RCR/TCR, TSAD/TSD und weitere Register.
+
+DriverApi Version 9: RX-Frames aus R4D in den Net-Core
+------------------------------------------------------
+
+Version 9 haengt net_receive_frame(adapter_index, frame, len) an die DriverApi
+an. Ein Netzwerk-R4D ruft diese Funktion auf, nachdem er ein Ethernet-II-Frame
+aus seinem RX-Ring gelesen hat. Der Kernel prueft Adapterindex und Framegroesse
+und uebergibt das Frame an net.receiveFrame().
+
+Damit ist register_net_backend nicht nur ein TX/Poll-Vertrag, sondern ein
+vollstaendiger RX/TX-Grundpfad fuer R4D-Netztreiber. RTL8139.R4D nutzt diesen
+Pfad erfolgreich fuer ARP, IPv4 und ICMP im QEMU-User-Network.
+
+RTL8139.R4D Stand
+-----------------
+
+RTL8139.R4D ist der erste echte Netzwerk-R4D-Treiber. Er erkennt Realtek/QEMU
+10EC:8139, liest BAR0 als I/O-BAR, aktiviert PCI-I/O und Bus Mastering, setzt
+den Chip zurueck, liest die MAC-Adresse, richtet RX/TX-DMA ein und registriert
+ein NetBackend im Net-Core.
+
+Die aktuelle Abnahme mit Build.bat -test -profile modern-q35 -storage ahci -net
+rtl8139 meldet:
+
+- runtime load RTL8139 [OK]
+- DRIVERS zeigt RTL8139 src=r4d type=net state=AKTIV
+- DEVMGR zeigt Realtek RTL8139 network als active-netbackend
+- ARPTEST gateway: ok
+- PINGTEST gateway: ok
+- PING 10.0.2.2: ok
+- ICMPSELFTEST inbound echo: ok
+
+0.31.2 DriverApi-Audit und R4D-Mindestvertrag
+---------------------------------------------
+
+DriverApi v9 deckt fuer ladbare Treiber bereits wichtige Grundlagen ab:
+Logging, CONFIG.R4S-Optionen, Port-I/O mit 8/16/32 Bit, DMA-Regionen,
+PCI/PCIe-Geraetelisten, PCI-Config-Zugriff, BAR-Lesen, Bus-Mastering,
+PCI-BAR-MMIO-Mapping, IRQ-Router, IRQ-Statistik, NetBackend-Registrierung und
+RX-Frames in den Net-Core.
+
+Fuer produktive Treiber gilt:
+- `DriverInit` und `DriverShutdown` muessen als R4M0-Exports vorhanden sein.
+- Anwendungscode soll `r4os.r4dev.DriverApi`, `DriverContext` und
+  `driverEntriesAsm` nutzen.
+- `DriverInit` darf erst als erfolgreich gelten, wenn der Treiber seine
+  benoetigten Ressourcen kontrolliert erhalten hat.
+- `DriverShutdown` muss das Geraet beruhigen und Ressourcen freigeben oder
+  vom owner-basierten Runtime-Cleanup erfassen lassen.
+- Produktive IRQ-Treiber nutzen `irq_register`/`irq_unregister`; die alten
+  `request_irq`/`release_irq`-Eintraege sind Platzhalter.
+
+Bekannte Luecken vor weiteren echten Auslagerungen:
+- StorageBackend existiert seit 0.45.43 als echter R4D-Blockdevice-Vertrag.
+  Seit 0.45.46 wird `USBMSC.R4D` aus `PRELOAD.R4I` geladen und das
+  USBMSC-Blockdevice als `source=preload` sichtbar; der Built-in-
+  Transferpfad bleibt bis zur USB-Stick-Boot-Abnahme als Legacy Rescue
+  erhalten. AHCI/NVMe/ATA folgen erst nach ihren jeweiligen Bootpfad-
+  Abnahmen.
+- USB-Hostcontroller existiert seit 0.45.44 als echter R4D-Vertrag fuer xHCI-
+  artige Controller. Seit 0.45.45 wird `XHCI.R4D` aus `PRELOAD.R4I` geladen
+  und registriert `XHCI source=preload`; der Built-in-xHCI-Datenpfad bleibt
+  bis zur USBMSC-/Bootstorage-Abnahme als Legacy Rescue erhalten.
+- InputBackend ist noch kein echter Eingabe-Backend-Vertrag fuer PS/2/USB-HID.
+- AC97/HDA brauchen vor dem Entfernen aus dem Kernel einen klaren Audio-
+  Hardwarevertrag fuer MMIO, IRQ, DMA, Streamstart, Stop und Recovery.
+- Fuer MMIO-Mappings gibt es aktuell Mapping, aber noch keinen expliziten
+  Unmap-/Lifetime-Vertrag.
+- Device-Quiesce vor UNLOAD muss pro Treiberklasse genauer werden.
+
+Testtreiber:
+`EXAMPLE.R4D` bleibt der API-Smoke-Treiber. Er prueft Logging, Optionen,
+DMA-Regionen, owner-basiertes Cleanup, PCI/MMIO-Grundlage, IRQ-Router,
+`DriverInit`, `DriverShutdown` und seit 0.45.43 den StorageBackend-Vertrag mit
+einem RAM-basierten Blockdevice-Smoke, Negativfaellen und Recovery-Markern.
+Seit 0.53.41 prueft er zusaetzlich DriverApi-v15-Deferred-Work aus IRQ0,
+Completion-Wait, Completion-Status, Release und Workqueue-Summary. Er ist
+damit ein Pruefstein, bevor echte Hardwaretreiber aus dem Kernel entfernt
+werden. Fuer komplett hardwarefreie Minimalabnahmen kann spaeter ein kleinerer
+No-Hardware-Smoke aus `Code/System/SDK/Smoke/R4D` abgeleitet werden.
+0.31.4 DriverApi v10: Audio-Output-Backends
+-------------------------------------------
+DriverApi v10 ergaenzt den R4D-Vertrag append-only um einen expliziten
+Audio-Output-Backend-Descriptor. Der alte generische `register_audio_backend`
+bleibt aus Kompatibilitaetsgruenden bestehen.
+
+Neue Felder am Ende der DriverApi:
+- `register_audio_output_backend(name, descriptor)`
+- `unregister_audio_backend(name)`
+
+Ein `AudioBackend` enthaelt Version, Groesse, Formatmaske, Rate-/Kanalgrenzen,
+Treiberkontext sowie Callbacks fuer `write_pcm`, `stop`, `shutdown` und optional
+`status`. Der Kernel-Audio-Core kann solche R4D-Backends als aktiven PCM-Ausgang
+nutzen. Owner-Cleanup entfernt registrierte Audio-Backends beim Entladen des
+R4D-Treibers wieder.
+
+Dieser Vertrag ist die Voraussetzung fuer echte Hardware-Audio-Treiber wie
+`AC97.R4D` und `HDA.R4D`. Ein reiner Platzhaltertreiber genuegt nicht fuer die
+Entfernung der Built-in-Pfade.
+
+0.38.0 DriverApi v11: Timer und Audio-R4D-Diagnose
+--------------------------------------------------
+DriverApi v11 erweitert die Tabelle erneut append-only. Bestehende Slots bleiben
+unveraendert; neue Felder stehen am Ende:
+
+- `tick_count()`
+- `timer_frequency()`
+- `wait_ticks(ticks)`
+
+Das SDK spiegelt diese Felder als `DriverContext.tickCount()`,
+`timerFrequency()` und `waitTicks(ticks)`. Ausserdem gibt es
+`apiMagic()`, `apiVersion()`, `apiSize()`, `supportsDriverApi(...)` und
+`apiCompatible()`, damit Treiber vor der Nutzung neuer Slots die Tabelle
+technisch pruefen koennen.
+
+Der Audio-Output-Backend-Vertrag aus v10 ist ab 0.38.0 diagnostisch vollstaendig
+angebunden: Ein optionaler `AudioBackend.status`-Callback wird im Audio-Core
+gespeichert und im `AUDIO`-Status ausgegeben. Der Callback liefert:
+
+- `active`
+- `writes`
+- `underruns`
+- `errors`
+- `last_result`
+
+Der PCM-Vertrag fuer Audio-R4D ist explizit: Der Kernel normalisiert PCM nicht
+vor dem R4D-Backend. Der Treiber erhaelt die Daten im Streamformat, meldet seine
+unterstuetzten Formate im Descriptor und muss fuer Hardware wie AC97 die
+notwendige Konvertierung selbst oder ueber SDK-nahe Hilfen vornehmen. Kernel-
+interne PCM-Module aus dem Kernelbaum duerfen R4D-Treiber nicht
+importieren.
+
+Seit 0.38.3 gibt es dafuer mit `r4os.audio_pcm` eine SDK-nahe PCM-Hilfe fuer
+einfache Hardwaretreiber. Sie bietet Framegroessen, Ausgabezaehlung und einen
+Streaming-Resampler nach 48 kHz stereo s16le fuer s16le/u8 mono/stereo. Diese
+Hilfe ist SDK-Code und importiert keine Kernelmodule.
+
+`EXAMPLE.R4D` nutzt DriverApi v11 als Runtime-Smoke fuer API-Version,
+Tabellengroesse, Tick-/Wait-Helfer und den IRQ0-Pfad. `SDKSMOKE.R4D` registriert
+und deregistriert testweise ein Audio-Output-Backend mit optionalem Status- und
+Shutdown-Feld, bleibt aber eine SDK-Build-/Vertragsabnahme und kein produktiver
+Audiotreiber.
+
+0.38.1 R4D Runtime-Ladeergebnis und AC97-Planpfad
+-------------------------------------------------
+Seit 0.38.1 kann der Runtime-Loader fuer geplante Treiber ein detailliertes
+Ladeergebnis liefern:
+
+- loaded
+- already-active
+- name-invalid
+- file-missing
+- invalid-file
+- init-failed
+- load-failed
+
+Der bisherige boolesche `loadRuntimeName`-Pfad bleibt fuer alte Aufrufer
+erhalten. Der neue Ergebniswert wird vom Boot-Treiberplan genutzt, damit
+`DRIVER=AC97` nicht nur "fehlgeschlagen" meldet, sondern zwischen fehlender
+Datei, ungueltigem R4D, fehlschlagendem `DriverInit` und erfolgreichem Laden
+unterscheiden kann.
+
+AC97 wird dadurch als R4D-Planpfad vorbereitet: `audio_boot` markiert
+`DRIVER=AC97` als erwartetes `AC97.R4D`, der Treiberplan laedt die Datei aus
+`C:\R4OS\DRIVERS`, und der Audio-Bootstatus erfasst danach, ob ein Backend
+geladen, registriert oder aktiv ist. `DISABLE=AC97`, fehlendes `AC97.R4D` und
+ein absichtlich fehlschlagender Init bleiben nichtfatal.
+
+`AC97FAIL.R4D` aus `Code/System/Driver/AudioFail` ist nur eine negative
+Vertragsfixture fuer diese Statuspfade. Der Treiber meldet sich als AC97-
+Audiotreiber, scheitert aber absichtlich in `DriverInit`; er ist kein
+produktiver AC97-Treiber und kein Ersatz fuer den spaeteren Port.
+
+0.38.3 AC97.R4D als Audio-Output-Backend
+----------------------------------------
+Seit 0.38.3 registriert `AC97.R4D` ein echtes Audio-Output-Backend ueber
+`register_audio_output_backend`. Der Treiber akzeptiert PCM-Streams in s16le
+oder u8, mono oder stereo, normalisiert sie ueber `r4os.audio_pcm` auf 48 kHz
+stereo s16le und fuellt damit AC97-BDL-/DMA-Puffer.
+
+Der Backend-Status meldet Writes, Underruns, Errors und den letzten
+Ergebniscode. Stop, Drain/Timeout, Reset bei blockierten Puffern,
+`unregister_audio_backend` und DMA-Freigabe gehoeren zum verpflichtenden
+Cleanup-Pfad. Damit ist AC97 erstmals ein produktiver Hardware-R4D statt nur
+ein Lade- oder Control-Plane-Smoke.
+
+0.39.0 HDA-R4D-Vorvertrag
+-------------------------
+0.39.0 fuehrt keine neue DriverApi-Version ein. Die bestehende DriverApi v11
+reicht fuer den naechsten HDA-Control-Plane-Port aus:
+
+- `pci_find_by_class`, `pci_read_config32`, `pci_write_config32` und
+  `pci_enable_bus_master` decken PCI-Erkennung und Command-Register ab.
+- `pci_map_bar` liest fuer HDA intern auch BAR64 und liefert im
+  `MmioRegion` sowohl `phys_addr` als auch `virt_addr`.
+- `alloc_dma_region`/`free_dma_region` liefern DMA-Puffer mit physischer und
+  virtueller Adresse fuer CORB, RIRB, BDL und Samplepuffer.
+- `wait_ticks`, `tick_count` und `timer_frequency` reichen fuer
+  Hardware-Wartepfade und Timeouts.
+- `register_audio_output_backend`, `unregister_audio_backend` und
+  `AudioBackend.status` sind der verbindliche PCM-/Diagnosevertrag.
+
+`HDA.R4D` implementiert volatile MMIO-Zugriffe selbst im Treiber und darf
+keine Kernel-internen HDA-, Audio- oder Memory-Module importieren. Der
+statische Guard `Tests/Gate/CheckHdaR4D039.zig` prueft ab
+0.39.3, dass der Built-in-HDA-Pfad entfernt bleibt, DriverApi v11,
+SDK-Helfer und das Q35/HDA-Standardprofil weiter zusammenpassen.
+
+0.39.1 HDA.R4D-Control-Plane
+----------------------------
+Seit 0.39.1 existiert `HDA.R4D` als regulaerer SDK-basierter R4D-Treiber. Er
+wird im zentralen `Code/build.zig`-Build erzeugt und vom normalen
+Build-Script nach `/R4OS/DRIVERS/hda.r4d` ins Image gelegt.
+
+Der Treiber nutzt nur DriverApi/SDK:
+- `pci_find_by_class` fuer Class Multimedia/Subclass HDA.
+- `pci_enable_bus_master` mit Memory-Space-Freigabe.
+- `pci_map_bar` fuer MMIO-BAR0.
+- volatile Registerzugriffe im Treiber selbst.
+- `get_option` fuer den optionalen aktiven Reset
+  `OPTION HDA r4d_reset=...`.
+
+In 0.39.1 ist `HDA.R4D` bewusst noch kein Audio-Output-Backend. Er meldet
+Controller-/Codec-Control-Plane-Zustand, nutzt Immediate Commands fuer erste
+Codec-Verbs, sichtet Function Groups und Widgets und sucht einen
+Output-Candidate aus Converter und Output-Pin. `register_audio_output_backend`
+gehoert erst zur Playback-Stufe 0.39.2.
+
+`driver_plan` reicht HDA-Ladeergebnisse an `audio_boot` weiter, damit
+`HDA.R4D [loaded]`, `missing`, `init failed` und `load failed` sichtbar und
+nichtfatal bleiben. Der Built-in-HDA-Pfad bleibt in dieser Stufe der
+produktive Playback-/Recovery-Vergleichspfad.
+
+0.39.3 Built-in-HDA entfernt
+----------------------------
+Seit 0.39.3 ist `HDA.R4D` der einzige HDA-Hardwarepfad. Direkte Kernelimporte
+vom alten HDA-Built-in, `hda.probe`, `hda.dumpStatus` und native
+`registerNativeAudioBackend("HDA")`-Fallbacks sind durch den statischen Guard
+verboten. Missing- und Load-Failed-Zustaende werden ueber `audio_boot` sichtbar
+gemeldet und bleiben nichtfatal.

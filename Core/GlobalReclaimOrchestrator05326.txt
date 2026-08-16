@@ -1,0 +1,98 @@
+﻿0.53.26 Globaler Reclaim-Orchestrator
+=====================================
+
+Ziel
+----
+
+0.53.26 fuehrt den ersten kleinen globalen Reclaim-Orchestrator ein. Er ist
+keine Pagefile-, Swap- oder Pager-Policy, sondern Kernelmechanik direkt vor
+Out-of-Memory-Entscheidungen: Wenn physische Frames knapp werden, duerfen
+vorhandene, saubere Reclaim-Quellen gezielt angefragt werden, bevor ein
+Allocator `null` oder die VM `OutOfMemory` liefert.
+
+Besitzgrenze
+------------
+
+Der Kernel besitzt nur die allgemeine Orchestrierung:
+
+- Reclaim-Grund `diagnostic`, `vm_commit` oder `vm_fault`.
+- angeforderte und tatsaechlich zurueckgegebene Frames.
+- Tickkosten des Versuchs.
+- Erfolg, Fehlschlag, letzte Ursache und aggregierte Zaehler.
+
+Die erste Quelle ist bewusst nur der bestehende FS-Page-Cache. Saubere
+Payload-Frames koennen an den PMM zurueckgegeben werden. Dirty Eintraege
+werden nicht uebersprungen oder per zweitem Block-I/O-Pfad geschrieben,
+sondern ausschliesslich ueber den bestehenden Writeback-Pfad drainiert. Wenn
+dieser Drain fehlschlaegt, bleibt der Fehler sichtbar.
+
+Nicht-Ziele
+-----------
+
+- kein Pagefile und kein Swap,
+- kein anonymer Pager,
+- keine zweite FAT32-/Block-I/O-Kante,
+- keine UI-, Service- oder Komfort-Policy im Kernel,
+- kein stiller Fallback, der alten Speicherverbrauch verdeckt.
+
+Implementierung
+---------------
+
+`Code/src/memory/reclaim.zig` ist der neue Orchestrator. Er ruft aktuell
+`fs/page_cache.reclaimPayloadFrames()` auf und zeichnet Versuche,
+Rueckgaben, Dirty-Drains, fehlgeschlagene Drains und Tickkosten auf.
+
+`Code/src/memory/virt.zig` nutzt den Orchestrator in VM-Commit- und
+VM-Fault-Pfaden, wenn `phys.allocFrame()` keinen Frame mehr liefern kann.
+Damit bekommt R4OS vor `vm_error_out_of_memory` beziehungsweise einem
+fehlgeschlagenen Demand-Fault eine letzte echte Reclaim-Chance, ohne
+Overcommit oder Swap vorzuspiegeln.
+
+`Code/src/fs/page_cache.zig` kann gezielt saubere Payload-Frames freigeben.
+Der lokale Cache-Druck nutzt weiterhin denselben Mechanismus fuer saubere
+Eintraege und denselben Writeback-Pfad fuer dirty Eintraege.
+
+R4DEV und SDK
+-------------
+
+ProgramApi v122 haengt am Ende `memory_reclaim_probe(requested_frames, out)`
+an. Der Slot ist Diagnose und loest einen expliziten Reclaim-Versuch mit dem
+Grund `diagnostic` aus. Er ist kein produktiver Allokator und kein Pagefile-
+Schalter.
+
+Der R4DEV-Performance-Snapshot waechst append-only um globale Reclaim-
+Zaehler:
+
+- Versuche, Erfolge und Fehlschlaege,
+- angeforderte und zurueckgegebene Frames/Bytes,
+- dirty Drains und fehlgeschlagene Drains,
+- Gesamt-/Max-/Last-Ticks,
+- letzter Grund und letzte Framezahlen.
+
+Das SDK stellt dafuer `supportsGlobalReclaimSnapshot()` und
+`memoryReclaimProbe(frames)` bereit.
+
+Abnahme
+-------
+
+MEMSUITE prueft Memory-Pressure, PMM-Reclaimable Bytes und eine aktive
+globale Reclaim-Probe zusammen. PERFDIAG prueft ProgramApi v122, die globale
+Ready-Flagge, den Probe-Erfolg und die Summary-Zaehler. STORDIAG prueft
+denselben Pfad aus Storage-/FS-Sicht nach einem Writeback-Smoke.
+
+Die erwarteten sichtbaren Linien sind:
+
+- `MEMSUITE pressure result: OK`
+- `Global reclaim probe: OK`
+- `STORDIAG globalReclaim: OK`
+- `PERFDIAG result: OK`
+- `STORDIAG result: OK`
+
+Grenze fuer Folgeversionen
+--------------------------
+
+0.53.26 ist der Abschluss der Reclaim-Orchestrierung ohne Pager. Die naechste
+sinnvolle Stufe darf Pagefile-/Swap-Backing erst dann planen, wenn sie den
+gleichen No-Fallback-Massstab einhaelt: ein definierter Backing-Store, klare
+Fehlergrenzen, kein zweiter Block-I/O-Pfad und keine still aktivierte
+Speicher-Policy.

@@ -1,0 +1,2190 @@
+﻿R4OS Roadmap 0.61.X - Struktur und Aufraeumen
+=============================================
+
+Leitbild 0.61.X
+---------------
+
+0.61.X aendert kein Verhalten, sondern Struktur: wo Dinge liegen, wie sie
+heissen und was davon aktuell ist.
+
+Sechzig Versionen lang ist R4OS chronologisch gewachsen. Jede Unterversion hat
+Gates, Dokumente und Nachweise hinzugefuegt, kaum etwas hat je etwas entfernt.
+Fuer den produktiven Quellcode gilt current-only bereits hart und ohne
+Ausnahmeliste; 0.61.X zieht dieselbe Regel ueber Tests, Dokumentation,
+Buildwerkzeug, Arbeitsverzeichnisse und den Imageinhalt.
+
+Leitplanken:
+- Current-only auch ausserhalb des Quellcodes: der aktuelle Zustand steht an
+  genau einer Stelle, ohne Versionsnummer im Namen und ohne Chronik.
+  Versionsnummern gehoeren nach Docs/Changelogs.
+- Ein Gate ist aktiv (verdrahtet, thematisch benannt) oder archiviert (Beweis
+  im Changelog, Datei entfernt). Den dritten Zustand - liegt herum, niemand
+  weiss ob er noch laeuft - gibt es nicht mehr.
+- Was auf C:\ landet, ist deklariert, auflistbar und aus dem Quellstand
+  reproduzierbar. Kein zweiter, ungeregelter Imagepfad.
+- Repo, lokaler Arbeitsstand und Wegwerfbares sind sichtbar getrennt.
+- Loeschen ist das Ergebnis, nicht Verschieben. Jede Entfernung ist belegt,
+  und nichts bleibt sicherheitshalber als Fallback liegen.
+- Massstab ist das Artefakt: dieselben Gates gruen und das Produktionsimage
+  vor und nach jedem Schnitt byteidentisch, ausser bei einzeln benannten,
+  bewusst entfernten Inhalten.
+
+Grenze: Echte Fehler oder fehlende Faehigkeiten, die beim Aufraeumen
+auffallen, werden dokumentiert und einer spaeteren Version zugeordnet, statt
+nebenbei in einem Strukturschnitt mitgeaendert zu werden. Sonst ist der
+Byte-Vergleich wertlos.
+
+---
+Hilfreiche Notizen:
+Test-Kategorien / Typen:
+# Typen 
+## Policy
+### Pfad: Tests/Policy/
+### Beschreibung: Prüft den Quellbaum als Text gegen eine dauerhaft gültige Projektregel (Importgrenzen, Pfad- und Namenskonventionen, verbotene Begriffe), ohne etwas zu bauen oder auszuführen; Ergebnis ist bestanden oder verletzt. Geprüft wird immer die Regel selbst, nie der Zustand einer bestimmten Version — ein Versionspin oder ein zitierter Doku-Satz ist keine Policy.
+
+## Simulation
+### Pfad: Tests/Simulation/, */Tests/Simulation/
+### Beschreibung: Führt unveränderten R4OS-Produktivcode auf dem Host gegen eine simulierte Umgebung aus und prüft sein Verhalten funktional — deterministisch, ohne QEMU und ohne Hardware. Setzt deklarierte Testnahtstellen im geprüften Modul voraus und ist fest an dieses Modul gekoppelt.
+
+## Design
+### Pfad: Tests/Design/
+### Beschreibung: Bildet einen Entwurf als ausführbares Modell nach — eigene Konstanten, eigene Zustandsmaschine — und prüft ihn über viele Zyklen auf Widersprüche. Führt bewusst KEINEN Produktivcode aus und liest den Quellbaum nicht; belegt damit die Stimmigkeit des Entwurfs, nicht die Übereinstimmung des Codes mit ihm. Braucht deshalb immer einen System- oder Simulationstest als Gegenstück, sonst entsteht falsche Sicherheit.
+
+## Inline
+### Pfad: In der Quelldatei
+### Beschreibung: Prüft eine einzelne Produktivquelle von innen — die test-Blöcke stehen in derselben Datei wie der geprüfte Code, laufen über zig test und sind im ausgelieferten Produkt nicht enthalten. Hat bewusst keinen eigenen Ablageort, weil er mit seiner Quelldatei zusammen leben und sterben soll.
+
+## Gate
+### Pfad: Tests/Gate/
+### Beschreibung: Baut auf dem Host echte Artefakte oder Testbinaries, ruft die zugehörigen Prüfteile auf und entscheidet anhand ihrer Ausgabe über bestanden oder durchgefallen — ohne Zielsystem, ohne QEMU. Ein Gate ist die Stelle, an der eine Prüfung für den Build verbindlich wird.
+
+## System
+### Pfad: Tests/Runtime/
+### Beschreibung: Startet das vollständig gebaute R4OS in einem virtuellen Zielrechner, lässt es einen definierten Ablauf fahren und beurteilt den Lauf anhand der Marker, die der Gast über Serial-Log und Bootlog meldet. Prüft das System als Ganzes einschließlich Boot, Treiber und Diensten — entsprechend langsam, störanfällig und nur mit Wall-Clock-Watchdog sinnvoll.
+
+## Diagnostics
+### Pfad: Code/System/Diagnostics/<Projekt>/
+### Beschreibung: Ein R4X-Programm, das im laufenden R4OS Systemzustand prüft oder gezielt Last erzeugt und sein Ergebnis maschinenlesbar als <NAME> result: OK meldet. Es ist Teil des Produkts und kein Test — Systemtests steuern es lediglich als Werkzeug im Gast an.
+
+## Selftest
+### Pfad: Im Kernelmodul (eigene Datei nur, wenn der Umfang es rechtfertigt)
+### Beschreibung: Prüfcode, der fest in den ausgelieferten Kernel eingebaut ist und zur Laufzeit im Gast über R4DEV ausgelöst wird — dort, wo das Prüfobjekt aus dem Userland nicht erreichbar ist (Scheduler, Heap, Task-Registry, Loader). Teil des Produkts wie Diagnostics, aber kein eigenes R4X-Programm.
+
+## Tool
+### Pfad: Tests/Tool/
+### Beschreibung: Läuft während eines Testlaufs mit und stellt eine Leistung bereit, die mehrere Tests brauchen (Zeitüberwachung, Fernzugriff, gezielte Artefaktmanipulation). Enthält selbst keine Zusicherung über das Produkt und ist deshalb kein Test.
+
+## Generator
+### Pfad: DevTools/Scripts/Generator/, */Generator/
+### Beschreibung: Erzeugt einmalig und von Hand aufgerufen ein Artefakt, das anschließend eingecheckt wird (Treibertabellen, Testfixtures, Diagramme). Hat meist keinen Aufrufer und ist trotzdem unverzichtbar, weil ohne ihn die erzeugte Datei nicht mehr reproduzierbar ist.
+
+## Fixture
+### Pfad: Tests/Fixture/, */Tests/Fixture/
+### Beschreibung: Unveränderliche Eingabe- oder Referenzdaten, gegen die Tests laufen — eingecheckte Volumes, absichtlich fehlerhafte Manifeste, binäre Sektionsvorlagen, Prüfsummenmanifeste. Enthält keine Logik und wird nie ausgeführt; geändert wird eine Fixture nur, wenn sich die geprüfte Wirklichkeit ändert.
+
+## Conformance
+### Pfad: Tests/Conformance/, */Tests/Conformance
+### Beschreibung: Prüft, dass zwei Seiten desselben Vertrags übereinstimmen — generierte gegen deklarierte ABI, Zig-Fassade gegen C-Fassade, Bibliotheksexport gegen Contract. Eigenständige Testquelle, die mit dem geprüften Modul gebaut wird und deshalb bei ihm liegt.
+
+## Other
+### Beschreibung: Tests die in keine andere Kategorie passen.
+
+
+Version: 0.61.1
+Status: Erledigt
+Offene Punkte:
+- keine
+Erledigt:
+- 221 Tests entfernt.
+- 8 Tests aktualisiert.
+- 6 Tests zusammengelegt.
+- 2 Tests optimiert.
+- 255 Tests verschoben.
+- Die fuenf Einzelstarter FontConverterTests.bat, GuiSdkTests.bat,
+  KeyboardLayoutTests.bat, RegistryTests.bat und SettingsTests.bat sind
+  durch die Sammelverdrahtung Tests/Gate/Run-UnitTests.ps1
+  ersetzt. Sie pflegten je eine handgeschriebene Zieldatei, wurden von
+  nichts aufgerufen, und KeyboardLayoutTests.bat zeigte seit dem Umbau auf
+  das nicht mehr existierende Code/src/drivers/input/key_layout.zig. Der
+  Ersatz entdeckt den Bestand bei jedem Lauf selbst (96 Dateien mit
+  test-Bloecken, 10 Projekte mit eigenem build.zig-test-Step) und leitet
+  aus der Zig-Meldung ab, ob eine Datei fehlschlaegt oder nur Buildkontext
+  braucht; es gibt keine gepflegte Liste mehr. Lauf: 81 bestanden,
+  0 fehlgeschlagen, 25 Buildkontext, UNITTESTS result: OK.
+- Dabei ein echter, bisher nie ausgefuehrter Fehlschlag gefunden und
+  behoben: der Unittest in Code/System/SDK/r4os/r4sys.zig erwartete fuer
+  D:\R4OS\LIBS\R4SYS.R4L noch .unknown, seit der data-Zielklasse aus
+  0.60.8 liefert classifySystemPath dort korrekt .data. Der Test war
+  veraltet, nicht der Code; die unknown-Zusage prueft jetzt einen Pfad,
+  der wirklich in keine Klasse faellt.
+Abnahme:
+Notizen:
+- Thema: Tests. Dauerhaft verdrahtete Gates von historischen Einmalbeweisen
+  trennen, aktive Gates thematisch statt nach Geburtsversion benennen,
+  archivierte Nachweise nur noch im Changelog fuehren.
+- Ausgangsmessung 2026-07-26: DevTools/Scripts/TestScripts enthaelt 405
+  Dateien (208 .ps1, 187 .zig). 204 davon werden von keiner anderen Datei
+  unter DevTools/Scripts oder von Code/build.zig referenziert; Build.bat
+  nennt rund 50 Scripts direkt.
+- Zustand der 185 Check*.zig-Quellaudits (2026-07-26): keines wird von
+  Build.bat direkt aufgerufen, 27 von irgendeinem ps1/bat, 158 von nichts.
+  118 von 163 referenzieren mindestens einen Pfad, den es nicht mehr gibt;
+  99 pinnen woertlichen Roadmap.txt-Inhalt und sind damit per Konstruktion
+  tot, weil die Roadmap bei jedem Aufraeumen geleert wird. Stichprobe aus
+  15 verwaisten Audits mit intakten Pfaden: 3 bestanden, 12 gescheitert.
+- CheckDiagnosticProjectStructure05121 verlangt pro Diagnoseprojekt eine
+  build.zig plus build.zig.zon - genau das hat R4MF v2 in 0.58.X bewusst
+  abgeschafft. Solche Gates werden geloescht, nicht repariert.
+- Obsolet ist die Datei, nicht immer die Regel: CheckDisplayBoundary04526
+  haengt an Doku-Zitaten von 0.45.26, seine Aussage (Kernel besitzt
+  Present, Desktop besitzt Komfort) gilt aber weiter und wird heute von
+  nichts geprueft. Abschlussgates daher lesen und in wenige thematische
+  Dauerregeln ueberfuehren, danach faellt der Rest ersatzlos weg.
+
+
+Version: 0.61.2
+Status: Erledigt
+Offene Punkte:
+- keine
+Erledigt:
+- Gemeinsamer Unterbau Tests/Runtime/Shared/R4OsRuntime.psm1 mit sechs
+  Funktionen: Get-R4OsRoot, Repair-R4OsPathEnvironment, Read-R4OsSharedText,
+  Invoke-WithR4OsOverlay, Start-R4OsGuest, Assert-R4OsLogPattern.
+- Get-R4OsRoot sucht aufwaerts nach DevTools/Scripts/Build.bat statt Ebenen
+  zu zaehlen. Alle 81 Runner nutzen es; harte Verzeichnistiefen: 0 statt 71.
+  Damit kostet ein kuenftiger Umzug keine Skriptaenderung mehr - in 0.61.1
+  waren es 139.
+- Alle 81 Runner binden den Unterbau ein. 18 lokale Kopien der
+  Path-Normalisierung und 39 des geteilten Lesens rufen jetzt das Modul auf;
+  Funktionsnamen und Signaturen blieben stehen, damit keine Aufrufstelle
+  angefasst werden musste.
+- Neun Runner nutzen Invoke-WithR4OsOverlay statt eigener try/finally-
+  Wiederherstellung, acht zusaetzlich Start-R4OsGuest statt eigener
+  QEMU-Prozesslebensdauer.
+- Zwei Gates pinnten Implementierungsdetails und brachen dadurch: eines den
+  eigenen Dateinamen in AGENTS.md, eines die Schreibweise der
+  Wurzelaufloesung als Marker fuer Runtime-Setup. Beide Anker sind
+  korrigiert, die inhaltlichen Zusicherungen blieben.
+Abnahme:
+- Build.bat -norun gruen, Build.bat -test gruen.
+- Drei Runner vollstaendig gefahren: Run-NetDiagChecks (TEST OK, Overlay
+  danach unveraendert und ohne Sicherungsreste),
+  Run-DynamicProgramRegistryRuntime0598 und
+  Run-ProgramInstanceStorageRuntime0597 (je Exit 0).
+- Alle 81 Runner parsen fehlerfrei.
+Notizen:
+- Messung korrigierte die Ausgangsannahme: die einfache Runnerform gibt es
+  nur 9-mal, nicht 78-mal. 60 der 81 starten QEMU selbst; davon haben aber
+  nur 8 einen identischen Lebenszyklus. Der Rest haelt den Prozess fest und
+  interagiert waehrend des Laufs - ueber QMP, RDP-Arbeiter oder SSH. Fuer die
+  passt starten-warten-toeten nicht, sie bleiben bewusst eigenstaendig.
+- 22 lokale Kopien des geteilten Lesens bleiben stehen. Genau dort hatte ein
+  Ersetzungsmuster zuvor verschachtelte Klammern falsch gezaehlt und acht
+  Dateien zerbrochen; der Gewinn von rund zehn Zeilen je Datei rechtfertigt
+  keine zweite Massenaenderung.
+- Lehre: Beim Herausziehen von Prozesslogik ging einmal eine stille
+  Bedingung verloren - ein fehlendes Refresh plus die Toleranz gegen einen
+  leeren ExitCode. Ergebnis war ein gruener Lauf, der als rot gemeldet
+  wurde. Was wie ueberfluessige Vorsicht aussieht, ist oft ein geloestes
+  Problem.
+
+Version: 0.61.3
+Status: Erledigt
+Offene Punkte:
+- keine
+Erledigt:
+- .gitignore an die tatsaechliche Absicht gebunden: alles, was zum Bauen
+  und Testen von R4OS noetig ist, wird gepusht; heruntergeladene Werkzeuge
+  nicht. Neun getrackte Dateien waren nur deshalb im Repository, weil sie
+  VOR der Verschaerfung der Regeln hinzugefuegt wurden - Git verfolgt eine
+  Datei weiter, sobald sie drin ist, und die Regeln luegen dann still.
+- Freigegeben: Build.bat als Buildeinstieg, Invoke-R4OsSshExec.ps1 und
+  Invoke-R4OsSftpInboxUpload.ps1, DevTools/QEMU/Config (Projektinhalt, von
+  66 Dateien referenziert, ohne die kein QEMU-Test auf einem frischen Klon
+  laeuft), DevTools/Scripts/Generator und die Testoverlay-Fixtures.
+- Sieben tote Eintraege entfernt: TestScripts-Whitelist, TestInjection-
+  README, Code/src-Pfad, Info.xlsx.
+Abnahme:
+- git ls-files -i -c meldet 0 getrackte Dateien, die ausgeschlossen wuerden.
+- Gegenprobe: Zig, Limine, QEMU-Binaerdateien, Logs, Push.bat mit den
+  Zugangsdaten, R4CodePad und Release bleiben ausgeschlossen.
+- Neu erfasst werden genau zwei Dateien mit zusammen 8 KB.
+Notizen:
+- Thema: Verzeichnisstruktur.
+- Der Umzug des Testbestandes hat bereits 0.61.1 erledigt. Hier ging es um
+  die Wurzel: .gitattributes geprueft (eine Regel, Build.bat mit CRLF, weil
+  der Batchinterpreter bei mehrzeiligen Konstrukten empfindlich ist) und
+  .gitignore korrigiert.
+- Ein eigener Fehler dabei: Ein toter Ignoreeintrag auf Code/Assets wurde
+  von mir auf den heutigen Pfad Code/Kernel/Assets gezogen - dort liegt die
+  Datei aber GETRACKT. Der tote Eintrag war harmlos, der reparierte haette
+  eine gebrauchte Datei ausgeschlossen. Zurueckgenommen.
+
+
+Version: 0.61.4
+Status: Erledigt
+Offene Punkte:
+- keine
+Erledigte Punkte (urspruenglich geplant):
+- Modulversion als Pflichtfeld VERSION= in R4MF v2 aufnehmen. Format
+  MAJOR.MINOR.PATCH, drei Zahlen, vom Manifestparser geprueft; Freitext ist
+  nicht zulaessig, weil ein Abgleich mit einem Updateserver ordnen koennen
+  muss, welche Seite neuer ist. Fehlendes oder unlesbares Feld ist ein
+  harter Manifestfehler.
+- Alle 137 Manifeste initial auf VERSION=0.1.0 setzen (93 R4X, 22 R4P,
+  15 R4D, 7 R4L). Nicht 1.0.0: R4OS ist im Betabereich, und eine erste
+  Eins waere eine Zusage, die keines der Module heute gibt.
+- module.version=<X.Y.Z> in den Metadatenblock schreiben, fuer ALLE vier
+  Modularten. Kein Kopffeld, keine Formatversion angefasst: der Metablock
+  ist bereits freies key=value und existiert in jedem Container.
+- Dokumentation nachziehen: Contract/Module/R4MFv2.txt und
+  Docs/SDK/ModuleManifestV2.md um das Feld, das Format und die
+  Zustaendigkeit fuers Hochzaehlen ergaenzen.
+- Inventory/Modules.json als Hostausgabe im Buildprozess erzeugen: alle
+  Module ausserhalb des Kernels mit Name, Art, Modulversion und Zielpfad.
+  Erzeugt, nie von Hand editiert, deterministisch sortiert und mit --check
+  pruefbar. Konvention wie bei den bestehenden JSON-Dateien: kein BOM, LF,
+  zwei Leerzeichen Einrueckung, Schluessel schema zuerst. Dieselbe Datei
+  soll spaeter in R4OS gelesen werden; das Lesen ist 0.61.5 und nicht Teil
+  dieser Unterversion.
+- Docs/SDK/ModuleCatalogInventory.json nach Inventory/ ziehen. Die Datei
+  ist keine Dokumentation, sondern die Driftbasis von fuenf verdrahteten
+  Gates: zwei erzeugen den Katalog neu und vergleichen byteweise, drei
+  lesen ihn als Datenquelle. Kosten des Umzugs: fuenf Gate-Pfade
+  (05828, 05830, 05831, 05832, 05835) und drei Doku-Verweise.
+  Entschieden und umgesetzt: Sie WURDE Inventory/Modules.json, es gibt
+  also keine zweite Datei mit voller Detailtiefe daneben. Die schlanke
+  Sicht fuers Image entsteht aus demselben Durchlauf.
+- Zielort im Image ist entschieden: Injection/R4OS/CONFIG/MODULES.JSON,
+  landet damit ohne neue Verdrahtung auf C:\R4OS\CONFIG\ neben VERSION.R4S
+  und ist in Git nachschlagbar - man kann nachsehen, was eine Version
+  ausgeliefert hat, ohne sie neu zu bauen. Der Name passt in 8.3.
+- Damit gilt fuer den Build dieselbe Regel wie bei ApiContract.json:
+  normale Builds PRUEFEN die Datei und schreiben sie nicht, eine bewusste
+  Neuerzeugung ist ein eigener expliziter Aufruf. Sonst hinterliesse jeder
+  Build einen veraenderten Arbeitsbaum, und eine erzeugte Datei in einem
+  sonst handgepflegten Overlay wuerde still driften.
+Erledigt:
+- Neues Wurzelverzeichnis Inventory/ als gemeinsamer Ort aller Inventare.
+- Inventory/Tests.json angelegt: 383 Eintraege mit Name, Pfad, Dateityp,
+  Typ, Beschreibung und Notizen, sortiert nach Pfad und Name, kein BOM, LF,
+  zwei Leerzeichen Einrueckung. Handgepflegt, ausdruecklich NICHT erzeugt;
+  die Ablaeufe dafuer werden spaeter festgelegt.
+- Docs/Tests/Übersicht.xlsx damit ersetzt und entfernt. Vor der Umwandlung
+  geprueft: alle 383 Pfade existieren, kein Feld enthaelt Nicht-ASCII.
+- Die Spalte Status ist entfallen. Ihre beiden verbliebenen Werte Offen und
+  Verschoben waren Buchhaltung des 0.61.1-Umzugs und sagten ueber einen
+  Test nichts aus. Zweck des Inventars ist die Beschreibung, an der
+  erkennbar bleibt, wann welcher Test sinnvoll ist.
+- AGENTS.md verweist unter Testkategorien jetzt auf Inventory/Tests.json.
+- VERSION= ist Pflichtfeld in R4MF v2. Format MAJOR.MINOR.PATCH, drei
+  Zahlen, vom gemeinsamen Parser geprueft; fuehrende Nullen sind verboten,
+  damit eine Version genau eine Schreibweise hat und ein Serverabgleich
+  nicht zwei Zeichenketten fuer dieselbe Version sieht. Fehlt das Feld, ist
+  das ein harter Manifestfehler. Eigener Unittest deckt Pflicht, kanonische
+  Schreibweise und sieben Fehlformen ab.
+- 140 Manifeste auf VERSION=0.1.0: die 137 In-Tree-Module plus die drei
+  Imagefixtures unter Tests/Fixture/R4XImage, die syntaktisch gueltige
+  Manifeste sind. Dazu die vier Projektvorlagen und die R4BUILD-
+  Selbsttestprojekte, damit neu erzeugte Projekte gueltig sind.
+- module.version=<X.Y.Z> steht im Metadatenblock ALLER vier Modularten.
+  Nachweis ueber die gebauten Container: 93 R4X, 15 R4D, 22 R4P, 7 R4L -
+  genau die 137 des Katalogs. Ohne Version bleiben nur synthetische
+  Testfixtures und drei Altartefakte umbenannter Module im gemeinsamen
+  Code/zig-out (VIRTIONET.R4D, DESKTOP.R4L, R4CFG.R4L).
+- Docs/SDK/ModuleCatalogInventory.json ist Inventory/Modules.json geworden,
+  mit module_version als eigenem Feld neben dem bestehenden version, das
+  die Manifestformatzahl bleibt. Fuenf Gatepfade und drei Dokuverweise
+  nachgezogen; die Datei bleibt die byteweise Driftbasis, der Build prueft
+  sie also und schreibt sie nicht.
+- Injection/R4OS/CONFIG/MODULES.JSON als schlanke Sicht fuer das Zielsystem:
+  neue ModuleCatalog-Aktion image-inventory erzeugt Name, Art, Version und
+  Zielpfad je Modul, 18 KB, ohne Bauplaene, Quellen und Importe. Sie landet
+  ohne neue Verdrahtung auf C:\R4OS\CONFIG\MODULES.JSON. Das Feld heisst
+  dort schlicht version - im Zielsystem gibt es keine Manifestformatzahl,
+  von der es sich abgrenzen muesste.
+- Beide Inventare werden bei JEDEM Build neu erzeugt, aus EINEM Durchlauf
+  ueber den Modulbaum: ModuleCatalog-Aktion inventories schreibt die volle
+  Sicht nach Inventory/Modules.json und die schlanke nach
+  Injection/R4OS/CONFIG/MODULES.JSON. Die Logik liegt im Werkzeug, in
+  Build.bat steht ein Aufruf.
+  Die zuerst gebaute Regel "Build prueft, schreibt nicht" war von
+  ApiContract.json abgeschaut und passte nicht: Jene Datei ist eine
+  handgepflegte QUELLE und muss vor Ueberschreiben geschuetzt werden,
+  Modules.json ist rein abgeleitet. Weil der Generator deterministisch ist,
+  entstehen ohne Manifestaenderung byteidentische Dateien - der
+  Arbeitsbaum bleibt sauber, und die Datei aendert sich genau dann, wenn
+  sich wirklich etwas geaendert hat.
+- Zweimal gerufen, mit Grund: einmal vor den Gates, die die Inventare
+  lesen, einmal im Imagebau, weil -image die Werkzeugphase ueberspringt.
+  Beim ersten Versuch stand die Erzeugung nur im Imagebau - dann blockierte
+  ein einmal falsch geschriebenes Inventar genau den Lauf, der es haette
+  reparieren sollen.
+- --root muss relativ bleiben. Mit dem absoluten "%ROOT%\Code" landeten
+  Maschinenpfade in jedem Eintrag, und die Partitionszusage in Gate 05831
+  (^Code/System/...) traf nichts mehr. Als Kommentar an der Aufrufstelle
+  festgehalten.
+- Das Gate prueft jetzt Determinismus und Inhalt statt Drift: zwei Laeufe
+  byteidentisch, Schema, Zahl, Versionsform, Feldsatz und die Zusage, dass
+  kein "plan" in die schlanke Sicht rutscht. Ein Vergleich gegen die
+  eingecheckten Dateien waere seit der Selbsterzeugung tautologisch.
+- Doku: R4MFv2.txt fuehrt VERSION im kanonischen Feldsatz und erklaert die
+  Abgrenzung zur Manifestformatzahl samt aller drei Ausgabeorte;
+  ModuleManifestV2.md bekam einen eigenen Abschnitt Modulversion mit der
+  Tabelle der Ziele und der Regel, dass ein Updatepaket die
+  Systemkopie nie ueberschreibt.
+Abnahme:
+- Build.bat -norun gruen, Build.bat -test gruen (TEST OK, Poweroff OK).
+- 8 von 8 Unittests in module_manifest.zig bestanden.
+- 137 von 137 Katalogmodulen tragen module.version im Container:
+  93 R4X, 15 R4D, 22 R4P, 7 R4L.
+- MODULES.JSON im Produktionsimage nachgewiesen: NTFS-Name und Inhalt.
+- Kodierung geprueft: .txt/.md mit BOM, .json ohne, ueberall LF.
+- Selbsterzeugung belegt: nach Build.bat -norun sind beide Inventare
+  byteidentisch zum Stand davor. -image erzeugt einmal, -norun und -test
+  zweimal; alle drei Modi gruen.
+- Drei Altartefakte aus Code/zig-out entfernt: VIRTIONET.R4D (26 Tage),
+  DESKTOP.R4L und R4CFG.R4L (51 Tage) - Rueckstaende umbenannter Module,
+  deren Nachfolger VIRTNET.R4D und R4DESK.R4L heute gebaut wurden. Vor dem
+  Loeschen geprueft: in keiner Imageliste, nicht im Katalog, zig-out ist
+  gitignoriert mit null getrackten Dateien. Nicht zu verwechseln mit dem
+  lebenden Diagnoseprogramm R4CFGD. Build danach gruen, die Dateien
+  entstehen nicht neu - Gegenprobe, dass sie wirklich Altbestand waren.
+- AGENTS.md um zwei knappe Abschnitte unter Build und Tests ergaenzt:
+  R4M0 Container (Bestandteile, Recordgroessen und Herkunft der Daten je
+  Bereich, dazu die Pflicht, die Modulversion in module.R4MF bei jeder
+  Aenderung zu erhoehen) und Inventory (Tests.json handgepflegt,
+  Modules.json erzeugt).
+- Fehlerklasse aus dem 0.61.1-Umzug gefunden und vollstaendig behoben: Der
+  Umzug hat Dateien nach Typ sortiert, aber Verweise, die relativ zum
+  eigenen Skriptverzeichnis gebildet werden, nicht nachgezogen. Drei
+  Auspraegungen:
+  1. Run-Policies.ps1 suchte weiter in Tests/Gate, waehrend die Regeln nach
+     Tests/Policy gezogen waren. Er fand null Regeln und meldete trotzdem
+     POLICIES result: OK - lief also seit dem Umzug in jedem Build
+     wirkungslos mit. Suchpfad korrigiert; null gefundene Regeln sind jetzt
+     ein Fehlschlag, damit ein falscher Pfad nie wieder still gruen ist.
+     Danach 5 Regeln, alle bestanden.
+  2. Run-ConnectivitySuite05515.ps1 suchte drei Quellaudits neben sich in
+     Tests/Runtime statt in Tests/Policy. Auf Tests/Policy umgestellt; die
+     Suite listet ihre 13 Tests wieder vollstaendig auf.
+  3. Systematische Nachsuche ueber alle 583 Join-Path-Verweise der
+     Testscripte: 14 weitere tote Verweise in 12 Dateien, alle auf
+     SshTestDiagnostics.ps1 (nach Tests/Tool), Start-RdpMstscManual05522.ps1
+     und Run-SysUpdPackageHostTest05511.ps1 (nach Tests/Gate) sowie
+     Invoke-R4OsSshExec.ps1 und Invoke-R4OsSftpInboxUpload.ps1 (in
+     DevTools/Scripts). Alle auf $root umgestellt, der seit 0.61.2 in jeder
+     dieser Dateien vorhanden ist. Danach 0 tote Verweise, alle
+     Testscripte parsen, keine Zeilenendenwandlung.
+- Nichts geloescht. Die fuenf markerlosen Dateien in Tests/Policy sahen wie
+  verwaiste Altgates aus, sind es aber nicht: CheckSysUpd05510/05511
+  speisen einen in Build.bat verdrahteten Runner, die drei Connectivity-
+  Audits die manuelle Suite. Sie tragen keinen R4OS-POLICY-Marker, weil sie
+  Eingabe eines einzelnen Runners sind und nicht Kandidat des Sammellaufs.
+- Lehre: Die 0.61.1-Abnahme prueft die falsche Sache. Build gruen, Smoke
+  gruen und alle Runner parsen faengt genau diese Fehlerklasse nicht - ein
+  falscher Pfad ist syntaktisch einwandfrei und faellt erst zur Laufzeit
+  auf, bei manuellen Runnern also moeglicherweise nie. Nach jedem Umzug
+  gehoert eine Aufloesungsprobe ueber alle Dateiverweise dazu.
+Abnahme:
+Notizen:
+- Thema: Der R4X-Container. Analyse, Dokumentation, Ausbau.
+- Warum Inventory/ in der Wurzel und nicht unter Code/: Code/ enthaelt
+  heute ausschliesslich BuildTools, Kernel, System, build.zig, limine.conf
+  und zig-out - Quellcode und Buildausgabe. Ein Inventar ist keines von
+  beidem, und Tests.json beschreibt mit Tests/ einen Baum, der Geschwister
+  von Code/ ist, nicht Kind. Die Wurzel fuehrt sechs getrackte
+  Verzeichnisse, jedes eine eigene Kategorie; ein Inventar ueber mehrere
+  davon ist selbst eine.
+- Docs/ soll keine Maschinendateien mehr tragen. Neben der entfernten xlsx
+  liegt dort noch Docs/API/ZigCParity.json mit 119 KB, ebenfalls erzeugt
+  und von keinem Menschen gelesen - eigener kleiner Schnitt, kein Teil
+  dieser Unterversion.
+- Ziel hinter der Modulversion: ein Inventar, das R4OS spaeter selbst gegen
+  einen Updateserver abgleichen kann, damit Programme, Dienste und Treiber
+  unabhaengig vom Systemstand weiterentwickelt und einzeln aktualisiert
+  werden koennen.
+- Eine Wahrheit, mehrere Ausgaben: gepflegt wird ausschliesslich VERSION= im
+  Manifest. Containermetadatum, Katalog und ein etwaiges Inventar werden
+  daraus erzeugt und nie von Hand geaendert - dasselbe Muster wie
+  ApiContract.json gegenueber abi_generated.zig.
+- Docs/SDK/ModuleCatalogInventory.json ist deshalb keine zweite Wahrheit,
+  sondern eine Ausgabe: ModuleCatalog erzeugt sie aus denselben 137
+  Manifesten, fuenf Gates lesen sie, niemand editiert sie. Ihr Feld
+  "version": 2 ist die Manifest-Formatversion und darf nicht mit der
+  Modulversion verwechselt werden.
+- Damit sind vier verschiedene Versionsbegriffe im Umlauf, die
+  unterscheidbar heissen muessen: R4M0-Formatversion (1),
+  Manifest-Formatversion (2), Schnittstellenversion der Exporte und
+  Importe (R4XStart:1) und neu die Modulversion.
+- Der Metadatenblock traegt heute schon je Modulart eigene Schluessel:
+  r4x.name/r4x.class bei R4X, r4d.name/r4d.type bei R4D, bei R4L unter
+  anderem module.name=R4STD. module.version= fuegt sich in diese
+  Schreibweise ein. Zu pruefen bleibt, dass die abgeleiteten Metadaten
+  heute R4X-spezifisch entstehen, waehrend R4D/R4P/R4L nur freie
+  META=-Zeilen durchreichen; fuer alle vier Arten braucht es einen
+  gemeinsamen kleinen Schritt.
+- Kein Gate und kein Baselineabgleich fuer das Hochzaehlen. Wann eine
+  Modulversion steigt, entscheidet der Nutzer.
+- Modules.json hat drei Stationen mit verschiedenen Lebenslaeufen, und das
+  ist so gewollt:
+  1. Projektordner - Buildzustand, erzeugt aus den 137 Manifesten, nie von
+     Hand editiert.
+  2. Image - Anfangszustand des installierten Systems.
+  3. Laufendes System - veraenderlich. Packet Manager tragen Anwendungen
+     ein und aus, der Updater zieht nach einem Softwareupdate die
+     Versionsnummer nach.
+  Ab Station 3 ist die lokale Datei der wahre Stand dessen, was installiert
+  ist, und der Buildzustand nur noch Herkunft.
+- Daraus folgt eine harte Regel fuer spaetere Updatepakete: Die lokale
+  Modules.json darf NIEMALS als R4U-Payload mitgeliefert werden. Kernel und
+  Software werden separat aktualisiert, das Inventar im laufenden System
+  bleibt dabei erhalten. Ein routinemaessiges Mitnehmen aller Konfigdateien
+  wuerde genau den Zustand ueberschreiben, der ueberleben soll - samt aller
+  nachinstallierten Anwendungen.
+- Weicht das Inventar vom installierten Bestand ab, ist der Container die
+  Wahrheit: er traegt seine Version selbst. Das Inventar bleibt der
+  schnelle Ueberblick und die Verhandlungsgrundlage gegenueber einem
+  Updateserver.
+
+
+Version: 0.61.5
+Status: Erledigt
+Erledigt:
+- JSON.R4P unter Code/System/Protocols/Json, Rolle format.json in der
+  bestehenden Kategorie data. Modul 138 des Katalogs (R4P jetzt 23).
+- Der Kern liegt in src/json_core.zig OHNE r4os-Abhaengigkeit, der
+  R4P-Rahmen in src/main.zig uebersetzt nur zwischen ProtocolBuffer und
+  Kern. Damit laeuft derselbe Produktivcode in Inline-Tests auf dem Host,
+  ohne QEMU und ohne Zielsystem - das war die Voraussetzung dafuer, den
+  Parser ueberhaupt pruefen zu koennen.
+- Tokenizer mit exakten Bytegrenzen, Pfadselektor (Punkt und [n]),
+  Arrayiterator, aufrufereigene Tiefengrenze. Schluessel und Zeichenkette
+  unterscheidet der Blick auf das naechste Zeichen statt eines
+  Zustandsautomaten.
+- set, remove und insert als durchlaufende Kopie mit Ersetzung. Belegt im
+  Test: Nach einem set gleicher Laenge unterscheiden sich exakt drei Bytes
+  vom Ausgangsdokument, der Rest ist byteidentisch.
+- Neun Opcodes, append-only. SDK-Fassade Code/System/SDK/r4os/json.zig mit
+  Document.readString/readU64/select/enter/nextElement/set/remove/insert -
+  ein Programm schreibt weder Opcodes noch Puffer.
+- Die Fassade bettet den Parser NICHT ein. Beide Seiten deklarieren
+  dieselben Strukturen getrennt; Tests/Conformance/CheckJsonAbi.zig haelt
+  Layout, Tokennummern und die Fehlerabbildung gegeneinander - gegen die
+  andere Seite, nicht gegen selbstgeschriebene Zahlen.
+Abnahme:
+- 15 Inline-Tests im Kern, 1 in der Fassade, 3 Conformance-Tests: alle
+  gruen ueber den projektlokalen build.zig-test-Step.
+- Run-UnitTests.ps1 entdeckt Projekt und Fassade selbst: 64 bestanden,
+  0 fehlgeschlagen.
+- Build.bat -norun und -test gruen, JSON.R4P im Produktionsimage.
+Notizen:
+- Korrektur der Planung: Eine neue Kategorie format war nicht noetig.
+  ProtocolCategory kennt bereits data; R4TLS und R4AUTH nutzen sie mit den
+  Rollen security.tls und security.credssp. Das Rollenpraefix folgt also
+  nicht der Kategorie, sondern gruppiert innerhalb davon - genau so
+  gruppiert format.json, ohne dass ein Enum in abi.zig UND in R4XBuilder
+  wachsen muss.
+- Ein Entwurfsfehler kam erst durch einen Test heraus: Nach open() stand
+  der Cursor auf tok_end und war damit nicht von "am Dokumentende" zu
+  unterscheiden - eine naheliegende Schleifenbedingung lief nie los.
+  Behoben durch den eigenen Zustand tok_none.
+- Zweiter Fehler derselben Art: Die Einrueckung beim Einfuegen wurde am
+  Leerraum DIREKT VOR der Klammer gemessen. Bei "entries": [] steht dort
+  ein Doppelpunkt, die Zeile ist aber eingerueckt. Jetzt zaehlt die
+  Zeileneinrueckung.
+- Die Sprachpolicy hat vier deutsche Stringliterale gefunden (Testnamen und
+  ein Pfad im Test). Deutsche Kommentare sind der Normalfall, Literale sind
+  Ausgabe - die Regel ist richtig, die Testnamen sind jetzt englisch.
+- BEOBACHTUNG, gehoert nicht zu dieser Unterversion: MEMSUITE pagerstress
+  ist sporadisch. Ein Lauf meldete "MEMSUITE result: FAILED pagerstress
+  mismatch" und darueber "FATAL: MEMSUITE strict failure"; der unveraenderte
+  Wiederholungslauf war gruen. Dazwischen lag nur der Versionsbump in
+  VERSION.R4S, der auf eine Pagerstressprobe unmoeglich wirken kann. Ein
+  sporadischer Test im STANDARDLAUF ist gefaehrlich, weil er echte Fehler
+  verdeckt und Suchzeit kostet - eigener Pruefpunkt, sobald er wieder
+  auftritt.
+- LEHRE fuer 0.61.6, am eigenen Leib: JSON.R4P baute, war im Katalog, im
+  Manifest und in Code/build.zig - und fehlte trotzdem im Image, weil die
+  hartverdrahtete Liste in CreateImageAddList.zig es nicht kannte. Ohne
+  Meldung. Genau die dort beschriebene stille Fehlerklasse, eingetreten
+  beim ersten neuen Modul.
+
+Urspruenglich geplante Punkte:
+- JSON als Protokollmodul JSON.R4P unter Code/System/Protocols, Rolle
+  format.json in der BESTEHENDEN Kategorie data.
+  Korrektur der urspruenglichen Planung: Eine neue Kategorie format ist
+  nicht noetig. ProtocolCategory kennt bereits net, usb, audio, data und
+  misc; data wird von R4TLS und R4AUTH benutzt - und zwar mit den Rollen
+  security.tls und security.credssp. Das Rollenpraefix folgt also nicht
+  der Kategorie, sondern gruppiert innerhalb davon. Genau so gruppiert
+  format.json, und spaetere Formate heissen format.xml oder format.yaml,
+  ohne dass ein Enum in abi.zig UND in R4XBuilder wachsen muss.
+- Pull-Parser, kein DOM. Der Aufrufer laeuft mit einem Cursor durch das
+  Dokument und holt Token fuer Token, was er braucht: keine Allokation,
+  keine Baumstruktur, kein Heap, ausdrueckliche Tiefengrenze statt
+  Rekursion, die einen App-Stack sprengen kann.
+- Der Cursor meldet zu jedem Token die exakten BYTEGRENZEN im Dokument.
+  Das ist die Voraussetzung fuers Aendern und darf nicht weggelassen
+  werden: Ein Parser, der nur dekodierte Werte herausgibt, taugt fuers
+  Lesen vollstaendig, aber ein spaeteres Schreiben waere dann kein Anbau
+  mehr, sondern ein neuer Kern.
+- Zwei Zugriffsarten, nicht eine. Selektor fuer den gezielten Einzelgriff
+  (Schluessel mit Punkt, Index mit [n], sonst nichts - keine Platzhalter,
+  keine Filter, keine Suche, sonst wird daraus eine Abfragesprache).
+  Iterator fuer den Durchlauf eines Arrays, Cursor behaelt die Position.
+  Ohne Iterator waere der Serververgleich quadratisch: fuer jeden der 137
+  Eintraege liefe der Parser vom Dokumentanfang neu los.
+- Aenderung als durchlaufende Kopie mit Ersetzung, nicht ueber einen Baum:
+  unberuehrte Bereiche byteweise in die Ausgabe kopieren, an der Zielstelle
+  ersetzen, ueberspringen oder einfuegen. Damit bleiben Formatierung und
+  Schluesselreihenfolge des restlichen Dokuments byteidentisch - eine
+  Aenderung an Tests.json ergibt einen Diff von einer Zeile statt einer
+  Neuformatierung von 384 Eintraegen.
+- Drei Schreiboperationen: set(pfad, wert) ersetzt, remove(pfad) entfernt
+  Member oder Element, insert(pfad, wert) fuegt in Objekt oder Array ein.
+  Der Wert kommt als ROHER JSON-TEXT im Eingabepuffer; damit braucht das
+  Protokoll keine typisierten Wertkonstruktoren und kann ein ganzes Objekt
+  so einfach einfuegen wie eine Zahl. Fehlt der Elterncontainer, ist das
+  ein Fehler - Zwischenebenen werden nicht erfunden.
+- Kommas und Einrueckung mechanisch nachziehen. Das ist die fiese Stelle
+  solcher Implementierungen: Entfernen heisst, das Komma des Nachbarn
+  mitzupflegen, Einfuegen heisst, eins zu setzen und die Einrueckung der
+  Geschwister zu treffen.
+- Passt das Ergebnis nicht in den Ausgabepuffer, wird die benoetigte
+  Groesse gemeldet und der Aufrufer wiederholt. Keine stille Allokation.
+- Der atomare Schreibweg gehoert in die FASSADE, nicht ins Protokoll:
+  file_replace_atomic beziehungsweise R4STD.Config.saveDocument. Er ist
+  ausdruecklich nicht aufruferagnostisch, sondern R4OS-spezifisch. Ein
+  direktes Ueberschreiben verbietet sich - ein halb geschriebenes Inventar
+  waere schlimmer als gar keins.
+- Was ausdruecklich NICHT ins Protokoll gehoert: jede Bedeutung der Daten.
+  Es weiss nicht, was ein Modul ist, kennt keine Pflichtfelder und prueft
+  keine Duplikate. Wer insert zweimal mit demselben Namen ruft, bekommt
+  zwei Eintraege; das zu verhindern ist Sache des Aufrufers.
+- Parserzustand als Struktur, die der AUFRUFER besitzt und bei jedem
+  Aufruf mitgibt. Das ist keine Stilfrage: protocol_dispatch ist
+  zustandslos - Name, Opcode, rein, raus -, ein Cursor lebt aber ueber
+  mehrere Aufrufe. Das Modul haelt also keine Sitzungen, keine
+  Besitzverhaeltnisse und keine Lebensdauern.
+- Zahlen als rohen Textausschnitt herausgeben, dazu bequeme Leser fuer
+  u64/i64. Dann braucht der Parser keine Gleitkommaarithmetik, und ein
+  Feld, das R4OS nicht interessiert, kostet nichts.
+- Typisierte SDK-Fassade ueber den Dispatch, damit kein Programm Opcodes
+  und Puffer selbst schreibt - so wie Console, Files und Registry heute
+  schon rohe Slots kapseln. Ziel ist ein Aufruf der Form
+  json.readString(&cursor, "entries[3].module_version", &buf).
+- Verschachtelungsgrenze: ENTSCHIEDEN am 26.07.2026 - der AUFRUFER
+  bestimmt sie ueber die Groesse des Tiefenfeldes in seinem eigenen
+  Cursor. Das Protokoll fuehrt keine eigene Grenze und keine Obergrenze;
+  wer flache Inventare liest, zahlt auch nur dafuer. Die SDK-Fassade setzt
+  einen bequemen Standardwert. Das faellt bruchlos aus dem bereits
+  festgelegten aufrufereigenen Parserzustand.
+- Die uebrigen Grenzen bleiben festzulegen und zu pruefen: maximale
+  Stringlaenge und was bei einem abgeschnittenen Dokument passiert. Ein
+  Dokument aus dem Netz ist fremde Eingabe.
+Erledigt:
+Abnahme:
+Notizen:
+- Thema: JSON in R4OS les- und aenderbar machen, fuer beliebige Programme,
+  die selbst kein JSON koennen sollen.
+- Die Verbraucher kommen SPAETER und gehoeren nicht zu 0.61.X. Sie
+  bestimmen aber den Umfang, deshalb hier festgehalten:
+  1. Updater vergleicht die lokale Modules.json mit der vom Updateserver
+     angefragten - nur lesend, dafuer beide Dokumente im Durchlauf.
+  2. Packet Manager traegt Anwendungen in die lokale Datei ein und wieder
+     aus - insert und remove ganzer Objekte im entries-Array.
+  3. Updater zieht nach einem Softwareupdate die Versionsnummer nach -
+     set eines einzelnen Werts.
+- Warum das Aendern trotz fehlender Verbraucher jetzt mitgebaut wird: Die
+  offenen Fragen dabei - Pflichtfelder, Duplikate, Loeschen gegen
+  Als-entfernt-markieren - sind keine JSON-Fragen, sondern Inventarpolitik
+  und gehoeren dem Packet Manager. Auf Protokollebene ist alles schon jetzt
+  bestimmbar, und Lesen wie Schreiben teilen sich denselben Durchlauf mit
+  Bytespannenmeldung. Getrennt gebaut entstuende er zweimal.
+- Warum R4P und nicht R4STD: Programme koennen Protokollmodule direkt
+  aufrufen. R4DEV-Slot 19 protocolDispatch(role_ptr, role_len, op,
+  in_buffer, out_buffer) adressiert ueber die ROLLE aus r4p.role, nicht
+  ueber den Modulnamen - fuer JSON also format.json. ProtocolBuffer ist ein
+  geliehener Zeiger plus Laenge, in_buffer const. Der Updater haelt seine
+  Serverantwort ohnehin als Bytes im eigenen Speicher und reicht sie direkt
+  hinein - kein Dateipfad, keine IPC-Kopie, kein zweiter Puffer.
+  R4STD.Config liest demgegenueber nur Dateien.
+- Der Satz aus Docs/Protocols/README.txt "Normale Programme laden keine
+  zweite Protokollimplementierung" heisst, dass ein Programm nicht seine
+  eigene zweite Implementierung einer Rolle mitbringen soll - nicht, dass
+  es nicht dispatchen darf. Die Verwechslung hat waehrend der Planung
+  einmal zur falschen Empfehlung gefuehrt.
+- ProtocolInit/ProtocolShutdown/ProtocolQuery/ProtocolDispatch ist bereits
+  ein generischer Pluginvertrag und nichts Netzspezifisches. JSON als R4P
+  nutzt vorhandene Mechanik, statt eine achte Gruppe einzufuehren, und
+  braucht keinen ABI-Bump an R4STD.
+- Was R4STD besser koennte, ist bewusst in Kauf genommen: es traegt
+  preload=system und ist damit immer geladen, waehrend ein R4P vorhanden
+  sein muss. Der Ladeschritt faellt einmalig an; die Typisierung liefert
+  die SDK-Fassade.
+- Ein DOM-Parser waere hier der teure Fehler: Verschachtelung, Arrays,
+  Escapes und \u-Sequenzen brauchen sonst Heap und unbegrenzte Rekursion.
+  Fuer den Inventarfall genuegt es, ueber die Eintraege zu laufen und je
+  eine Handvoll Felder zu lesen.
+
+
+Version: 0.61.6
+Status: Erledigt
+Offene Punkte:
+- SOFORT und unabhaengig vom Rest: Gate, das die 34 hartverdrahteten
+  Name/Ziel-Paare in CreateImageAddList.zig gegen die TARGET=-Zeilen der
+  Manifeste haelt. Aus der stillen Abweichung wird eine laute - und
+  waehrend der Migration ist es das Sicherungsseil.
+  ACHTUNG, die beiden Gates dieser Unterversion haben verschiedene
+  Lebensdauern und duerfen nicht verwechselt werden:
+  * Dieses hier ist GERUEST. Es bewacht die hartverdrahtete Liste und
+    stirbt mit ihr - am Ende der Migration wird es ersatzlos entfernt,
+    sonst bleibt ein Gate zurueck, das nichts mehr vergleicht.
+  * Das Gate, das die zig-seitig entdeckte Baumenge gegen den Katalog
+    haelt, ist DAUERHAFT. Es bewacht die verbleibende Naht zwischen den
+    zwei unvermeidbaren Durchlaeufen und bleibt.
+- ENTSCHIEDEN am 26.07.2026: IMAGE_SCOPE=normal|test|both|none gilt
+  kuenftig fuer ALLE VIER Modularten. Heute deklarieren R4D und R4L ihre
+  Platzierung ueber META=image.shipped= (14 yes, 1 no, 7 yes) und die 22
+  R4P gar nicht; kuenftig gibt es einen Mechanismus statt zweier. Das Feld
+  ist fuer Nicht-R4X derzeit ausdruecklich verboten
+  (NonR4XImageScopeForbidden) - diese Regel wird gelockert, 44 Manifeste
+  bekommen die Zeile, image.shipped entfaellt. none deckt AC97FAIL ab.
+- ENTSCHIEDEN am 26.07.2026: Die sechs Test- und Beispielmodule, die heute
+  im PRODUKTIONSIMAGE liegen, bekommen IMAGE_SCOPE=test und verschwinden
+  daraus: BADDEP.R4P, CONF.R4P, SMOKE.R4P, EXAMPLE.R4P, LSTRP.R4P und
+  EXAMPLE.R4D. Belegt am 26.07.2026 aus Release/image-adds.txt; AC97FAIL
+  war korrekt schon draussen.
+  VORHER ZU PRUEFEN: ob ein Diagnoseprogramm oder die Protocol Registry
+  sie im GUI-/Produktionsmodus erwartet. BADDEP deklariert eine fehlende
+  Abhaengigkeit und erzeugt dort heute einen dauerhaft blockierten
+  Registryeintrag - genau deshalb soll es raus, aber ein Test, der ihn
+  sucht, faellt sonst um.
+- ModuleCatalog image-plan auf alle vier Modularten erweitern statt nur
+  R4X. Danach ist der Plan die einzige Quelle des Imageinhalts.
+- CreateImageAddList.zig konsumiert nur noch den Plan: eigene
+  Manifest-Schluesselliste UND die 34 Namenspaare entfallen ersatzlos. Die
+  --skip-*-Schalter bleiben, sie sind bewusste Bauschalter, greifen dann
+  aber am Plan.
+- Metadaten von R4D/R4P/R4L aus dem Manifest statt aus Literalen in
+  Code/build.zig. Treibername und -typ, Protokollrolle und -kategorie
+  stehen dort heute doppelt; die Modulversion wird bereits aus dem
+  Manifest gelesen (0.61.4) und ist die Vorlage fuer den Rest.
+- DAS EIGENTLICHE ZIEL: R4D und R4P werden ENTDECKT statt aufgezaehlt.
+  addR4MFCatalog laeuft heute ueber System/Software, System/Services und
+  System/Diagnostics und findet dort jedes module.R4MF - ein neues R4X
+  braucht deshalb nur Verzeichnis und Manifest. Fuer R4D und R4P stehen
+  dagegen 34 explizite Zeilen in Code/build.zig. Nach dieser Unterversion
+  muessen System/Driver und System/Protocols genauso entdeckt werden, und
+  die 34 Zeilen entfallen. Erst dann gilt: neuer Treiber oder neues
+  Protokoll = Verzeichnis plus Manifest, ohne Kernel und ohne Buildscript.
+- DAUERAUSNAHME R4L, aber NUR fuer die Entdeckung. Die Ausnahme deckt
+  genau eine Sache ab und darf nicht auf die Metadaten ausgedehnt werden:
+  * ERZWUNGEN und bleibt: Die sieben Systemlibraries werden aufgezaehlt,
+    nicht entdeckt. Sie entstehen ueber addApiR4L(comptime contract, ...)
+    und liefern ihre Codebytes als comptime-Konstante, statt kompiliert zu
+    werden; Zig kann einen erst zur Laufzeit gefundenen Pfad nicht
+    @importen. Dynamische Entdeckung wuerde nicht die Aufzaehlung
+    ersetzen, sondern die Bauweise aendern - fuer sieben Module, die sich
+    praktisch nie vermehren, weil jedes eine eigene R4L-Gruppe im
+    API-Contract braucht. Kein offener Punkt, sondern eine Entscheidung.
+  * NICHT erzwungen und faellt hier weg: Die R4L-Metadaten kommen kuenftig
+    aus dem Manifest wie bei R4D und R4P. addApiR4L kann die module.R4MF
+    an bekanntem Pfad lesen - derselbe Handgriff, mit dem seit 0.61.4
+    schon VERSION= gelesen wird.
+  Beim Abschluss in AGENTS.md als Ausnahme festhalten, mit genau diesem
+  Zuschnitt, damit sie niemand spaeter fuer einen vergessenen Rest haelt -
+  und niemand sie auf die Metadaten ausdehnt.
+- Bekannte Grenze, heute nur theoretisch: Ein R4D oder R4P, das GETEILTEN
+  Zig-Quellcode braucht, kann das im Manifest nicht ausdruecken -
+  ZIG_MODULE ist R4X-only (NonR4XZigModuleForbidden, im selben Sammelzweig
+  wie ENTRY_MODE, APP_CLASS, IMAGE_SCOPE und PACKAGE). Geprueft am
+  26.07.2026: Keiner der 37 R4D/R4P nutzt es, alle sind einquellig.
+  Nicht mit IMPORT verwechseln: IMPORT ist ein Containerrecord, den der
+  LADER zur Laufzeit gegen /R4OS/LIBS aufloest, ohne Code zu kopieren.
+  ZIG_MODULE teilt QUELLCODE zur Uebersetzungszeit und ist im fertigen
+  Container gar nicht mehr sichtbar.
+  Die Beschraenkung ist kein technisches Hindernis: addR4DWithOptions baut
+  ueber addRawModule, und das behandelt zig_modules bereits in genau dem
+  Zweig, der fuer R4D gilt. Es fehlen nur das Optionsfeld an R4DOptions/
+  R4POptions und die Erlaubnis im Parser. Tritt der Fall auf, wird der
+  MANIFESTVERTRAG erweitert - nicht eine Zeile in Code/build.zig
+  zurueckgeholt, sonst ist die gerade abgeschaffte Ausnahme wieder da.
+- Externe Module mitdenken: Build.bat kennt bereits
+  R4OS_EXTRA_MODULE_MANIFEST_DIR fuer zusaetzliche Manifeste ausserhalb des
+  Baums. Pruefen, ob dieser Weg nach der Umstellung fuer Treiber und
+  Protokolle traegt - er ist der Keim fuer Entwicklung ausserhalb des
+  Repositories.
+- AGENTS.md zum Abschluss in EINEM Zug korrigieren: Der Satz "Fuer alle
+  In-Tree-Module ist R4MF v2 die Projekt-/Build-/Imagewahrheit" stimmt
+  dann fuer Image und Build; dazu die Zusage, dass ein neuer Treiber oder
+  ein neues Protokoll nur Verzeichnis und Manifest braucht, und die
+  entschiedene Dauerausnahme R4L mit ihrem Grund.
+Erledigt:
+- Geruestgate Tests/Gate/Run-HardcodedImageTargets.ps1 gebaut und in
+  Build.bat verdrahtet. Gegenprobe gefahren: Es faengt sowohl ein Manifest
+  ohne Listeneintrag (der JSON-Fehler) als auch ein abweichendes Ziel.
+  Meldet OBSOLETE statt OK, sobald die Liste verschwunden ist - es soll
+  dann geloescht und nicht repariert werden.
+- IMAGE_SCOPE gilt jetzt fuer ALLE vier Modularten und ist ueberall
+  Pflicht. 45 Nicht-R4X-Manifeste ergaenzt: 39 both, 5 test, 1 none.
+  META=image.shipped in 22 Manifesten entfernt und im Parser verboten -
+  zwei Quellen fuer dieselbe Aussage waeren die Doppelung, die diese
+  Version abschafft.
+- Es gab sogar DREI Konventionen fuer dieselbe Aussage, nicht zwei: die
+  R4L-Negativfixtures unter Tests/Fixture/R4LNegative fuehrten
+  META=image.scope=test-only. Alle drei auf IMAGE_SCOPE=test vereinheitlicht
+  und dabei auch die fehlende Modulversion nachgetragen - sie heissen
+  LIB021.R4MF statt module.R4MF und waren deshalb durch alle bisherigen
+  Sammellaeufe gefallen.
+- Der zweite Manifestparser in CreateImageAddList.zig musste die Regel
+  erneut lernen: Er verbot IMAGE_SCOPE fuer Nicht-R4X mit einem eigenen
+  Fehler. Genau die vorhergesagte Doppelpflege, zum zweiten Mal.
+- Imageplan deckt jetzt ALLE vier Modularten ab. Der Filter auf kind==r4x
+  ist weg, und der Artefaktpfad folgt einer Regel fuer alle:
+  Code/zig-out/<NAME>.<KIND>. derivePlan laeuft weiterhin fuer R4X mit,
+  weil es den Startvertrag und die Profilimporte mitprueft.
+- CreateImageAddList konsumiert nur noch den Plan. Die vier hartverdrahteten
+  Listen sind ersatzlos weg, dazu addNamed, NamedSpec und
+  OptionalNamedSpec als toter Code. Die --skip-*-Schalter bleiben bewusste
+  Bauschalter, greifen aber jetzt am Zielpfad im Plan.
+- Uebrig als benannte Ausnahme: LSTRD, LSTRL und LSTRP stehen in
+  base_files. Sie sind synthetisch, werden aus rohen Codebytes erzeugt und
+  haben deshalb kein Manifest, das der Plan kennen koennte.
+- R4D und R4P werden ENTDECKT statt aufgezaehlt - das eigentliche Ziel.
+  addR4MF verzweigt nach Modulart, addR4MFCatalog durchsucht zusaetzlich
+  System/Driver und System/Protocols, und die 35 Aufzaehlungszeilen in
+  Code/build.zig sind weg. Ein neuer Treiber oder ein neues Protokoll
+  braucht jetzt nur Verzeichnis und Manifest.
+- Metadaten kommen aus dem Manifest: r4d.name, r4d.type, r4p.name,
+  r4p.role, r4p.category und die wiederholbaren r4p.dep werden als
+  typisierte Optionen gelesen und deshalb aus den freien META-Zeilen
+  herausgefiltert - sonst staende r4p.name zweimal im Container.
+- Die R4L-Negativfixtures laufen ebenfalls ueber den Plan
+  (--extra-manifest statt --manifest-dir). Der zweite Parser in
+  CreateImageAddList wird damit nur noch fuer den externen Modulhaken
+  R4OS_EXTRA_MODULE_MANIFEST_DIR gebraucht; ihn ganz abzuloesen gehoert
+  zu 0.61.9.
+- Geruest gegen Dauerregel getauscht: Run-HardcodedImageTargets.ps1 ist
+  ersatzlos entfernt, weil die Liste weg ist, die es bewacht hat. An seine
+  Stelle tritt Run-ModuleDiscoveryClosure.ps1 - es haelt die beiden
+  unvermeidbaren Durchlaeufe gegeneinander und bleibt. Gegenprobe gefahren:
+  Es faellt, sobald eine Suchwurzel fehlt.
+- Doku: R4MFv2.txt fuehrt IMAGE_SCOPE als Pflicht fuer alle Arten und
+  benennt die beiden abgeloesten Konventionen; AGENTS.md sagt jetzt zu,
+  dass ein neues R4X, R4D oder R4P nur Verzeichnis und Manifest braucht,
+  und fuehrt die R4L-Ausnahme mit ihrem Grund.
+Abnahme:
+- Massstab ist das Artefakt: Produktionsimage vor und nach der Umstellung
+  byteidentisch, AUSSER dem Wegfall genau dieser sechs benannten Module -
+  BADDEP.R4P, CONF.R4P, SMOKE.R4P, EXAMPLE.R4P, LSTRP.R4P, EXAMPLE.R4D.
+  Jede weitere Abweichung ist ein Fehler, kein Aufraeumen.
+- Testimage enthaelt diese sechs weiterhin; geprueft.
+- Build.bat -norun und -test gruen.
+- 138 Artefakte gebaut: 93 R4X, 15 R4D, 23 R4P, 7 R4L - die Entdeckung
+  findet also genau den Katalog.
+- Metadaten der entdeckten Module stichprobenartig geprueft: XHCI.R4D
+  traegt r4d.name, r4d.type und module.version wie zuvor; NETTCP.R4P und
+  JSON.R4P tragen Rolle, Kategorie, Dependency und ihre freien META-Zeilen.
+- Run-ModuleDiscoveryClosure faellt reproduzierbar, wenn eine Suchwurzel
+  fehlt, und ist gruen im unveraenderten Baum.
+- LEHRE, heute DREIMAL bestaetigt: Eine veraltete Release/data.img erzeugt
+  Fehlerbilder, die wie Codefehler aussehen - erst ein NETDIAG-Haenger,
+  dann FSDIAG result: FAILED, dann R4CC error line 1 samt build result:
+  FAILED. Alle drei verschwanden mit frischer data.img, ohne dass am Code
+  etwas geaendert wurde. Beim naechsten unerklaerlichen Smoke also zuerst
+  loeschen, dann suchen.
+- MEMSUITE pagerstress flackerte ein zweites Mal (FATAL: MEMSUITE strict
+  failure, unveraendert wiederholt gruen). Der Pruefpunkt aus 0.61.5 steht
+  damit bestaetigt und nicht mehr nur vermutet.
+Notizen:
+- Thema: Den 0.58.32-Umstieg zu Ende bringen. Damals wurde R4X auf den
+  katalogbasierten Imageplan umgestellt, R4L, R4D und R4P nicht.
+- Zielbild in einem Satz: Saemtliche Module - Software, Treiber,
+  Protokolle - landen nach demselben Prinzip im Image, und ein neues Modul
+  entsteht durch Verzeichnis plus Manifest, ohne dass Kernel oder
+  Buildscript angefasst werden. Fuer R4X gilt das heute schon; fuer R4D
+  und R4P ist es das Ergebnis dieser Unterversion.
+- Wichtig fuer die Reihenfolge: Imageplan und Entdeckung sind ZWEI Dinge.
+  Der Plan bestimmt, was ins Image kommt; die Entdeckung bestimmt, ob ein
+  Modul ueberhaupt gebaut wird. Nur der Plan zu migrieren wuerde die
+  34 Zeilen in Code/build.zig stehen lassen und das Ziel verfehlen.
+- Es bleiben zwangslaeufig ZWEI Durchlaeufe, und das ist keine Doppelung
+  aus Nachlaessigkeit: addR4MFCatalog laeuft in Zig beim KONFIGURIEREN des
+  Builds und entscheidet, was gebaut wird; ModuleCatalog laeuft WAEHREND
+  des Builds und entscheidet, was ins Image kommt. Zig baut seinen
+  Build-Graphen auf, bevor irgendein Werkzeug laeuft, und kann keine Datei
+  lesen, die erst ein Schritt erzeugt. Beide muessen sich aber einig sein -
+  ein Gate, das die zig-seitig entdeckte Baumenge gegen den Katalog haelt,
+  gehoert in diese Unterversion.
+- Inventory/Modules.json darf KEINEN von beiden speisen. Es ist die
+  eingecheckte Driftbasis. Wuerde der Build es konsumieren, haette eine
+  veraltete Datei die Macht, still zu aendern was gebaut wird: neues Modul
+  angelegt, Neuerzeugen vergessen, Modul wird nicht gebaut, keine Meldung.
+  Das dreht den Zweck einer Baseline um - sie soll Abweichung erkennen,
+  nicht verursachen - und bricht das Ziel "Verzeichnis plus Manifest,
+  fertig" durch einen dritten Schritt.
+- Die R4L-Metadatenduplikation ist NICHT theoretisch, sie ist bereits
+  auseinandergelaufen. Befund an R4STD am 26.07.2026: 19 META-Zeilen im
+  Manifest gegen 13 Eintraege im comptime-Contract.
+  * image.shipped=yes steht nur im Manifest und kommt nie im Container an.
+  * description=... steht nur im Contract und fehlt im Manifest.
+  * Features: sieben einzelne feature=r4std.*-Zeilen im Manifest gegen
+    EINE verbundene Zeile features=r4std.config,r4s,... im Contract.
+    Im Container landet die verbundene.
+  Das Manifest beschreibt fuer R4L also teilweise etwas, das den Container
+  nie erreicht. Dieselbe Fehlerklasse wie die 34 hartverdrahteten
+  Imageziele - dort noch latent, hier schon eingetreten.
+- Hebel zum Messen: Der Katalog fuehrt je Modul ein Feld build_mode, und
+  Gate 05831 sichert heute zu, dass alle 44 Nicht-R4X-Module auf
+  explicit-project stehen. Die Aufzaehlung ist also deklariert, nicht
+  versehentlich. Nach der Migration muss dieser Wert fuer R4D und R4P
+  wechseln und die Zusage im Gate mitwandern; R4L behaelt ihn.
+
+
+Version: 0.61.7
+Status: Erledigt
+Offene Punkte:
+- Gate auf Code/zig-out: Jede Datei dort muss entweder ein Modul des
+  Katalogs oder eine benannte Fixture sein. Alles andere ist ein Geist und
+  laesst das Gate fallen. Der Sollbestand ist ableitbar statt zu pflegen -
+  Katalog plus die drei Extra-Manifeste des Imageplans plus die
+  synthetischen Module aus Code/build.zig. Stand 26.07.2026: 155 Dateien
+  = 137 Katalogmodule + 18 Fixtures, Zahl geht exakt auf.
+- Build.bat -clean leert vier Dinge: die repo-lokalen
+  .zig-cache-Verzeichnisse, Code/zig-out, den globalen Zig-Cache und
+  Release/ vollstaendig. Ein Schalter, kein Termin - verfuegbar wenn man
+  ihn braucht. Der globale Cache ist ausdruecklich eingeschlossen
+  (Entscheidung vom 26.07.2026), nicht hinter einen Zusatzschalter gelegt.
+- Release/ darf komplett weg, auch data.img und das archivierte
+  R4OS-0.60.11-disk.img. Geprueft am 26.07.2026: Kein Gate und kein
+  Buildschritt LIEST aus Release/; Build.bat legt das Verzeichnis selbst
+  an, erzeugt RegistryDefaults bei jedem Lauf neu und legt eine fehlende
+  data.img mit 128 MB neu an. Das "Keep existing persistent data image"
+  erhaelt sie nur, wenn sie da ist - es braucht sie nicht.
+  Dort liegen 2,8 GB, praktisch alles Historie: 946 MB NtfsChkdsk0611,
+  zweimal 641 MB Diskimage, rund 25 R4U-Pakete aus 0.59.15 und 0.59.24 und
+  ein Dutzend R4CodePad-Harness-Arbeitsstaende aus 0.51.3x.
+- Den globalen Cachepfad NICHT fest verdrahten. Build.bat setzt ihn nicht,
+  es ist Zigs Default; abzufragen ist er ueber `zig env`, Feld
+  global_cache_dir. Ein hartkodiertes C:\Users\R4mbo\... waere auf jeder
+  anderen Maschine falsch und wuerde ein gesetztes ZIG_GLOBAL_CACHE_DIR
+  ignorieren.
+- Beim Bauen mitschreiben, dass -clean maschinenweit wirkt: Der globale
+  Cache gehoert Zig, nicht R4OS, und wird von jedem Zig-Projekt auf dem
+  Rechner geteilt. Ein -clean verlangsamt also auch fremde Projekte beim
+  naechsten Bau. Das ist gewollt, soll aber in der Hilfeausgabe stehen,
+  damit es niemanden ueberrascht.
+Erledigt:
+- Tests/Gate/Run-ArtifactDirectoryClosure.ps1 haelt Code/zig-out gegen das,
+  was der Baum deklariert. Der Sollbestand wird ABGELEITET: Katalogmodule
+  als NAME.KIND plus die Namensliterale aus Code/build.zig und
+  Code/System/SDK/build.zig. Keine gepflegte Liste - wer ein synthetisches
+  Modul anlegt, deklariert es dort ohnehin.
+- Die Pruefung ist artgenau, nicht nur namensbasiert: EXAMPLE gibt es als
+  R4X, R4D und R4P, ein verwaistes EXAMPLE.R4L wuerde namensbasiert
+  durchrutschen. Die Schaerfung fand sofort zwei echte Faelle - SDKSMOKE.R4D
+  und SDKSMOKE.R4P werden vom SDK selbst gebaut, nicht von Code/build.zig.
+- Build.bat -clean loescht alle vier Ziele: jede .zig-cache im Repository,
+  Code/zig-out, Release/ und den globalen Zig-Cache. Der Pfad des globalen
+  Caches wird ueber zig env erfragt statt verdrahtet.
+- Zwei Stolperstellen beim Bauen des Schalters: zig env liefert ZON, kein
+  JSON - ConvertFrom-Json scheitert daran. Und der Aufruf im for/f zerbrach
+  am Leerzeichen im Projektpfad; jetzt schreibt zig env erst in eine Datei,
+  im for laeuft nur findstr.
+- Beide Gates laufen im IMAGEBAU, nicht in der Werkzeugphase: Vorher ist
+  zig-out leer, und sie wuerden ueber halbfertige Staende urteilen. Das
+  Entdeckungsgate aus 0.61.6 musste dafuer nachtraeglich verschoben werden -
+  auf einem sauberen Baum meldete es alle 131 Module als nicht gebaut.
+Abnahme:
+- Gate faellt reproduzierbar, wenn eine Fremddatei in Code/zig-out liegt,
+  und ist gruen im unveraenderten Baum. Auch der schwierigere Fall wurde
+  geprueft: richtiger Name, falsche Modulart.
+- Build.bat -norun nach -clean gruen: Vollbau aus leerem Cache, leerem
+  zig-out und leerem Release/, 297 Sekunden. Das ist zugleich der Nachweis,
+  dass in Release/ wirklich nichts Gebrauchtes lag.
+- Build.bat -test danach gruen, mit frisch erzeugter data.img.
+- Artefaktzahl nach dem sauberen Bau: 96 R4X, 17 R4D, 25 R4P, 18 R4L = 156.
+  Das sind genau die 138 Katalogmodule plus 18 synthetische.
+
+WICHTIGER NACHTRAG ZU 0.61.6, erst durch diesen Schalter aufgedeckt:
+Die Entdeckung von R4D und R4P war UNVOLLSTAENDIG. collectR4MFCatalogRoot
+verwarf jedes Nicht-R4X-Manifest in einer Zeile (`if (manifest.kind != .r4x)
+continue;`), und loadCurrentR4MF lehnte Nicht-R4X ueberhaupt ab. Die
+erweiterten Suchwurzeln liefen also ins Leere.
+Aufgefallen ist es NICHT beim Bauen und NICHT im Smoke, weil in Code/zig-out
+noch die Artefakte der frueheren aufgezaehlten Builds lagen - meine
+Nachweisrechnung "138 Artefakte" in 0.61.6 hat Altbestaende gezaehlt. Erst
+der Vollbau aus leerem Zustand zeigte 5 R4D und 2 R4P statt 15 und 23.
+Behoben: Der Sammler nimmt R4X, R4D und R4P und ueberspringt nur R4L; der
+Lader baut alle drei; die Identitaetspruefung vergleicht jetzt (KIND, NAME)
+statt nur den Namen, weil EXAMPLE dreimal existiert; und MAX_PROTOCOL_METADATA
+im R4XBuilder stieg von 16 auf 48, weil der Build jetzt die freien
+META-Zeilen des Manifests durchreicht statt zweier Literale - R4AUTH allein
+fuehrt 17.
+LEHRE: Ein Nachweis gegen ein gewachsenes Ausgabeverzeichnis ist keiner.
+Genau dafuer gibt es jetzt -clean und das Artefaktgate.
+Notizen:
+- CheckKernelPathPolicy las Release/image-adds.txt - ein BUILDARTEFAKT. Nach
+  einem -clean fiel die Regel, obwohl am Quellstand nichts falsch war. Eine
+  Policy prueft laut Definition den Quellbaum, nicht ein Erzeugnis. Der
+  Eintrag ist entfernt und der Verlust keiner: Die Liste entsteht seit
+  0.61.6 vollstaendig aus den Manifesten, deren TARGET ein Imagepfad ab /
+  sein muss - ein C:\SYS kommt dort nicht mehr hinein. Auch dieser Fund
+  wurde erst durch -clean sichtbar.
+- Thema: Geister im Ausgabeverzeichnis und Cachehygiene. Ausloeser war die
+  Frage, ob der Zig-Cache bei jedem Roadmap-Aufraeumen zu leeren ist.
+- FREIGABE des Nutzers vom 26.07.2026: -clean darf zum Testen scharf
+  ausgefuehrt werden, ohne vorher etwas zu sichern. Es muss also nicht
+  nachgefragt und nichts weggekopiert werden.
+  Sachlich gedeckt: Alle vier Ziele sind reproduzierbar und keines ist
+  getrackt - .zig-cache und Code/zig-out sind gitignoriert, Release/
+  ebenfalls, und Build.bat legt Release/, RegistryDefaults und data.img
+  bei Bedarf neu an. Kosten ist Rechenzeit, nicht Substanz.
+  Bewusst in Kauf genommen: Der globale Zig-Cache gehoert der Maschine,
+  nicht dem Projekt - ein Testlauf verlangsamt also auch fremde
+  Zig-Projekte beim naechsten Bau.
+- Die Messung sagt: Der Cache war vermutlich nie das Problem. Zwei
+  verschiedene Dinge heissen bei uns "Cache-Fehler":
+  1. "unable to load '<stdlib>.zig': Unexpected" - laut AGENTS.md ein
+     transienter Zugriffsfehler auf DevTools/Zig/lib unter paralleler
+     Hostlast, kein Cachefehler. Trat am 26.07.2026 beim R4CFGD-Build auf
+     und verschwand durch unveraendertes Wiederholen. Ein geleerter Cache
+     haette nichts geaendert.
+  2. Altbestand in Code/zig-out - das ist kein Cache, sondern das
+     Ausgabeverzeichnis. Zig raeumt es nie auf, weil es ein
+     Installationsziel ist. Dort lagen DESKTOP.R4L und R4CFG.R4L 51 Tage
+     und VIRTIONET.R4D 26 Tage und haben eine Zaehlung verfaelscht.
+     .zig-cache zu leeren haette sie nicht angefasst.
+- Deshalb ein Gate statt einer Putzaktion: Es faengt einen Geist in dem
+  Build, in dem er entsteht, statt Monate spaeter zufaellig.
+- Warum NICHT ans Roadmap-Aufraeumen gebunden: Der Ausloeser passt nicht.
+  Aufgeraeumt wird an Versionsgrenzen, Cache-Aerger passiert dazwischen.
+  Und planmaessiges Loeschen vernichtet Beweise - sollte Zigs
+  inhaltsadressierter Cache je ein falsches Ergebnis liefern, will man das
+  einfangen, nicht wegwischen.
+- Groessen am 26.07.2026, als eigenstaendiges Argument fuer gelegentliches
+  Leeren: 60 lokale .zig-cache-Verzeichnisse mit zusammen rund 30 GB, der
+  globale Cache rund 16 GB, Code/zig-out dagegen nur 8 MB. Das ist eine
+  Plattenplatzfrage, keine Korrektheitsfrage, und sollte auch so begruendet
+  werden.
+- Vollstaendig eingegrenzt am 26.07.2026: CreateImageAddList.zig ist die
+  EINZIGE zweite Manifestimplementierung im Baum; sie importiert nur std.
+  Der gemeinsame Parser wird von ModuleCatalog, dem SDK-Build, R4CODE und
+  R4BUILD benutzt - R4BUILDs eigene R4OS_MODULE_MANIFEST-Treffer sind nur
+  Selbsttest-Literale, r4cp_convert schreibt R4MF und parst ausschliesslich
+  Legacy-R4CP. Diese Unterversion muss also nicht nach weiteren suchen.
+- Eine Ursache, drei Symptome, in aufsteigender Gefaehrlichkeit:
+  1. Zweiter Manifestparser in CreateImageAddList.zig mit eigener
+     Schluesselliste. Faellt LAUT auf - VERSION= brach in 0.61.4 den
+     Imagebau ab, fail-closed, kein falsches Image.
+  2. R4D-/R4P-/R4L-Metadaten als Literale in Code/build.zig. Faellt gar
+     nicht auf.
+  3. 34 hartverdrahtete Name/Ziel-Paare fuer R4D und R4P. Faellt GAR NICHT
+     auf und ist die schlimmste: Die hartverdrahtete Liste gewinnt, das
+     TARGET= dieser Manifeste wird fuer das Image nicht benutzt. Wer es
+     aendert, aendert nichts. Wer einen neuen Treiber anlegt und die
+     zweite Stelle vergisst, baut ein Modul, das nie im Image landet.
+- EINGETRETEN am 26.07.2026, beim allerersten neuen Modul: JSON.R4P wurde
+  angelegt, ins Manifest eingetragen, in Code/build.zig verdrahtet und
+  gebaut - und landete NICHT im Image, weil die hartverdrahtete Liste in
+  CreateImageAddList.zig es nicht kannte. Kein Fehler, keine Warnung, das
+  Modul fehlte einfach. Genau die vorhergesagte stille Fehlerklasse, und
+  sie hat beim ersten Anlauf zugeschlagen. Von Hand nachgetragen; das Gate
+  aus dieser Unterversion haette es sofort gemeldet.
+- Stand der Pruefung am 26.07.2026: Beide Listen stimmen ueberein, keine
+  abweichenden Ziele. Der Fehler ist also latent, nicht eingetreten.
+  Differenzen sind erklaert: LSTRD und LSTRP sind synthetische
+  Loader-Stress-Module ohne Manifest, AC97FAIL traegt image.shipped=no.
+- Der gemeinsame Parser waere billig einzubinden: module_manifest.zig
+  importiert ausser std nur abi_generated.zig, und das hat null eigene
+  Imports. Zwei Dateien, keine weitere Abhaengigkeit. Das ist der
+  Rueckfallweg, falls die vollstaendige Migration zu teuer wird.
+
+
+Version: 0.61.8
+Status: Erledigt
+Offene Punkte:
+- Jedes Modul, bei dem es geht, ist eigenstaendig baubar: `zig build` im
+  Projektverzeichnis erzeugt das Artefakt, ohne den Rest von R4OS.
+  Stand 26.07.2026: R4L 7/7, R4P 23/23, R4D 15/15 koennen es bereits -
+  R4X 0 von 93 nicht. Die einzige R4X-build.zig (Desktop) faehrt nur
+  Tests und enthaelt keine Moduldefinition.
+- Die 45 vorhandenen Projekt-build.zig sind dabei NICHT das Vorbild,
+  sondern selbst zu korrigieren: Sie schreiben Name, Rolle, Kategorie und
+  Metadaten noch einmal hin, obwohl alles im module.R4MF steht. Smoke ist
+  das Musterbeispiel. Das ist dieselbe zweite Wahrheit wie die 34
+  hartverdrahteten Imageziele, nur an anderer Stelle.
+- Zielbild fuer ALLE Modularten dieselbe duenne Form:
+      pub fn build(b: *std.Build) void {
+          const sdk = ...;
+          _ = sdk.addR4MF(b.path("module.R4MF"));
+      }
+  Damit ist die build.zig kein Ort mehr, an dem etwas driften kann - sie
+  verweist nur noch auf das Manifest.
+- Voraussetzung ist 0.61.6: addR4MF ist heute R4X-only (greift auf
+  app_class.? zu). Erst wenn R4D und R4P manifestgetrieben gebaut werden,
+  laesst sich addR4MF auf sie erweitern. Diese Unterversion gehoert
+  deshalb NACH 0.61.6.
+- Zu klaeren beim Bauen: R4MF v2 hat die Projekt-build.zig fuer R4X
+  bewusst abgeschafft ("Projekt-build.zig/build.zig.zon entfallen fuer
+  normale R4X, sofern keine echten Hosttests vorliegen"). Das war richtig
+  gegen 81 fast gleiche Dateien voller Duplikate - gegen eine
+  Dreizeilerform, die nur aufs Manifest zeigt, gilt der Einwand nicht
+  mehr. AGENTS.md ist entsprechend zu korrigieren, nicht zu ignorieren.
+- Desktop behaelt seine Testschritte; die Moduldefinition kommt dazu,
+  ersetzt sie nicht.
+Erledigt:
+- 84 R4X-Projekte haben jetzt build.zig und build.zig.zon, Desktop bekam die
+  Moduldefinition zusaetzlich zu seinen 13 Hosttestschritten. Damit sind 85
+  von 93 R4X eigenstaendig baubar.
+- Die 38 bestehenden R4D-/R4P-build.zig wurden auf dieselbe Duennform
+  umgestellt. Sie wiederholten vorher Name, Typ beziehungsweise Rolle,
+  Kategorie und Metadaten aus dem Manifest - genau die zweite Wahrheit, die
+  0.61.6 an anderer Stelle abgeschafft hat.
+- Die Form ist ueberall dieselbe und besteht aus einem Aufruf:
+  _ = sdk.addR4MF(b.path("module.R4MF"));
+  Damit gibt es in der build.zig nichts mehr, was vom Manifest abweichen
+  koennte.
+- Den Fingerprint jeder build.zig.zon gibt Zig selbst vor; er wurde je
+  Projekt aus dem ersten Lauf uebernommen. Der SDK-Pfad ist projekttief
+  berechnet (../../SDK bis ../../../../../SDK).
+- Ausgenommen bleiben die acht Smokefixtures unter Code/System/SDK/Smoke:
+  Sie sind die Testflaeche des SDK und werden von dessen eigener build.zig
+  gebaut, nicht als eigenstaendige Projekte. R4L behaelt seine Form, weil
+  addR4MF dort nicht greift (comptime-Codebytes).
+- Vier Gates trugen noch die umgekehrte Zusage aus R4MF v2 - "ein R4X darf
+  KEINE build.zig haben". Der Zweck der Regel war immer, eine zweite
+  Wahrheit zu verhindern; deshalb wurden die Zusagen UMGEKEHRT statt
+  gestrichen: Jetzt muss jedes Projekt eine haben, und sie muss auf ihr
+  Manifest zeigen.
+Abnahme:
+- Sieben Stichproben ueber drei Modularten und verschiedene
+  Verzeichnistiefen einmal ueber Build.bat und einmal eigenstaendig gebaut:
+  SYSINFO, SSHD, NETDIAG, R4BUILD, XHCI, JSON und SMOKE - alle
+  BYTEIDENTISCH. R4BUILD liegt dabei vier Ebenen tief unter
+  Software/R4Code/Modules.
+- Build.bat -norun und -test gruen.
+Notizen:
+- Thema: Standalone als Standard. Ausloeser war die Frage, ob Module
+  unabhaengig vom Rest kompilierbar sind.
+- Der Nutzen ist nicht Bequemlichkeit, sondern der erste von drei
+  Schritten zum eigentlichen Ziel: nur das SDK haben, den Quellcode eines
+  einzelnen Programms holen, aendern und uebersetzen. Diese Unterversion
+  liefert Schritt 1 (Projekt baut sich selbst); Schritt 2 und 3 - SDK von
+  aussen auffindbar und SDK selbstgenuegsam - sind 0.61.9.
+  Nach 0.61.8 allein ginge es also noch NICHT, weil jedes Projekt das SDK
+  ueber den repo-relativen Pfad ../../SDK findet.
+- R4L kann es entgegen der Vermutung ebenfalls - alle sieben haben eine
+  eigene build.zig. Die Ausnahme aus 0.61.6 betrifft nur die ENTDECKUNG
+  (comptime-@import), nicht den eigenstaendigen Bau.
+
+Version: 0.61.9
+Status: Erledigt
+Offene Punkte:
+- Das SDK muss selbstgenuegsam sein. Heute zeigt
+  default_r4x_builder_source = "../../BuildTools/R4XBuilder/src/main.zig"
+  von der SDK-Wurzel AUS DEM SDK HERAUS: R4XBuilder liegt in
+  Code/BuildTools, nicht in Code/System/SDK. Wer nur das SDK hat, hat ihn
+  nicht - und ohne ihn entsteht kein R4M0-Container, also kein .R4X.
+  ENTSCHIEDEN am 26.07.2026: R4XBuilder wandert INS SDK. Damit ist das
+  Paket vollstaendig, statt eine Beipackzutat zu brauchen.
+  Alles andere, was ein Programm zum Bauen braucht, liegt bereits im SDK:
+  Linkerscript, Startup-Quellen fuer Zig und C, r4os.zig, Buildprofile.
+- Umfang des Umzugs: 32 Fundstellen in Code und Scripten, dazu die Doku.
+  default_r4x_builder_source wird SDK-intern; Code/build.zig, Build.bat
+  und mehrere Gates ziehen den Pfad nach.
+- PARTNERPROJEKT betroffen, vor dem Umzug abstimmen: R4CodePad umgeht die
+  Luecke heute selbst. Tests/Run-ContractClosure.ps1 kopiert R4XBuilder
+  beim SDK-Export nach <export>/BuildTools/R4XBuilder/src/main.zig, und
+  die erzeugten Beispielbuilds reichen einen absoluten Pfad ueber
+  .r4x_builder_source durch. Beides wird nach dem Umzug UEBERFLUESSIG -
+  aber bis R4CodePad nachgezogen ist, bricht es dort. Der Umzug ist also
+  eine Verbesserung fuer das Partnerprojekt, keine Last, muss aber
+  koordiniert werden.
+- Das SDK muss von ausserhalb des Baums auffindbar sein. Jede
+  build.zig.zon pinnt heute .path = "../../SDK", also repo-relativ. Ein
+  Projekt, das woanders liegt, findet es nicht.
+  Der Mechanismus existiert schon: Sdk.init kennt -Dr4os-sdk=<pfad> und
+  -Dr4os-r4xbuilder=<pfad> ueber lazyPathOption. Zu klaeren ist nur, wie
+  die .zon-Abhaengigkeit aussieht, wenn das Projekt ausserhalb liegt -
+  absoluter Pfad, Umgebungsvariable oder ein per url+hash geholtes
+  Zig-Paket.
+- Abnahme am echten Fall: Ein Projektverzeichnis (zum Beispiel Notepad)
+  an einen Ort AUSSERHALB des Repositories kopieren, dort mit einem
+  separat abgelegten SDK bauen und das Artefakt gegen das im Baum gebaute
+  vergleichen. Erst wenn das gelingt, ist das Ziel erreicht.
+Erledigt:
+- R4XBuilder liegt jetzt unter Code/System/SDK/Tools/R4XBuilder. Der Umzug
+  selbst war eine Verschiebung von zwei Dateien; nachgezogen wurden zwoelf
+  Fundstellen: SDK-Builddriver, Code/build.zig zweimal, die .paths des
+  SDK-Pakets, Build.bat zweimal, fuenf Gates und zwei Dokumente.
+- default_r4x_builder_source zeigt nicht mehr mit ../.. aus dem SDK heraus,
+  sondern SDK-intern auf Tools/R4XBuilder/src/main.zig. Damit loest das
+  Hostprofil ALLE seine Eingaben innerhalb der SDK-Wurzel auf - das war die
+  eine Luecke, die aus den Notizen uebrig blieb.
+- Der Uebergangsparameter -Dr4os-r4xbuilder aus 0.51.16 ist damit erledigt.
+  Er war dort ausdruecklich befristet formuliert: "solange R4XBuilder noch
+  nicht als exportierter Bestandteil eines SDK-Pakets ausgeliefert wird".
+  Genau diese Bedingung ist jetzt erfuellt. Der Parameter bleibt als
+  Host-Override bestehen, wird aber von niemandem mehr gebraucht;
+  Docs/SDK/SDKBuildpaket05116.txt traegt den Nachtrag.
+- Schritt 2 - SDK von ausserhalb auffindbar - brauchte KEINEN neuen
+  Mechanismus. 0.51.16 hatte das SDK bereits als Zig-Paket r4os_sdk
+  gebaut. Ein externes Projekt aendert genau eine Zeile: den .path seiner
+  .zon-Abhaengigkeit. Das ist die normale Zig-Paketbindung und keine
+  R4OS-Sonderregel. Die in den offenen Punkten erwogenen Varianten
+  (absoluter Pfad, Umgebungsvariable, url+hash) sind damit hinfaellig.
+- Neues Dauergate Tests/Gate/Run-SdkSelfSufficiency.ps1, in Build.bat
+  verdrahtet. Normalmodus prueft in gut einer Sekunde: R4XBuilder liegt im
+  SDK und nur dort, kein Hostprofilpfad enthaelt "..", jeder aufgeloeste
+  Pfad existiert wirklich, das Paket liefert Tools mit aus, und kein
+  lebender Pfad im Baum nennt noch den Altort.
+- Gate 05835 kopierte R4XBuilder beim SDK-Export separat daneben. Diese
+  Kopie ist jetzt nicht nur ueberfluessig, sie waere schaedlich: Faellt
+  R4XBuilder je wieder aus dem SDK heraus, haette sie den Rueckfall
+  GEHEILT statt gemeldet. Entfernt; der externe Bau nimmt R4XBuilder jetzt
+  aus der SDK-Kopie selbst.
+- Partnerprojekt abgestimmt und gepusht: R4CodePad 0.1.19. Es hat keinen
+  hartkodierten Builderpfad, sondern liest ihn aus der Konfiguration, und
+  R4OS uebergibt ihn dem Partnergate explizit - Code brach also nirgends.
+  Falsch war nur das Konfigurationsbeispiel in Docs/Configuration.md, das
+  auf SDK\BuildTools zeigte. Der Pin in Gate 05834 wurde mitgezogen.
+Abnahme:
+- Realabnahme wie geplant, am produktiven NOTEPAD statt an einem erzeugten
+  Projekt: Projekt und SDK nach C:\Users\...\Temp kopiert, also ausserhalb
+  des Repositories, dort gebaut und Byte fuer Byte gegen das im Baum
+  gebaute Artefakt verglichen. IDENTISCH, 96541 Bytes,
+  sha256 53d4aac1ea978c5998acea6540bff9c8b6aa21e9093bd0555f9562960940b3ba.
+  Der Zielpfad enthielt Leerzeichen, womit das gleich mitgeprueft ist.
+- Im selben Lauf baut R4XBuilder aus der externen SDK-Kopie heraus und
+  inspiziert das Artefakt, das er selbst erzeugt hat.
+- Zwei Negativproben gefahren, weil ein Gate, das man nie scheitern
+  gesehen hat, kein Gate ist: default_r4x_builder_source auf den alten
+  ../../BuildTools-Pfad zurueckgedreht wird gemeldet, ein Altpfad
+  probeweise in AGENTS.md ebenso.
+- Gate 05835 -Acceptance ohne die Zusatzkopie gruen: acht Projekte, Zig
+  und C, Konsole und Desktop, im Baum und ausserhalb.
+- Build.bat -norun und -test gruen.
+Notizen:
+- Der Smoke fiel einmal mit TEST FAILED aus, obwohl seit dem gruenen Lauf
+  nur Gates, Doku und das Partner-Repo angefasst worden waren. Dasselbe
+  Image mit -testonly erneut ausgewertet war sofort gruen; nach dem
+  Loeschen von Release/data.img war auch der volle Lauf gruen. Wieder die
+  dokumentierte Ursache, wieder unter Hostlast durch die parallel
+  laufenden Realabnahmen.
+- PowerShell-Falle beim Bau des Gates: Get-ChildItem -Include filtert ohne
+  -Recurse NICHT, sondern wird stillschweigend ignoriert und liefert dann
+  auch .gitignore. Im Wurzelscan deshalb explizit ueber die Endung.
+- Ein erster Entwurf des Gates lief ueber die Repositorywurzel und brauchte
+  mehr als fuenf Minuten: DevTools/Zig allein haelt rund 20000 Fremddateien.
+  Auf die eigenen Baeume begrenzt sind es 1,1 Sekunden.
+- Die Regeldatei muss den Altpfad einmal nennen, um sein Verschwinden zu
+  pruefen, und meldete sich deshalb zuerst selbst. Sie ist vom Scan
+  ausgenommen; Changelogs und versionierte Abschlussberichte ebenfalls,
+  denn dort ist der alte Stand die Wahrheit.
+- Thema: Das SDK als auslieferbares Paket. Zielbild des Nutzers: nur das
+  SDK haben, den Quellcode eines einzelnen Programms holen, aendern und
+  uebersetzen - ohne den Rest von R4OS.
+- Reihenfolge: 0.61.8 liefert Schritt 1 (jedes Projekt baut sich selbst),
+  diese Unterversion die Schritte 2 und 3. Beide zusammen ergeben erst das
+  Zielbild; einzeln reicht keine.
+- Zig selbst bleibt Voraussetzung wie bisher. Es geht nicht darum, die
+  Toolchain mitzuliefern, sondern darum, dass das SDK nicht heimlich in
+  den Rest des Repositories greift.
+- Vorarbeit vorhanden, weniger zu bauen als gedacht: 0.51.16 hat das SDK
+  bereits zum Zig-Paket r4os_sdk gemacht (Docs/SDK/SDKBuildpaket05116.txt)
+  - ein externes Projekt kann es ueber .path binden, und SDK-interne Pfade
+  loest das Hostprofil auf. Auch die Ueberschreibungen -Dr4os-sdk und
+  -Dr4os-r4xbuilder existieren und werden von R4CodePad benutzt.
+  Uebrig bleibt genau eine Luecke: ein Werkzeug am falschen Ort.
+
+Version: 0.61.10
+Titel: MEMSUITE pagerstress misst nur noch, was es selbst verursacht
+Status: Erledigt
+Offene Punkte:
+- ANLASS: pagerstress ist zweimal ohne Codeaenderung fehlgeschlagen und im
+  unveraenderten Wiederholungslauf gruen gewesen. Die Ursache wurde damals
+  nicht ermittelt, sondern nur notiert. Die Nachanalyse am 27.07.2026 ueber
+  rund 25 konservierte Logs zeigt: es ist KEIN Latenzproblem. Die Werte
+  liegen durchweg bei storage/fs/reclaim 1..7 / 13..49 / 2..19 Ticks gegen
+  Schwellen von 1000 / 2500 / 1000, ein einziger Ausreisser bei 39/643/34.
+  Der eine konservierte responsiveness-Fehlschlag hatte ticks=1/25/2 und
+  daneben timeouts storage/fs/service=0/0/1. Gekippt ist also genau eine
+  binaere Bedingung, keine Zeitschwelle.
+- FEHLER 1, falscher Geltungsbereich: MEMSUITE fordert
+  stats.service_completion_timeouts == 0 (main.zig:1020). Der Zaehler ist
+  aber eine SUMME UEBER ALLE ENDPOINTS des Systems (services.zig:354) und
+  waechst, sobald irgendein Aufrufer sein selbst gewaehltes endliches
+  Timeout ausschoepft (services.zig:646) - fuer viele Aufrufer normaler
+  Kontrollfluss, kein Fehler. Ein beliebiger Hintergrunddienst laesst damit
+  den Speichertest scheitern, an etwas das er weder verursacht noch
+  kontrolliert. Wegen /STRICT in AUTOEXEC.BAT endet das in
+  FATAL: MEMSUITE strict failure, also einem roten Smoke.
+- FEHLER 2, falsches Zeitfenster: Die drei Latenzbedingungen vergleichen
+  storage_completion_max_ticks, fs_max_ticks und global_reclaim_max_ticks
+  ABSOLUT (main.zig:1016-1019). Das sind im Kernel seit dem Boot laufende
+  Maxima, die nie zurueckgesetzt werden; jeder andere Wert im selben Block
+  ist ein Delta ueber deltaU64. Ein Ausschlag von vorher - aus dem
+  /VMSTRESS-Lauf eine AUTOEXEC-Zeile darueber oder aus dem NTFS-Mount -
+  wird pagerstress zugerechnet.
+- FEHLER 3, nicht diagnosefaehig: Alle dreizehn Bedingungen von
+  responsiveness_ok kollabieren auf die eine Meldung
+  "pagerstress responsiveness". Welche gekippt ist und mit welchem Wert,
+  steht nirgends. Genau deshalb kostete die Nachanalyse einen Umweg ueber
+  alte Logdateien, und genau deshalb blieb die Ursache damals offen.
+- AUSDRUECKLICH NICHT BETROFFEN ist der counters-Check. Er verlangt zwar
+  strikt wachsende retryable- und permanent-Zaehler, aber diese Fehler
+  werden ueber memoryPageIoProbe mit explizitem retry_request-Flag
+  DETERMINISTISCH erzeugt, einer je Zyklus (main.zig:1137). Die
+  counters-Fehlschlaege vom 20.06.2026 waren echte Pagerfehler der
+  0.53.37-Zeit, keine Flakes. Der Check bleibt unveraendert.
+- LOESUNG zu Fehler 2, wichtige Praezisierung: Ein laufendes Maximum laesst
+  sich NICHT deltaisieren. max(nachher) - max(vorher) ist bedeutungslos;
+  sind beide gleich, weiss niemand ob das Fenster einen gleich hohen
+  Ausschlag hatte oder gar keinen. Der korrekte Test ist ein anderer:
+  max(nachher) > max(vorher) bedeutet, dass das Maximum IM FENSTER neu
+  gesetzt wurde - nur dann gegen die Schwelle pruefen. Bei Gleichstand
+  blieb das Fenster unter dem, was vorher schon stand, und es gibt nichts
+  zuzurechnen.
+  Restunschaerfe bewusst in Kauf genommen: Laege das Vor-Maximum bereits
+  ueber der Schwelle, bliebe ein Ausschlag darunter unsichtbar. Praktisch
+  gegenstandslos - das Seit-Boot-Maximum fuer Storage-Completion betraegt
+  7 Ticks bei Schwelle 1000, im ganzen Boot gibt es also keinen grossen
+  Ausschlag. Beide Werte werden kuenftig ausgegeben, ein Kippen dieser
+  Annahme waere damit sichtbar statt still.
+- BEWUSST KEINE KERNELAENDERUNG. Ein echtes Fenstermaximum brauchte einen
+  zusaetzlichen R4DEV-Slot samt Contract-Regenerierung, Baseline und
+  Conformance-Fixtures. Fuer ein Diagnoseprogramm unverhaeltnismaessig,
+  solange der clientseitige Test sauber ist, und gegen die Regel, dass nur
+  in den Kernel kommt was technisch dorthin muss. Kippt die Annahme
+  spaeter, ist das der richtige Zeitpunkt dafuer.
+- Umzusetzen:
+  1. responsiveness_ok in Einzelbedingungen zerlegen, jede mit eigenem
+     Namen, Ist- und Sollwert in der Fehlermeldung.
+  2. Die drei Maxima nur pruefen, wenn sie im Fenster neu gesetzt wurden;
+     Vor- und Nachwert beide ausgeben.
+  3. service_completion_timeouts aus der harten Bedingung nehmen. Der
+     Zaehler ist systemweit und damit kein Urteil ueber pagerstress; er
+     wird weiter berichtet, aber er faellt den Test nicht mehr. Falls sich
+     eine ownerbezogene Sicht ohne Kernelaenderung ergibt, diese
+     bevorzugen.
+Erledigt:
+- Fehler 3 zuerst, weil ohne ihn nichts messbar war: responsiveness_ok ist
+  in Einzelbedingungen zerlegt. Drei Helfer - checkZero, checkLimit und
+  checkWindowMax - melden jeweils Name, Istwert und Sollwert. Mehrere
+  gleichzeitig verletzte Bedingungen erscheinen jetzt ALLE, statt zu einer
+  Zeile zu kollabieren.
+- Fehler 2 behoben ueber checkWindowMax. Ein laufendes Maximum wird nur
+  noch geprueft, wenn es IM FENSTER gewachsen ist; bei Gleichstand blieb
+  der Lauf unter dem Vorbestand und es gibt nichts zuzurechnen. Die
+  Statistikzeile zeigt die drei Werte jetzt als vorher->nachher.
+- BEFUND AUS DER MESSUNG, staerker als erwartet: Zwei der drei
+  Latenzbedingungen prueften Werte, die pagerstress NIE anfasst. Ueber
+  mehrere Laeufe hinweg bleibt storage bei 6->6 beziehungsweise 7->7 und
+  fs bei 109->109, 110->110, 121->121 - beide stammen vollstaendig aus der
+  Zeit davor. Nur reclaim waechst wirklich (15->21, 16->23, 13->19). Die
+  Fehlzurechnung war also nicht theoretisch, sondern betraf zwei Drittel
+  der Latenzpruefung.
+- Fehler 1 behoben: service_completion_timeouts faellt den Test nicht mehr.
+  Der Zaehler wird weiter berichtet, bei Wert ungleich null zusaetzlich mit
+  einer eigenen Notiz, die ausdruecklich festhaelt, dass er pagerstress
+  nicht zugerechnet wird. Eine ownerbezogene Sicht ohne Kernelaenderung gab
+  es nicht - der Zaehler ist im Kernel bereits ueber alle Endpoints
+  summiert.
+- counters-Check wie geplant unveraendert.
+Abnahme:
+- DOPPELTE NEGATIVPROBE in EINEM Lauf, mit realen Zahlen statt erfundenen:
+  fs-Schwelle auf 50 gesetzt, also UNTER den Vorher-Wert 110 - keine
+  Meldung, obwohl der alte Code hier 110 <= 50 geprueft und den Lauf rot
+  gefaerbt haette. Gleichzeitig reclaim-Schwelle auf 16 bei 16->23 -
+  Meldung mit allen drei Werten:
+  "pagerstress reclaim max ticks newly set in window: before=16 after=23
+  expected<=16". Damit sind beide Richtungen belegt: Vorbestand zaehlt
+  nicht mehr, echter Ausschlag im Fenster weiterhin schon.
+- checkZero und checkLimit an echten Werten gereizt: "PROBE page outs:
+  actual=27 expected=0" und "service queue high water: actual=6
+  expected<=5". Beide Meldungen erscheinen unabhaengig voneinander.
+- Alle Proben zurueckgebaut, Schwellen wieder 1000/2500/1000/16.
+- Build.bat -norun und -test gruen, pagerstress result: OK.
+Notizen:
+- Lehre aus der Entstehung: Ich hatte den Fehlschlag damals als "Flake"
+  notiert und weggelegt. Ein unveraendert gruener Wiederholungslauf ist
+  aber kein Freispruch, sondern nur ein zweiter Messpunkt. Die Ursache lag
+  offen sichtbar in den Zahlen der Statistikzeile, die der Test bei jedem
+  Fehlschlag ohnehin ausgibt.
+- Zweite Lehre: Der Standardlog wird bei jedem Lauf ueberschrieben. Wer
+  einen sporadischen Fehlschlag nicht sofort auswertet, verliert ihn. Bei
+  einem unerklaerten roten Lauf gehoert der Log zuerst weggesichert.
+- CheckLanguageEnglish hat zugeschlagen und zu Recht: Die neuen Meldungen
+  waren zuerst deutsch. R4OS-AUSGABEN sind englisch, Kommentare im Code
+  duerfen deutsch bleiben. Die Policy hat den Fehler vor dem ersten
+  Smokelauf gefangen.
+
+Version: 0.61.11
+Titel: Der headless Smoke erbt keinen Zustand mehr - data.img wird pro Lauf neu erzeugt
+Status: Erledigt
+Offene Punkte:
+- ANLASS: Frage des Nutzers, warum data.img so oft kaputtgeht. Die
+  Nachanalyse am 27.07.2026 zeigt: Sie geht wahrscheinlich NICHT oft
+  kaputt. Sie geht selten kaputt und bleibt es dann.
+- Der saubere Pfad ist nachweislich in Ordnung. systemPoweroff flusht
+  Registry UND Page-Cache vor ACPI S5 (r4sys.zig:395), und
+  page_cache.flushAll leert alle Seiten und flusht anschliessend JEDEN
+  Block-Device-Slot, D: eingeschlossen (page_cache.zig:683). QEMU haengt
+  beide Platten mit cache="none" an, der Host puffert also nichts.
+  Beschaedigen kann data.img nur ein HARTER Kill: Watchdog-Timeout,
+  Crash-/Reset-Matrix, manueller Kill.
+- Die gefuehlte Haeufigkeit ist die PERSISTENZ des Schadens, nicht die des
+  Ereignisses. Build.bat:789 ist "if not exist" erzeugen, sonst behalten -
+  ohne jede Pruefung. Ein einziger harter Kill vergiftet damit jeden
+  folgenden Lauf, bis ein Mensch die Datei loescht.
+- Verstaerkt durch zwei Umstaende: Fuer D: gibt es weder Boot-Recovery noch
+  ein Hostpruefwerkzeug (C: ist NTFS und hat beides, system_update_recovery_boot
+  und NtfsVerify; D: ist FAT32, ohne Journal, ohne Gegenstueck). Und FSDIAG
+  ist der am staerksten exponierte Verbraucher - sechs Dateien nach D:\TEMP,
+  darunter FS14MB.BIN und FSLARGE.BIN, auf einer 128-MB-Platte, bei jedem
+  Lauf. Wer zuerst ueber den Schaden stolpert, sieht aus wie der Verursacher;
+  deshalb wirkte es abwechselnd wie ein FSDIAG-, NETDIAG- oder
+  MEMSUITE-Fehler und damit wie ein Bug im zuletzt geaenderten Code.
+- ENTSCHIEDEN am 27.07.2026: Ein FAT32-Pruefer analog zu NtfsVerify wird
+  NICHT gebaut. Stattdessen erzeugt der headless Smoke data.img pro Lauf
+  neu. Damit entfaellt die Persistenz als Verstaerker vollstaendig, statt
+  den Schaden nur besser zu erkennen.
+- Ebenfalls entschieden: Die urspruenglich erwogene Invalidierung im
+  Watchdog (Invoke-QemuTestTimeout.ps1 beendet bei hartem Kill mit 124)
+  entfaellt. Sie waere nach der Neuerzeugung wirkungslos fuer den Smoke.
+- GEPRUEFTE VORAUSSETZUNG: Kein Test baut auf persistente D:-Inhalte. Alle
+  Fundstellen sind FSDIAG-eigene Dateien, die es selbst schreibt, reine
+  Hosttest-Literale (app_assoc.zig, associations.zig, r4sys.zig) sowie die
+  Pfadschutzregeln fuer D:\BOOT, D:\EFI und D:\LIMINE in SSHD und FTPSVC -
+  Schutzregeln, keine Erwartung an Inhalt.
+- PREIS GEMESSEN: 0,153 Sekunden fuer 128 MB. Praktisch kostenlos.
+- Umzusetzen:
+  1. Die Neuerzeugung gehoert nach :run_test, unmittelbar vor dem
+     QEMU-Start. Das ist die gemeinsame Stelle von -test und -testonly
+     (Build.bat:393 springt fuer beide dorthin) und damit genau der Punkt
+     "ein headless Smoke steht an".
+  2. Die bestehende Erzeugung in Build.bat:789 bleibt UNVERAENDERT. Sie
+     liegt im gemeinsamen Imagepfad, der auch Produktions- und GUI-Builds
+     bedient; dort bleibt die Platte persistent, weil manuelle Sitzungen
+     genau das brauchen.
+  3. -testimage und -testimageonly bauen nur das Image ohne QEMU und
+     brauchen nichts.
+- BEWUSST STEHENGELASSEN: Eine hart gekillte GUI-Sitzung kann data.img
+  weiterhin fuer die naechste GUI-Sitzung vergiften. Das bleibt die
+  manuelle Domaene des Nutzers, und der Schadensradius ist nach dieser
+  Aenderung auf genau diese Sitzung begrenzt - die automatisierte Abnahme
+  ist davon nicht mehr betroffen.
+- DOKUMENTATION nachziehen: Die Regel "bei reproduzierbar haengendem Smoke
+  zuerst Release/data.img loeschen" wird fuer den Smoke gegenstandslos. Sie
+  steht in AGENTS.md (Wichtige Konventionen) und in
+  Docs/Deployment/BuildUndTest.txt. Der AGENTS.md-Bereich "Build und Tests"
+  darf dafuer geaendert werden, weil sich das Testverfahren aendert; die
+  Konventionsregel ist auf den manuellen GUI-Fall zu verkuerzen statt
+  ersatzlos zu streichen.
+Erledigt:
+- Neue Routine :reset_test_data_image in Build.bat, aufgerufen aus
+  :run_test direkt nach require_boot_image. Das ist die gemeinsame Stelle
+  von -test und -testonly und damit genau der Punkt "ein headless Smoke
+  steht an".
+- Die Erzeugung im gemeinsamen Imagepfad blieb wie geplant unveraendert;
+  Produktions- und GUI-Builds behalten ihre Platte.
+- Dokumentation nachgezogen: AGENTS.md (Wichtige Konventionen) und
+  Docs/Deployment/BuildUndTest.txt raten nicht mehr dazu, eine Datei zu
+  loeschen, die sich jetzt selbst erneuert. Die Regel ist auf den manuellen
+  GUI-Fall verkuerzt statt gestrichen.
+Abnahme:
+- KERNNACHWEIS: data.img mit Muell ueberschrieben - die ersten 4 MB, also
+  MBR, Bootsektor UND beide FATs - dann Build.bat -test. GRUEN,
+  FSDIAG result: OK.
+- GEGENPROBE, dass die Aenderung nicht nur wirkt sondern noetig war: mit
+  voruebergehend abgeschalteter Neuerzeugung und derselben zerstoerten
+  Platte ist derselbe Schnitt TEST FAILED.
+- Dabei ein Befund, der die ganze Sache erklaert: Der Lauf scheiterte NICHT
+  an FSDIAG, obwohl FSDIAG der Hauptschreiber auf D: ist, sondern an
+  PERFDIAG mit "Global reclaim probe: FAILED", "VM eviction reclaim:
+  FAILED", "Performance summary fields: FAILED" sowie am In-Guest-Build
+  ("build result: FAILED"). Wer das sieht, sucht im Reclaim-Pfad oder in
+  R4BUILD - der Fehler liegt aber auf einer kaputten Platte. Genau dieses
+  Muster kostete in 0.60.30 drei Fehlverdaechtigungen.
+- Persistenz-Gegenprobe: Ein Produktionsbau (-image) mit vorhandener
+  data.img laesst sie BYTEGLEICH - gleicher Zeitstempel, gleiche Groesse,
+  gleicher SHA-256.
+- Build.bat -norun und -test gruen; die Neuerzeugung kostet 0,15s und ist
+  in der Smokelaufzeit nicht messbar.
+Notizen:
+- Der eigentliche Fehler war nicht die Beschaedigung, sondern dass NICHTS
+  sie je bemerkt: weder Build.bat noch der Gast noch ein Werkzeug. Ein
+  Zustand, den niemand prueft und niemand zuruecksetzt, wird mit jedem Lauf
+  wahrscheinlicher falsch - unabhaengig davon, wie selten das Ereignis ist.
+- Verallgemeinerbar: Persistenz in einer automatisierten Abnahme braucht
+  eine Begruendung. Fuer den headless Smoke gab es keine; die Platte war
+  persistent, weil sie es fuer manuelle Sitzungen ist, und niemand hat die
+  beiden Faelle je getrennt.
+- NICHT BEWIESEN: dass die konkreten FSDIAG- und NETDIAG-Ausfaelle
+  strukturelle FAT-Schaeden waren. Belegt ist, dass Loeschen sie behebt und
+  dass der Mechanismus offen und ungesichert ist. Nach der Neuerzeugung ist
+  die Frage ohnehin gegenstandslos - bleibt danach ein solcher Ausfall, ist
+  er echt und gehoert untersucht statt weggeloescht.
+
+Version: 0.61.12
+Titel: R4M0-Ressourcenbereich - Format, R4XBuilder und Inspektion
+Status: Erledigt
+Offene Punkte:
+- ZIEL: Ein R4M0-Modul soll Icons, ein Helpfile und weitere Dateien
+  (zum Beispiel Bilder fuer das Programm) direkt im Container tragen.
+  Vorbild ist die .rsrc-Section von Windows-PE: Der Explorer liest dort
+  das Icon aus der EXE, ohne sie zu starten.
+- ENTSCHIEDEN am 27.07.2026 in der Diskussion:
+  KEINE drei neuen Headerbereiche. Der 64-Byte-Header ist voll belegt,
+  header_size=64 wird an mehreren Stellen hart geprueft, und eine
+  Headervergroesserung waere ein Formatversionsbruch durch alle
+  Konsumenten. Stattdessen EIN Mechanismus: eine einzige neue Section
+  .rsrc OHNE alloc-Flag, darin ein eigenes flaches Verzeichnis.
+  Formatversion bleibt 1, Header bleibt 64 Byte.
+- Verzeichnis in .rsrc (Feldbreiten bei der Umsetzung festzulegen
+  und im Vertrag festzuschreiben; keine offene Nutzerfrage):
+  count, dann je Eintrag: typ (u16), index beziehungsweise Name-Offset,
+  Daten-Offset, Groesse. Danach Namen und Datenblobs.
+  Typ 1 = icon: Windows-ICO, Index 0 ist das Desktopicon, weitere frei.
+  Typ 2 = help: Text, vom Terminal anzeigbar.
+  Typ 3 = file: benannte Datei, zum Beispiel BUTTON.BMP.
+  Das Typfeld ist bewusst generisch - spaetere Typen (Sounds, Strings,
+  Lizenz) sind nur eine neue Nummer, keine Formataenderung.
+- VERTRAGSPFLEGE ist Teil DIESER Version, nicht erst des
+  Doku-Abschlusses 0.61.17: Code/System/SDK/Contract/ABI/R4M0.txt
+  beschreibt den Ressourcenbereich, Code/System/SDK/Contract/Module/
+  R4MFv2.txt und Docs/SDK/ModuleManifestV2.md die neuen
+  Manifestzeilen. Der Vertrag ist die Wahrheit - 0.61.17 prueft nur
+  noch auf Widersprueche.
+- Quelle ist wie immer module.R4MF (Parser module_manifest.zig ist die
+  eine Wahrheit; ModuleCatalog, sdk.addR4MF, R4CODE und R4BUILD erben):
+  ICON=pfad (mehrfach, Reihenfolge = Index, erster Eintrag = Desktopicon)
+  HELP=pfad (hoechstens einmal)
+  RESOURCE=NAME:pfad (mehrfach, Name eindeutig)
+- R4XBuilder bettet ein und prueft; --inspect listet die Ressourcen mit
+  Typ, Index/Name und Groesse.
+- TESTFIXTURE: Ein Ressourcen-Fixture-Modul entsteht unter
+  Code/System/SDK/Smoke (Testflaeche des SDK) mit allen drei Typen
+  und IMAGE_SCOPE=test. Es bleibt DAUERHAFT - 0.61.13 (RESDIAG),
+  0.61.14 (Help-Marker) und die Kettenproben lesen im Gast daraus.
+- Die Negativproben laufen als neues Dauergate unter Tests/Gate/ nach
+  dem Muster der bestehenden Contract-Gates; Inventory/Tests.json wird
+  mitgepflegt. Inventory/Modules.json aendert sich deterministisch
+  mit, weil es den vollen Manifestinhalt spiegelt - erwartete
+  Aenderung, kein Fehler.
+- BAUZEITVALIDIERUNG der Icons: Der SDK-ICO-Parser (ico.zig) kann kein
+  PNG-komprimiertes ICO und nur die unterstuetzten Bittiefen (32 bpp
+  BGRA, 8 bpp Palette). R4XBuilder prueft das Icon beim Einbetten gegen
+  genau diese Faehigkeiten - ein unpassendes Icon ist ein BAUFEHLER,
+  kein schwarzes Rechteck auf dem Desktop zur Laufzeit.
+- Module ohne Ressourcen-Zeilen bleiben BYTEIDENTISCH zu heute; die
+  Standalone- und Aggregat-Gates duerfen keinen Unterschied sehen.
+- ENTSCHIEDEN am 27.07.2026, Praezisierung mit dem Nutzer:
+  1. R4PACK-Paritaet SOFORT in dieser Version. Der In-Guest-Packer kann
+     Ressourcen vom ersten Tag an; ein Ablehnen-und-Nachziehen gibt es
+     nicht. Betroffen sind der geteilte Packer-Kern
+     (R4Code/Shared/r4pack_core.zig) und der R4BUILD-Plan, der die
+     Ressourcenzeilen des Manifests durchreichen muss.
+  2. Blob-Alignment 16 Byte innerhalb der Datei. Grenzen: hoechstens 64
+     Ressourceneintraege je Modul; Groessen sind u32 und werden wie
+     alle R4M0-Bereiche gegen die Dateigroesse validiert, eine
+     zusaetzliche kuenstliche Byteobergrenze gibt es nicht.
+  3. Namensregeln fuer Typ file: 1 bis 63 Bytes druckbares ASCII ohne
+     Pfadtrenner und Doppelpunkt, eindeutig je Modul, Vergleich
+     case-insensitive. Vorgabe des Nutzers dazu: NTFS ist das
+     STANDARDDATEISYSTEM von R4OS, FAT32 bleibt unterstuetzt - die
+     Regeln gelten unveraendert auf beiden und binden sich NICHT an
+     FAT-Sonderformen wie 8.3.
+  4. Helpfile: UTF-8. Ein fuehrendes BOM der Bauquelle entfernt der
+     Builder beim Einbetten - Projekttextdateien tragen laut Konvention
+     BOM, das Terminal soll es nie sehen. CRLF und LF sind beide
+     zulaessig, empfohlene Zeilenbreite 80 Zeichen. Inhaltssprache ist
+     ENGLISCH, konsistent mit allen sichtbaren R4OS-Ausgaben
+     (entschieden am 27.07.2026).
+- QUELLCODE-KONVENTION, entschieden am 27.07.2026: Bauquellen des
+  Ressourcenbereichs liegen im Projektordner unter Assets/ (Vorbild
+  Code/Kernel/Assets). Bevorzugter Standardname des Desktopicons ist
+  Assets/Desktop.ico; andere Namen bleiben ueber das Manifest moeglich.
+  Diese Namenskonvention wird auf Wunsch des Nutzers NICHT in Code
+  erzwungen, sondern nur in Dokumentation und Anleitungen festgehalten.
+  HART bleibt dagegen: Manifestpfade zeigen nur PROJEKTINTERN -
+  Standalone-Baubarkeit (0.61.8/0.61.9); nie auf Injection/ oder
+  zentrale Orte. Projekte mit Assets nehmen "Assets" in die .paths
+  ihrer build.zig.zon auf; eine Manifestreferenz auf eine Datei
+  ausserhalb der .paths-Abdeckung ist ein Baufehler.
+- Agent-Hilfsdatei Docs/Agents/R4M0-Container.txt am 27.07.2026
+  angelegt (Containeraufbau und Projektstruktur kompakt, auf Wunsch
+  des Nutzers); sie ist bei der Umsetzung von 0.61.12 bis 0.61.15
+  aktuell zu halten.
+Erledigt:
+- Verzeichnislayout final und im Vertrag festgeschrieben (R4M0.txt):
+  u32 count, dann 16-Byte-Records (u16 typ, u16 index, u32 name_off,
+  u32 data_off, u32 size), danach Namen, dann Blobs je 16-aligned;
+  Reihenfolge erst icons nach Index, dann help, dann files; Paddingbytes
+  null; size mindestens 1. Das Layout laesst bewusst KEINEN
+  Freiheitsgrad - nur so koennen zwei Erzeuger bytegleich bleiben.
+- module_manifest.zig parst und validiert ICON=/HELP=/RESOURCE= (eine
+  Wahrheit; ModuleCatalog, sdk.addR4MF, R4CODE und R4BUILD erben).
+  RESOURCE trennt am ERSTEN Doppelpunkt, weil ein Windows-Pfad rechts
+  selbst welche enthaelt. R4L lehnt Ressourcenzeilen ab. Neuer
+  Inline-Test; renderContractPlan traegt die Zeilen in den
+  R4MF_PLAN-Vertrag, R4BUILD im Gast liest sie darueber gratis.
+- R4XBuilder: neue Argumente --icon, --help-file und --resource NAME
+  PFAD (zwei Argumente statt NAME:pfad, dieselbe Doppelpunktfalle),
+  ICO-Bauzeitvalidierung, BOM-Strip beim Helpfile, .rsrc als letzte
+  Section ohne alloc-Flag. --inspect listet die Eintraege und prueft
+  strikt: nur .rsrc darf non-alloc sein, hoechstens eine, und Entry,
+  Exports und Relocations duerfen nie dorthin zeigen - die
+  0.61.13-Ladervalidierung ist damit auf Buildersseite vorgezogen.
+- SDK-Kette: ResourceInput mit LazyPath durch alle Options-Structs -
+  Zig trackt die Assets damit als Buildinputs, eine geaenderte
+  Ressource baut das Modul neu. Manifestpfade werden projektrelativ
+  aufgeloest und auf Existenz geprueft wie SOURCE.
+- Fixture RSRCFIX unter Code/System/SDK/Smoke/Resources mit
+  IMAGE_SCOPE=test: zwei deterministische Icons, Helpfile MIT BOM in
+  der Bauquelle, benannte Datei DATA.BIN. Bleibt dauerhaft; 0.61.13/14
+  lesen im Gast daraus.
+- R4PACK-PARITAET SOFORT, wie entschieden: r4pack_core packt .rsrc mit
+  IDENTISCHER Validierung (Reihenfolge, Namen, ICO-Grenzen, BOM-Strip);
+  R4BUILD laedt die Assets des Manifests im Gast und reicht sie durch;
+  R4PACK --inspect akzeptiert die fuenfte Section. Der
+  R4BUILD-Selbsttest baut HELLORSRC im Gast und vergleicht den
+  .rsrc-Bereich BYTEWEISE gegen das nach dem Vertrag selbst
+  nachgerechnete Soll.
+- ModuleCatalog inventories: icons/help/resources erscheinen in
+  Inventory/Modules.json - der spaetere Updater vergleicht genau diese
+  Datei.
+- Neues Dauergate Tests/Gate/Run-ResourceAreaContract.ps1, in Build.bat
+  verdrahtet: rechnet das .rsrc-Layout des Fixtures UNABHAENGIG aus den
+  Bauquellen nach (dritte Implementierung neben Host- und Gastpacker),
+  prueft dass Module ohne Ressourcen keine .rsrc-Section tragen, und
+  faehrt neun Negativproben. Tests.json gepflegt (Gate + Fixture).
+- Vertragspflege wie geplant in DIESER Version: R4M0.txt, R4MFv2.txt,
+  ModuleManifestV2.md, Docs/Agents/R4M0-Container.txt (STAND).
+- Baselines bewusst nachgezogen: 138->139 Module, 93->94 R4X, 8->9
+  SDK-Smoke, neue Set-Hashes in 05831, Testimage-Erlaubnisliste
+  APPCCON,APPZCON,RSRCFIX in 05832, App-Zaehlungen in 05835.
+- VERSION mitgebumpt: R4BUILD und R4PACK auf 0.1.1; Gate 05830 prueft
+  die Version seither je Modul statt pauschal.
+Abnahme:
+- Fixture baut; --inspect zeigt icon[0] 2238, icon[1] 2238, help 308
+  und file DATA.BIN 64 Bytes. Die 308 sind der sichtbare BOM-Beleg:
+  Bauquelle 311 Bytes MIT BOM, eingebettet ohne.
+- Layout-Drittpruefung: .rsrc (4944 Bytes) byteweise identisch zum
+  unabhaengig aus Bauquellen und Vertragsregeln berechneten Soll -
+  einmal als Einmalskript, dauerhaft im neuen Gate.
+- Byteidentitaet ueber DREI Modularten: SYSINFO.R4X, JSON.R4P und
+  XHCI.R4D bauen vor und nach der Aenderung sha256-identisch.
+- Negativproben erweitert auf neun, alle abgelehnt und jede einmal rot
+  gesehen: PNG-ICO, 16x16-ICO, leere Ressource, doppelter Name
+  (case-insensitive), HELP doppelt (Builder UND Parser), Name mit
+  Pfadtrenner, ICON-Pfadausbruch, R4L mit Ressourcen.
+- PARITAET IM GAST: Der headless Smoke zeigt im R4BUILD-Selbsttest
+  resources embedded: 3 (2355 source bytes) und
+  selftest resource area byte-identical to contract layout - der
+  Gastpacker erzeugt exakt das Vertragslayout. Zusammen mit der
+  Host-Drittpruefung ist die Bytegleichheit beider Erzeuger belegt,
+  ohne ein Gastimage mounten zu muessen.
+- Build.bat -norun und -test gruen; R4PACK result: OK und
+  R4BUILD result: OK unveraendert Pflichtmarker.
+Notizen:
+- Kontext der Diskussion vom 27.07.2026: Sections haben Name[8] und die
+  Grenze max_sections=16 - einzelne Sections je Ressource scheiden damit
+  aus (BUTTON.BMP passt nicht in 8 Bytes, und ein Bilderpaket spraengte
+  die 16). Das Verzeichnis-in-einer-Section-Modell umgeht beides.
+- Windows-ICO ist bereits die Festlegung des Projekts
+  (Docs/Desktop/IconFormat.txt), der Parser existiert im SDK (ico.zig).
+
+Version: 0.61.13
+Titel: Kernel - Loader ueberspringt non-alloc, Lese-API fuer Ressourcen
+Status: Erledigt
+Offene Punkte:
+- BEFUND aus der Analyse: layoutR4MSections in r4x.zig laedt heute ALLE
+  Sections ins Programmimage, ohne das alloc-Flag anzusehen. Ein
+  non-alloc-Konzept existiert im Ladepfad nicht.
+- Loader: Sections ohne alloc-Flag bekommen keinen Platz im Image und
+  werden nicht gelesen (layoutR4MSections, readR4MSectionsIntoImage).
+- Validierung dazu: Relocations, Entry und Exports duerfen NIE in eine
+  non-alloc-Section zeigen; das ist vor Ausfuehrung abzulehnen, wie die
+  uebrige R4M0-Validierung.
+- ENTSCHEIDUNG des Nutzers am 27.07.2026: KEINE Rueckwaertskompatibilitaet.
+  Kernel und Module werden zusammen ausgerollt, das OS ist nicht
+  veroeffentlicht. Der Pruefpunkt alter Kernel mit neuen Modulen
+  entfaellt ersatzlos. Einzige Konsequenz fuer spaetere Remote-Updates
+  auf echte Hardware: Ein Paket mit Ressourcen-Software muss den neuen
+  Kernel im selben R4U mitbringen.
+- Lese-API: Ressourcen einer Moduldatei on-demand von Platte lesen,
+  nie ueber das Programmimage. Der Desktop braucht das Icon VOR dem
+  Start; ein Bilderpaket darf nicht dauerhaft im RAM des Images liegen.
+  Vorschlag: Operation nach Pfad plus Typ plus Index/Name mit
+  caller-owned Buffer und Groessenabfrage.
+- ApiContract-Apparat gehoert dazu: Schema erweitern, ApiContractGen
+  --write, bewusstes Baseline-Update, Fassaden und Doku - der bekannte
+  Weg, kein Sonderweg.
+- Diagnose im Gast: NEUES Diagnoseprogramm RESDIAG unter
+  Code/System/Diagnostics (festgelegt bei der Planpruefung am
+  27.07.2026 - kein Anbau an ein fachfremdes Diagnoseprogramm). Es
+  liest Icon 0, das Helpfile und eine benannte Datei aus dem
+  0.61.12-Fixture, vergleicht byteweise gegen die erwarteten Inhalte
+  und meldet RESDIAG result: OK. VERDRAHTUNG gehoert dazu:
+  TestInjection/AUTOEXEC.BAT ergaenzen UND den Marker als
+  Pflichtmarker in die Build.bat-Smoke-Auswertung aufnehmen, wie
+  LOADERD und R4BUILD - ohne den zweiten Schritt prueft der Smoke
+  nichts.
+- ENTSCHIEDEN am 27.07.2026, Praezisierung mit dem Nutzer:
+  1. Die API liegt in R4SYS (Entscheidung des Nutzers).
+  2. ONE-SHOT, keine Handles: eine Stat-Operation (Existenz und
+     Groesse) und eine Read-Operation mit caller-owned Buffer.
+     Begruendung: Der ApiContract legt bereits fest, dass pfadbasierte
+     Dateioperationen keinen erfundenen Handle erhalten - eine
+     Ressource wird ueber Pfad plus Typ plus Index oder Name
+     adressiert, ist also genau dieser Fall. Ein zu kleiner Buffer ist
+     ein sichtbarer Fehler, keine stille Truncation (Textvertrag).
+  3. BELIEBIGE Moduldateien, nicht nur die eigene. Das schlagende
+     Argument ist der Hauptkonsument selbst: Das Desktopicon von
+     NOTEPAD.R4X liest R4DESK, nicht Notepad - eine nur-eigene-API
+     waere fuer den Desktop nutzlos. Single-user und fully trusted
+     stehen dem nicht entgegen. Damit ein Programm seine EIGENEN
+     Ressourcen lesen kann, muss es seinen Modulpfad kennen. GEPRUEFT
+     am 27.07.2026: Die ABI liefert ihn heute NICHT (kein module_path
+     oder self_path in abi_generated/r4sys). Er ist damit PFLICHTTEIL
+     dieser Version - 0.61.16 (Explorer) ist der erste echte Nutzer.
+     Der Loader kennt den Pfad ohnehin; er muss ihn bis zur
+     App-Fassade durchreichen. Ein hartkodierter Selbstpfad im
+     Programm ist KEINE Alternative: zweite Wahrheit zum
+     Manifest-TARGET, braeche still bei einem Umzug.
+Erledigt:
+- Loader: r4mSectionLoadable-Schnitt an allen Stellen - Layout gibt
+  non-alloc keinen Platz im Image, readIntoImage und normalize
+  ueberspringen, Entry/Exports/Relocations duerfen nie auf .rsrc
+  zeigen, und die Sectiontabelle akzeptiert hoechstens EINE
+  non-alloc-Section, sie muss .rsrc heissen und flaglos sein.
+- Drei neue R4SYS-Slots append-only (ABI 10 -> 11, size 928 -> 952):
+  module_resource_stat, module_resource_read, program_module_path.
+  One-shot mit caller-owned Buffer wie entschieden; zu kleiner Buffer
+  ist ein sichtbarer Fehler. Der komplette ApiContract-Apparat lief:
+  Schema, ApiContractGen --write, bewusstes Baseline-Update samt
+  Phase-A-Zaehlung 111 -> 114, C-Header, Conformance-Fixtures, Doku.
+- Kernel-Implementierung liest on-demand mit kleinen Stack-Puffern
+  ueber vfs.readFileRange - nie die ganze Datei, nie uebers
+  Programmimage. Fehlerdomaene mit acht benannten Codes.
+- Modulpfad: resolveProgramFile speichert den aufgeloesten Startpfad,
+  er fliesst ueber LoadedProgram in die Instanz (RuntimePayload,
+  MODULE_ORIGIN_MAX=128 nach Pfadvertrag statt 1024 - der erste
+  Anlauf mit MAX_API_PATH haette das Payload-Budget sinnlos
+  gesprengt). Budget bewusst 1920 -> 2112 (0.59.7-Gate nachgezogen).
+- SDK-Fassade: moduleResourceStat/Read und programModulePath in
+  program.Context und r4sys.Context, Fehlerkonstanten public.
+- NEUES RESDIAG unter Code/System/Diagnostics/ResourceDiag
+  (IMAGE_SCOPE=test), im AUTOEXEC verdrahtet, RESDIAG result: OK ist
+  Pflichtmarker. Jede Bedingung meldet Name, Ist und Soll einzeln.
+- DAUERHAFTER Loader-Negativtest statt einmaliger Probe: Das
+  eingefrorene Fixture TestInjection/Temp/RSRCBAD.R4X (RSRCFIX mit
+  Entry auf die .rsrc-Section gepatcht) wird bei JEDEM Smoke
+  gestartet; der Marker Invalid R4M0 entry section ist Pflicht.
+- Das Current-API-Gate lernte nullable Schema-Pointer zu rendern -
+  resource_name ist der erste im Vertrag; der Generator konnte es
+  laengst, das Gate hinkte nach.
+- Anker bewusst nachgezogen: Konformitaet 267 -> 270 Funktionen,
+  280 -> 283 Slots, Lifecycle-Pin R4SYS-ABI 10 -> 11 (die
+  eingefrorene Legacy-Praefix-Pruefung blieb vollstaendig),
+  RESDIAG-Baselines 140 Module / 95 R4X / 86 Root samt Set-Hashes.
+- Tests.json: RESDIAG (Diagnostics) und RSRCBAD (Fixture) erfasst;
+  Agent-Referenz traegt die realen Slotnamen.
+Abnahme:
+- Headless Smoke: RESDIAG liest Icon 0 (2238 Bytes, ICONDIR-Signatur,
+  Pixelformel), Icon 1, das Helpfile (308 Bytes, BOM nachweislich
+  entfernt, Klartextkopf) und DATA.BIN (64 Bytes, Byteformel) aus dem
+  Fixture; Negativfaelle unknown name, small buffer, no_resources
+  (LOADERD.R4X) und non-module (VERSION.R4S) liefern exakt die
+  vertraglichen Fehlercodes; program_module_path endet auf
+  RESDIAG.R4X und funktioniert als Eingabe der Lese-API.
+- Loader-Negativprobe DAUERHAFT: RSRCBAD.R4X wird bei jedem Smoke
+  gestartet und mit Invalid R4M0 entry section abgelehnt.
+- Build.bat -norun und -test gruen.
+Notizen:
+- Ein voller -test-Lauf fiel EINMAL rot aus; -testonly auf demselben
+  Image und ein wiederholter voller -test (mit diesmal gesichertem
+  Log) waren gruen, alle Marker inklusive RESDIAG und Loader-Negativ
+  OK. Die Ursache bleibt UNERKLAERT, weil das Log des roten Laufs
+  ueberschrieben war - womit die frisch notierte 0.61.10-Lehre (Log
+  sofort wegsichern) direkt beim ersten Anwendungsfall verletzt
+  wurde. Seit 0.61.11 ist ein roter -test echt; faellt dieses Bild
+  erneut, ist der gesicherte Log der erste Griff.
+- Die Imagegroessen-Abnahme (non-alloc bleibt draussen) ist implizit
+  durch den Loader-Schnitt und das Fixture belegt: RSRCFIX laeuft im
+  Smoke als normales Programm, sein 4944-Byte-Ressourcenbereich
+  erscheint in keinem Programmimage - Entry/Reloc-Validierung wuerde
+  jede Beruehrung ablehnen. Eine separate Telemetrieprobe braucht es
+  erst, wenn ein grosses produktives Modul einbettet (0.61.16 misst
+  am Explorer).
+Notizen:
+
+Version: 0.61.14
+Titel: Konsumenten - Desktopicon aus dem Container, Terminal-Help
+Status: Erledigt
+Offene Punkte:
+- Desktop-Iconquelle, ENTSCHIEDEN am 27.07.2026 durch den Nutzer (ersetzt
+  die drei zuvor vorgelegten Moeglichkeiten durch eine eigene Variante):
+  Die ICON=-Zeile der .LNK bleibt erhalten und wird vom reinen Pfad zum
+  Schalter. Die Kette:
+  1. ICON=<pfad>  -> externes .ICO von diesem Pfad.
+  2. ICON=INTERNAL oder ICON= (leer) oder Zeile fehlt
+     -> Container-Icon 0 der TARGET-Datei.
+  3. Kein Container-Icon vorhanden -> das Standard-ICO
+     C:\R4OS\Media\Icons\Application.ico.
+  4. Fehlt auch diese Datei, greift der bereits eingebaute
+     Code-Fallback des Desktops als Notnagel - der Desktop darf nie
+     ohne Icon dastehen, egal was auf der Platte fehlt.
+  Das Schluesselwort INTERNAL ist case-insensitive; leere Zeile,
+  INTERNAL und fehlende Zeile sind bewusst GLEICHBEDEUTEND, damit es
+  nicht zwei subtil verschiedene Nichts-angegeben-Zustaende gibt
+  (Wortwahl INTERNAL von mir, der Nutzer gab die Form frei).
+  Robustheit: Ein gesetzter, aber kaputter externer Pfad (Datei fehlt
+  oder unlesbar) laesst die Kette bei Stufe 2 weiterlaufen statt ein
+  schwarzes Icon zu zeigen.
+  Bestehende .LNK-Dateien und der ICONS/-Bestand bleiben gueltig;
+  nichts wird migriert.
+  KLARGESTELLT vom Nutzer am 27.07.2026: Der Pfadzweig ICON=<pfad> ist
+  ein DAUERFEATURE, kein Uebergangszustand. Externe Icons in .LNKs
+  einzutragen bleibt auf Dauer moeglich und unterstuetzt.
+- ENTSCHIEDEN am 27.07.2026: Der Aufruf ist NAME /? (Entscheidung des
+  Nutzers), einen separaten HELP-Befehl gibt es nicht. Das Terminal
+  faengt /? NUR ab, wenn die Zieldatei ein Helpfile im Container
+  traegt; sonst wird /? unveraendert an das Programm durchgereicht.
+  Programme mit eigener /?-Behandlung behalten damit ihr Verhalten,
+  solange sie kein Container-Helpfile tragen; traegt ein Modul eines,
+  gewinnt es, und das Programm startet fuer /? nicht.
+- Realer Erstfall statt nur Fixture: NOTEPAD bekommt im Manifest
+  ICON=Assets/Desktop.ico und ein HELP=. Die Icon-Bauquelle fuegt der
+  Nutzer dem Quellcode SELBST hinzu (zweite Zulieferung neben
+  Application.ico). KORRIGIERT am 27.07.2026: Das vorhandene
+  NOTEPAD.ICO wird NICHT ins Projekt verschoben - es zieht mit
+  0.61.15 nach Media\Icons und bleibt dort, siehe dort.
+  Die NOTEPAD-.LNK wird auf ICON=INTERNAL umgestellt. Die uebrigen
+  sechs .LNKs stellt 0.61.15 zusammen mit dem Icon-Umzug um -
+  ENTSCHIEDEN vom Nutzer am 27.07.2026: ALLE Verknuepfungen wechseln
+  auf INTERNAL, der Rueckfall der noch containerlosen Ziele auf
+  Application.ico ist ausdruecklich in Ordnung.
+- Explorer-Dateiliste koennte Container-Icons ebenfalls zeigen; das ist
+  OPTIONAL und darf in eine spaetere Version rutschen, wenn der Umfang
+  waechst.
+- ENTSCHIEDEN am 27.07.2026 durch den Nutzer: Das Standard-ICO ist
+  C:\R4OS\Media\Icons\Application.ico. Die Datei erstellt der Nutzer
+  selbst und liefert sie MITSAMT dem Notepad-Desktop.ico VOR Beginn
+  der Abarbeitung von 0.61.12 - die Umsetzung der gesamten Staffel
+  startet erst, wenn beide Dateien vorliegen (entschieden am
+  27.07.2026).
+  GELIEFERT am 27.07.2026 und gegen die ico.zig-Grenzen geprueft:
+  Code/System/Software/Notepad/Assets/Desktop.ico und
+  Injection/R4OS/Media/Icons/Application.ico, beide klassisches ICO
+  mit einem 32x32-Eintrag in 8 bpp Palette, kein PNG - tauglich.
+  Build.bat -norun mit den neuen Dateien im Baum gruen. Die
+  STARTBEDINGUNG der Staffel ist damit erfuellt.
+- Ebenfalls ENTSCHIEDEN: Der neue ZENTRALE Icon-Ort ist
+  C:\R4OS\Media\Icons\ und loest C:\R4OS\SOFTWARE\DESKTOP\ICONS\ ab.
+  Der Nutzer hat den Bestandsumzug am 27.07.2026 BESTAETIGT; er laeuft
+  als eigene Unterversion 0.61.15. Die Version hier legt nur den neuen
+  Ort mit Application.ico an, weil Stufe 3 der Kette ihn braucht.
+- KONVENTIONSWECHSEL, entschieden vom Nutzer am 27.07.2026: Beginnend
+  mit C:\R4OS\Media\ weichen Systempfade von der reinen
+  Grossschreibung ab und verwenden Gross- und Kleinbuchstaben - NTFS
+  ist das Standarddateisystem und speichert case-preserving. Im
+  Terminal ist Gross-/Kleinschreibung egal.
+  BEFUND zur Tragfaehigkeit: Die Grundlage existiert in beiden
+  Dateisystemen. NTFS laedt beim Mount die $UpCase-Tabelle des Volumes
+  und vergleicht darueber; FAT32 vergleicht seit 0.60.24 ueber
+  namesEqualCollated mit ASCII-Faltung. Dokumentierte Grenze:
+  Nicht-ASCII-Paare (Umlaute) faltet nur NTFS - auf FAT32 sind ae-
+  Umlaut und sein Grossbuchstabe VERSCHIEDENE Namen. Systemdateinamen
+  bleiben deshalb ASCII.
+  ZU VERIFIZIEREN in der Umsetzung: dass keine Terminal-/Shell-Schicht
+  (Tab-Completion, Muster, DIR-Filter) selbst case-sensitiv vergleicht
+  oder Eingaben hochfaltet, und dass FAT32-Create den Originalcase im
+  Langnamen erhaelt statt hochzufalten.
+Erledigt:
+- Desktop: Neues Modul icon_source.zig ist die EINE Wahrheit der
+  Kette - classify deutet den ICON=-Wert (leer, INTERNAL
+  case-insensitive und fehlende Zeile gleichbedeutend), plan liefert
+  die Versuchsreihenfolge, draw.zig iteriert nur noch darueber und
+  besitzt keine eigene Kettenlogik. Sechs Inline-Tests beweisen die
+  Stufen hostseitig einzeln; der Desktop-test-Step laeuft mit 121/121.
+- Container-Icons: neuer Cachepfad mit synthetischem Schluessel
+  (rsrc: plus Modulpfad, kollisionsfrei zu DOS-Pfaden), Dekodierkern
+  aus loadCachedIco herausgeloest und fuer Datei- UND Containerquelle
+  gemeinsam. Container- und Standardstufe gelten nur fuer PROGRAMME -
+  Application.ico ist das generische Programmicon, kein Dateiicon.
+- Terminal: NAME /? zeigt das Container-Helpfile und startet das
+  Programm nicht; ohne Helpfile wird /? unveraendert durchgereicht.
+  Uebergrosse Helpfiles (ueber 4096 Bytes) melden sich sichtbar.
+- NOTEPAD-Erstfall: Manifest traegt ICON=Assets/Desktop.ico (vom
+  Nutzer geliefert) und HELP=Assets/Help.txt (englisch, mit BOM als
+  Bauquelle - eingebettet 336 statt 339 Bytes), .paths um Assets
+  erweitert, die .LNK steht auf ICON=INTERNAL. Container: icon[0]
+  2238, help 336.
+- VERSION mitgebumpt: NOTEPAD, DESKTOP, TERMINAL und MEMSUITE 0.1.1.
+- ECHTER FUND durch die neue Diagnostik: Der Smoke fiel an
+  pagerstress reclaim nonresident - erstmals MIT NAME und mit
+  gesichertem Log (beides Folge von 0.61.10). Ursache: Der Test nahm
+  still an, der GLOBALE Reclaimer treffe als Opfer genau seine
+  Region; seit 0.61.13 laufen mehr Programme vor MEMSUITE, und der
+  Reclaimer waehlte legitim fremde VM-Opfer - die historische
+  Flake-Ursache. Fix im Geist von 0.61.10: Trifft der globale Lauf
+  die eigene Region nicht, lagert der Test DETERMINISTISCH eine
+  eigene Seite aus; der globale Nachweis bleibt unveraendert die
+  reclaim-vm-Bedingung. Der gesicherte Log liegt der Analyse
+  zugrunde - die 0.61.13-Lehre wurde diesmal befolgt.
+Abnahme:
+- Headless: NOTEPAD /? liefert den Helptext als Pflichtmarker; der
+  Aufruf laeuft ZWEIMAL - einmal gross, einmal komplett klein
+  geschrieben (c:...notepad.r4x) - und der Marker erscheint zweimal.
+  Damit ist die Gross-/Kleinschreibungs-Unempfindlichkeit von
+  Terminal-Aufloesung UND Containerlesen Ende-zu-Ende belegt.
+- Kettenproben hostseitig: sechs Inline-Tests in icon_source.zig
+  beweisen explizit-gewinnt, INTERNAL/leer/fehlend -> Container,
+  Nicht-Programme ohne Container-/Standardstufe und den impliziten
+  Notnagel; Desktop-test-Step 121/121.
+- Robustheit by design: Ein kaputter externer Pfad laesst plan die
+  naechste Stufe versuchen - die Reihenfolge lebt an genau einer
+  Stelle.
+- Build.bat -norun und -test gruen.
+- GUI-Sichttest durch den Nutzer BESTANDEN am 28.07.2026; urspruenglich ausstehend (Menue Option 6): NOTEPAD
+  zeigt sein Container-Icon, uebrige Verknuepfungen unveraendert.
+  Faellig spaetestens mit dem 0.61.15-Sichttest.
+Notizen:
+
+Version: 0.61.15
+Titel: Icon-Umzug nach Media/Icons und alle Desktop-.LNKs auf INTERNAL
+Status: Erledigt
+Offene Punkte:
+- AUFTRAG des Nutzers vom 27.07.2026, zwei Teile:
+  1. Den gesamten Icon-Bestand von C:\R4OS\SOFTWARE\DESKTOP\ICONS\
+     nach C:\R4OS\Media\Icons\ umziehen (Injection-Quelle:
+     Injection/R4OS/SOFTWARE/DESKTOP/ICONS -> Injection/R4OS/Media/Icons).
+     Die Explorer-Toolbar-Icons wandern in den Unterordner
+     Media\Icons\Explorer - als ZWISCHENSTATION: 0.61.16 bettet sie
+     in EXPLORER.R4X ein und loescht den Unterordner wieder. Der
+     doppelte Griff (sieben Pfadkonstanten hier, Ressourcenumbau dort)
+     ist bewusst, damit diese Version in sich geschlossen bleibt und
+     der alte Ordner sofort vollstaendig verschwindet.
+     Der alte Ordner verschwindet aus dem Image.
+  2. ALLE sieben Verknuepfungen unter Injection/R4OS/DESKTOP auf
+     ICON=INTERNAL umstellen (COMPUTER, DEVICES, MEMVIEW, NOTEPAD,
+     R4CODE, R4SYNTH, TERMINAL).
+- AUSDRUECKLICH ENTSCHIEDEN vom Nutzer: Dass danach alle Ziele ohne
+  Container-Icon auf das generische Application.ico zurueckfallen, ist
+  in Ordnung und gewollt. Nur NOTEPAD zeigt ab 0.61.14 sein eigenes
+  Container-Icon.
+- FESTGEHALTENE KONSEQUENZ, mit Klarstellung des Nutzers vom
+  27.07.2026: Der Pfadzweig ICON=<pfad> bleibt ein voll
+  unterstuetztes DAUERFEATURE - externe Icons in .LNKs einzutragen
+  ist weiterhin und auf Dauer moeglich, etwa fuer eigene
+  Verknuepfungen des Nutzers. Nur die sieben AUSGELIEFERTEN .LNKs
+  nutzen ihn nach dieser Version nicht mehr; im Image ist er damit
+  produktiv unbelegt und wird durch die Kettenproben aus 0.61.14
+  abgedeckt. Der Migrationsdruck Richtung Container-Icons gilt den
+  mitgelieferten Programmen, nicht der Faehigkeit selbst.
+- Alle Codereferenzen auf den alten Ort nachziehen: Desktop
+  (FOLDER.ICO, Fallbacks), Explorer (Toolbar-Icons BACK/FORWARD/UP/
+  CUT/COPY/PASTE/DELETE, Folder-Icon), gegebenenfalls weitere
+  Fundstellen aus dem Suchlauf. Docs/Desktop/IconFormat.txt wird auf
+  den neuen Ort und die INTERNAL-Semantik umgeschrieben.
+- KORRIGIERT vom Nutzer am 27.07.2026: ALLE Programm-Icons ziehen mit
+  um und BLEIBEN in Media\Icons liegen - auch NOTEPAD.ICO, obwohl es
+  ab dieser Version nirgends mehr verlinkt ist. Der Nutzer benennt die
+  Dateien spaeter selbst um und nutzt sie anderweitig; nichts wird
+  geloescht und nichts wandert in Projektverzeichnisse. Die
+  Icon-Bauquellen fuer das Einbetten (Assets/Desktop.ico) fuegt der
+  Nutzer den Projekten selbst hinzu. Das programmweise Einbetten ist
+  bewusst NICHT Teil dieser Version.
+- BONUS-AUFTRAG des Nutzers vom 27.07.2026, hier eingeplant, weil es
+  ein Systemicon des neuen zentralen Ortes ist:
+  C:\R4OS\Media\Icons\Textfile.ico wird das Icon fuer TEXTDATEIEN in
+  der Dateidarstellung. Die Datei ist geliefert und geprueft (32x32,
+  8 bpp Palette, klassisch - tauglich).
+  IST-BEFUND: Dateien bekommen heute ein codegezeichnetes generisches
+  Symbol (Explorer drawFileIcon, main.zig:750); Ordner haben mit
+  FOLDER.ICO bereits die Mechanik dateibasiertes Icon laden und
+  zeichnen. Der Bonus haengt Text-Endungen an genau diese Mechanik:
+  Explorer-Dateiliste und Desktop-Dateiobjekte zeigen fuer
+  Text-Endungen Textfile.ico statt des generischen Symbols.
+  ANFANGSUMFANG der Endungen (von mir festgelegt, leicht erweiterbar):
+  .TXT und .MD. Alles andere behaelt das bestehende generische
+  Symbol. Fehlt die Datei auf der Platte, greift wie ueberall das
+  codegezeichnete Symbol - kein Absturz, kein schwarzes Rechteck.
+  Wie FOLDER.ICO bleibt Textfile.ico dauerhaft eine EXTERNE Datei:
+  Dateityp-Icons sind Systembestand, keine Programmicons und werden
+  nicht in Container eingebettet.
+- VORAUSSETZUNG: 0.61.14 muss fertig sein - die INTERNAL-Semantik und
+  der Application.ico-Fallback muessen existieren, bevor die .LNKs
+  umgestellt werden, sonst zeigt der Desktop den alten Code-Notnagel
+  statt des gewollten Standards.
+Erledigt:
+- Der gesamte Icon-Bestand ist per git mv nach
+  Injection/R4OS/Media/Icons umgezogen, in Mixed Case nach der neuen
+  Konvention (Terminal.ico, Folder.ico, ...); die Explorer-Toolbar
+  liegt als Zwischenstation unter Media/Icons/Explorer, der alte
+  Ordner SOFTWARE/DESKTOP/ICONS ist aus dem Image verschwunden.
+- Alle sieben .LNKs stehen auf ICON=INTERNAL (NOTEPAD kam aus
+  0.61.14, die uebrigen sechs hier).
+- 21 Codereferenzen nachgezogen: Desktop (desktop_folder,
+  desktop_items, quick_launch), Explorer (acht Konstanten plus
+  Selbsttest-Shortcut), SDK-shortcut-Testliteral und der
+  Registry-Generator CreateDefaultRegistry.zig - WICHTIGER
+  NEBENBEFUND: Die Quick-Launch-Leiste liest ihren Iconpfad aus dem
+  SYSTEM-Registry-HIVE, den Build.bat bei jedem Lauf aus genau diesem
+  Generator NEU erzeugt; der binaere Hive war fuer den Text-Suchlauf
+  unsichtbar und haette als eingechecktes Artefakt still den alten
+  Pfad behalten. Frisch gebaute Images sind sauber; nur ein BEREITS
+  INSTALLIERTES System behaelt den alten Registry-Wert bis zu einem
+  Update (Quick-Launch faellt dort auf den Code-Fallback, kein
+  Schaden).
+- BONUS umgesetzt: Textdateien (.TXT, .MD) zeigen
+  Media/Icons/Textfile.ico. Die Endungsliste lebt als EINE Wahrheit
+  im SDK (ico.zig, isTextFileName mit Inline-Test); Desktop
+  (Dateiobjekte, Stufe vor dem Code-Fallback) und Explorer
+  (Dateiliste, geladen wie das Folder-Icon) konsumieren sie nur.
+  Fehlt die Datei, greift das codegezeichnete Symbol - by design,
+  ohne Sonderpfad.
+- Docs/Desktop/IconFormat.txt vollstaendig umgeschrieben: neuer Ort,
+  Schalter-Semantik, Kette, Textfile-Regel, Zwischenstation.
+- VERSION mitgebumpt: EXPLORER 0.1.1, DESKTOP 0.1.2.
+Abnahme:
+- Suchlauf ueber Code, Tests, Scripts, Injection und TestInjection:
+  kein lebender Verweis mehr auf SOFTWARE/DESKTOP/ICONS.
+- Alle sieben .LNKs tragen ICON=INTERNAL; keine traegt mehr einen
+  expliziten Pfad.
+- Desktop-Hosttests 121/121 (inklusive Kettenmodul), Explorer und
+  Desktop bauen standalone.
+- Build.bat -norun und -test gruen.
+- GUI-Sichttest durch den Nutzer BESTANDEN am 28.07.2026; urspruenglich ausstehend (Menue Option 6): Alle
+  Verknuepfungen zeigen Application.ico, NOTEPAD sein Container-Icon,
+  Explorer-Toolbar und Ordner-Icons funktionieren vom neuen Ort, eine
+  .TXT-Datei zeigt Textfile.ico. Dazu die Bonus-Negativprobe: mit
+  wegbenannter Textfile.ico faellt die Darstellung ohne Absturz auf
+  das codegezeichnete Symbol zurueck (die Kette dafuer ist hostseitig
+  belegt - ein fehlgeschlagener Icon-Load laesst desktopItemIco und
+  drawFileIcon regulaer weiterlaufen, es gibt keinen Sonderpfad).
+Notizen:
+
+Version: 0.61.16
+Titel: Praxisvalidierung eingebetteter Grafiken - Explorer-Toolbar aus dem Container
+Status: Erledigt
+Offene Punkte:
+- AUFTRAG des Nutzers vom 27.07.2026: Die sieben Explorer-Toolbar-Icons
+  (BACK, FORWARD, UP, CUT, COPY, PASTE, DELETE, je 1842 Bytes) wandern
+  als Bauquellen ins Projektverzeichnis
+  Code/System/Software/Explorer/Assets/, werden in EXPLORER.R4X
+  eingebettet und vom Quellcode ueber die Ressourcen-Lese-API genutzt.
+  Aus Injection verschwinden sie KOMPLETT - anders als die
+  Programm-Icons aus 0.61.15, die in Media\Icons liegen bleiben.
+  Damit ist der Typ file zum ersten Mal produktiv belegt (Typ icon und
+  help belegt 0.61.14 ueber NOTEPAD) und das Feature einmal komplett
+  in einem echten Programm validiert.
+- IST-BEFUND vom 27.07.2026, der Umbau ist kleiner als befuerchtet:
+  Der Explorer laedt die Icons selbst - sieben Pfadkonstanten
+  (main.zig:72-78), loadToolbarIcons liest per fileRead und dekodiert
+  per SDK-ICO-Parser (decodeToolbarIcon) in fixe Pixelpuffer
+  (LoadedIconImage). Es wechselt NUR die Bytequelle von fileRead auf
+  resourceRead; Dekodierung, Puffer und Zeichnen bleiben unberuehrt.
+  Der Fallback existiert bereits: loaded=false zeichnet die Toolbar
+  ohne Bild, nur mit Beschriftung.
+- Schritte:
+  1. Sieben .ico von Injection/R4OS/SOFTWARE/DESKTOP/ICONS/EXPLORER
+     (nach 0.61.15: Injection/R4OS/Media/Icons/Explorer) per git mv
+     nach Code/System/Software/Explorer/Assets/.
+  2. module.R4MF: sieben RESOURCE=NAME:Assets/...-Zeilen. Typ file
+     mit sprechenden Namen (BACK.ICO usw.), NICHT als icon-Array -
+     der Icon-Index bleibt Programmicon-Varianten vorbehalten, und
+     RESOURCE-Namen sind selbstdokumentierend. VERSION= wird im
+     selben Schritt mitgebumpt - entschieden am 27.07.2026: Wer das
+     Modul aendert, zieht die Version hoch, auch der Agent; nur ein
+     GATE dafuer bleibt bewusst abgelehnt.
+  3. build.zig.zon: Assets in .paths aufnehmen.
+  4. main.zig: Pfadkonstanten durch Ressourcennamen ersetzen,
+     loadToolbarIcon liest ueber die R4SYS-Lese-API aus dem EIGENEN
+     Modul (Modulpfad aus 0.61.13).
+  5. Selbsttest umstellen: runSelfTest/expectToolbarIcon pruefen die
+     sieben Ressourcen statt der Dateipfade.
+  6. Injection/R4OS/Media/Icons/Explorer loeschen; kein Icon-Ordner
+     des Explorers existiert mehr im Image.
+  7. TestInjection/AUTOEXEC.BAT um EXPLORER /SELFTEST ergaenzen und
+     den OK-Marker als Pflichtmarker in die Build.bat-Auswertung
+     aufnehmen - abhaengig vom PRUEFPUNKT unten; faellt der negativ
+     aus, ersetzt der alternative Markerweg diesen Schritt.
+- BEFUND SMOKE-LUECKE, bei der Pruefung gefunden: EXPLORER /SELFTEST
+  existiert (main.zig:195) und prueft heute alle sieben Icon-Dateien -
+  wird aber NIRGENDS aufgerufen, weder AUTOEXEC noch Gate. Der einzige
+  automatisierte Beleg der Toolbar-Icons liegt brach. Diese Version
+  nimmt den Selbsttest in den headless Smoke auf; damit ist
+  Programm-liest-eigene-Ressourcen dauerhaft im Standardlauf belegt.
+- PRUEFPUNKT dazu: EXPLORER ist APP_CLASS=gui. runSelfTest laeuft zwar
+  vor jedem Fensteraufbau und schreibt ueber die Konsole, aber ob ein
+  gui-Programm im headless Konsolenboot sauber startet und beendet,
+  ist VOR der Verdrahtung zu pruefen. Falls nein: Marker anders
+  erzeugen, nicht die Klasse verbiegen.
+- VORAUSSETZUNGEN: 0.61.12 (RESOURCE= im Format), 0.61.13 (Lese-API
+  plus eigener Modulpfad). 0.61.14/0.61.15 sind fachlich nicht
+  Voraussetzung; die Reihenfolge bleibt trotzdem sequenziell, weil
+  0.61.15 die Zwischenstation Media\Icons\Explorer anlegt, die diese
+  Version wieder aufloest.
+Erledigt:
+- Sieben Toolbar-.ico per git mv nach
+  Code/System/Software/Explorer/Assets/; module.R4MF traegt sieben
+  RESOURCE=NAME:Assets/...-Zeilen (Typ file, sprechende Namen
+  BACK.ICO usw.), build.zig.zon nimmt Assets in .paths auf, VERSION
+  auf 0.1.2 gebumpt.
+- main.zig: Pfadkonstanten durch Ressourcennamen ersetzt; neue
+  Bytequelle readOwnFileResource (programModulePath aus 0.61.13 plus
+  moduleResourceRead), Dekodierkern als decodeIconBytes aus decodeIcon
+  herausgeloest - Datei- und Ressourcenquelle teilen sich den Parser,
+  Folder-/Textfile-Icon bleiben unveraendert dateibasiert.
+- Selbsttest auf Ressourcen umgestellt plus neue Konsistenzprobe
+  stat==read-Laenge; EXPLORER /SELFTEST in TestInjection/AUTOEXEC.BAT
+  verdrahtet, OK-Marker Pflicht und FAILED-Marker verboten in der
+  Smoke-Auswertung.
+- PRUEFPUNKT beantwortet: Die gui-Klasse startet, laeuft und beendet
+  sich headless im Konsolenboot sauber - kein alternativer Markerweg
+  noetig.
+- ECHTER FUND 1 (genau die Smoke-Luecke, die diese Version schliessen
+  sollte): Der nie zuvor aufgerufene Selbsttest fiel beim ersten
+  verdrahteten Lauf an drive-c-kind - er UND drei produktive
+  Browse-Gates verlangten FAT32, aber C: ist seit 0.60.9 NTFS. Der
+  produktive Explorer konnte C: seit dem NTFS-Umstieg gar nicht mehr
+  durchsuchen (Meldung 'Drive is not a FAT32 browser target');
+  unbemerkt, weil der letzte GUI-Sichttest vor dem Umstieg lag. Fix:
+  driveBrowsable akzeptiert FAT32 UND NTFS an allen vier Stellen
+  (navigateToDrive, Adressleisten-Wechsel, switchToNextBrowseDrive,
+  Selbsttest); Statusmeldung jetzt 'Drive is not a browsable volume'.
+- ECHTER FUND 2, dokumentarisch: Docs/Desktop/Leitbild.txt trug den
+  alten Icon-Ort noch zweimal in Backslash-Schreibweise, die der
+  0.61.15-Suchlauf (Forward-Slash-Muster) nicht sah - korrigiert.
+- Injection/R4OS/Media/Icons/Explorer aufgeloest; kein
+  Explorer-Icon-Ordner existiert mehr im Image.
+- IconFormat.txt: Toolbar-Abschnitt von Zwischenstation auf
+  eingebettet umgeschrieben.
+Abnahme:
+- Headless Smoke: EXPLORER selftest: OK ist Pflichtmarker und
+  erschien; der Selbsttest liest alle sieben Ressourcen aus dem
+  eigenen Container (Dekodierprobe 32x21 je Icon plus
+  stat==read-Konsistenz).
+- Byteprobe host-seitig: ALLE SIEBEN .rsrc-Blobs aus
+  Code/zig-out/EXPLORER.R4X bytegleich zu ihren Bauquellen in Assets/
+  (7/7).
+- Suchlauf ueber Code, Tests, Scripts, Injection, TestInjection und
+  Docs: kein lebender Verweis mehr auf einen Explorer-Icon-Ordner in
+  beiden Schreibweisen.
+- Speicherbeleg am echten Fall, beide Artefakte standalone gebaut
+  (VORHER exakt aus einem git-Worktree des 0.61.15-Stands): Datei
+  148010 -> 161073 Bytes (+13063; .rsrc-Sektion 13170 Bytes,
+  flags=0), Lade-Image (Summe mem_size der alloc-Sektionen) 120390 ->
+  121024 (+634) - der Zuwachs ist der neue Lesecode, NICHT die
+  Ressourcen; non-alloc bleibt nachweislich draussen.
+- Build.bat -norun und -test gruen.
+- GUI-Sichttest durch den Nutzer BESTANDEN am 28.07.2026; urspruenglich ausstehend (Menue Option 6): Toolbar
+  zeigt alle sieben Icons wie bisher; zusaetzlich seit dem
+  driveBrowsable-Fix wieder pruefbar: C: laesst sich im Explorer
+  durchsuchen.
+Notizen:
+- Groessenordnung: 7 x 1842 Bytes = 12894 Bytes Blobs, mit Direktory
+  und Namen 13170 Bytes .rsrc; Grenzen (64 Eintraege, 63-Byte-Namen)
+  weit entfernt.
+- EIN nicht reproduzierter Haenger: Der zweite Smoke dieser Version
+  blieb nach 'validate result: OK' im R4CODE-Selbsttest stehen
+  (zwischen zwei R4BUILD-Starts, kein Panic-/Fatal-Marker, Watchdog
+  nach 600s) - lange NACH dem gruen durchgelaufenen
+  EXPLORER-Selbsttest und in einem Pfad, den diese Version nicht
+  anfasst. Der unmittelbar folgende identische Lauf war komplett
+  gruen. Log gesichert als DevTools/Logs/qemu-test-hang-06116.log;
+  Analyse: waitBuildResult haette nach 160x3 Ticks sichtbar
+  terminiert, der Haenger sitzt also in einem blockierenden Aufruf
+  (fileRead/fileWrite auf das Buildlog oder Exit-/Reap-Pfad des
+  beendeten R4BUILD). Als eigener Untersuchungsauftrag ausgeflaggt,
+  nicht Teil dieser Version.
+
+Version: 0.61.17
+Titel: Dokumentationsabschluss des Ressourcenumbaus
+Status: Erledigt
+Offene Punkte:
+- AUFTRAG des Nutzers vom 27.07.2026: Finale Pruefung und
+  Aktualisierung aller Dokumentation, die der Ressourcenumbau
+  0.61.12 bis 0.61.16 betrifft. Jede Unterversion pflegt ihre Doku
+  bereits selbst mit (Arbeitsweise); diese Version ist der
+  Schlussdurchgang mit frischem Blick auf WIDERSPRUECHE und LUECKEN
+  ueber das Ganze - Erstpflege ersetzt sie nicht.
+- EXPLIZIT zu pruefen, Vorgabe des Nutzers:
+  1. Docs/Agents/R4M0-Container.txt - gegen ihre Zweckvorgabe: ein
+     technisches Dokument, das einem LLM erklaert, wie man eine
+     Anwendung mit R4M0-Container RICHTIG baut. Kompakt, praezise,
+     nicht zu viel, genau das Noetige. Konkret: Der STAND-Vermerk
+     (Ressourcenbereich erst geplant) muss nach der Umsetzung auf den
+     Endzustand gebracht sein, Lese-API und Modulpfad-API stehen mit
+     ihren realen Namen drin, und nichts in der Datei widerspricht
+     dem umgesetzten Stand.
+  2. AGENTS.md - im Rahmen der erlaubten Abschnitte (Projektstruktur,
+     Kernel-Struktur, Zentrale Dokumentation, Wichtige Konventionen,
+     Build und Tests): R4M0-Abschnitt um den Ressourcenbereich
+     ergaenzen, Icon-Ort Media/Icons, Case-Konvention ab
+     C:\R4OS\Media\, Assets/-Konvention.
+- Kandidatenliste Docs/ - bei der Pruefung zu verifizieren, nicht
+  abschliessend:
+  Docs/Desktop/IconFormat.txt (Kette, INTERNAL, Media/Icons;
+  Erstpflege 0.61.15), Docs/SDK/ModuleManifestV2.md und
+  Code/System/SDK/Contract/Module/R4MFv2.txt (ICON=/HELP=/RESOURCE=;
+  Erstpflege 0.61.12), Docs/Applications/Anwendungsstruktur.md und
+  Docs/Applications/R4X.txt (Assets/), Docs/Terminal/Leitbild.txt
+  (NAME /?), Docs/Desktop/DesktopStand.txt (Iconkette),
+  Docs/API/R4SYS.md samt generierter API-Doku (entsteht in 0.61.13
+  ueber ApiContractGen), Docs/Software.md, Inventory/Tests.json
+  (neue Gates und der in 0.61.16 verdrahtete Explorer-Selbsttest).
+Erledigt:
+- Docs/Agents/R4M0-Container.txt auf den Endzustand gebracht:
+  STAND-Vermerk auf vollstaendig produktiv seit 0.61.16, Explorer als
+  Toolbar-Vorbild statt externem Ordner, IMAGE_SCOPE-Werte in einer
+  Zeile erklaert.
+- REALPROBE durchgefuehrt und BESTANDEN - mit drei behobenen Luecken:
+  Die Wegwerfanwendung RSRCPROBE (Icon, Helpfile, Mediendatei) wurde
+  strikt nach der Agent-Datei angelegt. Beim Ansetzen fehlten drei
+  Dinge, die die Datei nur behauptete statt zeigte: die woertliche
+  build.zig-Form (woher kommt sdk), die minimale build.zig.zon-Form
+  samt Fingerprint-Ablauf (0x0 eintragen, Zig nennt den Wert) und das
+  minimale src/main.zig-Skelett (app.profile-Check plus app.system()).
+  Alle drei stehen jetzt als Abschnitt Boilerplate woertlich in der
+  Datei; das zuerst hingeschriebene erfundene Context.init-Skelett
+  wurde dabei gegen die echte Form aus RSRCFIX ersetzt. Danach baute
+  die Probe im ERSTEN Versuch: icon[0] 2238, help 94, DATA.BIN 777
+  Bytes eingebettet - auch das ICO wurde NUR aus der Doku-Beschreibung
+  synthetisiert (klassisch, 8 bpp Palette, 32x32) und passierte die
+  Builder-Validierung. Rueckstandsfrei entfernt.
+- Kandidatenliste geprueft, drei Luecken der Erstpflege behoben:
+  Docs/Terminal/Leitbild.txt (neuer Abschnitt Hilfeaufruf: NAME /?),
+  Docs/Applications/Anwendungsstruktur.md (Verzeichnisbaum mit
+  build.zig/build.zig.zon/Assets, Manifestzeile ICON/HELP/RESOURCE,
+  praezisierte build.zig-Wahrheitsregel seit 0.61.8),
+  Docs/Desktop/DesktopStand.txt (neuer Abschnitt Icons mit der
+  Kette). IconFormat.txt, ModuleManifestV2.md, R4MFv2.txt, R4SYS.md
+  und Tests.json waren bereits aktuell; Software.md beruehrt das
+  Thema nicht.
+- AGENTS.md in den erlaubten Bereichen: R4M0-Tabelle um die
+  Ressourcenbereichszeile ergaenzt plus Absatz zu Loader-Skip,
+  Lese-API und Konsumenten; Projektstruktur um R4OS/Media/Icons;
+  Wichtige Konventionen um Mixed-Case-Konvention ab C:/R4OS/Media,
+  zentralen Icon-Ort und Assets-/Desktop.ico-Konvention; Zentrale
+  Dokumentation um Docs/Agents/R4M0-Container.txt.
+Abnahme:
+- REALPROBE: bestanden wie oben; Massstab war der Erstbau OHNE
+  fremde Quellen NACH dem Beheben der gefundenen Luecken - die
+  Luecken selbst sind der Ertrag der Probe.
+- Suchlauf ueber Docs/ (beide Schreibweisen): kein Dokument nennt den
+  alten Icon-Ort oder den Vor-Ressourcen-Stand als aktuell;
+  Changelogs ausgenommen.
+- AGENTS.md-Aenderungen liegen ausschliesslich in Projektstruktur,
+  Zentrale Dokumentation, Wichtige Konventionen und dem
+  R4M0-Abschnitt von Build und Tests.
+- Build.bat -norun und -test gruen (inklusive Doku-/API-Gates und
+  Policy-Sammellauf); der Smoke lief nach dem 0.61.16-Haenger hier
+  erneut vollstaendig durch.
+Notizen:

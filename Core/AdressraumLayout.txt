@@ -1,0 +1,63 @@
+﻿# R4OS Adressraumlayout
+
+Dieses Dokument beschreibt den Kernel-Adressraum. Die Zahlen sind die
+Konstanten aus `Code/Kernel/memory/layout.zig` und damit die Wahrheit; der
+Manager-Stapel darueber steht in `Docs/Core/MemoryManagement.txt`.
+
+R4OS laeuft im x86_64 Long Mode. Die CPU arbeitet dabei immer ueber virtuelle
+Adressen; die Uebersetzung in physische Frames erfolgt ueber die aktive PML4,
+deren physische Adresse in CR3 steht.
+
+## Boot-Handoff
+
+- Limine liefert die physische Memory Map, den HHDM-Offset, den Framebuffer und
+  die ACPI-RSDP-Adresse.
+- R4OS kopiert diese Informationen in BootInfo und behandelt BootInfo danach als
+  bootloader-neutrale Kernel-Grenze.
+- Der Kernel baut eine eigene PML4 und schaltet CR3 auf diese neue Root-Page-Table.
+- Nach dem CR3-Wechsel werden alte Limine-Page-Table-Frames nicht blind freigegeben,
+  sondern ueber den PMM-Blockzustand quarantained oder freigegeben.
+
+## Virtuelle Bereiche
+
+Alle Fenster liegen im oberen kanonischen Halbraum ab
+`0xffff_8000_0000_0000`; der untere kanonische Bereich wird nicht fuer
+Kernelobjekte benutzt.
+
+    HHDM / Direct Map    0xffff_8000_0000_0000   64 TiB
+    Kernel-Dynamik       0xffff_c000_0000_0000   32 TiB
+    MMIO-Fenster         0xffff_e000_0000_0000   16 TiB
+    Framebuffer          0xffff_f000_0000_0000    1 TiB
+    Kernel-Image         0xffff_ffff_8000_0000  512 MiB
+
+- HHDM/direct map: physische Frames sind ueber einen festen Offset
+  adressierbar. Der Bereich ersetzt nicht die Memory Map, er macht Frames
+  fuer den Kernel erreichbar.
+- Kernel-Dynamik: Heap, Stacks, Page Tables, Module und interne
+  Reservierungen; Kernel-Stacks entstehen guarded on demand.
+- MMIO: APIC, IOAPIC, HPET, PCIe/ECAM und Geraete-MMIO, nie als normal
+  cachebarer RAM.
+- Framebuffer: sichtbare Display-Backends. Write-Combining wird ueber PAT
+  gesetzt, wenn CPU- und PAT-Zustand das stabil erlauben.
+- Kernel-Image: Linkfenster fuer Text, Daten, BSS und Boot-Strukturen.
+- App-/R4X-Bereiche: vom Kernel verwaltete virtuelle Programmregionen mit
+  getrenntem Commit- und Residency-Zustand. Sie sind kein festes Fenster
+  dieser Tabelle, sondern werden pro Programminstanz reserviert.
+
+## Invarianten
+
+- CR3 muss nach der Initialisierung auf die R4OS-PML4 zeigen.
+- Die aktive Root-Page-Table muss mit dem hardwareseitig gelesenen CR3 uebereinstimmen.
+- Page-Table-Frames muessen als MemoryBlock `page_table` sichtbar sein.
+- Der Owner unterscheidet mindestens Kernel-Page-Tables und quarantained
+  Bootloader-Page-Tables.
+- Reservierte physische Bereiche aus der Memory Map duerfen nicht fuer neue Frames
+  verwendet werden.
+- Device-Mappings und der CR3-Wechsel werden erst nach dem ACPI-/PCIe-
+  Plattformzustand abgeschlossen, nicht schon im Speicherschnitt.
+
+## Diagnose
+
+BOOTINFO.R4X, SYSINFO.R4X und MEMVIEW.R4X lesen ab 0.25.9 die Paging-Summary aus
+R4DEV. Sichtbar sind aktive PML4, Hardware-CR3, Root-Owner, Page-Table-Blocks und
+Limine-Reclaim-Status.

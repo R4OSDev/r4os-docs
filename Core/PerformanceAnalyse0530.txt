@@ -1,0 +1,1259 @@
+﻿R4OS Performance-Basisanalyse 0.53.0
+====================================
+
+Version: 0.53.0
+Status: Analyse abgeschlossen; finaler Abgleich in 0.53.49
+Stand der Codebasis: nach 0.53.10 Memory Pressure / OOM Policy
+
+Ziel
+====
+
+0.53.0 ist die nachgezogene Performance-Basisanalyse fuer die 0.53.X-Reihe.
+Die Analyse bewertet R4OS nach dem abgeschlossenen R4X-VM-V2-/Memory-Umbau
+0.53.1 bis 0.53.10 und sucht bewusst nicht nur nach einzelnen langsamen
+Funktionen, sondern nach fehlenden OS-Bausteinen.
+
+Die zentrale Frage lautet:
+
+- Was verhindert heute, dass R4OS unter Datei-, Netzwerk-, Service-,
+  Desktop-, Treiber- oder CPU-Last reaktionsfreudig und vorhersagbar bleibt?
+- Welche Features fehlen gegenueber gaengigen OS-Konzepten wie Windows NT,
+  Linux oder BSD?
+- Welche dieser Bausteine gehoeren wirklich in den Kernel, und welche besser
+  in Contract, R4L/SDK, Services, R4X-Anwendungen, R4D-Treiber, R4P-
+  Protokolle oder Diagnoseprogramme?
+
+Nicht-Ziele
+===========
+
+- Keine Implementierung in 0.53.0.
+- Kein POSIX-, Mehrbenutzer-, Permissions- oder Sandbox-Ziel.
+- Kein Kernel-Monolith fuer Komfort-, Policy- oder Tooling-Funktionen.
+- Keine stillen Fallbacks und keine dauerhaft parallelen Produktivpfade.
+- Keine Preemption, Userland-Threads oder async I/O als Blindflug ohne
+  vorherige Messpunkte, Wait-Regeln, Lock-Regeln und Diagnosen.
+- Kein Pagefile-/Swap-Prototyp ohne Storage-/Completion-/Pinning- und
+  Writeback-Grundlagen.
+
+Kurzfazit
+=========
+
+Die Speicherverwaltung ist nach 0.53.1 bis 0.53.10 nicht mehr der grobe
+AppHeap-Flaschenhals. R4OS besitzt nun VM-Regionen, 64-bit-VM-API,
+Demand-Commit, Memory-Profile, Multi-GB-Stresstests, Streaming-I/O fuer
+grosse Transfers und Memory-Pressure-Diagnose. Das ist eine moderne Basis.
+
+Die naechsten Performance- und Responsiveness-Grenzen liegen aber deutlich in
+anderen Schichten:
+
+- Der Scheduler ist kooperativ. Timer-Ticks wecken Tasks, preempten aber den
+  laufenden Task nicht.
+- Wait-/Wake-Grundlagen sind rudimentaer: Event und Mutex schlafen in
+  1-Tick-Polling-Schleifen, ohne Wait-Queues, Completion, Semaphore,
+  Cancellation oder Multi-Object-Wait.
+- R4X-Programme laufen als je ein Kernel-Task pro Instanz; Userland-Threads,
+  Thread-Stacks, Join/Wait-Handles und per-Task-FPU-/SSE-State fehlen.
+- Storage und FAT32 sind noch stark synchron. Der Blocklayer kennt
+  Queue-Depth-Metadaten, akzeptiert praktisch aber nur einen aktiven Request.
+- Treiber warten oft per Polling oder Busy-Wait auf Hardware-Completion.
+- Services und IPC haben nur eine einfache Endpoint-Nachricht pro Richtung.
+  Mehrere outstanding Requests, Service-Worker und Completion-Queues fehlen.
+- Der Desktop erledigt weiterhin periodische Datei-/Config-Arbeit im
+  sichtbaren Eventloop.
+- Es gibt viele Status- und Diagnosepunkte, aber noch keine systematische
+  Latenzdiagnose fuer Tasks, Waits, APIs, Storage, Services, Desktop und
+  Treiber.
+
+Die wichtigste Reihenfolge ist deshalb:
+
+1. Observability und reproduzierbare Latenztests.
+2. Wait-Queues, Wait-Objekte und Lock-/Sleep-Regeln.
+3. Storage-/FS-/Service-Pfade queue- und workerfaehig machen.
+4. Async-I/O und Completion-APIs nachziehen.
+5. Erst danach Preemption, FPU/SSE-State und Userland-Threads.
+
+Nachtrag 0.53.37: Memory-/Pager-Block
+=====================================
+
+Der Memory-/Pager-Block der 0.53.X-Reihe ist nach 0.53.37 als eigener
+Performance-Unterbau abgeschlossen. Die urspruenglich kritischen Punkte rund
+um AppHeap-Limits, 32-bit-Groessen, manuell nachjustierte R4X-Speicherbereiche
+und fehlende Auslagerungsmechanik wurden durch VM-Regionen, 64-bit-ABI,
+Demand-Commit, Multi-GB-Reserve, Memory-Pressure-Diagnose, FS-/VM-Reclaim,
+Backing-Store, Fault-Page-In, Eviction, Fehlerpolicy und Pager-Stress-
+Abnahme ersetzt.
+
+Wichtig: Das ist kein stiller Fallback und kein zweiter I/O-Pfad. 0.53.37
+belastet die bestehende Mechanik ueber `MEMSUITE.R4X /PAGERSTRESS /STRICT`:
+viele kleine Regionen, wiederholte Page-Out/Page-In-Zyklen, globalen Reclaim,
+retrybare/permanente Backing-Store-Fehler, Recover/Retry, Program-Kill-
+Cleanup und Responsiveness-Grenzen. Der Abschluss laesst `data_lost_pages`
+bei 0 und dokumentiert die verbleibenden No-Fallback-Grenzen.
+
+Damit verschiebt sich der groesste offene Performance-Hebel zurueck auf die
+restlichen Befundgruppen dieser Analyse: produktive Preemption, Wait-/Lock-
+Regeln, Treiber-/IRQ-Deferred-Work, Storage-/FS-Queueing, Service-/Netzwerk-
+Completion, Desktop-Responsiveness und systematische Latenzdiagnose.
+
+Nachtrag 0.53.42: Storage-Driver-Completion
+===========================================
+
+Der gemeinsame Storage-Blocklayer ist nach 0.53.42 auf einen produktiven
+Runtime-Worker umgestellt. `block-work` verarbeitet Runtime-Requests aus der
+vorhandenen Blockqueue, R4DEV/SDK melden ProgramApi v137, PERFDIAG und
+STORDIAG pruefen Worker-Fortschritt und Completion-Signale, und MEMSUITE
+verlangt dieselben Deltas im Pagerstress. Der fruehe Bootpfad bleibt nur als
+sichtbar gezaehlte `boot_inline`-Grenze.
+
+Beim Umbau wurde ausserdem der FS-Request-Guard in ein reentrantes Gate
+umgestellt, damit Storage-Waits nicht unter einem gehaltenen Kernel-Mutex
+schlafen. Damit ist der gemeinsame Block-Core-Teil von Befund 07 erledigt.
+Hardware-nahe USB/xHCI-/MSC-, Audio- und weitere Treiberpfade bleiben als
+eigene Folgearbeiten bestehen, muessen aber auf dieser Completion-Kante
+aufsetzen statt einen zweiten produktiven I/O-Pfad einzufuehren.
+
+Nachtrag 0.53.45: Desktop-/Display-Responsiveness
+==================================================
+
+Der sichtbare Desktop-Pfad ist nach 0.53.45 messbar: R4DESK erfasst Frame-,
+Compose- und Present-Ticks, kopierte Scene-Bytes, Cursor-Present-Latenz,
+UI-Blocker und Layout-Worker-Fortschritt. Layout-Writeback laeuft im
+Normalpfad ueber den R4X-Worker und wird im Desktop-Smoke verlangt.
+
+R4DEV/SDK melden mit ProgramApi v139 generische Display-Present-Ticks in
+`DisplaySummary` und `ProgramPerformanceSummary`; `PERFDIAG.R4X` und
+`DISPLAYD.R4X` pruefen die Kante ueber echte R4DRAW-Present-Proben. Die
+Desktop-Policy bleibt bei R4DESK, der Kernel bekommt nur technische Present-
+Metriken. Damit ist der erste Desktop-Responsiveness-Diagnoseblock erledigt.
+Offen bleiben GPU-/Hardware-Compositor-Fragen, Audio-Latenz, Boot-/Loader-
+Kosten und systematische FS-/Service-/TCP-Latenzhistogramme.
+
+Nachtrag 0.53.46: Audio-Latenz und Underrun-Diagnose
+====================================================
+
+Der Audio-Hot-Path ist nach 0.53.46 messbar. AudioBackend v2 meldet
+Write-, Refill-, Buffer-, Silence-Refill-, Underrun- und Fehlerwerte aus
+HDA.R4D und AC97.R4D. R4DEV/SDK melden ProgramApi v140 mit Audio-Stream-,
+Backend- und Refill-Tickfeldern in `ProgramPerformanceSummary`.
+
+AUDSVC.R4X besitzt Request- und Write-Latenzzaehler fuer den Service-Hop.
+`AUDIOD.R4X` verlangt diesen Dienstpfad hart und nutzt keinen direkten
+Audio-Core-Fallback mehr; `PERFDIAG.R4X` prueft den globalen v140-Snapshot
+ueber eine kleine R4AUDIO-Schreibprobe. Audio bekommt dadurch Sichtbarkeit
+unter Last, aber keine allgemeine Realtime-Policy im Kernel.
+
+Offen bleiben echte Lastprofile mit parallelem Storage-, Desktop- und
+Netzwerkdruck sowie spaetere Worker-/IRQ-Optimierungen, falls die neuen
+Metriken konkrete Verletzungen zeigen.
+
+Nachtrag 0.53.47: Boot-/Loader-Performance und Modulscan
+========================================================
+
+Boot-/Loader-Kosten sind nach 0.53.47 strukturiert messbar. R4DEV/SDK melden
+ProgramApi v141 mit Loader-Lifecycle, R4P-Runtime, Service-Manager-
+Bootstatus, CONFIG.R4S-Ladedaten sowie R4L-/R4D-/R4P-Scan-, Read-, Resolve-,
+Load- und Init-Ticks in `ProgramPerformanceSummary`.
+
+`LOADERD.R4X` prueft die Loader-/Modulscan-Werte, `BOOTDIAG.R4X` prueft die
+Bootphasen-Bruecke und `PERFDIAG.R4X` bindet den v141-Snapshot in die
+globale Performance-Abnahme ein. Lazy-Load-Kandidaten sind markiert, aber
+noch nicht automatisch umgezogen; Indizes, Caches oder On-Demand-Loads
+bleiben datengetriebene Folgearbeit fuer 0.53.48.
+
+Nachtrag 0.53.48: Hot-Path-Audit und VM-Range-ID-Index
+======================================================
+
+Der erste datengetriebene Index-Umbau ist nach 0.53.48 erledigt:
+`memory/virt.zig` besitzt einen festen VM-Range-ID-Index fuer die bis zu
+1024 VirtualRanges und einen Free-Slot-Cursor. Damit laufen wiederkehrende
+Range-ID-Lookups nicht mehr ueber einen Vollscan der Range-Tabelle.
+
+R4DEV/SDK melden ProgramApi v142 mit Index-Kapazitaet, Eintraegen,
+Tombstones, Lookups, Hits, Misses, Probe-Werten, Rebuilds, Insert-Fehlern,
+Free-Slot-Probes sowie bounded Blockdevice-/TCP-Scangrenzen. `PERFDIAG.R4X`
+prueft den v142-Snapshot und schreibt eine `HotPath:`-Baseline ins Log.
+
+Blockdevice-Namenssuche (`MAX_DEVICES = 8`) und TCP-Connection-Match
+(`MAX_CONNECTIONS = 8`) bleiben bewusst bounded linear. Ein Index dort waere
+zum jetzigen Stand mehr Invalidation und zweiter Datenbesitz als Nutzen.
+Modul-, Service-, Desktop- und Registry-Indizes bleiben Folgearbeit, falls
+spaetere Messwerte echte Hot Paths zeigen.
+
+Nachtrag 0.53.49: Abschlussanalyse und Folgeplanung
+===================================================
+
+0.53.49 gleicht die komplette 0.53.0-Befundmatrix gegen den finalen Stand
+nach 0.53.48 ab. Der Abschluss liegt in
+`Docs/Core/PerformanceAbschluss05349.txt`; das Gesamt-No-Fallback-Audit liegt
+in `Docs/SDK/NoFallbackAudit05349.txt`.
+
+Der Abgleich bestaetigt: 0.53.X hat die grossen Performance-Grundbausteine
+von VM V2, Wait/Completion, Preemption, Threads, SIMD, Storage-/FS-Queueing,
+Service-/Netzwerk-Completion, Desktop-/Audio-/Loader-Diagnose und
+Hot-Path-Indizes in tragende Zielpfade ueberfuehrt. Offen bleiben keine
+versteckten Fallbacks, sondern bewusst geplante Folgepakete fuer 0.54.X oder
+spaeter: Lastprofile, SMP-/Prioritaetsanalyse, Latenzhistogramme,
+Storage-/Netzwerk-/Desktop-/Audio-Tuning, Lazy-Load und datengetriebene
+weitere Indizes.
+
+Bewertungsskala
+===============
+
+Reifegrade:
+
+- fehlt: Es gibt keinen tragenden Zielpfad.
+- rudimentaer: Es gibt eine Basis, aber sie ist nicht ausreichend fuer den
+  Zielzustand.
+- instabil: Es gibt einen Pfad, der unter Last oder Randfaellen nicht
+  belastbar ist.
+- brauchbar: Der Pfad funktioniert fuer aktuelle Lasten, skaliert aber nur
+  begrenzt.
+- gut: Der Pfad ist belastbar, diagnostizierbar und hat klare Besitzgrenzen.
+
+Risikoarten:
+
+- Responsiveness
+- Latenz
+- Durchsatz
+- Skalierung
+- Stabilitaet
+- Wartbarkeit
+- Datenverlust/Durability
+- Bedienbarkeit
+
+Moderne OS-Baseline ohne R4OS-Leitbildbruch
+===========================================
+
+Gaengige Systeme wie Windows NT, Linux und BSD loesen Performance nicht mit
+einem einzelnen Trick. Relevant fuer R4OS sind vor allem:
+
+- preemptives Scheduling mit klaren kritischen Abschnitten
+- Wait-Objekte, Wait-Queues, Events, Semaphoren, Completion-Objekte
+- Thread- und Task-Diagnose, Laufzeitzaehler, Blockiergrund, Latenzprofile
+- Workqueues, DPC/deferred work und IRQ-kurze Treiberpfade
+- async I/O, Request-Handles, Completion-Queues und Cancellation
+- Page Cache, Writeback-Policy, Dirty-/Clean-Tracking und Reclaim
+- per-Task FPU/SSE/XSAVE-State
+- Backpressure, Timeouts und robuste Close-/Abort-Pfade
+
+R4OS muss daraus kein Mehrbenutzer- oder POSIX-System machen. Die technische
+Essenz passt aber sehr gut: Mechanik in den Kernel, Policy und Komfort in
+R4L/SDK, Services, Anwendungen, Treibern, Protokollen und Diagnosen.
+
+Befund-Matrix
+=============
+
+Befund 01: Scheduler ist kooperativ
+-----------------------------------
+
+Bereich: Scheduler/Tasking
+
+Symptom: Ein langer Kernel-, Treiber-, FAT32-, Service- oder CPU-Pfad kann
+das System sichtbar festhalten, solange er nicht selbst yieldet oder schlaeft.
+
+Beleg:
+- `Code/src/sched/scheduler.zig:37-60` schaltet nur bei explizitem
+  `yield()`.
+- `Code/src/sched/scheduler.zig:66-88` blockiert `sleepTicks()` kooperativ.
+- `Code/src/sched/scheduler.zig:104-115` weckt Tasks im Tick, macht aber
+  keinen Context-Switch aus dem IRQ.
+
+Ist-Zustand: brauchbare kooperative Task-Grundlage, aber keine Zeitscheiben.
+
+Vergleich: Windows NT, Linux und BSD preempten normale Tasks nach Quantum
+oder Prioritaetsregeln und begrenzen nicht-preemptive Abschnitte hart.
+
+R4OS-Gap: Zeitscheiben, Prioritaeten, preempt_disable/preempt_enable,
+kritische Abschnitte, Scheduler-Latenzdiagnose und Reentrancy-Regeln fehlen.
+
+Auswirkung: Responsiveness- und Latenzrisiko fuer Desktop, Terminal,
+Services, Netzwerk und Audio bei langen Pfaden.
+
+Reifegrad: rudimentaer.
+
+Risiko: Responsiveness, Latenz, Stabilitaet.
+
+Besitz: Kernel, weil Context-Switch, Timer, Taskstatus und kritische
+Abschnitte allgemeine Mechanik sind.
+
+Zielzustand: kooperativer Pfad bleibt zunaechst stabil, aber der Kernel kennt
+messbare Laufzeit/letztes Yield, klare nicht-preemptive Abschnitte und spaeter
+Zeitscheiben.
+
+Nicht-Ziele: keine sofortige Preemption ohne Lock-/Wait-Modell; keine
+Userland-Policy im Scheduler.
+
+Empfohlene Umsetzung: erst Scheduler-/Task-Latenzsnapshot, dann Wait/Locks,
+dann Preemption-Readiness, danach Time-Slice-Schaltung.
+
+Folgeversion: 0.53.11 fuer Messpunkte, 0.53.17 fuer Preemption-Readiness.
+
+Befund 02: Wait-Objekte sind Polling-Helfer, keine Wait-Schicht
+--------------------------------------------------------------
+
+Bereich: Wait/Wake/Synchronisation
+
+Symptom: Viele Pfade schlafen oder pollen in 1-Tick-Schritten statt direkt
+auf ein Objekt, eine Completion oder mehrere Bedingungen zu warten.
+
+Beleg:
+- `Code/src/sched/sync.zig:21-28` Event wartet per
+  `sleepTicksWithReason(1, "event")`.
+- `Code/src/sched/sync.zig:55-62` Mutex wartet ebenfalls per 1-Tick-Sleep.
+- `Code/src/program/r4x.zig:3536-3558` Service-Call pollt die Antwort und
+  schlaeft pro Tick.
+
+Ist-Zustand: Event und Mutex sind nuetzlich, aber nur kooperative Polling-
+Bausteine.
+
+Vergleich: moderne Kernel besitzen Wait-Queues, Wake-One/Wake-All,
+Timeouts, Completions, Semaphoren und oft Multi-Object-Wait.
+
+R4OS-Gap: keine WaitQueue, keine Completion, keine Semaphore, keine
+Cancellation, kein waitbares Timer-/I/O-/Service-Handle.
+
+Auswirkung: unnoetige Latenz, Tick-Granularitaet, schlechtere Energie- und
+CPU-Nutzung, schwierige Service- und I/O-Architektur.
+
+Reifegrad: rudimentaer.
+
+Risiko: Latenz, Durchsatz, Wartbarkeit.
+
+Besitz: Kernel fuer WaitQueue/Event/Completion-Kern; Contract/R4L fuer
+R4X-sichtbare Handles und SDK-Komfort.
+
+Zielzustand: Tasks schlafen auf konkreten Wait-Objekten; Produzenten wecken
+gezielt; Timeouts und Cancellation sind sichtbar.
+
+Nicht-Ziele: keine POSIX-Emulation und keine Sicherheits-Capabilities.
+
+Empfohlene Umsetzung: WaitQueue V1, Event V2, Completion V1, Semaphore V1,
+TimerWait V1 und API-Regeln "darf schlafen" vs. "darf nicht schlafen".
+
+Folgeversion: 0.53.12.
+
+Befund 03: Locking und Reentrancy sind nicht reif fuer Preemption
+---------------------------------------------------------------
+
+Bereich: Locks/Reentrancy
+
+Symptom: Viele globale Tabellen und Subsysteme werden aktuell implizit durch
+kooperatives Scheduling geschuetzt. Mit Preemption oder async I/O wuerden
+Reentrancy-Fehler sichtbar.
+
+Beleg:
+- `Code/src/sched/sync.zig:30-70` kennt nur einen einfachen rekursiven Mutex.
+- `Code/src/storage/block.zig:113-125` fuehrt globale Blockdevice-Tabellen.
+- `Code/src/program/r4x.zig:4513-4535` erzeugt ProgramInstances aus globaler
+  Instanztabelle.
+- FAT32-Operationen wie `writeFile` und `appendFile` arbeiten ohne sichtbare
+  Volume-Lock-Schicht (`Code/src/fs/fat/fat32.zig:403-467`).
+
+Ist-Zustand: ausreichend fuer kooperative, kontrollierte Pfade; nicht
+ausreichend fuer echte Preemption und parallele I/O-Arbeit.
+
+Vergleich: moderne Kernel unterscheiden Spinlocks, Mutexes, RW-Locks,
+IRQ-sichere Kurzabschnitte, seqlocks/Revision-Counter und Lock-Hierarchien.
+
+R4OS-Gap: Lock-Typen, Lock-Reihenfolge, Sleep-under-lock-Regeln,
+IRQ-sichere Abschnitte, Deadlock-Diagnose.
+
+Auswirkung: Stabilitaetsrisiko bei jedem Schritt Richtung Preemption,
+Workqueues und async I/O.
+
+Reifegrad: fehlt bis rudimentaer.
+
+Risiko: Stabilitaet, Wartbarkeit, Datenverlust/Durability.
+
+Besitz: Kernel fuer Lock-Primitiven und Regeln; Subsysteme fuer eigene
+Lock-Integration; Docs/Diagnostics fuer Audit.
+
+Zielzustand: klare Lock-Hierarchie und minimale kritische Abschnitte, bevor
+Preemption produktiv wird.
+
+Nicht-Ziele: keine breite Lock-Schicht fuer reine App-Policy.
+
+Empfohlene Umsetzung: Lock-Audit, Volume-/Block-/Service-/ProgramInstance-
+Locks, Schlafverbot in IRQ-/Spin-Kontext, Debug-Zaehler.
+
+Folgeversion: 0.53.13.
+
+Befund 04: R4X hat Prozesse, aber keine Userland-Threads
+-------------------------------------------------------
+
+Bereich: R4X/R4XStart/SDK
+
+Symptom: Ein R4X-Programm kann nicht mehrere eigene Threads nutzen, um UI,
+I/O, Parsing, Crypto oder Hintergrundarbeit zu trennen.
+
+Beleg:
+- `Code/src/program/r4x.zig:2628-2729` erzeugt je Programminstanz einen
+  Kernel-Task fuer foreground, shell, background oder service.
+- `Code/src/program/r4x.zig:4667-4670` bietet R4XStart nur explizites Yield.
+- Historischer Stand vor 0.53.18: `Code/System/SDK/r4os/build.zig` deaktivierte
+  SIMD-Familien und nutzte soft-float. Seit 0.53.18 ist x87/SSE im
+  Standardprofil aktiv.
+- Historischer Stand vor 0.53.19: `Code/System/SDK/r4os/build.zig:668-705` baute
+  R4X-Module `single_threaded=true`.
+- Nachtrag 0.53.19: ProgramApi v116 und R4XStartR4Sys v4 liefern
+  `thread_create`, `thread_exit`, `thread_join`, `thread_current` und
+  `thread_status`; der SDK-Buildpfad fuer R4X/R4D/R4P ist nicht mehr
+  `single_threaded`.
+
+Ist-Zustand nach 0.53.19: R4X besitzt eine Userland-Thread-Basis mit
+create/join/exit/current/status und eigenen Worker-Stacks. Weiterhin offen
+sind Wait-Handles, Completion-Queues, async I/O und produktive Preemption.
+
+Vergleich: gaengige Systeme trennen Prozess und Thread, sichern FPU/SIMD-
+State pro Thread und bieten Wait-Handles fuer Threads.
+
+R4OS-Gap: Thread-ABI, Thread-Stacks, Join/Detach, Thread-Exit, Thread-Wait,
+TLS-Perspektive, FPU/SSE/XSAVE-State pro Task.
+
+Auswirkung: grosse Apps wie Browser, R4CODE oder Services koennen Arbeit
+nicht sauber parallelisieren; CPU-Last blockiert App-interne Responsiveness.
+
+Reifegrad: Basis umgesetzt, Folgearbeit offen.
+
+Risiko: Responsiveness, Durchsatz, Skalierung.
+
+Besitz: Kernel fuer Task/Thread/FPU-Mechanik; Contract/R4XStart/R4L/SDK fuer
+ABI und Bindings; Anwendungen fuer Migration.
+
+Zielzustand: R4X kann mehrere Threads je Instanz besitzen, aber ohne alte
+Single-Thread-Fallback-ABI.
+
+Nicht-Ziele: keine POSIX-pthreads; keine Sicherheitsisolation.
+
+Empfohlene Umsetzung: erst FPU/SSE-State und Preemption-Regeln, dann Thread-
+ABI komplett durchziehen und alle mitgelieferten Programme neu bauen.
+
+Folgeversion: 0.53.18 und 0.53.19.
+
+Befund 05: Blockdevice-Schicht hat Queue-Metadaten, aber keine Queue
+--------------------------------------------------------------------
+
+Bereich: Storage/Blocklayer
+
+Symptom: Blockdevices melden `queue_depth`, `active_request`, Busy- und
+Completion-Zaehler, aber der produktive Pfad fuehrt nur einen aktiven Request
+aus und lehnt parallele Requests als busy ab.
+
+Beleg:
+- `Code/src/storage/block.zig:90-110` speichert Queue-Depth und Request-
+  Status.
+- `Code/src/storage/block.zig:211-285` fuehrt read/write/flush synchron aus.
+- `Code/src/storage/block.zig:299-323` setzt Device-State auf busy und
+  erlaubt nur einen aktiven Request.
+
+Ist-Zustand: gute Diagnosebasis, aber kein Request-Queue-Modell.
+
+Vergleich: moderne Blocklayer besitzen Request-Queues, Merging, Completion,
+Timeout, Retry/Recovery und oft mehrere outstanding Requests.
+
+R4OS-Gap: Request-Objekt, Queue, Completion, Timeout-Wait, Cancellation,
+Backpressure, Scheduler-Integration.
+
+Auswirkung: I/O-Durchsatz und Responsiveness bleiben begrenzt; async FS/API
+kann darauf noch nicht stabil aufbauen.
+
+Reifegrad: rudimentaer.
+
+Risiko: Durchsatz, Latenz, Skalierung.
+
+Besitz: Kernel/Storage-Core fuer Queue-Mechanik; R4D-Treiber fuer
+Backend-Completion; R4DEV/Diagnostics fuer Sichtbarkeit.
+
+Zielzustand: ein einziger produktiver Block-Request-Pfad mit Queue,
+Completion und sichtbaren Countern.
+
+Nicht-Ziele: kein paralleler alter Sync-Blocklayer als Fallback.
+
+Empfohlene Umsetzung: bestehende read/write/flush koennen intern auf einen
+Queue-Request warten, aber der alte Direktpfad darf nicht dauerhaft bleiben.
+
+Folgeversion: 0.53.14.
+
+Befund 06: FAT32 und R4SYS-Dateioperationen sind synchron
+--------------------------------------------------------
+
+Bereich: Filesystem/R4SYS/R4STD
+
+Symptom: Dateioperationen blockieren den aufrufenden Task bis FAT32- und
+Blockdevice-Arbeit abgeschlossen ist.
+
+Beleg:
+- `Code/src/program/r4sys.zig:384-423` fileRead/fileWrite/fileReadAt rufen
+  FAT32 direkt synchron auf.
+- `Code/src/program/r4sys.zig:439-488` Streaming-I/O reduziert Heap-Spitzen,
+  bleibt aber synchrones Begin/Append/Finish.
+- `Code/src/fs/fat/fat32.zig:336-400` liest Cluster und Sektoren synchron.
+- `Code/src/fs/fat/fat32.zig:403-467` schreibt/appended und flusht danach.
+- `Code/src/fs/fat/fat32.zig:1466-1467` flushVolume ruft block.flush.
+
+Ist-Zustand: funktional und speicherschonender seit 0.53.9, aber nicht
+waitbar/asynchron.
+
+Vergleich: moderne Systeme besitzen Page Cache, VFS/FS-Locks,
+asynchrone Datei-Requests, Writeback-Policy und Durability-Regeln.
+
+R4OS-Gap: Volume-Locks, FS-Request-Kontext, async R4SYS-Datei-API,
+Completion-Handle, Writeback/Flush-Policy, Page-Cache-Perspektive.
+
+Auswirkung: Desktop, Terminal und Services koennen bei Dateioperationen
+sichtbar blockieren.
+
+Reifegrad: brauchbar fuer kleine synchrone Lasten, rudimentaer fuer
+Performance.
+
+Risiko: Responsiveness, Durchsatz, Datenverlust/Durability.
+
+Besitz: Kernel/FS fuer Volume-Locks und Request-Grundlagen; R4SYS/R4STD/SDK
+fuer API/Komfort; Diagnostics fuer Tests.
+
+Zielzustand: Dateioperationen koennen als Requests laufen und liefern
+Completion/Status; Sync-Wrapper warten nur noch auf den neuen Zielpfad.
+
+Nicht-Ziele: kein zweites Dateisystem neben FAT32; keine versteckte Host-FS-
+Kante.
+
+Empfohlene Umsetzung: erst Locks und Block-Queue, dann FS-Request-Modell,
+dann R4SYS async file handles.
+
+Folgeversion: 0.53.15 und 0.53.16.
+
+Befund 07: Treiber warten oft per Polling oder Busy-Wait
+-------------------------------------------------------
+
+Bereich: Treiber/IRQ/DPC
+
+Symptom: Storage-, USB-, Audio- und Driver-API-Pfade warten haeufig aktiv
+auf Hardware oder Tick-Fortschritt.
+
+Beleg:
+- `Code/src/kernel/driver_api.zig:419-425` `waitTicks` busy-waitet mit
+  `pause`.
+- AHCI setzt `queue_depth=1` und pollt Command-Slot
+  (`Code/src/driver/storage/ahci.zig:340-341`, `:506-550`).
+- NVMe reicht eine I/O-Queue-Depth durch, pollt Completion aber synchron
+  (`Code/src/driver/storage/nvme.zig:503-504`, `:606-633`, `:665-694`).
+- ATA PIO pollt Status in grossen Guard-Schleifen
+  (`Code/src/driver/storage/ata_pio.zig:196-215`).
+- xHCI wartet per Polling auf Transfer-/Command-Events
+  (`Code/src/driver/usb/xhci.zig:2539-2551`, `:2856-2868`).
+
+Ist-Zustand: fuer Boot und einfache Geraete tragfaehig, fuer Responsiveness
+und Parallelitaet zu blockierend. Status nach 0.53.41: DriverApi v15 besitzt
+einen generischen R4D-Workqueue-/Completion-Vertrag, IRQ-Waits werden
+sichtbar abgelehnt und `EXAMPLE.R4D`/`DRVDIAG.R4X` nehmen IRQ-Deferred-Work
+ab. Status nach 0.53.42: der gemeinsame Storage-Block-Core nutzt den
+`block-work`-Runtime-Worker statt produktiver Runtime-Inline-Pumps, und
+PERFDIAG/STORDIAG/MEMSUITE pruefen Worker-Requests, Completions und
+Completion-Signale. USB/xHCI-/MSC-, Audio- und weitere hardware-nahe
+Pollingpfade bleiben Folgearbeit.
+
+Vergleich: moderne Systeme halten IRQ-Pfade kurz, verschieben Arbeit in DPC/
+bottom halves/workqueues und signalisieren Completions.
+
+R4OS-Gap: deferred work, Driver-Completion-API, waitbare Treiber-Requests,
+IRQ-/DPC-Regeln, schedulerfreundliche Waits.
+
+Auswirkung: Hardware-Wartezeiten blockieren Tasks und koennen UI/Services
+sichtbar beeintraechtigen.
+
+Reifegrad: rudimentaer.
+
+Risiko: Responsiveness, Latenz, Stabilitaet.
+
+Besitz: Kernel fuer DPC/Workqueue/Completion-Mechanik; R4D-Treiber fuer
+Backend-Umstellung; Diagnostics fuer Timeouts/Latency.
+
+Zielzustand: Treiber starten Operationen, IRQ/DPC meldet Completion,
+aufrufende Tasks warten auf Wait-Objekte.
+
+Nicht-Ziele: keine dauerhafte Polling-Fallbackschicht im produktiven Pfad.
+
+Empfohlene Umsetzung: Driver-Wait-Regeln und Workqueue V1 sind 0.53.41;
+Storage-Driver-Completion im gemeinsamen Block-Core ist 0.53.42. Als
+naechstes bleiben USB-/Audio-/hardware-nahe Completion-Umbauten und
+Subsystem-Lifecycle-Waits.
+
+Folgeversion: 0.53.41 und 0.53.42.
+
+Befund 08: Service-Endpoints erlauben nur eine einfache Nachricht
+-----------------------------------------------------------------
+
+Bereich: Services/IPC
+
+Symptom: Service-Endpoints koennen nur eine pending Request und eine pending
+Response halten. Clients pollen auf Antwort.
+
+Beleg:
+- `Code/src/kernel/services.zig:129-148` Endpoint besitzt je ein
+  Request-/Response-Payloadfeld.
+- `Code/src/kernel/services.zig:367-387` `submitRequest` gibt busy zurueck,
+  wenn Request oder Response pending ist.
+- `Code/src/kernel/services.zig:390-437` recv/reply/takeResponse arbeiten auf
+  dieser einen Nachricht.
+- `Code/src/program/r4x.zig:3536-3558` Service-Call wartet per Sleep-Poll.
+
+Ist-Zustand: einfach und robust fuer Einzelrequests, aber nicht skalierbar.
+
+Vergleich: moderne Systeme haben Message Queues, Completion Ports/Queues,
+mehrere outstanding Requests, Cancel/Timeout und Worker-Pools.
+
+R4OS-Gap: Queue, Request-Handle, Completion, Cancellation, Service-Worker-
+Vertrag, Backpressure-Diagnose.
+
+Auswirkung: ein langsamer Request kann weitere Clients blockieren; Latenzen
+werden durch Polling und Busy-Rueckgaben grob.
+
+Reifegrad: rudimentaer.
+
+Risiko: Responsiveness, Skalierung, Wartbarkeit.
+
+Besitz: Kernel fuer Endpoint-Queue und Wait/Completion; Service-Manager und
+Services fuer Worker-/Policy-Vertrag; R4L/SDK fuer API.
+
+Zielzustand: mehrere Requests koennen sauber queued werden; Services koennen
+langsame Arbeit in Worker-Strukturen auslagern; Clients warten auf
+Completion.
+
+Nicht-Ziele: keine Capability- oder Permission-Pruefungen.
+
+Empfohlene Umsetzung: EndpointQueue V1 und ServiceCompletion V1, dann
+Migration zentraler Services ohne Altpfad-Fallback.
+
+Folgeversion: 0.53.16.
+
+Befund 09: Services sind oft single-session Eventloops
+-----------------------------------------------------
+
+Bereich: Service-Responsiveness
+
+Symptom: Dienste verarbeiten Polling, Client-Session und API-Requests oft im
+gleichen Task. Langsame Clients koennen den Dienst sichtbar beschaeftigen.
+
+Beleg:
+- `Code/Software/SshService/src/main.zig:478-520` registriert Endpoint,
+  pollt Requests, pollt Client und schlaeft pro Tick.
+- `Code/Software/SshService/src/main.zig:1138-1169` SSH-Channel-Loop
+  verarbeitet Packet-Polling und schlaeft bei keinem Packet.
+- `Code/Software/SshService/src/main.zig:2708-2845` liest SSH-Ident und
+  Pakete ueber TCP-Wait-Schleifen.
+
+Ist-Zustand: fuer einzelne Sessions brauchbar, fuer mehrere langsame oder
+halb offene Sessions nicht ausreichend.
+
+Vergleich: moderne Server trennen Accept, Session-State, Worker, Timeouts und
+Completion; langsame Clients bekommen Backpressure, blockieren aber nicht den
+gesamten Dienst.
+
+R4OS-Gap: Service-Worker, waitbare Socket-/Service-Events, robuste
+Dead-Connection-Diagnose, mehrere outstanding Sessions.
+
+Auswirkung: SSH/RDP/TCP-Services bleiben unter Last empfindlich; Host-Tools
+erleben offene Ports ohne Fortschritt.
+
+Reifegrad: instabil bis rudimentaer.
+
+Risiko: Responsiveness, Bedienbarkeit, Skalierung.
+
+Besitz: Service-Code und SDK fuer Worker-Strukturen; Kernel nur fuer
+Wait/Endpoint-Mechanik; R4NET/R4P fuer Socket-/Protocol-Events.
+
+Zielzustand: Dienst-Hauptloop bleibt leicht; Sessionarbeit laeuft als
+worker-/statebasierte Arbeit mit Timeouts und Diagnose.
+
+Nicht-Ziele: keine Service-Policy im Kernel.
+
+Empfohlene Umsetzung: nach EndpointQueue zentrale Services migrieren:
+SSHD, RDPSVC, TCPSVC, SERVMAN-Diagnose.
+
+Folgeversion: 0.53.16 und 0.53.20.
+
+Befund 10: TCP besitzt Backpressure, aber keine waitbaren Socket-Events
+-----------------------------------------------------------------------
+
+Bereich: Netzwerk/R4NET
+
+Symptom: TCP hat feste Kapazitaeten, Drops und Backpressure-Zustand, aber
+Clients/Services warten weiterhin ueber Poll-/Wait-Schleifen.
+
+Beleg:
+- `Code/src/net/tcp.zig:1-7` setzt feste Grenzen fuer Verbindungen,
+  Listener und RX-/Out-of-order-Puffer.
+- `Code/src/net/tcp.zig:810-889` zaehlt Drops, RX-full und OOO-Wait.
+- `Code/src/net/tcp.zig:962-980` durchsucht globale Verbindungstabellen.
+
+Ist-Zustand: brauchbare kleine TCP-Basis mit Diagnose, aber keine
+Event-/Completion-Integration.
+
+Vergleich: moderne Netzwerkstacks bieten waitbare Socket-Zustaende,
+select/poll/epoll/IOCP-artige Mechanik oder Completion Queues.
+
+R4OS-Gap: waitbare Socket-Events, Accept-/Read-/Write-Completion,
+Cancellation, bessere Session-Lifecycle-Diagnose.
+
+Auswirkung: Services muessen selber pollen und riskieren Tick-Latenzen oder
+Blockierungen.
+
+Reifegrad: rudimentaer.
+
+Risiko: Responsiveness, Skalierung, Wartbarkeit.
+
+Besitz: R4NET/Net-Core fuer Socket-Events; Kernel fuer Wait-Objekte; Services
+fuer Migration.
+
+Zielzustand: TCP kann Service-/App-Tasks wecken, wenn Accept/Read/Write/Close
+relevant wird.
+
+Nicht-Ziele: kein POSIX-socket-Clone als API-Ziel.
+
+Empfohlene Umsetzung: R4NET Event-Handles auf Basis WaitQueue/Completion,
+dann Service-Migration.
+
+Folgeversion: 0.53.20.
+
+Befund 11: Desktop-Eventloop enthaelt Hintergrund-I/O
+----------------------------------------------------
+
+Bereich: Desktop/GUI/Responsiveness
+
+Symptom: Periodische Desktop-Arbeit prueft Dateien und fuehrt Config-
+Writeback direkt im Desktop-Task aus.
+
+Beleg:
+- `Code/Software/Desktop/src/app.zig:1762-1777` Timer-Poll ruft u.a.
+  `syncTimeConfig` und `flushDesktopLayoutIfDue`.
+- `Code/Software/Desktop/src/app.zig:4404-4450` Desktop-Layout-Writeback
+  speichert ueber R4STD Config.
+- `Code/Software/Desktop/src/app.zig:4453-4457` Link-Dateien werden synchron
+  gelesen.
+- `Code/Software/Desktop/src/app.zig:4564-4597` Time-/Desktop-Config wird im
+  App-Pfad gelesen oder geschrieben.
+
+Ist-Zustand: besser als direkter Save beim Drop, aber sichtbarer Loop und
+Persistenz sind noch nicht getrennt.
+
+Vergleich: moderne Desktops trennen UI-Thread, Compositor/Present und
+Hintergrund-I/O. UI-Threads warten nur kontrolliert auf kurze Operationen.
+
+R4OS-Gap: Desktop-Worker/Writeback-Service, Present-/Cursor-Latenz-Messung,
+Dirty-Rect-/Frame-Zeit-Diagnose, nicht-blockierende Config-API.
+
+Auswirkung: Cursor, Fenster und Terminal koennen bei Datei-/Config-I/O
+sichtbar haengen.
+
+Reifegrad: rudimentaer bis brauchbar.
+
+Risiko: Responsiveness, Bedienbarkeit.
+
+Besitz: Desktop-App und R4STD/R4SYS fuer Worker/Config-API; Kernel nur fuer
+Wait/Task-Grundlagen.
+
+Zielzustand: sichtbarer Desktop-Loop bleibt kurz; Persistenz laeuft als
+Request/Worker mit Completion und Diagnose.
+
+Nicht-Ziele: keine Kernel-Speziallogik fuer Desktop-Config.
+
+Empfohlene Umsetzung: Desktop-Latenzdiagnose, dann Desktop-Config-Worker auf
+neuem Request-/Completion-Pfad.
+
+Folgeversion: 0.53.11 und 0.53.20.
+
+Befund 12: GUI-Blit und Present-Pfade haben CPU-Kosten ohne Profil
+------------------------------------------------------------------
+
+Bereich: GUI/Display
+
+Symptom: GUI-Pixel werden in Kernel-/Programmpfaden kopiert; ohne Messung ist
+unklar, welche App/Region/Operation Framezeit kostet.
+
+Beleg:
+- `Code/src/program/r4x.zig:3903-3920` kopiert GUI-Blit-Pixel einzeln in den
+  Instanz-Rasterpuffer.
+- Die Desktop-Analyse aus 0.50.43 dokumentiert Cursor-/Present-Freeze durch
+  synchronen Save-Pfad in `Docs/Core/ParallelitaetUndResponsivenessAnalyse.txt`.
+
+Ist-Zustand: funktional, aber ohne Framezeit-/Dirty-/Copy-Kostenprofil.
+
+Vergleich: moderne Systeme messen Present-Latenz, Dirty Regions, GPU/CPU-
+Copy-Kosten und UI-Thread-Blocker.
+
+R4OS-Gap: Framezeit, Copy-Bytes, Dirty-Region-Kosten, Cursor-Present-Latenz,
+per-App GUI-Counter.
+
+Auswirkung: Optimierung bleibt spekulativ; groessere GUI-Apps koennen den
+Desktop spuerbar belasten.
+
+Reifegrad: rudimentaer.
+
+Risiko: Responsiveness, Durchsatz, Bedienbarkeit.
+
+Besitz: Desktop/R4DESK/R4DRAW/R4DEV fuer Messung; Kernel nur dort, wo
+ProgramInstances/GUI-Puffer sichtbar sind.
+
+Zielzustand: sichtbare GUI-Kosten werden gemessen, bevor Kopierpfade
+umgebaut werden.
+
+Nicht-Ziele: keine GPU-Treiber-Architektur in 0.53.X.
+
+Empfohlene Umsetzung: Desktop-/GUI-Latenzsnapshot und gezielte Dirty-/Blit-
+Counters.
+
+Folgeversion: 0.53.11.
+
+Befund 13: Memory ist modernisiert, aber ohne Reclaim/Page Cache/Pagefile
+------------------------------------------------------------------------
+
+Bereich: Memory/VM
+
+Symptom: R4X kann grosse virtuelle Bereiche reservieren und demand-committen,
+aber physische Knappheit wird nicht durch Reclaim, Page Cache oder Pagefile
+entschaerft.
+
+Beleg:
+- `Code/src/memory/virt.zig:95-118` fuehrt Reserve/Commit/Resident/Fault-
+  Statistiken.
+- `Code/src/memory/virt.zig:224-266` R4X-VM commit ist logisch; andere
+  Fenster committen physisch.
+- `Code/src/memory/virt.zig:290-310` Demand-Fault prueft Owner, Commit-Span
+  und Resident-Limit.
+- `Code/src/program/r4dev.zig:96-106` und `:405-417` melden explizit kein
+  Pagefile, kein Swap, kein Reclaim und no-overcommit.
+
+Ist-Zustand: gut fuer VM-Regionen, ehrlich begrenzt fuer OOM, aber ohne
+globalen Speicherausgleich.
+
+Vergleich: moderne Systeme nutzen Page Cache, Reclaim, Dirty Tracking,
+Pagefile/Swap und per-Prozess-OOM-/Kill-Policy.
+
+R4OS-Gap: Page Cache, clean/dirty Tracking, reclaimable Bytes, Pagefile,
+Pinning fuer DMA/I/O, per-Prozess-Fault-Abbruch.
+
+Auswirkung: mehrere GB virtuell sind moeglich; mehrere GB resident brauchen
+physisch genug RAM. Unter Druck bleibt OOM hart.
+
+Reifegrad: gut fuer 0.53.10-Ziel, rudimentaer fuer langfristige Workstation-
+Lasten.
+
+Risiko: Skalierung, Stabilitaet.
+
+Besitz: Kernel fuer VM/Reclaim/Pinning; Storage/FS fuer Pagefile/Writeback;
+R4DEV/Diagnostics fuer Sichtbarkeit.
+
+Zielzustand: kein unehrlicher Overcommit; spaeter echter Reclaim/Pagefile-
+Pfad mit Diagnose.
+
+Nicht-Ziele: kein Pagefile vor async Storage/Completion und Writeback.
+
+Empfohlene Umsetzung: erst I/O- und Completion-Basis, dann Page Cache und
+Pagefile als eigene spaetere 0.53.X- oder 0.54.X-Arbeit.
+
+Folgeversion: nach 0.53.16, nicht sofort.
+
+Befund 14: Config-Atomic-Save ist robust, aber I/O-intensiv
+----------------------------------------------------------
+
+Bereich: R4STD/R4CFG/Config
+
+Symptom: Atomic Save schuetzt Daten, kostet aber mehrere synchrone
+Dateioperationen inklusive Verify-Read und Renames.
+
+Beleg:
+- `Code/System/SDK/r4os/config.zig:176-180` speichert ueber `atomicSave`.
+- `Code/System/SDK/r4os/config.zig:238-280` fuehrt Delete/Write/Read-Verify/Rename/
+  Delete aus.
+- `Code/System/SDK/r4os/settings.zig:253-331` Writeback verzoegert Saves, ruft den
+  Saver aber synchron auf, sobald er faellig ist.
+
+Ist-Zustand: gute Durability-Entscheidung, aber kein Hintergrund-I/O.
+
+Vergleich: moderne Systeme verwenden Journaling/Atomic-Rename/Writeback und
+trennen UI-Pfad von durablem Flush.
+
+R4OS-Gap: async config save, Writeback-Service/Worker, Durability-Policy und
+Completion-Diagnose.
+
+Auswirkung: UI-/Service-Pfade bezahlen fuer robuste Config-Saves.
+
+Reifegrad: brauchbar fuer Datenintegritaet, rudimentaer fuer Responsiveness.
+
+Risiko: Responsiveness, Datenverlust/Durability.
+
+Besitz: R4STD/SDK und Apps; Kernel/FS nur fuer Request-/Flush-Grundlage.
+
+Zielzustand: gleiche Atomic-Semantik, aber als Request/Worker mit sichtbarem
+Status.
+
+Nicht-Ziele: kein Zurueck zu direktem ungesichertem Write.
+
+Empfohlene Umsetzung: nach FS-/Completion-Basis Config-Writeback aus UI-
+Tasks herausziehen.
+
+Folgeversion: 0.53.20.
+
+Befund 15: Boot-/Loader-Pfade scannen synchron und ohne Zeitprofil
+------------------------------------------------------------------
+
+Bereich: Boot/Loader/Module
+
+Symptom: R4L/R4D/R4P-Discovery laeuft synchron ueber FAT32-Verzeichnisse und
+Modulladevorgaenge. Bootzeitkosten werden nicht fein genug gemessen.
+
+Beleg:
+- `Code/src/kernel/loader_boot.zig:23-26` laedt Systemlibraries, entdeckt
+  R4D und liest Boot-Config.
+- `Code/src/kernel/modules.zig:204-241` scannt `/R4OS/LIBS` und laedt
+  pending Libraries.
+- `Code/src/program/r4d.zig:84-105` scannt `/R4OS/DRIVERS`.
+- `Code/src/program/r4p.zig:67-87` scannt `/R4OS/PROTOCOLS` und initialisiert
+  Abhaengigkeiten.
+
+Ist-Zustand: klare externe Modulstruktur, aber keine messbare Kostenmatrix.
+
+Vergleich: moderne Systeme messen Bootphasen, lazy-loaden nichtkritische
+Komponenten und cachen Metadaten, ohne Bootkritisches unsichtbar zu
+verschieben.
+
+R4OS-Gap: Bootphase-Timer, Modulscan-Zaehler, Ladezeit je Modul, klare
+spaetere Lazy-Load-Kandidaten.
+
+Auswirkung: Bootzeit-Optimierung waere aktuell schwer belegbar.
+
+Reifegrad: brauchbar fuer Funktion, rudimentaer fuer Performanceanalyse.
+
+Risiko: Latenz, Wartbarkeit.
+
+Besitz: Kernel-Bootdiagnose fuer Messpunkte; Module/Drivers/Protocols fuer
+eigene Statusdaten; keine Policy in den Kernel.
+
+Zielzustand: Bootlog und R4DEV koennen Bootphasen und Modulscan-Kosten
+sichtbar machen.
+
+Nicht-Ziele: kein heimlicher Fallback auf Built-ins, wenn R4D/R4P nicht
+geladen werden.
+
+Empfohlene Umsetzung: Bootphase-Latenzsnapshot in Observability aufnehmen;
+Lazy-Load erst nach belastbarer Messung planen.
+
+Folgeversion: 0.53.11.
+
+Befund 16: Observability sieht Speicher gut, Latenz aber kaum
+------------------------------------------------------------
+
+Bereich: Diagnose/Profiling/R4DEV
+
+Symptom: Memory-Diagnose ist nach 0.53.10 stark, aber Scheduler-, Wait-,
+API-, Storage-, Service-, Desktop- und Treiberlatenzen sind nicht als
+standardisierte Snapshots sichtbar.
+
+Beleg:
+- `Code/src/sched/scheduler.zig:116-147` dumpStatus schreibt Zaehler nur ins
+  Kernel-Log.
+- `Code/src/sched/task.zig:19-30` Task speichert Wait-Grund, aber keine
+  Laufzeit, letztes Yield, CPU-Zeit oder Blocked-on-Objekt.
+- `Code/src/program/r4dev.zig:405-423` liefert detaillierten Memory-
+  Pressure-Snapshot.
+- `Docs/API/R4DEV.md:141-238` dokumentiert Memory Pressure, aber keinen
+  Scheduler-/Task-Latenzvertrag.
+
+Ist-Zustand: stark fuer Memory, lueckenhaft fuer Performance.
+
+Vergleich: moderne Systeme haben perf/ETW/dtrace/kstat-artige Zaehler,
+Tracepoints, Latenzhistogramme und per-Subsystem-Statistiken.
+
+R4OS-Gap: Task-Laufzeit, last-yield-age, blocked-on-object, wait-latency,
+API-Latenz, Blockqueue-Tiefe, FS-Operationen, Service-Queue, TCP-Events,
+Desktop-Present-Latenz.
+
+Auswirkung: Optimierungen koennen kaum sauber vorher/nachher belegt werden.
+
+Reifegrad: rudimentaer.
+
+Risiko: Wartbarkeit, Latenz, Responsiveness.
+
+Besitz: R4DEV/Diagnostics fuer Sichtbarkeit; Kernel/Subsystme liefern
+Counter; Anwendungen liefern Szenarien.
+
+Zielzustand: Jede Performance-Unterversion kann einen reproduzierbaren
+Vorher-/Nachher-Befund liefern.
+
+Nicht-Ziele: kein schwerer Always-on-Tracer in Hot Paths.
+
+Empfohlene Umsetzung: Low-cost Counter und Snapshots zuerst, Tracepoints nur
+gezielt.
+
+Folgeversion: 0.53.11.
+
+Befund 17: Optimierbarer Code durch Vollscans und Kopien
+-------------------------------------------------------
+
+Bereich: Code-Audit/Hot Paths
+
+Symptom: Mehrere Pfade nutzen lineare Tabellen, grosse Kopien oder wiederholte
+Scans. Das ist fuer kleine Grenzen ok, wird unter Wachstum aber teuer.
+
+Beleg:
+- `Code/src/storage/block.zig:149-154` sucht Blockdevices linear nach Name.
+- `Code/src/net/tcp.zig:962-980` sucht Verbindungen linear.
+- `Code/src/memory/virt.zig:903-908` sucht freie VirtualRange-Slots linear.
+- `Code/src/program/r4x.zig:3903-3920` kopiert GUI-Rasterpixel pro Pixel.
+- `Code/src/fs/fat/fat32.zig:336-400` laeuft Clusterketten fuer Reads.
+
+Ist-Zustand: bei aktuellen Limits akzeptabel, aber nicht als langfristige
+Workstation-/Browser-Basis ausreichend.
+
+Vergleich: moderne Systeme nutzen Hashes, Indizes, Caches, Radix-/Tree-
+Strukturen oder Queue-/List-Strukturen fuer wachsende Tabellen.
+
+R4OS-Gap: klare Grenzwerte, Hot-Path-Zaehler, Indizes fuer wachsende Objekte,
+Cache-Strategie fuer FAT/Path/Directory.
+
+Auswirkung: Skalierung verschlechtert sich schleichend, besonders bei mehr
+Tasks, Programmen, Verbindungen, VM-Regionen oder Dateien.
+
+Reifegrad: brauchbar fuer heutige Groessen, rudimentaer fuer Wachstum.
+
+Risiko: Skalierung, Durchsatz.
+
+Besitz: jeweiliges Subsystem; Kernel nur fuer generische Strukturen, wenn sie
+wirklich breit gebraucht werden.
+
+Zielzustand: erst messen, dann gezielt die Tabellen und Kopierpfade
+optimieren, die tatsaechlich in Hot Paths liegen.
+
+Nicht-Ziele: keine pauschale Datenstruktur-Refaktorierung ohne Messpunkt.
+
+Empfohlene Umsetzung: Observability liefert Hot-Path-Daten; danach gezielte
+Mikro-/Datenstruktur-Unterversionen.
+
+Folgeversion: 0.53.11 fuer Messung, spaetere Folgeversion nach Befund.
+
+Befund 18: Audio-/Realtime-Pfade brauchen Latenz- und Underrun-Sicht
+--------------------------------------------------------------------
+
+Bereich: Audio/Timer/Realtime-nahe Arbeit
+
+Symptom: Audio- und Refill-Pfade sind empfindlich gegen Scheduling- und
+Treiberlatenzen. Ohne Underrun-/Refill-Latenzdiagnose ist schwer sichtbar,
+ob Storage, Desktop oder Services Audio stoeren.
+
+Beleg:
+- `Code/Driver/HDA/src/main.zig` enthaelt Poll-/Timeout-Schleifen fuer DMA-
+  Refill/Drain (u.a. `rg`-Funde um `:843` und `:875`).
+- Scheduler kennt keine Prioritaeten oder Runtime-Klassen
+  (`Code/src/sched/task.zig:19-30`).
+
+Ist-Zustand: Audio funktioniert, aber Performance-Risiko ist nicht gut
+messbar.
+
+Vergleich: moderne Systeme nutzen niedrige Latenzpfade, Prioritaeten,
+Interrupt-/DPC-Messung und Underrun-Counter.
+
+R4OS-Gap: Audio-Underrun-Zaehler, Refill-Latenz, IRQ/DPC-Latenz,
+Scheduling-Klasse oder wenigstens Diagnose fuer realtime-nahe Tasks.
+
+Auswirkung: spaetere Last kann Audio knacken lassen, ohne klare Ursache.
+
+Reifegrad: rudimentaer fuer Performance.
+
+Risiko: Latenz, Bedienbarkeit.
+
+Besitz: Audio-R4D/Audio-Core fuer Zaehler; Scheduler/R4DEV fuer Task- und
+IRQ-Latenzsicht.
+
+Zielzustand: Audio kann melden, ob es durch eigene Treiberpfade,
+Scheduling-Latenz oder andere Last ausgebremst wird.
+
+Nicht-Ziele: keine harte Echtzeitgarantie.
+
+Empfohlene Umsetzung: Audio in Observability aufnehmen, spaeter Worker/DPC-
+Regeln nutzen.
+
+Folgeversion: 0.53.11 und 0.53.16.
+
+Reproduzierbare Messfelder
+==========================
+
+0.53.11 soll aus dieser Analyse eine Messbasis machen. Mindestens diese
+Szenarien muessen reproduzierbar werden:
+
+- Bootzeit: Phasen von CPU/Memory/Storage/Loader/R4L/R4D/R4P/Services.
+- Programmlauf: Startzeit, Loaderzeit, R4L-Resolve, erster Output.
+- Scheduler: Task-Laufzeit, letztes Yield, Blocked-Dauer, Wait-Grund.
+- Desktop: Cursor-/Present-Latenz, Timer-Event-Dauer, Config-Flush-Dauer.
+- Terminal: Eingabelatenz unter Datei- und CPU-Last.
+- Services: Request-Latenz, Queue/Busy, Timeout, Worker-/Sessiondauer.
+- TCP: Accept/Read/Write/Close-Latenz, Drops, Backpressure, Dead sessions.
+- Storage: read/write/flush-Latenz, Queue-Tiefe, Busy/Timeout/Recovery.
+- FAT32: Directory-Scan, Read/Write/Append/Flush, Atomic-Save-Kosten.
+- Treiber: AHCI/NVMe/ATA/xHCI/HDA Completion- und Timeoutzeiten.
+- Memory: Commit/Resident/Fault/Pressure aus 0.53.10 bleibt Baseline.
+- CPU-Last: langer nicht-yieldender Pfad und Yield-freundlicher Pfad im
+  Vergleich.
+
+Priorisierte Folge-Unterversionen
+=================================
+
+0.53.11: Performance Observability und Latenz-Baseline
+------------------------------------------------------
+
+Ziel: R4DEV-/Diagnostics-Snapshots fuer Scheduler, Tasks, Waits, Storage,
+Services, TCP, Desktop, Bootphasen und Audio. Keine Optimierung ohne
+Messpunkt.
+
+Besitz: Kernel liefert Low-cost Counter; R4DEV und Diagnostics machen sie
+sichtbar; Apps/Services liefern Szenarien.
+
+Abnahme: reproduzierbare Vorherwerte fuer die in dieser Analyse genannten
+Messfelder.
+
+0.53.12: WaitQueue, Completion und Event V2
+-------------------------------------------
+
+Ziel: echte WaitQueue-Grundlage mit Wake-One/Wake-All, Timeout,
+Completion-Objekt, Semaphore und TimerWait. Bestehende Poll-Schleifen werden
+schrittweise auf den neuen produktiven Pfad migriert.
+
+Besitz: Kernel-Mechanik, Contract/R4L/SDK fuer sichtbare Handles.
+
+Abnahme: Event/Mutex/Completion-Diagnose zeigt, dass Tasks auf Objekten
+schlafen statt tickweise zu pollen.
+
+0.53.13: Locking-, Reentrancy- und Sleep-Regelwerk
+--------------------------------------------------
+
+Ziel: Lock-Typen, Lock-Reihenfolge, Volume-/Block-/Service-/ProgramInstance-
+Locks und klare Regeln fuer "darf schlafen" vs. IRQ-/kritischer Kontext.
+
+Besitz: Kernel fuer Primitiven; Subsysteme fuer Integration.
+
+Abnahme: Lock-Audit-Doku, Debug-Counter und Tests fuer typische Deadlock- und
+Sleep-under-lock-Fehler.
+
+0.53.14: Blockdevice Request Queue und Storage-Completion
+---------------------------------------------------------
+
+Ziel: ein produktiver Block-Request-Pfad mit Queue, Timeout, Completion,
+Backpressure und R4DEV/StorageDiag-Sicht. Sync-read/write/flush warten nur
+noch als Wrapper auf diesen Pfad.
+
+Besitz: Storage-Core und R4D-Treiber.
+
+Abnahme: AHCI/NVMe/USB-MSC/ATA nutzen keinen dauerhaft separaten alten
+Polling-Produktivpfad.
+
+0.53.15: FAT32 Volume Locks und FS-Request-Schicht
+--------------------------------------------------
+
+Ziel: FAT32 bekommt Volume-/Directory-/File-Operation-Regeln,
+schedulerfreundliche Waits und Request-Kontext als Vorstufe fuer async R4SYS.
+
+Besitz: FS/R4SYS/R4STD.
+
+Abnahme: FileRead/FileWrite/FileStream laufen ueber den neuen FS-Request-
+Zielpfad; keine zweite Dateisystemwahrheit.
+
+0.53.16: Service-Endpoint-Queues und Worker-Vertrag
+---------------------------------------------------
+
+Ziel: mehrere outstanding Service-Requests, Completion/Cancel/Timeout,
+Service-Worker-Konvention und Migration der blockierenden Kernservices.
+
+Besitz: Kernel-Service-Core fuer Mechanik, ServiceManager/Services fuer
+Policy und Worker.
+
+Abnahme: SSHD/RDPSVC/TCPSVC koennen langsame Sessions diagnostizieren und
+blockieren nicht den ganzen Dienst.
+
+0.53.17: Preemption-Readiness
+-----------------------------
+
+Ziel: kritische Abschnitte, preempt_disable/preempt_enable, Task-Runtime,
+Starvation-Diagnose und Preemption-Gates vorbereiten.
+
+Besitz: Kernel/Scheduler.
+
+Abnahme: Preemption kann in Testmodus gezielt aktiviert oder simuliert
+werden, ohne FS/Storage/Service-State zu korrumpieren.
+
+Status nach 0.53.17: umgesetzt als harte Readiness-Simulation ohne
+produktive IRQ-Preemption. R4DEV v114 und PERFDIAG zeigen Gate-Maske,
+Simulationsergebnisse, Preempt-Disable-Zaehler sowie Long-running-/
+Starvation-Warnungen. Offene Gates bleiben Folgearbeit.
+
+0.53.18: FPU/SSE/XSAVE-State pro Task
+-------------------------------------
+
+Ziel: Taskwechsel sichert FPU/SSE/XSAVE-State; SDK muss nicht dauerhaft
+soft-float/no-SIMD bleiben.
+
+Besitz: Kernel/arch x86_64 und SDK-Buildprofile.
+
+Abnahme: R4X/R4D/R4P koennen nach hartem ABI-/Build-Umzug SIMD/FPU gezielt
+nutzen; kein alter soft-float-Fallback als Produktivzweig.
+
+Status nach 0.53.18: umgesetzt fuer x87/SSE mit eager Save/Restore pro
+Taskwechsel, R4DEV v115 und PERFDIAG-Abnahme. Status nach 0.53.40: AVX/AVX2
+ist als eigener XSAVE-/SIMD-ABI-Schritt umgesetzt, wenn CPU und XCR0
+x87+SSE+YMM bereitstellen.
+
+0.53.19: R4X Userland-Threads
+-----------------------------
+
+Ziel: Thread-ABI mit create/join/exit, Thread-Stacks, Wait-Handles,
+R4XStart/R4SYS/SDK-Bindings und Neubau aller mitgelieferten Programme.
+
+Besitz: Kernel fuer Threadmechanik; Contract/R4L/SDK fuer ABI; Apps fuer
+Migration.
+
+Abnahme: ein R4X kann UI/Worker sauber trennen; alte Single-Thread-ABI wird
+nicht still als Fallback fortgefuehrt.
+
+Status nach 0.53.19: umgesetzt als R4OS-eigene Thread-Basis mit ProgramApi
+v116, R4XStartR4Sys v4, SDK-/C-Bindings, nicht mehr `single_threaded`
+gebauten R4X/R4D/R4P-Modulen und THREADD-Abnahme. Wait-/Completion-Komfort
+und async I/O bleiben Folgearbeit.
+
+0.53.20: Async R4SYS I/O, Desktop-Worker und Service-Migration
+--------------------------------------------------------------
+
+Ziel: Async-Datei-/Config-/Socket-Requests auf Completion-Basis, Desktop-
+Persistenz aus dem sichtbaren Loop heraus, zentrale Services auf Worker/
+Completion migrieren.
+
+Besitz: R4SYS/R4STD/R4NET/Desktop/Services; Kernel nur fuer Wait/Completion.
+
+Abnahme: Desktop-Cursor/Present, Terminal und Services bleiben unter Datei-
+und Netzwerk-Last reaktionsfaehig.
+
+Spaetere Perspektive: Page Cache, Writeback und Pagefile
+=======================================================
+
+Page Cache und Pagefile sind nicht der naechste Schritt. Sie brauchen zuerst:
+
+- Block-Request-Queue und Completion
+- FS-Request-Schicht und Durability-Regeln
+- Pinning fuer DMA/I/O
+- Dirty-/Clean-Tracking
+- Reclaim-Diagnose
+- Timeout-/Cancel-Pfade
+- per-Prozess-Fault-/OOM-Policy
+
+Danach kann ein Pagefile-/Swap-Pfad geplant werden, ohne die Ehrlichkeit aus
+0.53.10 zu verlieren.
+
+Schlussfolgerung
+================
+
+0.53.0 bestaetigt: Der Memory-Umbau war notwendig, aber er allein macht R4OS
+nicht modern performant. Die naechste tragende Schicht ist nicht "mehr RAM"
+und auch nicht sofort "Preemption", sondern Messbarkeit, Wait/Completion,
+Lock-Regeln und queuefaehige I/O-/Service-Pfade.
+
+Wenn diese Reihenfolge eingehalten wird, kann R4OS langfristig Browser-,
+IDE-, SSH-/RDP-, Datei- und Desktop-Lasten tragen, ohne halbfertige
+Fallbacks, ohne unnoetig grossen Kernel und ohne das fully-trusted
+Einbenutzer-Leitbild zu verlassen.

@@ -1,0 +1,135 @@
+﻿R4OS FAT32 Flush- und Durability-Vertrag 0.55.10.3
+===================================================
+
+Ziel
+----
+
+0.55.10.3 reduziert den groessten FAT32-Blocker aus dem Connectivity-Pfad:
+fortlaufende R4SYS-Dateistreams duerfen nicht nach jedem kleinen Chunk einen
+vollstaendigen FAT32-/Blockdevice-Flush erzwingen. Gleichzeitig bleiben klare
+Persistenzpunkte erhalten, damit erfolgreiche Writes, Stream-Finish,
+Registry-/Config-Saves, Systemdatei-Replace und Poweroff keine scheinbar
+erfolgreichen unpersistierten Daten hinterlassen.
+
+
+Technischer Vertrag
+-------------------
+
+FAT32 nutzt weiterhin den gemeinsamen FS-Page-Cache:
+
+- `writeSector()` markiert 512-Byte-Sektoren dirty.
+- `flushVolume()` drainiert alle dirty Sektoren des betroffenen Blockdevices
+  in Queue-Reihenfolge und ruft danach den Storage-Flush des konkreten
+  Blockdevices auf.
+- Cache-Druck darf dirty Sektoren vorzeitig als Writeback schreiben, ersetzt
+  aber keinen expliziten Persistenzpunkt.
+
+Normale FAT32-Mutationen bleiben synchron-durable:
+
+- `writeFile`
+- `writeFileRange`
+- `appendFile`
+- `appendFileAtOffsetStatus`
+- `copyFile`
+- `makeDirectory`
+- `deleteFile`
+- `removeDirectory`
+- `renameEntry`
+- `setAttributes`
+
+Diese Pfade rufen nach erfolgreicher Metadaten-/Datenmutation weiterhin
+`flushVolume()` auf.
+
+Neu ist ein interner deferred Append-Pfad:
+
+- `appendFileAtOffsetStatusDeferred()` nutzt denselben FAT32-Append-Hotpath,
+  dieselben Offset-/Groessenregeln und dieselben FAT-/Directory-Updates wie
+  der normale Append.
+- Der Unterschied ist nur der Abschluss: Chunks bleiben dirty im Page-Cache
+  und werden nicht pro Chunk mit einem Blockdevice-Flush abgeschlossen.
+- Der Pfad ist fuer aktive R4SYS-Streamslots gedacht, nicht fuer allgemeine
+  Komfortwrites.
+
+R4SYS-Dateistreams haben damit folgende Persistenzpunkte:
+
+- `fileStreamBegin()` erstellt bzw. trunciert die Ziel-Datei weiter ueber
+  `writeFile()` und ist damit ein synchroner Startpunkt.
+- `fileStreamWrite()` nutzt bei aktivem Streamslot den deferred FAT32-Append.
+- `fileStreamFinish()` prueft die erwartete Endgroesse gegen den internen
+  Streamstand und ruft danach `flushVolume()` auf. Erst danach gilt der
+  Stream als abgeschlossen.
+- `fileStreamAbort()` loescht die angefangene Datei ueber `deleteFile()`;
+  der Delete bleibt synchron-durable und muss gelingen, sonst meldet R4SYS
+  `file_stream_error_io`.
+
+
+Recovery-Regeln
+---------------
+
+R4OS fuehrt mit 0.55.10.3 bewusst kein Volljournaling ein. Die Regeln sind
+deshalb klar begrenzt:
+
+- Ein erfolgreiches `fileStreamFinish()` ist der belastbare Commitpunkt fuer
+  einen R4SYS-Stream.
+- Ein erfolgreiches `fileStreamAbort()` entfernt die angefangene Datei.
+- Ein Client-Abbruch muss vom besitzenden Dienst in `Abort` oder erneutes
+  `Replace/Verify` umgesetzt werden. Direkt liegengebliebene Teilzustaende
+  gelten nicht als erfolgreiches Updatepaket.
+- SYSUPD bleibt auf Staging, Verify, Journal/Resume, Backup und
+  Rename/Replace angewiesen. Kernel- oder Systemdateien werden nicht durch
+  einen offenen Upload direkt als finaler Zielzustand betrachtet.
+- Registry-/Config-Saves nutzen weiter `fileWrite`, `fileCopy`, `fileDelete`
+  und `fileRename`; diese Operationen bleiben explizite Flush-Punkte.
+- Poweroff/Reboot ruft weiter `page_cache.flushAll()` auf und ist der letzte
+  globale Persistenzpunkt.
+
+Damit wird Performance gewonnen, ohne einen zweiten Datei-I/O-Pfad, einen
+SSHD-/SYSUPD-Sonderwrite oder eine stille "best effort"-Persistenzschicht
+einzufuehren.
+
+
+FSDIAG-Abnahme
+--------------
+
+FSDIAG prueft seit 0.55.10.3 nicht nur Korrektheit, sondern auch den
+Flush-Vertrag:
+
+- Der 1-MB-Stream wird weiterhin in 128 Chunks zu 8 KB geschrieben.
+- Offset-Guard und Finish-Guard muessen die bestehenden Stream-Fehlercodes
+  melden.
+- Die Ruecklese-Checksumme muss stimmen.
+- Abort muss die angefangene Datei entfernen.
+- Nach Finish muessen `fs_cache_dirty_entries=0` und `fs_cache_dirty_bytes=0`
+  sichtbar sein.
+- Die FAT32-Flush-Anzahl fuer den grossen Stream muss deutlich unter der
+  Chunk-Anzahl liegen; der aktuelle automatische Grenzwert ist `<= 4`.
+
+QEMU-Smoke vom 22.06.2026:
+
+    FSDIAG fat32 io: sectors=2294/735 flush=4 flushTicks=4/6/5 failures=0
+    FSDIAG stream large result: OK bytes=1048576 chunks=128 maxChunk=8192 offsetGuard=yes finishGuard=yes checksum=yes abort=yes flushGuard=yes dirtyClean=yes
+    FSDIAG stream large metrics: requests=132 fat=136069 allocSearch=2048 walk=133888 flush=2<=4 wbFlush=2 wbSectors=2177 dirty=0/0 flushFailures=0
+
+Vor 0.55.10.3 lag die 1-MB-Streamprobe bei 129 FAT32-Flushes. Nach der
+Aenderung sind es 2: Start/Finish statt Flush pro Chunk.
+
+
+Grenzen und Folgearbeit
+-----------------------
+
+0.55.10.3 beseitigt den teuersten Flush-Hotpath, aber nicht alle
+Responsiveness-Probleme:
+
+- FAT32-Operationen bleiben innerhalb des Volume-Serialisierungsvertrags
+  synchron.
+- Der Page-Cache hat aktuell nur 64 Sektoreintraege; grosse Streams erzeugen
+  deshalb weiterhin Writeback-Druck, wenn mehr dirty Sektoren anfallen.
+- Directory-Entry-Size-Updates passieren weiter pro Append-Chunk, damit der
+  bestehende FAT32-Vertrag und die Stream-Offset-Pruefung einfach bleiben.
+- Vollstaendige Crash-Recovery vor `fileStreamFinish()` bleibt Aufgabe eines
+  spaeteren Journaling-, Staging- oder Transaction-Vertrags, nicht dieser
+  Unterversion.
+
+Die direkte Folgeversion 0.55.10.4 soll die Responsiveness langer FAT32-
+Operationen verbessern, ohne parallele Metadatenwrites auf demselben Volume
+zuzulassen.

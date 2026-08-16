@@ -1,0 +1,233 @@
+﻿R4OS Registry und App-Konfiguration
+===================================
+
+Stand: 0.51.4
+
+Dieses Dokument ist der Einstieg fuer die aktuelle Registry- und
+Konfigurationsarchitektur. Es beschreibt den produktiven Zielzustand, nicht
+die historische 0.46.X-Mehr-Hive-Planung.
+
+
+Kurzfassung
+-----------
+
+R4OS nutzt vorerst genau einen produktiven Registry-Hive:
+
+    C:\R4OS\REGISTRY\SYSTEM.R4R
+
+Der sichtbare Rootname ist:
+
+    SYSTEM
+
+Die Registry ist fuer Betriebssystem-Einstellungen und Shell-/OS-Zustand
+gedacht. Nicht-System-Anwendungen speichern eigene Einstellungen in
+menschenlesbaren R4S-Dateien und lesen oder schreiben diese ueber R4STD.R4L.
+
+Spaetere Hives bleiben technisch moeglich, sind in 0.48.X aber nur
+Architekturreserve. Produktive Pfade nutzen keine alten 0.46-Rootnamen wie
+R4LM, R4SW, R4DT oder R4CU.
+
+Seit 0.48.8 ist auch die Laufzeit hart auf diesen Vertrag begrenzt:
+R4SYS-Registry-Aufrufe und `REG.R4X` akzeptieren produktiv nur `SYSTEM`.
+Reservierte einfache Rootnamen wie `SOFTWARE`, `DESKTOP` und `USER` bleiben
+im SDK-Formatmodell sichtbar, liefern im laufenden System aber
+`unsupported` beziehungsweise die Diagnose `inactive-root`.
+
+Seit 0.55.10.14 behandelt R4SYS ausschliesslich
+`SYSTEM\Shell\RecentDocuments` als nichtkritische UI-Spur mit deferred
+Writeback. Der SDK-Helfer speichert die Liste als kompaktes `Items`-Binary;
+dieses Value wird im R4SYS-Cache sofort sichtbar und spaeter als ein
+`SYSTEM.R4R`-Commit geschrieben.
+Normale Registry-Schreibvorgaenge ausserhalb dieses Zweigs flushen vorher und
+bleiben synchron-durable. `POWEROFF`, `REBOOT` und `HALT` sind ebenfalls
+Commitpunkte fuer den deferred Cache.
+
+
+Was in die Registry gehoert
+---------------------------
+
+In die Registry gehoert Zustand, der zum Betriebssystem oder zur sichtbaren
+Shell gehoert und von mehreren Komponenten gemeinsam genutzt werden kann.
+
+Aktive 0.49.X-Pfade:
+
+    SYSTEM\Shell\Desktop\Icons
+    SYSTEM\Shell\Desktop\Settings
+    SYSTEM\Shell\Taskbar\QuickLaunch
+    SYSTEM\Shell\RecentDocuments
+
+Beispiele:
+
+- Desktop-Icon-Layout inklusive Titel, Ziel, Policy, Iconpfad und Position.
+- Desktop-Shellwerte aus Registry-Migrationen unter `Settings`.
+- Quicklaunch-App-Liste rechts neben dem Startmenue.
+- Zuletzt geoeffnete Dateien als systemweite Recent-Documents-Liste.
+- Spaeter geeignete Service-, Treiber-, Protokoll- oder Library-Policy, wenn
+  der jeweilige Besitzer den Pfad sauber implementiert.
+
+Normale Anwendungen sollen R4R-Hives nicht direkt parsen. Fuer Registry-
+Zugriffe gibt es R4SYS-/SDK-Vertraege und spezialisierte Helfer wie
+`r4os.recent_documents`.
+
+
+Was nicht in die Registry gehoert
+---------------------------------
+
+Private App-Einstellungen gehoeren nicht in den SYSTEM-Hive.
+
+Beispiele:
+
+- Notepad-Wordwrap, Editor-Font oder andere Komfortwerte.
+- Paint-Werkzeugoptionen, Canvas-Defaults oder Farbauswahl.
+- Explorer-Optionen, die nicht Shell-Zustand sind.
+- App-interne MRU-Listen, wenn nur diese Anwendung sie nutzt.
+- Spielstaende, Projektdateien, grosse Daten oder Cache-Dateien.
+- Portable Tool-Konfiguration neben der jeweiligen Anwendung.
+
+Solche Daten liegen in R4S-Dateien:
+
+    C:\R4OS\CONFIG\APPS\EXPLORER.R4S
+    C:\R4OS\CONFIG\APPS\NOTEPAD.R4S
+    C:\R4OS\CONFIG\APPS\PAINT.R4S
+    D:\TOOLS\MYAPP\MYAPP.R4S
+
+Die zentralen App-Pfade unter `C:\R4OS\CONFIG\APPS` sind Konventionen, keine
+Pflicht. Portable Anwendungen duerfen ihre R4S-Datei im eigenen Ordner
+ablegen und diesen Pfad an das lokale `r4std.config`-Binding uebergeben.
+
+
+R4S-Format
+----------
+
+R4S ist das offizielle R4OS-Settings-Format fuer App- und Shell-nahe
+Textkonfigurationen.
+
+Kanonischer Anfang:
+
+    R4S_FORMAT=1
+    SCHEMA=<NAME>
+
+Formatregeln:
+
+- UTF-8-Text; Reader akzeptieren eine optionale UTF-8-BOM.
+- Writer erzeugen kanonisch UTF-8 mit BOM.
+- Reader akzeptieren `LF` und `CRLF`; Writer erzeugen `CRLF`.
+- Kommentare beginnen mit `#` oder `;`.
+- Eintraege haben die Form `KEY=VALUE`.
+- Whitespace um Key und Value wird beim Lesen getrimmt.
+- Keys sind case-insensitive und bestehen aus Buchstaben, Zahlen, `_`, `-`
+  oder `.`.
+- Doppelte Keys sind erlaubt; der letzte gueltige Eintrag gewinnt.
+- Kaputte Zeilen werden ignoriert.
+
+Typkonventionen:
+
+- String: Zeilenwert nach Trim.
+- Bool: `ON/OFF`, `YES/NO`, `TRUE/FALSE` oder `1/0`; Writer nutzt `ON/OFF`.
+- U32/I32: dezimale Ganzzahlen.
+- RGB24: sechs Hex-Ziffern ohne `#`, z.B. `008080`.
+- Path: normaler R4OS-Pfad als String.
+- Listen: Punkt-Schluessel, z.B. `ITEM.0.PATH`.
+
+
+R4STD.R4L
+---------
+
+R4STD.R4L ist die offizielle Komfort-API fuer R4S-Dateien:
+
+    C:\R4OS\LIBS\R4STD.R4L
+    R4STD:SETTINGS_V1:1
+    R4STD:CONFIG_V1:1
+
+Config ist keine R4SYS-Erweiterung und kein R4P-Protokoll. Anwendungen
+importieren die benoetigten R4STD-Tabellen, binden
+`Code/System/Libraries/R4STD/Bindings/Zig/r4std.zig` lokal ein und nutzen
+`r4std.config` mit einem expliziten R4S-Pfad.
+
+Typisierte Funktionen:
+
+    readString / writeString
+    readBool   / writeBool
+    readU32    / writeU32
+    readI32    / writeI32
+    readRgb24  / writeRgb24
+
+`r4std.config` liest tolerant und schreibt kanonisch. Fehlende, leere
+oder kaputte Dateien liefern Defaultwerte, waehrend ungueltige Aufrufe klare
+Fehlercodes bekommen. Schreibvorgaenge laufen ueber TMP,
+Ruecklesepruefung, BAK und Replace.
+
+Beispiel fuer zentrale App-Config:
+
+```zig
+if (!r4std.init(app.startContext())) return r4os.abi.err_no_group;
+var system = app.system();
+const path = "C:\\R4OS\\CONFIG\\APPS\\NOTEPAD.R4S";
+
+var title: [64]u8 = undefined;
+var wordwrap = false;
+var tab_width: u32 = 4;
+
+_ = r4std.config.readString(&system, path, "TITLE", "Notepad", title[0..]);
+_ = r4std.config.readBool(&system, path, "WORDWRAP", true, &wordwrap);
+_ = r4std.config.readU32(&system, path, "TAB_WIDTH", 4, &tab_width);
+
+_ = r4std.config.writeString(&system, path, "TITLE", "Notepad");
+_ = r4std.config.writeBool(&system, path, "WORDWRAP", wordwrap);
+_ = r4std.config.writeU32(&system, path, "TAB_WIDTH", tab_width);
+```
+
+Beispiel fuer portable App-Config:
+
+```zig
+const local_path = "D:\\TOOLS\\MYAPP\\MYAPP.R4S";
+_ = r4std.config.writeBool(&system, local_path, "SHOW_GRID", true);
+```
+
+
+Tools
+-----
+
+REG.R4X ist das Console-/Recovery-Tool fuer Registry-Abfragen, Imports,
+Exports, Schreibtests und Migrationen.
+
+REGEDIT.R4X ist die Desktop-GUI fuer die System-Registry. Regedit zeigt und
+bearbeitet den produktiven Root `SYSTEM`; es ist kein Editor fuer beliebige
+R4S-App-Konfigurationen.
+
+R4CFGD.R4X ist die Diagnose fuer R4STD/Config. Sie importiert
+`R4STD:SETTINGS_V1:1` und `R4STD:CONFIG_V1:1` und prueft Defaultwerte,
+kaputte R4S-Zeilen, zentrale Pfade, app-lokale Pfade und den
+TMP/BAK-Schreibpfad.
+
+
+Besitzgrenzen
+-------------
+
+Kernel:
+- parst keine R4S-App-Konfiguration.
+- haelt nur technische Grundlagen und Schutzvalidierung.
+- soll keine neue Registry-Policy ansammeln.
+
+Registry-Core und Kern-SDK:
+- besitzen R4R-Parsing, Builder, Import/Export und Registry-Zugriffe.
+- halten Mehr-Hive-Faehigkeit nur als Architekturreserve.
+
+Desktop, Explorer und Shell:
+- nutzen die Registry fuer Shell-/OS-Zustand.
+- nutzen die unabhaengige R4STD-Runtime fuer app-private oder portable
+  Einstellungen.
+
+Anwendungen:
+- nutzen R4STD-Config fuer eigene R4S-Dateien.
+- nutzen Registry-APIs nur fuer echte OS-/Shell-Integration.
+
+
+Weiterfuehrende Dokumente
+-------------------------
+
+- `Docs/Core/RegistryUmbau048.txt`: Umbauentscheidung und 0.48.X-Stand.
+- `Docs/Core/RegistryFormat046.txt`: technischer R4R1-Dateivertrag.
+- `Docs/API/R4STD.md`: API-Referenz fuer R4STD.R4L.
+- `Docs/API/Readme.txt`: API-Gruppen und R4L-Einordnung.
+- `Docs/SDK/README.txt`: SDK-Helfer fuer Registry, R4S und R4STD-Config.

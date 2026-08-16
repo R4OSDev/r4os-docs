@@ -1,0 +1,348 @@
+﻿Desktop MessageBox und Fenster-Info 0.47.X
+=========================================
+
+Ziel
+----
+
+0.47.X baut eine belastbare, Win98-nahe MessageBox-Mechanik fuer Desktop auf.
+Sie soll nicht als einzelner Spezialdialog entstehen, sondern als gemeinsame
+Desktop-Mechanik fuer Hinweise, Warnungen, Fehler und Rueckfragen.
+
+Der erste sichtbare Nutzerpfad ist `Info` im Fenster-Systemmenue. Dieser
+Menuepunkt zeigt eine MessageBox mit der Groesse des Fensters, fuer das das
+Systemmenue geoeffnet wurde.
+
+Grundsatz fuer 0.47.X:
+- Desktop-UI bleibt in Desktop.
+- Explorer-Optik bleibt in EXPLORER.R4X.
+- Wiederverwendbare GUI-Helfer gehoeren in Desktop oder spaeter in SDK/R4L.
+- Kernel-Code ist fuer diese Version nicht vorgesehen.
+
+
+Ausgangslage vor 0.47.1
+-----------------------
+
+Desktop-Bausteine zu Beginn der 0.47.X-Planung:
+- `Code/Software/Desktop/src/app.zig` besitzt den Dialog-State `Dialog`.
+- Einfache Meldungen laufen ueber `message_*`-Dialogwerte.
+- Bestaetigungen laufen getrennt ueber `confirm_restart`,
+  `confirm_poweroff` und `confirm_halt`.
+- `prepareDialogText()` setzt feste Titel und Texte fuer viele Dialoge.
+- `app_error_title`/`app_error_text` ist bereits ein dynamischer Fehlerpfad.
+- `Code/Software/Desktop/src/compositor.zig` kennt aktuell getrennte Overlays
+  `message` und `confirm`.
+- `Code/Software/Desktop/src/draw.zig` zeichnet `messageDialog()` und
+  `confirmDialog()` als eigene Funktionen.
+- Das Fenster-Systemmenue wird in `draw.systemMenu()` gezeichnet und ueber
+  `systemMenuTargetAt()` in `app.zig` getroffen.
+- Fenstergeometrie liegt im Desktop-Fenstermodell `window.Window` und wird
+  bereits fuer Zeichnung, Hitboxen, Drag/Resize und WindowService-Spiegelung
+  genutzt.
+
+Damals offene Grenzen:
+- Message und Confirm sind verwandt, aber noch keine gemeinsame MessageBox.
+- Meldungsart, Symbol, Button-Set und Ergebnis sind noch nicht als Datenmodell
+  beschrieben.
+- Texte sind teilweise feste Compile-Time-Strings. Fenster-Info braucht
+  bewusst dynamischen Laufzeittext.
+- Das Systemmenue hat noch keinen eigenen Info-Target.
+- Es gibt noch keine klare Entscheidung, ob externe R4X-Programme spaeter
+  MessageBoxen anfordern duerfen.
+
+
+Zielmodell
+----------
+
+Desktop bekommt intern ein kleines MessageBox-Modell:
+
+    MessageBoxKind = info | warning | error | question
+    MessageBoxButtons = ok | ok_cancel | yes_no
+    MessageBoxResult = none | ok | cancel | yes | no
+
+Mindestens benoetigte Felder:
+- Art der Meldung.
+- Titel.
+- Text.
+- Button-Set.
+- Fokusziel.
+- Ergebnis oder auszufuehrende Desktop-Aktion.
+
+Die erste produktive Stufe darf nur `info` mit `ok` verwenden, aber das Modell
+soll `warning`, `error`, `question`, `ok_cancel` und `yes_no` von Anfang an
+sauber ausdruecken koennen.
+
+Stand 0.47.1:
+- Das interne Modell liegt in `Code/Software/Desktop/src/message_box.zig`.
+- `error` wird im Zig-Code als `.@"error"` geschrieben, bleibt fachlich aber
+  die Meldungsart Error.
+- `Code/Software/Desktop/src/app.zig` haelt gemeinsame Titel-/Textpuffer,
+  Meldungsart, Button-Set und Ergebnis.
+- `Code/Software/Desktop/src/compositor.zig` nutzt fuer einfache Messages und
+  Yes/No-Confirm-Pfade ein gemeinsames `MessageBox`-Overlay.
+- Die Darstellung ist noch die bisherige OK-/Confirm-Darstellung. Die
+  Win98-nahe Optik kommt erst in 0.47.2.
+
+Stand 0.47.2:
+- `draw.messageBoxDialog` ist der zentrale Zeichenpfad fuer MessageBoxen.
+- MessageBoxen haben jetzt 3D-Rahmen, Titelzeile, Symbolbereich,
+  umbrochenen Text und Buttonleiste.
+- `Info`, `Warning`, `Error` und `Question` werden als kleine intern
+  gerenderte Pixel-/Primitive-Symbole gezeichnet.
+- `OK`, `OK/Cancel` und `Yes/No` teilen sich Buttonlayout, Hit-Testing,
+  Tastaturfokus und Cancel-Ziel.
+- Dialog-Overlays werden nach Startmenue, Systemmenue und Time-Menue
+  gezeichnet, damit MessageBoxen sichtbar modal oben liegen.
+- Es gibt weiter keine Kernel-, R4SYS-, Service- oder externe
+  R4X-MessageBox-API-Aenderung.
+
+Stand 0.47.3:
+- Das Fenster-Systemmenue enthaelt `Info` zwischen `Maximize`/`Restore Size`
+  und `Close`.
+- `Info` nutzt eigene pro-Fenster-Targets, damit der Klick immer auf das
+  Fenster zeigt, fuer das das Kontextmenue geoeffnet wurde.
+- Die MessageBox zeigt `Window size: <Breite> x <Hoehe>` und zusaetzlich die
+  Fensterposition.
+- Die Werte kommen aus dem vorhandenen Desktop-`window.Window` und werden beim
+  Oeffnen der MessageBox in den internen MessageBox-Textpuffer formatiert.
+- Es gibt weiter keine App-, Service-, R4SYS-/ABI- oder Kernel-Erweiterung.
+
+Stand 0.47.4:
+- Bestehende einfache Desktop-Meldungen und Yes/No-Bestaetigungen laufen jetzt
+  ausdruecklich ueber das zentrale `MessageBox`-Overlay.
+- Info-Pfade nutzen `info`/`ok`: `message_notepad`, `message_synth`,
+  `message_run_invalid` und `message_window_info`.
+- Warnpfade nutzen `warning`/`ok`: fehlende Programme, fehlende
+  Fenster-/Console-Slots und blockierter Terminal-Mode.
+- Fehlerpfade nutzen `error`/`ok`: nicht gefundene Programme, Loader-Fehler
+  und App-Fehler.
+- Restart, Poweroff und Halt nutzen `question`/`yes_no` und behalten ihre
+  vorhandene Ausfuehrungslogik erst nach `Yes`.
+- `run`, `message_settings` und `tasks` bleiben bewusst eigene Dialoge, weil
+  sie Eingabe, Konfigurationsbearbeitung oder eine eigene Uebersicht besitzen.
+- Die alten Zeichen-Wrapper `draw.messageDialog` und `draw.confirmDialog`
+  wurden entfernt; `draw.messageBoxDialog` ist der zentrale einfache
+  Meldungs-/Bestaetigungs-Zeichenpfad.
+- Es gibt weiter keine App-, Service-, R4SYS-/ABI- oder Kernel-Erweiterung.
+
+Stand 0.47.5:
+- Ergebnis der API-Pruefung: 0.47.X bleibt bei Desktop-internen MessageBoxen.
+- Es gibt keinen neuen R4SYS-/ProgramApi-Eintrag, keinen R4L-Export, keinen
+  WINSVC-Auftrag und keinen Kernelcode fuer MessageBoxen.
+- Eine spaetere externe MessageBox-API gehoert fachlich zuerst nach
+  R4DESK.R4L mit SDK-Wrapper, weil dort Fensterbezug, GUI-Events, Fokus und
+  Desktop-Modalitaet liegen.
+- R4SYS bleibt Systembasis fuer Programme und ist fuer sichtbare
+  Desktop-Dialoge zu breit.
+- WINSVC bleibt Spiegel-/Diagnosedienst fuer Window-/Task-Zustand und wird
+  nicht zum Dialog-Compositor.
+- Bevor externe Apps MessageBoxen anfordern duerfen, braucht Desktop einen
+  Owner-Vertrag: aufrufende Program-Instanz, Window-ID, Titel, Text,
+  Meldungsart, Button-Set und Ergebnisweg.
+- Der bevorzugte spaetere Ergebnisweg ist Event-/Request-basiert: Desktop
+  besitzt die Modalitaet und stellt das Resultat an die aufrufende App
+  zurueck, statt dass ein Kernelaufruf sichtbar blockiert.
+- Standard-Modalitaet fuer spaetere App-Dialoge waere app-modal zum
+  aufrufenden Fenster. Desktop-modal bleibt Desktop-Systempfaden vorbehalten.
+
+Stand 0.47.6:
+- EXPLORER.R4X zeichnet die obere Zone jetzt als klassische Leistenfolge:
+  3D-Linie, Menueleiste, 3D-Linie, Toolbar, 3D-Linie, Adresszeile,
+  3D-Linie.
+- Die Trennlinien liegen an den vorhandenen Bandgrenzen und verschieben keine
+  Buttons, Icons oder Adressfeld-Geometrie.
+- Die Navigationsicons behalten ihren 3-Pixel-Abstand und bleiben zentriert.
+- Die Linie unter der Adresszeile liegt vor der Iconansicht und verdeckt das
+  Adressfeld nicht.
+- Die Umsetzung bleibt vollstaendig in EXPLORER.R4X und nutzt vorhandene
+  R4DRAW-/SDK-Canvas-Rechtecke; es gibt keine Desktop-, Service-, R4SYS- oder
+  Kernel-Erweiterung.
+
+Stand 0.47.7:
+- Desktop-Fensterbuttons fuer Minimize, Maximize/Restore und Close bekommen
+  eine eigene graue Button-Flaeche im klassischen Win98-Stil.
+- Die Glyphen bleiben schwarz und dadurch auf aktiven blauen sowie inaktiven
+  grauen Titelleisten sichtbar.
+- Gedrueckte Buttons nutzen die bestehende Press-Geometrie und eine dunklere
+  graue Innenflaeche.
+- Hitboxen, Window-Targets, Titelleistenhoehe und Verhalten bleiben
+  unveraendert.
+- Die Umsetzung bleibt vollstaendig im Desktop-Rendering; es gibt keine
+  R4SYS-, Service-, SDK- oder Kernel-Erweiterung.
+
+Stand 0.47.8:
+- Explorer legt seine Mindestgroesse als gewuenschte Gesamtfenstergroesse
+  von 570x320 fest und uebersetzt sie beim Start in eine Client-
+  Mindestgroesse fuer die vorhandene Desktop-API.
+- Wenn Desktop gueltige Frame-/Client-Metriken liefert, nutzt Explorer diese
+  Werte fuer die Umrechnung; sonst greift der aktuelle bekannte Frame-
+  Fallback.
+- Die Toolbar-Icons beginnen 4 Pixel vom linken Clientrand entfernt und
+  bleiben bei 3 Pixel Abstand zwischen den Buttons.
+- Die Mindestbreite stellt sicher, dass Back, Forward, Up, Cut, Copy, Paste
+  und Delete innerhalb der Toolbar Platz haben.
+- Die Umsetzung bleibt in EXPLORER.R4X; Desktop, SDK, Services und Kernel
+  brauchen dafuer keine neue Schnittstelle.
+
+Stand 0.47.9:
+- EXPLORER.R4X wird aus der Desktop-Single-Instance-Liste entfernt.
+- Mehrere Starts der Desktop-Verknuepfung `Computer` erzeugen mehrere
+  Explorer-Fenster, solange freie App-Fensterslots verfuegbar sind.
+- Desktop nutzt weiterhin die vorhandene GUI-Host- und Window-Slot-Mechanik;
+  Explorer braucht dafuer keine eigene Mehrfenster-Schnittstelle.
+- Settings-nahe Anwendungen wie APPDEF, REGEDIT, NETCFG, Clock, Time
+  Settings und MemView bleiben Single-Instance.
+
+Win98-nahe Darstellung:
+- klassischer 3D-Dialograhmen
+- Titelzeile
+- Symbolbereich links
+- Textbereich rechts
+- Buttonleiste unten
+- OK/Cancel/Yes/No als normale Desktop-Buttons mit Fokus, Hover und Press
+- Modalitaet innerhalb von Desktop
+
+
+Besitzgrenzen
+-------------
+
+Desktop:
+- besitzt MessageBox-State, Fokus, Ergebnislogik, Modalitaet und Rendering.
+- besitzt das Fenster-Systemmenue und den neuen `Info`-Menuepunkt.
+- liest fuer Fenster-Info die Groesse aus dem vorhandenen `window.Window`.
+- darf bestehende Desktop-Meldungen schrittweise auf MessageBox umstellen.
+- bleibt fuer 0.47.X alleiniger Besitzer sichtbarer MessageBoxen.
+- wuerde bei einer spaeteren externen API Owner-Fenster, Fokus, Queue und
+  Resultat-Routing kontrollieren.
+
+EXPLORER.R4X:
+- besitzt Explorer-Menueleiste, Toolbar, Adresszeile, Toolbar-Icons und
+  Explorer-spezifische Optik.
+- nutzt vorhandene GUI-/Canvas-Zeichenpfade.
+- bekommt fuer 0.47.6 keine neue Kernel-, Desktop- oder Service-Abhaengigkeit.
+
+SDK/R4L:
+- ist erst relevant, wenn MessageBoxen als wiederverwendbarer Baustein fuer
+  andere R4X-Anwendungen freigegeben werden sollen.
+- kann spaeter Wrapper oder gemeinsame GUI-Strukturen bekommen, aber nicht in
+  den ersten Desktop-internen Schritten.
+- ist der bevorzugte spaetere Komfortpfad, wenn der technische Vertrag in
+  DESKTOP stabil ist.
+
+R4SYS/ProgramApi:
+- wird in 0.47.X nicht fuer MessageBoxen erweitert.
+- bleibt fuer Dateisystem, Programme, Systemstatus, Registry und aehnliche
+  Systembasis geeignet, nicht fuer sichtbare Desktop-Dialoge.
+
+Services/WindowService:
+- WindowService spiegelt Fenster fuer Status und Diagnose.
+- Die erste Fenster-Info braucht keinen Service-Aufruf, weil Desktop das
+  betroffene Fenster lokal kennt.
+- WINSVC wird fuer MessageBoxen nicht erweitert, weil der Dienst kein
+  Compositor ist und keine sichtbare Modalitaet besitzt.
+
+Kernel:
+- bekommt fuer 0.47.X keinen neuen MessageBox-, Explorer- oder
+  Fensterbutton-Code.
+- Kernel-Erweiterung waere nur mit konkreter ABI-/Boot-/Hardware-
+  Begruendung erlaubt. Fuer die geplanten 0.47.X-UI-Arbeiten gibt es diese
+  Begruendung nicht.
+
+
+Bestehende Dialoge als Migrationskandidaten
+-------------------------------------------
+
+Naheliegende Kandidaten:
+- `message_notepad`
+- `message_synth`
+- `message_run_invalid`
+- `message_run_no_programs`
+- `message_run_no_slots`
+- `message_run_console_busy`
+- `message_r4dos_mode_busy`
+- `message_run_not_found`
+- `message_run_failed`
+- `message_app_error`
+
+Question-/Confirm-Kandidaten:
+- `confirm_restart`
+- `confirm_poweroff`
+- `confirm_halt`
+
+Vorerst getrennt lassen:
+- `run` bleibt eigener Dialog, weil er Eingabe, Browse und mehrere Buttons
+  besitzt.
+- `message_settings` bleibt Settings-Dialog, weil dort Konfigurationswerte
+  bearbeitet werden.
+- `tasks` bleibt eigener Task-Overview-Dialog.
+
+Regel:
+Ein bestehender Dialog wird nur migriert, wenn Text, Fokus, Tastatur,
+Mausbedienung, Button-Resultat und Schliessverhalten gleichwertig oder besser
+abgebildet sind.
+
+
+Unterversionen und Abnahmefokus
+-------------------------------
+
+0.47.1 MessageBox-State:
+- gemeinsames Datenmodell fuer Art, Text, Buttons und Ergebnis.
+- keine Kernel- oder ABI-Aenderung.
+- vorhandene Dialoge bleiben funktional.
+
+0.47.2 Rendering:
+- Win98-nahe Darstellung mit Symbol, Text und Buttonleiste.
+- keine Flacker-/Uebermal-Artefakte.
+- Klicks ausserhalb loesen keine Fensteraktionen aus.
+
+0.47.3 Systemmenue-Info:
+- `Info` sitzt zwischen `Maximize`/`Restore Size` und `Close`.
+- Zielwindow wird beim Oeffnen des Systemmenues stabil gehalten.
+- MessageBox zeigt mindestens `Window size: <Breite> x <Hoehe>`.
+- Minimize, Maximize/Restore und Close bleiben unveraendert.
+
+0.47.4 Migration bestehender Meldungen:
+- nur vollstaendig passende Pfade migrieren.
+- Confirm-Pfade bleiben semantisch erhalten.
+- Abweichungen werden dokumentiert.
+
+0.47.5 API-Pruefung:
+- Entscheidung: kein Export in 0.47.X.
+- spaeter bevorzugt R4DESK.R4L mit SDK-Wrapper statt R4SYS, WINSVC oder
+  Kernel.
+- Owner-/Resultatvertrag vor Implementierung festlegen.
+- keine externe App muss fuer 0.47.X direkt umgestellt werden.
+
+0.47.6 Explorer-Leisten:
+- Umsetzung bleibt in EXPLORER.R4X.
+- horizontale 3D-Linien strukturieren Menue, Toolbar und Adresszeile.
+- keine neue Kernel-/Service-Abhaengigkeit.
+- bestehende Toolbar-Icon-Geometrie bleibt unveraendert.
+
+0.47.7 Fensterbuttons:
+- Umsetzung bleibt im Desktop-Rendering.
+- grauer Button-Hintergrund fuer Minimize, Maximize/Restore und Close.
+- Hitboxen und Verhalten bleiben gleich.
+- Glyphen bleiben auf aktiven und inaktiven Titelleisten sichtbar.
+
+
+Nicht-Ziele
+-----------
+
+- Kein globales Sicherheits- oder Berechtigungsmodell.
+- Keine Kernel-MessageBox.
+- Keine neue App-Pflicht-API in 0.47.0 bis 0.47.4.
+- Keine halb sichtbaren Platzhalter im Systemmenue.
+- Keine UI-Optik, die nur im Build funktioniert, aber Hover/Fokus/Modalitaet
+  bricht.
+
+
+Abschlusskriterium fuer 0.47.0
+------------------------------
+
+0.47.0 ist erledigt, wenn:
+- Zielmodell und Besitzgrenzen dokumentiert sind.
+- bestehende Dialoge und Systemmenue-Bausteine inventarisiert sind.
+- klar ist, dass 0.47.X zuerst Desktop-/Explorer-/SDK-nahe Schichten nutzt.
+- Kernel-Arbeit ausdruecklich ausgeschlossen ist, solange keine neue
+  technische Begruendung auftaucht.
+- die Folgeunterversionen eine belastbare, pruefbare Abnahme besitzen.

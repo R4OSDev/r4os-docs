@@ -1,0 +1,148 @@
+﻿*** Kernel Refactor Roadmap Leitbild ***
+In dieser Roadmap befassen wir uns im Verlauf mehrerer großer Versionen mit der säuberung des Kernels.
+Aktuell wurden viele Funktionen nach 
+kernelold.zig ausgelagert und in src/old/ verschoben.
+Wir holen die nach und nach zurück in main.zig, kontrollieren dabei aber alles.
+Was aus dem Kernel raus kann soll in Software, Treiber und Protokolle untergebracht werden.
+Im Zuge dieses Refactor ist auch die Dokumentation zu aktualisieren und pflegen.
+
+Grundsatz fuer alle Unterversionen:
+- Keine halben Umbauten: Eine Unterversion ist erst erledigt, wenn Code, Imports, Doku, Version und Abnahme zusammenpassen.
+- Keine stillen Doppelpfade: Wenn eine Initialisierung nach `main.zig` wandert, darf sie nicht weiterhin produktiv in `kernelold.zig` laufen.
+- Boot-kritische Pfade muessen konservativ behandelt werden. Was fuer Boot, `C:\`, Speicher, Interrupts oder fruehe Ausgabe noetig ist, bleibt built-in, bis ein stabiler Ersatz existiert.
+- Kernel-Verschlankung ist ein ausdrueckliches Ziel. Fallbacks und parallele Built-in-Pfade werden nur genutzt, wenn sie fuer Boot-Stabilitaet, Migration oder echte Abnahme noetig sind.
+- Nicht bootkritische Treiber sollen nach erfolgreicher R4D-Auslagerung aus dem Kernel entfernt werden, statt dauerhaft als Built-in-Fallback liegen zu bleiben.
+- Jeder Umzug braucht klare Modulgrenzen: Boot-Schicht, Runtime-Core, Treiber, API und Diagnose duerfen nicht unkontrolliert vermischt werden.
+- Jede neue Boot-Schicht braucht eine klare Zustands- und Fehlersemantik: entweder erfolgreich initialisiert, sauber uebersprungen oder fatal beendet. Stilles Weiterlaufen nach kaputten Pflichtpfaden ist kein erledigter Zustand.
+- `kernelold.zig` darf waehrend der Migration nur noch als Legacy-Bruecke dienen. Neu umgezogene Initialisierungen muessen aus `kernelold.zig` verschwinden oder dort explizit als bereits initialisierter Zustand konsumiert werden.
+- Zwischenversionen duerfen lauffaehig klein sein, aber nicht fachlich halb: Keine Unterversion wird abgeschlossen, wenn Besitzgrenzen, Boot-Reihenfolge oder Abhaengigkeiten noch absichtlich unklar bleiben.
+- Vor jedem Abschluss wird gezielt nach Rest-Imports, Doppelaufrufen und verdeckten Abhaengigkeiten gesucht. Gefundene Altlasten werden entweder beseitigt oder in der Roadmap als bewusster Folgepunkt notiert.
+- Jede abgeschlossene Unterversion erhoeht `Injection/sys/CONFIG/VERSION.R4S` auf die passende Version und wird danach gepusht.
+- Mindestens `DevTools/Scripts/Build.bat -norun` gehoert zu jeder Code-Unterversion. Bei Boot-, IRQ-, Input-, Storage-, USB- oder R4D-Aenderungen gehoert `DevTools/Scripts/Build.bat -test` dazu.
+- GUI-/Hardware-nahe Punkte bekommen zusaetzlich eine klare manuelle Sichtabnahme durch den User, wenn QEMU-Smoke allein nicht reicht.
+
+-------------------------------------------
+Ab hier beginnen die Versionen und ab hier darf auch bereinigt werden.
+Das Refactor Leitbild muss bei einer Roadmap Bereinigung stehen bleiben
+-------------------------------------------
+
+Version 0.35.0
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Fruehe Storage-Grundlage aus `kernelold.zig` in `Code/src/kernel/storage_boot.zig` umgezogen.
+- `main.zig` initialisiert direkt nach `memory_boot.initCore()` die Storage-Foundation ueber `storage_boot.initFoundation()`.
+- `storage_boot` besitzt Initialisierungsstatus, Memory-Core-Abhaengigkeit und fatalen Fehlerpfad fuer RAMDrive-Fehler.
+- Produktive Doppelinitialisierung in `kernelold.zig` entfernt: `drive.init()`, `ramdrive.initDefault()` und `block.init()` laufen nur noch in `storage_boot`.
+- Keine Auslagerung in Software, Treiber oder Protokolle vorgenommen; Drive-, RAMDrive- und Block-Grundlage bleiben Kernel-Bootpfad.
+- Dokumentation in `Docs/Core/KernelBereinigung.txt`, `Docs/Core/Architektur.txt` und `Docs/FileSystem/DateisystemUndStorage.txt` aktualisiert.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.35.0` gesetzt.
+- Restaufruf-Pruefung fuer `drive.init()`, `ramdrive.initDefault()` und `block.init()` durchgefuehrt.
+- `DevTools/Scripts/Build.bat -norun` erfolgreich.
+- `DevTools/Scripts/Build.bat -test` erfolgreich mit `TEST OK`.
+
+Notizen:
+- `audio.init()` bleibt trotz aktueller Position in `kernelold.zig` bewusst liegen, weil Audio nicht zur fruehen Boot-Grundlage gehoert.
+- Diagnose- und Policy-Ausgaben werden in dieser Unterversion nicht herausgeloest; zuerst wird nur die Startreihenfolge stabilisiert.
+- QEMU-Log bestaetigt die Reihenfolge: `RAM drive X:`, `Storage foundation [OK]`, danach Module-/Service-Registry und `Launcher [START]`.
+
+Version 0.35.1
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `Code/src/kernel/platform_boot.zig` als Plattform-/Mapping-Bruecke angelegt.
+- `main.zig` ruft `platform_boot.initDeviceMappings()` nach Storage-, Module- und Service-Boot und vor `kernelold.kmain()` auf.
+- `acpi.inspect()`, `pcie.enumerate()` und `memory_boot.finalizeDeviceMappings(acpi_info)` laufen nur noch in der Boot-Schicht.
+- `kernelold.zig` liest den vorbereiteten ACPI-/PCIe-Zustand ueber `platform_boot.acpiInfo()` und `platform_boot.pcieStatus()`.
+- Keine zweite produktive ACPI-/PCIe-Enumeration im Bootpfad.
+- Fehlerpfade fuer fehlenden Plattformzustand, Device-Mapping und CR3-Switch bleiben fatal und sichtbar geloggt.
+- CR3-Switch robuster gemacht: aktuelles Stack-Fenster wird vor dem Switch gemappt; die Code-Pruefung nutzt den stabilen `layout.KERNEL_IMAGE_BASE`-Anker statt `@returnAddress()`.
+- Dokumentation in `Docs/Core/KernelBereinigung.txt` und `Docs/Core/Architektur.txt` aktualisiert.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.35.1` gesetzt.
+- Abnahme mit `DevTools/Scripts/Build.bat -norun` und `DevTools/Scripts/Build.bat -test` erfolgreich.
+
+Notizen:
+- QEMU-Log bestaetigt `Storage foundation [OK]`, `R4OS CR3 switch [OK]`, `Platform mappings [OK]` und `Launcher [START]`.
+
+Version 0.35.2
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Echtes Storage-Probing aus `kernelold.zig` in `Code/src/kernel/storage_boot.zig` umgezogen.
+- `main.zig` ruft nach `platform_boot` `storage_boot.initControllers(pcie_status)` auf.
+- XHCI, USBMSC, ATA-PIO, AHCI und NVMe werden in fester Reihenfolge orchestriert.
+- Registry-Zustaende werden zentral gesetzt: geladen, initialisiert, aktiv oder fehlgeschlagen.
+- MBR-/FAT32-Scan laeuft nach Blockdevice-Registrierung zentral in `storage_boot`; einzelne Treiberzweige im Bootpfad rufen `mbr.scan()` nicht mehr selbst auf.
+- Blockdevice-Scans werden dedupliziert, damit ein Device nicht mehrfach gemountet wird.
+- `ensureDataDriveLayout()` ist kontrolliert als vorlaeufige `D:`-Ordnerpolicy in `storage_boot` mitgezogen.
+- USB-HID bleibt bewusst als separater Input-/USB-Folgepfad in `kernelold.zig`.
+- Dokumentation in `Docs/Core/KernelBereinigung.txt`, `Docs/Core/Architektur.txt` und `Docs/FileSystem/DateisystemUndStorage.txt` aktualisiert.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.35.2` gesetzt.
+- Abnahme mit `DevTools/Scripts/Build.bat -norun` und `DevTools/Scripts/Build.bat -test` erfolgreich.
+
+Notizen:
+- Nicht bootkritische Storage-Treiber wurden in dieser Unterversion noch nicht als R4D ausgelagert. Ziel war die saubere Boot-Orchestrierung ohne Doppelpfade.
+- QEMU-Smoke bestaetigt weiterhin `Storage [OK]`, `Loader [OK]`, `Launcher [START]` und COMMAND-Zugriff auf `C:\`.
+
+Version 0.35.3
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Loader-/Config-Anbindung nach erfolgreichem Storage-Bootpfad aus `kernelold.zig` nach `Code/src/kernel/loader_boot.zig` umgezogen.
+- `main.zig` startet `loader_boot.initFilesystemLoader()` nach `storage_boot.initControllers(pcie_status)` und damit erst nach bereitstehendem produktivem `C:`.
+- `loader_boot.zig` uebernimmt `modules.loadSystemLibraries()`, `r4d.discoverAll()`, `modules.dumpStatus()` und `boot_config.load()`.
+- `kernelold.zig` laedt Systemlibraries, R4D-Discovery, Modulstatus und Boot-Config nicht mehr selbst, sondern nutzt den gecachten Zustand ueber `loader_boot.config()`.
+- Treiber-Policy bleibt vollstaendig in `kernelold.zig`: `driver_plan.applyCoreDirectives()` und `driver_plan.buildAndLoad()` wurden nicht gemischt verschoben.
+- R4P-Start bleibt im Legacy-Pfad, weil er noch zum Runtime-/Driver-Kontext gehoert.
+- Netzwerk-Config-Anwendung bleibt im Legacy-Pfad, weil `net_core.init()` die Netzwerk-Konfiguration dort noch zuruecksetzt.
+- Audio-Optionen bleiben im Legacy-Pfad, weil `audio.init()` und Backend-Auswahl noch zusammen gestartet werden.
+- Dokumentation in `Docs/Core/KernelBereinigung.txt`, `Docs/Core/Architektur.txt` und `Docs/FileSystem/DateisystemUndStorage.txt` aktualisiert.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.35.3` gesetzt.
+- Abnahme mit `DevTools/Scripts/Build.bat -norun` und `DevTools/Scripts/Build.bat -test`.
+
+Notizen:
+- Loader-Boot ist bewusst nur Datenimport und Statusbruecke. Policy bleibt in eigenen Schritten, damit 0.35.3 keine halben Driver-, Netzwerk- oder Audio-Pfade erzeugt.
+- COMMAND.R4X/DESK.R4X/SYSINFO.R4X lesen die sichtbare Version weiterhin aus dem Dateisystem; der Kernel liest `VERSION.R4S` nicht selbst.
+- QEMU-Smoke muss `Loader config [OK]`, `Loader [OK]`, `Launcher [START]`, COMMAND-Zugriff auf `C:\` und `R4OS V0.35.3` bestaetigen.
+
+Version 0.35.4
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Legacy-PCI-CF8/CFC-Enumeration aus `kernelold.zig` nach `Code/src/kernel/platform_boot.zig` umgezogen.
+- `platform_boot.initDeviceMappings()` erzeugt nun zusammenhaengend ACPI-, PCIe- und Legacy-PCI-Plattformzustand vor Storage-, Loader-, Audio-, Netzwerk- und Driver-Policy-Verbrauchern.
+- `platform_boot.isLegacyPciEnumerated()` als expliziter Status fuer die vorbereitete klassische PCI-Geraeteliste ergaenzt.
+- `kernelold.zig` ruft `pci.enumerateLegacy()` nicht mehr produktiv selbst auf.
+- Driver-Policy, R4D-spezifische PCI-Auswahl und PCI-IRQ-Routing bleiben bewusst eigene Folgepunkte.
+- Dokumentation in `Docs/Core/KernelBereinigung.txt`, `Docs/Core/Architektur.txt` und `Docs/SupportedHardware.txt` aktualisiert.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.35.4` gesetzt.
+- Abnahme mit `DevTools/Scripts/Build.bat -norun` und `DevTools/Scripts/Build.bat -test`.
+
+Notizen:
+- AC97, HDA, RTL8139-Fallbacks, Hardwarediagnose und DriverApi lesen weiterhin die zentrale Legacy-PCI-Geraeteliste; nur der Aufbau dieser Liste ist aus `kernelold.zig` herausgezogen.
+- QEMU-Smoke muss weiterhin `Platform mappings [OK]`, `Storage [OK]`, `Loader [OK]`, `Launcher [START]`, COMMAND-Zugriff auf `C:\` und `R4OS V0.35.4` bestaetigen.

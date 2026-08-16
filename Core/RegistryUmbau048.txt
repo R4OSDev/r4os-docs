@@ -1,0 +1,343 @@
+﻿R4OS Registry-Umbau 0.48
+========================
+
+Stand: 0.48.8
+
+Zweck
+-----
+
+Dieses Dokument ist die aktuelle Leitentscheidung fuer den Registry-Umbau ab
+0.48.X. Es ersetzt nicht den historischen R4R1-Dateivertrag aus
+Docs/Core/RegistryFormat046.txt, korrigiert aber das 0.46.X-Zielbild mit
+mehreren produktiven Hives.
+
+Der kompakte Einstieg fuer Entwickler und App-Autoren steht in
+Docs/Core/Registry.txt. Dieses Dokument bleibt die ausfuehrlichere
+Umbau- und Migrationsnotiz fuer 0.48.X.
+
+R4OS nutzt vorerst genau einen produktiven Registry-Hive fuer
+Betriebssystem-Einstellungen und Shell-/OS-Zustand. Nicht-System-Anwendungen
+speichern ihre eigenen Einstellungen in R4S-Dateien und nutzen dafuer
+R4STD.R4L.
+
+
+Leitentscheidung
+----------------
+
+Produktiv gibt es in 0.48.X nur diesen Hive:
+
+    C:\R4OS\REGISTRY\SYSTEM.R4R
+
+Der sichtbare Rootname fuer den produktiven Baum ist:
+
+    SYSTEM
+
+SYSTEM.R4R ist damit nicht mehr nur ein Maschinen-Hive neben SOFTWARE,
+DESKTOP und USER. Er ist der eine aktive Betriebssystem-Hive fuer 0.48.X.
+
+Die interne Architektur darf weiter so gebaut sein, dass spaeter weitere
+Hives ergaenzt werden koennen. Diese Mehr-Hive-Faehigkeit ist aber nur eine
+Architekturreserve. Sie ist kein sichtbarer Produktumfang von 0.48.X.
+
+Alte 0.46.X-Rootnamen wie R4LM, R4SW, R4DT und R4CU sind nicht mehr das
+Zielmodell und werden nicht als Aliasse akzeptiert. Neue Registry-Pfade
+verwenden einfache R4OS-Rootnamen wie SYSTEM. Windows-Rootnamen sind ebenfalls
+keine Aliasse.
+
+
+Warum nur ein Hive?
+-------------------
+
+R4OS ist single-user und fully trusted. Es gibt keine Benutzerprofile,
+Gruppen, ACLs oder getrennte Sicherheitskontexte.
+
+Mehrere Hives wie SYSTEM, SOFTWARE, DESKTOP und USER fuehlen sich zwar nach
+Windows 98 an, erzeugen in R4OS aber frueh eine kuenstliche Trennung:
+
+- USER waere kein echter Benutzerkontext.
+- SOFTWARE wuerde App-Settings anziehen, die besser portable R4S-Dateien
+  bleiben.
+- DESKTOP wuerde Shell-Zustand von Systemzustand trennen, obwohl Desktop in
+  R4OS die sichtbare System-Shell ist.
+- Custom-Builds koennen unnoetig mit Missing-Hive-Meldungen starten.
+
+Der einzelne SYSTEM-Hive ist einfacher zu testen, einfacher zu prebuilden und
+klarer zu reparieren. Gleichzeitig bleibt das R4R-Format baumfoermig genug,
+um System-, Shell- und Desktop-Bereiche sauber unterhalb von SYSTEM zu
+trennen.
+
+
+Was gehoert in die Registry?
+----------------------------
+
+In die Registry gehoert persistenter Betriebssystem- und Shell-/OS-Zustand.
+
+Geeignete Bereiche:
+
+- System-Defaults, die nach C:-Mount sicher gelesen werden koennen.
+- Service-, Treiber-, Protokoll- und Library-Policy, sobald der jeweilige
+  Besitzer den Registry-Pfad sauber implementiert.
+- Shell-/Desktop-Zustand, der zum Betriebssystemerlebnis gehoert.
+- Gemeinsame OS-Listen, die mehrere Anwendungen nutzen oder aktualisieren.
+- Defaults fuer Desktop, Explorer, Startmenue und Taskbar, sofern sie nicht
+  rein app-private Komfortwerte sind.
+
+Fuer 0.48.X ausdruecklich als Registry-Daten vorgesehen:
+
+- Desktop-Icon-Layout.
+- Quicklaunch-App-Liste.
+- Zuletzt geoeffnete Dateien als systemweite Recent-Documents-Liste.
+
+Beispielhafte Zielstruktur:
+
+    SYSTEM\Shell\Desktop\Icons\<ID>
+    SYSTEM\Shell\Taskbar\QuickLaunch
+    SYSTEM\Shell\RecentDocuments
+    SYSTEM\System\Services\<NAME>
+    SYSTEM\System\Drivers\<NAME>
+    SYSTEM\System\Protocols\<NAME>
+
+Die konkreten Key-Namen, Werttypen, Sortierung und Limits werden in den
+folgenden 0.48.X-Unterversionen festgelegt.
+
+
+Umsetzungsstand 0.48.3
+----------------------
+
+Der erste technische Umbau ist abgeschlossen:
+
+- `DevTools/Scripts/CreateDefaultRegistry.zig` erzeugt fuer Standardimages nur
+  noch `SYSTEM.R4R` und bereinigt dabei alte Default-Hive-Artefakte
+  `SOFTWARE.R4R`, `DESKTOP.R4R` und `USER.R4R` im Ausgabeverzeichnis.
+- `DevTools/Scripts/Build.bat` injiziert standardmaessig nur noch
+  `/R4OS/REGISTRY/SYSTEM.R4R`.
+- Der vorgebaute System-Hive enthaelt die Quicklaunch-Defaults unter
+  `SYSTEM\Shell\Taskbar\QuickLaunch`.
+- Desktop liest die Quicklaunch-Leiste aus diesem System-Hive-Pfad und faellt
+  weiter auf eingebaute Defaults zurueck, wenn Registry-Werte fehlen oder
+  kaputte Eintraege nicht validiert werden koennen.
+- Seit 0.48.4 enthaelt der vorgebaute System-Hive auch Desktop-Icon-Defaults
+  unter `SYSTEM\Shell\Desktop\Icons`; Desktop liest sichtbare
+  Desktop-Verknuepfungen aus diesem Pfad und ignoriert kaputte Eintraege
+  zugunsten stabiler Defaults.
+- `SYSTEM\Shell\RecentDocuments` ist die systemweite Recent-Documents-Liste.
+  Seit 0.55.10.14 serialisiert der SDK-Helfer die Eintraege als kompaktes
+  Binary-Value `Items`; `Enabled=false` kann die Liste weiterhin deaktivieren.
+- `Code/System/SDK/r4os/recent_documents.zig` buendelt den Recent-Documents-Zugriff:
+  `addOpenedFile` dedupliziert, begrenzt auf acht Eintraege und schreibt ueber
+  die vorhandene R4SYS-Registry-API; `readEntries` liest dieselbe Liste.
+- Seit 0.55.10.14 commitet R4SYS diesen nichtkritischen RecentDocuments-Zweig
+  deferred: die Registry-API sieht neue Eintraege sofort aus dem R4SYS-Cache,
+  waehrend die kompakte `Items`-Aenderung spaeter als ein `SYSTEM.R4R`-Commit
+  auf FAT32 landet. Andere Registry-Schreibpfade flushen diesen Cache zuerst
+  und bleiben synchron-durable.
+- Explorer, Notepad und Paint aktualisieren die Recent-Documents-Liste beim
+  erfolgreichen Oeffnen beziehungsweise Speichern von Dateien.
+- `REG.R4X ROOTS` zeigt nur noch `SYSTEM`; Selftests, API-Tests,
+  Schreibtests und R4S-Migrationen schreiben in `SYSTEM.R4R`.
+- `REGEDIT.R4X` zeigt nur noch den produktiven Root `SYSTEM` und nutzt fuer
+  seinen `/SELFTEST` temporaere Werte in `SYSTEM.R4R`.
+- `HiveKind` und die R4SYS-internen Dateipfadfunktionen bleiben technisch
+  mehr-hive-faehig. Das ist Architekturreserve, kein sichtbarer Produktumfang.
+- Der Parser akzeptiert nur die einfachen R4OS-Rootnamen `SYSTEM`,
+  `SOFTWARE`, `DESKTOP` und `USER`. Alte Rootnamen wie `R4LM`, `R4SW`,
+  `R4DT` und `R4CU` werden abgewiesen.
+- Seit 0.48.8 begrenzen R4SYS und `REG.R4X` den aktiven Laufzeitvertrag hart
+  auf `SYSTEM`: `SOFTWARE`, `DESKTOP` und `USER` bleiben Parser- und
+  Architekturreserve, aber keine beschreibbaren oder ladbaren Produkt-Hives.
+  R4SYS liefert dafuer `unsupported`, `REG.R4X` meldet `inactive-root`.
+- `REG.R4X APITEST` prueft diesen Negativpfad und erwartet fuer Lesen,
+  Enumerieren, Schreiben und Loeschen auf einem inaktiven Root
+  `registry_api_result_unsupported`.
+- Derselbe API-Test prueft fehlende und kaputte `SYSTEM.R4R`-Dateien ueber
+  die echte R4SYS-Lese-API und erwartet `registry_api_result_hive_not_found`
+  beziehungsweise `registry_api_result_hive_corrupt`.
+- `Tests/Gate/CheckRegistry048.zig` prueft nach dem Smoke
+  hostseitig, dass das Image nur `SYSTEM.R4R` injiziert, alte Hive-Dateien
+  nicht auftauchen, `R4STD.R4L` und `R4CFGD.R4X` enthalten sind und der
+  Bootlog die REG-/REGEDIT-/R4CFG-Abnahmen enthaelt.
+
+
+Was gehoert nicht in die Registry?
+----------------------------------
+
+Nicht-System-Anwendungen speichern ihre eigenen Einstellungen in R4S-Dateien.
+
+Beispiele:
+
+- Paint-Werkzeugoptionen und Canvas-Defaults.
+- Notepad-Wordwrap, Font und Editor-Komfortwerte.
+- App-interne MRU-Listen, wenn sie nur dieser Anwendung gehoeren.
+- Portable Tool-Konfigurationen neben der jeweiligen Anwendung.
+- Spielstaende, Projektdateien, grosse Daten oder Cache-Dateien.
+
+Diese Werte gehoeren in explizite R4S-Dateien, z.B.:
+
+    C:\R4OS\CONFIG\APPS\NOTEPAD.R4S
+    C:\R4OS\CONFIG\APPS\PAINT.R4S
+    D:\TOOLS\MYAPP\MYAPP.R4S
+
+Zentrale App-Config-Pfade sind Komfortkonventionen, keine Pflicht. Portable
+Anwendungen duerfen ihre R4S-Datei im eigenen Ordner ablegen und den Pfad
+direkt an R4STD.R4L uebergeben.
+
+
+R4S und R4STD.R4L
+-----------------
+
+R4S ist das offizielle R4OS-Settings-Format fuer App- und Shell-nahe
+Textkonfigurationen, die nicht in die System-Registry gehoeren.
+
+Formatvertrag ab 0.48.5:
+
+- `R4S_FORMAT=1` bleibt der produktive Standard. Ein `R4S_FORMAT=2` mit
+  Sektionen wird fuer 0.48.X nicht eingefuehrt, weil die bestehenden
+  Punkt-Schluessel (`APP.NOTEPAD.PATH`, `EXT.TXT.APP`) fuer Listen und
+  Gruppierung ausreichen.
+- Dateien sind UTF-8-Textdateien. Der Reader akzeptiert eine vorhandene
+  UTF-8-BOM am Dateianfang; der kanonische Writer schreibt mit UTF-8-BOM.
+- Zeilenenden werden tolerant gelesen (`LF` und `CRLF`), kanonisch geschrieben
+  wird `CRLF`.
+- Leerzeilen sowie Kommentarzeilen mit `#` oder `;` werden ignoriert.
+- Normale Eintraege haben die Form `KEY=VALUE`. Whitespace um Key und Value
+  wird beim Lesen getrimmt.
+- Keys sind case-insensitive und duerfen Buchstaben, Zahlen, `_`, `-` und `.`
+  enthalten. Ungueltige Zeilen werden ignoriert.
+- Doppelte Keys sind erlaubt; beim Lesen gewinnt der letzte gueltige Eintrag.
+- Werte bleiben zeilenbasiert. Der Writer schneidet Zeilenumbrueche in Values
+  ab, damit eine Zeile nie mehrere Eintraege erzeugt.
+
+Typkonventionen:
+
+- String: unveraenderter Zeilenwert nach Trim.
+- Bool: `ON/OFF`, `YES/NO`, `TRUE/FALSE` oder `1/0`; kanonisch schreibt der
+  Writer `ON` oder `OFF`.
+- U32/I32: dezimale Ganzzahlen.
+- RGB24: sechs Hex-Ziffern, kanonisch ohne `#`, z.B. `008080`.
+- Path: normaler String mit R4OS-Pfad, z.B. `C:\R4OS\FONTS\TERMINAL8.R4F`.
+- Listen: Punkt-Schluessel mit stabilen IDs oder Indizes, z.B.
+  `APP.NOTEPAD.PATH` oder `ITEM.0.PATH`.
+
+Zentrale Komfortpfade:
+
+    C:\R4OS\CONFIG\ASSOC.R4S
+    C:\R4OS\CONFIG\TIME.R4S
+    C:\R4OS\CONFIG\DESKTOP.R4S
+    C:\R4OS\CONFIG\APPS\EXPLORER.R4S
+    C:\R4OS\CONFIG\APPS\NOTEPAD.R4S
+    C:\R4OS\CONFIG\APPS\PAINT.R4S
+
+Explorer hat in 0.48.5 noch keine private persistierte App-Config. Sein
+nicht-registry-pflichtiger Zielpfad ist trotzdem fest reserviert:
+`C:\R4OS\CONFIG\APPS\EXPLORER.R4S`. Shell-Zustand wie Desktop-Icons,
+Quicklaunch und Recent Documents bleibt davon getrennt im SYSTEM-Hive.
+
+R4STD.R4L ist seit 0.48.6 die Systemlibrary fuer R4S-Dateien:
+
+    C:\R4OS\LIBS\R4STD.R4L
+
+R4STD.R4L ist kein R4P-Protokoll und keine R4SYS-Erweiterung. Anwendungen
+sollen R4CFG direkt importieren koennen. Die Library darf stabile
+ProgramApi-/Dateivertraege nutzen, soll aber nicht als R4SYS-Wrapper
+modelliert werden und keine R4S-Logik in den Kernel ziehen.
+
+Zielbild fuer Anwendungen:
+
+    r4os.r4std.config.readString(ctx, path, key, fallback, out)
+    r4os.r4std.config.writeString(ctx, path, key, value)
+    r4os.r4std.config.readBool(ctx, path, key, fallback, out)
+    r4os.r4std.config.writeBool(ctx, path, key, value)
+    r4os.r4std.config.readU32(ctx, path, key, fallback, out)
+    r4os.r4std.config.writeU32(ctx, path, key, value)
+    r4os.r4std.config.readI32(ctx, path, key, fallback, out)
+    r4os.r4std.config.writeI32(ctx, path, key, value)
+    r4os.r4std.config.readRgb24(ctx, path, key, fallback, out)
+    r4os.r4std.config.writeRgb24(ctx, path, key, value)
+
+R4CFG liest tolerant, schreibt aber kanonisch. Kaputte oder fehlende
+R4S-Dateien liefern stabile Defaultwerte oder klare Fehlercodes. Schreibvorgaenge
+laufen ueber TMP, Readback-Validierung, BAK und Replace. `R4CFGD.R4X` prueft
+den Import `R4STD:Query:1`, fehlende Dateien, kaputte Zeilen, Defaultwerte,
+zentrale Pfade unter `C:\R4OS\CONFIG` und app-lokale Pfade unter `C:\R4OS\SOFTWARE\TERMINAL\DIAG`.
+
+
+Besitzgrenzen
+-------------
+
+Kernel:
+- besitzt keine grosse Registry-Policy.
+- parst keine R4S-App-Config.
+- liest Registry-Werte nur, wenn sie nach Boot-/Storage-Grenze sicher
+  verfuegbar sind und klare Defaults existieren.
+- darf technische Validierung zur Crash-Vermeidung machen.
+
+Registry-Core:
+- besitzt R4R-Parsing, Validierung, Builder, Import/Export und
+  Schreibstrategie.
+- kapselt R4R-Dateien gegenueber Anwendungen.
+- haelt Mehr-Hive-faehige interne Strukturen nur als Architekturreserve.
+
+Regedit:
+- ist System-Registry-Editor.
+- zeigt den produktiven SYSTEM-Hive und dessen Keys/Values.
+- ist kein App-Settings-Editor fuer beliebige R4S-Dateien.
+
+Desktop, Explorer und Shell:
+- nutzen die Registry fuer Shell-/OS-Zustand wie Desktop-Icons,
+  Quicklaunch und Recent Documents.
+- nutzen R4S/R4CFG fuer app-private oder portable Einstellungen.
+
+R4STD.R4L:
+- besitzt den komfortablen R4S-App-Config-Vertrag.
+- ist unabhaengig von R4SYS als oeffentlicher App-Abhaengigkeit.
+- akzeptiert explizite R4S-Dateipfade.
+
+Anwendungen:
+- parsen R4R-Hives nicht direkt.
+- nutzen Registry-APIs nur fuer OS-/Shell-Integration.
+- nutzen R4STD.R4L fuer eigene R4S-Dateien.
+
+
+Nicht-Ziele fuer 0.48.X
+-----------------------
+
+- Kein SQLite als Registry-Speicher.
+- Kein R4P-Protokoll fuer App-Config.
+- Keine neue Sicherheits- oder Berechtigungsgrenze.
+- Keine produktiven Mehr-Hive-Standardimages.
+- Kein Zwang, alle R4S-Dateien in die Registry zu migrieren.
+- Kein dauerhafter Parallelbetrieb alter Hives ohne dokumentierte Frist.
+- Keine direkte R4R-Dateiformat-Abhaengigkeit in normalen Anwendungen.
+
+
+Umbau-Regel
+-----------
+
+0.48.X gilt nur als belastbar, wenn es keine halbe Zwischenwelt hinterlaesst.
+
+Jeder alte Hive, alte Rootname oder alte Config-Ort bekommt eine bewusste
+Entscheidung:
+
+- migrieren,
+- entfernen,
+- als einmalige Importquelle behalten,
+- als einmalige Importquelle mit klarer Frist behalten,
+- oder bewusst in eine spaetere Version vertagen.
+
+Unklare Funde werden nicht stillschweigend weitergeschleppt.
+
+
+Abnahme fuer 0.48.1
+-------------------
+
+0.48.1 ist abgeschlossen, wenn:
+
+- die Roadmap und dieses Dokument genau einen produktiven Hive beschreiben.
+- SYSTEM.R4R und SYSTEM als aktiver Zielvertrag benannt sind.
+- spaetere Mehr-Hive-Faehigkeit nur als Architekturreserve beschrieben ist.
+- die Grenze zwischen Registry und R4S-App-Config klar dokumentiert ist.
+- Desktop-Icon-Layout, Quicklaunch-App-Liste und Recent Documents als
+  Registry-Daten genannt sind.
+- R4STD.R4L als R4S-App-Config-Pfad gegen R4SYS, R4P und Kernel
+  abgegrenzt ist.
+- alte 0.46.X-Dokumente sichtbar auf diesen neuen Zielstand verweisen.

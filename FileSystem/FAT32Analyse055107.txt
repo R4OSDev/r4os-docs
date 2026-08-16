@@ -1,0 +1,433 @@
+﻿FAT32 Analyse 0.55.10.7
+=======================
+
+Ziel
+----
+
+0.55.10.7 ist die erneute Gesamtanalyse nach den ersten FAT32-Reparaturen.
+Die Frage ist nicht mehr, ob FAT32 grundsaetzlich schreiben kann: 0.55.10.5
+hat 1-MB-SSH/SFTP/SCP-Transfers abgenommen, und 0.55.10.6 hat ein
+kernelgrosses 14-MB-Systemupdate ueber SSHD/SFTP/R4SYS/FAT32, SYSUPD VERIFY,
+SYSUPD APPLY und Reboot durchgebracht.
+
+Die Frage ist jetzt, warum der Pfad noch langsam wirkt, wo echte
+Flaschenhaelse sitzen und welche grossen naechsten Unterversionen daraus
+folgen sollen.
+
+Kurzfazit
+---------
+
+FAT32 ist fuer R4OS weiter praktikabel, aber aktuell nicht als fertiger
+High-Throughput-Pfad. Der wichtigste aktuelle Befund ist:
+
+- Korrektheit: Der FAT32-/Connectivity-Pfad funktioniert wieder belastbar.
+- Durchsatz: Der 14-MB-SYSUPD-Upload lief nur mit etwa 19 KB/s
+  (`Transferred: sent 14249356 ... in 748.0 seconds`).
+- Ursache: Nicht ein einzelner Bug, sondern eine Kette aus kleinen Fenstern,
+  FAT32-Metadatenarbeit, synchronen Commitpunkten, R4SYS-/SYSUPD-Mehrfach-
+  Lesen und QEMU-/IDE-/cache=none-Latenz.
+- Grundsaetzliche FAT32-Schwaeche: FAT32 speichert Dateien als einfach
+  verkettete Clusterliste. Ohne Chain-/Extent-Cache, freie-Cluster-Bitmap,
+  FSInfo-Nutzung und gebuendelte FAT-Sektorwrites kostet jede grosse Datei
+  schnell viele kleine Metadatenoperationen.
+
+Der naechste sinnvolle Schritt ist deshalb keine weitere kleine Korrektur,
+sondern ein geplanter Performance-Ausbau in mehreren klaren Schichten:
+FAT32-Allokation/FAT-Batching, Chain-/Extent-Cache, FSInfo/Inusemap,
+SSHD/SFTP-Windowing, SYSUPD-One-Pass-Staging und ein QEMU-/Storage-Benchmark.
+
+Code-Inventar
+-------------
+
+Direkte FAT32-Schicht:
+
+- `Code/Kernel/fs/fat/fat32.zig`
+  - mountet FAT32, liest BPB/Layout, Directory-Eintraege, FAT-Eintraege und
+    Clusterketten.
+  - nutzt `readSector()`, `writeSector()` und `flushVolume()` als
+    Blockdevice-/Page-Cache-Bruecke.
+  - hat seit 0.55.10.x Messpunkte fuer Requests, FAT-Reads/-Writes,
+    FAT-Kopiewrites, Directory-Scans, Allocation-Suche, Cluster-Walks,
+    Flushes und Yield-Punkte.
+  - `appendFileInternal()` ist der zentrale Append-/Stream-Hotpath.
+  - `writeRangeFromCluster()` schreibt volle Sektorbereiche inzwischen als
+    Multi-Sektor-Burst.
+  - `allocateChainPreferDetailed()`, `allocateChainFrom()` und
+    `findFreeCluster()` suchen freie Cluster aktuell weiter clusterweise.
+  - `writeFatEntryAll()` schreibt fuer jeden Cluster-Eintrag alle FAT-Kopien.
+  - `nthCluster()`, `cachedLastCluster()`, `cachedReadRangeCluster()` und die
+    Append-Caches reduzieren wiederholte Walks, ersetzen aber noch keinen
+    echten per-Datei-Extent-Cache.
+
+Page-Cache und Blockdevice:
+
+- `Code/Kernel/fs/page_cache.zig`
+  - shared Read-through-/Writeback-Cache fuer 512-Byte-Sektoren.
+  - `writeSector()` markiert Sektoren dirty.
+  - `writeSectorsDirect()` schreibt volle Multi-Sektor-Bereiche direkt in die
+    Blockschicht und invalidiert ueberlappende Cache-Sektoren.
+  - `flushDevice()` schreibt dirty Sektoren und ruft danach den
+    Blockdevice-Flush auf.
+- `Code/Kernel/storage/block.zig`
+  - besitzt Read/Write/Flush-Requests, Queue, Worker und Completion-Pfad.
+  - FAT32 benutzt diese Schicht seriell ueber den FS-Request-/Volume-Vertrag.
+    Das verhindert Korruption, bedeutet aber auch: lange FAT32-Arbeit blockt
+    weitere Dateioperationen sichtbar.
+
+R4SYS, Registry und Datei-APIs:
+
+- `Code/Kernel/program/r4sys.zig`
+  - `fileRead`, `fileWrite`, `fileReadAt64`, `fileWriteAt`,
+    `fileStreamBegin`, `fileStreamWrite`, `fileStreamFinish` und
+    `fileStreamAbort` sind der produktive Programmpfad auf FAT32.
+  - Streamslots halten Drive, Parent-Cluster, Dateiname, Offset und
+    Streamgroesse, damit grosse Appends nicht jeden Chunk neu aufloesen.
+  - `fileStreamWrite()` nutzt den deferred FAT32-Stream-Pfad.
+  - `fileStreamFinish()` ist der Commitpunkt und ruft `flushVolume()`.
+  - Registry-Mutationen bauen aktuell die Hive-Datei synchron neu,
+    schreiben eine temp-Datei, verifizieren, kopieren ein Backup und benennen
+    um. Das ist korrekt, aber fuer "kleine UI-Aktion erzeugt Registry-Write"
+    weiterhin ein Freeze-Risiko.
+
+SSHD/SFTP/SCP:
+
+- `Code/System/Services/SshService/src/main.zig`
+  - `ssh_channel_window` ist aktuell 32 KB.
+  - `sftp_output_capacity` ist 32768 Byte.
+  - `handleSftpWrite()` nimmt SFTP-Writes entgegen.
+  - `writeTransferChunks()` schreibt in R4SYS-Streams.
+  - `markTransferProgress()` verhindert alte Idle-Timeouts bei laufender
+    lokaler FAT32-Arbeit.
+  - Befund: Der Pfad ist stabilisiert, aber das kleine Channel-Fenster und
+    die Status-/ACK-Taktung bremsen grosse Transfers stark.
+
+SYSUPD und Paketformat:
+
+- `Code/System/Software/SysUpdate/src/main.zig`
+  - `readAndVerifyPackage()` liest Header, Manifest und Payload-Checksummen.
+  - `stagePayloads()`/`stagePayload()` lesen Paketbereiche erneut und
+    schreiben Stage-Dateien ueber R4SYS-Streams.
+  - `checksumFileRange()` liest Ziel-/Stage-Dateien fuer Checksummen.
+  - `writeJournal()` schreibt den Update-Journal synchron.
+  - Befund: Der Updatepfad ist absichtlich konservativ und robust, liest bei
+    grossen Paketen aber mehrfach und schreibt Stage-Kopien erneut. Nach dem
+    FAT32-Basisfix ist das einer der grossen Zeitanteile.
+- `Code/BuildTools/R4UPack/src/main.zig`
+  - baut Host-seitig R4U-Pakete mit Header, Manifest und Payloadblob.
+  - Kein R4OS-Runtime-Flaschenhals, aber relevant fuer Paketgroessen,
+    Checksumme und spaetere Streaming-Strategie.
+
+Buildtools, Images und Diagnosen:
+
+- `Code/BuildTools/ImageCreator/src/main.zig`
+  - erzeugt MBR+FAT32-Diskimages.
+  - Seit 0.55.10.5 nutzt das normale Bootimage 512 MB und 4096-Byte-Cluster.
+- `Code/System/Diagnostics/FsDiag/src/main.zig`
+  - automatisiert FAT32-Cache-, Writeback-, 64-KB- und 1-MB-Streamproben.
+  - aktuelle 1-MB-Streamprobe: `wbSectors=8`, `flush=2<=4`, `yield=yes`.
+- `Code/System/Diagnostics/StorageDiag/src/main.zig`
+  - relevant fuer Blockdevice-/Queue-/Storage-Sicht.
+- `DevTools/Scripts/Build.bat`
+  - Standardabnahme bleibt `-test`.
+  - Live-Abnahmen fuer SSHD/SYSUPD liegen unter
+    `Tests/Gate/`.
+- `DevTools/QEMU/Config/standard.conf`
+  - nutzt `format = "raw"`, `cache = "none"`, `piix3-ide` und `ide-hd`.
+  - Damit ist der Test streng gegen kleine Flush-/Sync-Kosten, aber nicht
+    zwingend repraesentativ fuer spaetere echte Hardware mit besserem
+    Controller-/Cache-Verhalten.
+
+Bottleneck-Bewertung
+--------------------
+
+1. Directory-Scans
+
+FAT32-Verzeichnisse sind lineare Dateien aus 32-Byte-Eintraegen. R4OS muss
+beim Suchen, Alias-Pruefen, Anlegen, Loeschen und Umbenennen weiter linear
+scannen. Die 0.55.10.x-Hotpaths reduzieren wiederholte Parent-Aufloesung,
+aber es gibt noch keinen Directory-Index.
+
+Bewertung: mittel. Fuer grosse Systemordner und viele kurze Registry-/Config-
+Dateizugriffe kann das sichtbar werden. Fuer den 14-MB-Transfer ist es nicht
+der Haupttreiber.
+
+2. Cluster-Chain-Walks
+
+FAT32 ist eine einfach verkettete Clusterliste. Eine Datei kennt den ersten
+Cluster; der N-te Cluster wird ueber die FAT-Kette gefunden. R4OS hat
+Append-/Last-Cluster-Cache und Read-Range-Cache, aber keinen mehrteiligen
+per-Datei-Extent-Cache.
+
+Bewertung: hoch. Fortlaufende Appends sind deutlich besser geworden, aber
+Verify-, ReadAt-, Checksum- und Stage-Schritte koennen weiter Clusterketten
+immer wieder ablaufen.
+
+3. Freie-Cluster-Suche
+
+R4OS nutzt einen Volume-Allocation-Hint, sucht aber weiterhin FAT-Eintraege
+clusterweise. Es gibt noch keine persistente FSInfo-Auswertung fuer
+Free_Count/Nxt_Free und keine Inusemap/Bitmap im Speicher.
+
+Bewertung: hoch. Bei grossen Dateien, Fragmentierung oder voller werdenden
+Images wird die Suche teuer. Das betrifft SSHD-Uploads, SYSUPD-Staging,
+Registry-Backups und spaeter Compiler-/Build-Ausgaben.
+
+4. FAT-Kopien und FAT-Sektor-Batching
+
+`writeFatEntryAll()` schreibt jeden FAT-Eintrag fuer alle FAT-Kopien. Bei
+fortlaufenden Dateien liegen viele Eintraege im selben FAT-Sektor, werden
+aber noch nicht als zusammenhaengender Run mit einem einzigen modifizierten
+Sektorblock behandelt.
+
+Bewertung: sehr hoch fuer grosse Dateien. Andere FAT-Stacks vermeiden genau
+das durch FAT-Sektor-/Buffer-Cache und durch Allokation zusammenhaengender
+Clusterketten.
+
+5. Flush-Haeufigkeit
+
+0.55.10.3 hat den schlimmsten Fall behoben: Streamchunks flushen nicht mehr
+jeden Chunk. Normale Mutationen bleiben absichtlich synchron-durable. Das ist
+fuer Replace, Delete, Rename, Registry und Config korrekt, kann UI-Workflows
+aber weiter haengen lassen.
+
+Bewertung: mittel bis hoch. Grosse Streams sind besser; kleine
+synchronisierte Metadatenwrites bleiben der naechste Responsiveness-Blocker.
+
+6. Page-Cache-Groesse und Writeback
+
+Der Page-Cache ist ein Sektorcache, kein Datei-Cache. Er kann dirty Sektoren
+halten und beim Flush schreiben. Fuer Multi-Sektor-Daten schreibt FAT32
+inzwischen direkt. FAT-/Directory-Metadaten profitieren aber noch nicht von
+einer groesseren, semantischen FAT-/Directory-Batching-Schicht.
+
+Bewertung: mittel. Die aktuelle Groesse reicht fuer Tests, aber nicht als
+endgueltige Antwort auf grosse Metadaten-Arbeit.
+
+7. FS-Request-/Volume-Serialisierung
+
+FAT32 bleibt absichtlich nicht reentrant. Kooperative Yield-Punkte halten das
+System etwas beweglicher, aber der eigentliche FS-Mutationsvertrag bleibt
+seriell.
+
+Bewertung: hoch fuer gefuehlte Freezes. Der Weg ist richtig, aber lange
+FAT32-Operationen muessen kuerzer werden; Parallelitaet alleine waere riskant.
+
+8. SSHD/SFTP-Windowing
+
+SSHD arbeitet aktuell mit einem 32-KB-Channel-Window und kleinen Output-/
+Status-Puffern. OpenSSH kann SFTP-Anfragen pipelinen, aber R4OS beantwortet
+Writes letztlich nach lokaler R4SYS/FAT32-Arbeit. Das erzeugt viele kleine
+Roundtrips und wenig nutzbare Pipe.
+
+Bewertung: sehr hoch. Die 14-MB-SYSUPD-Uebertragung mit etwa 19 KB/s ist
+fuer echte Hardware-/Kernelupdate-Ziele zu langsam.
+
+9. SYSUPD-Mehrfacharbeit
+
+SYSUPD verifiziert Paketinhalt, staged Payloads, prueft Checksummen und
+ersetzt Ziele robust. Dadurch werden grosse Dateien mehrfach gelesen und
+teilweise nochmal geschrieben.
+
+Bewertung: hoch. Robustheit bleibt wichtiger als Speed, aber der naechste
+Schritt muss ein One-Pass-/Streaming-Design sein: beim Lesen pruefen,
+gleichzeitig staged schreiben, Checksummen mitfuehren und Fortschritt
+sichtbar machen.
+
+10. QEMU-/Host-Einfluss
+
+Der Standardtest nutzt raw images, `cache=none`, PIIX3-IDE und QEMU user
+networking auf einem Windows-Host. Das ist gut fuer reproduzierbare, strenge
+Korrektheitstests, kann kleine synchronisierte Writes aber deutlich teurer
+machen als moderne echte Hardware.
+
+Bewertung: mittel bis hoch. QEMU ist sehr wahrscheinlich ein Verstaerker,
+aber nicht die alleinige Ursache. Dass 1-MB-SFTP bereits 104 Sekunden und
+14-MB-SYSUPD 748 Sekunden brauchen, zeigt einen echten Softwarepfad-Blocker.
+
+Vergleich mit anderen Systemen
+------------------------------
+
+Microsoft FAT-Spezifikation:
+
+- FAT32 bestimmt den Typ ueber die Clusterzahl.
+- FAT-Eintraege bilden eine einfach verkettete Clusterliste.
+- FAT32-Eintraege sind 32 Bit breit; die oberen 4 Bits muessen erhalten
+  bleiben.
+- FSInfo enthaelt `Free_Count` und `Nxt_Free`, also genau die Felder, die
+  R4OS spaeter fuer schnelle freie-Cluster-Suche nutzen sollte.
+
+Linux FAT:
+
+- Linux besitzt pro Inode einen kleinen FAT-Chain-Cache mit Dateicluster,
+  Diskcluster und Anzahl zusammenhaengender Cluster.
+- `fat_get_cluster()` versucht zuerst diesen Cache und baut beim Walk
+  zusammenhaengende Runs wieder in den Cache ein.
+- FAT-Zugriffe laufen unter einem FAT-Lock.
+- FAT-/Metadatenbloecke werden ueber Buffer/Page-Cache markiert und nur bei
+  synchronen Pfaden direkt erzwungen.
+- Linux hat fallocate-/Preallocation-Pfade, die Cluster vorab reservieren
+  koennen.
+
+FreeBSD msdosfs:
+
+- FreeBSD nutzt `denode`-nahe FAT-Caches (`fc_lookup`, `fc_setcache`) fuer
+  Cluster-Mapping.
+- Es gibt eine Inusemap und eine freie-Cluster-Zaehlsicht im Mountzustand.
+- `clusteralloc()` versucht zusammenhaengende freie Clusterketten zu finden.
+- `fatchain()` schreibt zusammenhaengende FAT-Ketten sektorweise statt fuer
+  jeden Cluster blind einzeln.
+- FAT-Spiegel werden ueber Buffer verzoegert geschrieben, ausser der Mount ist
+  synchron.
+
+DOS/Win9x/Windows:
+
+- Historische DOS-/Win9x-Umgebungen haben FAT stark ueber globale
+  Disk-/File-Caches abgefedert. Das Modell war fuer Single-User-Trust
+  brauchbar, aber nicht fuer harte Crash-Konsistenz.
+- Windows-NT-artige Systeme trennen FAT-Metadaten, File-Cache, Lazy Writer
+  und explizite Flush-/Unmount-Semantik staerker.
+- Fuer R4OS ist daraus nicht "alles asynchron" abzuleiten, sondern:
+  klare Commitpunkte, aber weniger kleine Metadatenwrites pro Operation.
+
+QEMU-Einschaetzung
+------------------
+
+Die aktuelle Standardkonfiguration ist absichtlich konservativ:
+
+- `format = "raw"` vermeidet Format-Raten und Overhead durch qcow2.
+- `cache = "none"` nutzt Direct-I/O-artiges Verhalten und laesst Flushes
+  wirksam bleiben.
+- `piix3-ide`/`ide-hd` ist kompatibel, aber langsam und nicht unser
+  langfristiges Best-Case-Hardwaremodell.
+- QEMU user networking und der Windows-Host fuegen Latenzen hinzu, besonders
+  bei vielen kleinen SSH/SFTP-Statuspaketen.
+
+QEMU erklaert also einen Teil der schlechten Zahlen, aber nicht alles. Die
+richtige Reaktion ist ein eigener Benchmark-Unterstrang:
+
+- IDE vs AHCI vs spaeter NVMe vergleichen.
+- `cache=none` vs `cache=writeback` separat messen.
+- SFTP/SCP und lokale FSDIAG-/SYSUPD-Pfade getrennt messen.
+- Immer mit Korrektheitschecks und nie als stiller Fallback in den
+  produktiven Buildpfad einbauen.
+
+Messstand 0.55.10.7
+-------------------
+
+Bekannte Abnahmen nach 0.55.10.5/0.55.10.6:
+
+- `DevTools/Scripts/Build.bat -test`: `TEST OK`.
+- FSDIAG 1-MB-Stream:
+  - `bytes=1048576`
+  - `chunks=128`
+  - `maxChunk=8192`
+  - `flush=2<=4`
+  - `wbSectors=8`
+  - `yield=yes`
+- SSHD 1-MB-Dateitransfer:
+  - SFTP gross: 1.048.576 Byte bytegenau.
+  - SCP gross: 1.048.576 Byte bytegenau.
+- SYSUPD 14-MB-Livetest:
+  - Paketpayload: 14.215.633 Byte.
+  - Upload per SFTP: 14.249.356 gesendete Bytes in 748 Sekunden,
+    etwa 19 KB/s.
+  - `SYSUPD VERIFY`: OK.
+  - `SYSUPD APPLY`: OK.
+  - Status und Version nach Reboot: OK.
+
+Risiken
+-------
+
+- Mehr FAT32-Performance darf keinen zweiten Datei-I/O-Pfad einfuehren.
+  R4SYS/FAT32 bleibt die Wahrheit.
+- Mehr Caching darf nicht bedeuten, dass Directory- oder FAT-Metadaten
+  inkonsistent werden. Jeder Cache braucht klare Invalidation.
+- SFTP-Windowing darf keine stillen Datenverluste erzeugen: ACK erst nach
+  R4SYS-/Stream-Erfolg.
+- SYSUPD darf nicht fuer Geschwindigkeit auf Verify, Journal, Replace oder
+  Reboot-Festigkeit verzichten.
+- QEMU-Benchmarkwerte duerfen nicht als Produktverhalten missverstanden
+  werden, solange echte Hardware fehlt.
+
+Vorschlag fuer weitere Unterversionen
+-------------------------------------
+
+0.55.10.8 - FAT32-Run-Allokation und FAT-Sektor-Batching
+
+- Ziel: Zusammenhaengende freie Clusterketten in einem Lauf finden und FAT-
+  Sektoren gebuendelt schreiben.
+- Inhalt: `allocateChain*` auf Run-Suche erweitern, FAT32-High-Bits weiter
+  erhalten, alle FAT-Kopien sektorweise aktualisieren, neue Metriken fuer
+  Run-Laenge und FAT-Sektorwrites.
+- Abnahme: `Build.bat -test`, FSDIAG 1-MB-Stream, synthetischer 14-MB-
+  Schreibtest ohne SSH, harte Obergrenzen fuer FAT-Reads/-Writes.
+
+0.55.10.9 - Per-Datei-Chain-/Extent-Cache
+
+- Ziel: Wiederholte ReadAt-/Checksum-/Stage-Walks deutlich reduzieren.
+- Inhalt: kleiner pro-Datei-/pro-Pfad-Cache fuer Dateicluster -> Diskcluster
+  und contiguous count, klare Invalidation bei Write, Delete, Rename,
+  Truncate/Replace.
+- Abnahme: FSDIAG sequentielle und versetzte ReadAt-Probe, SYSUPD VERIFY-
+  Metriken, keine Regression bei Delete/Rename/Abort.
+
+0.55.10.10 - FSInfo, Free-Count und Inusemap
+
+- Ziel: freie Cluster nicht immer aus FAT-Eintraegen ableiten muessen.
+- Inhalt: FSInfo lesen/validieren, Free_Count/Nxt_Free pflegen, bei
+  unsicherer FSInfo einmalig scannen, Inusemap im RAM fuer schnelle Run-Suche.
+- Abnahme: ImageCreator erzeugt gueltige FSInfo, FSDIAG prueft Mount,
+  Allocation, Delete, Reboot und freie Clusterzahl.
+
+0.55.10.11 - SSHD/SFTP-Durchsatz und Windowing
+
+- Ziel: SFTP/SCP nicht mehr an 32-KB-Fenstern und ACK-Churn verhungern lassen.
+- Inhalt: groesseres SSH-Channel-Window, groessere SFTP-Puffer,
+  kontrollierte Pipeline mehrerer Writes, Fortschrittsstatus ohne
+  Datenverlust, Timeout-Kontrakte an realen Transferfortschritt koppeln.
+- Abnahme: 1-MB und 14-MB Upload deutlich schneller als 0.55.10.7,
+  Bytevergleich, Abort, Fortschrittsstatus, Reconnect/Status-Kommandos.
+
+0.55.10.12 - SYSUPD-One-Pass-Staging
+
+- Ziel: Kernel-/Systemupdates robust halten, aber Vollpakete nicht mehrfach
+  unnoetig lesen und schreiben.
+- Inhalt: Paket lesen, Payload pruefen und staged schreiben in einem
+  kontrollierten Pass; Checksummen waehrenddessen mitfuehren; Journal- und
+  Replace-Vertrag behalten; Fortschritt sichtbar machen.
+- Abnahme: gueltig/korrupt/inkompatibel, Apply, Reboot, Status nach Reboot,
+  14-MB-Test mit deutlich weniger Gesamtzeit.
+
+0.55.10.13 - QEMU-/Storage-Profilbenchmark
+
+- Ziel: trennen, was FAT32/R4OS ist und was QEMU-/Controller-/Cacheprofil ist.
+- Inhalt: reproduzierbarer Test fuer standard.conf IDE/cache=none, AHCI,
+  cache=writeback-Dryrun/Manuellprofil und spaeter NVMe; lokale FAT32- und
+  SSHD-Transfermetriken getrennt ausgeben.
+- Abnahme: Benchmark-Dokument mit Zahlenmatrix, keine produktive
+  Standardprofil-Aenderung ohne ausdrueckliche Entscheidung.
+
+0.55.10.14 - Registry-/Config-Responsiveness
+
+- Ziel: kleine synchronisierte Systemwrites duerfen UI-Workflows nicht mehr
+  merklich einfrieren.
+- Inhalt: Registry-/Config-Schreiblast inventarisieren, deduplizieren,
+  optional kurze Commit-Buendelung fuer nichtkritische UI-Spuren, harte
+  Commitpunkte fuer echte Systemzustandsaenderungen behalten.
+- Abnahme: Oeffnen/Schliessen typischer Apps mit Registry-Schreiblast,
+  FSDIAG-/REGDIAG-Metriken, kein Verlust kritischer Settings nach Reboot.
+
+Quellen
+-------
+
+- Microsoft FAT Specification:
+  https://academy.cba.mit.edu/classes/networking_communications/SD/FAT.pdf
+- Linux FAT-Quellen:
+  https://codebrowser.dev/linux/linux/fs/fat/cache.c.html
+  https://codebrowser.dev/linux/linux/fs/fat/fatent.c.html
+  https://codebrowser.dev/linux/linux/fs/fat/file.c.html
+- FreeBSD msdosfs-Quellen:
+  https://web.mit.edu/freebsd/head/sys/fs/msdosfs/msdosfs_fat.c
+  https://web.mit.edu/freebsd/head/sys/fs/msdosfs/msdosfs_denode.c
+- QEMU Drive-/Cache-Dokumentation:
+  https://www.qemu.org/docs/master/system/qemu-manpage.html

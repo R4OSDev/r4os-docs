@@ -1,0 +1,82 @@
+﻿Storage-Driver-Completion 0.53.42
+=================================
+
+Ziel
+----
+
+0.53.42 verbindet die seit 0.53.14 vorhandene Blockdevice-Request-Queue mit
+einem produktiven Runtime-Worker. Block-I/O wird nach dem Runtime-Start nicht
+mehr vom aufrufenden Task inline gepumpt, sondern ueber den zentralen
+`block-work`-Kernelthread abgearbeitet. Synchrone R4SYS-, FAT32- und
+Diagnosepfade bleiben synchron an ihrer Oberflaeche, warten intern aber auf
+die Completion desselben Queue-Slots.
+
+Implementierungsstand
+---------------------
+
+- `Code/src/storage/block.zig` besitzt einen Runtime-Worker, ein auto-reset
+  Event, Runtime-/Boot-Inline-Zaehler und pro Blockdevice Completion-Signale,
+  Worker-Requests, Worker-Completions sowie fruehe Boot-Inline-Requests.
+- `kernel/runtime_boot.zig` startet den Block-Worker nach der allgemeinen
+  Driver-Workqueue. Vor diesem Punkt ist der Fruehbootpfad explizit
+  `boot_inline`; nach Runtime-Start ist der Worker der produktive Pfad.
+- `ProgramApi` steht auf v137. `ProgramPerformanceSummary` und
+  `ProgramStoragePerformanceInfo` wachsen append-only um Storage-Worker- und
+  Completion-Signal-Zaehler.
+- `PERFDIAG.R4X` und `STORDIAG.R4X` verlangen v137, das neue Ready-Flag,
+  aktive Worker-Requests, gleiche Worker-Completions, Completion-Signale und
+  keine Completion-Timeouts.
+- `MEMSUITE.R4X /PAGERSTRESS /STRICT` prueft seit 0.53.42 die Storage-Worker-
+  Deltas im Pagerstress und bewertet Responsiveness-Counter als Delta seit
+  Testbeginn. Vorhandene Altwerte aus frueheren Diagnosen kippen dadurch den
+  Test nicht mehr, neue Storage-/FS-/Service-/Lock-Verstoesse aber schon.
+- `fs/request.zig` nutzt ein reentrantes Request-Gate statt eines gehaltenen
+  Mutex. Die bestehende FS-Serialisierung und die FS-Request-Zaehler bleiben
+  erhalten, aber Storage-Completion-Waits schlafen nicht mehr unter einem
+  Kernel-Lock.
+
+Besitzgrenzen
+-------------
+
+Der Kernel besitzt nur die allgemeine Blockqueue, den Worker, Wait/Wake und
+die Diagnosezaehler. Dateisystem-Policy, Writeback-Policy, Pagefile-Policy,
+Transfergroessen und Benutzerkomfort bleiben in FS/R4SYS, Diagnostics,
+Services oder Anwendungen. R4D-Storage-Treiber liefern weiterhin ihren
+Backend-Read/Write/Flush; der gemeinsame Block-Core ist die einzige
+produktive Completion-Kante.
+
+Fruehbootgrenze
+---------------
+
+Vor Task-/Runtime-Start gibt es noch keinen blockierenden Worker. Deshalb
+duerfen Storage-Requests im Bootpfad explizit `boot_inline` laufen. Diese
+Kante ist sichtbar gezaehlt und keine stille Fallbackroute im Normalbetrieb.
+Nach `Block worker [OK]` muessen Runtime-Requests ueber `block-work` laufen.
+
+No-Fallback-Grenzen
+-------------------
+
+- Kein zweiter Block-I/O-Pfad fuer R4SYS, FAT32, Page-I/O oder Diagnostics.
+- Keine stille Rueckkehr zum alten produktiven Inline-Pump, sobald der
+  Runtime-Worker bereit ist.
+- Kein Completion-Ignorieren: Timeouts, Backpressure und Fehler bleiben
+  sichtbar in R4DEV, PERFDIAG, STORDIAG und MEMSUITE.
+- Boot-Inline ist auf die dokumentierte Fruehbootgrenze beschraenkt.
+
+Abnahme 0.53.42
+---------------
+
+Der Standard-Smoke-Test meldet:
+
+    Block worker [OK]
+    R4DEV performance snapshot v137: OK
+    Storage driver completion: OK
+    Storage worker: started=1 ... req=74073 done=74073 signals=74331 bootInline=258
+    Locks: acquire=814769 release=814769 contended=0 orderBad=0 sleepBad=0 held=0 maxDepth=1
+    MEMSUITE pagerstress: ... worker=28085/28085 signals=28085 ... lock timeout/sleep/noSleep=0/0/0 ...
+    MEMSUITE pagerstress result: OK
+
+Validiert wurde mit:
+
+    DevTools/Scripts/Build.bat -norun
+    DevTools/Scripts/Build.bat -test

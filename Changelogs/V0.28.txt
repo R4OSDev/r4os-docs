@@ -1,0 +1,511 @@
+﻿Archivierte Roadmap 0.28.X - R4DOS/COMMAND vom Kernel trennen
+==============================================================
+
+Diese Datei archiviert den abgeschlossenen Roadmap-Stand fuer Version 0.28.X.
+Die aktive Roadmap wurde danach bereinigt; das Refactor-Leitbild bleibt in
+Roadmap.txt stehen.
+*** Kernel Refactor Roadmap Leitbild ***
+In dieser Roadmap befassen wir uns im Verlauf mehrerer großer Versionen mit der säuberung des Kernels.
+Aktuell wurden viele Funktionen nach 
+kernelold.zig ausgelagert und in src/old/ verschoben.
+Wir holen die nach und nach zurück in main.zig, kontrollieren dabei aber alles.
+Was aus dem Kernel raus kann soll in Software, Treiber und Protokolle untergebracht werden.
+Im Zuge dieses Refactor ist auch die Dokumentation zu aktualisieren und pflegen.
+
+-------------------------------------------
+Ab hier beginnen die Versionen und ab hier darf auch bereinigt werden.
+Das Refactor Leitbild muss bei einer Roadmap Bereinigung stehen bleiben
+-------------------------------------------
+
+Version 0.28.X - Leitbild
+-------------------------------------------
+Status: Geplant
+
+Leitbild:
+- 0.28.X trennt R4DOS-/COMMAND-Anwendungen sauber vom Kernel.
+- R4DOS/COMMAND soll als normale externe R4X-Software laufen und nur die
+  bestehenden externen APIs beziehungsweise sauber dokumentierte Erweiterungen
+  nutzen.
+- `kernel/log.zig` bleibt Kernel-Log fuer Boot, Fatal, Debug und Kernel-
+  Diagnose. Normale Userland-/COMMAND-Ausgabe darf langfristig nicht mehr
+  ueber `kernel/log.zig` laufen.
+- COM1 bleibt physisch der headless Debug-/Testkanal, wird aber logisch
+  getrennt: Kernel-Logs gehen ueber `kernel/log.zig`, Userland-/COMMAND-
+  Ausgabe geht ueber Console-/STDIO-APIs und darf nur ueber einen optionalen
+  Console-Test-Mirror nach COM1 gespiegelt werden.
+- COMMAND.R4X soll Shell-Session, Prompt, History, einfache Built-ins,
+  Errorlevel, AUTOEXEC.BAT und sichtbare Textausgabe selbst verantworten.
+- Shell-State gehoert zu COMMAND beziehungsweise zur Console-Session:
+  CWD, PATH, PROMPT, COMSPEC, ERRORLEVEL, Environment, History und Batch-State
+  sollen nicht als COMMAND-Sonderzustand im Kernel leben.
+- Der Kernel startet Programme, stellt APIs bereit und verwaltet Console-
+  Hosts/Buffer, soll aber keine R4DOS-Shelllogik als eingebauten
+  COMMAND-Ersatz behalten.
+- Alte Kernel-Diagnosen sollen entweder ueber APIs erreichbar werden oder als
+  externe R4X-Diagnoseprogramme beziehungsweise Tools aus `C:\DIAG`/`C:\BIN`
+  laufen.
+- Keine halben Sachen: Eine Unterversion gilt erst als erledigt, wenn der
+  normale produktive Pfad wirklich entkoppelt ist. Temporaere Bruecken duerfen
+  nur mit dokumentiertem Zweck, klarer Abnahme und festem Entfernpunkt in der
+  Roadmap bleiben.
+
+Architekturregeln:
+- Console-Host und Shell-Anwendung sind strikt getrennt. R4DOS-Modus und
+  Terminal hosten Sessions; COMMAND.R4X ist Gast und besitzt Shelllogik.
+- Kernel darf allgemeine Mechanismen bereitstellen: Programmstart, Tasks,
+  Speicher, Dateien, Console-Buffer, Eingabe, Display-Present und optionale
+  Testspiegelung.
+- Kernel darf keine COMMAND-Fachlogik behalten: Prompt, Parser, PATH-Suche,
+  Built-ins, Batch, Redirection, Pipes, Errorlevel und Shell-Environment.
+- Jede aus `command_runtime.zig` entfernte Funktion braucht einen neuen
+  eindeutigen Besitzer: COMMAND.R4X, externes R4X-Tool, allgemeine API,
+  Service/Treiber/Protokoll oder bewusst entfernte Legacy-Funktion.
+- Nicht implementierte Legacy-Funktionen sollen sichtbar und ehrlich als
+  `not supported`/`not migrated` enden, nicht heimlich in den alten
+  Kernel-Executor zurueckfallen.
+
+Begriffe:
+- R4DOS-Modus: Vollbild-Console-Host. Er kann ueber das R4Desk-Startmenue
+  aufgerufen werden und zeigt eine laufende Console-Session fullscreen. Spaeter
+  kann dieser Host auch entfernte Sessions wie SSH anbinden.
+- Terminal: Fenster-Console-Host im Desktop-Modus. Es zeigt eine laufende
+  Console-Session in einem R4Desk-Fenster.
+- R4DOS-Anwendung: Console-/Textmodus-R4X-Anwendung. Sie laeuft innerhalb
+  eines Console-Hosts und kann dadurch im R4DOS-Modus oder im Terminal laufen.
+- COMMAND.R4X: Shell-Anwendung. COMMAND ist eine spezielle R4DOS-Anwendung,
+  aber nicht der Host selbst. COMMAND liest Eingaben, fuehrt Befehle aus,
+  startet Programme, verwaltet Prompt/History/Errorlevel und schreibt ueber
+  stdin/stdout/stderr beziehungsweise Console-/STDIO-APIs.
+- Console-Host: Anzeige-/Eingabeumgebung fuer Console-Sessions. R4DOS-Modus
+  und Terminal sind Hosts; sie besitzen keine Shell-Logik.
+
+Abschlussziel:
+- `Code/Software/Command` importiert keinen Kernel-Code und ist nicht mehr auf
+  `command_runtime.zig` als Shell-Backend angewiesen.
+- COMMAND-/R4DOS-Ausgabe laeuft ueber Console-/STDIO-APIs, nicht ueber
+  `kernel/log.zig`.
+- Normale Userland-Ausgabe faellt nicht still auf `kernel/log.zig`/`k.putc`
+  zurueck. Console-Apps brauchen einen Console-Host, Dummy-/Primary-Host oder
+  bewusst aktivierten Test-Mirror.
+- Fullscreen-R4DOS und R4Desk-Terminal nutzen denselben sauberen Console-
+  Host-/Buffer-Vertrag.
+- COMMAND.R4X kann externe Programme selbst aufloesen und starten:
+  direkter Pfad, aktuelles Verzeichnis, `PATH`, optionale `.R4X`-Ergaenzung,
+  Argumentuebergabe und Console-/GUI-Policy.
+- Die Legacy-Command-Bruecke in `r4sys.command_*` ist entfernt oder klar als
+  temporaer abgeschalteter Kompatibilitaetspfad isoliert.
+- `shell_launcher.zig` startet nur externe Shell-/Recovery-Programme und
+  registriert keine produktiven COMMAND-Runtime-Hooks mehr.
+- `command_runtime.zig` ist nach 0.28.X kein produktiver Bestandteil des
+  normalen R4DOS-/COMMAND-Pfads.
+
+Version 0.28.1 - Bestandsaufnahme: COMMAND-/Kernel-Kopplungen inventarisieren
+-----------------------------------------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- COMMAND.R4X, SDK-Hooks, shell_launcher.zig, command_runtime.zig, r4x.zig und relevante R4SYS-/ProgramAPI-Pfade auf COMMAND-/Kernel-Kopplungen untersucht.
+- Direkte Kernel- und Treiberimporte im COMMAND-Legacybereich dokumentiert.
+- Direkte Ausgabepfade ueber kernel/log.zig und den R4X-Fallback nach k.putc dokumentiert.
+- Built-ins, Batch-Funktionen und Diagnosekommandos als Migrationsflaechen klassifiziert.
+- Bestandsaufnahme mit Migrationsmatrix, Risiken und Abnahmeziel in Docs/R4DOS/CommandKernelTrennung.txt abgelegt.
+- Zentrale Version auf 0.28.1 erhoeht.
+
+Abnahmen:
+- Bestandsaufnahme enthaelt Suchmuster, betroffene Dateien und die wichtigsten Kopplungspunkte.
+- Fuer jede grosse Flaeche ist festgelegt, ob sie in COMMAND.R4X, Console-Host, SDK/API, externe Diagnose-R4X oder Legacy-Bruecke gehoert.
+- Keine Code-Aenderung in dieser Unterversion; daher keine Build-Abnahme erforderlich.
+
+Notizen:
+- command_runtime.zig bleibt der zentrale Legacy-Knoten und darf nicht mechanisch verschoben werden.
+- Headless-Smoke-Tests brauchen weiterhin einen COM1-sichtbaren, aber logisch von App-Ausgabe getrennten Testpfad.
+Version 0.28.2 - Console-/STDIO-Vertrag festlegen
+--------------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Console-/STDIO-Vertrag fuer R4DOS-Modus, Terminal, COMMAND.R4X und externe R4DOS-Anwendungen definiert.
+- Verantwortlichkeiten von R4X-Anwendung, COMMAND.R4X, ProgramAPI/R4X-Runtime, Console-Host, Kernel und COM1-Test-Mirror abgegrenzt.
+- stdin, stdout, stderr, capture und null als Stream-Ziele beschrieben.
+- Regeln fuer Textbytes, Steuerzeichen, fehlende Console, Capture und Null-Streams festgelegt.
+- Ausdruecklich verboten: App-Ausgabe ueber kernel/log.zig, direkte COM1-Nutzung durch R4DOS-Anwendungen und automatischer R4X-Fallback nach k.putc/k.puts.
+- Headless-Testpfad ueber optionalen Console-Test-Mirror statt ueber App-Logging definiert.
+- Zentrale Version auf 0.28.2 erhoeht.
+
+Abnahmen:
+- Docs/R4DOS/ConsoleStdioVertrag.txt beschreibt Akteure, Streams, Startpfade, Fehlerverhalten, COM1-Test-Mirror und Negativregeln.
+- Der Vertrag benennt konkrete spaetere Build-, Smoke-, R4DOS-, Terminal- und Negativ-Abnahmen.
+- Keine Code-Aenderung in dieser Unterversion; daher keine Build-Abnahme erforderlich.
+
+Notizen:
+- Die Umsetzung beginnt ab 0.28.3. Bis dahin darf command_runtime.zig nur als klar markierte Legacy-Bruecke bestehen bleiben.
+- Der COM1-Test-Mirror ist ein Host-/Testmechanismus, keine Anwendungs-API.
+Version 0.28.3 - Fullscreen-R4DOS ueber Console-State anbinden
+--------------------------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Direkter COMMAND-Shellstart kann als `fullscreen_r4dos`-Console-Host markiert werden.
+- `shell_launcher.zig` setzt den Fullscreen-Host nur fuer COMMAND.R4X beziehungsweise den COMMAND-Fallback; DESK.R4X bleibt ohne pauschale Fullscreen-Markierung.
+- Shell-Instanzen mit Host `fullscreen_r4dos` werden in `r4x.zig` als gueltiger Console-Kontext akzeptiert.
+- COMMAND-/R4DOS-Ausgabe landet im bestehenden Console-State statt im alten R4X-Fallback nach `k.putc`.
+- Der alte `apiOutputByte`-Fallback nach `k.putc` wurde entfernt.
+- Fullscreen-R4DOS spiegelt Console-Ausgabe als Host-/Testpfad nach COM1 und auf die rohe Kernel-Konsole, ohne daraus eine Anwendungs-API zu machen.
+- `kernel/log.zig` stellt dafuer rohe Serial-/Console-Ausgabehelfer bereit, die den normalen Output-Hook bewusst umgehen.
+- Zentrale Version auf 0.28.3 erhoeht.
+
+Abnahmen:
+- `DevTools/Scripts/Build.bat -test` ausgefuehrt.
+- Testauswertung: QEMU OK, Boot OK, Poweroff OK, `TEST OK`.
+- `rg`-Abnahme auf den alten produktiven `apiOutputByte`-Fallback nach `k.putc(ch)` ergab keinen Treffer.
+- Alle internen `runProgramFile`-Aufrufe tragen den neuen Host-Parameter.
+
+Notizen:
+- `command_runtime.zig` nutzt weiterhin viele `k.puts`/`k.putc`-Aufrufe. Im gehosteten Console-Kontext werden diese jetzt ueber den Output-Hook in den Console-State umgeleitet; das bleibt eine temporaere Legacy-Bruecke.
+- Der eigentliche Abbau der COMMAND-Session und Shell-Logik beginnt in 0.28.4.
+
+Version 0.28.4 - COMMAND-Session und Shell-State nach Userland ziehen
+---------------------------------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Normaler COMMAND.R4X-Start ruft keine produktiven `commandSessionStart*`-, `commandPrintPrompt`-, `commandGetErrorlevel`- oder `commandSetErrorlevel`-Hooks mehr auf.
+- COMMAND.R4X initialisiert PATH, PROMPT, COMSPEC, CWD, TEMP, ERRORLEVEL, History und Banner selbst.
+- COMMAND.R4X liest `VERSION.R4S` weiterhin direkt fuer die sichtbare Version.
+- COMMAND.R4X liest `COMMAND.R4S` fuer Session-relevante Defaults und behaelt bei kaputten Zeilen stabile Defaults.
+- COMMAND.R4X verarbeitet `AUTOEXEC.BAT` im Userland-Startpfad.
+- Userland-Built-ins fuer `REM`, `PATH`, `PROMPT`, `SET`, `CD/CHDIR` und lokalen ERRORLEVEL-State ergaenzt.
+- SDK-Wrappers fuer alte COMMAND-Session-/Prompt-/Errorlevel-Hooks als Legacy/deprecated markiert.
+- `TestInjection/AUTOEXEC.BAT` erweitert, damit `COMMAND.R4X /SELFTEST` im Smoke-Test laeuft.
+- `TestInjection/R4DOS/COMMAND.R4S` als kaputtes Test-Overlay ergaenzt, um stabile Defaults abzusichern.
+- Zentrale Version auf 0.28.4 erhoeht.
+
+Abnahmen:
+- `DevTools/Scripts/Build.bat -test` mit erweitertem COMMAND-Selftest ausgefuehrt.
+- `DevTools/Scripts/Build.bat -test` mit kaputtem Test-`COMMAND.R4S` ausgefuehrt.
+- Testauswertung: QEMU OK, Boot OK, Poweroff OK, `TEST OK`.
+- QEMU-Log enthaelt `COMMAND userland selftest: OK`.
+- `rg`-Abnahme in `Code/Software/Command/src/main.zig`: keine Treffer fuer produktive `commandSessionStart*`, `commandPrintPrompt`, `commandGetErrorlevel` oder `commandSetErrorlevel`-Nutzung.
+
+Notizen:
+- `commandExecuteLine` bleibt als Legacy-Executor-Bruecke erhalten, bis externe Programmstarts in 0.28.6 nach COMMAND.R4X wandern.
+- `CD/CHDIR` ist aktuell lokaler COMMAND-Prompt-/CWD-State; vollstaendige Dateisystem-CWD-Semantik folgt mit der weiteren Shell-/Executor-Entkernung.
+Version 0.28.5
+-------------------------------------------
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Einfache COMMAND-Built-ins laufen im normalen COMMAND.R4X-Pfad in Userland.
+- Bereits vorhandene Userland-Built-ins `ECHO`, `VER`, `TYPE`, `DIR`, `COPY`,
+  `DEL`, `REN`, `MD` und `RD` wurden per Builtin-Test abgesichert.
+- Weitere Built-ins wurden in COMMAND.R4X ergaenzt:
+  `CLS`, `DATE`, `TIME`, `VOL`, `VERIFY`, `MORE`, `SORT` und `PAUSE /?`.
+- `COLOR` wird in COMMAND.R4X bewusst abgefangen und sichtbar als noch
+  fehlende Console-Farb-API gemeldet, statt still in den Kernel-Executor
+  zurueckzufallen.
+- Batch-Grundlagen aus 0.28.4 bleiben in Userland: `AUTOEXEC.BAT`, `REM`,
+  Echo-Off-Verarbeitung und `PAUSE /?`-Abnahme.
+- Built-ins setzen den lokalen COMMAND-`ERRORLEVEL` ueber den gemeinsamen
+  Execute-Pfad und liefern DOS-nahe Fehlermeldungen fuer bekannte Fehler.
+- `COMMAND.R4X /BUILTINTEST` wurde in `TestInjection/AUTOEXEC.BAT` aufgenommen.
+- Dokumentation unter Docs/R4DOS/CommandBuiltinsUserland.txt ergaenzt.
+- Zentrale Version auf 0.28.5 erhoeht.
+
+Abnahmen:
+- `DevTools/Scripts/Build.bat -test` ausgefuehrt.
+- Testauswertung: QEMU OK, Boot OK, Poweroff OK, `TEST OK`.
+- QEMU-Log enthaelt `COMMAND builtins: userland echo/ver/type/dir/copy/del/ren/md/rd OK`.
+- `COMMAND.R4X /BUILTINTEST` deckt Erfolgspfade und Fehlerfaelle ab:
+  Datei-/Ordneroperationen, fehlende Datei, ungueltige Argumente, Pfad zu lang
+  und sichtbaren `COLOR`-API-Blocker.
+- `rg`-Abnahme in `Code/Software/Command/src/main.zig`: keine produktiven
+  alten COMMAND-Session-Hooks mehr; nur noch ein generischer
+  `commandExecuteLine`-Fallback fuer noch nicht migrierte externe Starts bis
+  0.28.6.
+- Migrierte Built-ins nutzen COMMAND.R4X-/SDK-/R4SYS-Pfade und keinen direkten
+  Kernelimport.
+
+Notizen:
+- `COLOR` ist fachlich ein Console-State-Thema und wird erst mit einer
+  sauberen Console-Farb-API vollstaendig funktional.
+- Externe Programmstarts bleiben bewusst 0.28.6; der verbleibende
+  `commandExecuteLine`-Fallback ist kein Zielzustand.
+- Kernelnahe Hardwarediagnosen sollen hier nicht in COMMAND kopiert werden;
+  sie gehoeren in 0.28.8 als eigene Diagnose-/Toolfrage.
+
+Version 0.28.6
+-------------------------------------------
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Der normale COMMAND-Pfad nutzt fuer unbekannte Befehle nicht mehr
+  `commandExecuteLine`/`command_execute_line`.
+- COMMAND.R4X loest externe Programme selbst auf:
+  direkter Pfad, aktuelles Verzeichnis, `PATH`, Name mit `.R4X`, Name ohne
+  Endung mit optionaler `.R4X`-Ergaenzung und relative Pfade wie
+  `BIN\BOOTINFO.R4X`.
+- COMMAND.R4X klassifiziert gefundene Ziele ueber die allgemeine Program-API
+  `program_class` und startet sie ueber `program_launch`.
+- Foreground-Console-Programme laufen ueber den bestehenden Program-Launch-
+  Pfad und erben dadurch den aktuellen Console-Host der COMMAND-Session.
+- COMMAND.R4X uebernimmt nach erfolgreichem Foreground-Launch den letzten
+  Program-Exitcode aus `ProgramStatus.last_exit_code` in den lokalen
+  `ERRORLEVEL`.
+- Startfehler werden sichtbar gemeldet: unbekannter Befehl, nicht startbares
+  Ziel, zu langer Pfad/Argumentstring und Service-Programm im COMMAND-Kontext.
+- Redirection und Pipes fallen nicht mehr still in die Legacy-Runtime, sondern
+  werden bis 0.28.7 sichtbar als noch nicht migriert gemeldet.
+- `POWEROFF`/`SHUTDOWN`, `REBOOT` und `HALT` sind explizite COMMAND-Built-ins
+  ueber die allgemeinen System-APIs, damit Smoke-Tests ohne Legacy-Executor
+  sauber beenden koennen.
+- `COMMAND.R4X /LAUNCHTEST` ergaenzt und in `TestInjection/AUTOEXEC.BAT`
+  aufgenommen.
+- Dokumentation unter Docs/R4DOS/CommandExternalLaunchUserland.txt ergaenzt.
+- Zentrale Version auf 0.28.6 erhoeht.
+
+Abnahmen:
+- `DevTools/Scripts/Build.bat -test` ausgefuehrt.
+- Testauswertung: QEMU OK, Boot OK, Poweroff OK, `TEST OK`.
+- QEMU-Log enthaelt `COMMAND launch: userland external program resolution OK`.
+- QEMU-Log enthaelt `Bad command or file name: NO_SUCH_COMMAND` als
+  sichtbaren Negativfall ohne Legacy-Fallback.
+- QEMU-Log enthaelt `BOOTINFO.R4X`; `BOOTINFO.R4X /SUMMARY` wurde aus der
+  primaeren COMMAND-Shell ueber den neuen externen Startpfad ausgefuehrt.
+- `/LAUNCHTEST` prueft Name ohne Endung, Name mit `.R4X`, absoluten Pfad,
+  relativen Pfad/CWD und PATH-Suche ueber `BOOTINFO`.
+- `rg`-Abnahme in `Code/Software/Command/src/main.zig`: keine Treffer fuer
+  `commandExecuteLine`, `command_execute_line`, `commandSessionStart`,
+  `commandPrintPrompt`, `commandGetErrorlevel` oder `commandSetErrorlevel`.
+
+Notizen:
+- Ein COMMAND-Testprozess kann aktuell kein weiteres Foreground-R4X als Kind
+  starten, solange er selbst als Foreground-Programm laeuft. Darum prueft
+  `/LAUNCHTEST` Aufloesung/Klassifikation, waehrend der echte Foreground-
+  Start im selben Smoke-Lauf aus der primaeren COMMAND-Shell erfolgt.
+- GUI-/Desktop-Launch-Policy ist noch der vorhandene Program-API-Stand. Eine
+  feinere Host-Launch-Regel fuer GUI-Programme aus COMMAND bleibt Folgearbeit.
+- Ohne diese Unterversion waere COMMAND zwar optisch Userland, aber der Kernel
+  bliebe weiter der eigentliche Shell-Executor.
+
+Version 0.28.7
+-------------------------------------------
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Batch-, Redirection- und Pipe-Syntax faellt im normalen COMMAND-Pfad nicht
+  mehr in die alte Kernel-Runtime zurueck.
+- COMMAND.R4X fuehrt einfache `.BAT`-Dateien im Userland aus.
+- `AUTOEXEC.BAT` bleibt Userland-Session-Verantwortung und laeuft ohne
+  produktiven `command_runtime.zig`-Sessionhook.
+- COMMAND.R4X besitzt eine eigene Ausgabeschicht, damit Built-in-Ausgabe
+  zwischen Console und Redirection-Ziel umgeschaltet werden kann.
+- `>` und `>>` funktionieren fuer Userland-Built-ins ueber Datei-APIs.
+- `TYPE datei > ziel` ist als erste Datei-zu-Datei-Redirection fuer Built-ins
+  abgenommen.
+- Input-Redirection (`<`) wird sichtbar als noch nicht migriert abgelehnt.
+- Pipes (`|`) werden sichtbar als noch nicht migriert abgelehnt.
+- Redirection fuer externe Programme wird sichtbar als noch nicht migriert
+  abgelehnt, weil dafuer ein echter Prozess-/Stream-Capture-Vertrag fehlt.
+- Batch-Kontrollfluesse `GOTO`, `CALL`, `SHIFT`, `IF` und `FOR` werden
+  sichtbar als noch nicht migriert abgelehnt.
+- `COMMAND.R4X /BATCHTEST` ergaenzt und in `TestInjection/AUTOEXEC.BAT`
+  aufgenommen.
+- Dokumentation unter Docs/R4DOS/CommandBatchRedirection.txt ergaenzt.
+- Zentrale Version auf 0.28.7 erhoeht.
+
+Abnahmen:
+- `DevTools/Scripts/Build.bat -test` ausgefuehrt.
+- Testauswertung: QEMU OK, Boot OK, Poweroff OK, `TEST OK`.
+- QEMU-Log enthaelt `COMMAND batch/redirection: userland basics OK`.
+- Redirection-Test prueft `ECHO >`, `ECHO >>` und `TYPE >` ueber Dateien.
+- Batch-Test prueft einfache `.BAT`-Ausfuehrung mit `@ECHO OFF`, `REM` und
+  Redirection aus einer Batch-Datei.
+- Negativtests bestaetigen sichtbare Ablehnung ohne Legacy-Fallback:
+  Pipe-Syntax, Input-Redirection, externe Programm-Redirection und
+  Batch-Kontrollfluss.
+- `rg`-Abnahme in `Code/Software/Command/src/main.zig`: keine Treffer fuer
+  `commandExecuteLine`, `command_execute_line`, `commandSessionStart`,
+  `commandPrintPrompt`, `commandGetErrorlevel` oder `commandSetErrorlevel`.
+
+Notizen:
+- Redirection ist in 0.28.7 bewusst auf COMMAND-Userland-Built-ins begrenzt.
+  Externe Programme brauchen spaeter echte STDIO-/Capture-Streams.
+- Pipes brauchen spaeter echte Prozess-/Stream-Verkettung und duerfen bis
+  dahin nicht als versteckte Kernel-Shellfunktion vorausgesetzt werden.
+- Batch-Kontrollfluss bleibt Folgearbeit; wichtig ist, dass er sichtbar offen
+  ist und nicht mehr heimlich vom Kernel-Executor erledigt wird.
+
+Version 0.28.8
+-------------------------------------------
+Status: Erledigt
+
+Offene Punkte:
+- --
+
+Erledigt:
+- Alte Kernel-Diagnosekommandos aus `command_runtime.zig` in einer
+  Migrationsmatrix klassifiziert: Shell-Built-ins, Userland-Diagnosen,
+  Kernel-/Treiber-APIs, externe Tools und temporaere Test-/Gate-Ausnahmen.
+- Bestehende externe Diagnosepfade dokumentiert, darunter `BOOTINFO.R4X`,
+  `SYSINFO.R4X`, `BOOTDIAG.R4X`, `INPUTD.R4X`, `AUDIOD.R4X`, `MEMSUITE.R4X`,
+  `IPCONFIG.R4X`, `NETCFG.R4X` und `DEVMGR.R4X`.
+- Fuer Hardware-, Plattform-, USB-, Storage-, Netzwerk-, Audio-, Memory-,
+  Bootlog-, Modul-, Service- und Protocol-Diagnosen Zielbesitzer und
+  Start-/Selftest-Richtung festgelegt.
+- Fehlende APIs bewusst als offene R4DEV/R4SYS/R4NET/R4AUDIO-API-Bedarfe
+  dokumentiert, statt Kernelmodule in COMMAND.R4X zu importieren.
+- Gate- und Testkommandos wie `QGATE`, `USBREGRESS`, `LEGACYTEST` sichtbar als
+  DevTools-/Diagnostics-Folgearbeit markiert.
+- COMMAND bleibt fuer Diagnosen ein Launcher/Frontend und nicht Besitzer von
+  Hardwarelogik.
+
+Abnahmen:
+- Dokumentierte Migrationsmatrix liegt in
+  `Docs/R4DOS/CommandDiagnosticMigration.txt`.
+- Repraesentativer externer Diagnosepfad ist dokumentiert und im Test-AUTOEXEC
+  bereits aktiv: `C:\BIN\BOOTINFO.R4X /SUMMARY`.
+- Matrix markiert fuer jede Diagnosegruppe Zielzustand und Status fuer 0.28.9:
+  entfernt, ausgelagert, ersetzt, teilweise extern oder offen/blockierend.
+- Fuer ausgelagerte Diagnosen sind konkrete Start- oder Selftest-Befehle
+  dokumentiert.
+- `rg`-Abnahme: COMMAND.R4X importiert fuer Diagnosen keine Kernel-/Treiber-
+  Module direkt.
+- Nicht migrierte Diagnosen sind als offen oder Gate-Ausnahme sichtbar
+  dokumentiert und duerfen 0.28.9 blockieren, statt versteckt produktiv zu
+  bleiben.
+- `DevTools/Scripts/Build.bat -norun` erfolgreich.
+
+Notizen:
+- 0.28.8 portiert nicht alle Diagnoseprogramme fertig. Es zieht die Grenze so,
+  dass weitere Portierungen nur noch ueber externe R4X-Tools und saubere APIs
+  laufen.
+Version 0.28.9
+-------------------------------------------
+Status: Erledigt
+
+Offene Punkte:
+- --
+
+Erledigt:
+- Legacy-Executor-Bruecke aus dem produktiven Shell-Start entfernt.
+- `shell_launcher.zig` registriert keine `command_runtime.zig`-Hooks mehr und
+  startet nur noch externe Shell-/COMMAND-/Recovery-Programme.
+- `r4sys.command_*` und die ProgramApi-v82/v83-COMMAND-Felder bleiben aus
+  ABI-Ruecksicht als deaktivierte Kompatibilitaets-Stubs erhalten, fuehren aber
+  keine COMMAND-Runtime mehr aus.
+- SDK-Fassade markiert die COMMAND-Hooks als retired; Supportfunktionen liefern
+  fuer neue SDK-Builds `false`, direkte Stub-Aufrufe liefern `-1` oder keinen
+  Effekt.
+- COMMAND.R4X-Selbsttest erwartet nun, dass die alte Bruecke deaktiviert ist.
+- `COMMAND.R4X /LEGACY` dient als Negativcheck und muss erfolgreich bestaetigen,
+  dass `sys.shellRun()` deaktiviert bleibt.
+- Test-AUTOEXEC fuehrt `/SELFTEST`, `/BUILTINTEST`, `/LAUNCHTEST`, `/BATCHTEST`
+  und `/LEGACY` aus.
+- Doku/API-Oberflaeche bewirbt die COMMAND-Hooks nicht mehr als normale
+  Programmierschnittstelle.
+
+Abnahmen:
+- `COMMAND.R4X` laeuft ohne produktive `command_runtime.zig`-Bruecke.
+- Suche bestaetigt: normaler COMMAND-Pfad nutzt keine `r4sys.command_*`-
+  Session-/Executor-Hooks mehr.
+- Suche bestaetigt: `shell_launcher.zig` registriert keine
+  `command_runtime.zig`-Hooks mehr fuer den normalen Bootpfad.
+- SDK-Doku/API-Oberflaeche beschreibt COMMAND-spezifische Hooks als retired und
+  nicht mehr als normale Programmierschnittstelle.
+- Negativtest: `COMMAND.R4X /LEGACY` bestaetigt im Smoke, dass `sys.shellRun()`
+  deaktiviert bleibt und keine eingebaute COMMAND-Runtime startet.
+- `rg`-Abnahme: produktive Builds enthalten keinen normalen Aufruf von
+  `command_runtime.startSession*`, `command_runtime.executeUserLine` oder
+  `r4sys.setCommandRuntimeHooks`.
+- `COMMAND.R4X /SELFTEST`, `/BUILTINTEST`, externer Programmstarttest,
+  Batch-/Redirection-Test und `/LEGACY` sind im Smoke enthalten.
+- `DevTools/Scripts/Build.bat -test` endet mit `TEST OK`.
+
+Notizen:
+- Die ABI-Felder werden bewusst noch nicht entfernt. Das Entfernen ist ein
+  separater ABI-Aufraeumschritt, sobald keine alten R4X-Builds mehr darauf
+  angewiesen sein koennen.
+Version 0.28.10
+-------------------------------------------
+Status: Erledigt
+
+Offene Punkte:
+- --
+
+Erledigt:
+- Abschlussabnahme fuer 0.28.X durchgefuehrt.
+- Codebasis auf unerwuenschte COMMAND-/Kernelkopplungen geprueft.
+- Bestaetigt: `Code/Software/Command` importiert keinen Kernel-Code und nutzt
+  keinen normalen `r4sys.command_execute_line`-Programmstartpfad.
+- Bestaetigt: `shell_launcher.zig` registriert keine produktiven
+  `command_runtime.zig`-Hooks mehr.
+- Bestaetigt: normale Userland-Ausgabe faellt im R4X-Ausgabepfad nicht still
+  auf `kernel/log.zig`/`k.putc` zurueck; Kernel-/Loader-Fehler und der
+  explizite Fullscreen-Test-Mirror bleiben getrennte Kernelpfade.
+- R4DOS-Begriffe in Doku und AGENTS.md auf Abschlussstand gebracht:
+  R4DOS-Modus, Terminal, R4DOS-Anwendung, COMMAND.R4X, Console-Host,
+  Console-Session und Kernel-Log.
+- COMMAND-README, R4DOS-Boot-/Shell-Doku, Console-/STDIO-Vertrag und
+  Kernel-Trennungsdoku auf 0.28.10 aktualisiert.
+- AGENTS.md aktualisiert: neue COMMAND-/R4DOS-Logik gehoert nicht mehr in
+  `command_runtime.zig`; COM1 ist kein stdout-Ersatz.
+- Version auf 0.28.10 gesetzt.
+
+Abnahmen:
+- `rg`-Abnahme: `Code/Software/Command` importiert keinen Kernel-Code.
+- `rg`-Abnahme: COMMAND-/R4DOS-Userland-Ausgabe nutzt nicht direkt
+  `kernel/log.zig`.
+- `rg`-Abnahme: normaler COMMAND-Programmstart nutzt nicht
+  `r4sys.command_execute_line`.
+- `rg`-Abnahme: `shell_launcher.zig` registriert keine produktiven
+  `command_runtime.zig`-Hooks mehr.
+- `rg`-Abnahme: normale Userland-Ausgabe hat keinen stillen Fallback auf
+  `k.putc`/`kernel/log.zig`.
+- `COMMAND.R4X /SELFTEST` erfolgreich.
+- `COMMAND.R4X /BUILTINTEST` erfolgreich.
+- COMMAND-Starttest prueft Userland-Session und Legacy-Negativpfad im
+  Fullscreen-R4DOS-Testlauf; R4Desk-Terminal nutzt denselben Console-
+  Host-Vertrag, bleibt aber eine manuelle Sichtabnahme.
+- Externer Programmstarttest prueft Console-App, Fehlerfall und Exitcode.
+- Batch-/Redirection-Test prueft migrierte Grundlagen und sichtbare
+  Nichtunterstuetzung ohne Kernel-Fallback.
+- Diagnose-Migrationsmatrix hat keine unklassifizierten alten
+  `command_runtime.zig`-Kommandos mehr.
+- COM1-Testlog bleibt verwertbar ueber Kernel-Log beziehungsweise expliziten
+  Fullscreen-Console-Test-Mirror, nicht ueber direkte COMMAND-zu-
+  `kernel/log.zig`-Kopplung.
+- Recovery-/Fehlerpfad bei fehlender externer Shell ist dokumentiert und der
+  alte `/LEGACY`-Ruecksprung ist im Smoke negativ getestet.
+- `DevTools/Scripts/Build.bat -norun` erfolgreich.
+- `DevTools/Scripts/Build.bat -test` endet mit `TEST OK`, `Boot OK`,
+  `Poweroff OK` und `Errors: none`.
+
+Notizen:
+- 0.28.X schliesst die produktive COMMAND-/Kernel-Entkopplung ab. Nicht
+  migrierte Diagnose- und ABI-Altlasten bleiben sichtbar dokumentiert, aber
+  nicht als normaler COMMAND-Pfad aktiv.

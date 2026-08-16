@@ -1,0 +1,804 @@
+﻿Leitbild fuer Version 0.11.X
+============================
+
+Version 0.11.X erweitert R4OS um den naechsten modernen Storage-Pfad, ohne
+bestehende Hardwarepfade zu verdraengen. Nach Q35/ICH9, AHCI, HDA,
+Blockdevice-Registry und Device Manager ist NVMe der sinnvollste naechste
+Treiberkandidat: ein echter PCIe-Storage-Controller mit klarem Nutzen fuer
+moderne Maschinen und mit gut abgrenzbarer End-to-End-Abnahme.
+
+Der wichtigste Grundsatz bleibt Kompatibilitaet. R4OS soll je nach vorhandener
+Hardware den passenden Treiber waehlen und alte Systeme weiter betreiben
+koennen. NVMe ist deshalb kein Ersatz-Zwang fuer AHCI oder ATA/IDE-PIO,
+sondern ein zusaetzlicher Pfad. Moderne Maschinen sollen NVMe nutzen koennen,
+SATA-Systeme sollen weiter ueber AHCI laufen und konservative oder sehr alte
+Setups sollen ueber ATA/IDE-PIO boot- und nutzbar bleiben.
+
+Die Storage-Auswahl darf nicht auf Wunschdenken beruhen. Ein Treiber gilt
+nicht als aktiv, nur weil ein PCI-/PCIe-Geraet gefunden wurde. R4OS muss klar
+zwischen Erkennung, Initialisierung, nutzbarem Blockdevice und gemountetem
+Laufwerk unterscheiden:
+
+- gefunden: PCI-/PCIe-Geraet existiert und Ressourcen sind sichtbar.
+- initialisiert: Controller wurde erfolgreich gestartet.
+- nutzbar: mindestens ein Blockdevice wurde registriert und kann lesen.
+- gemountet: MBR/FAT32 konnte daraus C:, D: oder ein anderes Laufwerk machen.
+
+Die bevorzugte Storage-Reihenfolge fuer 0.11.X lautet technisch, nicht
+politisch:
+
+- NVMe, wenn ein NVMe-Controller mit nutzbarem Namespace vorhanden ist.
+- AHCI, wenn ein SATA/AHCI-Controller nutzbar ist.
+- ATA/IDE-PIO als konservativer Legacy-Fallback.
+
+Ein fehlschlagender neuer Treiber darf keinen funktionierenden alten Pfad
+blockieren. Wenn NVMe gefunden, aber nicht initialisiert werden kann, muessen
+AHCI oder ATA/IDE-PIO weiterhin die Chance bekommen, Blockdevices zu melden.
+Diagnosen wie `HARDWARE`, `DEVICES`, `BLOCK`, `DRIVES`, `NVME` und der Device
+Manager sollen sichtbar machen, welcher Pfad wirklich arbeitet und warum ein
+Fallback aktiv ist.
+
+0.11.X soll bewusst keinen grossen Themenwechsel auf Netzwerk, nativen
+Displaytreiber, SMP, Preemption oder FPU-/SSE-State-Switching machen. Diese
+Themen bleiben wichtig, wuerden aber den NVMe-Schnitt verwaessern. Der Wert
+dieser Version liegt darin, einen modernen PCIe-Storage-Treiber sauber durch
+den vorhandenen R4OS-Vertrag zu fuehren: PCIe, MMIO, DMA, Queues,
+Blockdevice, FAT32, Diagnose, Device Manager und reproduzierbare QEMU-Profile.
+
+Ein NVMe-Pfad gilt erst dann als fertig, wenn er end-to-end genutzt wird,
+Fehler sichtbar meldet, Fallbacks nicht zerstoert, in `Docs/SupportedHardware.txt`
+dokumentiert ist und mindestens eine nicht-destruktive FAT32-Abnahme besteht.
+
+Neben dem Storage-Schwerpunkt soll 0.11.X sichtbare Alltags-Bugfixes
+aufnehmen. Diese Punkte betreffen nicht neue Architektur, sondern Bediengefuehl
+und Stabilitaet: der Desktop-Mauszeiger darf keine schwarzen Pixel
+hinterlassen, der Cursor soll naeher an einen klassischen Windows-95-
+Mauszeiger ruecken, laute Eingabe-Debugmeldungen sollen aus dem normalen
+Nutzerpfad verschwinden, der R4DOS-/Terminal-Cursor soll korrekt sitzen und
+blinken, und R4Config darf den Desktop beim Start aus R4Desk heraus nicht
+blockieren.
+
+Qualitaetsregeln fuer 0.11.X:
+
+- Keine halben Treiber: Ein neuer Storage-Treiber darf erst als unterstuetzt
+  gelten, wenn Erkennung, Init, I/O, Fehlerpfad, Diagnose, Fallback und Doku
+  zusammen funktionieren.
+- Kein stilles Schoenreden: Wenn NVMe fehlschlaegt, muss die Diagnose den
+  Grund oder mindestens die Failure-Stage zeigen. Ein Fallback auf AHCI/IDE ist
+  gut, darf aber nicht verschleiern, dass NVMe nicht aktiv ist.
+- Keine Dummy-Erfolge: `DEVICES`, `BLOCK`, Device Manager und `NVME` duerfen
+  NVMe nicht als nutzbares Laufwerk anzeigen, solange kein echter Namespace als
+  Blockdevice registriert und lesbar ist.
+- Keine riskanten Schreibtests: Schreibende Tests verwenden temporaere Dateien
+  auf FAT32 oder kontrollierte Testpfade. Rohe Datenbereiche werden nicht fuer
+  Abnahmen ueberschrieben.
+- Keine Regression der alten Pfade: Jeder relevante NVMe-Schritt muss
+  mindestens gedanklich, spaetere I/O-Schritte auch praktisch, gegen AHCI und
+  ATA/IDE-PIO abgegrenzt werden. Alte Hardware bleibt ein Ziel, kein Ballast.
+- Keine UI-Scheinfixes: Sichtbare Desktop-/R4DOS-Fehler gelten erst als
+  erledigt, wenn der konkrete Nutzerfall reproduziert, behoben und in einem
+  Smoke- oder manuellen Abnahmeschritt geprueft wurde.
+- Keine normale Debug-Flut: Erfolgreiche Alltagsereignisse wie Tastatur- oder
+  Maus-IRQs sind kein Nutzerstatus. Sie gehoeren entweder weg oder hinter einen
+  expliziten Debugpfad.
+
+
+Version 0.11.0
+--------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Noch nichts.
+
+Erledigt:
+- Roadmap fuer 0.11.X neu begonnen und den NVMe-Schwerpunkt mit klarer
+  Fallback-Regel festgehalten.
+- Qualitaetsregeln ergaenzt: keine halben Treiber, keine Dummy-Erfolge, keine
+  versteckten Fallbacks, keine riskanten Schreibtests und keine UI-Scheinfixes.
+- Lokales Build-Script um `-storage nvme` erweitert. Der Modus ist bewusst ein
+  0.11-Staging-Profil: C: und D: bleiben zunaechst ueber ICH9-AHCI erreichbar,
+  ein separates `Code\nvme.img` wird als QEMU-NVMe-Geraet fuer Erkennung und
+  spaeteren Treiberaufbau angehaengt.
+- `legacy-pc` lehnt moderne Storage-Modi wie AHCI/NVMe weiter ab und bleibt
+  der reine ATA/IDE-PIO-Fallback.
+- `RunQemuTest.ps1` lokal um den NVMe-Staging-Pfad erweitert und mit einer
+  sichtbaren Notiz versehen, dass C:/D: noch AHCI sind.
+- `.gitignore` um `Code/nvme.img` und QEMU-Testlogs ergaenzt, damit neue
+  lokale Testartefakte nicht versehentlich versioniert werden.
+- `Docs/Deployment/BuildUndTest.txt`, `Docs/SupportedHardware.txt` und
+  `Docs/README.txt` dokumentieren den 0.11.0-Stand, die Abnahmematrix und die
+  Grenze: NVMe ist erkannt, aber noch kein aktives Blockdevice.
+- `Build.bat -norun -profile modern-q35 -storage nvme` baut erfolgreich und
+  erzeugt das persistente NVMe-Testimage.
+- `Build.bat -test -profile modern-q35 -storage nvme` laeuft erfolgreich:
+  `HARDWARE` meldet `nvme=found-no-driver`, `DEVICES` listet QEMU NVMe ohne
+  Treiber, `BLOCK` zeigt nur AHCI fuer C:/D:, und Block/FAT/FSDIAG/AHCI/HDA
+  bestehen ohne CPU Exception, GPF, PANIC oder FATAL.
+- `Build.bat -test -profile modern-q35 -storage ahci` laeuft weiterhin
+  erfolgreich.
+- `Build.bat -test -profile legacy-pc` laeuft weiterhin erfolgreich und nutzt
+  ATA/IDE-PIO fuer C:/D:; fehlendes AHCI bleibt erwartbar.
+- Manuelle Sichtpruefung durch R4mbo abgeschlossen:
+  Der blinkende Cursor im R4DOS Mode und in R4Desk-Terminalfenstern sitzt
+  nach der Y-Korrektur optisch korrekt und wurde freigegeben.
+
+Notizen:
+- 0.11.0 ist der Planungs- und Profilanker. Der erste Code-Schritt soll erst
+  beginnen, wenn der gewuenschte QEMU-Aufruf und die Fallback-Erwartung klar
+  sind.
+- Die Entscheidung fuer den ersten NVMe-Modus lautet bewusst:
+  AHCI-Boot plus separates NVMe-Testimage. Ein echter NVMe-Bootpfad wird erst
+  spaeter freigegeben, wenn der NVMe-Treiber echte Blockdevices registrieren
+  und mounten kann.
+- Die Planungsstufe soll verhindern, dass ein spaeterer NVMe-Schritt nur
+  "irgendwie bootet", aber nicht erklaert, welcher Treiber wirklich aktiv ist.
+
+
+Version 0.11.1
+--------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `Code/src/drivers/storage/nvme.zig` als reiner Diagnosepfad angelegt.
+- NVMe-Controller wird ueber PCIe/ECAM gefunden und beim Boot im Staging-
+  Profil diagnostisch gemappt.
+- BAR0/BAR1 werden gelesen; 32-/64-Bit-MMIO-BARs, I/O-BAR-Fehler und
+  Null-BARs werden unterschieden.
+- NVMe-MMIO wird pageweise gemappt, ohne ein Blockdevice zu registrieren.
+- `CAP`, `VS`, `CC`, `CSTS`, `AQA`, `ASQ` und `ACQ` werden gelesen und
+  ausgegeben.
+- CAP-Felder fuer Queue-Grenze, Contiguous-Queue-Pflicht, Arbitration-
+  Hinweise, Timeout, Doorbell-Stride, Command-Set-Support und Page-Size-
+  Grenzen werden dekodiert.
+- R4DOS-Kommandos `NVME` und `NVMEDIAG` ergaenzt.
+- `HARDWARE` meldet bei erfolgreichem Mapping
+  `nvme=diagnostic-mmio-active`.
+- `DEVICES` und Device Manager zeigen QEMU NVMe weiter unter Hardware ohne
+  Treiber, aber mit Status `diagnostic-mmio-active` und ohne Blockdevice-
+  Versprechen.
+- `CHIPSET` benennt QEMU NVMe statt `Unknown Device`.
+- `Build.bat -test -profile modern-q35 -storage nvme` laeuft erfolgreich:
+  `NVME` zeigt den Controller `0:3.0`, BAR0/BAR1, MMIO-Basis,
+  NVMe-Version 1.4.0, CAP, CC/CSTS, AQA/ASQ/ACQ und
+  `block: none yet`.
+- `BLOCK` zeigt im NVMe-Staging-Profil weiterhin nur AHCI fuer C:/D:.
+- `Build.bat -test -profile modern-q35 -storage ahci` und
+  `Build.bat -test -profile legacy-pc` laufen weiter erfolgreich.
+- Dokumentation in `Docs/Deployment/BuildUndTest.txt` und
+  `Docs/SupportedHardware.txt` auf den 0.11.1-Diagnosestand aktualisiert.
+
+Notizen:
+- Dieser Schritt darf noch kein Storage-Versprechen abgeben. Er beweist nur,
+  dass R4OS den Controller sauber findet und seine MMIO-Basis lesen kann.
+- Wenn dieser Schritt abstuerzt, ist der Treiber nicht "fast fertig", sondern
+  noch Diagnosecode ohne Freigabe.
+- 0.11.1 hat bewusst keine Admin-Queue initialisiert und keinen Namespace
+  gelesen. Diese Arbeit beginnt erst in 0.11.2.
+
+
+Version 0.11.2
+--------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- NVMe-Controller wird im Staging-Profil kontrolliert deaktiviert,
+  konfiguriert und wieder aktiviert.
+- Admin Submission Queue, Admin Completion Queue und Identify-Puffer werden
+  als page-aligned 4-KB-Frames allokiert, genullt und ueber physische
+  Adressen an den Controller uebergeben.
+- Admin-Queue-Register AQA, ASQ und ACQ werden gesetzt; CC wird mit
+  NVM-Command-Set, 4-KB-MPS, 64-Byte-SQ-Entries und 16-Byte-CQ-Entries
+  programmiert.
+- Controller-Ready-Status wird mit Timeout gepollt. Endlose Warteschleifen
+  gibt es im Admin-Pfad nicht.
+- Admin-Kommandopfad fuer `Identify Controller` ist vorhanden:
+  Command-ID, Submission-Tail, Completion-Phase, Completion-Head-Doorbell und
+  Statusfeld werden ausgewertet.
+- `NVME` zeigt Init-Stage, Failure-Stage, Queue-Speicher, Queue-Tail/Head,
+  Phase-Tag, Admin-Command-Zaehler, Completion-DWords, Statuscode und erste
+  Identify-Controller-Daten.
+- `HARDWARE` meldet im NVMe-Staging-Profil `nvme=admin-identify-active`.
+- `DEVICES` fuehrt QEMU NVMe mit Treiber `NVMe`, Status
+  `admin-identify-active` und Hinweis, dass noch kein Namespace-/Blocktreiber
+  existiert.
+- `BLOCK` zeigt weiterhin nur AHCI-Blockdevices fuer C:/D:. NVMe wird nicht
+  als Laufwerk behauptet.
+- Abnahme `modern-q35 -storage nvme`: Controller erreicht `ready`,
+  `Identify Controller` liefert Daten, `NVME` zeigt `fail=0 timeout=0` und
+  Completion-Status `0x0000`.
+- AHCI-/FAT32-Abnahme bleibt im NVMe-Staging-Profil stabil:
+  `BLOCKTEST`, `BLOCKTEST FAT D:`, `FSDIAG` und `AHCI TEST` laufen durch.
+
+Notizen:
+- Der erste NVMe-Pfad kann polling-basiert sein. MSI/MSI-X, Interruptbetrieb,
+  Multi-Queue und Performance-Tuning sind keine Voraussetzung fuer diesen
+  Schritt.
+- Polling ist erlaubt, aber nur mit klaren Timeouts. Endlose Warteschleifen
+  sind fuer 0.11.X kein akzeptabler Treiberzustand.
+- QEMU meldet im aktuellen Test `QEMU NVMe Ctrl`, Firmware `11.0.0`,
+  NVMe-Version 1.4.0 und `nn=256`. 0.11.3 muss daraus noch einen konkreten
+  Namespace mit LBA-Format ableiten; 0.11.2 registriert bewusst kein
+  Blockdevice.
+
+
+Version 0.11.3
+--------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `Identify Controller` bleibt ausgewertet und speichert VID, SSVID,
+  Controller-ID, Modell, Seriennummer, Firmware, NVMe-Version, Namespace-
+  Anzahl, MDTS, OACS sowie SQES/CQES.
+- `Identify Namespace` fuer NSID 1 ist implementiert und nutzt einen eigenen
+  page-aligned DMA-Puffer.
+- Admin-Identify-Kommandos laufen ueber einen gemeinsamen Pfad fuer Controller
+  und Namespace. Der Completion-DW3-Decoder wertet CID, Phase-Tag und Status
+  korrekt aus; QEMU-Completion `0x00010002` bedeutet CID 2, Phase 1,
+  Status 0.
+- LBA-Format, Anzahl der LBA-Formate, LBADS, Metadatengroesse,
+  Sektoranzahl und Byte-Kapazitaet werden aus dem Namespace gelesen.
+- Der Namespace gilt nur als nutzbar, wenn ein aktives LBA-Format innerhalb
+  des gemeldeten Bereichs liegt, Kapazitaet und NCAP ungleich 0 sind,
+  kein Kapazitaetsueberlauf entsteht, keine Metadaten erzwungen werden und
+  die logische Sektorgroesse 512 Byte betraegt.
+- Nicht nutzbare Namespace-Zustaende bekommen einen klaren Diagnosegrund
+  statt still als 512-Byte-Laufwerk behandelt zu werden.
+- `NVME`/`NVMEDIAG` zeigt Namespace-Status, NSID, LBA-Format, Formatanzahl,
+  LBADS, Sektorgroesse, Metadaten, Sektoranzahl und Byte-Kapazitaet.
+- QEMU-0.11.3-Abnahme erkennt NSID 1 als nutzbar:
+  `format=0`, `formats=8`, `lbads=9`, `sector=512`, `metadata=0`,
+  `sectors=262144`, `bytes=134217728`.
+- `HARDWARE` meldet im NVMe-Staging-Profil
+  `nvme=namespace-diagnostic-active`.
+- `DEVICES` und Device Manager fuehren QEMU NVMe mit Treiber `NVMe`, Status
+  `namespace-diagnostic-active` und Hinweis, dass noch kein Block-I/O
+  registriert ist.
+- `BLOCK` bleibt bewusst frei von NVMe-Blockdevices; C:/D: laufen im
+  Staging-Profil weiter ueber AHCI, bis 0.11.4 echte Namespace-I/O liefert.
+- Regressionen abgenommen:
+  `Build.bat -test -profile modern-q35 -storage nvme`,
+  `Build.bat -test -profile modern-q35 -storage ahci` und
+  `Build.bat -test -profile legacy-pc` laufen ohne Kernel-Crash-Marker.
+
+Notizen:
+- Dieser Schritt trennt Controller-Erfolg, nutzbaren Namespace und aktives
+  Blockdevice sichtbar voneinander. Ein NVMe-Controller mit nutzbarem
+  Namespace ist vorbereitet, aber noch kein gemountetes Laufwerk.
+- Dieser Punkt ist wichtig fuer echte Hardware: Nicht jedes gefundene NVMe-
+  Geraet muss in jeder Umgebung sofort als Laufwerk verwendbar sein.
+- Das lokale QEMU-Staging-Profil stellt den Testdatentraeger als expliziten
+  `nvme`-Controller mit `nvme-ns` Namespace bereit. Der Kernel darf daraus
+  erst in 0.11.4 ein `nvme0`-Blockdevice machen.
+
+
+Version 0.11.4
+--------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- IO Completion Queue und IO Submission Queue fuer Queue 1 werden per
+  Admin-Kommandos `Create I/O Completion Queue` und `Create I/O Submission
+  Queue` eingerichtet.
+- Der erste NVMe-Read-Pfad nutzt eine kleine polling-basierte I/O-Queue mit
+  echter Completion-Auswertung.
+- Der initiale PRP-Pfad ist bewusst begrenzt: ein page-aligned 4-KB-DMA-
+  Puffer, PRP1-only, maximal 8 Sektoren pro Request. Groessere Requests
+  werden ueber den Blockdevice-Vertrag abgewiesen, statt halb korrekt ueber
+  Seitenuebergaenge zu laufen.
+- Request-Grenzen pruefen Namespace-Zustand, Sektoranzahl, Pufferlaenge,
+  Namespace-Kapazitaet und Ende-des-Namespace.
+- `nvme0` wird erst registriert, nachdem ein echter Read auf Sektor 0 mit
+  Controller-Completion erfolgreich war.
+- Blockdevice-Metadaten sind gesetzt: Treiber `NVMe`, Bus `nvme`,
+  Controller `pcie-nvme`, NSID als Port, 512-Byte-Sektoren, 262144 Sektoren,
+  Queue-Tiefe 16 und Max-Request 8.
+- `BLOCK` zeigt `nvme0` neben AHCI/IDE und ordnet es im Staging-Profil als
+  E: zu, waehrend C: und D: weiter ueber AHCI laufen.
+- `BLOCKTEST` liest Sektor 0 ueber `nvme0`, meldet Signatur/Checksumme und
+  Flush-Erfolg.
+- `HARDWARE` meldet im NVMe-Staging-Profil `nvme=found/active`.
+- `DEVICES` und Device Manager melden QEMU NVMe mit Status `active-block`.
+- NVMe ist als Builtin-Storage-Treiber in der Driver-Registry aktiv.
+- Abnahme `modern-q35 -storage nvme`: `nvme0` wird als Blockdevice #2
+  registriert, `BLOCKTEST` liest stabil, `NVME` meldet `fail=0 timeout=0`.
+- AHCI- und Legacy-Regressionslaeufe bleiben stabil:
+  `modern-q35 -storage ahci` nutzt nur `ahci0`/`ahci1`,
+  `legacy-pc` nutzt nur `ata0`/`ata1`.
+
+Notizen:
+- Der 4-KB-PRP1-Pfad ist eine absichtliche Stabilitaetsgrenze. PRP2 oder PRP-
+  Listen sind erst noetig, wenn groessere Transfers freigegeben werden.
+- Das lokale NVMe-Staging-Image enthaelt ein FAT32-Datenimage und wird nach
+  AHCI als E: gemountet. Damit bleiben C:/D: als Fallback eindeutig.
+
+
+Version 0.11.5
+--------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- NVMe Write ist implementiert und nutzt denselben begrenzten PRP1-/4-KB-
+  DMA-Pfad wie Read.
+- NVMe Flush ist implementiert und als Blockdevice-Flush verdrahtet.
+- Read, Write und Flush laufen ueber die I/O-Queue mit Completion-Status-
+  Auswertung, Timeouts und letztem Completion-DW3.
+- Schreibpfad nutzt dieselben Request-Grenzen wie Read: Namespace-Zustand,
+  Sektoranzahl, Max-Request, Pufferlaenge und Namespace-Ende.
+- `nvme0` ist jetzt read/write registriert; `BLOCK` zeigt `writable=yes`
+  und `flush=yes`.
+- `BLOCKTEST FAT E:` wurde lokal im NVMe-Staging-Profil abgenommen:
+  schreiben, lesen, vergleichen, loeschen und flushen funktionieren.
+- `FSDIAG` akzeptiert optional ein Datenlaufwerk, z.B. `FSDIAG E:`.
+- `FSDIAG E:` wurde lokal gegen das NVMe-Datenlaufwerk abgenommen.
+- Persistenztest fuer NVMe wurde lokal bestaetigt: Nach erneutem QEMU-Lauf
+  meldet `FSDIAG E:` den persistenten Marker vor dem erneuten Schreiben.
+- `NVME` meldet nach FAT32-Write-/Flush-Last `test-read=ok`,
+  `test-write=ok`, `test-flush=ok`, `fail=0` und `timeout=0`.
+- `NVMETEST`, `NVME TEST` und `NVMEDIAG TEST` sind als kontrollierter
+  NVMe-Selbsttest verdrahtet.
+- Der Selbsttest prueft reproduzierbar negative Requests: Null-Sektoren,
+  zu grosse Requests, Read jenseits des Namespace-Endes, zu kleiner
+  Read-Puffer und zu kleiner Write-Puffer.
+- Nach den absichtlich abgewiesenen Requests prueft `NVMETEST` denselben
+  Namespace erneut mit Read, Write-same-sector und Flush.
+- `NVMETEST` meldet die erwarteten Blocklayer-Fehlerzaehler und bestaetigt,
+  dass NVMe-IO-Fehler und NVMe-Timeouts dabei bei 0 bleiben.
+- Das lokale Testscript ist profilabhaengig getrennt: NVMe-spezifische
+  Befehle (`NVMETEST`, `BLOCKTEST FAT E:`, `FSDIAG E:`) laufen nur im
+  `modern-q35 -storage nvme` Profil; Legacy-IDE fuehrt keinen AHCI-
+  Selbsttest mehr aus.
+- Abnahme `modern-q35 -storage nvme`: `NVMETEST` meldet `result: OK`,
+  `BLOCKTEST FAT E:` schreibt/liest/loescht erfolgreich, `FSDIAG E:`
+  meldet `FSDIAG result: OK`, und `NVME` zeigt nach der Last
+  `test-read=ok`, `test-write=ok`, `test-flush=ok`, `fail=0`,
+  `timeout=0`.
+- Regressionen wurden gegen `modern-q35 -storage ahci` und `legacy-pc`
+  abgegrenzt. AHCI bleibt aktiv fuer C:/D: im modernen Profil, ATA/IDE-PIO
+  bleibt aktiv fuer C:/D: im Legacy-Profil.
+
+Notizen:
+- Der funktionale Write-/Flush-Pfad bleibt bewusst auf PRP1-only und 4-KB-
+  DMA begrenzt. 0.11.5 ist damit stabiler Block-I/O, aber noch kein
+  Performance- oder echter Bootpfad.
+- Der Selbsttest schreibt keinen neuen Inhalt in rohe Datenbereiche. Fuer die
+  Recovery schreibt er den zuvor gelesenen Sektor unveraendert zurueck; echte
+  Schreibabnahmen laufen ueber temporaere FAT32-Dateien.
+
+
+Version 0.11.6
+--------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- NVMe-Completion-Polling robuster gemacht: verspaetete/stale Completion-CIDs
+  werden gezaehlt und uebersprungen, statt den naechsten synchronen Request in
+  eine Fehlerkaskade zu ziehen.
+- NVMe-I/O-Warteguard fuer den direkten Boot-/Systemlaufwerksfall erhoeht.
+- `NVME` zeigt jetzt `cid_mismatch`, damit solche Queue-Anomalien sichtbar
+  bleiben, statt still verschluckt zu werden.
+- `NVMETEST` prueft, dass waehrend des Selbsttests keine neuen
+  CID-Mismatches entstehen.
+- Lokales Testprofil `modern-q35 -storage nvme-boot` angelegt. Es haengt das
+  Bootimage direkt als NVMe-Namespace 1 und das Datenimage als NVMe-
+  Namespace 2 an; AHCI/IDE liefern dabei keine C:/D:-Laufwerke.
+- NVMe-Mehr-Namespace-Pfad implementiert: Der Treiber liest die aktive
+  Namespace-Liste, prueft bis zu vier Namespaces, registriert jeden nutzbaren
+  512-Byte-LBA-Namespace als eigenes Blockdevice und reicht den NSID-Kontext
+  an Read, Write und Flush weiter.
+- Direkter NVMe-C:/D:-Bootpfad erfolgreich abgenommen: SeaBIOS/Limine startet
+  R4OS vom NVMe-Bootimage, R4OS registriert `nvme0` als Blockdevice #0 und
+  `nvme1` als Blockdevice #1, mountet C: ueber NSID 1 und D: ueber NSID 2.
+- COMMAND.R4X startet im direkten NVMe-Bootprofil und fuehrt das Debug-
+  AUTOEXEC aus.
+- `HARDWARE`, `DRIVES`, `BLOCK`, `DEVICES` und `NVME` zeigen eindeutig, dass
+  C: und D: im direkten Bootprofil ueber NVMe laufen.
+- `BLOCKTEST`, `NVMETEST`, `BLOCKTEST FAT C:`, `FSDIAG C:`,
+  `BLOCKTEST FAT D:` und `FSDIAG D:` laufen im direkten NVMe-Bootprofil
+  erfolgreich.
+- Nach ueber 40000 NVMe-I/O-Kommandos im direkten COMMAND-Bootprofil meldet
+  `NVME` `fail=0`, `timeout=0` und `cid_mismatch=0`.
+- R4Desk-Smoke laeuft im direkten NVMe-Bootprofil: C: und D: sind gemountet,
+  R4Desk-Konfigurationen werden gefunden, R4Files wird als Fenster geoeffnet,
+  Cursor-Redraw wird ausgefuehrt und der Smoke beendet mit `result: OK`.
+- Regressionsabnahmen fuer `modern-q35 -storage nvme`, `modern-q35 -storage
+  ahci` und `legacy-pc` laufen weiterhin ohne CPU Exception, GPF, PANIC oder
+  FATAL.
+
+Notizen:
+- Das Ziel ist nicht, alte Pfade zu ersetzen. Das Ziel ist eine automatische
+  und erklaerbare Wahl des besten nutzbaren Storagepfades.
+- Die Build-Profile sind Teil der Nutzeroberflaeche fuer Entwickler. Sie
+  muessen Fehlannahmen vermeiden, nicht nur QEMU starten.
+- Der direkte NVMe-Bootpfad ist jetzt ein echtes Systemprofil: C: und D:
+  kommen beide von NVMe. Das normale `-storage nvme` Profil bleibt trotzdem
+  wichtig, weil es AHCI als Fallback parallel mit einem separaten NVMe-
+  Datenimage abnimmt.
+- Der aktuelle Mehr-Namespace-Schnitt deckt einen Controller mit bis zu vier
+  aktiven Namespaces ab. Mehrere NVMe-Controller, PRP2/PRP-Listen, Interrupt-
+  Betrieb, MSI/MSI-X und Multi-Queue bleiben bewusst spaetere Ausbaustufen.
+
+
+Version 0.11.7
+--------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Device-Inventory erweitert: Registrierte Blockdevices erscheinen jetzt als
+  eigene Storage-Records, z.B. `ata0`, `ahci0`, `nvme0` und `nvme1`.
+- NVMe-Controllerstatus im Inventory praezisiert:
+  `active-block` fuer ein aktives NVMe-Blockdevice und `active-block-multi`
+  fuer mehrere registrierte Namespaces im direkten NVMe-Bootprofil.
+- Device Manager zeigt in Console und GUI-Liste neben dem Namen auch Bus,
+  Treiber und Status. Die Console-Ausgabe zeigt zusaetzlich die Notiz.
+- Device Manager unterscheidet im direkten NVMe-Bootprofil:
+  Controller `QEMU NVMe` mit Status `active-block-multi`,
+  `storage nvme0` mit Status `mounted-C` und `storage nvme1` mit Status
+  `mounted-D`.
+- NVMe-Staging-Profil bleibt eindeutig getrennt:
+  C:/D: laufen ueber AHCI, `storage nvme0` erscheint als `mounted-E`.
+- AHCI- und Legacy-Profile zeigen ebenfalls passende Blockdevice-Records:
+  `ahci0`/`mounted-C`, `ahci1`/`mounted-D` beziehungsweise
+  `ata0`/`mounted-C`, `ata1`/`mounted-D`.
+- `Docs/SupportedHardware.txt`, `Docs/Drivers/README.txt`,
+  `Docs/FileSystem/DateisystemUndStorage.txt`,
+  `Docs/Deployment/BuildUndTest.txt`, `Docs/SDK/README.txt` und
+  `Code/Software/DeviceManager/README.txt` aktualisiert.
+- Abnahme durchgefuehrt:
+  `modern-q35 -storage nvme-boot`, `modern-q35 -storage nvme`,
+  `modern-q35 -storage ahci`, `legacy-pc` und R4Desk-Smoke im direkten
+  NVMe-Bootprofil.
+- Keine CPU Exception, kein General Protection Fault, kein PANIC und kein
+  FATAL in den geprueften Logs.
+
+Notizen:
+- NVMe soll kein isolierter Sonderfall bleiben. Was fuer spaetere PCIe-
+  Treiber allgemein nuetzlich ist, soll in die gemeinsamen Vertraege wandern.
+- Falls ein Detail nur fuer QEMU funktioniert, muss es als QEMU-spezifisch
+  markiert bleiben und darf nicht als echte Hardwaregarantie erscheinen.
+- ProgramApi v49 musste nicht gebrochen werden. Die vorhandenen
+  `DeviceInventoryRecord`-Felder reichen fuer diesen Schritt aus; die
+  Semantik von Status und Notiz wurde erweitert.
+
+
+Version 0.11.8
+--------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Reproduzierbare Storage-Abnahme fuer 0.11.X in
+  `Docs/Deployment/V0.11-Storage-Abnahme.txt` dokumentiert.
+- Direkter NVMe-Systempfad dokumentiert und abgenommen:
+  `DevTools/Scripts/Build.bat -test -profile modern-q35 -storage nvme-boot`.
+- Direkter NVMe-Systempfad mit Desktop-Smoke dokumentiert und abgenommen:
+  `DevTools/Scripts/Build.bat -test -test-shell desktop -profile modern-q35 -storage nvme-boot`.
+- NVMe-Staging-Profil dokumentiert und abgenommen:
+  `DevTools/Scripts/Build.bat -test -profile modern-q35 -storage nvme`.
+- AHCI-Fallback dokumentiert und abgenommen:
+  `DevTools/Scripts/Build.bat -test -profile modern-q35 -storage ahci`.
+- Legacy-IDE-Fallback dokumentiert und abgenommen:
+  `DevTools/Scripts/Build.bat -test -profile legacy-pc`.
+- Erwartete Shell-/Diagnosepfade festgehalten:
+  `HARDWARE`, `DEVICES`, `DEVMGR.R4X`, `DRIVES`, `BLOCK`, `NVME`,
+  `NVMETEST`, `BLOCKTEST`, `BLOCKTEST FAT C:`, `BLOCKTEST FAT D:`,
+  `BLOCKTEST FAT E:`, `FSDIAG C:`, `FSDIAG D:` und `FSDIAG E:`.
+- Direkter NVMe-Bootpfad zeigt C: auf `nvme0`/NSID 1 und D: auf
+  `nvme1`/NSID 2. `DEVICES`/Device Manager melden den Controller als
+  `active-block-multi` und die Storage-Records als `mounted-C` und
+  `mounted-D`.
+- NVMe-Staging-Profil bleibt ehrlich getrennt: C:/D: laufen ueber AHCI,
+  das separate NVMe-Datenimage erscheint als E: ueber `nvme0`.
+- AHCI-Fallback bleibt auf Q35 aktiv: `ahci0` mountet C:, `ahci1` mountet
+  D:, NVMe fehlt erwartbar.
+- Legacy-Fallback bleibt aktiv: `ata0` mountet C:, `ata1` mountet D:, AHCI
+  und NVMe fehlen erwartbar.
+- Logs auf Crash-Marker geprueft: keine CPU Exception, kein General
+  Protection Fault, kein PANIC und kein FATAL in den Abnahmelogs.
+- Logs auf irrefuehrende Storage-Erfolge geprueft: kein NVMe-Bootpfad gilt
+  als bestanden, wenn C:/D: heimlich ueber AHCI/IDE laufen; das Staging-
+  Profil ist ausdruecklich als AHCI-C:/D: plus NVMe-E: dokumentiert.
+- `Docs/README.txt` und `Docs/Deployment/BuildUndTest.txt` verweisen auf die
+  neue 0.11-Storage-Abnahme.
+
+Notizen:
+- Der Storage-Teil von 0.11.X ist abgeschlossen, wenn NVMe als moderner
+  Storagepfad funktioniert und AHCI/IDE weiterhin als verlaessliche Rueckwege
+  bestehen.
+- Dieser Punkt schliesst den Storage-Block als Systemstand ab. Die folgenden
+  0.11.X-Punkte duerfen sich auf sichtbare Desktop-/R4DOS-Bugfixes
+  konzentrieren, ohne den Storagepfad erneut nebenbei neu zu definieren.
+- Weitere Themen wie Netzwerk, nativer Displaytreiber, SMP oder Preemption
+  sollen erst in eine spaetere Roadmap wandern, sofern sie nicht fuer einen
+  konkreten 0.11.X-Blocker zwingend gebraucht werden.
+
+
+Version 0.11.9
+--------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Ursache gefunden: Die R4Desk-Cursor-Surface war kleiner als die tatsaechlich
+  gezeichnete Cursorform. Der Cursor wurde bis `y + 17` gezeichnet, die
+  Damage-/Restore-Flaeche deckte aber nur 17 Pixel Hoehe ab.
+- `Code/Software/Desk/src/surface.zig` fuehrt zentrale Cursor-Masse
+  `cursor_w = 12` und `cursor_h = 18` ein. Die Cursor-Surface deckt damit die
+  volle gezeichnete Form inklusive letzter Schattenzeile ab.
+- Surface-Unit-Test aktualisiert: normaler Cursor, rechter/unterer
+  Bildschirmrand und oberer Bildschirmrand werden gegen die neuen Masse
+  geprueft.
+- R4Desk-Smoke erweitert: Der Cursor wird nach dem normalen Cursor-Step
+  gezielt an die obere Bildschirmkante bewegt.
+- Abnahme im Q35-AHCI-Desktop-Smoke:
+  `R4DESK render cursor-top-edge ... last=cursor rect=8,0,12,19 pixels=228`.
+  Der obere Rand bleibt damit ein kleiner Cursor-Only-Present und erzeugt
+  keinen Fullscreen-Redraw.
+- `R4DESK smoke result: OK`.
+- `Code/Software/Desk/README.txt` dokumentiert die Cursor-Surface-Abdeckung
+  und den neuen oberen Rand-Smoke.
+
+Notizen:
+- Der Fehler klingt nach einem Restore-/Clipping-Problem, nicht nach einem
+  Sicherheits- oder Berechtigungsproblem. Ziel ist sauberes Zeichnen, nicht
+  ein neues Eingabemodell.
+- Der Fix kaschiert keine Farbe, sondern korrigiert die Schadensflaeche. Die
+  folgende Cursor-Optik-Stufe 0.11.10 darf die Form veraendern, muss aber die
+  `cursor_w`/`cursor_h`-Abdeckung konsistent halten.
+
+
+Version 0.11.10
+---------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- R4Desk-Mauszeiger optisch ueberarbeitet:
+  klassische weisse Pfeilflaeche, schwarze Kontur, klare Spitze und schmalere
+  DOS-/Windows-95-nahe Silhouette.
+- Hotspot bleibt unveraendert an der linken oberen Pfeilspitze `(0,0)`.
+  Klickziele werden dadurch nicht gefuehlt verschoben.
+- Die Cursorform ist in `Code/Software/Desk/src/draw.zig` als 12x18-
+  Bitmaske aus getrennten schwarzen Kontur- und weissen Fuell-Bitreihen
+  umgesetzt.
+- Die in 0.11.9 eingefuehrten `cursor_w`/`cursor_h`-Masse bleiben gueltig;
+  die neue Form zeichnet nicht ausserhalb der abgesicherten Cursor-Surface.
+- Ein erster String-/Slice-Maskenansatz wurde verworfen, weil er im R4X-
+  Desktopstart einen Page Fault ausloeste. Die finale Loesung nutzt reine
+  `u16`-Bitreihen ohne Laufzeit-Zeiger auf Stringdaten.
+- `Code/Software/Desk/README.txt` dokumentiert Cursorform, Hotspot und
+  Maskenlogik.
+- R4Desk-Smoke bestaetigt weiter den oberen Randpfad:
+  `R4DESK render cursor-top-edge ... last=cursor rect=8,0,12,19 pixels=228`.
+- `R4DESK smoke result: OK`.
+
+Notizen:
+- Der Cursor soll klassisch, klar und gut lesbar sein. Kein moderner
+  High-DPI-/Glow-Stil; R4OS soll hier bewusst nach DOS/Windows-98-Naehe
+  wirken.
+- Die automatische Abnahme kann die Pixeloptik nicht semantisch bewerten,
+  prueft aber Build, Desktopstart, Randbewegung, Hotspot-Konstanz und den
+  kleinen Cursor-Damage-Pfad. Die sichtbare manuelle Kontrolle bleibt fuer
+  echte Optikfeinschliffe sinnvoll.
+
+
+Version 0.11.11
+---------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Normale Eingabe-Erfolgsmeldungen aus dem Nutzerpfad entfernt.
+- `Code/src/drivers/input/keyboard.zig` schreibt beim ersten IRQ1 keine
+  `[INPUT] keyboard IRQ1 delivered`-Bootlog-Zeile mehr.
+- `Code/src/drivers/input/mouse.zig` schreibt beim ersten IRQ12-Mauspaket
+  keine `[INPUT] mouse IRQ12 packet delivered`-Bootlog-Zeile mehr.
+- IRQ-, Scancode-, Decode-, Byte- und Paketzaehler bleiben erhalten und sind
+  weiter ueber das R4DOS-Kommando `INPUT` sichtbar.
+- `Docs/README.txt` und `Docs/R4DOS/BootUndShell.txt` dokumentieren den neuen
+  Vertrag: erfolgreiche Alltags-IRQs bleiben still, Diagnose erfolgt bei
+  Bedarf ueber `INPUT`.
+- Code-Suche bestaetigt: In `Code/src` gibt es keine
+  `[INPUT] ... delivered`-Ausgaben mehr.
+- `DevTools/Scripts/Build.bat -test -test-shell desktop -profile modern-q35 -storage ahci`
+  laeuft erfolgreich; R4Desk-Smoke endet mit `R4DESK smoke result: OK`.
+- `DevTools/Scripts/Build.bat -test -profile modern-q35 -storage ahci`
+  laeuft erfolgreich; COMMAND-Smoke endet per `System poweroff`.
+- Das aktuelle COM-Log enthaelt keine Crash-Marker und keine entfernten
+  `[INPUT] ... delivered`-Statuszeilen.
+
+Notizen:
+- Diagnose bleibt erlaubt, soll aber im Normalbetrieb nicht wie ein kaputter
+  Debug-Build wirken.
+- Das COM-Log der automatischen Tests darf weiterhin technische Fehler zeigen,
+  soll aber nicht durch erfolgreiche Einzel-IRQs unlesbar werden.
+
+
+Version 0.11.12
+---------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- R4DOS-/Terminal-Cursor nach `C:\>` korrigiert:
+  Der sichtbare Unterstrich wird nicht mehr am unteren Rand der Zeilenbox
+  gezeichnet, sondern innerhalb der Textzelle.
+- Nach erster manueller Sichtpruefung wurde die Cursor-Baseline um weitere
+  4 Pixel angehoben, weil der Unterstrich noch zu tief sass.
+- Zweite manuelle Sichtpruefung durch R4mbo bestaetigt: Blinken und
+  Unterstrichposition passen.
+- Der Cursor-Draw bleibt ein kleiner 2-Pixel-Unterstrich aus dem
+  Console-State. Damit bleiben Prompt-Position, Cursor-X/Y und
+  Terminal-Metriken an den vorhandenen Console-Vertrag gebunden.
+- `draw.terminalCursorRect()` liefert das konkrete Cursor-Rechteck zentral
+  fuer Terminalfenster und Vollbild-R4DOS. Fensterhost und R4DOS Mode nutzen
+  dadurch dieselbe Positionierungslogik.
+- R4Desk reicht eine Blinkphase bis in den Compositor und in den
+  Terminalzeichner durch. Der Cursor wird nur gezeichnet, wenn die Phase
+  sichtbar ist.
+- Das Blink-Timing nutzt das bereits monotone R4Desk-Timer-Timing
+  (`blink_half_ms = 500`) und bleibt damit unabhaengig von festen
+  PIT-Annahmen.
+- Blinkwechsel invalidieren nur das kleine Cursor-Rechteck der sichtbaren
+  Console-Instanzen. Terminalfenster und Vollbild-R4DOS brauchen dadurch
+  keinen dauernden Fullscreen-Redraw.
+- Wenn keine sichtbare Console-Instanz vorhanden ist, loest ein Blinkwechsel
+  keinen unnoetigen Redraw aus.
+- Beim Ausblenden wird derselbe kleine Bereich neu komponiert; Text,
+  Hintergrundfarbe und Cursor werden dadurch sauber aus dem aktuellen
+  Console-State rekonstruiert.
+- `Code/Software/Desk/README.txt` beschreibt den neuen Cursor-Baseline- und
+  Blinkvertrag.
+
+Notizen:
+- Das ist ein kleiner sichtbarer Qualitaetspunkt mit grosser Wirkung:
+  R4DOS soll sich lebendig und klassisch anfuehlen, nicht wie eine statische
+  Debugausgabe.
+- Vollbild-R4DOS und R4Desk-Terminalfenster teilen sich jetzt die Cursor-
+  Rechteckberechnung. Ein spaeterer Wechsel auf Blockcursor oder
+  konfigurierbare Cursorformen sollte deshalb an dieser zentralen Funktion
+  ansetzen.
+- Die automatische Desktop-Abnahme startet bewusst kein zusaetzliches
+  COMMAND-Terminal fuer den Blinktest, weil COMMAND in Debug-Images
+  AUTOEXEC.BAT ausfuehrt. Die sichtbare Cursorwirkung wird manuell im
+  QEMU-Fenster geprueft.
+
+
+Version 0.11.13
+---------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Ursache eingegrenzt:
+  R4Config ist eine Console-App und wartet ueber `ctx.readKey()` auf Eingaben.
+  Im gehosteten Desktop-Console-Fenster liefert `readKey()` bei leerer Queue
+  korrekt 0 zurueck; R4Config machte daraus aber eine enge Endlosschleife
+  ohne Yield. Durch das kooperative Scheduling konnte R4Desk dadurch
+  ausgehungert wirken.
+- R4Config gibt bei leerem `readKey()` nun `ctx.taskYield()` an den Scheduler
+  zurueck.
+- R4Config prueft `ctx.programShouldClose()` und beendet sich sauber, wenn der
+  Desktop das Fenster schliesst.
+- R4Desk-Smoke startet R4Config als Console-App, pumpt den Desktop-Loop,
+  prueft die Ausgabe auf `R4CONFIG` und `Choice?`, sendet `Q` ueber
+  `consolePushKey()` und laeuft danach mit R4Files weiter.
+- `Code/Software/R4Config/README.txt` dokumentiert den neuen
+  Idle-/Close-Vertrag fuer den Desktop-Console-Host.
+- `Docs/Deployment/BuildUndTest.txt` dokumentiert den R4Config-Schritt im
+  Desktop-Smoke.
+- `DevTools/Scripts/Build.bat -test -test-shell desktop -profile modern-q35 -storage ahci`
+  laeuft erfolgreich. Das COM-Log meldet `R4Config window: 1 ok`,
+  anschliessend `R4Files window: 1 ok` und `R4DESK smoke result: OK`.
+- Das aktuelle COM-Log enthaelt keine Crash-Marker fuer CPU Exception,
+  General Protection Fault, PANIC oder FATAL.
+
+Notizen:
+- Dieser Punkt ist ein Stabilitaets-Bug, weil die UI danach nicht mehr
+  bedienbar ist. Er sollte vor dem 0.11-Abschluss erledigt sein.
+- Ein Workaround wie "R4Config nicht mehr anzeigen" reicht nicht. Der Host-
+  oder App-Startpfad muss erklaerbar stabil werden.
+
+
+Version 0.11.14
+---------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Noch nichts.
+
+Erledigt:
+- Abschlussabnahme fuer 0.11.X durchgefuehrt:
+  NVMe, AHCI-Fallback, Legacy-IDE-Fallback und die sichtbaren Desktop-/
+  R4DOS-Bugfixes wurden gemeinsam geprueft.
+- Direkter NVMe-Systempfad getestet:
+  `DevTools/Scripts/Build.bat -test -profile modern-q35 -storage nvme-boot`.
+  C: und D: wurden ueber `nvme0`/`nvme1` gemountet; `BLOCKTEST`,
+  `NVMETEST`, `BLOCKTEST FAT C:`, `FSDIAG C:`, `BLOCKTEST FAT D:` und
+  `FSDIAG D:` waren OK.
+- Direkter NVMe-Systempfad mit Desktop-Smoke getestet:
+  `DevTools/Scripts/Build.bat -test -test-shell desktop -profile modern-q35 -storage nvme-boot`.
+  R4Config und R4Files oeffnen stabil, `R4DESK smoke result: OK`, Cursor-
+  Top-Edge-Damage bleibt auf `rect=8,0,12,19 pixels=228` begrenzt.
+- NVMe-Staging-Profil getestet:
+  `DevTools/Scripts/Build.bat -test -profile modern-q35 -storage nvme`.
+  C:/D: blieben ueber AHCI, das NVMe-Datenimage wurde als E: gemountet;
+  `NVMETEST`, `BLOCKTEST FAT E:`, `FSDIAG E:` und `AHCI TEST` waren OK.
+- Modernes AHCI-Profil getestet:
+  `DevTools/Scripts/Build.bat -test -profile modern-q35 -storage ahci`.
+  C:/D: liefen ueber `ahci0`/`ahci1`, NVMe fehlte erwartbar,
+  `BLOCKTEST`, `FSDIAG` und `AHCI TEST` waren OK.
+- Legacy-Profil getestet:
+  `DevTools/Scripts/Build.bat -test -profile legacy-pc`.
+  C:/D: liefen ueber AT-PIO/Legacy-IDE, AHCI und NVMe fehlten erwartbar,
+  `BLOCKTEST`, `BLOCKTEST FAT D:` und `FSDIAG` waren OK.
+- Keine Abschlusslaeufe zeigten `CPU EXCEPTION`, `General Protection Fault`,
+  `PANIC` oder `FATAL:`.
+- Sichtbare Desktop-/R4DOS-Bugfixes abgenommen:
+  klassischer Cursor, keine schwarzen Pixel am oberen Rand, kein
+  Eingabe-IRQ-Logspam im normalen Betrieb, blinkender und korrigierter
+  R4DOS-Unterstrich-Cursor sowie stabiler R4Config-Start aus R4Desk.
+- Waehrend der Abschlussabnahme wurde FSDIAG auf 16 KB R4X-Stack angehoben
+  und die Ausgabe von Pfaden/Directory-Eintraegen begrenzt, damit die
+  Diagnose selbst keine falschen Fehler erzeugt.
+- Abschlussdokument erstellt:
+  `Docs/Deployment/V0.11-Abschluss.txt`.
+- `Docs/README.txt`, `Docs/SupportedHardware.txt` und
+  `Docs/Deployment/V0.11-Storage-Abnahme.txt` spiegeln den erreichten Stand
+  und die bekannten Grenzen.
+
+Notizen:
+- 0.11.X ist abgeschlossen, wenn der moderne Storagepfad erweitert wurde,
+  alte Storagepfade weiter funktionieren und die genannten sichtbaren
+  Alltagsfehler behoben sind.
+- Bekannte Grenzen bleiben bewusst dokumentiert: NVMe ist noch polling-
+  basiert, ohne Interrupt/MSI/MSI-X, ohne Multi-Queue und ohne PRP2/PRP-
+  Listen fuer groessere Transfers. Native Displaytreiber, Netzwerk und
+  breitere echte Hardwareabnahme bleiben spaetere Roadmap-Themen.

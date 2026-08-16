@@ -1,0 +1,107 @@
+﻿R4OS 0.53.34: Fault-Page-In ohne automatische Eviction
+=======================================================
+
+Ziel
+----
+
+0.53.34 aktiviert das Einlesen nonresidenter, committed R4X-VM-Pages ueber
+den bestehenden Page-Fault-Pfad, wenn die betroffene Page bereits eine
+gueltige Backing-Store-Slotbindung besitzt.
+
+Das ist bewusst noch keine automatische Eviction. R4OS waehlt in dieser
+Version keine Opferseiten aus, schreibt unter Memory-Pressure keine Seiten
+automatisch heraus und fuehrt keinen Swap-/Pagefile-Sonderpfad ein.
+
+
+Besitzgrenze
+------------
+
+Die VM-Schicht bleibt die Wahrheit fuer committed, resident, nonresident,
+dirty, clean, busy, error und slot-bound Pages. Der Backing-Store besitzt
+Slots, Generationen, Valid-/Dirty-/Error-Status und Datei-Offsets.
+
+Page-In darf nur stattfinden, wenn beides zusammenpasst:
+
+- Die Fault-Adresse gehoert zu einer gueltigen R4X-VM-Region.
+- Die Page ist committed, nonresident und per VM-Page-State an einen Slot
+  gebunden.
+- Owner-Kind, Owner-ID, Region-ID und Slot-Generation passen zur aktuellen
+  Region.
+- Der Slot ist valid und nicht als Error markiert.
+- Der aktive Backing-Store wurde ueber den vorhandenen R4SYS-/FAT32-Pfad
+  vorbereitet.
+
+R4DEV macht diesen Zustand sichtbar, fuehrt aber keine Pager-Policy ein.
+
+
+Ablauf
+------
+
+Der Fault-Pfad bleibt der vorhandene R4X-VM-Demand-Pfad:
+
+    IDT Page Fault -> r4x.handlePageFault -> mem_virt.handleDemandFault
+
+Wenn der VM-Page-State fuer die betroffene Page eine gueltige Slotbindung
+enthaelt, versucht `mem_virt` einen Page-In statt Demand-Zero:
+
+1. Page-State wird auf busy gesetzt.
+2. `backing_store.pageIoPrepare()` prueft Owner, Generation, Slot-Status,
+   Backing-Offset und Transfergroesse.
+3. Ein physischer Frame wird ueber die bestehende VM-Fault-Allocation
+   angefordert und gemappt.
+4. Die Daten werden mit `R4SYS.fileReadAt64()` aus der Backing-Datei gelesen.
+5. `backing_store.pageIoComplete()` validiert das I/O-Ergebnis.
+6. Die Page wird resident, clean, nicht busy und bleibt slot-bound.
+
+Fehler beim Prepare, fehlendes Backing, stale Generationen, Error-Slots,
+partielle I/O-Ergebnisse oder Owner-/Region-Mismatch werden sichtbar als
+Failure gezaehlt. Der Fault wird dann nicht still in eine Zero-Page
+umgebogen.
+
+
+R4DEV / SDK
+-----------
+
+ProgramApi v130 markiert die Faehigkeit mit
+`program_api_version_memory_fault_page_in`. Das SDK spiegelt sie ueber
+`supportsMemoryFaultPageIn()`.
+
+`ProgramPerformanceSummary` waechst append-only um:
+
+- `memory_vm_page_state_fault_page_in_count`
+- `memory_vm_page_state_fault_page_in_failure_count`
+- `memory_vm_page_state_page_out_nonresident_pages`
+
+Der VM-Page-State setzt zusaetzlich
+`memory_vm_page_state_flag_fault_page_in`. Das alte
+`memory_vm_page_state_flag_no_fault_io` wird fuer diesen Stand nicht mehr
+gesetzt.
+
+
+Abnahme
+-------
+
+PERFDIAG prueft:
+
+- expliziten VM-Region-Page-Out auf zwei Seiten,
+- nonresident und slot-bound Page-State nach Page-Out,
+- normalen Speicherzugriff als Page-Fault-getriebenen Page-In,
+- korrekte Ruecklesedaten,
+- Resident-State und Page-In-Zaehler nach dem Fault,
+- Performance-Summary-Felder fuer Fault-Page-In und nonresident Page-Out.
+
+MEMSUITE prueft denselben Mechanismus im Memory-Pressure-Kontext:
+
+- bestehende Backing-Datei,
+- VM-Region-Slotbindung,
+- explizites Page-Out ohne automatische Eviction,
+- Fault-Page-In durch normalen Zugriff,
+- Summary-Zeile mit `faultIn=...`.
+
+No-Fallback-Grenzen:
+
+- kein zweiter Page-In-Pfad
+- kein direkter Blockdevice-Sonderpfad
+- kein Swap-Stub
+- keine automatische Eviction
+- kein stiller Demand-Zero-Fallback fuer slot-bound Page-In-Fehler

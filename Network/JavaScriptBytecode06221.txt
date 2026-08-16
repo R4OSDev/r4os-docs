@@ -1,0 +1,120 @@
+﻿R4JS - Bytecode-Ausfuehrungskern
+================================
+
+Zweck
+-----
+
+R4JS kompiliert den bereits geprueften JavaScript-AST vor jeder Ausfuehrung
+in kompakten Bytecode. Der produktive Pfad wertet keine AST-Knoten mehr aus.
+R4JS bleibt ein allgemeines R4P-Modul mit der Rolle application.javascript;
+Klickifax ist ein Verbraucher und besitzt keine zweite JavaScript-Laufzeit.
+
+Besitz und Grenzen
+------------------
+
+Parser, Compiler, Validator, VM, Zellen, Module, Garbage Collector, Event
+Loop und Promises liegen in Code/System/SDK/r4os/javascript.zig. Das Modul
+Code/System/Protocols/R4Js serialisiert nur den vorhandenen R4P-Vertrag.
+Bytecode, VM-Stack und Frames sind Userland-Arbeitsspeicher. Nichts davon
+liegt in Kernel, R4DRAW oder im Klickifax-Modulcontainer.
+
+Compiler und Speicheranlage
+---------------------------
+
+Program.parse durchlaeuft vier feste Stufen:
+
+1. Quelltext begrenzen und tokenisieren.
+2. Token in den gemeinsamen AST uebersetzen.
+3. AST in Ausdruecke, Anweisungssegmente und Funktionsprologe kompilieren.
+4. Den vollstaendigen Bytecode validieren und signieren.
+
+Eine Instruktion belegt acht Byte. Ausdruecke werden als Stackoperationen
+linearisiert; Kontrollfluss, Funktionskoerper, Kurzschlussausdruecke und
+Module verwenden begrenzte Segmente. Namen, Literale und Diagnoseorte
+verweisen weiterhin auf die unveraenderliche Programmquelle und ihre
+AST-Metadaten, werden aber nicht rekursiv als Programm ausgefuehrt.
+
+Token werden nach Abschluss des Parsers nicht mehr benoetigt. Derselbe
+Program-Arbeitsbereich wird deshalb anschliessend fuer Instruktionen,
+Segmentfelder und Knotenzuordnungen verwendet. Compiler und VM vergroessern
+den R4P-Arbeitsspeicher dadurch nicht um einen zweiten Maximalpuffer.
+
+R4JS.R4P haelt Program, Runtime, WebRuntime und Modulprogramme nicht als
+globale BSS-Maximalpuffer im dauerhaft geladenen Protokollmodul. Die
+serialisierte Dispatchgrenze fordert die jeweils benoetigten Arbeitsbereiche
+ueber R4DEV erst fuer eine Operation an und gibt sie nach Runtime-Deinit in
+umgekehrter Reihenfolge wieder frei. Modul- und Evalprogramme nutzen denselben
+bedarfsgesteuerten ProgramAllocator. Im Gast sank das geladene R4JS-Abbild
+dadurch von 103.604.224 auf 4.956.160 Byte; die grossen Laufzeitbereiche
+existieren nur waehrend einer tatsaechlichen JavaScript-Anforderung.
+
+Validierung
+-----------
+
+Vor der ersten Ausfuehrung prueft der Validator:
+
+- Root-, Segment-, Knoten- und Instruktionsgrenzen,
+- alle Segmentverweise von Block, Kurzschluss und Konditional,
+- Stackbedarf und Stackwirkung jeder Instruktion,
+- den geforderten Endstack fuer Ausdrucks- und Anweisungssegmente,
+- das globale VM-Stacklimit.
+
+Nach erfolgreicher Pruefung wird der aktive Instruktions- und Segmentbestand
+signiert. Evaluate, Modulstart und Funktionsaufruf verweigern veraenderten,
+nicht validierten oder nicht signierten Bytecode sichtbar mit
+BytecodeInvalid. Negativtests pruefen Bereichsfehler, Stack-Unterlauf und
+eine nachtraeglich veraenderte Instruktion.
+
+VM, Funktionen und asynchrone Arbeit
+------------------------------------
+
+Jedes aktive Segment besitzt einen expliziten BytecodeFrame mit Programm,
+Segment, Umgebung, Stackbasis und letztem Ergebnis. Funktionen behalten ihr
+Ursprungsprogramm und ihre Closure-Umgebung. Funktionsprologe enthalten die
+vorab kompilierten Var-Hoists; Funktionskoerper, Module und dynamisches Eval
+laufen ueber denselben Segmentpfad. Ausnahmen, Try/Catch/Finally, Async-
+Funktionen, Promise-Reaktionen, Tasks, Microtasks und Hostfunktionen benutzen
+keinen AST-Sonderweg.
+
+Schrittbudget, Abbruch und Garbage Collection
+---------------------------------------------
+
+Jede ausgefuehrte Instruktion durchlaeuft genau einen Checkpoint. Der
+Checkpoint prueft kooperativen Abbruch und Schrittbudget. RuntimeStats fuehrt
+Instruktionszahl und maximale Frame-Tiefe getrennt sichtbar.
+
+Der VM-Wertestack, alle aktiven BytecodeFrames und deren letztes Ergebnis
+sind Mark-and-Sweep-Wurzeln. Erreicht die Allokation ihre naechste GC-
+Schwelle, darf deshalb auch mitten in einer langen Schleife gesammelt werden.
+Schleifen ohne Funktionsaufruf sammeln Blockumgebungen nicht mehr bis zur
+Zellgrenze an.
+
+Deterministische Leistungsprofile
+---------------------------------
+
+Die R4JS-Unittests besitzen vier feste Profile. Sie pruefen Ergebnis,
+Instruktions-/Schrittbudget, Zellspitze und Frame-Tiefe:
+
+- klein: Arithmetik, hoechstens 64 Schritte und 256 Zellen,
+- mittel: 1.000 Schleifendurchlaeufe, hoechstens 32.000 Schritte und 2.048
+  Zellen,
+- gross: 20.000 Schleifendurchlaeufe, hoechstens 400.000 Schritte und 2.048
+  Zellen,
+- Allokationslast: 1.000 Array-/Blockzyklen, hoechstens 64.000 Schritte und
+  4.096 Zellen.
+
+Der getrennte Langlauftest behaelt 100.000 Schleifendurchlaeufe samt aktiven
+Blockumgebungen und anschliessender GC-Abnahme. Die Budgets messen
+deterministische VM-Arbeit; wechselnde Host-Wandzeit ist kein Buildgate.
+
+Abnahme
+-------
+
+Die direkte javascript.zig-Suite prueft Parser, Compiler, Validator, VM,
+Closures, Ausnahmen, Module, Eval, Promises, Jobs, GC, Grenzen, Abbruch und
+die vier Leistungsprofile. Run-JavaScriptRuntimeContract06218.ps1 baut
+zusaetzlich R4JS und Klickifax und verhindert die Rueckkehr permanenter
+Runtime-/Program-BSS-Puffer. Run-WebRuntimeSecurityContract06219.ps1 prueft
+die vollstaendige Webruntime-Integration und die bestehenden Artefaktbudgets.
+Der headless Gast-Smoke fuehrt beide R4JS-Protokollselbsttests ueber den
+Klickifax-Selbsttest aus und verlangt danach den regulaeren Poweroff.

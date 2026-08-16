@@ -1,0 +1,105 @@
+﻿R4OS 0.53.37 - Pager-Stress, Performance-Tuning und Abschluss-Audit
+===================================================================
+
+Ziel
+----
+
+0.53.37 schliesst den Memory-/Pager-Block der 0.53.X-Reihe mit einem
+belastbaren Stress- und Auditprofil ab. Die Version fuehrt keinen neuen
+Komfort-Pager, keinen Swap und keinen zweiten I/O-Pfad ein. Sie prueft, ob die
+seit 0.53.27 aufgebaute Mechanik unter wiederholter Last stabil bleibt:
+Backing-Store, Slot-/Range-Tabelle, VM-Page-State, explizites Page-I/O,
+Fault-Page-In, Memory-Pressure-Eviction und Fehlerpolicy.
+
+Stressprofil
+------------
+
+`MEMSUITE.R4X /PAGERSTRESS /STRICT` ist das Abschlussprofil. Es laeuft
+bewusst als Diagnoseprogramm und nicht als neue Kernel-Selbsttestlogik.
+
+Das Profil prueft:
+
+- 12 kleine R4X-VM-Regionen mit Reserve, Commit, Touch und Release,
+- 3 wiederholte Page-Out/Page-In-/Reclaim-Zyklen,
+- explizites Page-Out mehrerer Pages in Backing-Store-Slots,
+- Fault-Page-In ueber den normalen Page-Fault-Pfad,
+- retrybaren Backing-unavailable-Fehler mit erhaltener Dirty Page,
+- permanenten Slot-error-Fehler ohne Demand-Zero-Fallback,
+- Recover/Retry nach Fehlern,
+- globalen Reclaim mit PMM-Frame-Rueckgabe,
+- Program-Kill waehrend gehaltenem VM-Speicher ueber das bestehende
+  Owner-Cleanup,
+- stabile Summary-Zaehler ohne Datenverlust.
+
+Performance-Grenzen
+-------------------
+
+Das Abschlussprofil ist kein synthetischer Durchsatzbenchmark. Es setzt
+harte Regressionsgrenzen fuer Responsiveness und Hangs:
+
+- maximale Storage-Page-I/O-Latenz im Profil: 100 Ticks,
+- maximale FS-Page-I/O-Latenz im Profil: 250 Ticks,
+- maximale globale Reclaim-Latenz im Profil: 100 Ticks,
+- Service-Queue-Highwater: 16,
+- keine Long-running-/Starvation-/Lock-Sleep-Warnungen,
+- keine Service-Timeouts,
+- `data_lost_pages == 0`.
+
+Diese Grenzen sind absichtlich Diagnosegrenzen. Produktive Backoff-, Worker-
+oder Service-Policy gehoert spaeter in die jeweiligen Subsysteme, nicht in
+den Page-I/O-Kernpfad.
+
+Abnahme 0.53.37
+---------------
+
+Der isolierte Pager-Stresslauf nutzt
+`Tests/Gate/Run-PagerStress05337.ps1`. Der Lauf baut ein
+Testimage mit einem schlanken `AUTOEXEC.BAT`, startet QEMU headless und
+fordert die Marker aus dem QEMU-Log.
+
+Ergebnis:
+
+`MEMSUITE pagerstress: cycles=3 smallRegions=12 pageOuts=27 faultIns=30 reclaimFrames=3 retryable=3 permanent=3 preserved=3 lost=0 ticks storage/fs/reclaim=1/15/3 serviceQ=2 ownerCleanup=OK`
+
+Der normale Standard-Smoke fuehrt dasselbe Profil nach `/VMSTRESS` aus. Damit
+bleibt der Abschluss in der regulaeren Build-Abnahme sichtbar und muss nicht
+manuell erinnert werden. Im vollen Smoke meldete dasselbe Profil
+`cycles=3 smallRegions=12 pageOuts=27 faultIns=30 reclaimFrames=3 retryable=3 permanent=3 preserved=3 lost=0 ticks storage/fs/reclaim=2/28/3 serviceQ=5 ownerCleanup=OK` und blieb damit innerhalb der gesetzten Grenzen.
+
+No-Fallback-Grenzen
+-------------------
+
+0.53.37 bestaetigt die harten Grenzen der Memory-Reihe:
+
+- keine alte AppHeap-/Memory-ABI als produktiver Ersatzpfad,
+- kein Swap,
+- kein Pagefile,
+- kein zweiter Block-I/O-Pfad fuer Page-I/O,
+- kein Demand-Zero-Fallback bei Page-In-Fehlern,
+- keine stillen Success-Rueckgaben bei Pager-Fehlern,
+- keine Test-only-Policy im produktiven Normalpfad,
+- keine dauerhafte Kompatibilitaetsschicht fuer alte ProgramApi-Aufrufer.
+
+Abgleich mit 0.53.0
+-------------------
+
+Der Speicherbefund aus der 0.53.0-Performanceanalyse ist damit nicht mehr der
+primaere offene Block. R4OS kann grosse virtuelle R4X-Regionen reservieren,
+residentes Working Set begrenzen, Memory Pressure diagnostizieren, saubere
+FS-Cache-Frames und geeignete R4X-VM-Pages reclaimen, nonresidente Pages ueber
+den bestehenden Page-Fault-/R4SYS-/FAT32-Pfad wieder einlesen und Fehler ohne
+Datenverlust sichtbar machen.
+
+Weiter offen bleiben die nicht-memory-spezifischen Performance-Baustellen:
+
+- produktive Preemption und harte Fairness-Grenzen,
+- Wait-Queues, Completion, Semaphore und Lock-/Sleep-Regeln,
+- Deferred Work fuer Treiber und kurze IRQ-Pfade,
+- Storage-/FS-Queueing mit mehreren outstanding Requests,
+- Service-/Netzwerk-Completion und Worker-Modelle,
+- Desktop-Responsiveness bei periodischer Datei-/Config-Arbeit,
+- systematische Latenzdiagnose fuer Tasks, Waits, APIs, Storage, Services,
+  Desktop und Treiber.
+
+Diese Punkte gehoeren in die folgenden Unterversionen. 0.53.37 beendet den
+Memory-/Pager-Block, ohne die uebrige Performanceanalyse zu verwischen.

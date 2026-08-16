@@ -1,0 +1,534 @@
+﻿Klickifax-Webruntime und Origin-Sicherheit 0.62.19
+==================================================
+
+Zweck und Besitz
+----------------
+
+`r4os.web_runtime` verbindet die gemeinsame R4JS-Laufzeit mit einem
+dokumenteigenen HTML-Baum. `r4os.web_security` besitzt die davon getrennten
+Origin-, CSP-, CORS-, Cookie- und Storage-Regeln. Beide Komponenten liegen im
+SDK-Userland. Weder Kernel noch R4DRAW besitzen Seitenskripte, DOM-Zustand,
+Cookies oder Browserdaten.
+
+R4JS stellt dafuer eine generische Host-Funktions- und
+Host-Property-Schnittstelle bereit. Die Schnittstelle kennt keine
+Browserbegriffe. Funktionszellen merken sich zusaetzlich ihr urspruengliches
+Programm, damit spaetere Ereignisse, Timer und Promise-Reaktionen nicht gegen
+einen inzwischen geparsten anderen Skriptbaum laufen.
+
+Dokumentlebensdauer
+-------------------
+
+Jede Navigation erzeugt eine neue, von Klickifax vergebene
+Dokumentgeneration. Realm, Listener, Timer, XHR-Zustaende, ausstehende
+Requests und Aktionen tragen diese Generation. Abbruch oder Dokumentwechsel
+entwertet die Generation und leert die aktiven Warteschlangen. Eine Antwort
+mit alter Generation wird als `StaleGeneration` verworfen und kann weder DOM
+noch Verlauf, Storage oder Promise-Zustand des neuen Dokuments veraendern.
+
+Ein Realm ist fest begrenzt:
+
+- 16 Seitenskriptprogramme plus ein getrenntes Plattformprogramm je Dokument
+- 48 Ereignislistener
+- 16 MutationObserver mit je 8 Zielregistrierungen und 64 ausstehenden Records
+- 32 Timer
+- 8 gleichzeitige Fetch-, XHR- oder Skriptanforderungen
+- 16 ausstehende Browseraktionen
+- 8 XHR-Objekte
+- 128 KB Antwortkoerper je Skriptanforderung
+
+Die bis zu 16 Seitenskriptprogramme liegen nicht eingebettet in der Webruntime.
+Klickifax stellt sie einzeln und lazy aus seinem App-Allocator bereit; R4JS
+nutzt fuer seinen begrenzten Selbsttest statische Slots. Reset, Abbruch und
+Programmende geben alle belegten Programme wieder frei.
+
+Die Streams-Plattform liegt als eigenes eingebettetes JavaScript-Programm
+neben diesen Seitenslots. Dadurch verwenden Controller, Reader, Writer und
+Promise-Ketten dieselbe R4JS-Semantik, ohne einen Seitenskriptplatz zu
+belegen. Die Plattforminitialisierung ist vertrauenswuerdige Browserarbeit;
+kooperativer Abbruch und Schrittbudget greifen erst fuer den anschliessenden
+Seitencode.
+
+Window, DOM und Ereignisse
+--------------------------
+
+Die Bindings stellen `window`, `self`, `document`, `location`, `history`,
+`navigator`, `performance`, `URL`, Timer und Feature-Erkennung bereit.
+Dokument und Elemente bieten stabile Objektidentitaet, ID-, Tag-, Klassen-
+und vollstaendige vorhandene CSS-Selektorabfragen. Knotenart, Wert, Eltern-,
+Kind- und Geschwisterbeziehungen sind dynamisch sichtbar. Element- und
+Textknoten lassen sich anlegen, klonen, einfuegen, verschieben, ersetzen und
+entfernen; Zykleneinfuegungen und fremde Elternbeziehungen werden abgewiesen.
+Attribut-, `nodeValue`- und `textContent`-Mutationen gehen an Klickifax zurueck
+und loesen View-Neubau, CSS-Neuberechnung und Reflow aus.
+
+Window-, Dokument-, Element- und XHR-Listener besitzen getrennte Ziele.
+`Event` und `dispatchEvent` verteilen synchron ueber Capture-, Ziel- und
+Bubble-Phase. Funktions- und HandleEvent-Listener unterstuetzen Capture,
+Once, gezielte Entfernung, StopPropagation, StopImmediatePropagation und
+PreventDefault. Auch die nativen Klickifax-Eingaben durchlaufen diesen Pfad,
+bevor Link- oder Formularstandardaktionen ausgefuehrt werden. Timeout und
+Interval landen als Tasks in derselben R4JS-Event-Loop; Promise-Reaktionen
+bleiben Microtasks.
+
+`MutationObserver` registriert mehrere Ziele mit ChildList-, Attributes-,
+CharacterData-, Subtree-, Filter- und OldValue-Optionen. Records bewahren
+Mutationsreihenfolge, Ziel, hinzugefuegte und entfernte Knoten, Nachbarn,
+Attributname und den angeforderten Altwert. Pro Observer wird hoechstens eine
+Zustell-Microtask vorgemerkt. `takeRecords` und `disconnect` sind synchron;
+Aenderungen in einem gerade entfernten Teilbaum bleiben bis zur anstehenden
+Zustell-Microtask beobachtbar.
+
+Dokumentressourcen und Subdokumente
+-----------------------------------
+
+Der dokumentgebundene Ressourcenscheduler fuehrt Skripte, Stylesheets,
+Bilder und Iframes mit ID, DOM-Reihenfolge, Generation und den Zustaenden
+Discovered, Queued, Fetching, Ready, Running, Complete, Failed oder Aborted.
+Externe Ressourcen benutzen ausnahmslos den gemeinsamen App.web-Transport.
+Navigation oder Stop entwertet alte Generationen; spaete Antworten koennen
+weder Skripte ausfuehren noch Styles anwenden oder Frames anlegen.
+
+Klassische parser-blockierende Skripte bewahren ihre Dokumentreihenfolge.
+Async-Skripte duerfen nach ihrer Antwort vorziehen, Defer- und Modulskripte
+laufen nach dem Parserblock in Dokumentreihenfolge, und verbundene dynamisch
+erzeugte Skripte werden als eigene Ressourcen entdeckt. Stylesheets werden
+auch bei vertauschter Antwortreihenfolge in DOM-Reihenfolge angewandt.
+DOMContentLoaded und Load werden erst nach dem begrenzten initialen
+Ressourcendurchlauf ausgeliefert.
+
+Statische Modulskripte werden vor ihrer Auswertung rekursiv registriert.
+Relative, absolute und URL-Spezifizierer bilden einen auf acht Module
+begrenzten Graphen; doppelte Kanten und Zyklen erzeugen keinen zweiten Abruf.
+Jeder Modulabruf benutzt CORS, Same-Origin-Credentials, CSP, Mixed-Content-
+Pruefung und die Dokumentgeneration des gemeinsamen Transportpfads. Bare
+Specifier bleiben ohne eine spaetere Import-Map sichtbar ungueltig.
+
+Klickifax haelt bis zu vier aktive Iframe-Kontexte dynamisch ausserhalb des
+Eltern-Realm. Jeder Kontext besitzt ein eigenes HTML-Dokument, eine eigene
+R4JS-Laufzeit und Generation. Srcdoc erbt den Eltern-Origin, eine geladene
+Frame-URL erzeugt ihren eigenen Origin. Same-Origin-Frames erhalten stabile,
+lebende ContentDocument-, WindowProxy- und Knoten-Sichten. Der festgelegte
+Frame-DOM-Vertrag umfasst DocumentElement, Head, Body, Title,
+GetElementById, QuerySelector, Kern-Knotenbeziehungen, TextContent und
+Attributzugriff samt Mutation. Mutationen markieren die Laufzeit des
+Kinddokuments als geaendert. Bei fremdem Origin ist ContentDocument null und
+der Zugriff auf Document oder Location des WindowProxy wird abgewiesen. Eine
+Elternnavigation raeumt rekursiv alle Nachfahren, deren Requests, Timer, Jobs
+und Observer ab; alte Frame-Proxies werden dadurch unbrauchbar.
+
+Frame-src, Default-src, Mixed Content, Credentials und zielbezogene Cookies
+werden vor beziehungsweise waehrend jedes Subdokumentabrufs angewandt. Der
+Round-Robin-Pump teilt Jobpakete zwischen aktiven Realms, waehrend R4JS die
+standardisierte Task-/Microtask-Reihenfolge innerhalb eines Realms bewahrt.
+
+Stand 0.62.26: Isolierte Realms, Modulgraph, der festgelegte lebende
+Same-Origin-Frame-DOM-Vertrag und der gemeinsame Ressourcenlebenszyklus sind
+produktiv angebunden. Erweiterungen wie Import Maps, Frame-Sandboxing und
+Cross-Origin-Isolation sind eigenstaendige, im Browserinventar separat
+gefuehrte Webplattformfunktionen und keine stillen Bestandteile dieses
+Vertrags.
+
+Browserumgebung, Crypto und Canvas 2D
+-------------------------------------
+
+Seit 0.62.27 speist Klickifax die Webruntime mit seiner echten Fenster-,
+Bildschirm- und Online-Information. `navigator` meldet daher Klickifax auf
+R4OS statt eines vorgetaeuschten Chrome- oder Firefox-Profils; `screen` und
+die Window-Masse stammen aus der aktuellen R4OS-Ausgabe. Der Browserkern
+bleibt dabei frei von direkten Kernel- und R4DRAW-Abhaengigkeiten.
+
+`crypto.getRandomValues` und `crypto.randomUUID` verwenden ausschliesslich
+die CPU-Entropiequelle RDRAND. Ist sie nicht vorhanden oder liefert sie keinen
+Wert, scheitert der Aufruf sichtbar; die Feature-Erkennung meldet Web Crypto
+dann nicht als verfuegbar. `crypto.subtle.digest` ist bewusst auf SHA-256
+festgelegt und liefert sein Ergebnis asynchron als ArrayBuffer. Es gibt keine
+stille Pseudozufallsquelle und keinen versteckten Kryptopfad im Kernel.
+
+Canvas 2D besitzt bis zu acht dynamisch allozierte Zeichenflaechen je Realm.
+Jede Flaeche ist auf 512 mal 512 Pixel begrenzt und wird bei Navigation oder
+Abbruch vollstaendig freigegeben. Der Umfang umfasst Fuell- und
+Loeschrechtecke, Pfade mit MoveTo, LineTo und Stroke, FillText, Farben,
+Save/Restore sowie Translate, Scale, Rotate und SetTransform. GetImageData
+und PutImageData uebertragen begrenzte RGBA-Pixeldaten. Klickifax allein
+uebergibt die fertige XRGB-Rasterflaeche zum Zeichnen an R4DRAW; Webruntime,
+R4JS und Kernel besitzen keinen Grafiktreiberzugriff.
+
+Navigation und Timing
+---------------------
+
+`Location` besitzt die URL-Komponenten Href, Origin, Protocol, Username,
+Password, Host, Hostname, Port, Pathname, Search und Hash. Assign, Replace,
+Reload, direkte Href- und Komponenten-Zuweisungen werden als Browseraktionen
+ausgegeben. Relative Ziele werden gegen die aktuelle Dokumentadresse
+aufgeloest.
+
+`History` spiegelt den begrenzten Verlauf, den Klickifax als Besitzer fuehrt.
+Back, Forward und mehrstufiges Go traversieren nur vorhandene Eintraege;
+`go()` beziehungsweise `go(0)` laden den aktuellen Eintrag neu. PushState
+verwirft einen vorhandenen Vorwaertszweig und erzeugt auch bei gleicher URL
+einen neuen stabil identifizierten Eintrag. ReplaceState behaelt dessen ID.
+Beide Operationen verlangen denselben Ursprung. State und
+ScrollRestoration sind unmittelbar im Dokument sichtbar.
+
+Die moderne `Navigation`-Sicht liefert stabile Entry-Objekte mit Key, ID,
+Index, URL, SameDocument und GetState sowie CurrentEntry, Entries,
+CanGoBack und CanGoForward. Navigate, Reload, Back, Forward und TraverseTo
+liefern Committed- und Finished-Promises. Abgewiesene oder per PreventDefault
+abgebrochene Navigationen lehnen beide Promises mit AbortError ab. Navigate-
+Ereignisse enthalten den echten Zieleintrag; UpdateCurrentEntry und
+CurrentEntryChange teilen denselben History-Zustand.
+
+`performance.now` verwendet die monotone R4OS-Uhr, waehrend TimeOrigin den
+dazugehoerigen UTC-Zeitpunkt nennt. `PerformanceNavigationTiming`,
+GetEntries, GetEntriesByType, GetEntriesByName und die Legacy-Timing-Sicht
+teilen einen stabilen Navigationseintrag. Er wird aus NavigationStart,
+FetchStart, RequestStart, ResponseStart/-End, DOMInteractive,
+DOMContentLoaded Start/-End, DOMComplete und LoadEvent Start/-End des
+produktiven Ladepfads aktualisiert.
+
+Bewusste Grenzen: Klickifax besitzt noch keine unterbrechbare Commitphase.
+Darum ist `canIntercept` false; Navigation-Interception und Transition sind
+nicht vorgetaeuscht. Bei akzeptierten browserweiten Navigationen werden die
+beiden Ergebnis-Promises bereits beim Einstellen der Aktion erfuellt. State
+wird fuer Same-Document-Eintraege GC-sicher gehalten, aber noch nicht als
+strukturierter Klon ueber einen vollstaendigen Dokumentwechsel persistiert.
+Netzwerkphasen unterhalb von RequestStart werden erst mit einem spaeteren
+Ressourcen-Timing-Vertrag einzeln messbar.
+
+URL und URLSearchParams
+-----------------------
+
+`URL` und `URLSearchParams` sind konstruktive Hostinterfaces mit eigenen
+gemeinsamen Prototypen, Constructor-Verknuepfung, Instanceof-Semantik,
+ToStringTag und markengeprueften Methoden. Ein Aufruf ohne `new` wird wie bei
+den Webinterfaces abgewiesen. Der Zustand liegt in zwei vom Collector
+verfolgten internen Host-Slots je Objekt; frei sichtbare `_href`- oder
+`_query`-Scheinproperties existieren nicht.
+
+URL deckt fuer den Klickifax-Zielraum HTTP, HTTPS und interne About-Adressen
+ab. Absolute und relative Konstruktion, CanParse, Parse, String- und
+JSON-Darstellung sowie Protocol, Username, Password, Host, Hostname, Port,
+Pathname, Search, Hash, Origin und die stabile SearchParams-Instanz sind
+gekoppelt. Hostnamen werden normalisiert, Standardports entfernt und
+Credentials vom Origin getrennt gehalten.
+
+URLSearchParams bewahrt Einfuege- und Duplikatreihenfolge. String-, Kopier-,
+Record- und iterierbare Sequenzinitialisierung, WebIDL-Stringkonvertierung,
+Append, Delete mit optionalem Wert, Get, GetAll, Has mit optionalem Wert, Set,
+stabile UTF-16-Sortierung, Size, ForEach, Keys, Values, Entries und der
+Standarditerator verwenden gemeinsam die UTF-8-basierte
+Application/X-Www-Form-Urlencoded-Kodierung. Aenderungen an Search oder an der
+gebundenen Parameterinstanz aktualisieren die jeweils andere Sicht sofort.
+
+Encoding API
+------------
+
+TextEncoder und TextDecoder besitzen echte Konstruktoren, gemeinsame
+Prototypen, WebIDL-Metadaten, Markenpruefungen und interne Hostzustaende.
+TextEncoder erzeugt ausschliesslich UTF-8. EncodeInto meldet gelesene
+UTF-16-Codeeinheiten und geschriebene Bytes und trennt keine kodierte
+Unicode-Skalarsequenz an der Zielgrenze.
+
+TextDecoder akzeptiert den gesamten R4JS-BufferSource-Vertrag: ArrayBuffer,
+SharedArrayBuffer, DataView sowie alle TypedArray-Sichten unter Beachtung von
+Byteoffset und Bytelaenge. Der festgelegte Klickifax-Zeichensatzumfang ist
+UTF-8 plus Windows-1252 samt gebrauchter Encoding-Standard-Aliase. Er umfasst
+Ersatz- und Fatalmodus, BOM-Behandlung, leere Abschlussaufrufe und ueber
+mehrere Decode-Aufrufe bewahrte unvollstaendige Sequenzen. Ein fataler Fehler
+setzt den Streamingdecoder definiert zurueck. Unbekannte Labels liefern
+RangeError; eine stille Ersatzwahl findet nicht statt. Der Zustand liegt
+kompakt in der jeweiligen R4JS-Hostinstanz und besitzt keine globale
+Objektzahlgrenze oder sichtbare Scheinproperties.
+
+Headers
+-------
+
+Headers ist ein echtes markengeprueftes Webinterface und verwendet den
+gemeinsamen begrenzten Headerkern `r4os.web_fetch`. Namen werden als
+HTTP-Tokens validiert und kleingeschrieben, Werte von fuehrendem und
+abschliessendem HTTP-Whitespace befreit. NUL, Steuerzeichen und
+Zeilenumbrueche werden abgewiesen. Konstruktion aus Headers-Kopien, Records
+und iterierbaren Zweiersequenzen sowie Append, Set, Delete, Get, Has,
+GetSetCookie, ForEach, Keys, Values, Entries und der Standarditerator teilen
+dieselbe Headerliste. Iteration ist stabil nach Namen sortiert, kombiniert
+Duplikate und behaelt getrennte Set-Cookie-Werte fuer GetSetCookie.
+
+Der bisherige Fetch-Eintrag wird erst wieder als abgeschlossen gefuehrt,
+wenn Request, Response, Body-Besitz, echte Bytechunks, Cloning und Abbruch
+auf diesem Headervertrag aufgebaut sind. Die alte URL-zu-Promise-Huelle
+allein gilt nicht mehr als vollstaendige Fetch API.
+
+Response und Fetch-Body
+-----------------------
+
+Response ist ein echtes Webinterface mit Konstruktor, Clone, Text, JSON,
+Bytes und ArrayBuffer sowie den statischen Fabriken Error, Redirect und
+JSON. Der interne Antwortzustand traegt Status, StatusText, Ok, Type, URL,
+Redirected und ein Headers-Objekt. Netzwerkantworten uebernehmen Content-
+Type, finale Redirectadresse und Redirected aus App.web; ArrayBuffer ist ein
+echter kopierter R4JS-Puffer und Bytes sowie Reader-Chunks sind echte
+Uint8Arrays.
+
+Jeder Body besitzt einen internen Used-, Locked-, Cancelled- und Offset-
+Zustand. Konsum ist einmalig, Clone ist nur vor Disturbance oder Lock erlaubt
+und erzeugt unabhaengige Bytes. GetReader sperrt den Body, Read liefert bis
+zu 1024 Bytes je Pull und markiert BodyUsed, Cancel schliesst die Sicht und
+ReleaseLock gibt einen Reader frei. Response- und Request-Bodies teilen die
+oeffentliche ReadableStream-Oberflaeche und koennen deshalb auch PipeTo,
+PipeThrough, Tee und asynchrone Iteration verwenden.
+
+Streams API
+-----------
+
+ReadableStream, WritableStream und TransformStream sind konstruierbare,
+markengepruefte Webinterfaces mit DefaultControllern, DefaultReadern,
+DefaultWritern, Sperrzustand, Fehlerfortpflanzung, Close, Cancel und Abort.
+Groessenalgorithmen und HighWaterMark steuern Queue und DesiredSize;
+Writer.Ready sowie Transform-Backpressure verhindern unkontrolliertes
+Vorauseilen. CountQueuingStrategy und ByteLengthQueuingStrategy validieren
+den gemeinsamen Strategiegrundvertrag.
+
+ReadableStream unterstuetzt From, PipeTo, PipeThrough, Tee, Values und den
+asynchronen Standarditerator. Pipes geben Reader- und Writerlocks auch bei
+Fehler oder AbortSignal-Abbruch frei und respektieren PreventClose,
+PreventAbort und PreventCancel. Tee haelt die Cancellation einer Branch bis
+zum Abschluss oder Abbruch der zweiten Branch gekoppelt. TransformStream
+leitet Start-, Transform- und Flush-Fehler an beide Seiten weiter.
+
+Bytestreams verwenden ReadableByteStreamController,
+ReadableStreamBYOBReader und ReadableStreamBYOBRequest. Enqueue akzeptiert
+echte R4JS-BufferViews, partielle BYOB-Fuellung respektiert Min, und Respond,
+RespondWithNewView sowie AutoAllocateChunkSize arbeiten bytegenau. Ein
+Response-Body erbt dieselbe ReadableStream-Oberflaeche, behaelt seine
+hostseitig begrenzte Chunkquelle aber als einzige Wahrheit.
+
+Die Plattformzustaende leben ausschliesslich im dokumentgebundenen
+SDK-Userland und werden mit dem Dokumentprogramm freigegeben. Promise-
+Reaktionsjobs verwurzeln Kindpromise, Callback und Wert waehrend ihrer
+Ausfuehrung; damit bleiben allokationslastige mehrstufige Pipe-Ketten auch
+ueber eine Garbage Collection hinweg gueltig.
+
+Request und Request-Signale
+---------------------------
+
+Request ist ein markengeprueftes Webinterface mit Konstruktor,
+Kopierkonstruktion und Clone. Methode, normalisierte URL, Headers, Mode,
+Credentials, Cache, Redirect, Referrer, ReferrerPolicy, Integrity, Keepalive,
+Duplex und Signal liegen in kompakten internen Host-Slots. Der Body ist
+unabhaengig klonbar und teilt Text-, JSON-, Bytes-, ArrayBuffer-, Used-, Lock-
+und Readersemantik mit Response. Eine Kopierkonstruktion uebertraegt den
+Quellbody; Clone erzeugt dagegen eine unabhaengige Kopie.
+
+Vor dem Transport werden verbotene Hop-by-Hop- und browserverwaltete Header,
+GET-/HEAD-Bodies, unzulaessige No-Cors-Methoden und -Header,
+Only-If-Cached ausserhalb Same-Origin, ursprungsfremde Referrer sowie
+Keepalive-Bodies ueber 64 KB abgewiesen. Fetch reicht Methode, serialisierte
+Header und Body ueber das begrenzte PendingRequest an Klickifax, App.web und
+R4HTTP weiter. Der Transport erzeugt Content-Length selbst und sendet
+benutzerdefinierte Header genau einmal.
+
+Jeder Request besitzt ein echtes AbortSignal. AbortController setzt Reason
+und Aborted einmalig, ruft OnAbort sowie Funktions- und HandleEvent-Listener
+und beachtet Once sowie RemoveEventListener. ThrowIfAborted wirft denselben
+Wert unveraendert. AbortSignal.Abort, Timeout und Any erzeugen bereits
+abgebrochene, zeitgesteuerte oder dauerhaft gekoppelte Signale; die
+Standardgruende tragen die Namen AbortError und TimeoutError.
+
+Ein Abbruch verwirft wartende und bereits an den Host uebergebene
+Fetch-Anfragen mit demselben Reason. Auch ein schon aufgeloester Response-Body
+bleibt mit seinem Request-Signal verbunden: Text-, JSON-, Bytes-,
+ArrayBuffer-, Read- und Cancel-Zugriffe lehnen nach einem Abbruch mit dem
+identischen Wert ab. Da der aktuelle Netztransport kooperativ und synchron
+arbeitet, kann JavaScript nicht mitten in einen einzelnen Hostaufruf
+einspringen; der Zustand wird an jeder Rueckkehr zur Webruntime erneut
+ausgewertet. Das ist eine Transportgrenze und keine zweite Abortsemantik.
+
+Gemeinsamer Webtransport
+------------------------
+
+Fetch, XMLHttpRequest, externe Skripte und Response-Body-Streams erzeugen nur
+begrenzte Requestobjekte. Klickifax nimmt
+diese Objekte ab und ruft ausschliesslich `App.web()` auf. DNS und TCP bleiben
+bei R4NET, TLS bei R4TLS und HTTP bei `r4os.http`/R4HTTP. Es gibt keinen
+privaten Socket-, TLS- oder HTTP-Pfad in der Webruntime.
+
+Die gemeinsame HTTP-Schicht reicht Content-Security-Policy,
+Access-Control-Allow-Origin, Access-Control-Allow-Credentials und bis zu 16
+getrennte Set-Cookie-Header bis zum Browser durch. Cookie und Origin werden
+als kontrollierte Requestheader ueber dieselbe Fassade gesendet. Cookies
+werden nach einem Redirect nicht blind an ein moeglicherweise fremdes Ziel
+weitergereicht.
+
+Fetch projiziert Request-Methode, Body, normalisierte Header, Credentials,
+Signal und Redirectmodus in diesen einen Transportpfad. Follow verarbeitet
+hoechstens 20 Redirects, stellt POST bei 301/302 und Nicht-GET/HEAD bei 303
+auf GET um, entfernt dann Body-Header und entfernt Authorization beim
+Originwechsel. Error lehnt Redirects als Netzwerkfehler ab; Manual liefert
+eine gefilterte OpaqueRedirect-Response. Jeder Redirect berechnet Cookies
+fuer sein tatsaechliches Ziel neu. Die Webruntime autorisiert Initialziel,
+jede Zwischenadresse und das Endziel jeweils vor dessen Abruf erneut gegen
+die aktuelle CSP und Mixed-Content-Regel.
+
+Nicht einfache ursprungsfremde CORS-Anfragen senden vor dem eigentlichen
+Abruf ein credentialfreies OPTIONS-Preflight mit Methode und nicht
+safelisted Headernamen. Status, Allow-Origin, Allow-Credentials,
+Allow-Methods und Allow-Headers werden geprueft; auch jede ursprungsfremde
+Zwischen- und Endantwort braucht einen gueltigen CORS-Vertrag. Normale
+Cross-Origin-Responses zeigen nur safelisted oder ueber Expose-Headers
+freigegebene Header. Set-Cookie bleibt immer unsichtbar. No-Cors liefert eine
+Opaque-, Manual eine OpaqueRedirect-Response ohne Status, URL, Header oder
+Body. Transport-, Redirect-, Preflight-, CORS- und Policyfehler lehnen das
+Fetch-Promise als TypeError ab; HTTP-Fehlerstatus bleiben normale Responses.
+
+Origin-Sicherheit
+-----------------
+
+Der Ursprung besteht aus Schema, kleingeschriebenem Host und effektivem Port.
+Interne About-Dokumente erhalten einen opaken Generationsursprung. Vor jedem
+Subrequest werden in dieser Reihenfolge geprueft:
+
+- aktuelle Dokumentgeneration
+- gueltige HTTP-/HTTPS-Zieladresse
+- Mixed-Content-Schutz fuer HTTPS-Dokumente
+- Same-Origin-Modus
+- die wirksame CSP-Quellenliste
+
+Die CSP kommt aus dem HTTP-Header oder, falls dieser fehlt, aus einer
+Meta-Angabe. Default-, Script-, Connect-, Style-, Image-, Font- und Form-Quellen,
+Self, None, Schemaquellen, exakte Hosts, Unsafe-Inline und Nonces werden
+begrenzt ausgewertet. Fetch und XHR pruefen vor der Sichtbarkeit der Antwort
+die exakte CORS-Freigabe; Credential-Requests akzeptieren keinen
+Wildcard-Ursprung. `isSecureContext` ist nur fuer HTTPS und interne
+vertrauenswuerdige Dokumente wahr.
+
+Cookies und Web Storage
+-----------------------
+
+Cookies beachten Host-/Domainbindung, Pfad, Secure, HttpOnly, SameSite,
+Max-Age-Loeschung sowie Dokument- und Requestsicht. Local Storage und Session
+Storage besitzen getrennte, nach Ursprung partitionierte Bereiche. Pro Typ
+existieren hoechstens 8 Origins mit je 24 Schluesselwerten.
+
+Klickifax legt persistente Cookies und Local Storage physisch in
+`C:\R4OS\APPDATA\KLICKIFAX\PROFILE\WEBSTORAGE.DAT` ab. Einstellungen,
+Profil, Cache und Tempdaten besitzen getrennte Wurzeln:
+
+- `C:\R4OS\CONFIG\APPS\KLICKIFAX.R4S`
+- `C:\R4OS\APPDATA\KLICKIFAX\PROFILE\`
+- `C:\R4OS\Temp\Klickifax\Cache\`
+- `C:\R4OS\Temp\Klickifax\Work\`
+
+Die Profildatei ist ein versionierter, laengenbegrenzter Userland-
+Datenbestand und kein Bestandteil von Kernel, R4DRAW, R4JS oder einem
+Modulcontainer. Session-Cookies und Session Storage werden absichtlich nicht
+geschrieben und enden mit dem Klickifax-Prozess. Fehlerhafte oder
+abgeschnittene Persistenz wird geschlossen verworfen. Der einmalige Import
+von `C:\R4OS\CONFIG\KLICKIFAX.DAT` entfernt die Quelle erst, nachdem Ziel-
+schreiblaenge und bytegenau zurueckgelesener Inhalt uebereinstimmen. Ist die
+Migration nicht verifizierbar, bleibt die alte Datei unangetastet.
+
+Abnahme und verbleibende Grenze
+-------------------------------
+
+`Run-WebRuntimeSecurityContract06219.ps1` testet die Webruntime samt
+eingebetteten HTML-, JavaScript-, Origin-, Cookie-, Storage-, CORS-, CSP-,
+Mixed-Content-, Stream-, Timing- und Generationsfaellen. Es baut R4JS und
+Klickifax eigenstaendig und prueft die gemeinsame Transportkante sowie den
+Gast-Selbsttest. Das Gate enthaelt keine feste Modulzahl.
+
+Fuer gezielte Diagnosen kann ein Aufrufer einen optionalen synchronen
+`ScriptObserver` setzen. Er meldet Beginn und Ende eines klassischen
+Seitenskripts mit DOM-Knoten, Quellname, Quellgroesse, Schrittzahl und
+Erfolgszustand. Inline-Skripte erhalten dafuer einen dokumentlokalen
+`#r4-inline-script-`-Suffix; queued Jobs behalten den Quellnamen ihres
+Programms. Die uebergebenen Slices gelten nur waehrend des Callbacks und
+werden weder von der Webruntime noch von KFXLIVE persistiert. Ohne Observer
+bleiben Ausfuehrung und Speicherverhalten unveraendert.
+
+Zeitlesende Web-APIs verwenden eine vom Browser injizierte monotone Uhr.
+`performance.now()` und die an R4JS weitergereichte `Date.now()` koennen
+dadurch auch waehrend eines einzelnen langen JavaScript-Jobs fortschreiten;
+sie bleiben nicht am Beginn des letzten `pump`-Aufrufs stehen. Hauptdokument
+und isolierte Subdokumente erhalten dieselbe Uhr. Timerfaelligkeit und
+Taskauswahl bleiben dagegen bewusst pump-gesteuert und deterministisch.
+
+Ein Pump verarbeitet zuerst bereits wartende Jobs. Erst das danach noch
+freie Jobkontingent darf faellige Timer fair ab dem rotierenden Timer-Cursor
+einreihen und im selben Pump ausfuehren. Wiederholende Timer werden vom
+aktuellen Zeitpunkt aus neu terminiert; verpasste Intervalle erzeugen keinen
+anwachsenden Altbestand und kein einzelner niedriger Timerindex kann die
+uebrigen Timer dauerhaft verdraengen.
+
+Die grossen Zellen- und Dokumentfelder werden bei Prozessstart als
+Laufzeitarbeitsspeicher initialisiert. Modul- und Seitenskriptprogramme
+entstehen nur bei Bedarf. Sie liegen nicht als vorinitialisierte Kopien in
+der R4M0-Nutzlast. Dadurch sank Klickifax von rund 14 MB auf unter 1 MB und
+R4JS auf rund 1,2 MB; die JavaScript-Runtime selbst sank von rund 4,5 MB auf
+unter 1 MB. Das Dauergate begrenzt beide Artefakte grosszuegig auf 2 MB
+beziehungsweise 3 MB, damit dieser Startfehler nicht unbemerkt wiederkehrt.
+Der R4DESK-R4X-Smoke startet
+Klickifax zusaetzlich ueber seinen echten Desktoppfad, verlangt eine vom
+Browser erzeugte erste GUI-Revision und prueft nach Eingabeverarbeitung
+erneut, dass das Fenster noch lebt. Handle-basierte GUI-Starts passieren
+dabei vor dem ersten Usercode eine Fensteranheftungsschranke; nach einem
+aktiven Launchereignis gibt Desktop dem Kind eine kooperative
+Ausfuehrungsgrenze. R4DESK bleibt fuer das Browserfenster massgeblich; der
+optionale synchrone WINSVC-Spiegel wird fuer Klickifax nicht aufgerufen, weil
+sein Timeout den Desktop blockieren kann. Andere Fenster senden
+Spiegelfolgeoperationen nur nach bestaetigter Registrierung. Diese Laufabnahme
+packt nur das vorhandene Testartefakt neu und wertet ausschliesslich ihre
+Desktop-Marker aus; sie startet weder fachfremde Dauergates noch den
+kompletten Standard-Smoke. Ihr frisches Test-Datenimage wird ueber eine
+temporaere QEMU-Konfiguration eingebunden; `Release\data.img` wird weder
+gelesen, verschoben noch geloescht und muss fuer den Lauf nicht existieren.
+
+Die Encoding API ist fuer den festgelegten UTF-8-/Windows-1252-Zielumfang
+abgeschlossen. URL, Headers, Request, Response, Abort, Fetch, Streams, DOM,
+DOM-Ereignisse, MutationObserver, History, Location, Navigation und
+Dokument-Timing sind fuer den festgelegten Webruntimeumfang abgeschlossen.
+Interception, dokumentuebergreifende State-Klone und einzelne
+Netzwerk-Unterphasen bleiben als konkrete Grenzen dokumentiert und werden
+nicht als vorhandene Browserfaehigkeit ausgegeben.
+
+Dokumentbildressourcen
+----------------------
+
+IMG-SRC, SRCSET/SIZES und die geordneten SOURCE-Kandidaten eines PICTURE-
+Elements werden aus Dokumentstruktur, Viewport und einer expliziten
+Pixeldichte ausgewaehlt. Relative Quellen verwenden das erste gueltige BASE-
+Element. Unterstuetzte Data-URLs durchlaufen nach CSP-Pruefung denselben
+begrenzten Ressourcenverbraucher wie Netzantworten; Percent- und Base64-
+Daten bleiben auf 128 KB begrenzt. CSS-URL- und IMAGE-SET-Werte besitzen
+denselben gemeinsamen Auswahlparser fuer den dokumentierten einlagigen
+Zielstand. Externe Stylesheets bewahren dafuer die finale Antwortadresse
+jedes Quellabschnitts; ein relativer Bildverweis wird nicht versehentlich
+gegen die Dokumentadresse aufgeloest. CSS-Hintergruende besitzen am selben
+DOM-Knoten eine eigene Ressourcenrolle neben einem moeglichen IMG-Inhalt.
+Sie verwenden denselben Policy-, Redirect-, Abbruch- und Generationsvertrag,
+erzeugen bei einem Fehler aber weder IMG-Alttext noch ein DOM-ERROR-Ereignis.
+
+Ein synchroner `ResourceObserver` meldet ausgewaehlt, eingereiht, abrufend,
+Antwort, bereit, fehlgeschlagen, abgebrochen und ersetzt als besitzfreie,
+laengenbegrenzte Werte. Diagnose enthaelt angeforderte und finale URL,
+Redirectstatus, HTTP-Status, MIME, Bytelaenge und eine eindeutige
+Fehlerklasse. Navigation und Abbruch verwerfen alte Generationen; eine spaete
+Antwort darf keine neu ausgewaehlte Bildquelle erfuellen. Alttext wird erst
+nach einem terminalen Auswahl-, Transport- oder Decoderfehler gezeichnet und
+nicht waehrend eine Quelle noch laedt.
+
+Klickifax bewahrt den letzten fehlgeschlagenen Bildressourceneintrag getrennt
+von spaeteren Erfolgsmeldungen. Trace nennt zuerst Ressourcen-ID, Rolle,
+Knoten, Phase und Fehlerklasse und fuehrt danach HTTP-Status, MIME,
+Bytelaenge, angeforderte sowie finale URL auf. Damit kann ein spaeter
+erfolgreiches Nachbarbild die Ursache eines sichtbaren Fehlers nicht aus der
+Diagnose verdraengen.
+
+`Run-WebImageResourceContract06238.ps1` prueft diese Regeln mit neutralen
+Offline-Fixtures einschliesslich Redirect, HTTP-Fehler, Abbruch, Ersatz,
+Raster, SVG, rollengetrenntem CSS-Hintergrund und nicht verfuegbarer
+optionaler SVG-Teilressource. Der Gastmarker dekodiert die gemischte
+SVG-Probe ueber den wirklich ausgelieferten R4IMG-Kontext. Der
+Produktpfad enthaelt weder einen Webseiten- noch einen Hostnamen-Sonderfall.
+Der URL-/URLSearchParams-Vertrag fuer HTTP, HTTPS und interne
+Klickifax-Adressen ist abgeschlossen.

@@ -1,0 +1,362 @@
+﻿Archivierte Roadmap: 0.34.X - Service Manager aus Kernel herausloesen
+===================================================================
+
+Version 0.34.X - Service Manager aus dem Kernel herausloesen
+-------------------------------------------
+
+Status: In Arbeit
+
+Leitbild:
+Nach dem Herausziehen der fruehen Module- und Service-Registry soll 0.34.X den
+naechsten sauberen Schnitt machen: Der Kernel soll nicht dauerhaft der Ort
+sein, an dem Service-Policy, Service-Konfiguration, Autostart-Entscheidungen,
+Diagnoseausgaben und Verwaltungslogik wachsen. Der Kernel behaelt nur die
+kleine technische Basis, die fuer Service-Registrierung, Endpunkte, IPC und
+Kernel-nahe Service-Vertraege noetig ist. Alles, was Service-Manager-Logik ist,
+wandert in externe Systemsoftware.
+
+0.34.X ist damit keine Entfernung des Service-Systems, sondern eine klare
+Trennung von Mechanik und Verwaltung:
+- Kernel-Service-Core: technische Registry, Endpoint-Tabelle, Message Queues,
+  Kernel-ABI-Strukturen und noetige IPC-Bruecken.
+- Service Manager: Config lesen/validieren, Startplan bilden, Services starten,
+  Status anzeigen, Fehler erklaeren und spaeter Restart-/Lifecycle-Policy
+  umsetzen.
+
+Aktueller Bestand vor 0.34.X:
+- Die Service-Registry selbst liegt aktuell in `Code/src/old/kernel/services.zig`.
+- `services.init()` setzt den Kernel-Service-Zustand zurueck und wird nach
+  0.33.X ueber `service_boot.init()` frueh gestartet.
+- `services.loadConfigFromDisk()` liest spaeter `C:\SYS\CONFIG\SERVICES.R4S`
+  direkt aus dem Kernel-Kontext.
+- Service-Status, Config-Parsing, Config-Schreiben, Diagnose und Selftests sind
+  aktuell teils in derselben Kernel-Datei wie die technische Registry vermischt.
+- Service-Autostart haengt aktuell noch an spaeteren Runtime-/COMMAND-Legacy-
+  Pfaden und ist dadurch architektonisch zu nah am Kernel-Legacybaum.
+
+Qualitaetsziel:
+0.34.X darf kein halber Parallelbetrieb werden. Wenn der Service Manager eine
+Aufgabe uebernimmt, muss der alte produktive Kernelpfad dafuer entfernt,
+deaktiviert oder eindeutig als Diagnose-/Kompatibilitaetsstub dokumentiert
+sein. Am Ende soll klar erkennbar sein, welcher Teil Kernel-Mechanik ist und
+welcher Teil vom externen Service Manager verantwortet wird.
+
+Bestehende Services muessen weiterhin starten. Das System muss bootfaehig
+bleiben, auch wenn `SERVICES.R4S` fehlt, ungueltig ist oder der Service Manager
+einen Fehler meldet. Solche Fehler duerfen nicht als Kernel-Fatal enden,
+sondern sollen als Service-Manager-Diagnose sichtbar werden.
+
+Nicht-Ziel:
+0.34.X entfernt nicht die minimale Kernel-Service-Registry und nicht die
+Kernel-IPC-Grundlage. Solange Services ueber Kernel-APIs miteinander sprechen
+und Kernel-nahe Ressourcen anmelden, bleibt ein kleiner Kernel-Core noetig.
+Ebenfalls nicht Ziel ist ein neues Berechtigungsmodell: R4OS bleibt single-user
+und fully trusted. Der Service Manager dient Ordnung, Startreihenfolge,
+Diagnose und Wartbarkeit, nicht Security-Policy.
+
+0.34.X ersetzt auch nicht den gesamten Scheduler, Loader oder die komplette
+R4X-Runtime. Falls fuer den Service Manager neue APIs noetig sind, werden sie
+minimal und dokumentiert ergaenzt, nicht als grosses Nebensystem improvisiert.
+
+Aufraeumziel:
+Alles, was Service-Verwaltung statt Kernel-Mechanik ist, soll aus
+`Code/src/old/kernel/services.zig` herausgeloest oder klar isoliert werden.
+Dazu gehoeren insbesondere Laden/Schreiben von `C:\SYS\CONFIG\SERVICES.R4S`,
+Autostart-Entscheidungen, Service-Status-/Diagnose-Kommandos, Config-Dump,
+usernahe Selftests und spaeter restart-/lifecycle-nahe Policy. Der produktive
+Zielpfad fuer diese Logik soll ein externes Programm unter
+`Code/Software/ServiceManager/` sein.
+
+Zielbild:
+- `service_boot.init()` startet nur den minimalen Kernel-Service-Core.
+- Der Kernel stellt stabile, kleine APIs bereit, ueber die externe Software
+  Services registrieren, starten, abfragen oder Nachrichten/Endpoints nutzen
+  kann.
+- `SERVMAN.R4X` ist fuer `SERVICES.R4S`, Autostart-Plan und sichtbare
+  Verwaltung zustaendig.
+- COMMAND/R4DOS und spaeter Terminal koennen Service-Status ueber externe
+  Programme oder APIs anzeigen, nicht ueber direkte Kernel-Log-Ausgaben.
+- COM1 bleibt Kernel-Log oder expliziter Test-Mirror und wird kein stdout-
+  Ersatz fuer Service Manager oder R4DOS-Anwendungen.
+
+Verbindliche Migrationsregeln:
+- Kernel-Core bleibt klein: Registry, Endpoint-Tabelle, Message Queues und
+  noetige Kernel-API-Strukturen bleiben Kernel-Code.
+- Service-Policy wandert raus: Config lesen/schreiben, Autostart-Plan,
+  Verwaltungsbefehle und Diagnoseausgaben gehoeren in den Service Manager.
+- Kein versteckter Doppelpfad: Wenn der Service Manager eine Aufgabe
+  uebernimmt, darf dieselbe Aufgabe nicht weiterhin produktiv im Kernel laufen.
+- Bootkritische Reihenfolge beachten: Der Service Manager darf erst starten,
+  wenn `C:`, FAT32 und R4X-Runtime sicher verfuegbar sind.
+- Fehlertoleranz statt Kernel-Fatal: Fehlende/defekte Service-Konfiguration
+  muss diagnostizierbar sein und den Boot nicht hart abbrechen.
+- Bestehende externe API-Vertraege bleiben stabil oder bekommen dokumentierte,
+  getestete Uebergangsstubs.
+- Keine neuen produktiven COMMAND-/R4DOS-Hooks in
+  `Code/src/old/program/command_runtime.zig`.
+- Neue Service-Manager-Ausgaben nutzen Console-/STDIO-APIs, nicht
+  `kernel/log.zig`.
+- Keine Security-Semantik einbauen: Validierung nur fuer Stabilitaet,
+  kaputte Parameter und reproduzierbare Fehlerdiagnose.
+
+Definition of Done fuer 0.34.X:
+- Es gibt einen produktiven `ServiceManager.R4X`-Pfad unter
+  `Code/Software/ServiceManager/` oder einen final festgelegten gleichwertigen
+  externen Service-Manager-Pfad.
+- `SERVICES.R4S` wird nicht mehr produktiv direkt vom Kernel als hoehere
+  Service-Policy verwaltet.
+- Kernel-Service-Code ist auf Registry/Endpoint/IPC-Core und noetige ABI-
+  Strukturen reduziert oder entsprechend sauber abgegrenzt.
+- Alte produktive Service-Policy-Pfade sind entfernt, deaktiviert oder klar als
+  nicht-produktive Diagnose-/Kompatibilitaetsstubs dokumentiert.
+- R4OS bootet im Smoke-Test weiterhin bis zum automatischen Testabschluss.
+- Services, COMMAND/R4DOS und Desktop bleiben lauffaehig mit dem neuen
+  Service-Manager-Pfad.
+- Doku erklaert klar den Unterschied zwischen Service Registry im Kernel und
+  Service Manager als externer Systemsoftware.
+
+Version 0.34.0 - Service-Manager-Grenze analysieren und festlegen
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `Code/src/old/kernel/services.zig` wurde als aktueller Mischpunkt aus Kernel-Service-Core und Service-Manager-Policy eingeordnet.
+- Im Kernel bleiben nur die technisch notwendigen Basisfunktionen: Service-Tabelle, Statusmodell, ABI-Strukturen, Fehlercodes, Endpoint-Tabelle, Message-Queues sowie Request-/Response-IPC fuer R4X-/R4D-Dienste.
+- Aus dem Kernel heraus soll die Service-Manager-Policy wandern: `SERVICES.R4S` laden, parsen, validieren und schreiben, Autostart-Planung, Install/Remove, StartMode-Persistenz, Restart-Policy und benutzernahe Diagnoseausgaben.
+- `kernelold.zig` enthaelt aktuell noch den produktiven Altpfad `services.loadConfigFromDisk()` nach Storage/FAT32. Dieser Pfad ist der erste Kernel-Policy-Pfad, der spaeter ersetzt werden muss.
+- `Code/src/old/program/r4x.zig` trennt aktuell noch nicht sauber zwischen stabiler Service-API-Bruecke und Service-Manager-Operationen. Core-APIs wie list/status/open/call/endpoint bleiben ABI-nah; start/stop/restart/install/remove/setStartMode/writeConfig werden als Manager-/Policy-Kandidaten behandelt.
+- `Code/src/old/program/command_runtime.zig` enthaelt nur noch Legacy-/Diagnosepfade wie Service-Dump und Selftest. Daraus soll kein produktiver Service Manager entstehen.
+- Die vorhandene externe Services-Anwendung unter `Code/Software/Services` und der Desktop-Eintrag `/bin/services.r4x` wurden als moeglicher Anknuepfungspunkt eingeordnet. Ziel fuer die geplante Systemsoftware bleibt ein klarer ServiceManager-Pfad, sofern nicht bewusst anders entschieden wird.
+- Netzwerknahe `net_ipc_services` sind ein eigenes Subsystem und werden nicht mit dem generischen Service Manager vermischt.
+- Risiken fuer die folgenden Schritte wurden festgehalten: Boot-Reihenfolge nach Storage/FAT32/R4X-Runtime, fehlende oder kaputte `SERVICES.R4S` darf nicht kernel-fatal werden, SDK-Kompatibilitaet fuer bestehende Service-APIs erhalten, keine doppelten produktiven Config-Pfade im Kernel und im Service Manager.
+
+Abnahme:
+- Roadmap beschreibt Kernel-Core, Service-Manager-Policy und Grenzen eindeutig.
+- Alle relevanten Service-Funktionsgruppen sind als Bleibt-im-Kernel, Wandert-in-ServiceManager oder Wird-entfernt/Stub klassifiziert.
+- Keine Code-Aenderung in dieser Unterversion, ausser Roadmap und Version.
+- Version steht auf `KERNEL_VERSION=0.34.0`.
+- Push ist erfolgt.
+
+Notizen:
+- Ziel von 0.34.X ist nicht, Service-IPC zu entfernen. Ziel ist, die Verwaltung und Policy aus dem Kernel zu ziehen, waehrend der Kernel nur den minimalen Service-Core bereitstellt, den externe Programme und Services fuer Kommunikation benoetigen.
+Version 0.34.1 - Service-Kernel-Core isolieren
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `Code/src/kernel/service_core.zig` wurde als schmaler Kernel-Service-Core-Vertrag angelegt.
+- `service_core.zig` exportiert nur die technische Service-Mechanik, die im Kernel bleiben darf: Service-Registry-Vertrag, Status-/Lifecycle-Zustand, ABI-Strukturen, Endpoint-Vertrag und Request-/Response-IPC.
+- Service-Manager-Policy bleibt bewusst ausserhalb dieses Core-Vertrags: `SERVICES.R4S` laden/schreiben, Autostart-Planung, Install/Remove, sichtbare Diagnose und Restart-Policy werden dort nicht exportiert.
+- `Code/src/kernel/service_boot.zig` importiert nicht mehr direkt `Code/src/old/kernel/services.zig`, sondern initialisiert den Service-Core ueber `Code/src/kernel/service_core.zig`.
+- Der produktive Altpfad in `Code/src/old/kernel/services.zig` bleibt fuer diese Unterversion noch erhalten, ist aber nicht mehr der direkte Boot-Vertrag. Damit ist die naechste Migration vorbereitet, ohne Services vorzeitig zu brechen.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` laeuft erfolgreich.
+- `DevTools/Scripts/Build.bat -test` laeuft erfolgreich mit `TEST OK`.
+- Service Registry und Endpoint-Tabellen werden weiterhin genau einmal ueber `service_boot.init()` initialisiert.
+- `service_boot.init()` bleibt frei von Dateisystem-, Config- und Autostart-Logik.
+- Noch keine Service-Policy wurde ohne Ersatz aus dem produktiven Pfad entfernt.
+- Version steht auf `KERNEL_VERSION=0.34.1`.
+- Push ist erfolgt.
+
+Notizen:
+- 0.34.1 ist ein bewusst konservativer Schnitt: Der neue Core-Vertrag zeigt, was im Kernel bleiben darf. Die Implementierung delegiert noch an den Legacy-Mischpunkt, bis Config, Autostart und Management in den folgenden Unterversionen extern ersetzt sind.
+Version 0.34.2 - Externe Service-Manager-API klaeren
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Die vorhandenen R4SYS-/SDK-Servicefunktionen wurden als ausreichend fuer den externen Service Manager bewertet. Es ist keine neue grosse ABI fuer 0.34.2 noetig.
+- Die API wurde in zwei Gruppen getrennt: Kernel-Service-Core und Service-Manager-Operationen.
+- Kernel-Service-Core bleibt: `supportsServiceManager`, `serviceInfo`, `serviceStatus`, `serviceDetail`, `serviceDetailByName`, `serviceOpen`, `serviceClose`, `serviceCall` sowie die Endpoint-Funktionen `serviceEndpointRegister`, `serviceEndpointUnregister`, `serviceEndpointPoll`, `serviceEndpointRecv` und `serviceEndpointReply`.
+- Service-Manager-Operationen bleiben als bestehender ABI-Vertrag sichtbar, sollen aber kuenftig vom externen Service Manager orchestriert werden: `serviceStart`, `serviceStop`, `serviceRestart`, `serviceSetStartMode`, `serviceInstall` und `serviceRemove`.
+- Die aktuelle R4X-Bruecke wurde eingeordnet: Sie implementiert heute noch Core-IPC und Manager-Policy im selben Pfad. Diese Trennung ist der zentrale Umbaupunkt fuer die folgenden Unterversionen.
+- Fehlercodes wurden klassifiziert: Core-nahe Fehler wie `not_found`, `not_running`, `no_endpoint`, `busy`, `timeout`, `bad_handle`, `full`, `bad_op` und `duplicate`; Manager-/Policy-nahe Fehler wie `bad_path`, `config_io`, `running`, `disabled`, `spawn_failed` und `stop_failed`.
+- `Docs/API/R4SYS.md` dokumentiert die Service-API-Grenze, die Funktionsgruppen und die Ergebnis-/Fehlercodes.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` laeuft erfolgreich.
+- `DevTools/Scripts/Build.bat -test` laeuft erfolgreich mit `TEST OK`.
+- Service-Manager-API ist in `Docs/API/R4SYS.md` als finaler Vertrag fuer 0.34.X beschrieben.
+- Bestehende R4X-/COMMAND-/Desktop-Pfade bauen weiterhin.
+- Version steht auf `KERNEL_VERSION=0.34.2`.
+- Push ist erfolgt.
+
+Notizen:
+- 0.34.2 fuegt bewusst keine neue Verwaltungsschicht hinzu. Der naechste produktive Schritt ist, `ServiceManager.R4X` als externe Systemsoftware anzulegen und die vorhandenen Management-Operationen dorthin zu verlagern.
+Version 0.34.3 - ServiceManager.R4X als externe Systemsoftware anlegen
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `Code/Software/ServiceManager/src/main.zig` wurde als externe Service-Manager-Systemsoftware angelegt.
+- Das neue Programm wird als `SERVMAN.R4X` gebaut und ueber `Code/build.zig` ins R4X-Build-/Image-System integriert.
+- `SERVMAN.R4X` nutzt ausschliesslich SDK-/R4SYS-Funktionen und keine Kernel-Imports.
+- Der Manager bietet einen ersten belastbaren Console-/Automation-Pfad: `LIST`, `STATUS`, `DIAG`, `SELFTEST`, `START`, `STOP`, `RESTART`, `ENABLE`/`MANUAL`, `AUTO`, `DISABLE`, `INSTALL` und `REMOVE`.
+- Ausgaben laufen ueber Console-/STDIO-APIs des SDK, nicht ueber `kernel/log.zig` oder COM1.
+- Fehlerfaelle werden sichtbar ausgegeben: fehlende Service-API, unbekannter Service, ungueltige Parameter, Config-I/O, Bad Path, Disabled, Spawn-/Stop-Fehler und Timeout.
+- Die bestehende GUI-Anwendung `SERVICES.R4X` bleibt unveraendert. `SERVMAN.R4X` ist der neue externe Systemsoftware-Pfad fuer die folgenden Policy-Migrationen.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` laeuft erfolgreich.
+- `DevTools/Scripts/Build.bat -test` laeuft erfolgreich mit `TEST OK`.
+- `SERVMAN.R4X` wird im Build erzeugt.
+- `SERVMAN.R4X` nutzt Console-/STDIO-Ausgabe und keine Kernel-Log-Ausgabe.
+- Version steht auf `KERNEL_VERSION=0.34.3`.
+- Push ist erfolgt.
+
+Notizen:
+- 0.34.3 entfernt noch keine produktive Kernel-Policy. Der neue externe Manager schafft den stabilen Zielpfad, auf den `SERVICES.R4S`-Verwaltung und Autostart in den naechsten Unterversionen umziehen koennen.
+Version 0.34.4 - SERVICES.R4S-Verwaltung aus dem Kernel verschieben
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `SERVMAN.R4X` besitzt nun eigene Config-Operationen fuer `C:\SYS\CONFIG\SERVICES.R4S`.
+- Neue Manager-Kommandos: `LOAD`, `BOOT` und `SAVE`.
+- `LOAD` liest `SERVICES.R4S`, parst `SERVICE;name=...;path=...;args=...;start=...;enabled=...;description=...` und registriert Services ueber die bestehende R4SYS-Service-Manager-API.
+- `BOOT` entspricht `LOAD`, behandelt eine fehlende Config aber als nicht fatalen Boot-/Uebergangsfall.
+- `SAVE` schreibt die aktuelle Service Registry aus Sicht des externen Managers wieder als UTF-8-BOM-`SERVICES.R4S`.
+- `SERVMAN INSTALL`, `SERVMAN REMOVE`, `SERVMAN ENABLE`/`MANUAL`, `SERVMAN AUTO` und `SERVMAN DISABLE` speichern nach erfolgreicher Registry-Aenderung selbst die Config.
+- Die Config-Ausgabe laeuft vollstaendig ueber SDK-/Console-/STDIO-APIs und nicht ueber `kernel/log.zig`.
+- Fehlerfaelle werden sichtbar behandelt: Config fehlt, File-I/O, zu kleiner Puffer, ungueltige Zeilen, Duplikate, ungueltige Startmodi und Registry-Fehler.
+- Der produktive Kernel-Boot-Read bleibt fuer genau diese Uebergangsstufe noch bestehen, bis 0.34.5 den Service-Autostart ueber den externen Manager fuehrt. Damit wird der Bootpfad nicht zwischen zwei Unterversionen absichtlich serviceleer.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` laeuft erfolgreich.
+- `DevTools/Scripts/Build.bat -test` laeuft erfolgreich mit `TEST OK`.
+- `SERVMAN.R4X` wird im Build erzeugt.
+- `SERVMAN.R4X` enthaelt eigene `SERVICES.R4S`-Load-/Save-Logik und nutzt dafuer keine Kernel-Imports.
+- Version steht auf `KERNEL_VERSION=0.34.4`.
+- Push ist erfolgt.
+
+Notizen:
+- 0.34.4 ist der Config-Ownership-Schnitt im externen Manager. Der letzte produktive Kernel-Load wird erst in 0.34.5 entfernt, sobald der Autostart-Pfad nicht mehr davon abhaengt.
+Version 0.34.5 - Service-Autostart ueber Service Manager fuehren
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `kernelold.zig` laedt `SERVICES.R4S` nicht mehr selbst und ruft keinen
+  produktiven `command_runtime.autostartServices()`-Pfad mehr auf.
+- `shell_launcher.zig` startet nach R4X-Runtime-Initialisierung und vor der
+  konfigurierten Shell einmalig `/BIN/SERVMAN.R4X BOOT`.
+- `SERVMAN BOOT` liest `C:\SYS\CONFIG\SERVICES.R4S`, registriert die Eintraege
+  ueber die bestehende R4SYS-Service-Manager-API und startet danach alle
+  Services mit `start=auto`.
+- Fehlende `SERVICES.R4S` wird als sichtbarer, nicht fataler Bootfall
+  behandelt.
+- Auto-Service-Startfehler werden sichtbar ausgegeben, brechen den Bootpfad
+  aber nicht hart ab.
+- `TestInjection/AUTOEXEC.BAT` fuehrt `C:\BIN\SERVMAN.R4X SELFTEST` aus,
+  damit die automatische Smoke-Abnahme den externen Manager wirklich startet.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` laeuft erfolgreich.
+- `DevTools/Scripts/Build.bat -test` laeuft erfolgreich mit `TEST OK`.
+- Service-Autostart laeuft ueber `SERVMAN.R4X BOOT`, nicht mehr ueber
+  Kernel-Policy oder `command_runtime.zig`.
+- COMMAND/R4DOS und Desktop starten weiterhin wie erwartet.
+- Fehlende/disabled Services werden sichtbar, aber nicht fatal behandelt.
+- Version steht auf `KERNEL_VERSION=0.34.5`.
+- Push ist erfolgt.
+
+Notizen:
+- `Code/src/old/kernel/services.zig` bleibt in dieser Unterversion noch der
+  technische Registry-/IPC-Backendkern. Die alten Diagnose-/Verwaltungshelfer
+  werden in 0.34.6/0.34.7 weiter ausgeduennt, sind aber nicht mehr der
+  produktive Boot-Autostart-Besitzer.
+Version 0.34.6 - Service-Diagnose und Verwaltungsbefehle externalisieren
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `SERVMAN.R4X` besitzt nun den produktiven Diagnosepfad fuer Services:
+  `DIAG` zaehlt Registry-, Startmodus- und Laufzeitstatus sichtbar ueber die
+  R4SYS-Service-API.
+- `SERVMAN CONFIG` beziehungsweise `SERVMAN DUMP` gibt die vom externen Manager
+  erzeugte `SERVICES.R4S`-Sicht auf stdout aus, ohne Kernel-Log-Ausgabe.
+- Der alte `SERVICE`-Befehl im Legacy-Commandpfad fuehrt keine produktive
+  Service-Verwaltung oder Diagnose mehr aus, sondern verweist sichtbar auf
+  `SERVMAN.R4X`.
+- Die automatische Smoke-Abnahme ruft `SERVMAN SELFTEST`, `SERVMAN DIAG` und
+  `SERVMAN CONFIG` aus `TestInjection/AUTOEXEC.BAT` auf.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` laeuft erfolgreich.
+- `DevTools/Scripts/Build.bat -test` laeuft erfolgreich mit `TEST OK`.
+- Service-Diagnose funktioniert ohne direkte Ausgabe ueber `kernel/log.zig`.
+- Kernel enthaelt keinen produktiven hoeheren Service-Verwaltungsbefehl mehr.
+- R4DOS-Modus und Desktop-Terminal koennen ServiceManager-Ausgaben anzeigen.
+- Version steht auf `KERNEL_VERSION=0.34.6`.
+- Push ist erfolgt.
+
+Notizen:
+- Der technische Service-Core bleibt weiterhin im Kernel/Legacy-Backend, weil
+  Registry, IPC-Endpunkte und Service-Prozessstart Kernel-nahe Mechanik sind.
+  Die sichtbare Policy-/Diagnose-Oberflaeche liegt jetzt beim externen Manager.
+Version 0.34.7 - Doppelte Altpfade entfernen und Abschluss testen
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- R4SYS-Service-Manager-Operationen mutieren nur noch die laufende Registry und schreiben SERVICES.R4S nicht mehr selbst.
+- Kernel-Write-Pfad serviceApiSaveConfig() aus der R4X-Bruecke entfernt.
+- Alte COMMAND-Pfade SVCREG, SVCREGTEST und SERVICE fuehren keine Kernel-Diagnose-, Config- oder Autostart-Policy mehr aus, sondern verweisen auf SERVMAN.R4X.
+- command_runtime.autostartServices() als produktiver Starter deaktiviert.
+- Oeffentliche Kernel-Config-Altpfade in services.zig lesen und schreiben nicht mehr produktiv vom Dateisystem.
+- SERVMAN.R4X ist der einzige produktive Ort fuer Service-Config, Service-Autostart und sichtbare Service-Diagnose.
+
+Abnahme:
+- DevTools/Scripts/Build.bat -norun lief erfolgreich.
+- DevTools/Scripts/Build.bat -test lief erfolgreich mit TEST OK.
+- Kein produktiver Doppelpfad fuer Service-Config, Service-Autostart oder Service-Diagnose im Kernel/COMMAND.
+- Service Manager ist der einzige produktive Ort fuer Service-Policy.
+- Version steht auf 0.34.7.
+- Push ist erfolgt.
+
+Notizen:
+- Der technische Service-Core bleibt Kernel-Infrastruktur fuer Registry, Runtime-Status und R4SYS-Operationen.
+- Externe Tools, die R4SYS-Service-Manager-Operationen direkt nutzen, mutieren weiterhin die laufende Registry; persistente Service-Config gehoert jetzt zum Managerpfad.
+Version 0.34.8 - Dokumentation und Abschluss
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `Docs/Core/KernelBereinigung.txt` um den 0.34.X-Stand ergaenzt.
+- `Docs/Core/Architektur.txt` auf die neue Service-Manager-Grenze aktualisiert.
+- `Docs/API/R4SYS.md` dokumentiert die Trennung zwischen technischem Service-Core und externer Service-Policy.
+- `Docs/Software.md`, `Docs/Services/README.txt` und `Docs/R4DOS/BootUndShell.txt` dokumentieren `SERVMAN.R4X`, `SERVICES.R4S`, Boot-Autostart, Config-Fehlerpfade und Legacy-`SERVICE`.
+- `AGENTS.md` um die dauerhafte SERVMAN-Konvention und die zentrale Service-Doku ergaenzt.
+- Website-`kernel.md` nicht angepasst, weil dafuer laut Roadmap eine eigene User-Freigabe noetig ist.
+- Version auf `KERNEL_VERSION=0.34.8` gesetzt.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -test` muss erfolgreich durchlaufen.
+- Doku erklaert kurz und eindeutig: Service Registry/IPC-Core bleibt Kernel, Service Manager ist externe Systemsoftware.
+- Doku nennt die neue Service-Manager-Startreihenfolge und Config-Fehlerpfade.
+- Keine produktive Service-Policy verbleibt unerklaert im Kernel.
+- Roadmap-Unterversionen sind abgeschlossen und koennen spaeter archiviert werden.
+- Push ist erfolgt.
+
+Notizen:
+- 0.34.X ist damit als Service-Manager-Extraktion abgeschlossen.
+- Eine spaetere Roadmap-Aufraeumung kann den Block nach `Docs/Changelogs/V0.34.txt` archivieren.

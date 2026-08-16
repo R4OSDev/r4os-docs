@@ -1,0 +1,975 @@
+﻿R4OS Roadmap 0.15.X
+===================
+
+Leitbild
+--------
+
+0.15.X fuehrt R4P als nativen Dateityp fuer Protokollmodule ein.
+
+R4P ist nicht R4X und nicht R4D:
+- R4X bleibt fuer Programme.
+- R4D bleibt fuer Hardwaretreiber und Geraeteanbindung.
+- R4P ist fuer Protokolle, Datenformate, Parser/Builder, Transportlogik und
+  wiederverwendbare Systemvertraege.
+
+R4P-Dateien liegen im Image unter:
+
+  /sys/protocols/*.r4p
+
+Ziel ist nicht nur ein neuer Container, sondern ein sauberer Modulpfad:
+Build-System, SDK, Loader, Kernel-Registry, Diagnose, Device Manager und
+Dokumentation muessen zusammenpassen. Bestehende Kernel- oder R4D-Protokolle
+sollen nur dann umgezogen werden, wenn der neue Pfad mindestens gleich gut
+diagnostizierbar ist und stabile Fallbacks vorhanden sind.
+
+Leitplanken
+-----------
+
+- Boot-kritische Pfade duerfen nicht hart von R4P abhaengen, solange der Loader
+  und die betroffenen Module nicht stabil sind.
+- R4P-Module besitzen keine Hardware. Hardware bleibt bei Kernel/xHCI/PCI oder
+  R4D-Treibern; R4P verarbeitet Protokollzustand und Daten.
+- Jedes R4P-Modul braucht Rolle, Name, ABI-Version, Kategorie, Dependencies,
+  Lifecycle und Statusmeldung.
+- R4P verwendet wie R4X/R4D vorerst keine SIMD/FPU, solange R4OS keinen
+  FPU-/SSE-State pro Task sichert.
+- Device Manager und ProgramApi muessen Protokolle sichtbar machen, ohne sie
+  als PCI-/USB-Hardware oder normale Treiber zu verfaelschen.
+- Jede Version braucht eine klare Abnahme ueber Build und QEMU. Reale
+  Hardwaretests sind fuer diese Roadmap kein Pflichtbestandteil.
+
+Sehr gute R4P-Kandidaten
+------------------------
+
+- net.ethernet
+- net.icmp
+- net.udp
+- net.dhcp
+- net.dns
+- net.tcp
+- net.serial_link / R4SL
+- usb.hid_report
+- usb.hid_boot
+- usb.msc_bot
+- usb.scsi_block
+- audio.midi
+- audio.sid
+- audio.opl3
+
+Riskante, aber gewuenschte Kandidaten
+-------------------------------------
+
+- net.arp
+- net.ipv4
+
+Bewusst nicht Teil von 0.15.X
+-----------------------------
+
+- FAT32, MBR, Blockdevice-Registry
+- R4X-/R4D-Loader selbst
+- Kernel API, Driver API, ProgramApi und IPC als Modulinhalt
+- xHCI, PCI, PCIe, ACPI, APIC/IOAPIC, Storage-Hardwaretreiber
+- Desktop-Anwendungen und normale Diagnoseprogramme
+
+
+Version 0.15.0 - R4P-Spezifikation und Architektur
+--------------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- R4P-Dateiformat schriftlich festgelegt:
+  - Magic, Header-Version, Architektur, ABI-Version
+  - Modulklasse "protocol"
+  - Kategorie, Rollen-ID, Anzeigename
+  - Code-/Datenbereiche, Entry-Offsets, Metadatenbereich
+  - Dependency-Tabelle und optionale Feature-Flags
+  - Bounds-/Alignment-Regeln und Fehlerfaelle
+- ProtocolApi v1 definiert:
+  - init/shutdown
+  - role registration
+  - status/query
+  - optionale receive/build/dispatch-Funktionen je Kategorie
+- Speicher- und Buffer-Vertrag festgelegt:
+  - wer besitzt eingehende Pakete, Reports, Events und Ausgabepuffer?
+  - welche Buffer sind nur fuer die Dauer des Aufrufs gueltig?
+  - wann muss ein R4P-Modul Daten kopieren?
+  - welche Buffer duerfen beschrieben werden?
+  - wie werden Laengen, Truncation und ungueltige Pointer gemeldet?
+  - maximale Paket-/Report-/Eventgroessen je Kategorie dokumentieren
+- Kernel-seitiges Registry-Modell entworfen:
+  - getrennt von Driver Registry
+  - sichtbare Builtin-Fallbacks
+  - geladene R4P-Module
+  - Dependency-Aufloesung
+  - Fehlerstatus ohne Kernelcrash
+- Dependency-Modell konkretisiert:
+  - Lade-Reihenfolge
+  - fehlende Dependencies
+  - doppelte Rollen
+  - zyklische Dependencies
+  - Fallback-Verhalten bei nicht erfuellten Dependencies
+  - Statusmeldungen fuer blockierte Module
+- Dokumentation angelegt:
+  - `Docs/Protocols/README.txt`
+  - `Docs/Protocols/R4PFormat.txt`
+  - SDK-/Build-Hinweise fuer spaetere Implementierung vormerken
+- `Docs/README.txt` um die neue Protocols-Dokumentation erweitert.
+
+Abnahme:
+- R4P-Format und ProtocolApi v1 sind dokumentiert.
+- Die Grenzen zwischen Kernel, R4D und R4P sind schriftlich geklaert.
+- Speicher-/Buffer-Ownership und Dependency-Regeln sind dokumentiert.
+- Fuer alle besprochenen R4P-Kandidaten ist festgelegt, in welcher Version sie
+  als R4P umgesetzt werden.
+- Fuer bewusst ausgeschlossene Komponenten ist dokumentiert, warum sie kein
+  R4P-Ziel dieser Roadmap sind.
+
+Notizen:
+- Diese Version soll noch keine grossen Kernel-Umbauten erzwingen. Erst muss der
+  Vertrag stimmen.
+
+
+Version 0.15.1 - Toolchain, SDK und Image-Pfad
+----------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- `Code/BuildTools/R4XBuilder` um R4P erweitert:
+  - `.R4P`-Magic
+  - eigene Modulklasse
+  - R4P-Header schreiben
+  - Versions-/ABI-Felder
+  - Rollen-/Kategorie-Metadaten
+  - saubere Fehlermeldungen bei ungueltigen Parametern
+- SDK erweitert:
+  - `Code/SDK/r4os/protocol.zig`
+  - ProtocolApi-v1-Bindings
+  - Build-Helfer `R4POptions` und `addR4P`
+  - klare Trennung zu `addR4X` und `addR4D`
+- Projektstruktur ergaenzt:
+  - `Code/Protocol/*` fuer R4P-Projekte
+  - erstes minimales Smoke-Protokoll
+  - erstes R4P-Conformance-Protokoll fuer Loader-/Registry-Tests
+- Zentralen Build erweitert:
+  - `Code/build.zig` baut aktive R4P-Module
+  - Build-Artefakte landen in `Code/zig-out/*.R4P`
+- Image-Build erweitert:
+  - Build-Script kopiert R4P-Artefakte nach `/sys/protocols/*.r4p`
+  - keine Protokolle in `/sys/drivers`
+- Dokumentation aktualisiert:
+  - `Docs/Protocols/README.txt`
+  - `Docs/SDK/README.txt`
+  - `Docs/Deployment/BuildUndTest.txt`
+- `SMOKE.R4P` und `CONF.R4P` werden gebaut.
+- `CONF.R4P` enthaelt eine Dependency auf `misc.smoke` fuer spaetere
+  Loader-/Resolver-Tests.
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` erzeugt ein Image mit mindestens einem
+  `.r4p` unter `/sys/protocols/`.
+- R4XBuilder kann R4X, R4D und R4P bauen und lehnt falsche Parameter sauber ab.
+- SDK-Beispiel fuer ein minimales R4P-Protokoll baut ohne Spezialwissen ausser
+  dem SDK.
+- Ein Conformance-R4P kann gezielt Init, Status, Rollenregistrierung und
+  Dependency-Metadaten fuer spaetere Loader-Tests bereitstellen.
+
+Notizen:
+- In dieser Version muss R4OS die R4P-Datei noch nicht produktiv verwenden.
+  Wichtig ist ein sauberer, wiederholbarer Artefakt- und Image-Pfad.
+
+
+Version 0.15.2 - Kernel-Loader, Registry und Sichtbarkeit
+---------------------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Kernel-R4P-Loader implementieren:
+  - `/sys/protocols/*.r4p` nach C:-Mount scannen
+  - Header validieren
+  - Bounds pruefen
+  - ABI-/Architektur pruefen
+  - defekte Module ablehnen, ohne Boot oder Shell zu zerstoeren
+- Protocol Registry implementieren:
+  - Builtin-Fallbacks registrieren
+  - R4P-Module registrieren
+  - Rollen eindeutig aufloesen
+  - Dependency-Status fuehren
+  - active/fallback/error/disabled sichtbar machen
+- Dependency-Resolver implementieren:
+  - Lade-Reihenfolge aus Dependencies ableiten
+  - fehlende Dependencies sichtbar melden
+  - doppelte Rollen ablehnen oder eindeutig priorisieren
+  - zyklische Dependencies erkennen
+  - blockierte Module ohne Kernelcrash deaktivieren
+- ProtocolApi v1 im Kernel anbinden:
+  - init/shutdown aufrufen
+  - Status-Strings begrenzt und crashsicher uebernehmen
+  - Rollenregistrierung pruefen
+- Diagnose ergaenzen:
+  - `PROTOCOLS`-Kommando
+  - kurze und ausfuehrliche Ausgabe
+  - Loader-Fehler mit Modulname und Grund
+- ProgramApi / Device Inventory erweitern:
+  - Protokolle als eigene Kategorie sichtbar machen
+  - nicht als PCI-/USB-Geraete ausgeben
+  - Device Manager um Protokollgruppe erweitern
+- Negative Tests vorbereiten:
+  - kaputte Magic
+  - falsche ABI
+  - abgeschnittener Header
+  - doppelte Rolle
+  - fehlende Dependency
+  - Dependency-Zyklus
+- R4P-Selftest anbinden:
+  - Smoke-Modul erfolgreich laden
+  - Conformance-Modul registrieren
+  - erwartete Fehlerfaelle pruefen
+  - Ergebnis in QEMU-Log und `PROTOCOLS` sichtbar machen
+- R4P-Module `SMOKE.R4P` und `CONF.R4P` werden im Kernel geladen und
+  initialisiert.
+- Builtin-Fallbacks fuer alle geplanten 0.15.X-Protokollrollen werden in der
+  Protocol Registry registriert.
+- `PROTOCOLS`-Kommando gibt Quelle, Kategorie, Status, Fehler und Notiz aus.
+- `R4PTEST` prueft aktive Smoke-/Conformance-Module sowie einfache
+  Header-Ablehnungen.
+- Device Inventory besitzt Busart `protocol`; Device Manager kennt den neuen
+  Buswert.
+- SDK-Linkerscript haelt `.text.r4p_entries` am Anfang des Rohcodes, damit die
+  R4P-Entrypoint-Offsets stabil bleiben.
+- Dokumentation aktualisiert:
+  - `Docs/Protocols/README.txt`
+  - `Docs/Protocols/R4PFormat.txt`
+  - `Docs/Applications/R4X.txt`
+
+Abnahme:
+- `PROTOCOLS` zeigt Builtin-Fallbacks und das Smoke-R4P-Modul.
+- Device Manager zeigt Protokolle in eigener Gruppe.
+- Fehlerhafte R4P-Dateien werden gemeldet und uebersprungen.
+- Dependency-Fehler und Selftest-Ergebnisse sind ohne Debugger nachvollziehbar.
+- `DevTools/Scripts/Build.bat -test` laeuft ohne Kernelpanic.
+- Abgenommen mit:
+  - `DevTools/Scripts/Build.bat -norun`
+  - `DevTools/Scripts/Build.bat -test`
+
+Notizen:
+- Ab hier darf erst mit echten Protokollumzuegen begonnen werden.
+- Die Registry-Sicht ist bereit fuer 0.15.3; produktive Protokoll-Dispatches
+  werden in den folgenden Versionen pro Rolle angebunden.
+
+
+Version 0.15.3 - Netzwerk-Basisprotokolle als R4P
+-------------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- R4P-Dispatch-Mechanik ergaenzt:
+  - aktive R4P-Module koennen per Rolle und Opcode aufgerufen werden
+  - Module ohne Dispatch oder nicht aktive Rollen liefern saubere Fehler
+  - Builtin-Fallback bleibt aufrufbar
+- `net.ethernet` als erstes produktives R4P umgesetzt:
+  - `Code/Protocol/NetEthernet/src/main.zig`
+  - Artefakt `NETETH.R4P`
+  - Rolle `net.ethernet`
+  - Ethernet-II RX-Filter
+  - Ethernet-II TX-Klassifizierung
+  - EtherType-Erkennung
+  - R4OS-Testframe-Building
+- Net-Core an R4P/Fallback gekoppelt:
+  - RX/TX-Pfade rufen `net.ethernet` per Dispatch auf
+  - Builtin-Fallback greift bei fehlendem Modul oder Dispatch-Fehler
+  - Diagnosezaehler fuer R4P-RX, R4P-TX, R4P-Build, Fallbacks und
+    Dispatch-Fehler
+- `RTL8139TX` nutzt den Net-Core-Testframe-Pfad und damit R4P/Fallback.
+- `NETETHTEST` als QEMU-faehiger Selftest ergaenzt:
+  - Build
+  - Frame-Type
+  - TX
+  - RX
+- `net.arp` als R4P umgesetzt:
+  - `Code/Protocol/NetArp/src/main.zig`
+  - Artefakt `NETARP.R4P`
+  - Rolle `net.arp`
+  - Dependency auf `net.ethernet`
+  - ARP Request-Building
+  - ARP RX-Parser fuer Request/Reply
+  - ARP TX-Parser fuer Request/Reply
+  - Cache- und TTL-Verantwortung bleibt im Net-Core
+- Net-Core an ARP-R4P/Fallback gekoppelt:
+  - ARP Request-Building laeuft ueber R4P oder Fallback
+  - ARP RX/TX-Parsing laeuft ueber R4P oder Fallback
+  - Diagnosezaehler fuer ARP-R4P-RX, ARP-R4P-TX, ARP-R4P-Build, Fallbacks und
+    Dispatch-Fehler
+- `ARPSELFTEST` als QEMU-faehiger Selftest ergaenzt:
+  - Request-Building
+  - TX-Parsing
+  - RX-Parsing
+- `net.ipv4` als R4P umgesetzt:
+  - `Code/Protocol/NetIpv4/src/main.zig`
+  - Artefakt `NETIPV4.R4P`
+  - Rolle `net.ipv4`
+  - Dependency auf `net.ethernet` und `net.arp`
+  - IPv4 Packet-Building
+  - IPv4 RX-Parser mit Ziel-IP-Pruefung
+  - IPv4 TX-Parser
+  - Header-Checksumme
+  - Fragment-Ablehnung
+  - Dispatch zu ICMP/UDP/TCP bleibt im Net-Core
+- Net-Core an IPv4-R4P/Fallback gekoppelt:
+  - IPv4 Packet-Building laeuft ueber R4P oder Fallback
+  - IPv4 RX/TX-Parsing laeuft ueber R4P oder Fallback
+  - Diagnosezaehler fuer IPv4-R4P-RX, IPv4-R4P-TX, IPv4-R4P-Build,
+    Fallbacks und Dispatch-Fehler
+- `IPV4SELFTEST` als QEMU-faehiger Selftest ergaenzt:
+  - Packet-Building
+  - TX-Parsing
+  - RX-Parsing
+- IPv4-Fragment-Policy dokumentiert und umgesetzt:
+  - Fragmente werden in 0.15.3 bewusst abgelehnt
+  - Fragment-Reassembly ist kein Ziel dieser Version
+  - Dispatch zu ICMP/UDP/TCP bleibt im Net-Core
+- `net.udp` als R4P umgesetzt:
+  - `Code/Protocol/NetUdp/src/main.zig`
+  - Artefakt `NETUDP.R4P`
+  - Rolle `net.udp`
+  - Dependency auf `net.ipv4`
+  - UDP Datagramm-Building
+  - UDP RX-Parser
+  - UDP TX-Parser
+  - IPv4-Pseudoheader-Checksumme
+  - Port-Dispatch zu DHCP/DNS bleibt im Net-Core
+  - bestehende DHCP/DNS-Nutzung bleibt erhalten
+- Net-Core an UDP-R4P/Fallback gekoppelt:
+  - UDP Datagramm-Building laeuft ueber R4P oder Fallback
+  - UDP RX/TX-Parsing laeuft ueber R4P oder Fallback
+  - Diagnosezaehler fuer UDP-R4P-RX, UDP-R4P-TX, UDP-R4P-Build, Fallbacks
+    und Dispatch-Fehler
+- `UDPTEST` als QEMU-faehiger Selftest erweitert:
+  - Datagramm-Building
+  - TX-Parsing
+  - RX-Parsing
+- Net-Diagnosen aktualisiert:
+  - Ethernet, ARP, IPv4 und UDP zeigen aktive Quelle
+  - R4P-/Fallback-Zaehler
+  - Dispatch-Fehler
+  - letzte Fehler pro Rolle
+- Dokumentation aktualisiert:
+  - `Docs/Network/README.txt`
+  - `Docs/Protocols/README.txt`
+  - `Docs/Protocols/R4PFormat.txt`
+  - `Docs/SDK/README.txt`
+
+Abnahme:
+- Bestehende Netzwerkdiagnosen laufen weiter in QEMU.
+- ARP/IPv4/UDP koennen als R4P aktiv sein, ohne RTL8139/R4D oder Net-Core zu
+  verwechseln.
+- Bei fehlendem oder defektem R4P greift der Builtin-Fallback.
+- `PROTOCOLS` und Device Manager zeigen die aktiven Netzwerkrollen korrekt.
+- Abgenommen fuer `net.ethernet` mit:
+  - `DevTools/Scripts/Build.bat -test`
+  - `NETETHTEST R4P/Fallback Ethernet path: ok`
+  - `NET` zeigt `source=r4p`, `r4p_rx=1`, `r4p_tx=1`, `r4p_build=1`,
+    `fallback=0`, `dispatch_fail=0`
+- Abgenommen fuer `net.arp` mit:
+  - `DevTools/Scripts/Build.bat -test`
+  - `ARPSELFTEST R4P/Fallback ARP path: ok`
+  - `NET` zeigt ARP `source=r4p`, `r4p_rx=1`, `r4p_tx=1`, `r4p_build=1`,
+    `fallback=0`, `dispatch_fail=0`
+- Abgenommen fuer `net.ipv4` mit:
+  - `DevTools/Scripts/Build.bat -test`
+  - `IPV4SELFTEST R4P/Fallback IPv4 path: ok`
+  - `NET` zeigt IPv4 `source=r4p`, `r4p_rx=1`, `r4p_tx=1`, `r4p_build=2`,
+    `fallback=0`, `dispatch_fail=0`
+- Abgenommen fuer `net.udp` mit:
+  - `DevTools/Scripts/Build.bat -test`
+  - `UDPTEST checksum/parser: ok`
+  - `NET` zeigt UDP `source=r4p`, `r4p_rx=1`, `r4p_tx=1`, `r4p_build=1`,
+    `fallback=0`, `dispatch_fail=0`
+
+Notizen:
+- ARP und IPv4 sind riskanter als die uebrigen Kandidaten. Deshalb bleiben
+  Fallbacks hier bis zum Abschluss von 0.15.X erhalten.
+- `net.ethernet` ist der erste echte Dispatch-Pfad. ARP/IPv4/UDP sollen darauf
+  aufbauen, aber jeweils mit eigenem Fallback und eigener Diagnose.
+
+
+Version 0.15.4 - Hoehere Netzwerkprotokolle als R4P
+---------------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- ICMP als R4P umgesetzt:
+  - `Code/Protocol/NetIcmp/src/main.zig`
+  - Artefakt `NETICMP.R4P`
+  - Rolle `net.icmp`
+  - Dependency auf `net.ipv4`
+  - Echo Request-Building
+  - Echo Reply-Building
+  - RX-Parsing
+  - TX-Parsing
+  - Echo-Request-Klassifikation
+  - Checksumme
+- Net-Core an ICMP-R4P/Fallback gekoppelt:
+  - ICMP Echo Request/Reply-Building laeuft ueber R4P oder Fallback
+  - ICMP RX/TX-Parsing laeuft ueber R4P oder Fallback
+  - Echo-Request-Klassifikation laeuft ueber R4P oder Fallback
+  - Diagnosezaehler fuer ICMP-R4P-RX, ICMP-R4P-TX, ICMP-R4P-Build,
+    Klassifikation, Fallbacks und Dispatch-Fehler
+- `ICMPSELFTEST` als QEMU-faehiger Selftest erweitert:
+  - nutzt bei fehlendem NetBackend einen adapterlosen Protokolltest
+  - prueft Echo Request, RX, Echo-Klassifikation, Echo Reply und TX
+- Dokumentation aktualisiert:
+  - `Docs/Network/README.txt`
+  - `Docs/Protocols/README.txt`
+  - `Docs/Protocols/R4PFormat.txt`
+- DNS als R4P umgesetzt:
+  - `Code/Protocol/NetDns/src/main.zig`
+  - Artefakt `NETDNS.R4P`
+  - Rolle `net.dns`
+  - Dependency auf `net.udp` und `net.ipv4`
+  - A-Query-Building
+  - A-Response-Parsing
+  - komprimierte Antwortnamen per Pointer
+  - Fehlerstatus fuer NXDOMAIN, Header-, Question-, Answer- und Typfehler
+  - Timeout-Status im Contract reserviert; echte Timeouts bleiben Aufgabe
+    eines spaeteren Live-DNS-Request-Timers
+  - Antwortzustand bleibt im Net-Core
+- Net-Core an DNS-R4P/Fallback gekoppelt:
+  - DNS A-Query-Building laeuft ueber R4P oder Fallback
+  - DNS A-Response-Parsing laeuft ueber R4P oder Fallback
+  - Diagnosezaehler fuer DNS-R4P-RX, DNS-R4P-Build, Fallbacks und
+    Dispatch-Fehler
+- `DNSTEST` als QEMU-faehiger Selftest aktualisiert:
+  - A-Query-Building
+  - synthetische A-Response
+  - A-Response-Parsing
+- Dokumentation aktualisiert:
+  - `Docs/Network/README.txt`
+  - `Docs/Protocols/README.txt`
+  - `Docs/Protocols/R4PFormat.txt`
+- DHCP als R4P umgesetzt:
+  - `Code/Protocol/NetDhcp/src/main.zig`
+  - Artefakt `NETDHCP.R4P`
+  - Rolle `net.dhcp`
+  - Dependency auf `net.udp` und `net.ipv4`
+  - Discover-Building
+  - Request-Building
+  - Offer-Parsing
+  - Ack-Parsing
+  - Lease-Zustand bleibt im Net-Core
+- Net-Core an DHCP-R4P/Fallback gekoppelt:
+  - DHCP Discover/Request-Building laeuft ueber R4P oder Fallback
+  - DHCP Offer/Ack-Parsing laeuft ueber R4P oder Fallback
+  - Diagnosezaehler fuer DHCP-R4P-RX, DHCP-R4P-Build, Fallbacks und
+    Dispatch-Fehler
+- `DHCPTEST` als QEMU-faehiger Selftest aktualisiert:
+  - Discover-Building
+  - Offer-Parsing
+  - Request-Building
+  - Ack-Parsing
+- Dokumentation aktualisiert:
+  - `Docs/Network/README.txt`
+  - `Docs/Protocols/README.txt`
+  - `Docs/Protocols/R4PFormat.txt`
+- TCP-Clientgrundlage als R4P umgesetzt:
+  - `Code/Protocol/NetTcp/src/main.zig`
+  - Artefakt `NETTCP.R4P`
+  - Rolle `net.tcp`
+  - Dependency auf `net.ipv4`
+  - connect/write/read/close/status-Vertrag bleibt fuer ProgramApi v51
+    kompatibel
+  - Segment-Building und RX/TX-Parser inklusive IPv4-Pseudoheader-Checksumme
+  - SYN/SYN-ACK/ACK-, Daten- und FIN-Zaehler
+  - Minimalgrenzen bleiben unveraendert: kein Retransmit-Timer, kein
+    Listen/Accept, kein Performanceversprechen
+  - zustandsbehaftetes Modul nutzt ProtocolApi `alloc/free` fuer Runtime-State
+  - Header-, Rollen-, Metadaten- und Dependency-Strings bleiben getrennt von
+    beschreibbarem Modulzustand
+- Net-Core an TCP-R4P/Fallback gekoppelt:
+  - ProgramApi-v51-TCP-Aufrufe laufen ueber R4P oder Fallback
+  - TCP Segment-Building und RX/TX-Parsing laufen ueber R4P oder Fallback
+  - Diagnosezaehler fuer TCP-R4P-RX, TCP-R4P-TX, TCP-R4P-Control,
+    TCP-R4P-Build, Fallbacks und Dispatch-Fehler
+- `TCPTEST` als QEMU-faehiger Selftest aktualisiert:
+  - connect/write/read/close
+  - Segment-Building
+  - TX-Parsing
+  - Statusausgabe ueber `NET`
+- Dokumentation aktualisiert:
+  - `Docs/Network/README.txt`
+  - `Docs/Protocols/README.txt`
+  - `Docs/Protocols/R4PFormat.txt`
+  - `Docs/SDK/README.txt`
+- R4SL / Serial Link als R4P umgesetzt:
+  - `Code/Protocol/NetSerialLink/src/main.zig`
+  - Artefakt `NETR4SL.R4P`
+  - Rolle `net.serial_link`
+  - COM2-Erkennung, UART-I/O, Polling und Hosttest-Zeitbudget bleiben im
+    Kernel
+  - R4P uebernimmt Frame-Building, Streaming-Parser, Magic-/Versions-/
+    Laengenpruefung, Sum16-Checksumme und Loopback-Selftest
+- Serial-Link-Core an R4SL-R4P/Fallback gekoppelt:
+  - `SERIALLINK TEST` laeuft ueber R4P oder Fallback
+  - `SERIALLINK SEND` und Hosttest-Sendepfad nutzen R4P oder Fallback fuer
+    Frame-Building
+  - Polling-Parser nutzt R4P oder Fallback
+  - Diagnosezaehler fuer R4P-Build, R4P-Parse, R4P-Selftest, Fallbacks und
+    Dispatch-Fehler
+- Dokumentation aktualisiert:
+  - `Docs/Network/README.txt`
+  - `Docs/Protocols/README.txt`
+  - `Docs/Protocols/R4PFormat.txt`
+
+Abnahme:
+- ICMP/Ping-Pfad funktioniert in QEMU.
+- DHCP/DNS-Diagnosen zeigen verstaendliche Erfolgs- oder Fehlerzustaende.
+- TCP-Client-ProgramApi bleibt kompatibel.
+- `PROTOCOLS` zeigt alle hoeheren Netzwerkrollen mit Quelle und Status.
+- Abgenommen fuer `net.icmp` mit:
+  - `DevTools/Scripts/Build.bat -test`
+  - `ICMPSELFTEST inbound echo: ok`
+  - `NET` zeigt ICMP `source=r4p`, `r4p_rx=1`, `r4p_tx=1`, `r4p_build=2`,
+    `r4p_classify=1`, `fallback=0`, `dispatch_fail=0`
+- Abgenommen fuer `net.dhcp` mit:
+  - `DevTools/Scripts/Build.bat -test`
+  - `DHCPTEST discover/offer/request/ack: ok`
+  - `NET` zeigt DHCP `source=r4p`, `r4p_rx=2`, `r4p_build=2`, `fallback=0`,
+    `dispatch_fail=0`
+- Abgenommen fuer `net.dns` mit:
+  - `DevTools/Scripts/Build.bat -test`
+  - `DNSTEST A query/response: ok`
+  - `NET` zeigt DNS `source=r4p`, `r4p_rx=1`, `r4p_build=1`, `fallback=0`,
+    `dispatch_fail=0`
+- Abgenommen fuer `net.tcp` mit:
+  - `DevTools/Scripts/Build.bat -test`
+  - `TCPTEST handshake/echo/close: ok`
+  - `NET` zeigt TCP `source=r4p`, `r4p_tx=1`, `r4p_ctl=1`, `r4p_build=1`,
+    `fallback=0`, `dispatch_fail=0`
+- Abgenommen fuer `net.serial_link` mit:
+  - `DevTools/Scripts/Build.bat -test`
+  - `SERIALLINK selftest: ok`
+  - `SERIALLINK` zeigt `Protocol: source=r4p`, `r4p_build=1`,
+    `r4p_parse=1`, `r4p_self=1`, `fallback=0`, `dispatch_fail=0`
+
+Notizen:
+- 0.15.4 ist fuer die besprochenen hoeheren Netzwerkprotokolle abgeschlossen.
+
+
+Version 0.15.5 - USB-Protokolle als R4P
+---------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- USB-Grenzen fuer den ersten Teil festgelegt:
+  - xHCI bleibt Hardwaretreiber/Core
+  - USB Core bleibt Bus-/Transferverwaltung
+  - USBHID bleibt Besitzer von Control-Transfers, Interrupt-IN-Polling und
+    Input-Injektion
+  - `usb.hid_report` uebernimmt nur HID-Report-Descriptor-Parsing
+- HID Report Parser als R4P umgesetzt:
+  - `Code/Protocol/UsbHidReport/src/main.zig`
+  - Artefakt `HIDREPORT.R4P`
+  - Rolle `usb.hid_report`
+  - Kategorie `usb`
+  - HID-Report-Descriptor-Parsing
+  - Short-/Long-Item-Laengenpruefung
+  - Usage Page, Usage, Usage Min/Max
+  - Report ID, Report Size/Count und logische Grenzen
+  - Input/Output/Feature-Feldzusammenfassung
+  - feste Fehlercodes fuer abgeschnittene Descriptoren
+- USBHID an HID-Report-R4P/Fallback gekoppelt:
+  - Report-Descriptoren werden ueber R4P oder Builtin-Fallback geparst
+  - bestehende Boot-Keyboard-/Boot-Mouse-Pfade bleiben stabil
+  - Diagnosezaehler fuer R4P-Parse, R4P-Selftest, Fallbacks und
+    Dispatch-Fehler
+- `HIDREPORTTEST` als QEMU-faehiger Selftest ergaenzt:
+  - synthetischer Boot-Mouse-Descriptor
+  - Parser-Dispatch
+  - R4P-Selftest
+- USB HID Boot-Protokoll als R4P umgesetzt:
+  - `Code/Protocol/UsbHidBoot/src/main.zig`
+  - Artefakt `USBHID.R4P`
+  - Rolle `usb.hid_boot`
+  - Kategorie `usb`
+  - Klassifikation von HID-Boot-Keyboard-/Mouse-Interfaces
+  - Boot-Keyboard-Report-Dekodierung in Usage-/Modifier-Ereignisse
+  - Boot-Mouse-Report-Dekodierung in Buttons, X/Y und Wheel
+  - Report-ID-Heuristik fuer einfache abweichende Boot-Reports
+- USBHID an HID-Boot-R4P/Fallback gekoppelt:
+  - xHCI, USB-Core, Control-Transfers und Interrupt-IN-Polling bleiben im
+    Kernel
+  - R4P liefert neutrale Decode-Ergebnisse
+  - Keyboard-Scancode-Mapping und Mouse-State-Injektion bleiben im Kernel
+  - Diagnosezaehler fuer Klassifikation, Keyboard-Decode, Mouse-Decode,
+    R4P-Selftest, Fallbacks und Dispatch-Fehler
+- `USBHIDTEST` als QEMU-faehiger Selftest ergaenzt:
+  - Interface-Klassifikation
+  - Keyboard-Bootreport
+  - Mouse-Bootreport
+  - R4P-Selftest
+- USB-Grenzen fuer Mass Storage BOT festgelegt:
+  - xHCI und USB-Core bleiben Besitzer von Geraeteauswahl, Endpoint-Handles
+    und Bulk-Transfers
+  - USBMSC bleibt Besitzer von Recovery, Reset/Clear-Halt, SCSI-Kommandoablauf
+    und Blockdevice-Registry
+  - `usb.msc_bot` uebernimmt nur CBW-Aufbau, CSW-Validierung und Status-
+    Klassifikation
+- USB MSC BOT als R4P umgesetzt:
+  - `Code/Protocol/UsbMscBot/src/main.zig`
+  - Artefakt `USBBOT.R4P`
+  - Rolle `usb.msc_bot`
+  - Kategorie `usb`
+  - CBW-Aufbau fuer USB Mass Storage Bulk-Only Transport
+  - CSW-Validierung mit Signatur, Tag, Residue und Status
+  - Ergebniswerte fuer Command Failed, Bad CSW, Tag-Mismatch, Residue-Fehler,
+    Phase Error und ungueltigen Status
+- USBMSC an BOT-R4P/Fallback gekoppelt:
+  - echte Bulk-In-/Bulk-Out-Transfers bleiben im Kernel
+  - R4P/Fallback-Ergebnisse steuern die bestehenden Command-/Transport-
+    Fehlerpfade
+  - Diagnosezaehler fuer CBW-Build, CSW-Parse, R4P-Selftest, Fallbacks und
+    Dispatch-Fehler
+- `USBMSCBOTTEST` als QEMU-faehiger Selftest ergaenzt:
+  - synthetischer INQUIRY-CBW
+  - synthetische Erfolgs-CSW
+  - R4P-Selftest
+- USB-Grenzen fuer SCSI Block festgelegt:
+  - USBMSC bleibt Besitzer von SCSI-Ablauf, Bulk-Transfers, Request-Sense-
+    Ausloesung, Sense-Klassifikation, Medienentscheidung und
+    Blockdevice-Registry
+  - `usb.scsi_block` uebernimmt CDB-Aufbau und Response-Parsing fuer
+    blockorientierte USB-Mass-Storage-Kommandos
+- USB SCSI-Blockbefehle als R4P umgesetzt:
+  - `Code/Protocol/UsbScsiBlock/src/main.zig`
+  - Artefakt `USBSCSI.R4P`
+  - Rolle `usb.scsi_block`
+  - Dependency auf `usb.msc_bot`
+  - CDB-Aufbau fuer INQUIRY
+  - CDB-Aufbau fuer TEST UNIT READY
+  - CDB-Aufbau und Parsing fuer REQUEST SENSE
+  - CDB-Aufbau und Parsing fuer READ CAPACITY(10)
+  - CDB-Aufbau und Write-Protect-Parsing fuer MODE SENSE(6)
+  - CDB-Aufbau fuer READ(10), WRITE(10) und SYNCHRONIZE CACHE(10)
+- USBMSC an SCSI-R4P/Fallback gekoppelt:
+  - Init-Pfad nutzt R4P/Fallback fuer Inquiry, TUR, Capacity und Mode Sense
+  - Read-/Write-/Flush-Pfade nutzen R4P/Fallback fuer CDB-Aufbau
+  - Sense-, Capacity- und Write-Protect-Antworten werden ueber R4P/Fallback
+    geparst
+  - Diagnosezaehler fuer CDB-Build, Response-Parse, R4P-Selftest, Fallbacks
+    und Dispatch-Fehler
+- `USBSCSITEST` als QEMU-faehiger Selftest ergaenzt:
+  - synthetischer READ(10)-CDB
+  - synthetische READ CAPACITY(10)-Antwort
+  - synthetische MODE SENSE(6)-Write-Protect-Antwort
+  - synthetische REQUEST SENSE-Antwort
+  - R4P-Selftest
+- Storage- und Input-Diagnosen aktualisiert:
+  - `USB` zeigt HID-Report-Parser, HID-Boot, BOT und SCSI mit
+    Kernel/R4P/Fallback-Quelle
+  - `USB` zeigt R4P-Dispatch-, Selftest-, Fallback- und Fehlerzaehler fuer die
+    USB-Protokollrollen
+  - `INPUT` zeigt USB-HID-Bindings und Reportzaehler weiter ueber den
+    bestehenden Inputpfad
+  - `BLOCK` und `DRIVES` bleiben die strukturierten Storage-/Mount-Sichten,
+    waehrend `USB` die klassenspezifischen Protokollfehler zeigt
+- Dokumentation aktualisiert:
+  - `Docs/Protocols/README.txt`
+  - `Docs/Protocols/R4PFormat.txt`
+  - `Docs/SDK/README.txt`
+  - `Docs/Drivers/TreiberStand.txt`
+
+Abnahme:
+- QEMU-Tests laufen ohne USB-R4P-Crash, auch wenn keine passende USB-Hardware
+  emuliert wird.
+- Wenn QEMU-USB-Konfiguration vorhanden ist, funktionieren HID/MSC mindestens
+  so gut wie vor dem Umbau.
+- Boot vom Mass-Storage-Pfad bleibt fallbackfaehig.
+- `USB`, `INPUT`, `BLOCK`, `DRIVES` und `PROTOCOLS` widersprechen sich nicht.
+- Abgenommen fuer `usb.hid_report` mit:
+  - `DevTools/Scripts/Build.bat -norun`
+  - `DevTools/Scripts/Build.bat -test`
+  - `HIDREPORTTEST R4P/Fallback parser: ok`
+  - `HIDREPORTTEST` zeigt `source=r4p`, `r4p_parse=1`, `r4p_self=1`,
+    `fallback=0`, `dispatch_fail=0`
+  - `PROTOCOLS` und Device Inventory zeigen `usb.hid_report` als R4P aktiv
+- Abgenommen fuer `usb.hid_boot` mit:
+  - `DevTools/Scripts/Build.bat -norun`
+  - `DevTools/Scripts/Build.bat -test`
+  - `USBHIDTEST R4P/Fallback boot HID: ok`
+  - `USBHIDTEST` zeigt `source=r4p`, `self=1`, `fallback=0`,
+    `dispatch_fail=0`
+  - `PROTOCOLS` und Device Inventory zeigen `usb.hid_boot` als R4P aktiv
+- Abgenommen fuer `usb.msc_bot` mit:
+  - `DevTools/Scripts/Build.bat -norun`
+  - `DevTools/Scripts/Build.bat -test`
+  - `USBMSCBOTTEST R4P/Fallback BOT: ok`
+  - `USBMSCBOTTEST` zeigt `source=r4p`, `build=1`, `csw=1`, `self=1`,
+    `fallback=0`, `dispatch_fail=0`
+  - `PROTOCOLS` und Device Inventory zeigen `usb.msc_bot` als R4P aktiv
+- Abgenommen fuer `usb.scsi_block` mit:
+  - `DevTools/Scripts/Build.bat -norun`
+  - `DevTools/Scripts/Build.bat -test`
+  - `USBSCSITEST R4P/Fallback SCSI block: ok`
+  - `USBSCSITEST` zeigt `source=r4p`, `build=1`, `parse=3`, `self=1`,
+    `fallback=0`, `dispatch_fail=0`
+  - `PROTOCOLS` und Device Inventory zeigen `usb.scsi_block` als R4P aktiv
+
+Notizen:
+- Diese Version darf gross sein. Lieber weniger USB-Klassen sauber abschliessen
+  als HID/MSC halb umziehen.
+
+
+Version 0.15.6 - Audio-/Synth-Protokolle als R4P
+------------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Audio-Grenzen fuer MIDI festgelegt:
+  - Audio-Core bleibt Besitzer von Synth-Auswahl, SynthEngine-Registry,
+    Stimmen, Rendering und PCM-Ausgabe
+  - OPL3/SID/MIDI-R4D-Engines bleiben Synth-/Backendmodule
+  - `audio.midi` uebernimmt nur Event-Klassifikation und Normalisierung
+- MIDI als R4P umgesetzt:
+  - `Code/Protocol/AudioMidi/src/main.zig`
+  - Artefakt `MIDI.R4P`
+  - Rolle `audio.midi`
+  - Kategorie `audio`
+  - MIDI-Kanalereignis-Klassifikation
+  - Note-On mit Velocity 0 wird zu Note-Off normalisiert
+  - Note/Velocity, Controller/Wert und Program Change werden als neutrale
+    Eventdaten geliefert
+- Audio-Core an MIDI-R4P/Fallback gekoppelt:
+  - `midi_send` klassifiziert Events ueber R4P oder Builtin-Fallback
+  - normalisierter Status wird an den aktiven Synth weitergereicht
+  - Diagnosezaehler fuer Klassifikation, R4P-Selftest, Fallbacks und
+    Dispatch-Fehler
+- `MIDITEST` als QEMU-faehiger Selftest ergaenzt:
+  - Note-On-zu-Note-Off-Normalisierung
+  - Controller-Event
+  - Program-Change-Event
+  - R4P-Selftest
+- OPL3-Grenzen festgelegt:
+  - `audio.opl3` uebernimmt Registerklassifikation und MIDI-Routing
+  - OPL3-Renderer, PCM-Ausgabe, Patch-Zustand und SynthEngine-Registry bleiben
+    im Audio-Core beziehungsweise bei `OPL3.R4D`
+  - `OPL3.R4D` bleibt damit Synth-/Backendmodul, `OPL3.R4P` ist der
+    Protokoll-Frontendpfad
+- OPL3 als R4P umgesetzt:
+  - `Code/Protocol/AudioOpl3/src/main.zig`
+  - Artefakt `OPL3.R4P`
+  - Rolle `audio.opl3`
+  - Kategorie `audio`
+  - Dependency `audio.midi`
+  - OPL3-Registerwrites werden als Global-, Operator-, Kanal- oder sonstige
+    Register klassifiziert
+  - MIDI-Events fuer Note On/Off, Program Change, relevante Controller und All
+    Notes Off werden fuer den bestehenden OPL3-Synthpfad geroutet
+- Audio-Core an OPL3-R4P/Fallback gekoppelt:
+  - ProgramApi-Registerwrites werden ueber R4P oder Builtin-Fallback
+    klassifiziert
+  - OPL3-SynthEngine-MIDI-Events werden ueber R4P oder Builtin-Fallback
+    geroutet
+  - Diagnosezaehler fuer Registerrouting, MIDI-Routing, R4P-Selftest,
+    Fallbacks und Dispatch-Fehler
+- R4P-Loader-Kapazitaet fuer den gewachsenen Protokollsatz erweitert:
+  - Modultabelle von 16 auf 32 R4P-Module
+  - Protocol Registry von 32 auf 64 Eintraege, damit Builtin-Fallbacks und
+    aktive R4P-Module parallel sichtbar bleiben
+- `OPL3TEST` als QEMU-faehiger Selftest ergaenzt:
+  - Global-Registerklassifikation
+  - Operator-Registerklassifikation
+  - MIDI Note-On-Routing
+  - R4P-Selftest
+- SID-Grenzen festgelegt:
+  - `audio.sid` uebernimmt Modellvalidierung, Registerklassifikation und
+    SID-I/O-Spiegelung
+  - 6502/6510-Laufzeit, SID-Dateidaten, Renderer, PCM-Ausgabe und
+    SynthEngine-Registry bleiben im SID-Core beziehungsweise bei `SID.R4D`
+  - `SID.R4D` bleibt sichtbares Synth-Modul, `SID.R4P` ist der
+    Register-/I/O-Protokollpfad
+- SID als R4P umgesetzt:
+  - `Code/Protocol/AudioSid/src/main.zig`
+  - Artefakt `SID.R4P`
+  - Rolle `audio.sid`
+  - Kategorie `audio`
+  - SID-Modellauswahl fuer 8580/6581 wird validiert
+  - SID-Registerwrites werden als Voice-, Filter-, Volume- oder sonstige
+    Register klassifiziert
+  - SID-I/O-Adressen im Bereich `$D400..$D7FF` werden gespiegelt und in
+    Registerzugriffe uebersetzt
+- SID-Core an SID-R4P/Fallback gekoppelt:
+  - `configureModel`, ProgramApi-Registerwrites und C64-Runtime-I/O-Writes
+    laufen ueber R4P oder Builtin-Fallback
+  - Diagnosezaehler fuer Modell, Register, I/O, R4P-Selftest, Fallbacks und
+    Dispatch-Fehler
+- `SIDTEST` als QEMU-faehiger Selftest ergaenzt:
+  - 8580-Modellvalidierung
+  - Voice-Registerklassifikation
+  - Filter-Registerklassifikation
+  - SID-I/O-Spiegelung fuer `$D41B`
+  - R4P-Selftest
+- AudioDiag/SynthDiag fuer den neuen Testpfad abgenommen:
+  - `AUDIOD.R4X` wird mit 16 KB Stack gebaut, damit der lokale PCM-Testpuffer
+    nicht den kleinen Default-Stack ueberlaeuft
+  - `SYNTHD.R4X` akzeptiert einen stillen OPL3-Renderblock als gueltige
+    Diagnoseantwort, solange Reset/Write/Stop funktionieren
+  - lokale `Build.bat -test`-Abnahme startet `AUDIOD` und `SYNTHD` ueber
+    `TestInjection/AUTOEXEC.BAT`
+- Dokumentation aktualisiert:
+  - `Docs/Protocols/README.txt`
+  - `Docs/Protocols/R4PFormat.txt`
+  - `Docs/SDK/README.txt`
+  - `Docs/Audio/README.txt`
+  - `Docs/Audio/SIDStand.txt`
+  - `Code/System/Diagnostics/README.txt`
+
+Abnahme:
+- R4Synth und Diagnosen funktionieren mit R4P- oder dokumentiertem Fallback.
+- Device Manager und `PROTOCOLS` zeigen Audio-/Synth-Protokolle korrekt.
+- Keine doppelte, unerklaerte Verantwortung zwischen R4D und R4P bleibt uebrig.
+- Abgenommen fuer `audio.midi` mit:
+  - `DevTools/Scripts/Build.bat -norun`
+  - `DevTools/Scripts/Build.bat -test`
+  - `MIDITEST R4P/Fallback MIDI event: ok`
+  - `MIDITEST` zeigt `source=r4p`, `classify=3`, `self=1`, `fallback=0`,
+    `dispatch_fail=0`
+  - `AUDIO`, `PROTOCOLS` und Device Inventory zeigen `audio.midi` als R4P
+    aktiv
+- Abgenommen fuer `audio.opl3` mit:
+  - `DevTools/Scripts/Build.bat -norun`
+  - `DevTools/Scripts/Build.bat -test`
+  - `OPL3TEST R4P/Fallback OPL3 protocol: ok`
+  - `OPL3TEST` zeigt `source=r4p`, `register=2`, `midi=1`, `self=1`,
+    `fallback=0`, `dispatch_fail=0`
+  - `PROTOCOLS` und Device Inventory zeigen `audio.opl3` als R4P aktiv
+- Abgenommen fuer `audio.sid` mit:
+  - `DevTools/Scripts/Build.bat -norun`
+  - `DevTools/Scripts/Build.bat -test`
+  - `SIDTEST R4P/Fallback SID protocol: ok`
+  - `SIDTEST` zeigt `source=r4p`, `model=1`, `register=2`, `io=1`,
+    `self=1`, `fallback=0`, `dispatch_fail=0`
+  - `PROTOCOLS` und Device Inventory zeigen `audio.sid` als R4P aktiv
+- Abgenommen fuer Diagnostics mit:
+  - `AUDIOD`
+  - `audio_open_stream: 1`
+  - `SYNTHD`
+  - `SYNTHD result: OK`
+
+Notizen:
+- Die Grenze zwischen R4D und R4P muss trotzdem sauber bleiben: R4D darf
+  Hardware/Backend bleiben, R4P uebernimmt die besprochenen Protokoll- und
+  Modellanteile.
+- R4Synth selbst wurde nicht mit echten WAV/MIDI/SID-Dateien automatisiert
+  getestet, weil aktuell keine passenden Medien-Testdateien im Image liegen.
+  Die zugrunde liegenden Audio-/Synth-ProgramApi-Pfade sind ueber `AUDIOD`,
+  `SYNTHD`, `MIDITEST`, `OPL3TEST` und `SIDTEST` abgenommen.
+
+
+Version 0.15.7 - Abschluss, Aufraeumen und harte Kanten
+-------------------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Ungueltige R4P-Dateien und Dependency-Fehler per QEMU-Test abgedeckt:
+  - `BADDEP.R4P` als absichtlich geblockter Conformance-Fall
+  - Rolle `misc.baddep`
+  - Dependency `misc.missing_dependency`
+  - Loader setzt `misc.baddep` auf `blocked err=-5`
+  - `R4PTEST` prueft `misc.baddep` und ungueltige Dependency-Header
+- Dokumentation fuer den Dependency-Conformance-Fall aktualisiert:
+  - `Docs/Protocols/README.txt`
+  - `Docs/Protocols/R4PFormat.txt`
+  - `Docs/SDK/README.txt`
+- R4P-Fallbacks fuer alle 0.15.X-Rollen geprueft und dokumentiert:
+  - keine Builtin-Fallbacks werden in 0.15.X entfernt
+  - USB- und R4SL-Fallbacks bleiben Boot-/Recovery-Pfade
+  - Netzwerk-Fallbacks bleiben mindestens bis nach 0.15.X erhalten
+  - Audio-/Synth-Fallbacks bleiben fuer ProgramApi-, Diagnose- und
+    R4D-Kompatibilitaet
+  - Conformance-Module besitzen keinen produktiven Fallback-Vertrag
+- Doppelte Codepfade bewusst nicht reduziert:
+  - R4P gewinnt bei gueltigen aktiven Modulen
+  - Builtin-Pfade bleiben als sichtbare, gezaehlte Recovery-Schicht
+- Alle in der Roadmap besprochenen produktiven R4P-Kandidaten sind per
+  `R4PTEST` als aktive R4P-Rollen abgesichert:
+  - Netzwerk: Ethernet, ARP, IPv4, ICMP, UDP, DHCP, DNS, TCP, R4SL
+  - USB: HID Report, HID Boot, MSC BOT, SCSI Block
+  - Audio/Synth: MIDI, OPL3, SID
+  - Conformance: Smoke und Conformance aktiv, BadDep geblockt
+- Diagnosequellen vereinheitlicht:
+  - `PROTOCOLS` fuehrt Quelle weiter als `builtin` oder `r4p`
+  - Laufzeitstatus bleibt `active`, `fallback`, `blocked` usw.
+  - NET/USB/AUDIO/SERIALLINK zeigen Protokollquelle als `r4p` oder
+    `fallback`
+  - Detaildiagnosen vermeiden fuer R4P-Fallbacks den alten sichtbaren
+    Begriff `builtin`
+- SDK- und Build-Dokumentation finalisiert:
+  - aktueller `Build.bat`-Vertrag in `Docs/Deployment/BuildUndTest.txt`
+    klargestellt
+  - BuildTools werden als immer gebaut dokumentiert
+  - R4P-Protokollmodule als aktive Build-Artefaktgruppe dokumentiert
+  - `AGENTS.md` um `Code/Protocol/`, `program/r4p.zig`,
+    `protocol/registry.zig` und zentrale Protocols-Dokumentation ergaenzt
+- Roadmap-spezifisches Wissen in Docs uebertragen:
+  - `Docs/Deployment/V0.15-Abschluss.txt` angelegt
+  - `Docs/README.txt` um 0.15-Abschluss und aktuellen Stand ergaenzt
+
+Abnahme:
+- `DevTools/Scripts/Build.bat -norun` und `DevTools/Scripts/Build.bat -test`
+  laufen sauber.
+- `R4PTEST result: OK`
+- `PROTOCOLS` und Device Inventory zeigen `misc.baddep` als `blocked`.
+- `R4PTEST` meldet fehlende produktive R4P-Rollen als Fehler.
+- NET/USB/AUDIO/SERIALLINK nutzen `source=r4p` oder `source=fallback`.
+- Fallback-Entscheidungen sind in `Docs/Protocols/README.txt` dokumentiert.
+- `Docs/Deployment/BuildUndTest.txt` beschreibt den aktuellen
+  Ein-Argument-Buildmodus.
+- `Docs/Deployment/V0.15-Abschluss.txt` fasst Ergebnis, Abnahme, Grenzen und
+  zentrale Dokumente zusammen.
+- Keine aktiven R4P-TODOs ohne Entscheidung bleiben in Roadmap oder Docs.
+- Alle besprochenen Kandidaten sind als R4P umgesetzt und im Imagepfad
+  vertreten.
+- Alle umgezogenen Protokolle haben:
+  - R4P-Artefakt
+  - SDK-/Build-Pfad
+  - Loaderstatus
+  - Diagnoseausgabe
+  - Dokumentation
+  - Fallback-Entscheidung
+- Die Roadmap kann anschliessend nach `Docs/Changelogs/V0.15.txt` archiviert
+  und geleert werden.
+
+Notizen:
+- Ziel dieser Abschlussversion ist ein wirklich benutzbarer Modulpfad, kein
+  Papierformat.

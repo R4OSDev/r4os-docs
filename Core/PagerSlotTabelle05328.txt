@@ -1,0 +1,102 @@
+﻿0.53.28 Pager-Slot-Tabelle ohne aktive Eviction
+=================================================
+
+Ziel
+----
+
+0.53.28 fuehrt die erste Metadatenebene fuer spaetere Auslagerung ein:
+eine page-sized Slot-/Range-Tabelle ueber einem bereits validierten
+Backing-Store. Sie reserviert und verwaltet Slot-Bereiche, aktiviert aber
+weiterhin keinen Pager, keine anonyme Auslagerung, keine Eviction und kein
+Page-In/Page-Out.
+
+Das ist absichtlich nur der Zustand unterhalb eines echten Pagers. Die Version
+soll beweisen, dass R4OS Backing-Store-Kapazitaet, Reservierungen, Freigaben,
+Fehler-Markierung und Recovery reproduzierbar abbilden kann, ohne neue
+Storage-Abkuerzungen oder Komfortpolicy in den Kernel zu ziehen.
+
+Kernel-Vertrag
+--------------
+
+`Code/src/memory/backing_store.zig` enthaelt nun neben der Backing-Store-Probe
+eine schmale Slot-Tabelle:
+
+- Slot-Groesse: 4096 Bytes.
+- Tabellenform: Range-/Extent-Tabelle, nicht eine feste riesige Per-Page-
+  Tabelle.
+- Operationen: Probe, Reserve, Release, MarkError, Recover.
+- Zustaende: reserved, valid, dirty, error. 0.53.28 nutzt aktiv reserved und
+  error; valid/dirty bleiben fuer spaetere Page-In/Page-Out-Stufen sichtbar,
+  aber ungenutzt.
+- Diagnosezaehler: Probes, Reservierungen, Releases, Error-Marks, Recoveries
+  und Failures.
+
+Die Range-Tabelle ist bewusst klein gehalten. Sie kann grosse Backing-Dateien
+abbilden, solange Reservierungen zusammenhaengend bleiben. Das passt besser zu
+mehreren Gigabyte Backing-Store als eine starre Kernel-Tabelle mit einem
+Eintrag pro 4-KB-Seite.
+
+R4DEV und SDK
+-------------
+
+ProgramApi v124 haengt am Ende
+`memory_backing_store_slot_probe(path, backing_bytes, operation,
+requested_slots, reservation_id, owner_id, flags, out)` an.
+
+Der Aufruf nutzt denselben R4SYS-/FAT32-Infopfad wie die v123-
+Backing-Store-Probe. R4DEV prueft zuerst den Datei-backed Backing-Store und
+fuehrt danach die Slot-Operation als Metadatenoperation aus.
+
+Das SDK stellt dazu bereit:
+
+- `supportsMemoryBackingStoreSlots()`
+- `memoryBackingStoreSlotProbe(path, backing_bytes, operation,
+  requested_slots, reservation_id, owner_id, flags)`
+
+`ProgramPerformanceSummary` waechst append-only um Slot-Status, Operation,
+Flags, Blocker, Slot-Kapazitaet, freie/reservierte/valid/dirty/error Slots,
+Range-Zaehler, letzte Reservierung und Operationszaehler. Die Felder
+`memory_backing_store_slot_pager_enabled`,
+`memory_backing_store_slot_eviction_enabled`,
+`memory_backing_store_slot_page_in_enabled` und
+`memory_backing_store_slot_page_out_enabled` bleiben 0.
+
+Abnahme
+-------
+
+PERFDIAG, MEMSUITE und STORDIAG pruefen:
+
+- fehlender Backing-Store wird als `backing_unavailable` blockiert;
+- ein vorhandener 64-KB-Backing-Store liefert page-sized Slot-Kapazitaet;
+- eine zu grosse Reservierung scheitert reproduzierbar mit
+  `insufficient_capacity`;
+- Reservierung, Fehler-Markierung, Recovery und Release funktionieren;
+- nach Release ist die Tabelle wieder frei;
+- Pager, Eviction, Page-In und Page-Out bleiben deaktiviert.
+
+Erwartete sichtbare Linien im Smoke-Test:
+
+- `R4DEV performance snapshot v124: OK`
+- `Backing slots missing: OK`
+- `Backing slots capacity: OK`
+- `Backing slots reserve: OK`
+- `Backing slots recover: OK`
+- `Backing slots release: OK`
+- `Backing slots final: OK`
+- `MEMSUITE pressure ... slots=...`
+- `STORDIAG backingSlots: OK`
+
+Grenzen
+-------
+
+0.53.28 ist weiterhin kein produktiver Pager:
+
+- keine VM-Region wird automatisch ausgelagert;
+- keine Page-Fault-Behandlung liest aus dem Backing-Store;
+- keine Dirty-Page wird geschrieben;
+- keine Eviction-Policy entscheidet ueber Opferseiten;
+- kein Swap-Stub und kein zweiter FAT32-/Block-I/O-Pfad existieren.
+
+Der naechste sinnvolle Schritt ist ein Pager-Gate zwischen VM/Commit,
+Slot-Reservierung und Fault-Pfad. Erst danach sollte echte Eviction oder
+Page-In/Page-Out geplant werden.

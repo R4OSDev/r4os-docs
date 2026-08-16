@@ -1,0 +1,161 @@
+﻿*** Kernel Refactor Roadmap Leitbild ***
+In dieser Roadmap befassen wir uns im Verlauf mehrerer großer Versionen mit der säuberung des Kernels.
+Aktuell wurden viele Funktionen nach
+kernelold.zig ausgelagert und in src/old/ verschoben.
+Wir holen die nach und nach zurück in main.zig, kontrollieren dabei aber alles.
+Was aus dem Kernel raus kann soll in Software, Treiber und Protokolle untergebracht werden.
+Im Zuge dieses Refactor ist auch die Dokumentation zu aktualisieren und pflegen.
+
+Grundsatz fuer alle Unterversionen:
+- Keine halben Umbauten: Eine Unterversion ist erst erledigt, wenn Code, Imports, Doku, Version und Abnahme zusammenpassen.
+- Keine stillen Doppelpfade: Wenn eine Initialisierung nach `main.zig` wandert, darf sie nicht weiterhin produktiv in `kernelold.zig` laufen.
+- Boot-kritische Pfade muessen konservativ behandelt werden. Was fuer Boot, `C:\`, Speicher, Interrupts oder fruehe Ausgabe noetig ist, bleibt built-in, bis ein stabiler Ersatz existiert.
+- Kernel-Verschlankung ist ein ausdrueckliches Ziel. Fallbacks und parallele Built-in-Pfade werden nur genutzt, wenn sie fuer Boot-Stabilitaet, Migration oder echte Abnahme noetig sind.
+- Nicht bootkritische Treiber sollen nach erfolgreicher R4D-Auslagerung aus dem Kernel entfernt werden, statt dauerhaft als Built-in-Fallback liegen zu bleiben.
+- Jeder Umzug braucht klare Modulgrenzen: Boot-Schicht, Runtime-Core, Treiber, API und Diagnose duerfen nicht unkontrolliert vermischt werden.
+- Jede neue Boot-Schicht braucht eine klare Zustands- und Fehlersemantik: entweder erfolgreich initialisiert, sauber uebersprungen oder fatal beendet. Stilles Weiterlaufen nach kaputten Pflichtpfaden ist kein erledigter Zustand.
+- `kernelold.zig` darf waehrend der Migration nur noch als Legacy-Bruecke dienen. Neu umgezogene Initialisierungen muessen aus `kernelold.zig` verschwinden oder dort explizit als bereits initialisierter Zustand konsumiert werden.
+- Zwischenversionen duerfen lauffaehig klein sein, aber nicht fachlich halb: Keine Unterversion wird abgeschlossen, wenn Besitzgrenzen, Boot-Reihenfolge oder Abhaengigkeiten noch absichtlich unklar bleiben.
+- Eine Unterversion darf bewusst nur Vertrag, Diagnose oder Probe liefern,
+  wenn sie klar als nicht-produktiver Ersatz gekennzeichnet ist. Produktive
+  Umschaltung und Entfernen des Altpfads passieren erst nach echter
+  Funktionsabnahme.
+- Vor jedem Abschluss wird gezielt nach Rest-Imports, Doppelaufrufen und verdeckten Abhaengigkeiten gesucht. Gefundene Altlasten werden entweder beseitigt oder in der Roadmap als bewusster Folgepunkt notiert.
+- Jede abgeschlossene Unterversion erhoeht `Injection/sys/CONFIG/VERSION.R4S` auf die passende Version und wird danach gepusht.
+- Mindestens `DevTools/Scripts/Build.bat -norun` gehoert zu jeder Code-Unterversion. Bei Boot-, IRQ-, Input-, Storage-, USB- oder R4D-Aenderungen gehoert `DevTools/Scripts/Build.bat -test` dazu.
+- GUI-/Hardware-nahe Punkte bekommen zusaetzlich eine klare manuelle Sichtabnahme durch den User, wenn QEMU-Smoke allein nicht reicht.
+
+-------------------------------------------
+Ab hier beginnen die Versionen und ab hier darf auch bereinigt werden.
+Das Refactor Leitbild muss bei einer Roadmap Bereinigung stehen bleiben
+-------------------------------------------
+
+Rahmen fuer 0.37.X:
+- Ziel ist der Audio-Bootschnitt: Audio-Core, SID-Bootoption und optionale
+  HDA-/AC97-Backend-Auswahl sollen aus `kernelold.zig` in eine neue
+  Boot-Schicht `Code/src/kernel/audio_boot.zig` wandern.
+- Die chronologische Position ist nach `loader_boot` und `platform_irq_boot`
+  und vor den verbleibenden Legacy-Folgeschritten in `kernelold.kmain()`.
+  Damit stehen `BOOT.R4S`, PCI/PCIe, Device-Mappings, IRQ und Timer bereit,
+  bevor Audio-Backends geprueft werden.
+- Diese Roadmap verschiebt den Boot-Besitz, lagert aber noch keine
+  Hardware-Audiotreiber nach R4D aus. AC97 und HDA bleiben bekannte
+  R4D-Kandidaten fuer eine eigene spaetere Auslagerungs-Roadmap mit
+  vollstaendigem Audio-Output-Backend-Vertrag und eigener Abnahme.
+- Audio bleibt optional. Fehlende, deaktivierte oder fehlschlagende
+  Audio-Backends duerfen den Boot nicht fatal abbrechen, muessen aber sichtbar
+  und diagnostizierbar bleiben.
+- `audio_boot` darf `BOOT.R4S` nicht neu laden. Es verbraucht ausschliesslich
+  den bereits von `loader_boot` vorbereiteten Config-Zustand.
+- Jede Unterversion braucht einen klar lesbaren Status, damit Diagnosepfade
+  spaeter Audio-Core, SID-Modell, HDA, AC97 und Skip-/Fehlergruende sehen
+  koennen, ohne Initialisierung erneut auszufuehren.
+- Am Ende von 0.37.X darf `kernelold.zig` keine produktive Audio-Startlogik
+  und keine direkten Imports auf `old/audio/core.zig`,
+  `old/drivers/audio/hda.zig` oder `old/drivers/audio/ac97.zig` mehr haben.
+- Mindestens `DevTools/Scripts/Build.bat -norun` und
+  `DevTools/Scripts/Build.bat -test` gehoeren zu jeder Code-Unterversion.
+
+Version 0.37.0
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Neue Boot-Schicht `Code/src/kernel/audio_boot.zig` fuer den Audio-Core und
+  die SID-Bootoption angelegt.
+- `main.zig` startet `audio_boot` nach erfolgreichem `platform_irq_boot.init()`
+  und vor `kernelold.kmain()`.
+- `audio.init()` aus `kernelold.zig` in `audio_boot` verschoben.
+- `OPTION SID model=...` aus dem von `loader_boot` geladenen Config-Zustand
+  wird in `audio_boot` ausgewertet und an `audio.configureSidModel(model)`
+  uebergeben.
+- `audio_boot` besitzt ein Statusmodell fuer Core-Initialisierung,
+  Config-Sichtbarkeit, SID-Modell und Skip-/Fehlergruende.
+- `kernelold.zig` hat keinen direkten Import auf `old/audio/core.zig` mehr.
+- HDA und AC97 bleiben als klar benannte Legacy-Hardware-Backend-Verbraucher
+  fuer 0.37.1 sichtbar.
+- Dokumentation in `Docs/Core/KernelBereinigung.txt` und
+  `Docs/Core/Architektur.txt` aktualisiert.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.37.0` gesetzt.
+- Abnahme mit `DevTools/Scripts/Build.bat -norun` und
+  `DevTools/Scripts/Build.bat -test`.
+
+Notizen:
+- Diese Unterversion ist bewusst der Core-/SID-Schnitt, nicht die
+  Hardware-Backend-Auswahl. Sie ist nur erledigt, wenn die verbleibenden
+  HDA-/AC97-Legacy-Verbraucher eindeutig als 0.37.1-Restpunkt benannt sind.
+
+Version 0.37.1
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- HDA-/AC97-Backend-Auswahl aus `kernelold.zig` nach `audio_boot` gezogen.
+- `audio_boot` wertet `DRIVER=HDA`, `DRIVER=AC97` und deaktivierte Treiber aus
+  dem vorbereiteten Config-Zustand aus, ohne `BOOT.R4S` erneut zu laden.
+- `hda.probe()` und `ac97.init()` aus `kernelold.zig` entfernt und in der
+  Audio-Boot-Schicht mit unveraenderter Auswahlsemantik ausgefuehrt.
+- Skip-Meldungen fuer nicht gewaehlte oder deaktivierte Backends bleiben
+  sichtbar.
+- Fehler bei HDA oder AC97 sind nicht fatal und werden im Audio-Bootstatus als
+  failed/skipped/disabled/selected nachvollziehbar.
+- `kernelold.zig` hat keine direkten Imports auf
+  `old/drivers/audio/hda.zig` oder `old/drivers/audio/ac97.zig` mehr.
+- Rest-Import-Pruefung auf `audio`, `hda`, `ac97`, `configureSidModel`,
+  `hda.probe` und `ac97.init` in `kernelold.zig` durchgefuehrt.
+- Dokumentation in `Docs/Core/KernelBereinigung.txt`,
+  `Docs/Core/Architektur.txt`, `Docs/Audio/README.txt` und
+  `Docs/Drivers/TreiberStand.txt` aktualisiert.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.37.1` gesetzt.
+- Abnahme mit `DevTools/Scripts/Build.bat -norun` und
+  `DevTools/Scripts/Build.bat -test`; Audio-/HDA-/AC97-Diagnoseausgaben im
+  QEMU-Log geprueft.
+
+Notizen:
+- Dies ist der eigentliche Abschluss des produktiven Audio-Starts in
+  `kernelold.zig`. Eine spaetere AC97-/HDA-R4D-Auslagerung bleibt ein eigener
+  Roadmap-Kandidat.
+
+Version 0.37.2
+-------------------------------------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Audio-Boot-Besitzgrenze abschliessend geprueft: keine produktive
+  Audio-Init, keine Audio-Backend-Auswahl und keine direkten Audio-Imports
+  mehr in `kernelold.zig`.
+- `audio_boot.status()` als Snapshot bestaetigt und um gezielte
+  Diagnose-Helfer `hdaStatus()`, `ac97Status()` und `backendStateName()`
+  ergaenzt.
+- Status-Helfer loesen keine erneute Audio-Initialisierung, keinen erneuten
+  `BOOT.R4S`-Load und keine zweite HDA-/AC97-Hardware-Probe aus.
+- Sichtbare Bootausgabe bleibt knapp mit `Audio boot [OK]`; Detailstatus
+  bleibt im Bootlog ueber `[AUDIOBOOT]` mit SID-Modell, HDA-/AC97-Zustand und
+  Gruenden.
+- Lokale `AGENTS.md` geprueft; die trackbare Dokumentation in
+  `Docs/Core/KernelBereinigung.txt`, `Docs/Core/Architektur.txt`,
+  `Docs/Audio/README.txt`, `Docs/Drivers/TreiberStand.txt` und
+  `Docs/SupportedHardware.txt` auf den 0.37.X-Abschlussstand gebracht.
+- Naechste chronologische Kandidaten nach Audio konkret benannt:
+  Netzwerk-/IPC-Basis, USB-HID, Driver-Policy/R4D, R4P-Start,
+  Task/Scheduler, DHCP-Boot-Acquire und Launcher.
+- `Injection/sys/CONFIG/VERSION.R4S` auf `KERNEL_VERSION=0.37.2` gesetzt.
+- Abnahme mit `DevTools/Scripts/Build.bat -norun` und
+  `DevTools/Scripts/Build.bat -test`.
+
+Notizen:
+- 0.37.X ist damit als Audio-Bootschnitt abgeschlossen. Die spaetere
+  AC97-/HDA-R4D-Auslagerung beginnt erst in 0.38.X/0.39.X mit eigenem
+  Audio-Hardware-Backend-Vertrag.

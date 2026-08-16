@@ -1,0 +1,101 @@
+﻿Service-Session-Worker 0.53.44
+==============================
+
+Ziel
+----
+
+0.53.44 isoliert lange Service-Clients von den Management-Loops der Dienste.
+SSHD und RDPSVC sollen langsame, halb geschlossene oder laenger laufende
+Verbindungen nicht mehr so behandeln, dass `SERVMAN STATUS`, neue Accepts
+oder Stop/Restart-Verwaltung dauerhaft blockieren.
+
+Architektur
+-----------
+
+- `SSHD.R4X` und `RDPSVC.R4X` starten pro angenommener Clientverbindung einen
+  R4X-Worker-Thread.
+- Der Service-Mainloop bleibt Besitzer des Service-Endpoints, der Listener-
+  Polls und der Worker-Lifecycle-Diagnose.
+- Jeder Worker besitzt seine Session-Daten. SSHD allokiert die grossen
+  SSH-/SFTP-/SCP-Puffer pro Session statt als geteilten Dienstscratch.
+- `TCPSVC.R4X` bleibt Besitzer der serviceeigenen TCP-Handles, Listener,
+  Restart-Cleanup-Policy und lokalen Frontend-Fehler. 0.53.44 fuegt dort
+  Diagnose fuer Request-Dauer, lange Requests und Session-Handle-Kapazitaet
+  hinzu, aber keine Anwendungs-Session-Policy.
+- `SERVMAN.R4X` wertet Endpoint-Statusantworten aus und markiert, ob ein
+  Dienst Worker-, Session-, Slow-Client- oder Timeout-Diagnose liefert.
+
+Kein Kernel-Policy-Pfad
+-----------------------
+
+Der Kernel-Service-Core bleibt bei Queue, Wait, Completion,
+Endpoint-Lebensdauer und Zaehlern. Er entscheidet nicht ueber SSH-, RDP-,
+Retry-, Timeout- oder Session-Limits. Diese Entscheidungen gehoeren in die
+jeweiligen R4X-Dienste.
+
+SSHD
+----
+
+SSHD verlangt R4X-Threads und startet fuer jede akzeptierte TCP-Verbindung
+einen Session-Worker mit eigenem Stack und eigenem Pufferpaket. Der alte
+synchrone Normalpfad im Dienstloop bleibt nicht bestehen. Der Mainloop pollt
+TCPSVC per `ACCEPT_POLL`, nimmt neue Verbindungen an, joined fertige Worker
+und beantwortet Managementrequests.
+
+Der Status meldet unter anderem:
+
+    workers=<aktiv>/<kapazitaet>
+    worker_started=<n>
+    worker_done=<n>
+    worker_joined=<n>
+    worker_spawn_fail=<n>
+    worker_join_err=<n>
+    queued=<n>
+    slow=<n>
+    last_worker=<id>
+    last_thread=<id>
+    last_exit=<code>
+    last_ticks=<ticks>
+    max_ticks=<ticks>
+
+RDPSVC
+------
+
+RDPSVC nutzt denselben Session-Worker-Grundsatz. Der Dienst akzeptiert per
+TCPSVC `ACCEPT_POLL`, startet einen Worker fuer die RDP-Session und fuehrt
+Lifecycle-, Bitmap-, Input- und Protokollzaehler nach dem Join in die
+Service-Statistik zurueck.
+
+Der Status meldet die Worker-Felder analog zu SSHD und behaelt zusaetzlich
+die bestehenden RDP-Protokoll-, Frame-, Input- und Lifecycle-Zaehler.
+
+TCPSVC
+------
+
+TCPSVC bekommt keine Worker-Policy fuer SSH/RDP. Der Dienst diagnostiziert
+aber seine zentrale Rolle als TCP-Handle-Besitzer:
+
+    req_ticks=<last>/<max>
+    long_req=<n>
+    session_handles=<aktiv>
+    session_cap=<kapazitaet>
+
+Damit lassen sich blockierende Service-Requests, Handle-Druck und
+Session-Kapazitaet sehen, ohne die Anwendungslogik aus SSHD/RDPSVC in TCPSVC
+oder den Kernel zu ziehen.
+
+Abnahme
+-------
+
+Die Standardabnahme ist erfolgt:
+
+    DevTools/Scripts/Build.bat -norun
+    DevTools/Scripts/Build.bat -test
+
+`NETIOD.R4X` prueft dabei zusaetzlich, dass der produktive `TCPSVC`-Status die
+neuen Felder `session_handles=`, `req_ticks=` und `long_req=` liefert. Der
+Smoke-Test meldete:
+
+    NETIOD tcp-service-workers: OK
+    NETIOD result: OK
+    TEST OK

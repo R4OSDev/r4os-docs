@@ -1,0 +1,85 @@
+﻿AVX/AVX2 XSAVE State 0.53.40
+============================
+
+Ziel
+----
+
+0.53.40 erweitert den seit 0.53.18 produktiven x87/SSE-State auf
+x87+SSE+YMM. Damit koennen R4X-, R4D-, R4P- und R4L-Module im
+Standardprofil AVX/AVX2 verwenden, ohne dass Register ueber Taskwechsel,
+Threadwechsel, Sleep/Wait oder produktive Timer-Preemption verloren gehen.
+
+Der Schritt ist ein harter ABI-Umzug. R4OS bietet keinen stillen SSE-only-
+Produktivfallback fuer neu gebaute Standardartefakte an. Wenn CPU, XSAVE oder
+XCR0 die noetigen Komponenten nicht bereitstellen, wird das ueber R4DEV und
+Diagnose sichtbar statt als falscher AVX-Vertrag kaschiert.
+
+Technischer Vertrag
+-------------------
+
+- Voraussetzung: x86_64-FPU, SSE/SSE2, XSAVE, OSXSAVE, AVX und AVX2.
+- XSAVE-Komponenten: XCR0 muss x87, SSE und YMM aktiv haben.
+- Der Kernel setzt XCR0 fuer den R4OS-Standardpfad auf x87+SSE+YMM, wenn
+  CPUID leaf 0x0D die Komponenten bestaetigt.
+- Task-State-Speicher bleibt pro Task im Schedulerbesitz und ist auf
+  `state_storage_bytes = 4096` angehoben. Die vom Prozessor gemeldete
+  benoetigte XSAVE-Groesse wird separat in R4DEV sichtbar.
+- Save/Restore bleibt eager. Damit ist der Vertrag einfacher, messbarer und
+  vermeidet Lazy-FPU-Ausnahmen in produktiven R4X-Pfaden.
+
+SIMD-ABI
+--------
+
+R4DEV meldet ab ProgramApi v135 den aktiven SIMD-ABI-Stand:
+
+- `performance_simd_abi_none`
+- `performance_simd_abi_sse2`
+- `performance_simd_abi_avx`
+- `performance_simd_abi_avx2`
+
+Der erwartete Standard fuer 0.53.40 ist `performance_simd_abi_avx2`.
+Zusatzfelder in `ProgramPerformanceSummary` melden AVX-/AVX2-Support,
+Enablement, aktive XSAVE-Backend-Sicht, XCR0 und die benoetigte
+XSAVE-Groesse. `performance_flag_avx_state_ready` markiert, dass AVX und
+AVX2 nicht nur erkannt, sondern auch fuer den Task-State-Vertrag aktiv sind.
+
+SDK und Module
+--------------
+
+Das SDK baut R4X-, R4D-, R4P- und R4L-Module seit 0.53.40 AVX2-faehig.
+Zig-Module aktivieren die passenden x86_64-Features im Buildprofil; C-Module
+nutzen den gleichen R4OS-Vertrag und erhalten `-mavx2` im Standardprofil.
+
+Der Kernel selbst bleibt ohne SIMD/FPU gebaut. SIMD ist ein Programm-,
+Treiber-, Protokoll- und Library-Vertrag, kein Kernel-Komfortpfad.
+
+Diagnose
+--------
+
+PERFDIAG prueft ab 0.53.40:
+
+- ProgramApi v135 ueber `supportsAvxSimdState()`
+- `performance_flag_avx_state_ready`
+- aktiven SIMD-ABI `avx2`
+- XCR0 x87+SSE+YMM
+- XSAVE-Backend statt FXSAVE-only
+- YMM-Registererhalt mit zwei R4X-Worker-Threads unter Sleep/Wait,
+  Threadwechseln und produktiver Preemption
+
+Erwartete Marker:
+
+    R4DEV performance snapshot v135: OK
+    AVX/AVX2 task state: OK
+    AVX/AVX2 SIMD ABI: OK
+    PERFDIAG result: OK
+
+Grenzen
+-------
+
+- AVX512, AMX und weitere XSAVE-Komponenten bleiben nicht Teil des Vertrags.
+- Es gibt keine neue User-/Security-Policy. Das System bleibt single-user und
+  fully trusted.
+- CPUs ohne AVX/AVX2 koennen diesen Standardpfad sichtbar ablehnen. Das ist
+  kein produktiver Kompatibilitaetsmodus fuer mitgelieferte Artefakte.
+- Der Kernel packt keine Anwendungs-SIMD-Policy in den Core. Er stellt nur den
+  korrekten Register-State-Vertrag bereit.

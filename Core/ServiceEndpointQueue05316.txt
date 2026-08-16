@@ -1,0 +1,126 @@
+﻿Service-Endpoint-Queue 0.53.16
+==============================
+
+Ziel
+----
+
+0.53.16 ersetzt den alten Single-Message-Service-Endpunkt durch eine feste
+Endpoint-Queue. Ein langsamer oder halb geschlossener Client-Request soll
+nicht mehr verhindern, dass weitere Requests beim Dienst ankommen koennen.
+
+Der Kernel-Service-Core bleibt trotzdem klein. Er besitzt nur:
+- Registry-Status und Endpoint-Lebensdauer,
+- Queue-Slots,
+- Request-/Response-Zustaende,
+- Response-Completion-Waits,
+- Timeout-/Cancel-/Busy-Zaehler.
+
+Service-Policy bleibt ausserhalb des Kernels:
+- `SERVMAN.R4X` besitzt Config, Boot-Autostart, Anzeige und Lifecycle-Policy.
+- Dienste besitzen Worker-Anzahl, Session-Verhalten, Retry-Strategien und
+  Langlaufentscheidungen.
+- SDK und Diagnostics spiegeln den Vertrag, erfinden aber keine zweite
+  Service-Wahrheit.
+
+
+Endpoint-Queue
+--------------
+
+Jeder Endpoint besitzt seit 0.53.16 `service_api_endpoint_queue_depth` Slots,
+aktuell 4. Ein Slot hat genau einen Zustand:
+
+- `free`: kein Request im Slot.
+- `queued`: Client hat einen Request eingestellt, Dienst hat ihn noch nicht
+  entgegengenommen.
+- `delivered`: Dienst hat den Request mit `service_endpoint_recv` erhalten,
+  aber noch nicht geantwortet.
+- `responded`: Dienst hat mit `service_endpoint_reply` geantwortet, der
+  Client hat die Response noch nicht abgeholt.
+
+`service_call` stellt einen Request in einen freien Slot. Wenn alle Slots
+belegt sind, liefert der Call `service_api_result_busy` und erhoeht
+`busy_rejections`. Es gibt keinen alten Single-Slot-Fallback.
+
+`service_endpoint_poll(handle)` liefert die Anzahl queued Requests. Dienste,
+die mehr Parallelitaet wollen, koennen in einer Schleife mehrere Requests
+entgegennehmen und selbst an eigene Worker verteilen.
+
+`service_call` wartet nach dem Enqueue auf die Response-Completion des
+Endpoints. `service_endpoint_reply` weckt wartende Clients; der Client
+identifiziert seine Response ueber die Request-ID. Bei Timeout bricht der
+Client den Request ueber Cancel ab.
+
+
+Worker-Vertrag
+--------------
+
+Der Kernel startet keine Service-Worker und legt keine Worker-Anzahl fest.
+Ein aktiver Worker ist aus Kernelsicht ein Request im Zustand `delivered`:
+Der Dienst hat ihn entgegengenommen und schuldet noch eine Antwort.
+
+Damit sind die Grenzen eindeutig:
+- Der Kernel misst `active_workers` und `max_active_workers`.
+- Der Dienst entscheidet, ob er Requests seriell, kooperativ oder ueber eigene
+  Worker-/Task-Strukturen bearbeitet.
+- `SERVMAN.R4X` zeigt die Werte an, bewertet sie aber nicht als Policy.
+
+
+Sichtbare Metriken
+------------------
+
+`ServiceInfo` enthaelt seit 0.53.16:
+- `queue_depth`
+- `queue_used`
+- `queue_high_water`
+- `active_workers`
+- `max_active_workers`
+- `open_handles`
+- `busy_rejections`
+- `timeouts`
+- `cancellations`
+
+Das Flag `service_api_flag_queue_backed` zeigt, dass der Endpoint auf dem
+neuen Queue-Vertrag laeuft.
+
+`ProgramPerformanceSummary` enthaelt zusaetzlich:
+- `service_queue_depth_total`
+- `service_queue_used_total`
+- `service_queue_high_water_total`
+- `service_active_workers`
+- `service_max_active_workers`
+- `service_open_handles`
+- `service_busy_rejections`
+- `service_timeouts`
+- `service_cancellations`
+- `service_completion_waits`
+- `service_completion_timeouts`
+
+`performance_flag_service_queue_ready` markiert den Snapshot als v113-
+Service-Queue-faehig. Echte Service-Latenzhistogramme bleiben in
+`missing_flags` sichtbar, damit die spaetere Performance-Analyse diese Luecke
+nicht uebersieht.
+
+
+Abnahme
+-------
+
+- `SERVMAN DIAG` zeigt Endpoint-, Queue-, Worker-, Open-Handle-, Busy-,
+  Timeout- und Cancel-Werte.
+- `PERFDIAG.R4X` oeffnet den im Testoverlay registrierten `SVCAPPD`-Dienst und
+  prueft Queue-Flag, Queue-Depth, Queue-High-Water, Request-/Response-Zaehler,
+  Busy-Freiheit, Payload-too-large, Buffer-too-small und Bad-Op im normalen
+  Service-Call-Pfad.
+- `PERFDIAG.R4X` nutzt ProgramApi v113, setzt den Service-Queue-Ready-Flag
+  voraus und druckt die neuen Service-Queue-/Completion-Zaehler.
+- `Build.bat -test` fuehrt `SERVMAN DIAG` und `PERFDIAG.R4X` im Testoverlay
+  aus; `SVCAPPD` laeuft dabei als echter Autostart-Service, nicht als
+  Terminal-Programm.
+
+
+Nicht-Ziele
+-----------
+
+- Kein Sicherheitsmodell, keine Capabilities, keine Handle-Rechte.
+- Keine Kernel-Policy fuer Service-Retry, Worker-Anzahl oder Sessions.
+- Keine zweite Service-API neben R4SYS/R4XStart/R4L.
+- Kein alter Single-Message-Fallback.

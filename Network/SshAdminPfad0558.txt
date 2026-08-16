@@ -1,0 +1,108 @@
+﻿SSHD-Administrationspfad 0.55.8
+================================
+
+Ziel
+----
+
+0.55.8 macht `SSHD.R4X` zum belastbaren Administrationspfad fuer R4OS. Der
+Dienst bleibt ein normaler R4X-Service unter `Code/System/Services/SshService`
+und nutzt `TCPSVC`, R4SYS, die Console-Host-APIs und SERVMAN. SSH-Protokoll,
+Login-Policy, Sessionzustand, Shell/Exec, Client-Abbruchbehandlung und
+Diagnose bleiben Userland-Service-Logik. Es gibt keinen Kernel-SSH-Pfad und
+keinen parallelen synchronen Fallback.
+
+Umfang
+------
+
+Abgenommen ist Windows OpenSSH ueber QEMU-Hostforwarding
+`127.0.0.1:10022 -> 10.0.2.15:22` mit dem festen Single-User-Zugang
+`r4os:rosebud`.
+
+Der 0.55.8-Stand deckt ab:
+
+- schneller SSH-Exec mit Exitstatus 0,
+- langer Remote-Exec-Output ueber den Console-Output-Pfad,
+- interaktive Shell mit `SERVMAN STATUS SSHD` waehrend aktiver SSH-Session,
+- blockierendes Remote-Kommando mit hart beendetem Host-Client,
+- sauberer Reconnect nach Client-Abbruch,
+- sichtbare Endpoint-Diagnose fuer letzte Sessionart, letztes Exec-Kommando,
+  Remote-Exitstatus, EOF, Client-Close, Client-Abbruch, Idle-Timeout und
+  Output-Fehler.
+
+SSHD-Status
+-----------
+
+`SERVMAN STATUS SSHD` zeigt seit 0.55.8 zusaetzlich:
+
+- `eof`
+- `client_close`
+- `client_abort`
+- `idle_timeout`
+- `out_fail`
+- `last_remote_exit`
+- `last_kind`
+- `close`
+- `cmd`
+
+Aktive Worker-Statistiken werden weiterhin in den Status-Snapshot gemischt,
+damit ein Remote-Kommando wie `SERVMAN STATUS SSHD` auch dann sinnvolle Daten
+liefert, wenn dieselbe SSHD-Instanz gerade in einer aktiven Session steht.
+
+Session- und Abbruchverhalten
+-----------------------------
+
+Shell- und Exec-Sessions drainen Console-Ausgabe vor Exitstatus, EOF und Close.
+Wenn der Output-Pump im Close-Drain kurzzeitig nicht senden kann, gilt das
+nicht mehr automatisch als stabiler Abschluss. SSHD prueft den TCP-Zustand,
+wartet weiter und sendet Exit/Close erst, wenn die Console-Ausgabe stabil ist
+oder der Client wirklich weg ist. Dadurch werden laengere Exec-Ausgaben nicht
+vorzeitig abgeschnitten.
+
+Wenn der Host-Client waehrend eines noch laufenden Remote-Programms verschwindet,
+zaehlt SSHD `client_abort`, setzt den Abschlussgrund auf `client-disconnect`
+oder `client-read-abort`, beendet das Remote-Programm und gibt die Session
+wieder frei. Ein anschliessender SSH-Exec muss wieder funktionieren.
+
+Host-Test
+---------
+
+Die reproduzierbare Abnahme liegt in:
+
+`Tests/Runtime/Run-SshAdminLiveTest0558.ps1`
+
+Der Test baut zuerst ein Test-Image, startet QEMU headless mit SSH-Hostforward,
+wartet auf `Endpoint: SSHD OK port=22` und nutzt Windows `ssh.exe` fuer:
+
+- `ECHO SSH0558-FAST`,
+- `TYPE C:\TEMP\SSH0558L.TXT` mit langem Fixture,
+- interaktive Shell mit `SERVMAN STATUS SSHD`,
+- `PAUSE` als blockierendes Remote-Kommando, dessen Host-Client beendet wird,
+- Reconnect mit erneutem `SERVMAN STATUS SSHD`.
+
+Der Test prueft unter anderem `Exit status 0`, die vollstaendige lange Ausgabe,
+`active=1` waehrend der Shell, `client_abort=1`, `close=client-disconnect`,
+`last_kind=exec`, `cmd=SERVMAN STATUS SSHD`, `TCP Detail` und `listen=1`.
+
+Echte Hardware 0.59.6
+---------------------
+
+`DevTools/Scripts/Invoke-R4OsSshExec.ps1` akzeptiert neben dem
+QEMU-Default jetzt `-HostName` und `-Port`, zum Beispiel:
+
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File DevTools\Scripts\Invoke-R4OsSshExec.ps1 -HostName 192.168.178.213 -Port 22 -Command "SYSUPD STATUS"
+```
+
+Der Helfer wurde fuer die reale R4U-Abnahme 0.59.5 -> 0.59.6 verwendet. Seine
+Wegwerf-known_hosts-, Ein-/Ausgabe- und SSH_ASKPASS-Dateien werden nach jedem
+Aufruf entfernt; das Passwort bleibt nicht mehr als temporaere CMD-Datei
+liegen.
+
+Grenzen
+-------
+
+0.55.8 macht SSH als Administrationspfad stabiler. Die grosse Dateiuebertragung
+und der Systemdatei-Updatepfad sind bewusst noch nicht abgeschlossen. SFTP,
+klassisches `scp -O`, groessere Transfers und Uploads nach
+`C:\R4OS\UPDATE\INBOX` werden in den folgenden 0.55.X-Unterversionen auf dieser
+Basis weiter ausgereift.

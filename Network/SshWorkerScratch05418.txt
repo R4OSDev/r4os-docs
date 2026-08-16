@@ -1,0 +1,92 @@
+﻿R4OS 0.54.18 - SSHD Worker-Scratch
+==================================
+
+Ziel
+----
+
+0.54.18 repariert den 0.54.17-Befund, dass Windows OpenSSH zwar den SSHD
+erreichte, der Transport aber vor KEX abbrach, weil der Session-Worker seinen
+grossen SSH-/SFTP-/SCP-Scratch nicht belastbar bekam.
+
+Die Reparatur bleibt bewusst im SSHD-Service. Es gibt keinen Kernel-SSH-Pfad,
+keinen synchronen SSHD-Fallback und keine blosse Erhoehung eines beliebigen
+Limits.
+
+
+Besitzregel
+-----------
+
+Der SSHD-Mainloop ist Besitzer der grossen `SessionBuffers`.
+
+- Ein freier Session-Slot kann einen vorbereiteten Scratch-Puffer halten.
+- Der Mainloop waermt Scratch fuer die erlaubte Sessionzahl vor.
+- Der Worker bekommt nur noch den bereits vorhandenen Pufferzeiger.
+- Vor jedem Transportlauf wird der Pufferinhalt zurueckgesetzt.
+- Nach erfolgreichem Join wird der Slot-Scratch wieder als bereit markiert.
+- Beim Service-Ende werden nur Puffer von nicht laufenden Slots freigegeben.
+
+Damit laeuft die grosse Allokation nicht mehr im Worker-Kontext und nicht mehr
+nach einem Accept als verdeckter Race-Pfad. Falls beim echten Client-Accept kein
+Scratch bereitgestellt werden kann, wird die Verbindung geschlossen, bevor ein
+Worker gestartet wird.
+
+
+Diagnose
+--------
+
+`SERVMAN STATUS SSHD` zeigt seit 0.54.18 zusaetzlich:
+
+- `scratch=<ready>/<in_use>`
+- `scratch_alloc=<count>`
+- `scratch_fail=<count>`
+
+Ein Worker ohne vorbereiteten Puffer meldet `scratch-missing`. Ein echter
+Client-Accept, bei dem Scratch nicht bereitgestellt werden kann, setzt weiterhin
+`last=scratch`. Warmup-Retries duerfen `scratch_fail` erhoehen, ohne
+`last=scratch` als letzten Protokollfehler zu setzen.
+
+
+Abnahme
+-------
+
+Ausgefuehrt:
+
+- `DevTools/Scripts/Build.bat -norun`
+- `powershell.exe -NoProfile -ExecutionPolicy Bypass -File Tests/Runtime/Run-SshTransportLiveTest.ps1`
+
+Aktuelle Abnahmelogs:
+
+- `DevTools/Logs/qemu-test-sshd-transport-20260621-170257.log`
+- `DevTools/Logs/qemu-test-sshd-transport-20260621-170257.ssh.err`
+
+Der SSHD-Status vor dem Clientlauf zeigt vorbereiteten Slot-Scratch:
+
+- `scratch=1/0`
+- `scratch_alloc=1`
+- kein `last=scratch`
+
+Der OpenSSH-Log zeigt:
+
+- `SSH2_MSG_KEXINIT sent`
+- `SSH2_MSG_KEXINIT received`
+- `kex: algorithm: curve25519-sha256`
+- `SSH2_MSG_NEWKEYS sent`
+- `SSH2_MSG_NEWKEYS received`
+- `SSH2_MSG_SERVICE_ACCEPT received`
+- `Authentications that can continue: password`
+
+Nicht beobachtet:
+
+- `kex_exchange_identification`
+- `Program task create failed`
+- `Program module file allocation failed`
+- `PANIC`
+- Page Fault
+- General Protection Fault
+
+
+Grenze
+------
+
+0.54.18 stellt den Transportpfad wieder her. Vollstaendige Login-, Shell-,
+SFTP- und SCP-Abnahmen bleiben fuer die folgenden Unterversionen geplant.

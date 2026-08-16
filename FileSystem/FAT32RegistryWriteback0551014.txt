@@ -1,0 +1,74 @@
+﻿R4OS FAT32 Registry-/Config-Writeback 0.55.10.14
+=================================================
+
+Ziel
+----
+0.55.10.14 behebt den praktischen Haenger beim Oeffnen typischer Dateien:
+Notepad, Paint und R4Code aktualisieren dabei die systemweite
+Recent-Documents-Liste. Bislang fuehrte jeder einzelne Registry-Value-Write zu
+einem vollstaendigen `SYSTEM.R4R`-Commit. Ein neuer RecentDocuments-Eintrag
+konnte dadurch viele kleine FAT32-Schreib- und Flushpfade hintereinander
+ausloesen.
+
+Entscheidung
+------------
+Der Registry-Vertrag bleibt zentral in R4SYS. Anwendungen schreiben weiterhin
+ueber `r4os.recent_documents` und die normale R4SYS-Registry-API. Es gibt
+keinen zweiten Registry-Dateipfad in Apps und keine direkte Hive-Manipulation
+aus Notepad, Paint oder R4Code.
+
+Der SDK-Helfer speichert die sichtbare Liste ab 0.55.10.14 als kompaktes
+Binary-Value `Items` unter `SYSTEM\Shell\RecentDocuments`. Dadurch entspricht
+ein erfolgreicher Datei-Open einem RecentDocuments-Commit statt mehreren
+einzelnen `Count`-/`Item<N>`-/`Path`-/`App`-/`Title`-Writes.
+
+Nur der nichtkritische UI-Zweig
+
+`SYSTEM\Shell\RecentDocuments`
+
+wird in R4SYS deferred behandelt. Mutationen in diesem Zweig aktualisieren
+einen R4SYS-eigenen Dirty-Cache. Registry-Lese-APIs sehen den neuen Stand
+sofort aus diesem Cache. Die persistente Hive-Datei wird spaeter in einem
+einzigen Commit geschrieben.
+
+Commitpunkte
+------------
+- Normale Registry-Schreibvorgaenge ausserhalb von RecentDocuments flushen
+  zuerst den deferred Cache und bleiben dadurch synchron-durable.
+- `POWEROFF`, `REBOOT` und `HALT` flushen den deferred Registry-Cache vor dem
+  Page-Cache-Flush.
+- RecentDocuments ist eine nichtkritische UI-Spur. Ein harter Absturz vor dem
+  Commit darf diese Liste verlieren, aber keine kritischen Einstellungen.
+
+Was unveraendert bleibt
+----------------------
+- `SYSTEM.R4R` bleibt die einzige produktive Hive-Datei.
+- Die sichtbare RecentDocuments-API bleibt `r4os.recent_documents`.
+  Anwendungen lesen und schreiben keine eigenen `Item<N>`-Keys.
+- Kritische Registry-Pfade, Service-/Systemzustand und App-Konfigurationen
+  ausserhalb von RecentDocuments behalten ihren direkten Commitpunkt.
+- R4S-Konfigurationsdateien bleiben weiterhin normale Datei-Saves; diese
+  Unterversion fuehrt keinen globalen Config-Daemon ein.
+
+Abnahme
+-------
+`FSDIAG.R4X` prueft seit 0.55.10.14:
+
+- Drei schnelle RecentDocuments-Aktualisierungen hintereinander.
+- Sofortiges Ruecklesen ueber `r4os.recent_documents.readEntries()`.
+- Front-Eintrag und Reihenfolge nach Deduplizierung.
+- Responsiveness-Gate von 2000 ms ueber R4SYS-Ticks.
+
+Erfolgreicher Marker:
+
+`FSDIAG registry recent writeback: OK`
+
+Ein Build-/Smoke-Lauf muss weiterhin `System poweroff.` erreichen. Dabei wird
+der deferred Registry-Cache vor dem finalen Page-Cache-Flush geschrieben.
+
+Folgearbeit
+-----------
+0.55.10.14 entlastet den unmittelbaren App-Oeffnen-Pfad. Weitere Arbeit kann
+danach gezielt entscheiden, ob auch andere nichtkritische UI-Spuren einen
+expliziten Writeback-Vertrag brauchen. Kritische Einstellungen sollen nicht
+stillschweigend in diesen Pfad wandern.

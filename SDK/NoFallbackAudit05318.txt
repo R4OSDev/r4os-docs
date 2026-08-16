@@ -1,0 +1,57 @@
+﻿No-Fallback-Audit 0.53.18: FPU/SSE
+==================================
+
+Audit-Ziel
+----------
+
+0.53.18 entfernt den bisherigen produktiven soft-float/no-SIMD-Pfad fuer
+R4X/R4D/R4P/R4L-Module. Ziel ist ein endgueltiger Umzug: Module werden neu
+gebaut, der Scheduler sichert FPU/SSE-State pro Task, und Diagnosen schlagen
+fehl, wenn der neue Pfad nicht aktiv ist.
+
+
+Gepruefte Stellen
+-----------------
+
+- Kernel-Boot: `cpu_boot.init()` initialisiert FPU/SSE nach CPU-Detection als
+  harte Bootvoraussetzung. Bei fehlender FPU/SSE-State-Unterstuetzung wird der
+  Bootpfad mit Kernel-Fatal beendet.
+- Architektur: `arch/x86_64/fpu.zig` setzt CR0/CR4, OSFXSR/OSXMMEXCPT,
+  optional OSXSAVE, und verwaltet FXSAVE/XSAVE-State.
+- Scheduler: `sched/task.zig` besitzt pro Task einen festen State-Slot;
+  `sched/scheduler.zig` speichert und restauriert den State beim Taskwechsel.
+- SDK-Zig: `Code/System/SDK/r4os/build.zig` setzt fuer R4X/R4D/R4P/R4L-Module nicht
+  mehr `.soft_float` und subtrahiert SSE/MMX/AVX nicht mehr pauschal.
+- SDK-C: Der Host-C-Buildpfad setzt nicht mehr `-msoft-float`, `-mno-sse`
+  oder `-mno-sse2`; x86_64-SSE2 ist explizit Teil des Profils.
+- Diagnose: R4DEV ProgramApi v115 meldet FPU/SSE-State-Felder, PERFDIAG
+  prueft FPU/SSE-Arithmetik, Save/Restore-Zaehler und das entfernte
+  FPU-Preemption-Gate.
+
+
+Bewusst kein Fallback
+---------------------
+
+- Es gibt keinen produktiven "falls FPU kaputt ist, baue Module ohne SIMD"-
+  Zweig.
+- `performance_preemption_gate_fpu_state` bleibt als historisch benannte
+  Gate-Konstante im ABI sichtbar, ist in 0.53.18 aber nicht mehr gesetzt,
+  sobald FPU/SSE-State aktiv ist.
+- Kernel-Code bleibt separat ohne SIMD/FPU gebaut. Das ist kein Modul-
+  Fallback, sondern die Kernel-IRQ-/Exception-Policy: Kernelpfade sollen
+  keine versteckten XMM-Abhaengigkeiten bekommen.
+- AVX/AVX2 bleiben in 0.53.18 ausserhalb des Profils, weil diese Version nur
+  x87+SSE-State freigibt. Der spaetere AVX/AVX2-Ausbau ist seit 0.53.40 ein
+  eigener ABI-/XSAVE- und Diagnoseschritt.
+
+
+Abnahme
+-------
+
+Erwartete Abnahme fuer diese Stufe:
+
+- `DevTools/Scripts/Build.bat -norun`
+- `DevTools/Scripts/Build.bat -test`
+- PERFDIAG-Ausgabe mit `R4DEV performance snapshot v115: OK`,
+  `Local FPU/SSE arithmetic: OK`, `FPU/SSE task state: OK` und
+  `PERFDIAG result: OK`

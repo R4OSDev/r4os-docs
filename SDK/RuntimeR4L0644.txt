@@ -1,0 +1,203 @@
+﻿R4OS 0.64.4 - Runtime-R4L-Kompatibilitaetsabnahme
+=================================================
+
+Ziel
+----
+
+0.64.4 nimmt den in 0.64.1 bis 0.64.3 aufgebauten Runtime-R4L-Pfad mit
+echten Providergenerationen und echten Verbrauchern ab. Die fachliche
+Referenz bleibt vollstaendig in ihrer Libraryeinheit. Plattform-Contract,
+Kernel und Kern-SDK kennen weder ihren Modulnamen noch ihre Funktionen.
+
+Referenzeinheit
+---------------
+
+Die nicht auszuliefernde Einheit liegt unter:
+
+    Code/System/Libraries/ACMECALC/
+
+Generation 2 besitzt Modulversion 0.2.0 und exportiert parallel:
+
+    API_V1 Revision 2, ABI-Major 1, Tabellengroesse 80 Bytes
+    API_V2 Revision 1, ABI-Major 2, Tabellengroesse 40 Bytes
+    Query  Revision 1
+
+Der eingefrorene Vorganger liegt als eigenes test-only Projekt unter:
+
+    Tests/Fixture/RuntimeR4LCompatibility0644/Generation1/
+
+Generation 1 besitzt Modulversion 0.1.0 und exportiert:
+
+    API_V1 Revision 1, ABI-Major 1, Tabellengroesse 48 Bytes
+    Query  Revision 1
+
+Beide Projekte besitzen eigenen Contract, Baseline, generiertes
+Implementierungs-ABI, Zig-Binding, C-Header, Zig-/C-Conformance und
+API-Referenz. Normale Builds fuehren fuer beide Generationen ausschliesslich
+R4LContractGen --check aus.
+
+Append-only V1
+--------------
+
+Die ersten zwei Slots bleiben binaer unveraendert:
+
+    Offset 32  add
+    Offset 40  scale_pair
+
+Generation 2 haengt vier Slots an:
+
+    Offset 48  sum_bytes
+    Offset 56  counter_create
+    Offset 64  counter_add
+    Offset 72  counter_destroy
+
+Das eingefrorene Generation-1-Binding fordert Revision 1 und 48 Bytes. Ein
+unveraendert daraus gebauter Verbraucher akzeptiert die neue 80-Byte-Tabelle
+mit Revision 2, ruft nur die bekannten vorderen Slots auf und ignoriert die
+unbekannten hinteren Slots.
+
+Buffer und Ownership
+--------------------
+
+sum_bytes ist ein zustandsloser Bufferaufruf. Der Caller liefert einen
+read-only Bytepointer plus Laenge. Die Library allokiert nichts, behaelt den
+Pointer nicht und liest ihn nur waehrend des Aufrufs.
+
+counter_create liefert einen opaque u64-Handle in caller-owned Speicher. Der
+Handle bezeichnet Libraryzustand genau einer Providergeneration.
+counter_add serialisiert den Zustand pro Handle. counter_destroy invalidiert
+ihn sofort; ein zweiter Destroy oder ein spaeterer Aufruf mit demselben
+Handle liefert ACMECALC_STATUS_INVALID_HANDLE. Kein Pointer oder Handle darf
+zwischen Providergenerationen gemischt werden.
+
+Inkompatibles V2
+----------------
+
+API_V2 besitzt eigenen Exportnamen, eigene 128-Bit-Interface-ID und
+ABI-Major 2. Sein dot_pair-Aufruf ist kein in-place Umbau der V1-Tabelle. Ein
+V2-Verbraucher fordert API_V2 explizit an. Fehlt der Export, liefert das
+Binding sichtbar MissingImport. Zeigt der V2-Import versehentlich auf V1,
+wird er wegen der falschen Interface-ID abgelehnt.
+
+Echte Verbraucher
+-----------------
+
+Der aktuelle Zig-Verbraucher liegt unter:
+
+    Code/System/Libraries/ACMECALC/Tests/ZigConsumer/
+
+Sein R4X-Artefakt importiert API_V1 Revision 2 und API_V2 Revision 1. Es ruft
+Buffer-, Handle- und V2-Code ausschliesslich ueber das von ACMECALC erzeugte
+Zig-Binding auf.
+
+Der aktuelle C-Verbraucher liegt unter:
+
+    Code/System/Libraries/ACMECALC/Tests/CConsumer/
+
+Sein R4X-Artefakt importiert API_V1 Revision 2 und verwendet ausschliesslich
+den von ACMECALC erzeugten C-Header.
+
+Der unveraenderte alte Zig-Verbraucher wird gemeinsam mit Generation 1
+gebaut. Sein Artefakt importiert weiterhin nur API_V1 Revision 1.
+
+Artefaktabnahme
+---------------
+
+Die echten R4M0-Artefakte besitzen folgende Form:
+
+    Generation 1 R4L  2 Sections, 2 Exporte,  2 Relocations
+    Generation 2 R4L  3 Sections, 3 Exporte, 13 Relocations
+    alter V1 R4X       2 Imports
+    aktueller Zig R4X  3 Imports
+    aktueller C R4X    2 Imports
+
+R4XBuilder inspiziert jedes Artefakt erneut. Eine Kopie der Generation-2-R4L
+wird mitten im Sectionbereich abgeschnitten und muss vom generischen
+Containerinspektor mit einem Fehler abgelehnt werden.
+
+Negative Runtimefaelle
+----------------------
+
+Die ausgefuehrte Hostabnahme mutiert echte Tabellenkopien und verlangt fuer
+jeden Fall einen bestimmten Fehler vor dem ersten Funktionsaufruf:
+
+- falsche Magic;
+- falsche Interface-ID;
+- falscher ABI-Major;
+- zu kleine Tabelle;
+- Export-/Header-Revisionsdrift;
+- Nullslot;
+- Nullpointer als Importtabelle;
+- fehl ausgerichteter Tabellenpointer;
+- fehlendes API_V2;
+- API_V2-Name mit API_V1-Tabelle;
+- stale Handle nach counter_destroy;
+- abgeschnittene R4M0-Sektionen.
+
+Aktivierung zweier Generationen
+-------------------------------
+
+Ein laufender Altverbraucher haelt weiterhin Tabelle und Funktionspointer der
+Generation 1. Das atomare Ersetzen des on-disk-Artefakts aendert diesen
+laufenden Kontext nicht. Erst ein neuer Kontext nach dem sicheren
+Systemstartpunkt erhaelt die Tabelle der Generation 2. Das ausgefuehrte
+Modell unterscheidet beide Funktionspointer und beweist, dass vor dem Neustart
+weiter Generation 1 und danach Generation 2 aufgerufen wird.
+
+Der produktive Kernelpfad bleibt unveraendert: loadSystemLibraries pinnt die
+aktive Bootgeneration und lehnt einen zweiten Ladeversuch mit
+"reload deferred until reboot" ab.
+
+Unabhaengigkeitsgate
+--------------------
+
+    Tests/Gate/Run-RuntimeR4LCompatibility0644.ps1
+
+Das Gate baut beide Providerprojekte und alle drei Verbraucher, fuehrt die
+Hosttests aus, inspiziert die Artefakte, prueft den abgeschnittenen Container
+und die produktiven Aktivierungsinvarianten. Danach durchsucht es zentralen
+Plattform-Contract, Kernel, Kern-SDK und Code/build.zig. Der konkrete Name
+ACMECALC darf dort nicht vorkommen.
+
+Gezielte Abnahme
+----------------
+
+    DevTools/Zig/zig.exe test Code/System/SDK/r4os/module_manifest.zig
+    cd Tests/Fixture/RuntimeR4LCompatibility0644/Generation1
+    DevTools/Zig/zig.exe build test
+    DevTools/Zig/zig.exe build
+    cd Code/System/Libraries/ACMECALC
+    DevTools/Zig/zig.exe build test
+    DevTools/Zig/zig.exe build
+    powershell -File Tests/Gate/Run-RuntimeR4LCompatibility0644.ps1
+
+Alle gezielten Tests sind gruen. Der gefilterte Root-Katalogbuild entdeckt
+ACMECALC, ACMECALCC, ACMEZCON und ACMECCON ohne konkrete zentrale Liste und
+baut alle vier Artefakte. Die drei Referenzverbraucher und beide Provider
+tragen IMAGE_SCOPE=none und gelangen in kein R4OS-Image.
+
+Gesamtabnahme
+-------------
+
+- `DevTools/Scripts/Build.bat -norun` endete nach 168,1 Sekunden mit Exitcode
+  0. Alle Host-, Quell-, Kernel-, Modul-, Artefakt- und Imagegates waren
+  gruen. ModuleCatalog entdeckte 157 aktuelle Manifeste; das finale
+  Full-Inventar enthaelt 102 Komponenten inklusive Kernel, der Imageplan 101
+  installierte Module.
+- `DevTools/Scripts/Build.bat -test` endete mit
+  `QEMU_TEST_TIMEOUT_SECONDS=600` nach 252,9 Sekunden mit Exitcode 0. Das
+  Testinventar enthielt 123 Komponenten inklusive Kernel, der Testimageplan
+  122 Module.
+- Das serielle Log enthaelt `Booted via Limine [OK]`, `dirs=ok` und
+  `System poweroff.`. Panic-, Fatal-, CPU-Exception-, GPF-, Page-Fault-,
+  Diagnosefehler-, Selftest-Fehler- und `dirs=missing`-Marker fehlen.
+- Nach dem QEMU-Lauf wurden Modules.json, MODULES.JSON und Release.json wieder
+  deterministisch fuer das Full-Profil erzeugt. Die Releaseversion ist
+  0.64.4; die Kernelversion bleibt unveraendert 0.1.8.
+
+Bewusste Grenze
+---------------
+
+ACMECALC bleibt eine Testreferenz. 0.64.4 migriert keine produktive Library.
+Mit dieser Abnahme ist der allgemeine Runtime-R4L-Pfad bereit fuer R4IMG als
+erste produktive Migration in 0.64.5.

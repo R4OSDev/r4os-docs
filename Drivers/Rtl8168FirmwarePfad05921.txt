@@ -1,0 +1,170 @@
+﻿Rtl8168FirmwarePfad05921 - Analyse des Firmware-Ladepfads fuer RTL8168GU
+=========================================================================
+
+Stand: 0.59.21 (Analyse-Unterversion, host-only, keine Codeaenderung)
+Ziel-Hardware: Lenovo IdeaPad L340-15API, RTL8168GU/8111GU, XID 0x509,
+PCI 10EC:8168, Subsystem 17AA:38C7, Rev 10.
+
+1. Ausgangslage und Fragestellung
+---------------------------------
+Der Warmreboot-Ausfall der NIC ist real vollstaendig eingegrenzt:
+kalt+DHCP ok, kalt+statisch ok, warm+DHCP tot, warm+statisch tot -
+NIC-/Datenpfad-seitig, nicht IP-seitig. Windows rehabilitiert dieselbe
+NIC aus jedem vererbten Zustand per Software; softwareseitig loesbar ist
+das Problem also bewiesenermassen. Der zentrale Unterschied zu R4OS:
+Windows- und Linux-Treiber laden fuer diesen Chip FIRMWARE (MAC-MCU-
+Patch und PHY-MCU-RAM-Code); R4OS laedt gar keine. Diese Analyse klaert
+Quellen, Format, Lizenz und den exakten Ladevertrag.
+
+2. Chip-Identitaet in beiden Referenztreibern
+---------------------------------------------
+- Upstream r8169 (Linux v6.6): TxConfig-Maske 0x7CF -> XID 0x509 ->
+  RTL_GIGA_MAC_VER_42 "RTL8168gu/8111gu" -> Firmwaredatei
+  FIRMWARE_8168G_3 = "rtl_nic/rtl8168g-3.fw". (rtl8168g-2.fw gehoert zu
+  VER_40/RTL8168G; eine aeltere Roadmap-Notiz nannte faelschlich g-2.)
+- Vendor r8168 (GPL): TxConfig & 0x7C800000 == 0x50800000 und
+  ICVerID (TxConfig & 0x00700000) == 0x00100000 -> CFG_METHOD_25
+  "RTL8168GU/8111GU" mit FIRMWARE_8168G_3. (ICVerID 0 waere
+  CFG_METHOD_24, ebenfalls GU, ohne Firmwaredatei.)
+Unser Chip ist damit eindeutig CFG_METHOD_25 / VER_42.
+
+3. Quellenlage
+--------------
+(a) VENDOR-C-ARRAYS (GEWAEHLTE QUELLE). Der GPL-2.0-Vendortreiber
+    (Reference/Hardware/RTL8168/r8168-realtek-vendor/r8168_n.c)
+    enthaelt fuer CFG_METHOD_25 BEIDE Firmware-Bausteine vollstaendig
+    als Quelltext-Konstanten, aktiv im Standardbuild
+    (#ifndef ENABLE_USE_FIRMWARE_FILE):
+    - MAC-MCU-Patch: rtl8168_set_mac_mcu_8168gu_2, 417 MAC-OCP-Writes
+      (Patchcode nach 0xF800..0xFB2E, danach Aktivierung und
+      Breakpoints, siehe Abschnitt 4).
+    - PHY-MCU-RAM-Code: rtl8168_set_phy_mcu_8168gu_2, 38 Ops
+      (37 paged MDIO-Writes plus ein RMW von Reg 0x17 auf Seite
+      0x0B82; die grossen RAM-Codes im Vendortreiber gehoeren anderen
+      Chips - eine fruehere 1080er-Zaehlung war eine
+      Bereichs-Fehlattribution).
+(b) linux-firmware "rtl_nic/rtl8168g-3.fw": externes Binaerformat,
+    redistributable nach linux-firmware WHENCE (Realtek-Terms,
+    unveraendert). Braucht den rtl_fw-Interpreter und eine Datei im
+    Image. Nicht gewaehlt, bleibt dokumentierte Alternative.
+(c) r8169_firmware.c (Reference, GPL): definiert das rtl_fw-Format als
+    Referenzwissen: Header (magic==0: version[32], fw_start, fw_len,
+    Byte-Checksumme ueber die Gesamtdatei == 0), danach 32-Bit-Aktionen
+    (Opcode Bits 31:28, regno Bits 27:16, data Bits 15:0), 14 Opcodes
+    (PHY_READ/WRITE/OR/AND/BJMPN/MDIO_CHG/DELAY_MS/...); PHY_MDIO_CHG
+    schaltet zwischen PHY- und MAC-MCU-Schreibzielen um. Fuer die
+    gewaehlte Quelle (a) wird KEIN Interpreter benoetigt.
+
+Begruendung der Wahl (a): keine externe Datei, kein Binaerformat, kein
+Laufzeit-Dateizugriff im Bind, deterministische mechanisch
+extrahierbare Konstanten, identische Wirkung wie die .fw-Datei (der
+Vendor nutzt dieselben Sequenzen inline). Lizenz: GPL-2.0-Quelle; die
+Uebernahme der Registersequenzen ist im privaten, nicht
+redistribuierten R4OS unkritisch und in Reference/README.txt mit
+Provenienz dokumentiert. Fuer eine spaetere Weitergabe von R4OS waere
+auf die redistributable linux-firmware-Datei zu wechseln oder die
+GPL-Frage neu zu bewerten.
+
+4. Der MAC-MCU-Vertrag (CFG_METHOD_25, komplett)
+------------------------------------------------
+Vendor-Ablauf rtl8168_hw_mac_mcu_config, laeuft in hw_init VOR der
+PHY-Konfiguration und VOR dem Start der RX/TX-Engines:
+  Schritt 1 (Disable, rtl8168_hw_disable_mac_mcu_bps):
+    MAC-OCP 0xFC28..0xFC36 = 0x0000 (acht Breakpoint-Register),
+    3 ms warten, MAC-OCP 0xFC26 = 0x0000.
+  Schritt 2 (Patch laden): 0xF800.. aufsteigend bis 0xFB2E mit dem
+    GU_2-Patchcode beschreiben (Sprungtabelle 0xE008.. am Anfang).
+  Schritt 3 (Aktivieren): 0xFC26 = 0x8000 (Patch-Base enable), danach
+    Breakpoints exakt: 0xFC28=0x0000, 0xFC2A=0x0000, 0xFC2C=0x0297,
+    0xFC2E=0x0000, 0xFC30=0x00A9, 0xFC32=0x012D, 0xFC34=0x0000,
+    0xFC36=0x08DF.
+WICHTIG (realer Negativbefund 0.59.15-Phase): Der Zustand nach
+Schritt 1 OHNE Schritte 2+3 ist genau der Zustand, der auf der realen
+Hardware den kalten Datenpfad getoetet hat. Der Vertrag ist
+unteilbar; ein Einstieg ohne die Absicht und Faehigkeit, Schritt 3 zu
+erreichen, ist verboten.
+
+5. Der PHY-MCU-Vertrag (RAM-Code)
+---------------------------------
+Vendor-Ablauf rtl8168_init_hw_phy_mcu innerhalb hw_phy_config:
+  (1) Versionspruefung: aktueller RAM-Code-Stand im PHY (Seite 0x0A43,
+      Adressregister 0x13 = 0x801E, Daten 0x14) gegen
+      NIC_RAMCODE_VERSION_CFG_METHOD_24 = 0x0001. Stimmt die Version,
+      wird NICHT geladen (idempotent; der RAM-Code ueberlebt
+      Warmresets im PHY).
+  (2) Patch-Request-Handshake VOR dem Laden: Seite 0x0B82, Reg 0x10
+      Bit 4 setzen; dann Seite 0x0B80, Reg 0x10 warten bis Bit 6
+      gesetzt (Poll mit 100 us, max. 1000 Versuche).
+  (3) RAM-Code schreiben: die 38 Ops aus
+      rtl8168_set_phy_mcu_8168gu_2 (37 paged Writes plus RMW Reg 0x17
+      Bit 0 loeschen auf Seite 0x0B82); danach
+      clear_phy_mcu_patch_request (Bit 4 loeschen, warten bis Bit 6
+      geloescht).
+  (4) Versionsmarker schreiben (0x801E = 0x0001), Seite 0x0000.
+OFFENER DESIGNPUNKT fuer 0.59.23: Nach einem Warmreset kann der
+Versionsmarker "aktuell" melden, obwohl der PHY-Zustand vergiftet ist;
+dann wuerde (1) den Reload ueberspringen. Fuer den Warmtest ist eine
+Force-Variante vorzusehen (Marker ignorieren), z.B.
+OPTION RTL8168 fw=force.
+
+6. Integrationsdesign fuer R4OS (Vorgabe fuer 0.59.22)
+------------------------------------------------------
+- Eigenstaendiger Baustein Code/System/Driver/RTL8168/src/
+  rtl8168_firmware.zig: generierte Konstanten-Tabellen (MAC-MCU-Wortliste,
+  PHY-Zugriffsliste) plus Lader. main.zig ruft ihn ausschliesslich hinter
+  OPTION RTL8168 fw=on|force; Default in 0.59.22 ist AUS. Die
+  Default-Entscheidung faellt erst nach dem realen 0.59.23-Nachweis.
+- Identitaetsgrenze: exakt XID 0x509 (CFG_METHOD_25). KEINE
+  Familienausweitung ohne eigenen Hardware-Nachweis (Lehre aus der
+  H-Fehlzuordnung).
+- Ladepunkt im Bind: nach BAR-Map/XID-Erkennung und VOR
+  initializeHardware (Vendor-Reihenfolge: MCU-Patch -> PHY-RAM-Code ->
+  normaler Start). Der reset-freie Bind selbst bleibt unveraendert.
+- Tabellen-Extraktion: DevTools-Script parst die Vendor-C-Funktionen
+  mechanisch und erzeugt die Zig-Tabellen mit Provenienz-Header und
+  Wortzahl; die erzeugte Datei wird eingecheckt, das Gate prueft
+  Wortzahlen (417 MAC-Writes, 1080 PHY-Zugriffe) und Ankerwerte
+  (0xFC26=0x8000, Breakpointwerte).
+- Fehlersemantik: Vor Schritt 1 des MAC-Vertrags werden alle
+  Vorbedingungen geprueft (MAC-OCP-Zugriff funktioniert, Identitaet
+  exakt). Ab Schritt 1 wird die Sequenz best-effort zu Ende gefahren;
+  ein Teilfehler im Schwanz wird als fataler Marker geloggt
+  (fw state=failed) und der Adapter bleibt gebunden, aber der Befund
+  verlangt einen Kaltstart. Einen sauberen Rollback gibt es
+  hardwareseitig nicht - deshalb Option-Default aus und
+  Zwei-Schritt-Hardwareabnahme (erst Kaltpfadschutz, dann Warmtest).
+- Gates: indirekte Registerzugriffe (MAC-OCP, paged GPHY) sind
+  ausschliesslich innerhalb von rtl8168_firmware.zig zulaessig;
+  die Negativ-Konformitaet des reset-freien Binds in main.zig bleibt
+  fuer fw=off BYTEIDENTISCH bestehen und wird vom Hostmodell weiter
+  erzwungen. Neue Modellszenarien beweisen die exakte
+  Vertragsreihenfolge (Disable -> Patch -> Enable; Handshake vor
+  RAM-Code) und die Idempotenz ueber den Versionsmarker.
+- Telemetrie: eigene Logmarker fw=off|loaded|skipped-current|failed
+  mit Wortzahlen, damit reale Boots den Pfad beweisen (COM1/LOGSVC).
+
+7. Risiken
+----------
+- Kaltpfad-Regression durch den Lader: Hauptrisiko. Gegenmassnahmen:
+  Default aus, exakte Identitaetsgrenze, unveraenderter Bind,
+  0.59.23-Schritt-1-Kaltnachweis vor jedem Warmexperiment.
+- Teilfehler mitten im MAC-Vertrag: kein Rollback moeglich; Zustand
+  entspricht dem bekannten Negativbefund. Akzeptiert, weil nur per
+  expliziter Option erreichbar und im Fehlerfall klar geloggt.
+- Warm-Heilung nicht garantiert: Der Firmware-Load ist die
+  plausibelste fehlende Komponente (Windows-Beweis), aber Windows
+  faehrt zusaetzlich vollstaendige PHY-Parameter-Inits. Ergebnisoffen;
+  bei Misserfolg greift 0.59.24 (Reboot-als-Poweroff).
+- Versionsmarker-Skip im Warmfall: siehe Abschnitt 5, fw=force.
+
+8. Quellenverzeichnis
+---------------------
+- Reference/Hardware/RTL8168/r8168-realtek-vendor/r8168_n.c (GPL-2.0):
+  rtl8168_get_mac_version, rtl8168_hw_disable_mac_mcu_bps,
+  rtl8168_set_mac_mcu_8168gu_2, rtl8168_hw_mac_mcu_config,
+  rtl8168_init_hw_phy_mcu, rtl8168_set_phy_mcu_8168gu_2,
+  rtl8168_set/clear_phy_mcu_patch_request,
+  r8168.h: NIC_RAMCODE_VERSION_CFG_METHOD_24 = 0x0001.
+- Reference/Hardware/RTL8168/r8169-linux-v6.6/: r8169_main.c
+  (VER_42-Mapping, FIRMWARE_8168G_3), r8169_firmware.c (rtl_fw-Format),
+  r8169_phy_config.c.

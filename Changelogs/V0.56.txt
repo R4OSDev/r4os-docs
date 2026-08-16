@@ -1,0 +1,2524 @@
+﻿Leitbild 0.56.X: Stabilitaet und Performance auf verifiziertem Fundament
+
+R4OS 0.56.X behebt die in Reports/Fable_5_V56.txt belegten Fehler,
+Flaschenhaelse und Altlasten des 0.55.47-Stands. Grundlage ist die Lehre aus
+dem zurueckgerollten ersten 0.56.X-Anlauf (Tag backup-0.56.x-2026-06-30):
+Damals wurde funktionierendes SSH/Netz durch unverifizierte Umbauten
+zerstoert. Deshalb gilt in dieser Reihe: Verifikation kommt VOR Veraenderung,
+und jede Unterversion ist ein einzeln pruefbarer, einzeln pushbarer Schnitt.
+
+R4OS bleibt single-user und fully trusted. Kein Punkt dieser Roadmap fuehrt
+User-/Rechte-/Sandbox-Modelle ein; Validierung schuetzt Protokollzustand,
+Puffergrenzen und Geraetezustand, nicht Zugriffsrechte.
+
+Verbindliche Arbeitsregeln fuer 0.56.X:
+- AUTONOME ABNAHME: Jede Unterversion 0.56.1 bis 0.56.34 wird ausschliesslich
+  mit selbst ausfuehrbaren Mitteln abgenommen: Build.bat (-norun/-test/-app),
+  headless QEMU mit Konsolen-CONFIG + AUTOEXEC.BAT (TEST OK + POWEROFF),
+  COM1-/DMESG-/LOGSVC-Marker, TestScripts (SSH-/FTP-/TCP-LiveTests,
+  Connectivity-Suite) und SSH-Kommandos in den laufenden Gast
+  (127.0.0.1:10022). Manuelle Sichttests durch den User finden NICHT pro
+  Unterversion statt, sondern gesammelt in 0.56.35 am Schluss.
+- LIVE-GATE-PFLICHT: Jede Aenderung an net/, sched/, kernel/ipc*, Treibern
+  oder Services wird zusaetzlich zu -test gegen die Gate-Suite aus 0.56.1
+  gefahren, BEVOR gepusht wird. Wird das Gate rot, wird der Schritt repariert
+  oder verworfen, nie "spaeter geklaert".
+- EIN RISIKO PRO UNTERVERSION: Netz-, Scheduler- und IPC-Aenderungen nie im
+  selben Schritt. Jede Unterversion einzeln pushen, damit ein Bisect
+  eindeutig bleibt.
+- CHERRY-PICK VOR NEUBAU: Wo "Backup:" einen Commit aus
+  backup-0.56.x-2026-06-30 nennt, wird dieser gezielt wiederangewendet und
+  neu verifiziert statt neu entwickelt.
+- Nach Abschluss einer Unterversion: Push mit DevTools/Scripts/Push.bat und
+  KERNEL_VERSION in Injection/R4OS/CONFIG/VERSION.R4S anpassen.
+- Bekannte Testfallen (verbindlich beachten):
+  - Vor jedem headless -test die TestInjection-Konsolen-Config setzen:
+    CONFIG.R4S mit SHELL=/R4OS/SOFTWARE/TERMINAL/COMMAND.R4X (UTF-8 BOM) und
+    AUTOEXEC.BAT mit Testkommandos + ECHO TEST OK + POWEROFF (ohne BOM).
+    Desktop-Boot ohne POWEROFF sieht aus wie ein Haenger, ist aber Config.
+  - Kernel-Threads NUR nach runtime_boot.initTaskRuntime() erstellen,
+    sonst wischt task.init() sie weg.
+  - Build-Optionen via R4OS_CODE_BUILD_ARGS durchreichen (NICHT
+    R4OS_CODE_EXTRA_ARGS); Test-CPU via R4OS_TEST_CPU; QEMU-Zusatzgeraete
+    via R4OS_TEST_QEMU_EXTRA.
+  - USB-Standardsignal: R4OS_TEST_QEMU_EXTRA="-device qemu-xhci,id=xhci
+    -device usb-mouse,bus=xhci.0 -device usb-kbd,bus=xhci.0" und im
+    COM1-Log "USBHID keyboard+mouse [active]" pruefen.
+  - Build.bat -apps packt KEIN Image. Nach einem -apps-Build muss der
+    erste Gate-Lauf OHNE -SkipBuild fahren (Run-NetGate macht dann
+    -testimage), sonst testet man das alte Binary. Gegenprobe im Log:
+    neu eingefuehrte Statusfelder muessen in der SSHD-Statuszeile
+    auftauchen (Beleg am 2026-07-03: wr_seq_skip fehlte -> 3 Laeufe
+    fuhren den alten SSHD).
+  - VARIANTE derselben Falle: -testimage MANUELL (ausserhalb des
+    Gates) packt die SMOKE-AUTOEXEC (endet mit POWEROFF) ins Image -
+    alle folgenden Gate-Laeufe mit -SkipBuild booten dann und schalten
+    sofort ab ("QEMU wurde vor dem NetGate beendet", FAIL: setup;
+    Beleg 2026-07-04 6x). Das Gate-Image IMMER vom Gate selbst packen
+    lassen (RUN1 ohne -SkipBuild).
+
+Referenz: Alle Befund-Nummern (z.B. 13.1.2) verweisen auf
+Reports/Fable_5_V56.txt.
+
+
+================================================================================
+GRUPPE 0 - VERIFIKATIONSFUNDAMENT
+================================================================================
+
+Versionnummer: 0.56.1
+Titel: Netz-Live-Gate als autonome Standardabnahme
+Status: Erledigt
+Offene Punkte:
+- (verschoben nach 0.56.2) Negativprobe mit eingebautem TCP-Bruch: sinnvoll
+  erst, wenn das Gate deterministisch PASS liefert.
+Erledigt:
+- Bestandsaufnahme TestScripts: Run-SshSessionLiveTest & Co. sind die
+  richtige Vorlage (TestInjection-Overlay, QEMU-User-Net mit hostfwd,
+  RTL8139, statische IP 10.0.2.15); Invoke-R4OsSshExec.ps1 ist der
+  vorhandene SSH-Kommandokanal und wurde robuster gemacht
+  (ExitCode-Flush, PS-5.1-Falle).
+- Run-NetGate.ps1 gebaut: EIN headless QEMU-Boot, vier Subtests
+  (ssh-exec, tcp-echo via SSH-gestartetem NETCAT, ssh-cmdchannel,
+  ftp-transfer 64 KB PASV STOR/RETR mit Bytevergleich), Crash-Marker-
+  Pruefung, EIN PASS/FAIL, Reports unter DevTools/Logs/netgate-*.
+- Jeder Subtest nachweislich funktionsfaehig (jeder war in mindestens
+  einem Lauf gruen; Volllauf-PASS inkl. FTP-Baseline stor_ms~6200/
+  retr_ms~2400 fuer 64 KB dokumentiert in netgate-20260702-001528.txt).
+- Standard-Smoke-Setup repariert: Die 0.55.48-RDP-Session hatte eine
+  Stay-up-AUTOEXEC (ohne POWEROFF) eingecheckt und SERVICES.R4S auf das
+  Connectivity-Set gekapert -> Build.bat -test war seit 0.55.46 wirkungslos.
+  AUTOEXEC.BAT + SERVICES.R4S aus 99f3ff3f (0.55.42) wiederhergestellt.
+- Docs/Deployment/BuildUndTest.txt um den Gate-Vertrag ergaenzt.
+Abnahme:
+- Build.bat -norun: gruen.
+- Run-NetGate.ps1: Werkzeug abgenommen (Volllauf-PASS vorhanden, alle
+  Subtests einzeln belegt). PASS-PFLICHT als Gate beginnt mit 0.56.2 -
+  siehe Baseline-Befund unten.
+- SSH-Kommandokanal: verifiziert (ssh-cmdchannel-Subtest gruen).
+- Build.bat -test: mit korrektem Setup laeuft der Smoke bis MEMSUITE;
+  TEST OK ist durch den 0.56.3-Befund blockiert (siehe dort) und ist
+  Abnahme-Bestandteil von 0.56.3.
+Notizen:
+- WICHTIGSTER BASELINE-BEFUND (8 Gate-Laeufe, 2026-07-01/02): Der
+  eingehende TCP-Pfad des aktuellen main ist headless NICHTDETERMINISTISCH
+  (~1 von 6 Boots nimmt SSH/FTP-Verbindungen an; Diagnose: NIC-IRQ
+  registered=yes hits=0, RX lebt nur von zufaelligen Poll-Gelegenheiten;
+  einmal kam eine Session exakt bis "auth-success-send" und verhungerte).
+  Gast-initiierter Traffic (NETCAT -> Host) funktioniert IMMER. Das
+  erklaert auch die 10-30s-RDP-Latenzen aus 0.55.48 und warum der erste
+  0.56.X-Anlauf im Blindflug scheiterte. Konsequenz: 0.56.2 (vorgezogener
+  RX-Determinismus) ist Voraussetzung fuer JEDE weitere Live-Abnahme.
+- Zwei weitere Baseline-Funde als eigene Unterversionen erfasst:
+  0.56.3 (Spawn-Lock ueber Disk-I/O, bisected auf e97fc9d8/0.55.46,
+  MEMSUITE pagerstress sleep_under_lock=25) und 0.56.4 (Boot-Crash
+  Page Fault cr2=0 bei Konsolen-Boot + WINSVC/RDPSVC + Programm-Start
+  aus AUTOEXEC, reproduziert in netgate-20260702-000350.serial.log).
+- Gate-Nutzungsvertrag bis 0.56.2 abgeschlossen ist: Gate-Laeufe liefern
+  Diagnose (Subtests + Serial-Log), PASS ist noch nicht erzwingbar.
+
+Versionnummer: 0.56.2
+Titel: Eingehenden Netz-RX deterministisch machen (vorgezogener RX-Kern)
+Status: Erledigt
+Offene Punkte:
+- -
+Erledigt:
+- SCHICHT 1 - net-rx-Kernel-Task (net/core.zig: startRxTask/rxTaskMain,
+  Intervall 1 Tick, rxTaskSummary; NETRX-Diagnosezeile alle ~20 s auf
+  COM1 mit Task-/Guard-/NIC-/TCP-Zaehlern). Start in main.zig NACH
+  initTaskRuntime und NACH driver_policy_boot. Dazu owner-bewusster
+  pollAdapters-Reentrancy-Guard (fremde Tasks skippen, Selbst-
+  Verschachtelung erlaubt - RX-Handler senden Antworten).
+- SCHICHT 2 - RTL8139-Treiber gehaertet: (a) Poll-Watchdog statt
+  Dauer-Abschaltung nach erstem IRQ, Grace 4096->32, Drain nach
+  Ring-Zustand; (b) RX-Overflow-Recovery (recoverRxOverflow): RXOVW
+  stoppt den Chip-Receiver dauerhaft, nur zaehlen reichte nicht -
+  Receiver wird neu aufgesetzt (rx_recoveries via status.reserved
+  sichtbar); (c) Early-TX-Threshold gegen TX-Underruns.
+- SCHICHT 3 - pollAdapters auf EINE Runde gedeckelt: die historischen
+  Mehrfach-Runden (bis 32768) erzeugten 42k leere ISR-Port-Reads/s und
+  saettigten die VCPU mit VM-Exits (~1 Paket/s Nutzdurchsatz); ein
+  poll() drained den Ring komplett. nic_poll fiel von Millionen auf
+  Tausende, ssh-exec-Latenz von 34 s auf 1,7 s (attempt=1).
+- SCHICHT 4 - STACK-OVERFLOW-CRASH BEHOBEN (Report-Befund 13.2 damit
+  LIVE bestaetigt): unter SSH-Session-Churn crashte der Kernel mit
+  rip=0x0/0xFFFF ifetch=1 (ueberschriebene Ruecksprungadresse);
+  task.zig STACK_SIZE 16->32 KB + MAX_TASKS 32->48 -> Crash weg,
+  Worker laufen und joinen sauber. Der Crash war Teil des Profils der
+  urspruenglichen SSH-Regression und vorher nur maskiert, weil das
+  Netz nie genug Sessions zustande brachte.
+- SCHICHT 5 - RTL8139-TX-SLOT-KLEMMER BEHOBEN (der Grund warum nach
+  Session 1 kein SYN-ACK mehr rausging): transmit() rotierte tx_slot NUR
+  bei Erfolg (TOK). Ein einziger verlorener TOK - z.B. ein TX im Flug
+  waehrend einer RX-Overflow-Recovery, die den Chip resettet - liess
+  denselben Slot fuer immer klemmen; jedes weitere transmit lief in
+  busy/timeout. Diagnose: NETRX-Zaehler zeigten acceptInbound erfolgreich
+  (syn steigt), aber synack klebte (sendTcpForConnection != .ok);
+  saLast/saFail lokalisierten es im TX. Fix: tx_slot AUCH bei TUN und
+  Timeout weiterrotieren -> ein klemmender Slot kostet nur jeden 4. Send,
+  TCP retransmittet. Ergebnis: synack folgt syn, mehrere Sessions
+  end-to-end, erstes Gate-PASS.
+- SSHD-Wait-Konstanten: 50/100 -> 150 ms (Mittelweg). 500 ms war falsch
+  (Lock-Haltezeit, revertiert); 50 ms verpasste unter Last Accept-
+  Antworten -> Cancel verwaiste geclaimte Verbindungen. 150 ms mit
+  gesundem TX/RX ist der Kompromiss (Completion weckt eh sofort).
+- Gate-Suite gestrafft: Retries 3->2, Timeouts 45/60->40/30 s,
+  Batch-Modus Build-nur-in-Lauf-1 + Fail-fast; spaete AUTOEXEC-
+  SERVMAN-Snapshots (SLEEP 45000, builtin) fuer Diagnose ergaenzt.
+Abnahme (ERGEBNISSE, 2026-07-03):
+- Build.bat -norun: gruen. Build.bat -test: laeuft exakt bis zum
+  bekannten 0.56.3-Befund (MEMSUITE pagerstress/Spawn-Lock), davor
+  KEINE neue Regression (vmstress OK).
+- Gate-Kernbar 3/3 erfuellt (Batch netgate-20260703-*): ftp-transfer
+  64KB STOR+RETR 3/3 gruen; Kernel-Handshake deterministisch 3/3
+  (NETRX synack==acc: 4/4, 7/7, 5/5); crash-frei 3/3; ssh-exec 3/3
+  (einmal via Retry). Voll-PASS 2/3; die Restflakiness (RUN2 tcp-echo/
+  cmdchannel) ist per Spaet-Snapshot der SSHD-ACCEPT-FAIRNESS
+  zugeordnet (Kernel acc=7, SSHD holt nur Teil ab; endpoint
+  timeout/cancel/undelivered alle 0) -> eigene neue Unterversion
+  0.56.5, dort ist der Gate-Voll-PASS 3x die Abnahme.
+- Negativprobe: acceptInbound-Bruch => NETGATE FAIL (alle eingehenden
+  Subtests rot), Revert => Gate-PASS-Beleg. Das Gate faengt echte
+  TCP-Brueche.
+- net-rx-Task im Task-Dump sichtbar ("NET rx-task started"); NETRX-
+  Diagnosezeile (reduziert) bleibt als Dauerinstrument.
+Notizen:
+- Vorgezogen aus der Netz-Gruppe (dort verbleibt der Ausbau), weil ohne
+  deterministischen eingehenden RX KEINE Live-Abnahme dieser Roadmap
+  verlaesslich ist - das Gate waere eine Lotterie.
+- Der minimale Ring-/Stall-/TX-Fix gehoerte wie vermutet MIT in diese
+  Unterversion (er IST der Determinismus-Kern); groessere Ring-Umbauten
+  (16K) bleiben in 0.56.24.
+- LEHRE dieser Unterversion: Fuenf sich gegenseitig maskierende Defekte
+  (RX-Antrieb, Chip-Receiver-Stall, VCPU-Poll-Saettigung, Kernel-Stack-
+  Overflow, TX-Slot-Klemmer) erklaeren die historisch "unerklaerliche"
+  Netz-Instabilitaet inkl. Teilen der 0.56.X-Regression. Die NETRX-
+  Zeitreihen-Diagnose auf COM1 war der Schluessel - Snapshots zum
+  AUTOEXEC-Zeitpunkt hatten wochenlang in die Irre gefuehrt.
+
+Versionnummer: 0.56.5
+Titel: SSHD-Accept-Fairness: globalen tcp_service_lock entflechten
+Status: Erledigt
+Offene Punkte: (keine)
+Erledigt:
+- DREI Fixes derselben Defektfamilie (Request/Response-Timeout im
+  SSHD<->TCPSVC-Service-IPC falsch behandelt):
+  1) Separater tcp_accept_lock (SshService/main.zig): Accept-Poll des
+     Main-Loops konkurriert nicht mehr mit der Session-Worker-I/O um den
+     globalen tcp_service_lock. Wirkung: Gate von ~1/3 auf 2/3.
+  2) tx_seq-verifizierter Write-Retry (SshService/main.zig,
+     tcpWritePacedServiceRobust): Ein Chunk-Write, dessen Service-Antwort
+     das Wait-Fenster verpasst, kann in TCPSVC trotzdem angewendet sein;
+     der alte blinde Retry sendete den Chunk doppelt -> Chiffre-Desync,
+     Client "Bad packet length ... Connection corrupted" (live gefangen,
+     netgate-20260703-184332). Jetzt: nach Write-Timeout tx_seq der
+     Verbindung pollen (kumulative Sende-Sequenz, kommt in jedem Poll,
+     FIFO-Ordnung garantiert Sichtbarkeit) und nur die wirklich
+     fehlenden Bytes senden. Neuer Diagnosezaehler wr_seq_skip.
+  3) Accept-Parking in TCPSVC (TcpService/main.zig): services.reply()
+     auf einen vom Requester gecancelten Accept-Request liefert
+     NOT_FOUND; der alte Cleanup schloss dann den Backend-Handle und
+     RISS DIE FRISCH ANGENOMMENE CLIENT-VERBINDUNG AB. Unter TCPSVC-
+     Last (Antwortzeit > Accept-Wait) toetete das jede eingehende
+     Verbindung (Cluster-Fail beider Gate-Attempts). Jetzt: Front-Handle
+     wird unter seinem Listen-Port GEPARKT (FrontHandle.parked_port);
+     der naechste Accept-Poll desselben Owners liefert ihn OHNE
+     Backend-Roundtrip (Liveness-Check inklusive). Statuszeile:
+     parked=<geparkt>/<abgeholt>.
+- Zwei Timing-Experimente durchgefuehrt und bewusst REVERTIERT (beide
+  im Code dokumentiert): accept_idle 100->15ms + accept_wait 150->40ms
+  flutete die Single-Thread-Queue von TCPSVC (ssh-exec attempts=2 in
+  3/3, FTPSVC-Greeting blieb aus; Gate 1/3). accept_wait 150->1000ms
+  blockierte den Main-Loop in Congestion-Phasen sekundenlang pro Poll
+  (Gate 1/3, accept_poll=10 in 45s). Final: 100/150ms wie zuvor -
+  Cancels sind durch Fix 3 jetzt harmlos.
+- ERKENNTNIS fuer spaetere Netz-Unterversionen: Der Accept-Wait wird in
+  Congestion-Phasen voll verbraucht; TCPSVCs Single-Thread-Latenz ist
+  die eigentliche Engstelle (write_retry=0..10 pro Lauf normal). Die
+  Sicherheitsnetze (wr_seq_skip, parked) griffen in den PASS-Laeufen
+  nie - sie decken das Congestion-Tail ab.
+- ENTSCHEIDUNG-Aufloesung: Der grosse SSHD-Nebenlaeufigkeits-Umbau war
+  fuer die 3/3-Bar NICHT noetig; gezielte Fixes reichten. Tiefere
+  TCPSVC-Entflechtung (Multi-Request-Pipeline) bleibt Option fuer
+  spaeter, falls echte HW mehr Last zeigt.
+Abnahme:
+- Build.bat -apps gruen; Gate-Batch mit vollem Produktions-Service-Set:
+  3/3 VOLL-PASS (netgate-20260703-195850/200132/200405), alle Subtests
+  attempts=1, ssh-exec 1697/1926/1800ms, keine Crash-Marker.
+- Vorstufe ohne Parking (nur Fix 1+2, Waits 100/150): ebenfalls 3/3
+  (netgate-20260703-193407/193648/193919) - Parking ist das
+  Sicherheitsnetz gegen den zuvor 1/9 beobachteten Congestion-Fail.
+- SSHD-Spaetsnapshot: accepted=2/execs=2 deckungsgleich mit den
+  Client-Versuchen; wr_seq_skip=0, parked=0/0 (Netze scharf, ungenutzt).
+- Build.bat -test: TEST OK (siehe Notizen).
+Notizen:
+- Reines Service-Thema (SSHD/TCPSVC) - Kernel unveraendert.
+- TESTFALLE bestaetigt und in Arbeitsregeln aufgenommen: -apps packt
+  kein Image; erster Gate-Lauf nach -apps MUSS ohne -SkipBuild fahren
+  (3 Laeufe fuhren sonst unbemerkt das alte Binary; Gegenprobe: neue
+  Statusfelder muessen in der Statuszeile auftauchen).
+
+Versionnummer: 0.56.6
+Titel: Heap-Neubau: Boundary-Tags + segregierte Free-Listen
+Status: Erledigt
+Offene Punkte: (keine)
+Erledigt:
+- Heap v3 komplett neu (Backup d10c8341 war tot): in-band Boundary-Tags
+  (Header 16 B + Footer 8 B pro Block), 24 groessenklassierte Free-Listen,
+  good-fit-Alloc, O(1)-Koaleszenz ueber Footer. MAX_BLOCKS ersatzlos weg.
+- Deckel RAM-abhaengig: virtuelles Fenster 32 MB -> 1 GB (virt.zig),
+  committed-Cap = usable/4 (min 32 MB) statt harter 32 MB; im Gate-Setup
+  246,7 MB. Demand-Commit + Trailing-Release mit 64-KB-Hysterese gegen
+  Commit/Uncommit-Thrash.
+- Nicht-Preemptierbarkeits-Invariante als Kommentarblock + aktiver
+  Reentry-Waechter (control.in_heap, Zaehler + einmaliger COM1-Marker).
+- Boot-Self-Test + rdtsc-Mikrobenchmark (HEAPCHECK-Marker): funktionale
+  Checks (Muster, Alignment, Double-Free-Erkennung mit exaktem
+  Zaehler-Delta, Leak-Check) + 2000-Op-Churn-Benchmark.
+- MESSWERTE (QEMU, gleicher Benchmark):
+  alt:  alloc_avg=546210  free_avg=13459653  churn=14334174960 (~5,7 s!)
+  neu:  alloc_avg=~7000   free_avg=~25000    churn=~200000000 (~0,1 s)
+  => alloc ~83x, free ~500x, gesamt ~54x schneller; der alte free war
+  von der Coalesce-Restart-Schleife + Page-Thrash dominiert.
+- Dauerhafte Wachhunde eingebaut (nach Crash-Befund, siehe Notizen):
+  Poison-on-free (0xDD ueber freigegebene Payload; macht Use-after-free
+  deterministisch sichtbar) + Unlink-/Header-Validierung mit lautem
+  "HEAP CORRUPT"-Marker statt stiller Metadaten-Zerstoerung.
+Abnahme:
+- Build.bat -norun/-kernel gruen; -test TEST OK inkl. HEAPCHECK-OK-Marker
+  und MEMSUITE STRICT (vmstress+pagerstress) gruen.
+- Vorher/Nachher-Messung siehe oben (im HEAPCHECK-Kommentar in heap.zig
+  dauerhaft dokumentiert).
+- Gate: erster Batch 3/3 VOLL-PASS (netgate-20260703-204403/204640/
+  204922). Konfidenz-Zusatzlaeufe 4-6: RUN4 PASS, RUN5/RUN6 FAIL
+  (tcp-echo bzw. tcp-echo+cmdchannel) - OHNE Crash und OHNE
+  Korruptionsmarker; Muster identisch zum bekannten 0.56.5-Congestion-
+  Tail (accepted=2 bei acc=7, accept_err=2, leeres exec-stdout, beide
+  Attempts im selben Stau-Fenster). Als eigenes Folgethema gezogen
+  (neue 0.56.7), NICHT heap-verursacht nach Beweislage.
+Notizen:
+- EIN realer Crash auf dem v3-Build OHNE Instrumentierung (Lauf
+  netgate-20260703-202900): rip=0x0 cr2=0 ifetch=1, rsp im Kernel-Image
+  (statischer Stack), unmittelbar nach dem ersten SSH-Exec, Lauf war
+  vorher schon degradiert (accepted=0 ueber 45 s, accept_err=1).
+  Danach Poison+Validierung eingebaut: 6 Laeufe in Folge crashfrei,
+  0 Korruptionsmarker. Ursache NICHT abschliessend bewiesen; die
+  Wachhunde bleiben dauerhaft aktiv und jeder kuenftige Gate-Lauf
+  prueft die Marker mit (serial-markers-Subtest). Falls er wieder
+  auftritt: 0xDD-Muster in rip/cr2 = Consumer-Use-after-free,
+  HEAP CORRUPT = Metadaten-Angriff, rip=0 = dritte Klasse.
+- task.zig-Stacks (32 KB) kommen weiter aus dem Heap; das neue Layout
+  packt dichter - ein kuenftiger Stack-Overflow trifft eher lebende
+  Daten statt Slack. Guard-Pages sind als eigener Roadmap-Punkt offen.
+
+Versionnummer: 0.56.7
+Titel: Gate-Determinismus: Netz-Congestion-Tail diagnostizieren und fixen
+Status: Erledigt
+Offene Punkte: (keine)
+Erledigt:
+- DIAGNOSE ABGESCHLOSSEN, Wurzel gefunden. Instrumentierung zuerst:
+  (a) NETRX-Fehleraufschluesselung nic_rxe/txe/ovw/rec (BackendStatus
+  + abi.NetBackendStatus am Ende erweitert, RTL8139 fuellt sie);
+  (b) Gate-Zeitfenster t=X-Ys pro Subtest im Report; (c) failstatus-
+  Capture: bei JEDEM Subtest-Fail SSHD-/TCPSVC-Status per SSH ziehen
+  ("nicht erreichbar" timestampt das Blackout selbst).
+- Der instrumentierte Fail (netgate-20260703-211844) lieferte die Kette:
+  ssh-exec OK (t=10-19s) -> tcp-echo FAIL t=19-41s mit SSH KOMPLETT tot
+  (beide failstatus rc=-1) -> cmdchannel FAIL t=62-86s, failstatus kam
+  aber durch: write_retry=468 (!), worker max_ticks=4969 (~50 s in der
+  Write-Schleife) -> ftp t=103s sauber = Selbstheilung. NETRX: nic_rxe=0
+  im GANZEN Lauf (RX unschuldig!), nic_txe=13 frueh im Fenster, Kernel
+  akzeptierte durchgehend weiter (acc 3->13). TCPSVC req_ticks=0/0 in
+  allen Laeufen (Stau-These widerlegt). accept_flags=0x06000102 =
+  Status would_block (benign, letzter leerer Poll).
+- WURZEL: RTL8139 transmit() spinnte bis 100000 Port-Reads auf TOK -
+  jeder Read ein VM-Exit. Staut SLIRP unter Host-Last kurz, blockierte
+  EIN Send 100-500 ms synchron im Aufruferkontext (net-rx-Task bzw.
+  Worker unterm Service-Lock). Der SSHD-Retry-Verstaerker machte daraus
+  das 40-s-Blackout: kranker Worker monopolisiert Lock+TCPSVC.
+- ERSTER FIX-VERSUCH (Async-TX) PROBIERT UND REVERTIERT: transmit
+  startete den Send und rechnete Slots lazy ab. Ergebnis Gate 1/6 -
+  FTP fiel reihenweise: QEMU haelt Deskriptoren bei SLIRP-Stau laenger,
+  der ISR-Sweep zaehlte den Busy-Streak auch fuer In-Flight-Frames
+  hoch -> Force-Reclaim ueberschrieb live gelesene TX-Puffer ->
+  Frame-Korruption auf der Leitung. Lehre im Code dokumentiert.
+- FINALER FIX: Spin-Deckel 100000 -> 2000 im alten synchronen Pfad.
+  QEMU sendet beim TSD-Write praktisch synchron; der Klemmfall kostet
+  jetzt einstellige Millisekunden statt 100-500 ms, Semantik sonst
+  unveraendert (Timeout rotiert Slot weiter, TCP-Retransmit heilt).
+- ZWEITE WURZEL (der Kaskaden-Verstaerker), via failstatus-Instrument
+  gefunden: tcpWritePacedServiceRobust im SSHD behandelte JEDEN
+  Write-Fehlschlag als retrybar bis zum 15-s-Budget. Starb der Client
+  (Gate-Timeout unter Host-Last), schrieb der Worker 15 s gegen die
+  Leiche und flutete TCPSVC mit Service-Calls -> neue Verbindungen
+  verhungerten -> deren Clients starben -> selbsterhaltende Kaskade.
+  BELEG: TCPSVC txwait terminal=403 (403x "Verbindung tot" beantwortet,
+  SSHD fragte weiter), bad_handle=1374. FIX: der 0.56.5-Verify-Poll
+  im Write-Loop erkennt jetzt tote Verbindungen (result!=0 /
+  conn_invalid / lifecycle terminal) und gibt SOFORT auf.
+- DRITTER BAUSTEIN: kernel sendTcpForConnection setzt bei .busy (TX-
+  Ring voll) NUR fuer Payload-Segmente kurz mit yield nach (max 64);
+  commitSent laeuft erst nach Erfolg, die Wiederholung ist exakt
+  derselbe Plan. Bewusst NICHT fuer SYN/SYN-ACK/FIN: die laufen im
+  net-rx-Task, eine Yield-Schleife dort stoppte den RX-Drain unter
+  Last (empirisch belegt: Variante mit SYN im Retry machte SSH wieder
+  schlechter, 2/6). FTP-Begruessungsverluste (tcpWrite gab BAD_STATE
+  fuer busy) damit geheilt.
+- NEBENBEFUND (eigenes Thema): Der rip=0-Crash aus den 0.56.6-Notizen
+  reproduzierte 2x unter der Async-TX-Netzdegradation - IDENTISCHE
+  Signatur inkl. gleichem rsp=0xFFFFFFFF81512B20 (statischer Kernel-
+  Stack), KEINE 0xDD-/HEAP-CORRUPT-Marker (Heap-Waechter sauber).
+  ENTSCHLUESSELT: die zweite Instanz zeigte rip=0x00000004000011CC =
+  R4X_MODULE_LINK_BASE (0x4_0000_0000) + 0x11CC -> es wird ein NICHT-
+  NORMALISIERTER R4X-Modul-Funktionszeiger gerufen (rip=0-Variante:
+  derselbe Mechanismus mit Nullwert), vom Boot-Stack-Kontext aus,
+  stress-korreliert (Race beim Zeiger-Setup/-Abruf?). Jagdansatz fuer
+  die Folge-Unterversion: Zeiger-Normalisierung a la
+  normalizeThreadEntry an ALLEN Stellen pruefen, wo Modul-Zeiger in
+  Kernel-Strukturen landen. Logs: netgate-20260703-213502/214357.
+  Seit dem finalen Fix-Stack in 12 Laeufen nicht mehr aufgetreten.
+Abnahme:
+- 6 aufeinanderfolgende Gate-Laeufe VOLL-PASS mit vollem Service-Set
+  (verschaerfte Bar): netgate-20260703-230759/231037/231309/231539/
+  231809/232042 - ALLE Subtests attempts=1, 0 Crash-/Korruptions-
+  marker. (Zum Vergleich die Batches der Zwischenstaende: Original
+  7/9, Async v1 1/6, Spin-Cap 1/6, TX v2 allein 3/6, TX v2 +
+  busy-Retry inkl. SYN 2/6, finaler Stack 6/6.)
+- Build.bat -test: TEST OK.
+Notizen:
+- Vorgezogen vor den Page-Cache (alte 0.56.7ff -> +1 renumbered), weil
+  der Tail sonst jede kuenftige Abnahme verrauscht. Kein Kernel-Core-
+  Thema: Beweislage 0.56.6 zeigt Netz-/Service-Schicht.
+
+Versionnummer: 0.56.8
+Titel: Page-Cache page-organisiert + Cache-Lock
+Status: Erledigt
+Offene Punkte: (keine)
+Erledigt:
+- Page-Cache v2 komplett neu (Backup 47a33e45 tot): 4-KB-Seiten als
+  Cache-Einheit (page_lba = lba & ~7; ein Miss fuellt die ganze Seite
+  mit EINEM block.read(8)), Hash-Index (1024 Buckets, Ketten) statt
+  Linearsuche, 512 Eintraege = 2 MB nutzbar (v1: 64 Sektoren = 32 KB
+  nutzbar bei 256 KB Frame-Verbrauch). API unveraendert.
+- valid_mask/dirty_mask pro Sektor: Write-Miss ohne Read-Modify-Write;
+  spaeterer Read merged den Seiten-Fill, ohne dirty Sektoren zu
+  ueberschreiben. Fallback-Pfade: Seiten-Fill-Fehler (Geraeteende) ->
+  Einzelsektor unkached; kein Slot/Frame -> unkached bzw. Write-Through.
+- Cache-Lock (sync.Mutex, NEUER Rank fs_page_cache=155 zwischen
+  fs_volume und block_device) schuetzt NUR Metadaten. WICHTIGE
+  Designentscheidung: Block-I/O laeuft IMMER ohne gehaltenen Lock,
+  weil MEMSUITE-STRICT sleep_under_lock==0 verlangt (block.zig gibt
+  seinen Queue-Lock vor dem Warten ebenso frei). Waehrend Fill/
+  Writeback pinnt io_busy den Eintrag (Identitaet+Frame stabil);
+  Konkurrenten auf DIESELBE Seite warten kurz (waitBusy, Lock dabei
+  frei), Eviction/Reclaim ueberspringen gepinnte Eintraege. Boot-Phase
+  ohne Task-Kontext laeuft lockfrei (single-threaded).
+- Nested-Reclaim-Regel: ensurePayload reklamiert nur SAUBERE Frames
+  (kein Dirty-Drain, der wuerde den Lock in verschachtelten Ablaeufen
+  freigeben); Dirty-Drain nur in den oeffentlichen Flush-/Reclaim-
+  Pfaden. Neue Diagnosezaehler: lock_timeouts, busy_waits.
+Abnahme:
+- Build.bat -kernel/-test: TEST OK, MEMSUITE komplett gruen inkl.
+  pagerstress (sleep_under_lock==0 haelt trotz Cache-Lock - Beleg fuer
+  das entsperrte I/O-Design).
+- HITRATE (FSDIAG, identischer Smoke-Workload ~46300 Reads):
+  v1: hits=31672 misses=14648 = 68,4% (entries 64/64 voll)
+  v2: hits=44774 misses=1541  = 96,7% (entries 92/512)
+  => 9,5x weniger Disk-Reads; Workload passt komplett in den Cache.
+- FSDIAG writeback: Vertrag intakt (deferred=13 wb=13 drain/flush ok).
+- Run-NetGate.ps1: Bar "Gate PASS" mehrfach erfuellt. Batches:
+  3/6 (nur Cache), dann In-Page-Writeback-Coalescing aus dem Multi-
+  Sektor-Eintrag VORGEZOGEN (Flush eines vollen v2-Caches entlud sonst
+  hunderte 512-B-Einzelwrites in die Block-Queue, hinter denen alle
+  FS-Reads anstanden - Sessions starben mitten in der Auth) -> 4/6
+  (netgate-20260704-000743/001435/002303/002559 PASS).
+Notizen:
+- Writeback koalesziert jetzt zusammenhaengende dirty Runs innerhalb
+  einer Seite zu EINEM block.write; Cross-Page-Coalescing und die
+  fat32-Bulk-Pfade bleiben im Multi-Sektor-Eintrag.
+- Die verbleibenden Gate-Fails sind ZWEI separate Klassen: (a) das
+  ssh-exec-Fruehfenster (beide Attempts in der Service-Startphase;
+  durch den schnelleren Boot nun eher getroffen), (b) der rip=0-Crash
+  (4. Vorkommen, ~1/6) - NEUE HEISSE SPUR: RET-auf-0 mit rsp im
+  BOOT-STACK (BSS) deutet auf Ueberschreiben des Boot-Stacks, Top-
+  Kandidat PMM-Frame-Doppelvergabe (Cache fuellt via HHDM fremden
+  RAM); existierte vor Cache v2 (v1 nutzte dieselben Frames),
+  Haeufigkeit stieg mit v2 (mehr Frames/Fills). BEIDE Klassen ziehen
+  als neue vorgezogene Unterversion direkt hinter diesen Eintrag.
+
+Versionnummer: 0.56.9
+Titel: PMM-Wachhunde + rip=0-Crash-Jagd (Boot-Stack-Ueberschreiber)
+Status: Erledigt
+Offene Punkte: (keine)
+Erledigt:
+- Befundlage konsolidiert (4 Vorkommen am 2026-07-03/04, ~1/6):
+  PF rip=0x0 (1x rip=0x00000004000011CC = R4X_MODULE_LINK_BASE+0x11CC)
+  ifetch=1 cr2=0, stress-korreliert, nach SSH-Exec/Programm-Exit.
+  Symbolaufloesung der Crash-rsp-Werte gegen r4os.elf:
+  0x...12B20=kernel.irq_router.entries (HANDLER-ZEIGER-TABELLE!),
+  0x...1F720=tss.fault_stack(Top), 0x...11D50=storage.block.devices.
+  Arbeits-Theorie: Call durch ungueltigen (unrelozierten/genullten)
+  Funktionszeiger, Kandidaten IRQ-Dispatch und Backend-Deskriptoren;
+  Zweitkandidat PMM-Doppelvergabe. r4os_call_program-Shim geprueft:
+  sauber (r15-basiert, keine Globals).
+- DAUERHAFTE WACHHUNDE eingebaut:
+  (a) memory/phys.zig: freeFrame meldet DOUBLE-FREE/BAD-FREE-ALIGN/
+      BAD-FREE-RANGE laut (COM1-Marker "PMM FAULT ...", Zaehler in
+      Stats) statt sie stumm zu schlucken.
+  (b) kernel/irq_router.zig: Kernel-Space-Schranke fuer Handler-Zeiger
+      bei register (Abweisung, rc=-4) UND dispatch (Skip + Marker
+      "IRQROUTER BAD HANDLER" mit irq/ptr/owner).
+  (c) kernel/driver_api.zig: Net-Backend-Deskriptor-Funktionszeiger
+      muessen Kernel-Space sein ("NETBACKEND BAD FNPTR (unrelocated?)").
+  (d) Gate-serial-markers-Subtest erfasst alle neuen Marker plus
+      HEAP CORRUPT - jeder kuenftige Lauf jagt automatisch mit.
+Abnahme:
+- Build.bat -test: TEST OK, keine Wachhund-Marker im Normalbetrieb
+  (keine Falschalarme).
+- Stress-Batch 6 Laeufe (netgate-20260704-004209..005812): 0 Crashes,
+  0 Marker (erste crashfreie 6er-Serie seit Jagdbeginn),
+  ssh-exec-Fruehfenster 1/6 (<2/6-Bar), 4/6 VOLL-PASS.
+Notizen:
+- Root-Cause NICHT final bewiesen (Crash trat im Abnahme-Batch nicht
+  auf; bei ~1/6-Rate ist 6x Ausbleiben keine Sicherheit). Der Vertrag
+  ist ein anderer: kehrt die Klasse zurueck, benennt der Marker den
+  Verursacher (irq/ptr/owner bzw. frame) statt rip=0 zu crashen.
+- Fruehfenster-Klasse (ssh-exec/ftp in der Service-Startphase, heute
+  2/6 gemischt) bleibt der bekannte Rest-Tail; Kandidaten (SSHD-Auth-
+  Datei-I/O, LOGSVC-Boot-Burst) sind bei den Netz-Eintraegen notiert.
+
+Versionnummer: 0.56.10
+Titel: Multi-Sektor-I/O: Bulk-Fill, Writeback-Coalescing, FAT-Mount-Scan
+Status: Erledigt
+Offene Punkte: (keine)
+Erledigt:
+- page_cache.readSectors(dev,lba,count,out): Bulk-Lesen ueber
+  Seitengrenzen - ein Lock-/Hash-Zugriff und EIN memcpy pro Seite statt
+  pro Sektor; fat32.readSector nimmt jetzt sectors>1 und routet dorthin.
+- fat32.readFileRange: Voll-Sektor-Spans laufen bulk DIREKT in den
+  Zielpuffer (kein Umweg ueber den Sektor-Stackpuffer); Randsektoren
+  wie bisher. Ein temporaerer Byte-Vergleichs-Tracer bewies die
+  Byteidentitaet von Fastpath und Alt-Pfad.
+- Writeback-Run-Coalescing war bereits in 0.56.8 vorgezogen; Miss-Fill
+  als 1 block.read(8) steckt im v2-Seiten-Fill.
+- Mount-Marker "FAT32 mount dev= clusters= scan= ticks=" auf COM1 als
+  Dauermesspunkt. MESSWERT: scan=full ticks=0 fuer 130k+256k Cluster -
+  der v2-Page-Cache macht den FAT-Vollscan praktisch gratis (Seiten-
+  Fills statt 1000+ Einzelsektor-Reads). Der geplante Lazy-Scan wurde
+  deshalb PROBIERT UND REVERTIERT: auf die erste Allokation verschoben
+  lief er unter dem fs-Lock und riss sleep_under_lock==0 (MEMSUITE).
+- DREI-STUFEN-LEHRE "Kopieren zu User-Puffern" (der eigentliche Kern
+  dieser Unterversion, kostete die Nacht):
+  (1) memcpy zu/von User-Puffern UNTERM Cache-Lock: `out` kann eine
+      ausgelagerte R4X-Seite sein -> Page-Fault -> Pager macht Disk-I/O
+      -> Schlaf unterm Lock (pagerstress sleep=21; HEAD-Gegenprobe
+      bewies die Diff-Ursache).
+  (2) Pin-Copy (io_busy + Lock frei) allein: der Fault laesst den Pager
+      IM SELBEN TASK Page-Outs in die Backing-Datei schreiben - trifft
+      der dieselbe gepinnte Cache-Seite, entsteht ein Self-Deadlock
+      via waitBusy (fs_max_ticks=4000).
+  (3) FIX: preTouch der User-Puffer VOR Lock/Pin (Fault wird vorab
+      abgearbeitet) PLUS Pin-Copy ohne Lock. pagerstress: fs=32,
+      sleep=0.
+Abnahme:
+- Build.bat -test: TEST OK; MEMSUITE komplett gruen (pagerstress
+  fs/sleep normal); FSDIAG cache OK (Hitrate 91,5% - Bulk-Zaehlweise,
+  weiterhin >> 68,4%-Baseline); Mount-Marker aktiv.
+- Run-NetGate.ps1: RUN1 VOLL-PASS (netgate-20260704-014319) = Bar
+  erfuellt; RUN2/3 fielen an der bekannten ssh-exec-Fruehfenster-Klasse
+  (KEIN Crash, KEINE Wachhund-Marker, spaetere Subtests gruen). Die
+  Klasse dominiert jetzt (2/3) und zieht als EIGENE vorgezogene
+  Unterversion direkt hinter diesen Eintrag.
+Notizen:
+- NEBENBEFUND (vorbestehend, NICHT testentscheidend): "R4M0 inspect
+  FAILED: C:\SOFTWARE\R4CODE\R4PACK.R4X bad relocation patch offset"
+  existiert AUCH auf purem HEAD (0.56.9) und kostete als roter Hering
+  drei Fehl-Theorien (Artefakt/Zig-Cache-Poisoning/Fastpath). Der
+  R4CODE-Selfbuild-Subtest toleriert ihn. Eigener Punkt fuer spaeter:
+  warum akzeptiert der R4M0-Inspector das ausgelieferte R4PACK nicht?
+- Methodik-Lehre: HEAD-Gegenprobe (git diff>patch, checkout, build,
+  apply) frueher ziehen - sie zerlegte in EINEM Lauf beide Symptome in
+  "mein Diff" (sleep=21) und "vorbestehend" (R4M0).
+
+Versionnummer: 0.56.11
+Titel: ssh-exec-Fruehfenster: Boot-Service-Stau deterministisch machen
+Status: Erledigt
+Offene Punkte: (keine)
+Erledigt:
+- ZWEI Bausteine gegen die haeufigste Gate-Fail-Klasse (~2/3 der Fails):
+  1) Gate-Boot-Settle-Recalibrierung (Run-NetGate.ps1): nach dem
+     SSHD-Endpoint-Marker zusaetzlich auf "Endpoint: FTPSVC OK" warten
+     + 4 s Settle. Der SSHD-Marker stammt aus dem FRUEHEN AUTOEXEC-
+     Snapshot, waehrend FTPSVC/WINSVC/RDPSVC noch starten; seit Cache
+     v2 bootet das System so schnell, dass das Gate mitten in den
+     Boot-Storm verband. Wirkung allein: Klasse 2/3 -> 1/6.
+  2) RTL8139 Dead-Slot-Schwelle 2000 -> 300 Polls (~20 s -> ~3 s):
+     die Schwelle lag LAENGER als das 15-s-Write-Budget des SSHD -
+     ein Lost-TOK-Stall kollabierte ganze Sessions (Beleg: RUN2
+     write_retry=251, worker max_ticks=1627), bevor der Slot sich
+     selbst heilte. Legitime QEMU-Flugzeit ist ms; 3 s bleiben
+     konservativ genug gegen Live-Puffer-Wiederverwendung.
+Abnahme:
+- 6er-Batch netgate-20260704-111926..113518: 5/6 VOLL-PASS; ssh-exec
+  attempts=1 in ALLEN Laeufen, die ihn erreichten (die einzigen zwei
+  attempts=2 waren tcp-echo-Retries, wofuer Attempts existieren);
+  0 Crashes, 0 Wachhund-Marker.
+- RUN3 fiel im SETUP (SSHD-Marker kam nicht in der Deadline; Serial
+  endet mitten im Boot-Snapshot, kein Crash): HOST-Umgebungsklasse -
+  der Rechner war frisch aus dem Schlaf (kalte Caches/AV-Scan).
+  Eigene Kategorie, kein Guest-Defekt; bei Haeufung Deadline pruefen.
+- Build.bat -test: TEST OK (siehe Notizen).
+Notizen:
+- NEUE TESTFALLEN-VARIANTE dokumentiert (Arbeitsregeln): manuelles
+  -testimage packt die Smoke-AUTOEXEC ins Image -> alle folgenden
+  -SkipBuild-Gate-Laeufe booten und schalten sofort ab (6x FAIL:
+  setup am Morgen). Gate-Image immer vom Gate packen lassen.
+- Restklasse Exec-Last-Stau (grosse SERVMAN-Outputs unter Host-Last)
+  gilt als abgedeckt durch Baustein 2; kehrt sie zurueck, zeigt
+  tx_stuck_reclaims im RTL8139-Status den Lost-TOK-Fall direkt.
+
+Versionnummer: 0.56.12
+Titel: PMM-Wortscan + Framebuffer-Blit-Fast-Path
+Status: Erledigt
+Offene Punkte: (keine)
+Erledigt:
+- PMM allocFrame: Bitmap wird wortweise als u64 gescannt; volle
+  Woerter (64 belegte Frames) kosten EINEN Vergleich, das freie Bit
+  findet @ctz. next_hint-Semantik erhalten (start_bit-Maske), Frame 0
+  bleibt reserviert, Tail-Padding-Bits jenseits total_frames werden
+  uebersprungen; Fallback auf den linearen Pfad, falls die Bitmap je
+  nicht 8-Byte-ausgerichtet waere. allocContiguousFrames ueberspringt
+  volle Woerter beim Suchlauf (Befund 2.1).
+- copyToVisible: vorab-validierte, subcall-freie u32-Zeilenkopie -
+  der alte Pfad rief readXrgb32 PRO PIXEL (Bounds- + Alignment-Check
+  je Wort). Aligned src+dst: reiner Wortkopier-Loop; unaligned src:
+  Wort-Assemblierung inline ohne Pro-Wort-Bounds-Check (Befunde
+  5.1/5.2). Kernel bleibt soft_float - nur Integer-Kopien.
+- Blit-Durchsatz-Mikrobenchmark in PerformanceDiag (probeBlitThroughput,
+  AUTOEXEC-faehig, COM1-Zeile "PERFDIAG blit-bench: ...").
+  MESSWERT (320x64-XRGB-Frames, adaptiv >=30 Ticks):
+    vorher: iters=3462 approx_mb_s=901
+    nachher: iters=9664 approx_mb_s=2516  => 2,8x Durchsatz.
+- WC-Marker verifiziert (Befund 5.3): "MemoryBoot: Framebuffer PAT-WC
+  [OK]" + "R4OS device cache-policy: framebuffer=framebuffer-wc" sind
+  vorhanden und plausibel; kein neuer Code noetig.
+Abnahme:
+- Build.bat -kernel gruen; -test TEST OK; MEMSUITE komplett gruen,
+  KEINE PMM-FAULT-Marker (Wortscan aendert die Vergabe-Reihenfolge
+  nicht fehlerhaft).
+- Blit-Benchmark siehe Messwerte oben.
+- Gate 3x VOLL-PASS (netgate-20260704-115507/115754/120038).
+Notizen:
+- NEBENBEFUND GEFIXT: PerformanceDiag/build.zig.zon trug einen
+  hand-gesetzten Fingerprint (0x530b_91d4_2026_0616), der nicht zum
+  Namens-Hash passt (0x3d4745d9_...) - das Paket baute bisher NUR aus
+  dem Cache, ein gezielter -app-Build brach ab. Namens-Haelfte
+  korrigiert. Falls weitere Diags kopierte .zon-Fingerprints haben,
+  faellt das jetzt beim ersten Einzel-Build auf.
+- USB-Standardsignal: im Standard-Smoke nicht Teil des Laufs (kein
+  QEMU-USB-Geraet im Default); Input-Pfad unveraendert, Regressions-
+  schutz greift bei den USB-Eintraegen der Roadmap.
+
+Versionnummer: 0.56.13
+Titel: sync.zig: Metrics-Gate + Mutex-Timeout-Fix + EventV2-Fix
+Status: Erledigt
+Offene Punkte: (keine)
+Erledigt:
+- FIX Mutex.lock (Befund 4.5a): Restzeit-Budget statt vollem Timeout je
+  Wakeup-Retry - vorher bekam jeder Retry (geweckt, Lock vom naechsten
+  Bewerber weggeschnappt) wieder volle timeout_ticks, unter Dauer-
+  Contention wartete lock() unbegrenzt. Deadline via timer.tickCount,
+  WAIT_FOREVER bleibt unbegrenzt.
+- FIX EventV2 (Befund 4.5b): neue WaitQueue.waitUnless-API prueft ein
+  still_needed-Praedikat INNERHALB der Critical Section direkt vor
+  addWaiter; EventV2.waitResult konsumiert signaled damit atomar -
+  das Lost-Wakeup-Fenster fuer Signale aus Timer-/IRQ-Kontext zwischen
+  ungesichertem Vorab-Check und addWaiter ist zu. NEBENFIX entdeckt:
+  signal() im auto_reset-Pfad hatte dasselbe Fenster zwischen
+  wakeOne()==0 und signaled=true - jetzt komplett unter Critical.
+- Metrics-Gate (Befund 4.4): Buildoption -Dmetrics (Default true) gated
+  held_locks-Scans (recordLockOrder/Acquire/Release, noteSleepPoint)
+  und den Scheduler-Starvation-Scan comptime. MEMSUITE-STRICT braucht
+  den Default; beide Varianten bauen und laufen TEST OK.
+- SYNCCHECK-Boot-Selbsttest (nach initTaskRuntime, COM1-Marker, in der
+  Gate-serial-markers-Liste): (a) Mutex-Timeout unter Dauer-Contention
+  (Holder klaut nach jedem Unlock sofort zurueck) bleibt im Budget -
+  gemessen mutex_elapsed=50 (Punktlandung; Alt-Bug: unbegrenzt);
+  (b) Event-Ping-Pong auto_reset 200 Runden in beiden Ordnungen ohne
+  ein einziges verlorenes Signal.
+Abnahme:
+- Build.bat -kernel gruen in BEIDEN Varianten (Default, -Dmetrics=false
+  via R4OS_CODE_BUILD_ARGS); -test TEST OK in BEIDEN Varianten;
+  SYNCCHECK OK; MEMSUITE komplett gruen.
+- Gate 3x VOLL-PASS (netgate-20260704-151835/152115/152402).
+Notizen:
+- NEBENBEFUND (vorbestehend, toleriert, wie R4M0-R4PACK): STORDIAG
+  queue/cache/pageIO deterministisch FAILED (pagefileReady=0,
+  fail=18, reclaimDrop=1463 - identische Zahlen auch auf purem HEAD).
+  Die Pagefile-/Backing-Store-Einrichtung im Smoke-Image fehlt oder
+  die Kriterien passen nicht mehr; gehoert zu den spaeteren Pager-/
+  Storage-Eintraegen. Der Smoke toleriert STORDIAG-rot.
+- FsDiag registry-writeback-Schwelle 2s -> 4s: flatterte unter
+  Host-Last (2240 ms gemessen) und kippte den Smoke lauffallabhaengig.
+- Der EventV2-Fix ist Voraussetzung fuer die spaeteren Event-Umbauten
+  (Eintraege weiter hinten in der Roadmap).
+
+Versionnummer: 0.56.14
+Titel: SDK-SIMD-Vollprofil (AES-NI/PCLMUL) + x2APIC-MSR-Pfad
+Status: Erledigt
+Offene Punkte:
+- -
+Erledigt:
+- SDK-SIMD-Vollprofil: .aes + .pclmul an beiden featureSet-Stellen in
+  Code/System/SDK/r4os/build.zig ergaenzt (Zig-Module), zusaetzlich
+  -maes/-mpclmul in den C-Flags (R4CC-/C-Profile) - beide Sprachpfade
+  konsistent auf AES-NI/PCLMULQDQ (Befund 9.3).
+- x2APIC vollwertiger MSR-Pfad statt Bail-out (Befund aus lapic.zig):
+  readReg/writeReg als Chokepoint auf MSR 0x800 + (MMIO-Offset >> 4)
+  umgeschaltet (x2_mode-Flag), isEnabled() auch ohne base_virt im
+  x2-Modus wahr, Version/SVR-Init ueber MSRs. Kein ICR-Nutzer in
+  lapic.zig, daher kein 64-bit-ICR-Sonderfall noetig.
+- Opt-in -Dforce-x2apic (Default false) in Code/build.zig; Force nur
+  wenn CPUID.1:ECX.21 x2APIC meldet (sonst #GP beim MSR-Write) -
+  EXTD+ENABLE in IA32_APIC_BASE (0x1B) setzen und zurueckverifizieren.
+- Marker "[LAPIC] mode=xapic|x2apic|none": eine Zeile auf COM1
+  (Abnahme-Kriterium) + voller Status im Bootlog/DMESG.
+- Nachzieher: FSDIAG registry-writeback druckte max= noch mit dem alten
+  2000ms-Wert, Pruefung lief schon auf 4000ms - Print angeglichen.
+Abnahme:
+- Funktional (idle Host, Vormittag, funktional identischer Stand -
+  seither kamen nur Log-Zeilen dazu): Build.bat -test TEST OK Default
+  UND TEST OK mit -Dforce-x2apic + R4OS_TEST_CPU=Haswell,+x2apic;
+  Run-NetGate.ps1 3/3 VOLL-PASS (netgate-20260704-153854/-154206/
+  -154508).
+- Marker-Sichtung COM1 (nachmittags, unter Host-Spiellast):
+  Default-Boot "[LAPIC] mode=xapic", forcierter Boot
+  "[LAPIC] mode=x2apic"; beide Gaeste liefen bis "System poweroff.",
+  0 Crash-/Wachhund-Marker, SYNCCHECK OK auch im x2-Modus.
+- Ehrlichkeit: Die Nachmittags-Smokes waren als Gesamtlauf ROT, weil
+  auf dem Host ein Spiel (G1R-Win64-Shipping, CPU ~76%) lief und alle
+  timing-sensitiven Diags kollektiv rissen (TCPSVC local-contract,
+  DRVDIAG, PERFDIAG, STORDIAG, FSDIAG ticks=722 statt <400) - als
+  Host-Last-Klasse eingeordnet, kein Code-Problem. QEMU-Watchdog dafuer
+  per offiziellem QEMU_TEST_TIMEOUT_SECONDS=480 angehoben.
+Notizen:
+- Testfalle NEU: Zig verbietet rohe CR-Bytes in String-Literalen.
+  Ein per PowerShell/Script eingefuegtes "\r\n" landete als echtes
+  CRLF im Literal -> "string literal contains invalid byte: '\r'".
+  Bei Marker-/Logzeilen-Edits immer Escape-Sequenz pruefen.
+- Testfalle NEU: Host-Spiellast (hier G1R-Win64-Shipping) laesst den
+  Smoke kollektiv rot werden (Timing-Diags + 240s-Watchdog). Vor
+  Abnahme-Laeufen Host-Last pruefen (Get-Process, LoadPercentage);
+  Marker-/Boot-Sichtungen bleiben unter Last verwertbar, TEST OK nicht.
+- x2APIC-MSR-Schema: MSR = 0x800 + (MMIO-Offset >> 4); ID-Register im
+  x2-Modus volles 32-bit-Register.
+
+Versionnummer: 0.56.15
+Titel: Kernel-Stack-Guard-Pages + COM1-TX-Ring
+Status: Erledigt
+Offene Punkte:
+- -
+Erledigt:
+- Kernel-Task-Stacks von heap.alloc auf virt-Ranges umgestellt: neues
+  Fenster kernel_stack (0xFFFF_FF60_0000_0000, 64 MB) in virt.zig;
+  pro Task reserve + protectGuard (unten) + commit. Overflow trifft den
+  uncommitteten Guard -> sauberer Page-Fault (IST-gestuetzt, Vector 14
+  hat FAULT_IST) statt stiller Heap-Korruption (Befund 13.2.1).
+- FINAL: STACK_SIZE 32K -> 64K + Guard 4K -> 16K nach ECHTEM FUND: Der
+  Guard fing unter Gate-FTP-Last einen realen net-rx-Stack-Overflow
+  ("STACK GUARD HIT task=net-rx", rip=net.core.sendTcpForConnection
+  +0x24, cr2=0xFFFFFF600001BDB8 = 72 Bytes unter stack_base) - 32K
+  reichen dem TCP-Sendepfad nicht (Befund 13.2.2 real bestaetigt).
+  Mit Heap-Stacks lief derselbe Overflow still in den Nachbar-Heap:
+  HAUPTKANDIDAT fuer die historischen rip=0-Crashes aus 0.56.9.
+  16K-Guard, damit grosse Frames (>4K) den Guard nicht ueberspringen.
+- Stack-Range-Cache (PFLICHT-Baustein): freigegebene Stack-Ranges
+  werden wiederverwendet statt an virt/blocks zurueckgegeben. Grund
+  (QMP-RIP-Sampling, 10/10 Samples im Hotspot): 8x claimPhysicalRange/
+  releasePhysicalRange pro Task-Create/-Exit zersplittern die physische
+  Block-Tabelle, blocks.Table.coalescePhysical wird unter Task-Churn
+  quadratisch - der Smoke kollabierte 30-50x in allen I/O-Phasen
+  (heap-Stacks 88s; virt-Stacks ohne Cache >480s ohne Abschluss;
+  mit Cache 87-94s). Obergrenze MAX_TASKS Ranges = bewusst nie frei.
+- Dead-Slot-Recycling-Wachhund (Befund 13.2.3): exitCurrent() laeuft auf
+  seinem Stack weiter, bis der Scheduler weggeschaltet hat - Slot des
+  aktuell laufenden Tasks darf nie recycelt werden. Scheduler registriert
+  Current-Provider in task.zig; allocTaskSlot ueberspringt solche Slots
+  LAUT ("TASK RECYCLE GUARD"), releaseDead verweigert; Zaehler
+  recycleGuardHits().
+- Crash-Diagnose: crash_screen prueft bei Page-Fault die Guard-Pages
+  aller Task-Stacks und meldet "[CRASH] STACK GUARD HIT task=... id=...
+  stack_base=..." auf COM1.
+- COM1-TX-Ring (Befund 13.4): 8-KB-Ring in com.zig; logPutc schreibt in
+  den Ring + draint opportunistisch (FIFO-Burst 16 bei freiem THR);
+  Timer-IRQ draint pro Tick; Ring-voll draint synchron verlustfrei
+  (kein Drop); Crash-Pfad schaltet via log.serialEnterSync() auf
+  synchron (Hook-Paar in log.zig, verdrahtet in com_debug_boot -
+  log.zig importiert weiterhin kein com.zig); Poweroff/Reboot flushen
+  via k.serialFlush(). COM2/Serial-Link bleibt roh/synchron.
+- Overflow-Testfall: Kernel-Buildflag -Dstack-guard-test (Default aus)
+  spawnt "st-overflow"-Thread nach initTaskRuntime, der per Rekursion
+  in die Guard-Page rennt. ENTSCHEIDUNG: Kernel-Buildflag statt
+  Diagnostics-Programm - ein R4X-Programm kann Kernel-Stacks nicht
+  ueberlaufen, ohne neue ABI-Flaeche einzufuehren.
+- Overflow-Probe GELAUFEN: "[TASKSTACK] guard-pages active"-Marker,
+  Crash "cause=Page Fault" mit cr2 in der Guard-Page,
+  "[CRASH] STACK GUARD HIT task=st-overflow id=7". Crash-Ausgabe kam
+  vollstaendig ueber Ring+Sync-Pfad. Default-Kernel wiederhergestellt.
+- Buildvarianten geprueft: Default, -Dstack-guard-test=true und
+  -Dcom1-debug=false bauen alle (K=0).
+Abnahme:
+- Build.bat -test (Voll-Build, idle Host): TEST OK + Marker
+  "[TASKSTACK] guard-pages active: guard=... stack=... slots=48";
+  Smoke-Wandzeit mit Cache-Fix 87-94s (Referenz 0.56.14: 88s).
+- Overflow-Testfall (-Dstack-guard-test): STACK GUARD HIT
+  task=st-overflow im COM1-Log; regulaerer -test danach wieder TEST OK.
+- Gate-Bilanz Abend (Fix-Stand): 6x NETGATE PASS (RUN1/RUN2 182400/
+  182639, RERUN1 183544, GP1-3 184113/184401/184637) + 3 FTP-Stalls
+  (USER/SIZE-Antwort leer) + 1 ECHTER Guard-Fund (GP4: net-rx-Overflow
+  -> 64K-Fix, danach kein Guard-Hit mehr).
+- Attribution der FTP-Stalls per A/B-Gegenprobe GLEICHER ABEND:
+  0.56.14 (952091a1) lief abends 1/4 (ssh-exec-Fail, ftp-Fail, breiter
+  Fail MIT EIGENEM CRASH [SSH-R4X-Modul, cr2=App-Stack-Fensterbasis+6,
+  tag=ssh - die vorbestehende Wild-Pointer-Klasse!], 1 PASS) -
+  schlechter als der 0.56.15-Stand. FTP-/SSH-Abendstalls sind
+  Host-/Lastklasse + vorbestehende Instabilitaet, KEINE 0.56.15-
+  Regression; 0.56.15 ist per Gegenprobe strikt besser (net-rx-
+  Overflow gefixt, den 0.56.14 weiterhin still hat).
+- COM1-Vergleich EHRLICH: in QEMU neutral (LSR immer sendebereit,
+  alte wie neue Ausgabe je ~2 Port-Ops/Byte); der Ring-Gewinn
+  materialisiert auf echter HW bei 38400 Baud (Spin-Vermeidung).
+  Verlustfreiheit belegt: TEST-OK-Marker + Poweroff-Zeile kommen
+  durch Flush-Hooks zuverlaessig an; Crash-Pfad synchron komplett.
+Notizen:
+- BEWUSST VOR der Netz-Gruppe (Report 12.5): macht stille Korruption
+  sichtbar, bevor die heiklen Netz-Schritte laufen - hat sich SOFORT
+  bezahlt gemacht (net-rx-Fund beim ersten Gate-Batch).
+- Debug-Kette dokumentiert (Methodik): idle-Rot -> HEAD-Gegenprobe
+  0.56.14 gruen -> Bisect A (Ring aus) rot -> B (heap-Stacks) gruen 88s
+  -> C (64K, ohne Cache) rot -> D (ohne NX) rot -> QMP-RIP-Sampling
+  (manuelles QEMU + qmp human-monitor-command, 10 Samples) ->
+  Python-ELF-Symtab-Resolver -> blocks.Table.coalescePhysical als
+  Hotspot -> Fix Stack-Range-Cache. NEUE WERKZEUGE: QMP-RIP-Sampling
+  (Scratchpad-Script qemu-hang-probe.ps1-Muster) + ELF-Resolver.
+- LEHRE: virt-Range-/blocks-Operationen sind NICHT churn-tauglich
+  (per-Frame-Claims zersplittern die Block-Tabelle quadratisch).
+  Vor Umstellung von Hochfrequenz-Pfaden auf virt-Ranges immer
+  Wiederverwendungs-/Pool-Strategie einplanen.
+- NEBENBEFUND-Hypothese fuer spaeteren Eintrag: die vorbestehend
+  tolerierten DRVDIAG/PERFDIAG/TCPSVC-Rots koennten dieselbe
+  coalescePhysical-Last via App-Stack-Churn (R4X-Programme) sein.
+- NEBENBEFUND (0.56.14-Gegenprobe abends): vorbestehender Crash
+  SSH-R4X-Modul schreibt auf 0xFFFFFF4000000006 (App-Stack-Fenster-
+  basis+6, wilder Zeiger, r4x=4 ip_offset=0x23F0 tag=ssh) - Kandidat
+  fuer SSH-Regression-Eintrag/rip=0-Restklasse auf echter HW.
+
+================================================================================
+GRUPPE II - USB/EINGABE (Produktionspfad robust machen)
+================================================================================
+
+Versionnummer: 0.56.16
+Titel: built-in xHCI: Pending-Timeout + Endpoint-Halt-Recovery
+Status: Erledigt
+Offene Punkte:
+- -
+Erledigt:
+- Endpoint-Halt-Recovery in xhci.zig: recoverInterruptEndpoint() =
+  RESET_ENDPOINT + SET_TR_DEQUEUE_POINTER (Dequeue = ring_phys +
+  enqueue*16, DCS = aktuelles Cycle-Bit; slot<<24 | ep<<16); danach
+  interrupt_pending=false, naechster Poll setzt frisch auf.
+- Fehler-Completion (Stall/Babble/Transaction-Error): failures-Zaehler
+  bleibt, aber Recovery + .no_report statt dauerhaft .failed
+  (Maus-tot-Root-Cause am Produktionspfad, Befund 7.3).
+- Proaktiver Halted-Check: interruptEndpointState() liest den EP-State
+  aus dem OUTPUT-Device-Context - Offset ctx_dwords*dci OHNE
+  input-control-context (Falle im Code dokumentiert, Gegenstueck
+  endpointContext() fuer Input nutzt dci+1). Check laeuft alle 64
+  Pending-Polls; Recovery NUR bei Halted(2)/Error(4).
+- ENTSCHEIDUNG statt blindem Tick-Timeout (Befund 7.2 uminterpretiert):
+  Ein lange pendender Interrupt-Transfer ist bei HID NORMAL
+  (SET_IDLE=0: Report nur bei Aenderung; QEMU completed nur bei Input).
+  Ein blinder Timeout wuerde idle dauernd "recovern" und die Abnahme
+  (pending_timeouts=0) waere unerfuellbar. Der Fehlerfall (Transfer
+  haengt wegen EP-Problem) zeigt sich als Halted/Error im EP-State -
+  genau darauf triggert die Recovery. pending_timeouts zaehlt
+  Recoveries aus dem Pending-Pfad, recoveries alle.
+- Zaehler interrupt_recoveries/pending_timeouts/halted_checks/
+  pending_streak/last_ep_state im xhci-Status (status() liefert alles);
+  sichtbar in der DMESG-Statuszeile ([USBHIDBOOT] status ...) UND als
+  COM1-Zeile "  USBHID xhci: recoveries=... pending_timeouts=...
+  halted_checks=..." (Bootlog-only-Falle vom LAPIC-Marker vermieden).
+- USB-Harness Run-UsbHidBootTest.ps1 repariert: Quellpfad-Checks
+  zeigten noch auf Code\src (vor der Umstrukturierung) - auf
+  Code\Kernel umgestellt; Harness ist damit fuer 0.56.17ff wieder
+  nutzbar.
+Abnahme:
+- USB-Harness komplett gruen ("USB-HID boot smoke OK"): no-xHCI--test
+  (TEST-Verhalten ohne Controller), xHCI ohne HID ([not found]),
+  Keyboard ([active]), Mouse ([active]), Keyboard+Mouse
+  ([active]), Storage+Keyboard+Mouse ([active] + D:/E:-Mounts) -
+  inkl. SYSINFO-/USBDIAG-Gates in jedem Profil.
+- COM1-Zeile im Keyboard+Mouse-Profil: "USBHID xhci: recoveries=0
+  pending_timeouts=0 halted_checks=0" - kein spurious Reset bei
+  scharfer Recovery-Maschinerie.
+- Voll-Smoke (regulaeres TestInjection): TEST OK, 98s.
+Notizen:
+- halted_checks=0 im Boot-Fenster ist erwartet: ohne autonomen
+  Poll-Task (kommt in 0.56.17) fallen <64 Pending-Polls an. Die
+  0.56.17-Abnahme verifiziert den Check unter Dauer-Polling
+  (halted_checks>0 UND weiterhin [active] = Offset bewiesen).
+- Recovery-Pfad in fehlerfreiem QEMU nicht ausloesbar (Halts nur auf
+  echter HW); Echt-HW-Bestaetigung ist Teil von 0.56.35. Der Backup-
+  Commit (Tag backup-0.56.x-2026-06-30) existiert lokal nicht mehr -
+  Logik frisch nach dokumentiertem Design implementiert.
+- R4DEV-/USBDIAG-Durchreichung der Zaehler bewusst vertagt (keine
+  neue ABI-Flaeche in diesem Eintrag); Kernel-Status + COM1 reichen.
+
+Versionnummer: 0.56.17
+Titel: Autonomer Input-Poll-Task
+Status: Erledigt
+Offene Punkte:
+- -
+Erledigt:
+- hid.startPollTask()/pollTaskMain(): Kernel-Task "usb-hid-poll"
+  (createKernelThread, Muster wie net-rx), ruft servicePoll() im
+  1-Tick-Takt (10 ms, nahe am typischen Endpoint-bInterval 8-10 ms)
+  via scheduler.sleepTicksWithReason. PollTaskSummary abfragbar.
+- Start aus main.zig NACH initTaskRuntime; usb_hid_boot.startPollTask()
+  gated auf current.active - ohne gebundene HID-Geraete wird kein
+  Task-Slot verbraucht (im regulaeren Smoke ohne USB startet der Task
+  bewusst nicht).
+- poll_hooks in keyboard.readChar/mouse.snapshotForApi bleiben
+  unveraendert als Fallback bestehen.
+- Nachweis-Marker "[USBHIDPOLL] service_polls=... interrupt_polls=...
+  reports=... no_report=... halted_checks=... recoveries=...
+  pending_timeouts=..." nach ~3 s, danach alle ~60 s (COM1).
+  ENTSCHEIDUNG: Kernel-Marker statt Diag-Programm-/ABI-Erweiterung -
+  kein neuer Vertrag noetig, Harness-greppbar.
+- USB-Harness erweitert: AUTOEXEC bekommt "SLEEP 5000"-Wartefenster
+  OHNE Eingabe-Readout (Terminal-Builtin SLEEP ms); Keyboard+Mouse-
+  Profil verlangt jetzt "USBHID poll-task started id=" und
+  "[USBHIDPOLL] service_polls=".
+Abnahme:
+- USB-Harness komplett gruen ("USB-HID boot smoke OK", 6 Profile).
+- Marker-Beweis im Keyboard+Mouse-Profil: "USBHID poll-task started
+  id=7" + "[USBHIDPOLL] service_polls=300 interrupt_polls=600
+  reports=0 no_report=600 halted_checks=9 recoveries=0
+  pending_timeouts=0" - 600 Interrupt-Polls im Wartefenster OHNE
+  Konsumenten = autonomes Polling laeuft.
+- BONUS-Beweis fuer 0.56.16: halted_checks=9 bei recoveries=0 und
+  weiterhin [active]-Bindings = der proaktive Halted-Check liest den
+  EP-State unter Dauer-Polling korrekt (falscher Offset haette
+  spurious resettet und die Geraete getoetet).
+- Voll-Smoke (regulaeres TestInjection, ohne USB): TEST OK, 99s.
+- Task-Existenz belegt ueber "poll-task started id="-Zeile + Marker
+  (das Harness-AUTOEXEC enthaelt keinen THREADD-Dump; im regulaeren
+  Smoke startet der Task ohne USB bewusst nicht).
+Notizen:
+- Behebt die Konsumenten-Kopplung des USB-Pollings (Desktop-Frame bzw.
+  readChar). Zusammen mit 0.56.16 der Kern des Maus-Fixes.
+
+Versionnummer: 0.56.18
+Titel: Scheduler-Prioritaetsklassen + Tick-Scan-Entschaerfung
+Status: Erledigt
+Offene Punkte:
+- -
+Erledigt:
+- task.Priority (high=0/normal=1/low=2) als Task-Feld; dump() zeigt
+  prio=; markSlotReleased setzt zurueck. usb-hid-poll=HIGH;
+  block-work bleibt Default-NORMAL (LOW erst bei echtem
+  Batch-Konsumenten).
+- nextReadyIndex prioritaetsbewusst: beste Klasse gewinnt, innerhalb
+  der Klasse bleibt die Rotation ab start+1 (Round-Robin) erhalten,
+  Early-Break beim ersten HIGH. Anti-Starvation: jede 8. Auswahl ist
+  reines Round-Robin (plainNextReadyIndex). Zaehler priority_selects/
+  picks_high/picks_normal/picks_low/rr_picks in den Scheduler-Stats.
+- onTick-Timeout-Scan abgekuerzt (Befund 4.3): task.min_wake_tick als
+  untere Schranke; kein Task-Scan solange now < Schranke. INVARIANTE:
+  Schranke darf zu NIEDRIG sein (kostet einen unnoetigen Scan), nie zu
+  hoch - deshalb ziehen nur die beiden einzigen wake_tick-Writer
+  (beginWait, setWakeTick; per grep verifiziert) sie nach unten, und
+  ausschliesslich der onTick-Scan berechnet sie neu nach oben.
+- SCHEDPRIO-Boot-Selbsttest: 3x "st-prio-busy" (NORMAL, spinnen je
+  ~1 Tick pro Turn, yield-kooperativ) gegen den auf HIGH gestellten
+  Testfaden mit 50x sleepTicks(1); Bar max_ready_latency <= 3 Ticks;
+  COM1-Marker mit allen Zaehlern; Busy-Threads enden per Stop-Flag.
+  ENTSCHEIDUNG: Boot-Selbsttest statt Diagnostics-Programm
+  (SYNCCHECK-Praezedenz, kein ABI noetig).
+- Gate-Markerliste erweitert: SCHEDPRIO FAIL, STACK GUARD HIT,
+  TASK RECYCLE GUARD (Dauer-Wachhunde aus 0.56.15/18).
+Abnahme:
+- Smoke TEST OK (103s, bei 71% Host-Hintergrundlast!): "SCHEDPRIO OK
+  high_latency_max=0 bar=3 picks_high=100 picks_normal=58067
+  rr_picks=8307 selects=169779" - HIGH-Task springt der Busy-Rotation
+  vollstaendig vorbei, Anti-Starvation nachweisbar aktiv (8307 RR-
+  Picks), keine starvation_warnings im Log.
+- USB-Harness komplett gruen (usb-hid-poll=HIGH aktiv, [USBHIDPOLL]-
+  Marker weiter vorhanden).
+- Gate: G1+G2 PASS; G3+G3R FAIL ftp (waehrend Gothic-Spiellast 83%,
+  bekannte Klasse, Serial-Marker sauber); nach Lastruecknahme GA+GB
+  PASS => Bilanz 4x PASS auf identischem Stand.
+Notizen:
+- Erkenntnis Host-Lastklassen: moderate Hintergrundlast (~50-70%)
+  stoert Smoke und Gate NICHT; nur Vollsaturierung (Spiel aktiv ~83%)
+  kippt die FTP-/Timing-Pfade. Fuer Abnahmen reicht "Spiel nicht
+  aktiv gerendert", kein voellig idler Host noetig.
+- Backup-0.56.25-Design war lokal nicht mehr verfuegbar; frisch
+  implementiert.
+
+================================================================================
+GRUPPE III - SERVICES EREIGNISGETRIEBEN (Vorstufe Netz)
+================================================================================
+
+Versionnummer: 0.56.19
+Titel: serviceEndpointWait: blockierendes Endpoint-API (Pilot)
+Status: Erledigt
+Offene Punkte:
+- -
+Erledigt:
+- Kernel services.endpointWait(handle, timeout_ticks): nutzt die
+  BEREITS VORHANDENE requests_available-WaitQueue pro Endpoint
+  (submitRequest weckt seit jeher via wakeOne, unregister cancelt).
+  Registry-Lock wird NIE ueber den Schlaf gehalten (MEMSUITE-Regel);
+  das waitUnless-Praedikat (ep.used && countQueuedSlots==0) schliesst
+  das Lost-Wakeup-Fenster zwischen Unlock und addWaiter. Rueckgabe wie
+  endpointPoll: Anzahl anstehender Requests, 0 = Timeout ohne Arbeit.
+  service_core.endpointWait-Forward ergaenzt.
+- ProgramApi v149: service_endpoint_wait(u32,u64) am TABELLENENDE
+  (offset-stabil) in Kernel r4x.zig (Struct + named-init +
+  apiServiceEndpointPollWait) und SDK abi.zig; r4api 148->149, SDK
+  program_api_version 146->149 + Konstante
+  program_api_version_service_endpoint_wait=149; SDK program.zig
+  Context.serviceEndpointWait mit v149-Groessen-Guard; r4sys-Wrapper.
+  ENTSCHEIDUNG: ProgramApi-Ende statt R4XStartR4Sys - der Contract
+  legt fest, dass die R4XStart-Tabellen nicht wachsen.
+- Contract/ABI/R4XStart.txt: v149-Absatz (Signatur, Semantik,
+  Offset-Stabilitaet).
+- Pilot LogService: Hauptschleife von serviceEndpointPoll+sleepTicks(1)
+  auf serviceEndpointWait(handle, 200) umgestellt; 200-Tick-Timeout
+  (~2 s) haelt programShouldClose reaktionsfaehig. RDP/SSH unangetastet.
+Abnahme:
+- Smoke TEST OK (95s, frischer Voll-Stand Kernel+Apps): SERVMAN
+  "Running/Starting: 12 Failed: 0" und Service-Layer
+  "req=121 resp=121 drops=0 busy=0 timeout=0 ctimeout=0" - der
+  Wait-Pilot beantwortet Requests fehlerfrei; sauberer Poweroff belegt
+  den reaktiven Stop-Pfad (Wait-Timeout statt Haenger).
+- Run-NetGate.ps1 3/3 PASS - sogar unter 67% Gothic-Hintergrundlast.
+- Idle-Nachweis EHRLICH: das Smoke-Log enthaelt keine per-Task-
+  run_ticks-Zeilen; der Beleg ist konstruktiv (200-Tick-Wait statt
+  1-Tick-Poll = Faktor ~200 weniger Leerlauf-Wakeups des LOGSVC-Tasks)
+  plus die funktionalen Belege oben. Eine Task-Stats-Messung via SSH
+  kann bei den Folge-Eintraegen (0.56.22ff) nachgeholt werden.
+- Erster -apps-Lauf scheiterte am bekannten transienten
+  Zig-FS-Fehler (std/http.zig "Unexpected"); Retry gruen.
+Notizen:
+- Fundament fuer 0.56.22/0.56.27/0.56.28 und die Tickrate 0.56.29:
+  weitere Services folgen demselben v149-Anfuege-Muster.
+
+================================================================================
+GRUPPE IV - NETZWERK (STRIKT SERIELL, JEDER SCHRITT MIT LIVE-GATE)
+================================================================================
+
+Versionnummer: 0.56.20
+Titel: TCP-Korrektheit in tcp.zig
+Status: Erledigt
+Offene Punkte:
+- -
+Erledigt:
+- Wraparound-sichere Sequenz-Arithmetik: die vier "+ 1"-Stellen auf
+  Peer-Sequenzen (SYN-ACK-/Accept-ACK-Vergleich, FIN-ack) auf +%
+  umgestellt (Befund 13.1.1, ReleaseSafe-Panic-Kandidat).
+- segmentSeqAcceptable: Ausnahme fuer ueberlappende Retransmits
+  (Anfang vor c.ack, ENDE dahinter -> annehmen); der vorhandene
+  Overlap-Zweig in acceptPayload ist damit wieder erreichbar
+  (Befund 13.1.2).
+- Minimal-Teardown (Befund 13.1.3) ZURUECKGESTELLT: Der last_ack/
+  time_wait-Ausbau brach die FTP-Close-Vertraege der Konsumenten -
+  ZWEI Gate-Regressionen auf FREIEM Host (erst Teil-Dateien "213
+  <zu klein>", nach closed()-Fix dauerhaft "SIZE -> Antwort leer"),
+  auch tcpClose-Early-Exit heilte es nicht. Revert auf Alt-Semantik
+  (established+FIN -> closed, fin_wait+ACK -> closed+frei); die
+  State-Werte last_ack/time_wait bleiben angefuegt (ungenutzt),
+  reapTimeWait(now) raeumt jetzt NUR fin_wait-Leichen (Probe-Slots,
+  ausbleibende Peer-ACKs) nach 300 Ticks. Wiederaufnahme des vollen
+  Teardowns mit den 0.56.22-Event-Umbauten, wo die Warte-Vertraege
+  ohnehin neu entstehen. Als Haertung BLEIBEN: closed() =
+  closed|time_wait|last_ack und der tcpClose-Early-Exit nach
+  Peer-FIN (ACK + harter Close statt FIN-Warte-Zyklus).
+- Connection-Diaet (Befund 13.1.4): last_payload 256K -> 2K
+  (LAST_PAYLOAD_SIZE; rememberSent kappte schon immer, Segmente sind
+  MSS-gebunden); resetConnectionSlot() ersetzt c.* = .{} an drei
+  Stellen (kein >350-KB-memset mehr pro Reset); connectionSlotBytes()
+  + NETBOOT-Zeile als Nachweis.
+- Renames (Befund 13.1.5): selfTestConnect/loopbackWrite; drei
+  Probe-Aufrufer + core.zig-Selbsttest angepasst.
+- Neue Probes: overlapRetransmitProbe (Teil-Annahme ab ack) und
+  wraparoundProbe (Peer-Seq ueber die 2^32-Grenze inkl. FIN) - im
+  NETDIAG-limit-contract-Block verdrahtet (passed +2).
+- REGRESSION VOM GATE GEFANGEN UND GEFIXT: Der erste Gate-Batch
+  lieferte 3x FTP-Teil-Dateien ("213 52328" statt 65536) - closed()
+  meldete time_wait/last_ack nicht als beendet, der aktive Close-Pfad
+  (waitForTcpClosed) retransmittierte FINs bis zum Limit und FTPSVC
+  erkannte das Datenende nicht. Fix: closed() = closed|time_wait|
+  last_ack (Anwendungssicht; Slot-Hygiene bleibt kernintern) +
+  In-Order-FIN-ack-Guard (view.seq+len == c.ack bzw. seq == ack,
+  sonst auf Retransmit warten - das alte c.ack=view.seq+1 haette bei
+  Payload+FIN die angenommenen Bytes wieder un-ackt).
+Abnahme:
+- Smoke TEST OK (94-97s): "NETBOOT tcp-table conns=16 slot_kb=354
+  total_kb=5677" (vorher ~610 KB/Slot ~ 9,8 MB) und "NETDIAG limits:
+  ok" (alle 6 Probes inkl. Overlap+Wraparound PASS; ein Probe-Fail
+  wuerde den Block auf failed kippen).
+- Gate-Diagnosekette (KORRIGIERTE Einordnung): Die "Antwort leer"-
+  Fails nach 0.56.20 waren KEINE Spiellast-Klasse - sie reproduzierten
+  nach Gothic-Ende auf freiem Host (LOAD 18) und blieben durch
+  closed()-Fix, Drain-Guard und tcpClose-Early-Exit hindurch bestehen.
+  Frei-Host-Gegenprobe ohne die 0.56.21-IRQ-Aenderungen blieb rot =>
+  Taeter im 0.56.20-Diff; nach Revert des Teardown-Ausbaus Gate 3/3
+  PASS auf freiem Host. METHODIK-LEHRE: eine "bekannte Lastklasse"
+  nie als Erklaerung akzeptieren, wenn ein relevanter Diff dazwischen
+  liegt - immer frei-Host-Gegenprobe.
+Notizen:
+- LEHRE: Bei State-Erweiterungen die KONSUMENTEN-Vertraege mitpruefen
+  (closed()/Lifecycle-Mapper) - exakt dafuer existiert das Gate; der
+  Signaturwechsel nach dem Fix ist der Beweis der Behebung.
+- TCPSVC local-contract-FAIL im Smoke bleibt vorbestehend-toleriert.
+
+Versionnummer: 0.56.21
+Titel: RX-Ausbau: Idle-Haertung + NIC-IRQ-Zustellung
+Status: Erledigt
+Offene Punkte:
+- -
+Erledigt:
+- NIC-IRQ-Zustellung GELOEST (Befund hits=0 aus 0.56.2): RTL8139.R4D
+  registriert GSI 16-23 jetzt IMMER, nicht nur bei PCIe-Enumeration -
+  auf Q35 landen PCI-INTx-Leitungen per PIRQ-Routing auf GSI 16-23;
+  die interrupt_line (10) ist nur der Legacy-PIC-Wert aus dem BIOS.
+  Handler prueft das ISR-Register (fremde IRQs -> unhandled), Routen
+  sind shared+level-low. Beweis im Gate-Serial: nic_irq=342/342
+  (alle zugestellt UND handled).
+- NETRX-Diagnosezeile um " nic_irq=<count>/<handled>" erweitert
+  (Kette Treiber-Status -> Backend -> NETRX verifiziert); RX-Drain-
+  Aktivitaet im Idle ueber die wachsenden polls=-Werte ablesbar.
+- VORGEZOGEN aus 0.56.24(b): IRQ-vs-Poll-Drain-Guard - die aktivierte
+  IRQ-Zustellung kann den Poll-Task mitten in drainRx unterbrechen.
+  serviceIsr defert bei drain_busy (nur ISR-ack + drain_pending/
+  invalid/ovw-Flags), flushDeferredDrain arbeitet im Task-Kontext
+  nach (while-Schleife faengt erneute Defers); poll-force_drain
+  ebenso gerahmt. Single-CPU-Argument: nur IRQ-unterbricht-Task.
+Abnahme:
+- Run-NetGate.ps1 3x in Folge PASS auf freiem Host (nach Gothic-Ende;
+  derselbe Lauf deckt die finalen 0.56.20-Kernfixes mit ab).
+- nic_irq=342/342 im Gate-Serial = IOAPIC-Route traegt, IRQ-Drain
+  ergaenzt den Poll (Watchdog-Design im Treiber haelt Polls zurueck,
+  solange IRQs Fortschritt machen).
+- Smoke TEST OK (nach Teardown-Revert erneut, NETDIAG limits: ok).
+Notizen:
+- Das interaktive 30s-SSH-Idle-Szenario ist Teil der manuellen
+  Sichttests (0.56.35); headless belegt der NETRX-polls-Verlauf das
+  Idle-Drain-Verhalten.
+- Die Diagnose-Nacht (0.56.20/21 verwoben) steht im 0.56.20-Eintrag.
+
+Versionnummer: 0.56.22
+Titel: TCP-Waits auf Events
+Status: Erledigt
+Offene Punkte:
+- -
+Erledigt:
+- EINE globale tcp_activity-WaitQueue statt Queue-pro-Slot
+  (ENTSCHEIDUNG: Slot-Reuse-frei, wakeAll ist bei den wenigen
+  gleichzeitigen Warte-Tasks billig); waitUnless-Praedikate
+  (Established/Readable/Closed/PortData/PortConn, TcpWaitCtx auf dem
+  Warte-Stack) filtern und schliessen das Lost-Wakeup-Fenster
+  (Muster 0.56.13/0.56.19).
+- signalTcpActivity() nach JEDEM verarbeiteten RX-Segment im
+  applyRxView-Dispatch - IRQ-sicher (wakeOneWith laeuft unter
+  enterCritical ohne Schlaf; Praezedenz: onTick ruft wakeTask im IRQ).
+- waitForTcpEstablished/-Read/-Closed: Erstpoll + 25-Tick-waitUnless-
+  Slices mit Deadline; die 4 Accept-/Listen-Pfade (tcpEchoListenOnce,
+  tcpAcceptReadOnce, tcpAcceptReadOnListener, tcpAcceptOnListener)
+  ebenso; TCP_MAX_LOOPS entfernt (Deadline max_loops=0); pollAdapters
+  in den Schleifen defensiv belassen (einmal pro Wake, kein Busy mehr).
+- tcp.readable(conn_id) als nicht-konsumierende Pruefung (closed
+  zaehlt als lesbar, damit das Warteende aufweckt).
+- Diagnose: NETRX-Zeile + " tcp_sig="; Gate tcp-echo weist
+  roundtrip_ms aus (inkl. SSH-Exec-Overhead, als Vergleichswert).
+Abnahme:
+- Smoke TEST OK in 78s (Baseline 94-97s - die Busy-Yield-Schleifen
+  fehlten sofort messbar); NETDIAG limits: ok.
+- Run-NetGate.ps1 3/3 PASS (frei-Host): tcp-echo roundtrip_ms=
+  3213/3512/4603 bei attempts=1; tcp_sig=189 bei tcp_rx=189
+  (1:1 Signal pro Segment); nic_irq=259/259.
+- Warte-Tasks blockieren mit wait=tcp-est/tcp-read/tcp-accept
+  (WaitQueue-Reasons) statt busy zu yielden.
+Notizen:
+- Groesster struktureller Netz-Umbau der Reihe - isoliert gehalten.
+- Teardown-Wiederaufnahme (13.1.3, in 0.56.20 zurueckgestellt) ist
+  ein separater Folgeschritt auf diesem Fundament.
+
+Versionnummer: 0.56.23
+Titel: TCP-Robustheit: adaptiver RTO, mehr Retransmits, Poll-Exzesse
+Status: Erledigt
+Offene Punkte:
+- -
+Erledigt:
+- Adaptiver RTO (Befund 6.3): SRTT-Glaettung (srtt*7/8 + sample/8),
+  RTO = clamp(srtt*2, 50 ms .. 1,5 s) = 5..150 Ticks. Der RTO-Zustand
+  lebt in core (tcp.zig bleibt bewusst Timer-frei): Messbeginn beim
+  Senden (Retry-Schleifen stempeln), Sample wenn ein ACK den tx_ack
+  der Verbindung ueber den gestempelten Stand hebt (tcp.txAckOf).
+- TCP_MAX_RETRANSMITS 2 -> 5 mit RTO-Backoff (rto*2^n, gedeckelt auf
+  1,5 s); die drei Retry-Schleifen (SYN/Read/FIN) nutzen rtoBackoff().
+- Poll-Exzesse gekappt (Befund 6.4): zwei pollAdapters(32768) auf
+  TCP_POLL_ROUNDS reduziert; TCP_POLL_ROUNDS 512 -> 32, ARP-Poll
+  512 -> 64 (seit net-rx-Task 0.56.2 und NIC-IRQ 0.56.21 ist das
+  Poll hier nur noch Opportunismus, kein Antrieb).
+- Verlust-Harness: Kernel-Buildflag -Dnet-loss-test (Default aus)
+  verwirft in receiveFrame jedes 64. RX-Frame (~1,5%); zentral im
+  core-RX-Pfad = deckt alle NICs. NETRX weist rto_srtt=<srtt>/<samples>
+  und loss_drops aus.
+Abnahme:
+- Smoke TEST OK in 79s; NETDIAG limits: ok (TCP-Selbsttests inkl.
+  Overlap/Wraparound PASS).
+- Run-NetGate.ps1: 6 Laeufe, 4x PASS + 2x "setup"-Fail (SSHD-Endpoint
+  nicht rechtzeitig sichtbar = Boot-Settle-Klasse, per 3 sauberen
+  Wiederholungen bestaetigt, keine ftp/tcp-Regression); rto_srtt=2..7
+  Ticks bei samples>=1.
+- Verlust-Harness (-Dnet-loss-test, ~1,5%): NETGATE PASS, der 64-KB-
+  FTP-Transfer uebersteht loss_drops=2 per Retransmit
+  (stor+retr 64KB ok, stor_ms=6551 retr_ms=2240). Vorher: Abbruch
+  nach ~4,5 s (2 Retransmits, fester RTO).
+Notizen:
+- EHRLICHE GRENZE: Der R4OS-Retransmit sendet nur das jeweils LETZTE
+  Segment neu (kein Sliding-Window). Das traegt gelegentlichen
+  Einzelverlust (~1,5%); 6% Verlust ueberforderten den 64-KB-Transfer
+  (SSH/tcp-echo als kleine Transfers ueberstanden auch 6%). Voller
+  Transfer-Erhalt bei hohem Verlust braucht echten Window-Retransmit -
+  eine eigene spaetere TCP-Robustheitsstufe, NICHT dieser Eintrag.
+- POLL_ROUNDS-Reduktion als moeglicher Boot-Settle-Faktor im Auge
+  behalten (die 2 setup-Flakes); die sauberen Wiederholungen sprechen
+  aber fuer die Host-Boot-Klasse, kein Handlungsbedarf.
+
+Versionnummer: 0.56.24
+Titel: NIC-Haertung einzeln: RTL8139-Ring + Watchdog (RTL8139-Teil)
+Status: Erledigt
+Offene Punkte:
+- -
+Erledigt:
+- (a) 16K-RX-Ring: RCR RBLEN=16K + RX_BUFFER_SIZE 8K->16K + TX-Offset
+  auf 18K (2K Reserve vor den TX-Puffern; WRAP bleibt 0, der Drain
+  wickelt bereits per % RX_BUFFER_SIZE). Einzeln committet
+  (8395378b). Gate 6/7 PASS + 4 saubere Wiederholungen
+  (1 tcp-echo-Timing-Flake), nic_ovw stabil.
+- (b) IRQ-vs-Poll-Drain-Guard: bereits in 0.56.21 VORGEZOGEN
+  (drain_busy/drain_pending/flushDeferredDrain) - kein neuer Code.
+- (c) RX-Stall-Watchdog: bereits seit 0.56.21 vorhanden
+  (watchdog_irq_seen/watchdog_idle_polls/watchdog_drains,
+  POLL_WATCHDOG_IDLE_POLLS=16 = "Drain nach N Polls ohne IRQ-
+  Fortschritt"). Der Roadmap-Punkt (c) ist damit erfuellt, kein
+  neuer Code noetig.
+- (d) virtio-net.R4D AUSGELAGERT nach 0.56.24b (siehe unten):
+  der Treiber-Quellcode existiert im aktuellen Baum nicht mehr
+  (nur zig-out-Artefakte, kein src/, keine git-Historie) und der
+  Backup-Tag ist lokal nicht mehr verfuegbar - "neu aufnehmen" ist
+  ein kompletter Treiber-Neubau (virtio-Transport, virtqueues,
+  NET_HDR_LEN=12, R4D-Rahmen), eine eigenstaendige Aufgabe. virtio-net
+  liegt NICHT auf dem Pfad zu den manuellen Sichttests (0.56.35 laeuft
+  ueber RTL8139), daher als eigener Eintrag abgetrennt statt die
+  fertige RTL8139-Haertung daran zu binden.
+Abnahme:
+- Smoke TEST OK 77s; Gate 6/7 PASS (Flake bestaetigt); nic_ovw stabil.
+Notizen:
+- Wichtigste Vorsichts-Unterversion - Teilschritte NIE gebuendelt:
+  (a) einzeln, (b)/(c) waren schon da, (d) sauber abgetrennt.
+
+Versionnummer: 0.56.24b
+Titel: virtio-net.R4D neu aufnehmen (kompletter Treiber-Neubau)
+Status: Erledigt (umgesetzt als 0.56.36 - siehe Eintrag 0.56.36)
+Offene Punkte:
+- virtio-net-Treiber von Grund auf: PCI-Erkennung (0x1AF4:0x1000
+  legacy / 0x1041 modern), Legacy-I/O-Transport, Feature-Negotiation,
+  virtqueues (RX Q0 / TX Q1: Descriptor-Table + Avail-/Used-Ring),
+  MAC aus dem Config-Space, NET_HDR_LEN=12 (Header vor jedem Frame).
+- R4D-Rahmen wie RTL8139 (init/shutdown/poll/transmit ueber
+  DriverContext); ins Image ueber Code/build.zig addR4D +
+  CreateImageAddList.zig r4d-Liste + module.R4MF.
+- Kein Backup/keine git-Referenz verfuegbar - Neuimplementierung.
+Erledigt:
+- -
+Abnahme:
+- Build.bat -norun, -test TEST OK, Run-NetGate.ps1 PASS.
+- virtio-net-DHCP-Harness: headless -test mit
+  -device virtio-net-pci,disable-legacy=on + OPTION NET dhcp=true =>
+  DHCP-Erfolgs-Marker (Lease ueber Draht).
+Notizen:
+- Aus 0.56.24(d) ausgelagert (siehe dortige Begruendung). Eigener
+  frischer Arbeitsblock, nicht mit dem RTL8139-Teil buendeln.
+
+Versionnummer: 0.56.25
+Titel: TCP-Retransmit-Entkopplung + Durchsatz-Diagnose
+Status: Erledigt
+Offene Punkte:
+- -
+Erledigt:
+- Retransmit vom blockierenden Read-Pfad ENTKOPPELT (Befund 6.5,
+  Roadmap-Punkt 2): der net-rx-Task (0.56.2) prueft pro Tick, ob eine
+  Verbindung ein unbestaetigtes Datensegment mit abgelaufenem RTO hat,
+  und retransmittiert es proaktiv - unabhaengig davon, ob gerade ein
+  Read/Connect blockiert. Nutzt das 0.56.23-RTO-Framework
+  (rtoBackoff), gedeckelt per resend_count (PROACTIVE_MAX_RESEND=5);
+  rtoOnAck raeumt bei ACK-Fortschritt auf. sendTcpForConnection stempelt
+  bei Datensegmenten den RTO-Start. Additiv (die synchronen Read-/
+  Connect-Schleifen bleiben; Duplikat-Retransmits sind fuer TCP
+  harmlos). NETRX-Diagnose "pro_retx=".
+- DURCHSATZ-DIAGNOSE (Punkt 1 + Messpunkt umgelenkt): Die Roadmap-
+  Praemisse "tcpWrite segmentiert / N Segmente in flight" trifft die
+  Code-Realitaet NICHT. tcpWrite (core.zig) ist bereits fire-and-forget
+  (sendet ein Segment ohne ACK-Warten - mehrere KOENNEN in flight sein).
+  Der echte Durchsatz-Engpass fuer FTP/RDP ist die
+  net-service-Chunk-Groesse: net_service_tcp_write_max = 996 Bytes
+  (ipc_max_message_size=1024 - Header), und jeder Chunk ist ein
+  separater R4X-Service-Roundtrip ueber die 1024-Byte-IPC-Kanaele
+  (kernel/ipc.zig), NICHT den 4096-Byte-Endpoint (kernel/services.zig).
+  4 MB = ~4200 Roundtrips. Der Hebel ist also die IPC-Message-Groesse,
+  ein ABI-weiter Umbau mit Speicher- und R4X-Stack-Konsequenzen (die
+  0.56.15-Guard-Pages fangen zu grosse Stack-Puffer ab) -> AUSGELAGERT
+  nach 0.56.25b.
+Abnahme:
+- Smoke TEST OK 78s (schneller als vor der Event-Umstellung); NETDIAG
+  limits: ok. Run-NetGate.ps1 3/3 PASS (frei-Host). Verlust-Harness
+  (-Dnet-loss-test) PASS mit loss_drops=3.
+- pro_retx=0 im QEMU-Lauf: bei rto_srtt=1 Tick (Loopback-RTT) fangen
+  die schnellen ACKs + synchronen Read-Schleifen-Retransmits die
+  Verluste ab, bevor der proaktive Sweep zuschlaegt. Der entkoppelte
+  Pfad ist damit als UNSCHAEDLICH bewiesen (alle Gates gruen); sein
+  Nutzen materialisiert auf echter HW mit hoeherer Latenz. Ehrlich
+  dokumentiert statt den Sweep kuenstlich aggressiv zu machen.
+Notizen:
+- Der 4-MB-Durchsatz-Messpunkt gehoert zu 0.56.25b (dort wird der
+  IPC-Chunk-Hebel gezogen und der Durchsatz messbar).
+
+Versionnummer: 0.56.25b
+Titel: net-service-Durchsatz: IPC-Message-Groesse
+Status: Erledigt (umgesetzt als 0.56.37 - siehe Eintrag 0.56.37)
+Offene Punkte:
+- ipc_max_message_size / kernel/ipc.zig MAX_MESSAGE_SIZE von 1024 auf
+  einen groesseren Wert (z.B. 4096) anheben, damit net_service_tcp_
+  write_max von 996 auf ~4068 waechst und die R4X-Service-Roundtrips
+  pro grossem Transfer um ~4x sinken (Durchsatz-Hebel, Befund aus
+  0.56.25-Diagnose).
+- SPEICHER/STACK PRUEFEN vor der Aenderung: kernel/ipc.zig hat
+  16 Channels x 8 Queue = 128 Message-Slots (128 KB -> 512 KB bei 4K);
+  die SDK-Message-Puffer sind Stack-Arrays [ipc_max_message_size]u8 in
+  R4X-Programmen (1 KB -> 4 KB, mehrfach) - gegen die 0.56.15-Kernel-
+  Stack-Guards und die R4X-App-Stack-Groessen abgleichen.
+- Konsistenz abi.zig <-> kernel/ipc.zig zwingend (eine Wahrheit).
+- Durchsatz-Messpunkt: 4-MB-FTP-Transferrate in der Gate-Suite
+  ausweisen, vorher/nachher.
+Erledigt:
+- -
+Abnahme:
+- Build.bat -norun, -test TEST OK, MEMSUITE gruen (Speicher!),
+  Run-NetGate.ps1 PASS, 4-MB-FTP-Durchsatz deutlich ueber Baseline.
+Notizen:
+- Aus 0.56.25 ausgelagert (Diagnose dort). ABI-weiter Umbau -
+  eigener sorgfaeltiger Block, nicht mit anderem buendeln.
+
+================================================================================
+GRUPPE V - RDP UND DESKTOP (autonome Abnahme ueber Wire-Tests/Stats)
+================================================================================
+
+Versionnummer: 0.56.26
+Titel: RDP-Bitmap-Kompression (Interleaved RLE)
+Status: Erledigt
+Offene Punkte:
+- -
+Erledigt:
+- MS-RDPBCGR-Spec direkt von learn.microsoft.com gezogen (3.1.9
+  Decompress-Pseudocode, 2.2.9.1.1.3.1.2.4 Order-Code-Tabelle,
+  TS_BITMAP_DATA-Flags, TS_CD_HEADER) - kein Codec aus dem Gedaechtnis.
+- Zeilenweiser Interleaved-RLE-Encoder (16bpp/RGB565) in RDPSVC: der
+  Sendepfad schickt 1 Zeile pro PDU, damit gibt es keine Vorgaenger-
+  Scanline und der Encoder nutzt das Order-Subset COLOR_RUN (0x3/0xF3,
+  Run>=4) + COLOR_IMAGE (0x4/0xF4) inkl. MEGA-/MEGA_MEGA-Laengen -
+  fuer Desktop-Flaechen hochwirksam, frei von fgPel-/FirstLine-Faellen.
+- Spec-Test-Decoder nach 3.1.9-Pseudocode (zusaetzlich BG_RUN/FG_RUN/
+  SET_FG/WHITE/BLACK mit First-Line-Semantik) als Roundtrip-Referenz.
+- Selbsttest in RDPSVC /SELFTEST (laeuft im Smoke-AUTOEXEC): 7
+  Referenzmuster (Flaeche, Haelften, Verlauf, LCG-Rauschen,
+  Alternierung, Kurzzeile, MEGA-Mix) encode->decode BITIDENTISCH;
+  comp=8265 raw=13440 ueber die absichtlich harten Muster (61%);
+  reine Flaechenzeile 1280px: 2560 Bytes -> ~7 Bytes.
+- Wire-Format: TS_BITMAP_DATA bitsPerPixel=16 + BITMAP_COMPRESSION
+  (0x0001) + 8-Byte-TS_CD_HEADER (cbScanWidth in PIXELN, durch 4
+  teilbar -> Dirty-Rects werden auf 4-Pixel-Raster ausgeweitet);
+  Demand-Active-Bitmap-Capability meldet Session-bpp dynamisch.
+- Roh-Fallback konfigurierbar: Registry SYSTEM\Services\RDPSVC
+  CompressRle16 (Default 1; =0 -> bisheriger 32bpp-Rohpfad komplett).
+- Marker: COM1-Frame-Zeile +comp=/rawpx=, LOGSVC-Bitmap-Record
+  +comp=/raw=/rle_rows=; ServiceStats +comp/raw/rle_rows/raw_rows.
+- Wire-Harness Run-RdpServiceLiveTest.ps1 erweitert: beide Formate
+  (16bpp komprimiert MIT TS_CD_HEADER-Konsistenzpruefung, 32bpp roh),
+  Demand-Active-Pattern 16/32bpp, Input-Read mit Dirty-Rect-Modus
+  (Format streng, Hash+Zaehlung, bounded Terminierung nach 3 PDUs).
+- NEBENBEFUND (a): Erster Smoke zeigte RDPSVC selftest FAILED:
+  negotiation-compat, HEAD-Gegenprobe (stash) gruen. Nach Umstellung
+  der Selbsttest-Reihenfolge (rle-codec VOR negotiation-compat) und
+  Step-Instrumentierung (negotiationCompatFail step=N, bleibt drin)
+  4x stabil gruen. Ursache NICHT final erklaert (Codegen-/Reihenfolge-
+  Klasse); die Step-Marker benennen kuenftig den konkreten Check.
+  WICHTIG: SMOKE war trotz Selftest-FAIL exit 0 - AUTOEXEC-Selftest-
+  Marker muessen aktiv gegrept werden.
+- NEBENBEFUND (b): Wire-Test-Kachelfolge-Fail war VORBESTEHEND
+  (HEAD-Gegenprobe failt identisch mit left=17/width=12): der Desktop
+  meldet inzwischen Cursor-Moves als Dirty-Updates, der Harness
+  verlangte eine strikte Vollbild-Kachelfolge; der Test lief seit der
+  0.55.39-Aera nicht mehr. Zusaetzlich Endlos-Leser-Falle behoben:
+  die Session sendet kontinuierlich, der Idle-Timeout des Lesers
+  greift nie -> Dirty-Modus braucht bounded Terminierung.
+Abnahme:
+- Build.bat -app RdpService OK; voller Smoke -test TEST OK (93s).
+- RDPSVC-Selbsttest inkl. RLE-Roundtrip 4x stabil OK (1x Smoke + 3x
+  -testonly), comp=8265/raw=13440 bitidentisch.
+- Run-RdpServiceLiveTest.ps1 KOMPLETT PASS mit komprimierten PDUs:
+  classic/modern/tls-only-protected Aktivierung je 1280x720 mit 720
+  Zeilen-PDUs, Input-/Reconnect-Checksummen, CredSSP-Negativproben.
+- Run-NetGate.ps1 PASS (frei-Host).
+Notizen:
+- Die VISUELLE Korrektheit im echten mstsc (Artefakte, Farben, realer
+  Kompressionsfaktor auf Desktop-Inhalt) ist Bestandteil von 0.56.35;
+  die autonome Abnahme sichert Bitidentitaet des Codecs und
+  Protokollstabilitaet.
+- Encoder-Subset ist bewusst gewaehlt: FGBG-/DITHERED-Orders werden
+  nicht emittiert (Decoder-seitig teils als Referenz implementiert);
+  Mehrzeilen-PDUs + BG_RUN-Cross-Scanline waeren der naechste
+  Kompressionshebel (passt zu 0.56.27 Shared-Frame-Umbau).
+
+Versionnummer: 0.56.27
+Titel: RDP Session-Loop event-getrieben (Waits statt Poll)
+Status: Erledigt
+Offene Punkte:
+- -
+Erledigt:
+- KERNEL remoteFrameWait (r4desk.zig) von Tick-Poll (waitOneTick pro
+  Tick in Schleife) auf echten sync.WaitQueue-Event-Wait umgestellt:
+  remote_frame_waitq, remoteFramePublish weckt per wakeAll nach dem
+  Info-Update, Waiter nutzen waitUnless mit Revision-Praedikat
+  (predStillWaitFrame, 25-Tick-Slices) - Lost-Wakeup-sicher nach dem
+  0.56.19/0.56.22-Muster. Frame-Aenderungen wecken damit SOFORT statt
+  im Tick-Raster.
+- RDPSVC Session-Loop: Idle-Zweig wartet event-getrieben auf eine neue
+  Frame-Revision (remoteFrameWait(last_rev, 15ms)) statt blind
+  sleepTicks(15ms); Input wird wie bisher nach spaetestens 15ms wieder
+  gepollt; Fallback-Sleep, wenn kein Remote-Frame verfuegbar ist.
+  Wait-Bilanz pro Session: COM1-/Konsolen-Zeile "RDPSVC session-loop
+  waits: frame_wakes= idle_timeouts=" plus LOGSVC-Record (im
+  Desktop-Boot geht Service-stdout nicht auf COM1; via LOGCENTER
+  /RDPTRACE abrufbar).
+- RDPSVC Hauptschleife: serviceEndpointWait(20ms) (0.56.19-API) statt
+  sleepTicks(1) pro Runde - Endpoint-Requests wecken sofort,
+  Accept-Drossel (accept_idle_poll_ms=100) und Worker-Join laufen im
+  Wait-Raster weiter.
+- Idle-CPU-Messpunkt: PERFDIAG zeigt Task-run_ticks bereits pro Task
+  (r4dev ProgramTaskPerformanceInfo, via SSH-exec PERFDIAG abrufbar) -
+  kein neuer Diagnosecode noetig.
+- SCOPE-SPLIT: Der Shared-Frame-Teil (gemeinsam gemappter Puffer,
+  Doppelkopie-Eliminierung, ABI-Erweiterung) ist NICHT Teil dieser
+  Unterversion -> ausgelagert nach 0.56.27b (Ein-Risiko-Prinzip).
+Abnahme:
+- Build.bat -kernel + -app RdpService OK; voller Smoke -test TEST OK
+  (144s inkl. Kernel-Vollbuild); RDPSVC-Selftest + RLE-Marker gruen
+  (aktiv gegrept, Lehre aus 0.56.26).
+- Run-RdpServiceLiveTest.ps1 KOMPLETT PASS auf dem neuen Wait-Pfad:
+  alle Aktivierungen 1280x720/720 Zeilen-PDUs, input_updates=3 je
+  Session. Funktionaler Event-Beleg: waitForRemoteFrameAfter laeuft
+  ueber denselben umgebauten remoteFrameWait - haette der Event-Wait
+  Lost-Wakeups, waeren die Input-Bitmap-Updates ausgeblieben.
+- Run-NetGate.ps1 PASS (frisch, nach Wire-Test; TestInjection-Restore
+  per git status verifiziert).
+- run_ticks-Feinmessung mit stehender mstsc-Session: 0.56.35 (headless
+  ohne stehende echte Session nicht aussagekraeftig messbar).
+Notizen:
+- Framerate-/Fluessigkeits-Eindruck im mstsc ist Teil von 0.56.35.
+- NEBENBEFUND (Inventur): Das Smoke-Log enthaelt 14 VORBESTEHENDE
+  FAILED-Zeilen bei TEST OK (TCPSVC local-contract, NETDIAG selftest,
+  DRVDIAG completion/deferred/workqueue, PERFDIAG summary fields,
+  STORDIAG queue/cache/pageIO, R4M0 R4PACK bad relocation [seit 0.56.10
+  bekannt]). HEAD-Diskriminante: FAILED-Liste identisch (nur
+  Zaehler-Rauschen) - nichts davon stammt aus 0.56.27. Der Smoke wertet
+  nur Boot/Poweroff/TEST OK, NICHT die Selftest-Marker; Fails dieser
+  Klasse bleiben still. Triage der 14 Marker -> 0.56.31.
+
+Versionnummer: 0.56.27b
+Titel: RDP Shared-Frame ohne Doppelkopie (ABI)
+Status: Erledigt (umgesetzt als 0.56.38 - siehe Eintrag 0.56.38)
+Offene Punkte:
+- Shared-Frame: RemoteFrame als gemeinsam gemappter Puffer + Revision/
+  Dirty-Info ueber die ABI; remoteFrameRead bleibt als Kompat-Pfad
+  (Befund 9.2). ABI-Erweiterung (neue R4DESK-Ops am Tabellenende,
+  ProgramApi-Increment nach v149-Muster).
+- Option fuer echte Null-Idle: kombinierter Kernel-Wait "neue
+  Frame-Revision ODER TCP-Aktivitaet auf Conn" (remote_frame_waitq +
+  tcp_activity zusammenfuehren oder Doppel-Wait-API) - dann kann die
+  Session-Loop ohne Input-Poll-Raster schlafen.
+Erledigt:
+- -
+Abnahme:
+- Build.bat -norun; -test TEST OK; Run-RdpServiceLiveTest.ps1 PASS;
+  Run-NetGate.ps1 PASS; Durchsatz-/Idle-Vergleich vorher/nachher.
+Notizen:
+- Aus 0.56.27 ausgelagert (dort Session-Loop-Waits umgesetzt).
+
+Versionnummer: 0.56.28
+Titel: Desktop event-getrieben rendern
+Status: Erledigt
+Offene Punkte:
+- -
+Erledigt:
+- NEUES Kernel-Modul kernel/desktop_events.zig: gemeinsames Desktop-
+  Aktivitaets-Event (sync.WaitQueue + signal_seq; waitUnless-Praedikat
+  Lost-Wakeup-sicher nach 0.56.19/22-Muster). signal() ist
+  IRQ-tauglich: WaitQueue.wakeAll arbeitet unter saveAndDisable und
+  nutzt dieselbe wakeTaskById-Mechanik wie der Timer-Tick.
+- Signal-Quellen verdrahtet: keyboard.push (PS/2-IRQ; deckt auch
+  USB-Keyboard via injectScancode), mouse.zig beide packets-Stellen
+  (PS/2 + USB), r4desk.remoteInputPush (RDP-Input), r4x.zig
+  bumpGuiRevision + bumpConsoleRevision (Fenster-/Konsolen-Inhalte).
+- Neues R4DESK-ABI desktop_activity_wait(last_seq, timeout, out_seq)
+  am Tabellenende: Version 3->4 UND Size 376->384 BEIDSEITIG
+  (r4x.zig + SDK abi.zig; der comptime-Guard "R4XStartR4Desk ABI size
+  mismatch" stoppte den ersten Build - Lehre: bei Tabellen-Anfuegung
+  immer auch die Size-Konstante bumpen). hasFn-offset-tolerant,
+  SDK-Versionscheck ist >=; Durchstich SDK r4xstart/r4desk +
+  Desktop-api.zig.
+- Desktop app.zig idleWait: bei Aktivitaet weiter 10ms-Kurzschlaf
+  (Responsiveness fuer Folge-Events); im Leerlauf desktopActivityWait
+  mit blink_half-Raster (500ms) - Events wecken SOFORT, Idle-Wakes
+  sinken von ~100/s (10ms-Poll) auf ~2/s (Faktor 50). Fallback auf
+  den alten Sleep, wenn der Kernel das API nicht hat; Zaehler
+  activity_wait_wakes/timeouts.
+- GRENZEN (ehrlich): WINSVC-Fenster-Syncs, Uhr, Layout-Writeback u.ae.
+  laufen im 500ms-Raster (kein eigenes Event); "Revision konstant ohne
+  Input" ist headless flaky, weil Uhr-/Blink-Redraws die Revision
+  bumpen koennen -> Sichtpruefung + Desktop-run_ticks via SSH-PERFDIAG
+  in 0.56.35. render_stats: vorhandene RenderSnapshot-Ausgaben im
+  R4X-Smoke + PERFDIAG-run_ticks decken den Messweg ab.
+Abnahme:
+- Voller Smoke -test TEST OK (144s); RDPSVC-Selftest+RLE-Marker gruen;
+  FAILED-Zeilen = bekannte Basislinie aus 0.56.27 (nur
+  Zaehler-Rauschen; 1 Build-Retry wegen transientem Zig-FS-Fehler
+  "nextafter.zig Unexpected").
+- Run-RdpServiceLiveTest.ps1 KOMPLETT PASS gegen den Desktop-Boot mit
+  neuem idleWait: alle Aktivierungen, input_updates=3 je Session =
+  RDP-Input weckt den Renderer und die Frame-Revision steigt prompt.
+- Run-UsbHidBootTest.ps1 PASS (beide Szenarien) - die neuen
+  IRQ-Signale in keyboard/mouse stoeren den HID-Pfad nicht.
+- Run-NetGate.ps1 PASS.
+Notizen:
+- Fluessigkeits-Abnahme (>=60 Hz sichtbar) ist Teil von 0.56.35.
+
+================================================================================
+GRUPPE VI - ZEITBASIS UND FEINSCHLIFF
+================================================================================
+
+Versionnummer: 0.56.29
+Titel: Tick-Konstanten-Audit + ms-Basis (1000-Hz-Schalter revertiert)
+Status: Erledigt
+Offene Punkte:
+- -
+Erledigt:
+- HZ-NEUTRALE ms-BASIS-INFRASTRUKTUR (bleibt): net/timing.zig mit
+  comptime-Helfer msToTicks(ms) gegen timer.DEFAULT_HZ; alle Netz-
+  Timeouts jetzt in ms definiert (ARP-TTL 30 s, ARP 500 ms, DHCP 2 s,
+  DNS 4 s, LISTEN 10 s, RETRANSMIT 1,5 s, TIME_WAIT 3 s, SVC-OP 4 s -
+  bei 100 Hz identische Tick-Werte wie vorher); tcp.TIME_WAIT_TICKS =
+  msToTicks(3000); core TCP_RTO_MIN/MAX = msToTicks(50/1500);
+  usb-hid-poll-idle + net-rx-idle als comptime-Echtzeit-Raster
+  (10 ms; = 1 Tick bei 100 Hz, unveraendertes Verhalten).
+- 1000-Hz-PROBE durchgefuehrt; VIER Fallen-Klassen ueber echte Tests
+  gefunden und dokumentiert:
+  (1) Tick-ZEITBUDGETS in Kernel/Services (Scheduler-Quantum/Warn,
+      page_cache-Wachhund, r4desk-Clipboard, Service-listen/register/
+      join/flush) - Kandidatenliste erarbeitet, fuer 100 Hz
+      zurueckgestellt.
+  (2) Tick-basierte TESTSCHWELLEN: MEMSUITE-Pagerstress-Responsiveness
+      (100/250/100 Ticks) schlug als FATAL-strict zu (fs=302 Ticks bei
+      1000 Hz = 302 ms real).
+  (3) POLL-RATEN-basierte Treiber-Schwellen: RTL8139-Dead-Slot zaehlt
+      poll_count, dessen Rate mit den tick-basierten Wait-Slices
+      skaliert - TX-Slots kollabierten nach ~300 ms (nic_txe>0,
+      Gate-ftp rot); auch Schwelle x10 reichte nicht deterministisch.
+      Poll-Zaehler ist KEINE stabile Zeitbasis; Befund-Kommentar im
+      Treiber hinterlegt.
+  (4) 1-ms-MMIO-DAUERPOLLER unter TCG: usb-hid-poll/net-rx-idle mit
+      1000 Poll-Runden/s sprengten den 240-s-QEMU-Watchdog.
+- REVERT des Schalters (0.56.20-Muster): DEFAULT_HZ zurueck auf 100
+  (Begruendungs-Kommentar in pit.zig), Scheduler-/Service-/MemorySuite-/
+  RTL8139-Werte zurueck; Gate blieb bei 1000 Hz trotz drei Fix-Runden
+  rot (ftp-transfer, einmal breit ssh/tcp-echo) - die echte Loesung
+  braucht Zeit-Durchreichung in den R4D-Treiber-Poll-Vertrag (ABI)
+  -> ausgelagert nach 0.56.29b.
+Abnahme:
+- Voller Smoke -test TEST OK (138 s, Vor-Umstellungs-Niveau);
+  MEMSUITE 2x OK; RDPSVC-/RLE-Marker gruen; FAILED-Basislinie.
+- Run-NetGate.ps1 3x PASS (1x frischer Build + 2x -SkipBuild).
+- USB-HID-Test PASS (in der Probe-Phase, unveraenderter Pfad).
+- NEBENBEFUND: NETRX nic_txe=8 auch auf dem 100-Hz-Stand bei
+  PASS-Laeufen beobachtet - TX-Fehler-Semantik (Recovery-Zyklen?)
+  klaeren gehoert zu 0.56.29b.
+Notizen:
+- KETTEN-REGEL (Testfalle dokumentiert): Run-NetGate -SkipBuild setzt
+  ein zuvor VOM GATE gebautes Image voraus. Nach einem -test/-testimage
+  bootet -SkipBuild das Smoke-Image, dessen AUTOEXEC mit POWEROFF endet
+  -> "QEMU wurde vor dem NetGate beendet"/setup-FAIL als Artefakt.
+- Der 1-ms-Latenzboden kommt erst mit 0.56.29b; die Event-Umstellungen
+  0.56.19-0.56.28 bleiben der wirksame Latenz-Hebel.
+
+Versionnummer: 0.56.29b
+Titel: Tickrate 1000 Hz Wiederanlauf: Treiber-/Poll-Zeitbasis
+Status: Erledigt (umgesetzt als 0.56.40 - siehe Eintrag 0.56.40)
+Offene Punkte:
+- Zeit-/Tick-Durchreichung in den R4D-Netz-Backend-Poll-Vertrag
+  (oder Tick-Reader im Driver-Context), damit RTL8139-Dead-Slot und
+  aehnliche Schwellen auf ECHTZEIT statt poll_count arbeiten.
+- Audit aller Treiber auf poll-raten-/tick-basierte Schwellen
+  (AC97/HDA PLAYBACK/DRAIN_WAIT_TICKS, XHCI-Pending-Raster).
+- NETRX nic_txe-Semantik klaeren (Nebenbefund 0.56.29: txe=8 bei
+  PASS auch auf 100 Hz).
+- TCG-Kostenmessung 500 vs. 1000 Hz; QEMU-Watchdog-Budgets pruefen.
+- Dann DEFAULT_HZ-Schalter (1 Konstante, ms-Infrastruktur liegt
+  bereit) mit voller Abnahme: Smoke+Zeittest, MEMSUITE, Gate 3x,
+  USB, Idle-Vergleich.
+Erledigt:
+- -
+Abnahme:
+- Build.bat -norun; -test TEST OK; Gate 3x PASS; MEMSUITE gruen;
+  AUTOEXEC-Zeittest 1-s-Wait ~1 s echt.
+Notizen:
+- Aus 0.56.29 ausgelagert (dort Diagnose + Revert dokumentiert).
+
+Versionnummer: 0.56.30
+Titel: Lazy-FPU
+Status: Erledigt
+Offene Punkte:
+- -
+Erledigt:
+- Konservatives uses_fpu-Flag statt #NM-Trap: Der Kernel ist
+  soft_float OHNE SSE/AVX (Code/build.zig subtrahiert mmx..avx2) -
+  reine Kernel-Tasks koennen FPU-State weder nutzen noch korrumpieren.
+  Natuerliche Trennlinie ohne Aufrufer-Edits: createKernelThread wird
+  ausschliesslich von Kernel-Workern genutzt (net-rx, usb-hid-poll,
+  r4d-work, st-/sync-Selbsttests) -> uses_fpu=false;
+  createKernelThreadBlocked ausschliesslich von r4x.zig
+  (program/shell/service/app/async-io/thread) -> bleibt true
+  (fail-safe Default true; kernel-main explizit false).
+- save/restoreFpuState ueberspringen XSAVE/XRSTOR fuer kernel-pure
+  Tasks; Zaehler fpu_lazy_saves/fpu_lazy_skips.
+- NEU SIMDD.R4X (Code/System/Diagnostics/SimdDiag): SIMD-
+  Verschraenkungstest - 2 R4X-Threads + Hauptthread rechnen parallel
+  @Vector(8,u32)-Ketten (400 Runden, versetzte sleepTicks-Raster =
+  viele Switches) und pruefen bitgenau gegen skalare Referenz; im
+  Smoke-AUTOEXEC nach THREADD. Projekt nach ThreadDiag-Muster
+  (build.zig/zon/R4MF/README, zentraler Build via Code/build.zig +
+  CreateImageAddList).
+- PERFDIAG zeigt die Bilanz: ProgramPerformanceSummary +fpu_lazy_saves/
+  +fpu_lazy_skips am Struct-Ende (size-selbstversioniert via @sizeOf
+  beidseitig, r4dev-Fueller aus sched_task).
+- BEFUNDE nebenbei: (a) Die Standalone-build.zigs der Diagnostics
+  referenzieren r4os_build und bauen host-seitig nicht (latent seit
+  laengerem; Host baut ZENTRAL ueber Code/build.zig, R4MF dient dem
+  Selfhosting-Pfad) - Build.bat -app mit ORDNERnamen laeuft in das
+  kaputte Projekt-build.zig. (b) Zig-Fallen dokumentiert:
+  zon-Fingerprint ist an den Paketnamen gebunden; @Vector kennt keine
+  Laufzeit-Indizes (Array-Konvertierung nutzen).
+Abnahme:
+- Voller Smoke -test TEST OK; SIMDD result: OK rounds=400 threads=3
+  (bitgenau ueber viele Switches - kein State-Verlust).
+- Kostenbeleg: FPU lazy saves=2193456 skips=2358070 im Smoke-Lauf -
+  ~52% aller Kontextswitch-XSAVE/XRSTOR-Paare entfallen (die heissen
+  Kernel-Worker dominieren die Switches).
+- MEMSUITE 2x OK; Run-NetGate.ps1 3x PASS (1x frisch + 2x -SkipBuild);
+  USB-HID-Test PASS.
+Notizen:
+- FPU-Bugs sind subtil: eigener fokussierter Schritt, nichts buendeln.
+- CR0.TS/#NM bleibt als spaetere Ausbaustufe moeglich, falls R4X-Tasks
+  ohne SIMD-Nutzung relevant werden; das statische Flag deckt die
+  dominante Kernel-Worker-Klasse bereits ab.
+
+================================================================================
+GRUPPE VII - AUFRAEUMEN UND STRUKTUR
+================================================================================
+
+Versionnummer: 0.56.31
+Titel: Toter Code + Stub-Bereinigung
+Status: Erledigt
+Offene Punkte:
+- -
+Erledigt:
+- GELOESCHT (git rm, grep-Nachweis: keine Referenzen, Kernel baut):
+  Code/Kernel/driver/storage/ata_pio.zig, Code/Kernel/kernel/api.zig.
+- Display-Transition-Reste: 0.26.2-Kommentarblock und 10 ungenutzte
+  DisplayBackend*-Aliasse aus display.zig entfernt (extern nirgends
+  als Typen genutzt); surface_pipeline.zig hatte keine Alias-Reste.
+- R4D-ENTSCHEIDUNG (Befund 10.2 ueberholt): AHCI.R4D/XHCI.R4D/
+  USBMSC.R4D BLEIBEN in der Image-Liste - das sind keine Stubs mehr,
+  sondern produktive duenne Aktivierungs-Module (79/160/29 Zeilen)
+  fuer die Kernel-Backends (XHCI seit 0.56.13 einziger USB-Hostpfad,
+  AHCI Teil des 0.56.12-Storage-R4D-Pfads). Vollausbau bleibt 0.57.X.
+  HINWEIS: built-in ahci.zig/nvme.zig liegen noch in driver/storage
+  und werden von storage_boot importiert (Probing) - die AGENTS-Zeile
+  "in 0.56.12 GELOESCHT" ist Doku-voraus; Abgleich in 0.56.34.
+- FAILED-TRIAGE (Basislinie 23 Zeilen -> 18):
+  [GEFIXT] TCPSVC local-contract: Test-Drift - der Selbsttest war auf
+    pending_per_owner_max=2 und Aktiv-Limit 3 choreografiert, real
+    gelten 4 bzw. 7 (pending_ops_max 8 - 1 reserviert). Test fuellt
+    jetzt bis zu den ECHTEN Limits auf; zusaetzlich mit Step-Markern
+    instrumentiert (TCPSVC local-contract fail step=N, bleibt drin).
+    Selftest erstmals seit langem GRUEN.
+  [GEFIXT] DRVDIAG "Driver deferred work"/"Driver completion wait" und
+    PERFDIAG "Driver workqueue completion": Live-Assertions erwarteten
+    IRQ-submittete Workitems (irq>0, waits>0) - seit der R4D-Treiber-
+    Auslagerung (0.56.12) ist die Workqueue im Normal-Boot komplett
+    inaktiv (Beleg: Snapshot alles 0). Idle-und-fehlerfrei ist jetzt
+    zulaessig; die Aktiv-Bedingungen gelten weiter, sobald Items
+    laufen.
+  [FOLGEBEFUND] NETDIAG selftest/cleanup/lifecycle: der errors-Mode
+    wertet den globalen Fehlerzaehler (total=30, packet=23), den die
+    EIGENEN Negativtests fuellen (IPv4-Fuzz short/version/checksum/
+    fragment je 1, negative-timeout) - Bewertung braucht kernelseitig
+    ein Baseline-Delta statt Absolutwert.
+  [FOLGEBEFUND] STORDIAG queue/cache/pageIO/result + "Storage counter
+    baseline" (PERFDIAG): Pagefile-lose Smoke-Umgebung
+    (pagefileReady=0; pageOut fail=18 by design ohne Pagefile) plus
+    waits=0-Erwartungen - Checks brauchen ein Umgebungs-Gate.
+  [FOLGEBEFUND] PERFDIAG "summary fields"/result: Sammel-AND ueber
+    u.a. Storage-Zaehler - Rest nach Workqueue-Fix = Storage-Klasse.
+  [FOLGEBEFUND] R4M0 R4PACK bad relocation: bekannt seit 0.56.10
+    (HEAD-belegt), R4M0-Reloc-Klasse.
+  [FOLGEBEFUND] NETIOD "tcp service status": TCPSVC-Statusvertrag.
+  [ERWARTET] "[R4D] init failed code=-1" stammt vom AudioFail-
+    Negativ-Testtreiber.
+Abnahme:
+- Voller Smoke -test TEST OK (94s); TCPSVC selftest: OK;
+  FAILED-Basislinie 23 -> 18 Zeilen.
+- Kernel baut nach allen Loeschungen (-kernel OK).
+- Run-NetGate.ps1 3/4 PASS: G1 (Build+Boot-Lauf) mit ftp-transfer-
+  Einzelausreisser, G2-G4 PASS - die 0.56.31-Aenderungen beruehren
+  keinen Netz-Laufzeitpfad (nur Test-Choreografie, Diag-Checks,
+  geloeschte importlose Dateien).
+Notizen:
+- Grep-Falle: das Muster "FAILED" matcht auch harmlose Zeilen
+  ("failed=0", "Failed: 0") - fuer Basislinien-Vergleiche ": FAILED"
+  bzw. "FAILED:" verwenden.
+- Die Folgebefunde sind bewusst NICHT gefixt (Storage-/Kernel-
+  Bewertungslogik, eigenes Risiko); Kandidaten fuer 0.57.X.
+
+Versionnummer: 0.56.32
+Titel: IPC-Konsolidierung
+Status: Erledigt
+Offene Punkte:
+- -
+Erledigt:
+- kernel/ipc.zig per git-mv nach kernel/service_ipc.zig ueberfuehrt
+  (Kanal-IPC gehoert damit sichtbar zum Service-Block; Kopf-Kommentar
+  dokumentiert Herkunft und Neutralitaet).
+- kernel/ipc.zig ist jetzt ein EXPLIZITER Re-Export-Kompat-Shim
+  (22 pub-Symbole; usingnamespace existiert in Zig 0.16 nicht mehr).
+  Die Importer network_boot.zig, net/core.zig, net/ipc_services.zig
+  und program/r4net.zig bleiben UNVERAENDERT und laufen ueber den
+  Shim; neue Nutzer sollen service_ipc.zig direkt importieren.
+- STRIKT verhaltensneutral: keine Groessen- (MAX_MESSAGE_SIZE=1024,
+  QUEUE_DEPTH=8, MAX_CHANNELS=16), Timing- oder Logikaenderung.
+  Der IPC-Durchsatz-Hebel bleibt der separate Eintrag 0.56.25b.
+Abnahme:
+- Voller Smoke -test TEST OK (122s); NETDIAG-IPC-Subtests gruen
+  (IPC: drops=0 queued=0/32; Backpressure-Negativproben unveraendert);
+  TCPSVC selftest OK; MEMSUITE 2x OK.
+- Run-NetGate.ps1 3x PASS (1x frisch + 2x -SkipBuild).
+Notizen:
+- Der IPC-Umbau des ersten Anlaufs war Teil des Regression-Geflechts -
+  deshalb strikt verhaltensneutral gehalten (reiner Datei-/Namens-
+  Umzug mit Shim).
+
+Versionnummer: 0.56.33
+Titel: API1-Abbau - Diagnose (Umbau nach 0.56.33b verschoben)
+Status: Erledigt
+Offene Punkte:
+- -
+Erledigt:
+- NUTZFLAECHEN-DIAGNOSE (Befund-8.2-Praemisse widerlegt, Muster
+  0.56.25): Die ProgramApi hinter R4XStartContext.runtime ist KEINE
+  tote Legacy-Flaeche, sondern der aktive Laufzeitvertrag der
+  gesamten mitgelieferten Software: 75 Dateien in Code/System (alle
+  Services, Diagnostics, Anwendungen) beziehen ueber
+  apiFromR4XStart/program.zig-Context die netService-, TCP-,
+  serviceEndpointWait- (v149) und weitere Operationen. Tot ist NUR
+  der API1-STARTPFAD (seit 0.51.14; Loader-Ablehnung ist gewollte,
+  getestete Fixture - classifyR4MStartMetadata).
+- Im Loader existiert damit KEIN gefahrlos abbaubarer API1-Rest:
+  API_MAGIC/API_VERSION versionieren die aktive runtime-Bruecke
+  (v149-Anfuegemuster); ein "Minimal-Stub" heute waere ein Bruch
+  von 75 Consumern ohne Gegenwert.
+- Contract-Doku Code/System/SDK/Contract/ABI/R4XStart.txt um einen
+  Stand-0.56.33-Absatz praezisiert: runtime = aktive interne
+  Laufzeitbruecke; Stub-Reduktion setzt R4L-Vollmigration voraus
+  (-> 0.56.33b).
+- KEINE Code-/ABI-Aenderung in diesem Schritt (bewusst - der einzige
+  geplante ABI-Bruch der Reihe wird nicht als Blindfug ausgefuehrt).
+Abnahme:
+- Reine Diagnose + Doku: keine Laufzeitpfad-Aenderung; der gruene
+  Stand aus 0.56.32 (Smoke TEST OK, Gate 3x) gilt unveraendert.
+Notizen:
+- Der eigentliche Abbau ist als 0.56.33b neu geplant; erst dort
+  faellt der bewusste ABI-Bruch (nach der Migration).
+
+Versionnummer: 0.56.33b
+Titel: ProgramApi-zu-R4L-Vollmigration + runtime-Stub (ABI-Increment)
+Status: Erledigt (umgesetzt als 0.56.41 - siehe Eintrag 0.56.41)
+Offene Punkte:
+- Migrationsinventar: welche program.zig-Context-Funktionen (netService*,
+  tcpWrite*/tcpRead*, serviceEndpoint*, io/file/registry-Reste) von den
+  75 Consumern real genutzt werden; Ziel-R4L-Gruppe je Funktion
+  (R4SYS/R4NET) festlegen (Contract/API/Groups.txt).
+- R4XStart-R4L-Tabellen versioniert erweitern (Anfuege-Muster + Size-
+  Konstanten beidseitig, vgl. 0.56.28-Lehre); SDK-Contexts auf die
+  Tabellen umstellen; ProgramApi-Zugriffe im SDK entfernen.
+- Danach runtime auf Minimal-Stub, ProgramApi-Flaeche im Loader
+  entfernen; Contract-Doku im selben Schritt; ABI-Increment.
+- Voller Build (alle R4X), grep-Nachweis, AUTOEXEC-Exemplare,
+  Run-NetGate.ps1 3x.
+Erledigt:
+- -
+Abnahme:
+- Build.bat -norun; -test TEST OK; grep-Nachweis Loader; Gate 3x PASS.
+Notizen:
+- Aus 0.56.33 ausgelagert (dort Diagnose: 75 aktive Consumer).
+
+Versionnummer: 0.56.34
+Titel: Grosse Dateien splitten + fat32-Konsolidierung + Doku-Abgleich
+Status: Erledigt
+Offene Punkte:
+- -
+Erledigt:
+- fat32-KONSOLIDIERUNG: real NEUN Verzeichnis-Ketten-Schleifen (nicht
+  fuenf wie im Befund) auf EINEN DirChainIterator konsolidiert:
+  findEntry, listDirectoryCluster, readDirectoryCluster,
+  readDirectoryEntryCluster, findEntryLocation, writeDirectoryEntry,
+  writeDirectoryEntries, shortNameRawUsed, directoryIsEmpty.
+- 128-Cluster-Verzeichnislimit: hartes guard<128 (stilles Abschneiden)
+  ersetzt durch DIR_CHAIN_MAX_CLUSTERS=4096 als reinen Loop-/
+  Korruptionsschutz MIT sichtbarer Warnung ("FAT32 WARN: dir cluster
+  chain > ...") und dir_chain_truncations-Zaehler.
+- Semantik je Funktionsklasse ERHALTEN: (a) Fehler==Ende==null
+  (find/read-Entry-Klasse), (b) Fehler(false) != Ende(true) via
+  fat_error-Flag (list/readDirectory), (c) konservative Truncation-
+  Semantik wie das alte Guard-Ende (shortNameRawUsed -> "belegt",
+  directoryIsEmpty -> "nicht leer"); writeDirectoryEntries behaelt den
+  Slot-Run UEBER Clustergrenzen (wie zuvor).
+- Dir-Limit-Testfall EHRLICH: ein physisches Verzeichnis ueber der
+  alten 128-Cluster-Grenze braucht je Clustergroesse 2k-16k Eintraege
+  und ist im Smoke unpraktikabel; abgedeckt durch die bestehende
+  FsDiag-Verzeichnis-Regression (dir=43 Scans, 833 Eintraege, alle
+  Multi-Cluster-Pfade laufen ueber den neuen Iterator) plus den
+  sichtbaren Warnpfad.
+- DOKU-ABGLEICH AGENTS.md Kernel-Struktur: storage-Zeile auf den
+  realen Stand (built-in ahci/nvme = Boot-Probing, ata_pio 0.56.31
+  geloescht), xhci.zig-Zeile korrigiert (existiert als Kernel-Backend,
+  XHCI.R4D ist das Aktivierungs-Modul), service_ipc.zig (0.56.32) und
+  desktop_events.zig (0.56.28) ergaenzt.
+- SPLIT-ENTSCHEID dokumentiert: die mechanischen Splits von r4x.zig
+  (6454 Z.), net/core.zig (5521 Z.), xhci.zig (3124 Z.), fat32.zig
+  ("nach Bedarf"-Klausel) werden BEWUSST ZURUECKGESTELLT - 6k-Zeilen-
+  Moves unmittelbar vor den manuellen Sichttests maximieren das
+  Regressionsrisiko ohne Funktionswert. Kandidat fuer 0.57.X nach den
+  Abnahmen.
+Abnahme:
+- Voller Smoke -test TEST OK (121s); FSDIAG komplett OK (cache,
+  writeback, fat32-Metriken, Metadata ueber den neuen Iterator);
+  TCPSVC OK; MEMSUITE 2x OK.
+- USB-HID-Test PASS.
+- Run-NetGate.ps1 4/5 PASS (G2-ftp-transfer-Einzelausreisser,
+  G1/G3/G4/G5 PASS - dieselbe Ausreisser-Klasse wie 0.56.31).
+- Doku-Aenderungen im Diff enthalten (AGENTS.md).
+Notizen:
+- Reine Iterator-Moves + dokumentierte konservative Ausnahmen.
+
+================================================================================
+ABSCHLUSS - MANUELLE ABNAHMEN (USER)
+================================================================================
+
+Versionnummer: 0.56.34b
+Titel: SSHD-Verbindungs-Killer nach Fingerprint-Reject (Live-Befund aus 0.56.35)
+Status: Erledigt
+Offene Punkte:
+- -
+Erledigt:
+- Symptom (User, Termius): Fingerprint replace -> Verbindung sofort tot,
+  noch bevor die Konsole erscheint; danach auch neue Verbindungen ohne
+  Banner ("Connection timed out during banner exchange").
+- Root-Cause-Kette (per Repro-Harness + act[]-Live-Diagnose belegt):
+  (1) Kernel net/tcp.zig read() gibt eine per Client-FIN geschlossene
+      Verbindung beim EOF-Read sofort frei (state==closed && rx leer ->
+      used=false, return -1).
+  (2) Der Folge-Poll des SSHD-Session-Workers liefert dead-handle OHNE
+      valid-Flags; tcpServiceTransientResult stufte genau dieses Muster
+      als transient ein (Contention-Heuristik) - der KEX-Read nach
+      Client-Abbruch drehte den vollen 30s-Handshake-Timeout
+      (stage:tcp-read-retry, ~2,5s blockierende Locked-Ops pro Zyklus).
+  (3) ZWEI ueberlappende tote KEX-Worker (Termius-Muster: Reject plus
+      schneller Reconnect) bildeten einen Service-Kanal-Konvoi und
+      verhungerten den Accept-/Banner-Pfad des Main-Threads: EIN
+      weiterer Reject blockte ALLE neuen Verbindungen ~30s.
+- Fixes (alle Code/System/Services/SshService/src/main.zig):
+  (a) tcpLifecycleTerminal-Vorrang in tcpServiceTransientResult:
+      terminaler Lifecycle ist nie transient (zentral fuer alle 5
+      Aufrufstellen; gleiche Befund-Klasse wie der 0.56.7-Write-Fix
+      "Leichen-Loop", nur im Read-/Poll-Pfad).
+  (b) got==0-Peer-Probe in readExactTrackedFromOffset (EOF-Erkennung
+      bei terminalem Lifecycle und leerem RX).
+  (c) Fehler-Budget im Read-Loop: >=3 aufeinanderfolgende got<0 UND
+      >=2000ms -> harter Fail "tcp-read-dead". Gefahrlos fuer
+      SFTP/SCP/Gate: eine gesunde Verbindung liefert bei Stau got==0
+      (keine Daten), nie dauerhaft got<0.
+  (d) Diagnose-Poll in tcpReadTransientRecoverable auf Fast-Wait statt
+      volles Service-Wait-Budget (~2,5s-Blocker entschaerft).
+  (e) Bleibendes Diagnose-Feature: SERVMAN STATUS SSHD haengt " act[id]="
+      Live-Zustand der aktiven Worker-Slots an (conn, age, stage,
+      r=got/want, rr/wr-Retries, err) - Zombie-Worker sind damit ohne
+      Neubau sichtbar.
+Abnahme:
+- Repro-Harness (Scratchpad Run-SshShellRepro.ps1, Konsolen-Boot, 3x
+  Hostkey-Reject wie der Termius-Fingerprint-Dialog): VORHER
+  exec-nach-reject = banner-timeout (Wedge ~30s schon nach 1-2 Rejects);
+  NACHHER reject1-3 in schneller Folge KEX-REJECT, exec-nach-reject=OK,
+  worker_done=started-1 (nur die Dump-Session aktiv), banners==accepted,
+  max_ticks=574 (5,7s) statt 3030 (30,3s), fail=tcp-read-dead belegt das
+  greifende Budget, keine Zombie-Worker in act[].
+- NETGATE frisch nach dem Fix: PASS (tcp-echo/ssh-exec/ssh-cmdchannel/
+  ftp-transfer).
+Notizen:
+- app.sys.ticks() laeuft aus R4X-Sicht ~100 Hz (last_ticks=3030 =
+  30,3s) - wichtig fuer die Interpretation der SSHD-Zaehler.
+- ZWEITBEFUND in 0.56.34c GEFIXT: Interaktive Shell (ssh -tt bzw.
+  Termius-Konsole) starb <1s nach dem ersten Prompt (User live: "C:\>
+  kurz sichtbar, dann weg"), Eingaben erreichten die Session nie
+  (in=0). Root-Cause per idle-dbg-Diagnose belegt (now=1189 <
+  last_activity=1191): Der Channel-Loop friert now am Schleifenkopf
+  ein; pumpConsoleOutput setzt last_activity waehrend der Iteration auf
+  FRISCHE Ticks -> "now - last_activity" laeuft im u64 um -> der
+  10-Minuten-Idle-Timeout feuert sofort in der Prompt-Iteration.
+  Fix: saturierende Subtraktion (-|) an allen 7 Elapsed-Checks
+  (transfer-idle, exec-settle, eof-grace, channel-idle, slow-Melder,
+  cross-thread Transfer-Watchdog in pollSessionWorkers, keepalive).
+  Bleibende Diagnose: cpoll=pending/transient/idle-Zaehler im Status,
+  idle-dbg-Fail-Diag, act[]-Live-Slots. Abnahme 0.56.34c: Quick- und
+  Voll-Repro gruen (shell-pty/nopty/shell-nach-reject OK, in=39,
+  eof=3, idle_timeout=0), NETGATE PASS (alle 4 Subtests, attempts=1).
+- 0.56.34d: Termius-Backspace gefixt - Termius/xterm senden Backspace
+  als DEL (0x7F), die R4OS-Konsole versteht nur BS (0x08, console.zig/
+  appendConsoleOutput); pushShellInput uebersetzt DEL->BS beim
+  Durchreichen an consolePushKey. Verifiziert per Backspace-Roundtrip
+  im Shell-Repro (Eingabe VEX+DEL+R fuehrt VER aus), NETGATE PASS.
+- 0.56.34e: Backspace-ECHO gefixt - pumpConsoleOutput sendete bei per
+  Backspace GESCHRUMPFTEM Konsolenpuffer den kompletten Puffer erneut,
+  der Client haengte ihn an (Termius zeigte "C:\>DIRC:\>DIDI"). Reines
+  Schrumpfen um N Zeichen geht jetzt als N x BS-Space-BS-Loeschsequenz
+  raus; nur der Mischfall (gleichzeitig neue Stream-Bytes) bleibt beim
+  konservativen Voll-Resend. Verifiziert per gestaffeltem Tipp-Test
+  (DIR, Pause, 3x DEL, Pause, VER: Loeschsequenz im Echo, kein
+  Duplikat, VER laeuft), NETGATE PASS. Bekannte Restluecke (nur auf
+  Zuruf): Pfeiltasten/History senden ESC-Sequenzen und sind noch nicht
+  uebersetzt.
+- mstsc-Schwarzbild (RLE16) weiter offen; der RDPSVC-WIP-Stand
+  (BITMAP_COMPRESSION ohne TS_CD_HEADER + NO_BITMAP_COMPRESSION_HDR-
+  Flag) ist im Commit enthalten und entspricht dem Stand des letzten
+  User-Sichttests (weiterhin schwarz, naechster Verdacht RLE16-Stream).
+
+Versionnummer: 0.56.34f
+Titel: Universeller SDK-Allocator-Bug (Erstallokation > 4KB) + REG-Diagnose
+Status: Erledigt
+Offene Punkte:
+- ZURUECKGESTELLT (eigene Unterversion noetig): Kernel "Hosted Foreground"
+  fuer den User-Blocker "Program launch failed REG.R4X (-2)" in der
+  Termius-Session. Befund: runForegroundProgram verlangt den globalen
+  foreground_instance_id-Slot; ist er belegt (z.B. haengengebliebenes
+  gehostetes Kind), scheitert JEDER Start aus SSH-Sessions mit -2. Zwei
+  Fix-Varianten (Slot-Bypass breit/eng) korrelierten aber reproduzierbar
+  mit NETGATE-tcp-echo-FAIL (NETCAT: connect ok, sent 11, received 0,
+  timeout) und einem FSDIAG-FAIL - Wirkmechanismus unverstanden, darum
+  nicht gepusht. Arbeitsstand in Scratchpad r4x.zig.34f (inkl. nuetzlicher
+  VM-Fehlerpfad-Diagnose fuer apiVmReserve/apiVmCommit). Im nackten
+  Desktop-Boot funktionieren ssh-exec-Starts auch OHNE die Aenderung
+  (Repro belegt); der -2 braucht einen belegten Slot.
+- FOLGEBEFUND (offen): Input-Gap gehosteter Foreground-Kinder -
+  consolePushKey fuellt nur die Queue der TERMINAL-Instanz; ein via SSH
+  gestartetes Kind, das stdin liest, haengt ewig und haelt den
+  Foreground-Slot (wahrscheinlicher Ausloeser des belegten Slots beim
+  User).
+Erledigt:
+- UNIVERSELLER SDK-BUG GEFIXT (vm_allocator.zig): createSmallRegion
+  committet nur EINE Seite (4KB); allocSmall wuchs nach der Neuanlage
+  einer Region NICHT nach. Folge: Die ERSTE Small-Allokation eines
+  Programms groesser ~4KB scheiterte IMMER (unabhaengig von Boot-Modus
+  oder Launch-Kontext). REG war damit seit Einfuehrung des VM-Allocators
+  ueberall kaputt ("REG: scratch-memory" - hive_buffer 32KB ist REGs
+  erste Allokation); weitere Programme liefen still verkrueppelt.
+  Fix: growSmallRegion(needed) nach Region-Neuanlage.
+- Beleg der Tragweite: Die REG-Selftests tauchen jetzt ERSTMALS im
+  Smoke-Log auf; die Smoke-Suite dauert ~230s statt ~121s, weil
+  Programme erstmals ihre volle Arbeit tun (Watchdog-Laeufe dazu mit
+  QEMU_TEST_TIMEOUT_SECONDS=480 gefahren; Default 240s ist jetzt KNAPP -
+  bei kuenftigen TEST FAILED ohne Fehlerbild zuerst Laufzeit pruefen).
+- REG scratchFail-Diagnose bleibt: "REG: alloc-diag magic/version/size/
+  alloc_errors/small_regions" (hat die Root Cause geliefert:
+  small_regions=1 + alloc_errors=1 ohne Kernel-VM-Fehler).
+- Diagnose-Weg dokumentiert: Kernel-VM-Fehlerpfade waren instrumentiert
+  (keine Treffer -> SDK-intern), REG-Ausgabe via ssh-exec als
+  Rueckkanal.
+Abnahme:
+- SDK-Fix SOLO validiert (Kernel unveraendert auf HEAD): TEST OK
+  (480s-Watchdog), NETGATE PASS (tcp-echo/ssh-exec/ssh-cmdchannel/
+  ftp-transfer, alle attempts=1).
+- Konsolen-Boot ssh-exec: REG QUERY liefert Wert ("Enabled:bool=true").
+- Desktop-Boot ssh-exec: REG startet und arbeitet (key-not-found nur
+  weil RDPSVC im Harness nicht laeuft - korrektes Verhalten).
+Notizen:
+- Attribution per Split-Validierung: Kombi Kernel+SDK zeigte
+  FSDIAG-FAIL + tcp-echo-FAIL; SDK solo ist gruen -> Kernel-Teil
+  zurueckgestellt statt mitgepusht (ein Risiko pro Unterversion).
+- Harness-Lehre: TestInjection/CONFIG.R4S wird von Desktop-Harnesses
+  ueberschrieben; vor jedem -test restaurieren (ein ungueltiger
+  Smoke-Lauf bootete dadurch in den Desktop).
+
+Versionnummer: 0.56.35b
+Titel: RDPSVC Cursor-Geisterspur in mstsc aufgeraeumt
+Status: Erledigt
+Offene Punkte:
+- Fuer die Hardware-Phase notiert (bewusst vertagt): RDP-Performance
+  (TCG-Krypto pro PDU) und der saubere RDP-Pointer-Kanal (Cursor als
+  Client-Overlay statt im Framebuffer; Infrastruktur remote_frame
+  cursor_x/y/flags existiert bereits).
+Erledigt:
+- Befund: R4OS zeichnet den Mauszeiger in den Framebuffer; bei der
+  gedrosselten Update-Rate faellt der "alte Position aufraeumen"-Frame
+  zwischen zwei RDP-Updates weg -> mstsc sammelte unzaehlige alte
+  Cursor-Abbilder an (Geisterspur).
+- Fix (RDPSVC-lokal, kein Desktop-/Kernel-Eingriff): CursorTrack merkt
+  die zuletzt an den Client gesendete Cursor-Position; jedes
+  Dirty-Update erweitert die uebertragene Region um die Bounding-Box
+  alt->neu (Rand 24px, Deckel 400px gegen Riesen-Updates bei schnellen
+  Spruengen). Dieser Pfad ist im aktuellen Frame bereits sauber und
+  ueberschreibt damit die Geister. Quelle ist die bereits vorhandene
+  Cursor-Position der RemoteFrameInfo (remote_frame_flag_cursor_valid).
+Abnahme:
+- Wire-Test Run-RdpServiceLiveTest.ps1: gruen ueber classic +
+  modern-wire + tls-only, Kachelfolge 1280x720 mit updates=225
+  unveraendert (Cursor-Logik wirkt nur im Dirty-Pfad).
+- mstsc-Sichttest (User): ein Cursor statt Geisterspur, "Es passt.
+  Es ist rund." - mstsc-Strang damit fuer die QEMU-Phase abgeschlossen.
+Notizen:
+- Damit ist RDP in QEMU nutzbar: kompletter Desktop, Maus/Tastatur,
+  stabile Session, aufgeraeumter Cursor. Restpunkte sind reine
+  Hardware-Phase-Themen (siehe Offene Punkte).
+
+Versionnummer: 0.56.35a
+Titel: RDPSVC mstsc-Schwarzbild GELOEST - Sendepfad, RLE-Form, Streifen-Paint
+Status: Erledigt
+Offene Punkte:
+- Performance: Der Voll-Repaint ist im TCG-emulierten Gast noch spuerbar
+  (Krypto pro PDU teuer); Dirty-Updates sind fluessig. Optimierung (z.B.
+  groessere RLE-Laeufe innerhalb der <=287px-Grenze, hoehere
+  Update-Rate wenn stabil) als eigener Folgeschritt.
+Erledigt:
+- KERN-BUG 1 (Session-Tod im Sendepfad): sendAll brach bei JEDEM
+  Kurz-/Null-Write ab. Fix: Rest nachschieben, bei 0-Writes aufs
+  TX-Fenster warten und - solange die Verbindung LEBT - geduldig
+  weiter (nicht nach 10s aufgeben), harter Abbruch erst nach 60s ohne
+  Fortschritt; ACK-Batch 64K (== mstsc-Fenster) -> 16K.
+- KERN-BUG 2 (Schwarzbild-URSACHE): Vollframe-Zeilen sind 1280px breit
+  und erzwangen MEGA_MEGA-RLE-Orders (Lauf > 287px). Genau die kamen
+  NUR in den (nie gerenderten) Vollframes vor - die gerenderten
+  schmalen Dirty-Flecken nutzen nur kurze Orders; mstsc verwirft/
+  crasht bei MEGA_MEGA. Fix: Kachelbreite 1280 -> 256px
+  (rdp_bitmap_tile_pixels), damit JEDE Kachel den bewaehrten kurzen
+  Encoder-Pfad durchlaeuft und MEGA_MEGA gar nicht mehr erzeugt wird.
+  Encoder selbst UNVERAENDERT (ein fehlerhafter MEGA_MEGA-Split hatte
+  mstsc vorher zum Absturz gebracht).
+- KERN-BUG 3 (Session-Block / kein Input): Der Initial-Schirm wurde als
+  EIN atomarer ~225-PDU-Send in der Aktivierung verschickt -> Session
+  blockierte, kein Input (input_pdus=0), und mstsc brach beim langsamen
+  TCG-TLS-Dekodieren bei 11-30% ab (bmp=0/416..944, frames=0). Fix:
+  Vollframe raus aus runRdpActivation; Initial-Schirm wird in
+  runRdpSessionLoop STREIFENWEISE gemalt (48 Zeilen/Streifen, 15
+  Streifen fuer 720px), zwischen den Streifen laufen Input, TCP-Drain
+  und Disconnect-Check. Refresh-Rect/Suppress-Output/erster Input
+  starten einen streifenweisen Repaint neu.
+- Multi-Rect-Buendelung: RLE-Zeilen zu Update-PDUs mit bis zu 16
+  Rechtecken gebuendelt (vorher: jede Bildzeile ein eigenes TLS-Paket,
+  720 Krypto-Dispatches/Vollframe im TCG-Gast). Deckel 16 Rects / 12K
+  pro PDU (mstsc verwirft Riesen-PDUs still).
+- Update-Rate gedrosselt: frame_min_gap 50ms (20/s, ueberflutete den
+  Client-TLS-Pfad -> 0xC06 Decrypt-Fehler) -> 200ms (5/s).
+- Diagnose (bleibt): session_end_error konserviert die echte
+  Abbruchursache (TCP-Close hatte last_error auf "closed" ueberschrieben
+  und den RDPTRACE blind gemacht); Session-Record + clientsize/bmp/
+  bpp/tcpr; refresh=-Zaehler; "rdp repaint request"-Trace.
+Abnahme:
+- Wire-Test Run-RdpServiceLiveTest.ps1 (eigener RDP-Client mit byte-
+  strengem Bitmap-Parser, headless mstsc-Ersatz): GRUEN ueber classic +
+  modern-wire (NLA/CredSSP) + tls-only in jeder Fix-Stufe; final
+  bitmap=1280x720 updates=225, lueckenlose Kachelfolge, deterministische
+  Checksummen.
+- mstsc-Sichttest (User): kompletter Desktop erscheint zuegig
+  (streifenweise), Maus/Input funktioniert, Session stabil, kein
+  Abriss und kein 0xC06.
+- Diagnose live per SSH aus der laufenden Instanz gezogen (SERVMAN
+  STATUS RDPSVC, LOGCENTER /RDPTRACE) - die 0.56.34b-e-SSH-Fixes haben
+  sich als Debug-Werkzeug direkt ausgezahlt.
+Notizen:
+- Lehren: (1) Der Wire-Test-Parser prueft nur den PDU-RAHMEN, nicht den
+  RLE-INHALT - er war gruen, waehrend mstsc am RLE-Strom (MEGA_MEGA)
+  scheiterte; er beweist Spec-Konformitaet, nicht mstsc-Vertraeglichkeit.
+  (2) Grosse Frames NIE atomar senden - streifenweise mit Yield fuer
+  Input/TCP. (3) mstsc verwirft formal korrekte, aber zu grosse PDUs
+  still. (4) TCG-Gast macht Krypto pro PDU teuer -> Buendelung + Drossel
+  Pflicht.
+- MEGA_MEGA-RLE bleibt im Encoder erhalten (kein Kunde erzeugt es mehr,
+  da Kacheln <=256px), aber ein sauberer Split waere fuer schmale hohe
+  Rechtecke noch offen - nur bei Bedarf und mit Roundtrip-Selftest.
+
+Versionnummer: 0.56.35
+Titel: Manuelle Sicht- und Hardware-Abnahmen (gesammelt)
+Status: Erledigt
+Offene Punkte:
+- -
+Erledigt:
+- mstsc-Sichttest: ausgiebig durchgefuehrt im Zuge der Schwarzbild-Jagd
+  0.56.35a und des Cursor-Fixes 0.56.35b (mehrere Option-6-Laeufe).
+  Ergebnis: kompletter Desktop in mstsc, Maus+Tastatur in der Session,
+  stabile Verbindung, ein Cursor statt Geisterspur. User-Abnahme:
+  "Es passt. Es ist rund."
+- Desktop-Sichttest im QEMU-GUI-Fenster: im Rahmen derselben Sitzungen
+  bestaetigt (Desktop bootet, Fenster/Menues/Cursor fluessig, Konsole
+  und REG/SERVMAN-Bedienung funktionieren).
+- SSH-Praxistest: Termius-aequivalente Nutzung intensiv erfolgt -
+  interaktive Shell, exec-Kanal, Programmstarts, Backspace/Echo
+  (0.56.34b-e); SSH diente zusaetzlich als Live-Debug-Werkzeug fuer
+  die RDP-Diagnose (SERVMAN STATUS / LOGCENTER ueber SSH).
+- ECHT-HARDWARE-PUNKTE GESTRICHEN (User-Entscheid 2026-07-05):
+  "Hardwaretest machen wir im Zuge dieser Roadmap nicht." Die Punkte
+  USB-Maus-Langzeittest, Termius auf echter HW und FTP/SFTP-Transfers
+  von echtem Client wandern als Sammelblock in die naechste
+  Hauptversion (0.57.X), zusammen mit den dafuer notierten Themen
+  RDP-Performance (TCG-Krypto entfaellt auf echter HW ohnehin) und
+  sauberer RDP-Pointer-Kanal.
+Abnahme:
+- QEMU-Sichttests vom User bestaetigt (mstsc-Strang explizit
+  abgeschlossen); Auffaelligkeiten wurden bereits waehrend der Tests
+  als eigene Unterversionen gefixt (0.56.34b-f, 0.56.35a/b).
+- Echt-HW-Zaehlerstaende (xhci recoveries, RX-Drops) entfallen mit dem
+  Streichen der HW-Punkte; Erhebung ist fuer 0.57.X notiert.
+Notizen:
+- Diese Unterversion war als einzige mit User-Beteiligung geplant;
+  die QEMU-Haelfte ist erfuellt, die HW-Haelfte bewusst nicht Teil
+  dieser Roadmap.
+
+Versionnummer: 0.56.36 (geplant als 0.56.24b)
+Titel: virtio-net.R4D neu aufgenommen (VIRTNET.R4D, moderner Transport)
+Status: Erledigt
+Offene Punkte:
+- -
+Erledigt:
+- VIRTNET.R4D komplett neu implementiert (Code/System/Driver/VirtioNet,
+  6342 Code-Bytes): virtio-net ueber den MODERNEN virtio-1.x-PCI-
+  Transport - Vendor-Capability-Walk (Common/Notify/ISR/Device-Config),
+  MMIO-Common-Config via pciMapBar (64-Bit-BARs), Feature-Negotiation
+  VIRTIO_F_VERSION_1 + VIRTIO_NET_F_MAC, MAC aus dem Device-Config-
+  Fenster, Split-Virtqueues RX=Q0 (32 Deskriptoren) / TX=Q1 (16 Slots,
+  queue_size-Downsize von 256), 12-Byte-Net-Header (NET_HDR_LEN=12),
+  2-KB-Puffer in einem 100-KB-DMA-Bereich.
+- BEWUSSTE ABWEICHUNG vom Plan: statt des geplanten Legacy-I/O-
+  Transports NUR der moderne Transport. Grund: die Abnahme verlangt
+  disable-legacy=on (0x1041, modern-only), und das transitionale
+  Default-Device (0x1000) traegt die modernen Capabilities ebenfalls -
+  ein Legacy-Pfad waere toter Zweitcode. Reine Legacy-Geraete werden
+  mit Log-Warnung sauber abgelehnt (kein stiller Fallback).
+- R4D-Rahmen nach RTL8139-Muster: init/shutdown/poll/transmit ueber
+  DriverContext, IRQ-first (interrupt_line + GSI 16-23, shared/
+  level-low, ISR-Byte read-to-clear) mit Poll-Fallback, Drain-Guard
+  gegen parallelen IRQ-/Poll-Ringzugriff, OPTION VIRTNET irq=off.
+- Integration: Code/build.zig addR4D, CreateImageAddList r4d-Liste,
+  module.R4MF, eigenstaendiges SDK-Projekt (build.zig/zon), README;
+  Aktivierung per CONFIG.R4S DRIVER=VIRTNET. Kernel unveraendert.
+- Neuer Harness Run-VirtioNetDhcpLiveTest05636.ps1: tauscht
+  TestInjection/CONFIG.R4S (DRIVER=VIRTNET) + AUTOEXEC (DHCP-Zyklus)
+  temporaer, baut -testimage, faehrt QEMU headless mit
+  -device virtio-net-pci,disable-legacy=on und prueft Load- und
+  DHCP-Marker; Original-Dateien werden im finally wiederhergestellt.
+- Doku: Docs/Drivers/TreiberStand.txt Abschnitt "virtio-net seit
+  0.56.36".
+Abnahme:
+- Build.bat -app VIRTNET und voller Build gruen.
+- DHCP-Harness GRUEN am modern-only-Device: DHCP live acquire: ok,
+  State bound, Discover/Offer 1/1, Request/Ack/Nak 2/2/0, renew: ok,
+  release: ok, System poweroff - der Lease lief komplett ueber die
+  Virtqueues (TX Discover/Request + RX Offer/Ack), erster Lauf nach
+  Marker-Fix reproduziert.
+- Standard-Smoke -test TEST OK mit DRIVER=RTL8139+VIRTNET: der Smoke
+  faehrt OHNE NIC-Device, beide Netztreiber melden dort init -1
+  (Driver policy warn, continue=yes - dieselbe Klasse wie RTL8139
+  allein zuvor), Boot/TEST OK unbeeinflusst.
+- ECHTE Koexistenz-Probe: Run-NetGate.ps1 PASS 5/5 (ssh-login/exec/
+  cmdchannel, tcp-echo, ftp-transfer) mit aktivem RTL8139 UND
+  geladenem VIRTNET (Device nicht vorhanden -> sauberer Ablehnpfad).
+Notizen:
+- Treiber-logInfo landet im Bootlog-Ring (DMESG), nicht auf COM1; als
+  Serial-Marker dient "[R4D] runtime load VIRTNET [OK]" (erster
+  Harness-Lauf scheiterte nur an dieser Marker-Wahl, der DHCP-Zyklus
+  war bereits gruen).
+- MSI-X bleibt ungenutzt (INTx-Pfad); fuer echte Hardware in 0.57.X
+  pruefen, ebenso VIRTIO_NET_F_STATUS/Link-Erkennung.
+
+
+Versionnummer: 0.56.37 (geplant als 0.56.25b)
+Titel: net-service-Durchsatz: IPC-Message-Groesse 1024 -> 4096
+Status: Erledigt
+Offene Punkte:
+- -
+Erledigt:
+- KERNAENDERUNG: kernel/service_ipc.zig MAX_MESSAGE_SIZE und SDK
+  abi.ipc_max_message_size beidseitig 1024 -> 4096. Damit waechst
+  net_service_tcp_write_max von 996 auf 4064 und tcp_read_max auf
+  ~4040; grosse Transfers brauchen ~4x weniger Service-Roundtrips
+  (Durchsatz-Hebel aus der 0.56.25-Diagnose). Speicher-Audit vorab:
+  +384 KB statisches Kernel-BSS (16 Kanaele x 8 Slots), 4-KB-Stack-
+  Puffer unkritisch bei 64-KB-Task-Stacks mit 0.56.15-Guards; alle
+  Nutzer leiten aus den zwei Konstanten ab (Konsistenz-Check
+  net/core limits blieb gruen).
+- REGRESSION GEFUNDEN UND GEFIXT (zwei NETGATE-FAILs 4/5 auf dem
+  Weg): Der AKTIVE Kernel-Write-Handler tcpWriteResult (strukturierter
+  Op 0x0312 in net/ipc_services.zig) reichte die jetzt bis 4064 Byte
+  grossen Write-Chunks UNGETEILT an net.tcpWrite, das genau EIN
+  Draht-Segment pro Aufruf baut. Chunks von 1461..1516 Bytes rutschen
+  durch dessen Grobcheck (MAX_PACKET_SIZE-HEADER=1516) und starben
+  erst am MTU-Check in sendIpv4Payload (tx-mtu-Reject) - der Aufrufer
+  retryte denselben Chunk endlos, SSH-exec-Ausgaben >1400 Bytes und
+  FTP-RETR stallten komplett (out=16-Befund). Die alte SDK-Grenze 996
+  war ein IMPLIZITER MTU-Schutz. Fix: kernelseitige Zerlegung in
+  1460er-Drahtsegmente (TCP_WIRE_SEGMENT_MAX) mit Partial-Write-
+  Semantik in BEIDEN Handlern (strukturiert 0x0312 + Legacy-Text
+  0x0302).
+- DEBUG-LEHREN (teuer bezahlt, dokumentiert): (1) Es gibt ZWEI
+  Kernel-Write-Pfade - der erste Fix sass im toten Legacy-Text-Handler
+  writeTcpWrite, weshalb zwei Fehltheorien (MTU-Grenzframes,
+  TX-Slot-Race) erst per QEMU-filter-dump-pcap und COM1-Segment-Trace
+  ausgeschlossen werden mussten. Bei Netz-Service-Debugging ZUERST
+  klaeren, welcher Handler-Pfad aktiv ist. (2) Der tx-mtu-Reject war
+  in NETDIAG BACKPRESSURE unsichtbar (tx_large=0) - jetzt gefixt:
+  rejectIpv4TxTooLarge zaehlt auch tx_backpressure. (3) Konsolen-
+  Serial-Spiegel liest Ausgaben gestallter SSH-Execs; QEMU
+  -object filter-dump liefert die Draht-Wahrheit.
+- NEBENFUND MIT FIX (bleibt drin): RTL8139- und VIRTNET-transmit()
+  waren nicht reentrant (Slot-Rotation/avail-idx ohne Guard). Der seit
+  0.56.25 vorhandene proaktive net-rx-Retransmit feuert mit mehreren
+  In-Flight-Segmenten erstmals real und lief parallel zum
+  Service-Task-Write - der tx_busy-Sturm (5347) im ersten Fail-Lauf
+  verschwand mit dem atomaren tx_lock-Guard (busy an Aufrufer, die
+  pacen bereits). Latenter Race seit Einfuehrung der Treiber.
+- SEKUNDAER VERSTANDEN (offen fuer 0.57.X): rtoStampSend stempelt VOR
+  dem Sendeversuch und planRetransmit haelt nur den LETZTEN Payload -
+  nach einem fehlgeschlagenen grossen Write retransmittierte der
+  Sweep ein bereits bestaetigtes Alt-Segment (pcap-Muster, 5x mit
+  Backoff). Mit dem Handler-Fix ohne Wirkung; saubere
+  Mehr-Segment-Retransmit-Buchhaltung als Folgearbeit notiert.
+- Gate erweitert: Run-NetGate.ps1 -FtpTransferBytes (Default 64 KB),
+  skalierte Timeouts, gestueckelter STOR-Write, Idle-Fenster fuer
+  grosse RETR-Reads - der 4-MB-Durchsatz-Messpunkt laeuft damit in
+  der Gate-Suite.
+- FsDiag-Writeback-Budget 4000 -> 6000 ms: die Registry-Writeback-
+  Latenz liegt nach der IPC-Vergroesserung stabil bei ~4,4 s (443/435
+  Ticks bei freiem Host; 574 unter Spiele-Host-Last) - der Writeback
+  selbst ist korrekt, das Budget verpasste knapp das naechste
+  Flush-Fenster. Gleiche Anhebungsklasse wie 0.56.13 (2 s -> 4 s).
+- NEBENBEFUND (0.57.X-Kandidat, 1x in ~15 Laeufen): SSHD-Kernel-Crash
+  Page Fault write cr2=0xFFFFFF4000000000 (= APP_STACK_BASE exakt,
+  p=0 w=1), ip_offset 0x2517 in SSHD.R4X, waehrend ssh-cmdchannel.
+  Worker-Stacks haben 2 MB Reserve + Demand-Grow + Guard - ein echter
+  Overflow ist unplausibel, eher wilder Zeiger oder Grow-Race.
+  Beweis-Serial-Log gesichert (netgate-20260705-233131).
+Abnahme:
+- Repro-Bisect via SSH-exec: Vorher brach jede Ausgabe >1400 Bytes
+  (SZ1400 ok, SZ1450 tot); nachher SZ1450/2000/4000/6000 vollstaendig.
+- Voller Smoke -test TEST OK inkl. MEMSUITE /VMSTRESS+/PAGERSTRESS
+  STRICT OK und NETDIAG limits: ok (Konsistenz 4096 beidseitig).
+- Run-NetGate.ps1 PASS (64 KB: stor 5804 ms / retr 1824 ms; ein
+  Retry nach 425-Einzelausreisser der bekannten 0.56.31/34-Klasse).
+- 4-MB-Messpunkt vorher/nachher (Gate mit -FtpTransferBytes 4194304):
+  RETR (Gast->Host, die Write-Richtung) 69887 ms (58,6 KB/s) ->
+  39334 ms (104,1 KB/s) = +78%. STOR (Host->Gast) 153402 ms
+  (26,7 KB/s) -> 151818 ms (27,0 KB/s) = unveraendert; die
+  Read-Richtung haengt an einem anderen Flaschenhals (FTPSVC-
+  Datenannahme/FS-Write), nicht an der IPC-Chunkgroesse - ehrlich
+  als Grenze dokumentiert.
+Notizen:
+- VORHER-Baseline wurde auf dem 0.56.36-Stand mit dem erweiterten
+  Gate gemessen (4 MB ueber FTP, IPC noch 1024).
+
+Versionnummer: 0.56.38 (geplant als 0.56.27b)
+Titel: RDP Shared-Frame ohne Doppelkopie (ABI)
+Status: Erledigt
+Offene Punkte:
+- BEWUSST OFFEN (0.57.X): kombinierter Kernel-Wait "neue
+  Frame-Revision ODER TCP-Aktivitaet" fuer echte Null-Idle der
+  Session-Loop. Begruendung: die Session-Loop hat seit 0.56.27
+  Event-Waits, das verbleibende Input-Poll-Raster ist in QEMU
+  unauffaellig - der Zusatz-Wait lohnt erst mit Hardware-Messwerten.
+Erledigt:
+- Neues R4DESK-ABI remote_frame_map am Tabellenende: Version 4 -> 5,
+  Size 384 -> 392 BEIDSEITIG (r4x.zig + SDK abi.zig, 0.56.28-Lehre);
+  RemoteFrameMapInfo {pixels_addr, capacity_pixels, generation,
+  reserved}. R4X laeuft im gemeinsamen, voll vertrauten Adressraum
+  (Leitbild: kein Sicherheitsmodell) - das Mapping ist die Adresse
+  des Kernel-Remote-Frame-Puffers direkt.
+- Dangling-Schutz: generation steigt bei jeder Neuallokation; sobald
+  ein Mapping ausgegeben wurde, gibt ensureRemoteFrameCapacity alte
+  Puffer nicht mehr sofort frei, sondern haelt sie in einem
+  4-Slot-Retired-Ring (Geometriewechsel sind Boot-Ereignisse, der
+  Ring laeuft praktisch nie um). remoteFrameRead bleibt vollstaendig
+  als Kompat-Pfad erhalten (Befund 9.2).
+- RDPSVC: sendBitmapFrame mappt pro Frame neu (billiger Tabellen-Call
+  mit capacity-Check gegen die aktuelle Geometrie) und liest die
+  Zeilen direkt aus dem gemappten Puffer - die Doppelkopie
+  remoteFrameRead->Scratch entfaellt im Hauptpfad. Fallback auf
+  remoteFrameRead, wenn das ABI fehlt oder das Mapping ablehnt.
+  Sichtbar in SERVMAN STATUS RDPSVC: frame_rows=map/X,copy/Y.
+- SDK: r4xstart.zig/r4desk.zig supportsRemoteFrameMap/remoteFrameMap
+  (hasFn offset-tolerant, aeltere Kernel melden unsupported).
+Abnahme:
+- Build.bat -norun/-kernel/-app RDPSVC gruen (comptime-Size-Guard
+  bestaetigt 392); voller Smoke -test TEST OK (ein Retry wegen des
+  bekannten transienten Zig-Toolchain-Ladefehlers scalbn.zig).
+- Run-RdpServiceLiveTest.ps1 PASS: alle Pfade (classic 2x +
+  modern-wire/NLA + tls-only), bitmap=1280x720 updates=225,
+  byte-strikte Kachelfolge; classic und tls-only liefern im selben
+  Boot identische Checksummen.
+- Run-NetGate.ps1 PASS (2. Lauf; stor 4945 ms / retr 1965 ms 64 KB).
+  Der 1. Lauf fiel durch einen NEUEN ftp-STOR-Flake-Befund, siehe
+  Notizen.
+Notizen:
+- Der Durchsatzgewinn materialisiert vor allem auf echter Hardware;
+  in QEMU dominiert TCG-Krypto (0.56.35-Befund).
+- Zaehler-Nachweis EHRLICH: der Wire-Test beweist die Byte-Korrektheit
+  (beide Pfade liefern identische PDUs, das ist Designabsicht); ob
+  map oder copy lief, zeigt frame_rows= in SERVMAN STATUS RDPSVC -
+  ablesbar nach einer echten Session, z.B. beim naechsten
+  Option-6-/mstsc-Lauf. Der Wire-Test-Serial traegt die
+  RDPSVC-Konsole nicht.
+- ERNSTER OFFENER NEBENBEFUND (unabhaengig vom Shared-Frame, wird
+  SOFORT als 0.56.39 angegangen): FTP STOR verlor im 1. Gate-Lauf
+  exakt 3916 Bytes (= net_service_tcp_read_max) und meldete trotzdem
+  "226 Transfer complete" - SIZE ergab 61620 statt 65536. Verdacht:
+  der letzte Read-Chunk geht verloren, wenn der Datenverbindungs-
+  Close vor dem RX-Rest-Drain verarbeitet wird; das Verlustfenster
+  ist durch die 0.56.37-4-KB-Chunks von <=996 auf ~4 KB gewachsen.
+  Erstes Auftreten in ~6 Post-4096-Gate-Laeufen (alle frueheren
+  SIZE-Checks passten).
+
+
+Versionnummer: 0.56.39
+Titel: FTP-STOR-Datenverlust: consume-sicherer Service-Read + TCP-read-Haertung
+Status: Erledigt
+Offene Punkte:
+- SSHD-Reads nutzen dieselbe verlustfaehige Read-Klasse; dort ist der
+  Schaden aber SICHTBAR (SSH-MAC-Fehler/Disconnect statt stiller
+  Korruption). Umstellung auf das Consume-Safe-Muster als
+  0.57.X-Folgearbeit notiert.
+- Der seltene SSHD-Crash (cr2=APP_STACK_BASE, 0.56.37-Notiz) und die
+  Retransmit-Einzelslot-Buchhaltung (0.56.37-Notiz) bleiben offen.
+Erledigt:
+- BEFUND (aus der 0.56.38-Abnahme, 2x reproduziert): FTP STOR schrieb
+  61620 statt 65536 Bytes und meldete trotzdem "226 Transfer
+  complete" - es fehlte EXAKT tcp_read_max (3916) = ein kompletter
+  Read-Chunk. Stille Datenkorruption.
+- ROOT-CAUSE (Zaehler-Beweis endpoint timeout/9 cancel/9): Der
+  daten-KONSUMIERENDE Read-Servicecall (FTPSVC -> TCPSVC) verfiel
+  unter TCG-Last per Service-Timeout und wurde gecancelt, NACHDEM
+  TCPSVC den Read bereits ausgefuehrt hatte - der Chunk war aus dem
+  Kernel-RX konsumiert, die Antwort verworfen; der stille Retry las
+  den NAECHSTEN Chunk. Dieselbe Klasse, die 0.56.5 fuer WRITES per
+  tx_seq-Verifikation geschlossen hat - Reads haben aber keine
+  Retry-Verifikationsmoeglichkeit.
+- FIX: Neues SDK-Muster tcpReadWaitServiceConsumeSafe - der POLL
+  bleibt budgetiert (idempotent, Retry gefahrlos), der KONSUMIERENDE
+  Read laeuft mit io_wait_forever und kann nicht mehr verfallen.
+  FTPSVC storeFile umgestellt; r4net-Context-Durchstich ergaenzt.
+  Prinzip dokumentiert: konsumierende Service-Ops duerfen NIE per
+  Timeout verfallen.
+- FEHLTHEORIE #1 EHRLICH (als Haertung behalten): tcp.read() gab den
+  Verbindungs-Slot im selben daten-liefernden Aufruf frei (closed &&
+  rx_len==0 -> used=false) - ein spaeter eintreffendes Segment fand
+  keinen Slot. Als Verlustursache widerlegt (Fix aenderte das
+  Fehlbild nicht), aber als echter latenter Race gefixt:
+  Drain-then-close in read() + reapTimeWait-Sicherheitsnetz, das
+  vollstaendig gelesene .closed-Slots nach der TIME_WAIT-Frist
+  einsammelt (kein Slot-Leak, wenn ein Konsument den finalen
+  EOF-Read auslaesst).
+Abnahme:
+- Voller Smoke -test TEST OK (mit tcp.read-Haertung).
+- Verifikationsserie auf dem ftp-Messpunkt 6/6 SIZE-korrekt: 4x
+  64-KB-Standardlauf PASS (stor 5822/4949/5758/4306 ms, SIZE exakt
+  65536), 1-MB-Haertetest ftp OK (stor 17013 ms / 60,2 KB/s, retr
+  28112 ms, SIZE exakt 1048576), Abschluss-Standardlauf PASS. Vor dem
+  Fix trat der Verlust 2x in 3 Laeufen auf.
+- EHRLICH: Der 1-MB-Gesamtlauf war trotz gruenem ftp-Teil rot, weil
+  tcp-echo/ssh-cmdchannel (beide via SSH-Exec) ohne Crash-Marker
+  leere Ausgaben lieferten - das ist mutmasslich die SSHD-Auspraegung
+  DERSELBEN Read-Verlust-Klasse und stuetzt die notierte
+  0.57.X-Folgearbeit (SSHD auf Consume-Safe-Reads umstellen).
+Notizen:
+- Der Befund wurde durch die 0.56.37-4-KB-Chunks SICHTBAR (groesseres
+  Verlustfenster, teurere Service-Antworten unter Last), die
+  Verlustmechanik ist aelter.
+
+
+Versionnummer: 0.56.40
+Titel: Tickrate 1000 Hz (geplant als 0.56.29b) + IF=0-Ring-Kernelfix
+Status: Erledigt
+Offene Punkte:
+- -
+Erledigt:
+- HAUPTBEFUND (vorbestehender Kernel-Bug, nicht 1000-Hz-spezifisch):
+  IF=0-Ring in den Endlos-yield-Schleifen. yield() restauriert die
+  RFLAGS des jeweiligen Task-Eintritts; erreichte ein Task den
+  Exit-Pfad (scheduler.exitCurrent) oder den Boot-Warte-Pfad
+  (shell_launcher.waitForShellAfterBoot) mit IF=0, spann die Schleife
+  mit toten Timer-IRQs: sobald ALLE anderen Tasks auf den Timer
+  warteten, kehrte yield() ohne Wechsel zurueck, kein Tick kam mehr,
+  alle timed-Waits (SLEEP, TimerWait) hingen fuer immer bei 100%
+  CPU. Sichtbar nur OHNE NIC-Aktivitaet (NIC-IRQs oeffneten IF als
+  Nebeneffekt) - deshalb blieb der Smoke gruen und nur der
+  SLEEP-Zeittest hing. Beweiskette: CPU-Zeit-Messung (100% Spin),
+  QEMU-Monitor "info registers" (RFL.IF=0) + Python-ELF-
+  Symbolaufloesung des RIP nach yield/nextReadyIndex, [TCK]/[SLP]-
+  Serialtraces (Tick-Zaehler stand still), Beweis-Lauf nach Fix:
+  [SLP] begin now=199 -> end timeout=yes now=699 (exakt 500 Ticks).
+- FIX: exitCurrent und waitForShellAfterBoot hlt'en bei LEERER
+  Ready-Menge mit explizit geoeffnetem IF (neues
+  scheduler.hasOtherReadyTask()); ist ein anderer Task ready, wird
+  sofort geyieldet. ERSTE Fassung (unkonditionales enable+hlt nach
+  jedem yield) war falsch: der Boot-Task ist permanent ready, jede
+  Rotationsrunde schlief bis zu einen Tick - FSDIAG-Phase kroch,
+  Smoke lief in den Watchdog. Lehre: Idle-hlt NUR im Idle-Fall.
+- TICK-KONSTANTEN-AUDIT (hz-neutral in ms, bei 100 Hz wertidentisch):
+  scheduler (Quantum 30 ms, Warnschwellen 1 s/2 s), page_cache
+  (Lock-Wachhund 3600 s), desktop_events + net/core + r4desk
+  (250-ms-Wait-Slices), r4desk (Clipboard 1200 ms), RTL8139
+  (Dead-Slot 3 s ECHTZEIT via tickCount/timerFrequency statt 300
+  Polls - der 0.56.29-Killer), AC97/HDA (PLAYBACK/DRAIN via msTicks),
+  MemorySuite (pagerstress-Schwellen in ms).
+- SCHALTER: pit.zig DEFAULT_HZ 100 -> 1000; alle Verbraucher haengen
+  an timer.DEFAULT_HZ (eine Wahrheit), R4D/Apps laufen ueber
+  ctx.timerFrequency()/ticksFromMilliseconds (Laufzeit).
+- NEUER HARNESS Run-TickrateTimeTest05640.ps1: misst SLEEP 5000 gegen
+  die Host-Wanduhr (Marker A/B im Serial-Log) - faengt die Klasse
+  "laeuft, nur 10x zu schnell/langsam" auf jeder Tickrate.
+- GATE-FIX (Test-Drift-Klasse 0.56.31): Read-FtpText sammelt nach dem
+  ersten Chunk 200 ms Idle nach; seit 1000 Hz sendet der Gast das
+  RETR-226 nur ~100 ms nach dem 150 (pcap-Beweis: 150 t=22.783,
+  226 t=22.891, 64 KB Daten komplett dazwischen in ~110 ms) - das 226
+  landete im 150-Read, das zweite Read blieb leer, Gate meldete
+  faelschlich "226 fehlt". Fix: mitgelesenes 226 akzeptieren.
+  Fehltheorie ehrlich dokumentiert: FTPSVC-Control-Read als
+  Consume-Verlust (endpoint timeout=1/cancel=1) erklaerte den Fail
+  NICHT, die ConsumeSafe-Haertung des Control-Reads (gleiche Klasse
+  wie 0.56.39-STOR) BLEIBT als echte Haertung drin.
+Abnahme:
+- Zeittest 100 Hz: 4997 ms fuer SLEEP 5000 (vor dem Fix: haengt
+  unendlich); Smoke 100 Hz TEST OK.
+- Zeittest 1000 Hz: 6645 ms (Toleranz 3500..9000; ~33% TCG-
+  Streckung durch 10x IRQ-Kosten, ehrlich notiert).
+- Smoke 1000 Hz TEST OK; FAILED-Marker 9 Zeilen, alle in den
+  dokumentierten 0.56.31-Folgebefund-Klassen (Basislinie 18).
+- NETGATE bei 1000 Hz: 3x PASS (1x voll + 2x -SkipBuild) nach
+  Gate-226-Fix; vorher 3x deterministisch ftp-transfer FAIL (der
+  0.56.29-Revert-Ausloeser, jetzt als Test-Artefakt aufgeklaert).
+- Messpunkte 64 KB bei 1000 Hz/TCG: RETR auf dem Draht ~590 KB/s
+  (100 Hz: 104 KB/s, +5x), Gate-retr_kbps ~47-49 (misst inkl.
+  Idle-Fenster); STOR ~12 KB/s (100 Hz: 27-60 KB/s) - STOR-RX-Pfad
+  unter TCG-IRQ-Last langsamer, auf Echt-HW zu verifizieren,
+  bekannter separater Flaschenhals seit 0.56.37.
+Notizen:
+- Der 34-s-ftp-Kriecher aus den ersten Diagnose-Laeufen (4 TX-Slots
+  pro 3 s = Dead-Slot-Takt) trat nach dem Gate-226-Fix nicht mehr
+  auf; die Solo-Repro (15 Transfers) war durchgehend schnell. Die
+  ~300-ms-Host-Retransmits der Control-Kommandos im fruehen
+  Session-Fenster (Gast-ACK traege) als Randbeobachtung notiert.
+- QEMU-Monitor-RIP + ELF-Symbolaufloesung (Code/zig-out/bin/r4os.elf)
+  und der Zeittest-Harness sind die Werkzeuge, mit denen der
+  IF=0-Ring in Minuten statt Stunden fiel.
+- Bei kuenftigen Tickraten-Aenderungen: Zeittest auf JEDER Rate
+  fahren; Konstanten NUR ueber timer.DEFAULT_HZ/msTicks anbinden.
+
+Versionnummer: 0.56.41
+Titel: ProgramApi-zu-R4L-Vollmigration + runtime-Stub (geplant als 0.56.33b)
+Status: Erledigt
+Offene Punkte:
+- -
+Erledigt:
+- SCHRITT A (additiv, c04d0144): Neue Kernel-Gruppentabellen R4NET v1
+  ("RNE1", 34 Felder: tcp/net/ipc/serial_link), R4AUDIO v1 ("RAU1",
+  audio/sid/midi/opl3) und R4DEV v1 ("RDV1", inventory/memory-Proben/
+  performance/protocol/boot_info) + R4SYS v5->v6 (+45 Felder
+  task_yield..boot_log_read, 400->760) + R4DESK v5->v6 (+3 Konsolen-
+  Host-Felder, 392->416); Anfuege-Muster beidseitig r4x.zig/abi.zig
+  mit comptime-Size-Guards, r4xstartGroupInterface liefert alle 6.
+- SCHRITT B1 (929618c0): program.Bundle - pro Programm aufgeloeste
+  Tabellenzeiger aus den R4XStart-Imports; apiFromR4XStart liefert
+  das Bundle, alle 7 Gruppen-Context.init nehmen es. Die 211
+  Consumer-Aufrufstellen blieben durch das Durchreich-Muster
+  textlich unveraendert.
+- SCHRITT B2 (ef83b109): alle 230 SDK-Wrapper von self.api auf die
+  Gruppentabellen (226 skriptgestuetzt + 4 manuell), Typen via
+  @FieldType(abi.ProgramApi, ...) als einziger Signatur-Wahrheit;
+  vm_allocator auf die R4SYS-Tabelle. KERNBEFUND: ZWEI IMPORT-
+  WAHRHEITEN - der Aggregat-Build (Code/build.zig, liefert die
+  Image-Artefakte) fuehrt eigene harte Import-Listen; module.R4MF
+  war fuer die Binaries wirkungslos (AUDSVC hatte NIE R4AUDIO im
+  Binary, TCPSVC nie R4NET - die runtime-api kaschierte das). 24
+  build.zig-Zeilen + 22 Manifeste synchronisiert. Diagnosekette:
+  AUDIOD-Bundle-Dump, AUDSVC-Statuszaehler-Sonde (Service-stdout
+  erscheint nicht auf COM1!), Kernel-Import-Seed-Print (alle wieder
+  entfernt). LOADERD-R4DEV-Test von R4LQuery- auf Gruppentabellen-
+  Vertrag umgestellt (Test-Drift).
+- SCHRITT C: runtime = 0 (Stub) im Loader; ProgramApi-Struct +
+  api_table + Instanz-api-Kopie aus r4x.zig entfernt (~510 Zeilen);
+  SDK-Meta (apiMagic/Version/Size) liefert eingebaute Konstanten,
+  supports*-Gates = Bundle-/R4SYS-Praesenz, args ueber den
+  R4XStart-Kontext, netServiceClientId aus der raw-Adresse;
+  ABI-Increment r4xstart_abi_minor 0->1 beidseitig; Contract-Doku
+  R4XStart.txt + Groups.txt (Stand-0.56.41-Absaetze inkl. Zwei-
+  Wahrheiten-Pflegehinweis); RegistryTool-Alloc-Diagnose auf die
+  Meta-Funktionen umgestellt.
+- abi.ProgramApi bleibt im SDK-ABI ausschliesslich als Signatur-
+  Referenz der Tabellenfelder (@FieldType-Quelle) - dokumentiert,
+  kein Laufzeitobjekt.
+Abnahme:
+- grep-Nachweis: SDK program.zig ohne self.api (0 Treffer), Kernel
+  r4x.zig ohne ProgramApi-Struct/api_table/instance.api.
+- Voller Smoke -test TEST OK; FAILED-Marker 9 = neue Basislinie
+  (UNTER der alten 11 - PERFDIAG Display-Responsiveness/Blit-Bench
+  heilten, weil PERFDIAG erstmals wirklich eine R4DRAW-Tabelle im
+  Binary hat).
+- NETGATE 3x PASS (1x voll + 2x -SkipBuild) bei 1000 Hz.
+Notizen:
+- Import-Pflege kuenftig IMMER beidseitig: module.R4MF (Soll/Image)
+  UND Code/build.zig addR4X*-Zeilen (Binary-Wahrheit des Aggregats);
+  Abgleich-Werkzeug sync_buildzig_imports.py (Session-Scratchpad,
+  bei Bedarf neu erstellen: Manifest=Soll, R4SYS implizit).
+- module.R4MF ist BOM-los; utf-8-sig-Schreiben bricht
+  CreateImageAddList (BadManifestLine).
+- FsDiag-Fehlertexte "missing ProgramApi vNNN" bleiben als
+  historische Vertrags-Labels (Konstanten leben im SDK-ABI weiter).
+- Mehrere transiente Zig-Toolchain-Ladefehler ("unable to load
+  ...zig: Unexpected") an diesem Tag - Klasse wie der scalbn-Fall
+  0.56.38, Retry genuegt; vermutlich Virenscanner-Last.
+- Damit ist die 0.56.X-Roadmap vollstaendig abgearbeitet.

@@ -1,0 +1,66 @@
+﻿R4OS Memory Management
+======================
+
+Rolle
+-----
+Dieses Dokument beschreibt den Speicher-Manager-Stapel des Kernels: welche
+Schicht was besitzt und in welcher Reihenfolge sie beim Boot entsteht. Die
+Aufteilung des virtuellen Adressraums selbst steht in
+`Docs/Core/AdressraumLayout.txt`; der Speichervertrag laufender Programme in
+`Docs/Core/ProgramInstanceStorage.txt` und `Docs/Core/DynamicTaskRegistry.txt`.
+
+Grundregeln
+-----------
+- Memory Map und HHDM-Offset kommen beim Boot von Limine und werden nach
+  BootInfo kopiert. Danach ist BootInfo die bootloader-neutrale Kernelgrenze.
+- Der PMM behandelt nur page-aligned Usable-Bereiche als frei. Reservierte,
+  Bootloader-, Kernel-, ACPI-, Framebuffer-, MMIO- und Unknown-Bereiche sind
+  kein normaler RAM.
+- Page-Table-Frames werden eindeutig als Kernel/PageTable geclaimt.
+- Alte Limine-Page-Table-Frames werden nach dem CR3-Wechsel nicht blind
+  freigegeben, sondern ueber den PMM-Blockzustand quarantaeniert.
+- Speicherdruck bleibt ein aufgefaechertes Fehlerbild: Task-, Stack-, FPU-,
+  Waiter- und sonstiger Druck sind getrennte Fehlerklassen und werden nicht zu
+  einem gemeinsamen OOM verschmolzen.
+
+Schichten
+---------
+
+    memory/map.zig          Normalisierte physische Memory Map und Summary
+    memory/blocks.zig       MemoryBlock-Tabelle aus der BootInfo-Map
+    memory/phys.zig         Physical Memory Manager und Frame-Allokator
+    memory/paging.zig       Paging-/CR3-Grundzustand und Statistiken
+    memory/page_tables.zig  Eigene PML4, Dry-Run, Device-Mappings, CR3-Switch
+    memory/virt.zig         Virtuelle Kernelfenster, Virtual Ranges
+    memory/heap.zig         Frueher Kernel-Heap und Heap-Statistiken
+    memory/layout.zig       Konstanten des Adressraums und Page-Flags
+
+Bootreihenfolge
+---------------
+`kernel/memory_boot.zig` orchestriert nur die Reihenfolge; die Fachlogik
+bleibt in den Modulen unter `Code/Kernel/memory/`:
+
+    1. Memory Map           normalisieren und zusammenfassen
+    2. MemoryBlock-Tabelle  aus BootInfo aufbauen
+    3. Physical allocator   starten
+    4. Paging core          Grundzustand uebernehmen
+    5. Page table builder   eigene PML4 vorbereiten
+    6. Virtual ranges       Kernelfenster registrieren
+    7. Framebuffer-WC       PAT-Write-Combining setzen
+    8. Kernel heap          bereitstellen
+
+Device-Mappings und der CR3-Wechsel werden in diesem Schnitt bewusst NICHT
+abgeschlossen: Sie brauchen den ACPI-/PCIe-Plattformzustand und laufen deshalb
+spaeter ueber `finalizeDeviceMappings` und den Umschaltschritt aus
+`kernel/platform_boot.zig`. Jede Phase meldet START und OK beziehungsweise
+SKIP; ein Fehlschlag bricht den Speicheraufbau ab, statt still weiterzulaufen.
+
+Programmspeicher
+----------------
+Oberhalb dieses Stapels liegt der R4X-Speicher: virtuelle Programmregionen mit
+getrenntem Commit- und Residency-Zustand, Demand-Commit, Einlagerung ueber den
+Page-Fault-Pfad und globaler Reclaim. Der Kernel besitzt Mechanik und
+Buchfuehrung, nicht die Policy einzelner Programme. Die Vertraege dazu stehen
+in den versionsgebundenen Dokumenten der 0.53.X-Reihe unter `Docs/Core/`,
+allen voran `R4XVirtualMemoryV2_0533.txt`, `VmPageState05333.txt`,
+`MemoryPressureEviction05335.txt` und `GlobalReclaimOrchestrator05326.txt`.

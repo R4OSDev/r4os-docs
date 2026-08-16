@@ -1,0 +1,653 @@
+﻿
+Leitbild fuer Version 0.9.X
+===========================
+
+Version 0.9.X soll R4OS vom sichtbaren Desktop-Prototypen zu einem merklich
+reiferen Alltagssystem bringen. Jede 0.9.x-Version muss ein nutzbares,
+abgenommenes Upgrade liefern und darf nicht nur Unterbau oder Platzhalter
+sein. Wenn ein Thema in die Roadmap kommt, wird es so geschnitten, dass es am
+Ende der jeweiligen Version sichtbar funktioniert.
+
+R4OS bleibt ein single-user, fully trusted System. Anwendungen duerfen
+weiterhin viel direkt tun. Fuer Grafik braucht das System aber trotzdem klare
+technische Besitzregeln, damit nicht mehrere Komponenten gleichzeitig in den
+sichtbaren Speicher schreiben und dadurch Flackern, Artefakte oder verlorene
+Pixel erzeugen.
+
+Qualitaetsregeln fuer 0.9.X:
+- Keine halben Feature-Schalter: Jeder neue Modus braucht Bedienweg,
+  Rueckweg, Fehlerfall, Diagnose und eine sichtbare Abnahme.
+- Kein reiner "spaeter"-Unterbau: Interne Architektur ist erlaubt, muss aber
+  in derselben Version ein konkretes Nutzer- oder Entwicklerproblem loesen.
+- Wenn ein Ziel zu gross fuer eine Version wird, wird der Umfang bewusst
+  kleiner geschnitten. Es wird nicht als unfertiger Schalter ausgeliefert.
+- Kompatibilitaet bleibt Pflicht: Bestehende R4X-/R4DOS-Pfade duerfen nicht
+  still brechen, sondern muessen bewusst migriert oder mit Fallback gehalten
+  werden.
+- Diagnose gehoert zum Feature: Wenn R4OS ein neues Subsystem bekommt, muss
+  der aktive Zustand im Bootlog, in R4DOS oder in einer kleinen Diagnose-App
+  sichtbar sein.
+- Abnahmen muessen praktisch sein: Jede Version bekommt konkrete Tests, die
+  nach einem normalen Build in QEMU nachvollziehbar sind.
+
+
+Version 0.9.0
+-------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Roadmap fuer 0.9.X neu begonnen.
+- Erstes Problemfeld fuer 0.9.0 festgelegt: Rendering, Framebuffer,
+  Compositor und Cursor-Flackern.
+- AppFB hat einen RAM-Backbuffer erhalten. Direkte Zeichenoperationen koennen
+  gesammelt praesentiert werden; alte R4X-Vollbildprogramme bleiben durch
+  Auto-Present nach Einzeloperationen kompatibel.
+- Der Limine-Framebuffer ist als `bootfb` im neuen Kernel-Display-Core
+  registriert. AppFB praesentiert Dirty-Rects ueber diesen Display-Core statt
+  selbst Besitzer des sichtbaren Framebuffers zu sein.
+- `bootfb` besitzt sichtbare Display-Flags, Mode-/Pixelmasken-Diagnose,
+  angebotene Operationsnamen, ein letztes Present-Rechteck und einen letzten
+  Present-Grund als Abnahme fuer den Display-Device-Vertrag.
+- Der Display-Core verwaltet `bootfb` als echtes primaeres Display-Device mit
+  Mode, Flags, Framebuffer-Mapping, Operations-Tabelle und device-eigener
+  Present-Statistik. AppFB nutzt weiter die stabilen Wrapper, schreibt aber
+  ueber den primaeren Device-Pfad.
+- `bootfb` kapselt sein sichtbares Mapping zentral: virtuelle Basis,
+  Byte-Laenge, Bootloader-Framebuffer-Herkunft, konservative
+  Bootloader-Default-Cache-Policy und volatile CPU-Writes. Write-Combining
+  bleibt damit ein spaeterer kontrollierter Schritt statt verstreuter Annahme.
+- AppFB nutzt intern ein einheitliches XRGB32/RGB32-Backbuffer-Format.
+  `bootfb` praesentiert dieses Surface ueber den Display-Core und wandelt bei
+  Bedarf in das tatsaechliche Hardware-Pixelformat des Limine-Framebuffers.
+- AppFB unterscheidet explizite Full-Frame- und Rect-Frame-Surfaces vom alten
+  Legacy-Auto-Present-Pfad. Die Display-Diagnose zeigt aktiven und letzten
+  Surface-Modus, damit Vollbild-/AppFB-Ausgabe nicht mehr unsichtbar am
+  R4Desk-Frame-Vertrag vorbeilaeuft.
+- ProgramApi Version 35 ergaenzt `display_begin_frame()` und
+  `display_present()` als expliziten Present-Vertrag fuer fertige Frames.
+- R4Desk nutzt den neuen Frame-Vertrag beim Redraw: Der Desktop komponiert in
+  den Backbuffer und praesentiert erst danach den fertigen Frame.
+- R4DOS-Kommando `DISPLAY` ergaenzt: zeigt aktives `bootfb`-Device,
+  Aufloesung, Pitch, BPP, Backbuffer-/Frame-/Dirty-Status und Present-
+  Zaehler.
+- ProgramApi Version 36 ergaenzt `display_begin_frame_rect()` fuer begrenzte
+  Damage-Frames.
+- R4Desk reicht sein Dirty-Rechteck an AppFB weiter. AppFB clippt
+  Desktop-Clear, Rechtecke und Text waehrend des Frames auf diese Region und
+  praesentiert nur die betroffenen Pixel.
+- Reine Cursorbewegungen werden in R4Desk als eigener Cursor-Damage-Pfad
+  behandelt. Wenn alte und neue Cursorflaeche auseinanderliegen, praesentiert
+  R4Desk zwei kleine Damage-Frames statt ein grosses Bounding-Rechteck.
+- Der R4Desk-Tasks-Dialog zeigt Render-Abnahmezaehler fuer Redraws,
+  Cursorbewegungen, Cursor-Presents, Full-Damage-Presents und die letzte
+  Damage-Art. Damit ist der Cursor-Stresstest ohne extra Tool sichtbar.
+- PS/2-Maus-IRQ zeichnet keinen Cursor mehr direkt in den sichtbaren
+  Framebuffer. Der IRQ aktualisiert nur den Mauszustand; sichtbare
+  Softwarecursor laufen ueber R4Desk bzw. AppFB-Overlay ausserhalb des
+  Interruptpfads.
+- Kernel-Heap-Kapazitaet wurde erweitert, damit ein 32-bpp-Desktop-
+  Backbuffer bei ueblichen QEMU-Aufloesungen nicht den Programm-Heap
+  erschoepft.
+- 0.9.0-Abnahme erfuellt: R4Desk rendert ueber den Backbuffer-/Present-Pfad,
+  Mauscursor-Damage laeuft ohne IRQ-Direktzeichnen, Display-Diagnose ist
+  sichtbar und alte AppFB-/Vollbildpfade bleiben ueber den expliziten
+  Surface-/Legacy-Vertrag lauffaehig.
+
+Notizen:
+- Der Limine-Framebuffer ist fuer ein junges OS weiterhin sinnvoll: Er ist
+  der robuste Startpunkt, funktioniert ohne eigenen Grafiktreiber und bleibt
+  als Boot-/Panic-/Fallback-Ausgabe wertvoll.
+- Fuer ein ausgereifteres System darf Limine nicht die dauerhafte
+  Grafikarchitektur sein. 0.9.0 liefert deshalb die eigene Display-
+  Abstraktion und nutzt `bootfb` nur als erstes konkretes Device.
+- Das aktuelle Flackern ist wahrscheinlich nicht allein ein
+  Performanceproblem. Kritisch ist, dass Kernel-Mauscursor, direkte AppFB-
+  Ausgabe und R4Desk-Compositor teilweise denselben sichtbaren Framebuffer als
+  Zeichenflaeche verwenden.
+- Ein nativer Grafiktreiber ist nicht Teil von 0.9.0, aber die Version ist
+  erst fertig, wenn ein zweites Display-Device ohne Umbau des Desktops
+  registrierbar waere. Das ist eine Architekturabnahme, kein Platzhalter.
+- 0.9.0 verspricht keine Hardwarebeschleunigung. Es verspricht stattdessen
+  einen stabilen Renderbesitz, saubere Presents und ein Ende des
+  Cursor-Flackerns.
+
+
+Version 0.9.1
+-------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Feature-Richtung festgelegt: R4DOS bekommt zwei sichtbare Bedienwege,
+  `Terminal` fuer Desktop-Fenster und `R4DOS Mode` fuer Vollbild.
+- Console-Apps als eigener Laufzeitvertrag festgelegt: Desktop startet sie im
+  Terminalfenster, R4DOS Mode startet sie in der Vollbild-Konsole.
+- Rueckkehrweg festgelegt: Der R4DOS-Befehl `DESK` bringt eine
+  Vollbild-R4DOS-Sitzung zurueck zum Desktop und darf im Desktop-Terminal
+  keine zweite Desktop-Instanz starten.
+- Der Startmenueeintrag fuer die normale COMMAND.R4X-Sitzung heisst jetzt
+  `Terminal`; `R4DOS Mode` ist als eigener Systemeintrag und MENU.R4S-Aktion
+  `r4dos_mode` vorhanden.
+- R4DOS Mode startet /R4DOS/COMMAND.R4X als exklusiven Vollbild-Console-Host
+  im R4Desk. Desktop-Fenster, Taskbar und Startmenue werden in diesem Modus
+  nicht gezeichnet; Tastatureingaben gehen an die gehostete Console-Instanz.
+- R4DOS kennt den internen Befehl `DESK`. In gehosteten Console-Instanzen
+  setzt er ein ProgramInstanceInfo-Flag fuer den Host. R4Desk beendet dadurch
+  die COMMAND-Sitzung und kehrt aus R4DOS Mode zum Desktop zurueck; im
+  normalen Terminalfenster schliesst der Befehl die gehostete Sitzung.
+- ProgramInstanceInfo-Flags dokumentieren `desk_requested` als ersten
+  Console-Host-Request. Damit muss DESK nicht als zweites Desktop-Programm
+  gestartet werden.
+- Laufende Desktop-Apps werden beim Wechsel in R4DOS Mode nicht still
+  abgeschnitten: R4Desk synchronisiert beendete App-Instanzen und lehnt den
+  Vollbildwechsel mit sichtbarer Meldung ab, solange noch Desktop-App-Fenster
+  aktiv sind.
+- ProgramApi Version 37 ergaenzt `program_set_console_host()` und den
+  Host-Vertrag `none`, `r4desk_terminal`, `fullscreen_r4dos`. R4Desk setzt die
+  Kennung beim Terminalstart und beim R4DOS-Mode-Wechsel.
+- ProgramInstanceInfo meldet `fullscreen_r4dos` als Flag, damit Hosts und
+  Diagnosewerkzeuge Vollbild-Console-Sitzungen sichtbar erkennen koennen.
+- R4DOS kennt das Diagnosekommando `CONHOST`. Es zeigt den aktiven Host-Typ
+  und unterscheidet Primaerkonsole, Desktop-Terminal und Vollbild-R4DOS.
+- Der gemeinsame Console-App-Vertrag ist fuer R4DOS-Child-Programme umgesetzt:
+  Externe `console`-R4X-Programme, die aus einer gehosteten COMMAND-Sitzung
+  gestartet werden, erben denselben Console-I/O-Host. Damit laufen Ausgabe und
+  `read_key()` im Desktop-Terminal oder im Vollbild-R4DOS Mode ueber denselben
+  Host-Puffer und kehren danach sauber zum Prompt zurueck.
+- Die Startpfade sind fuer Startmenue, Desktop-Shortcuts, Run-Dialog,
+  Dateimanager und R4DOS-Prompt vereinheitlicht. R4Files stellt gehostet einen
+  ProgramApi-v38-Host-Launch-Request; R4Desk nimmt ihn ab und entscheidet ueber
+  dieselbe `program_class(..., auto)`-Erkennung zwischen Terminal-Host und GUI-
+  Fensterslot. R4DOS-Prompt-Starts nutzen weiterhin denselben R4X-Header-
+  Vertrag und erben im gehosteten Fall den aktiven Console-Host.
+- Vollbild-R4DOS ist als Console-Host robuster: ProgramApi Version 39 liefert
+  `console_state()` fuer Host-Farben, Clear-Zaehler und vorbereitete
+  Cursorfelder. R4DOS-`CLS` und `COLOR` aktualisieren im gehosteten Modus den
+  Console-Host-Zustand explizit; R4Desk rendert Terminalfenster und R4DOS Mode
+  aus diesem Zustand statt aus hart kodierten Farben.
+- Vollbild-R4DOS und Desktop-Terminals liefern jetzt echte Host-Metriken:
+  ProgramApi Version 40 ergaenzt `console_set_metrics()`, R4Desk meldet
+  sichtbare Spalten/Zeilen pro Terminalflaeche, der Kernel pflegt die
+  Cursorposition beim Schreiben in den gehosteten Terminalpuffer und R4Desk
+  zeichnet den Cursor aus dem Console-State. `CONHOST` zeigt Host-Typ,
+  Terminalgroesse, Cursor, Farben und Clear-Zaehler.
+- Desktop-startende Console-Apps sind nicht mehr auf den einen primaeren
+  Terminalslot beschraenkt: COMMAND/R4DOS nutzt bevorzugt den Terminalslot,
+  waehrend R4Synth, R4Config, Diagnostics, Run-Dialog-Starts und R4Files-
+  Starts freie App-Fensterslots als Terminalfenster nutzen koennen. Fokus,
+  Tastatur, Paste, Console-Revisionen und DESK-Schliessen arbeiten pro aktiver
+  Console-Instanz.
+- Konsolen-E/A ist als Host-Vertrag weiter abstrahiert: ProgramApi Version 41
+  ergaenzt `console_write()` und `console_read()` fuer explizite Streams
+  `stdin`, `stdout` und `stderr`. Die alten `print`, `putc` und `read_key`
+  bleiben kompatibel, nutzen intern aber denselben Console-Host-Pfad.
+  Tastaturqueue, Terminalpuffer, CLS, Farben, Cursor, Host-Metriken und
+  Stream-Diagnosewerte laufen dadurch ueber dieselbe Console-Instanz,
+  unabhaengig davon, ob das Backend `r4desk_terminal` oder `fullscreen_r4dos`
+  ist.
+- 0.9.1-Abnahme erfuellt: `Terminal` startet R4DOS im Fenster, `R4DOS Mode`
+  wechselt in eine Vollbild-Shell, `DESK` kehrt stabil zum Desktop zurueck
+  oder schliesst das Terminalfenster, Console-Apps laufen in Desktop- und
+  Vollbild-Hosts, und belegte Modus-/Fensterslots erzeugen sichtbare
+  Meldungen statt still zu scheitern.
+
+Notizen:
+- R4Desk einfach hart zu killen waere technisch moeglich, aber als
+  Architektur keine gute Zielrichtung. Besser ist ein geordneter
+  Session-Wechsel: Desktop fordert den Moduswechsel an, beendet oder parkt
+  seine Apps kontrolliert, gibt Display/Eingabe frei und startet R4DOS als
+  Vordergrund-Shell.
+- 0.9.1 soll keinen Einweg-Wechsel liefern. Der Wechsel in R4DOS Mode und der
+  Rueckweg per `DESK` gehoeren zusammen, sonst bleibt das Feature unfertig.
+- Ein kleiner Shell-Manager ist Teil des Ziels: aktuelle Shell ist entweder
+  `desktop` oder `r4dos`, und R4OS kann zwischen beiden wechseln, ohne dass
+  CONFIG.R4S manuell angepasst oder neu gebootet werden muss.
+- Wichtig ist die Trennung zwischen Anwendungsklasse und Darstellung: Eine
+  Console-App bleibt dieselbe Anwendung, egal ob sie im Desktop-Terminal oder
+  im R4DOS-Vollbild laeuft. Nur der Console-Host ist anders.
+- `DESK` sollte nicht als normales externes Programm gedacht werden, sondern
+  als Shell-/Session-Befehl. Er betrifft den aktiven Host und muss deshalb
+  vom R4DOS-Kontext oder einer kleinen Shell-Manager-API verstanden werden.
+
+
+Version 0.9.2
+-------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Ausgangslage festgehalten: PIT und 8259-PIC funktionieren bereits; ACPI
+  findet MCFG/MADT/FADT-Adressen, wertet MADT/APIC aber noch nicht fuer echte
+  Interruptsteuerung aus.
+- ACPI-Strategie festgelegt: 0.9.2 liefert einen statischen Tabellenreader
+  fuer RSDP, XSDT/RSDT, MADT, MCFG, FADT und nach Moeglichkeit HPET; AML
+  bleibt bewusst ausserhalb des Ziels.
+- RTC-/CMOS-Ausgangslage festgehalten: R4OS liest bereits Sekunden, Minuten
+  und Stunden aus CMOS und nutzt Sekunden seit Mitternacht fuer R4Desk-Uhr und
+  R4X-API; Datum, Century und ein gemeinsamer Systemzeitvertrag fehlen noch.
+- RSDP/XSDT/RSDT-Reader gehaertet: RSDP kommt ueber Limines RSDP-Request,
+  physische ACPI-Tabellenseiten werden bei Bedarf in den HHDM-Bereich
+  gemappt, SDT-Laengen werden begrenzt, Checksummen werden geprueft,
+  RSDP-Extended-Checksummen entscheiden ueber XSDT-Nutzung und der Boot faellt
+  bei ungueltigen Tabellen sichtbar auf Fallbacks zurueck.
+- Bestehenden ACPI-Reader ausgebaut: MADT/APIC wird geparst und liefert
+  Local-APIC-Adresse, LAPIC-/x2APIC-Zaehler, aktivierte CPUs, IOAPICs,
+  Interrupt-Source-Overrides, NMI-Zaehler und erste IOAPIC-/ISO-Details.
+- FADT/FACP wird nicht mehr nur gefunden: Revision, SCI, SMI-Port,
+  ACPI-Enable/-Disable, PM1-Control-Bloecke, Flags, Century-Feld und
+  Reset-Register werden ausgelesen und geloggt.
+- HPET-Tabelle wird erkannt und ausgewertet: Basisadresse, HPET-Nummer,
+  Mindest-Tick und Legacy-Replacement-Faehigkeit sind sichtbar.
+- R4DOS-Kommando `ACPI` ergaenzt. Es zeigt RSDP, Tabellenvalidierung, MCFG,
+  MADT/APIC, FADT/FACP und HPET als praktische 0.9.2-Diagnose, ohne bereits
+  APIC-/IOAPIC- oder HPET-Betrieb zu aktivieren.
+- Interrupt-/Timer-Diagnose ergaenzt: `platform/irq.zig` fasst den aktiven
+  8259-PIC-/PIT-Fallback mit den erkannten LAPIC-, IOAPIC-, IRQ-Override-,
+  NMI- und HPET-Daten zusammen. Bootlog und R4DOS `IRQ`/`TIMER` zeigen
+  Controller, Timer-Backend, PIT-Frequenz, Tickstand, PIC-Masken, erkannte
+  Routen und den Fallback-Grund.
+- RTC-/CMOS-Zeitquelle in den Time-Core eingeordnet: `platform/time.zig`
+  liefert Wandzeit und monotone PIT-Zeit als getrennte Schnittstellen.
+- CMOS-RTC liest Sekunden, Minuten, Stunden, Wochentag, Tag, Monat, Jahr und
+  Century-Register, behandelt BCD/Binary sowie 12h/24h und nutzt das FADT-
+  Century-Feld, falls ACPI es meldet. Ohne Century-Feld faellt R4OS auf
+  CMOS-0x32 oder den 1980-2079-Pivot zurueck.
+- R4DOS `DATE`, `TIME`, Prompt `$D`/`$T`, R4Desk-Taskbar und ProgramApi
+  `time_seconds_since_midnight()` nutzen denselben Systemzeitpfad. `DATE` ist
+  nicht mehr dauerhaft auf 01-01-1980 fest verdrahtet.
+- Bootlog `TIME` zeigt die gelesene RTC-Wandzeit, die Century-Quelle und den
+  weiterhin getrennten monotonen PIT-Pfad.
+- FADT-/Power-Pfad an die Laufzeit angebunden: Poweroff wertet die aus
+  FADT/FACP erkannten PM1-Control-Bloecke aus. Dieser fruehe Zwischenstand
+  nutzte PM1 noch nur fuer bekannte Emulator-Pfade; der spaetere S5-Schritt
+  liest DSDT-`_S5` statisch und nutzt damit echte SLP_TYP-Werte.
+- Reboot nutzt das FADT-Reset-Register, wenn es laut FADT-Flags beworben wird,
+  und faellt danach sichtbar auf den Keyboard-Controller-Resetpfad zurueck.
+- R4DOS-Kommando `POWER` ergaenzt. Es zeigt FADT-Revision, Flags, SCI,
+  PM1-Control-Bloecke, Reset-Register und die tatsaechlichen Poweroff-/
+  Reboot-Fallbacks als Abnahme fuer den 0.9.2-Power-Pfad.
+- ProgramApi `system_reboot()` und `system_poweroff()` sowie die
+  R4Desk-Systemaktionen sind dokumentiert auf den FADT-vor-Fallback-Vertrag
+  aktualisiert.
+- Local APIC als belastbaren xAPIC-MMIO-Grundpfad aktiviert:
+  IA32_APIC_BASE wird gelesen, der MADT-/MSR-LAPIC-Speicherbereich gemappt,
+  der APIC global aktiviert, das Spurious-Interrupt-Register gesetzt und eine
+  LAPIC-EOI-Funktion bereitgestellt. Der PIC/PIT-Pfad bleibt fuer IRQ-Routing
+  und Timer bewusst aktiv.
+- R4DOS-Kommando `LAPIC` ergaenzt. Es zeigt MADT-/MSR-Basis, virtuelle
+  MMIO-Adresse, BSP-/x2APIC-Hinweise, APIC-ID, Version, LVT-Anzahl,
+  Spurious-Register und den Grund fuer den noch aktiven PIC/PIT-Fallback.
+- `IRQ`/`TIMER` zeigen jetzt zusaetzlich den LAPIC-Laufzeitstatus und loggen,
+  ob der lokale APIC bereits softwareseitig aktiv ist.
+- IOAPIC-MMIO-Grundpfad ergaenzt: Der erste ueber MADT erkannte I/O-APIC wird
+  gemappt, Register-ID, Version, Redirection-Table-Groesse, GSI-Basis und
+  ausgewaehlte Redirection-Eintraege werden aus echter MMIO gelesen.
+- R4DOS-Kommando `IOAPIC` ergaenzt. Es zeigt MADT-ID, Register-ID, Version,
+  physische und virtuelle Basisadresse, GSI-Basis sowie Redirection-Eintraege
+  fuer 0, 1, 2 und 12 als Abnahme fuer Timer-, Keyboard-, Cascade- und
+  Maus-nahe Routen.
+- `IRQ`/`TIMER` zeigen jetzt zusaetzlich, ob der IOAPIC-Laufzeitpfad gemappt
+  ist. Die eigentliche IRQ-Zustellung bleibt bis zur Route/PIC-Umschaltung
+  bewusst beim stabilen 8259-PIC.
+- MADT speichert jetzt nicht mehr nur den ersten Interrupt-Override, sondern
+  feste Tabellen fuer mehrere IOAPICs und Interrupt-Source-Overrides. Dadurch
+  ist der statische ACPI-Reader als Quelle fuer echte IRQ-Routen nutzbar.
+- IOAPIC-Interruptplan fertiggestellt: Fuer Legacy-IRQ 0, 1, 2 und 12 wird
+  ein belastbarer Routeintrag aus IRQ, GSI, Vector, Ziel-LAPIC, Polarity,
+  Trigger-Modus und Override-Quelle berechnet. Das ist der konkrete Plan fuer
+  Timer, Keyboard, Cascade und Maus.
+- R4DOS `IOAPIC` zeigt neben den MMIO-Redirection-Eintraegen nun auch den
+  geplanten IRQ-zu-GSI-Routingpfad. `IRQ`/`TIMER` zeigen die wichtigsten
+  Routen ebenfalls kompakt an.
+- IOAPIC-Redirection fuer die kontrollierten Legacy-Pfade aktiviert:
+  IRQ0/PIT wird ueber GSI 2 zugestellt, IRQ1/Keyboard ueber GSI 1 und
+  IRQ12/Maus ueber GSI 12. Die Eintraege werden mit MADT-Flags, Vector und
+  Ziel-LAPIC programmiert; alle anderen IOAPIC-Redirection-Eintraege bleiben
+  maskiert.
+- 8259-PIC wird nach erfolgreicher IOAPIC-Programmierung voll maskiert.
+  Bootlog und `IRQ`/`TIMER` zeigen dann `controller=APIC/IOAPIC`,
+  `ioapic_routing=active` und den Grund `IOAPIC routes active, 8259-PIC
+  masked`.
+- Abnahme gegen PIT-Ticks bestanden: R4OS bootet mit aktivem IOAPIC-Routing
+  bis R4Desk, `waitForTimerTicks(5)` laeuft weiter und der Tickzaehler steigt
+  nach maskiertem PIC.
+- PS/2-Eingabediagnose ergaenzt: Keyboard und Maus zaehlen IRQs und
+  Datenereignisse; R4DOS `INPUT` zeigt Keyboard-IRQs, Scancodes, dekodierte
+  Zeichen, Maus-IRQs, Bytes, Pakete, Position, Delta und Buttons.
+- IOAPIC-Eingabeabnahme bestanden: Ein QEMU-Monitor-Test mit `sendkey a`,
+  `mouse_move` und `mouse_button` erzeugt unter aktivem APIC/IOAPIC-Pfad die
+  Bootlog-Zeilen `[INPUT] keyboard IRQ1 delivered` und
+  `[INPUT] mouse IRQ12 packet delivered`. Damit sind IRQ1 und IRQ12 neben
+  IRQ0/PIT konkret ueber IOAPIC zugestellt.
+- Timer-Core eingefuehrt: `platform/timer.zig` kapselt Backend, Tickzaehler,
+  Frequenz und IRQ-Tick-Verarbeitung. Aktives Backend ist weiterhin PIT, aber
+  PIT wird nur noch dort direkt importiert.
+- Scheduler-Sleep, Kernel-API, R4X-Sleep, R4DOS/TIME-Diagnose,
+  Audio-Wartepfade und Boot-Wartepfade nutzen den gemeinsamen Timer-Core.
+  `TIME` zeigt das monotone Backend, der Bootlog meldet die RTC-Wandzeit
+  getrennt vom aktiven monotonen Backend.
+- HPET-MMIO-Laufzeitpfad ergaenzt: Der ACPI-HPET wird gemappt, Capabilities,
+  Revision, Comparator-Anzahl, 64-Bit-Faehigkeit, Legacy-Replacement-
+  Faehigkeit, Vendor-ID, Periodendauer, berechnete Frequenz und Main-Counter
+  werden gelesen. Der Hauptzaehler wird als Diagnosequelle aktiviert; HPET-
+  Interrupts bleiben aus.
+- R4DOS-Kommando `HPET` ergaenzt. `IRQ`/`TIMER` zeigen zusaetzlich, ob HPET
+  zur Laufzeit gemappt ist und welchen Counter/Frequenzwert die Hardware
+  meldet.
+- LAPIC-Timer als echtes Timer-Backend aktiviert: Der lokale xAPIC-Timer wird
+  gegen den HPET-Main-Counter kalibriert, periodisch auf 100 Hz programmiert
+  und ueber den gemeinsamen Timer-Core als monotone Zeitquelle genutzt.
+- Boot-Abnahme fuer den LAPIC-Timer eingebaut: Nach der Umschaltung wird die
+  alte PIT-IRQ0-Route im IOAPIC maskiert, R4OS wartet mit aktivierten
+  Interrupts auf echte LAPIC-Ticks und faellt bei ausbleibenden Ticks
+  automatisch auf PIT/IOAPIC zurueck.
+- R4DOS `LAPIC`, `IRQ`/`TIMER` und `TIME` zeigen das aktive LAPIC-Timer-
+  Backend inklusive Frequenz, Tickstand, Initial-Count, HPET-/LAPIC-
+  Kalibrierwerten und LVT-Konfiguration.
+- Zeitmodell fuer Anwendungen abgeschlossen: RTC/CMOS liefert Wandzeit,
+  Timer-Core liefert monotone Laufzeit, und ProgramApi Version 42 stellt mit
+  `time_state(out)` einen gemeinsamen Snapshot aus Datum, Uhrzeit, Century-
+  Quelle, Sekunden seit Mitternacht, monotonen Ticks, Frequenz und Backend
+  bereit.
+- Das SDK bildet den neuen Zeitvertrag in `r4os.abi.TimeState` und
+  `Context.timeState()` ab. `EXAMPLE.R4X` zeigt den Snapshot im Konsolenmodus
+  als sichtbare Abnahme fuer R4X-Anwendungen.
+- SMP-Vorbereitung ohne SMP-Schalter abgeschlossen: MADT speichert lokale
+  APIC- und x2APIC-Prozessoreintraege mit ACPI-UID, APIC-ID und Flags.
+  R4DOS `ACPI` listet die Eintraege mit, und `CPUS` zeigt die CPU-/APIC-
+  Sicht gezielt als Diagnose fuer spaetere Mehrkernarbeit.
+- PCIe-/MCFG-Diagnose ausgebaut: `platform/pcie.zig` nutzt ACPI-MCFG/ECAM,
+  enumiert PCIe-Funktionen, speichert eine begrenzte Funktionsliste und zaehlt
+  erste AHCI-, NVMe- und HDA-Kandidaten als Grundlage fuer spaetere
+  Storage-/Audio-Treiber.
+- R4DOS-Kommando `PCIE` ergaenzt. Es zeigt MCFG-Basis, Segment, Busbereich,
+  gefundene und gespeicherte Funktionen, Kandidatenzaehler und die ersten
+  AHCI-/NVMe-/HDA-Treffer; der Bootlog meldet die PCIe-Zusammenfassung
+  ebenfalls.
+- ACPI-MCFG-Reader fuer echte Q35-Tabellen gehaertet: Der MCFG-Eintrag wird
+  unaligned gelesen, weil ACPI-Tabellennutzdaten nicht automatisch 8-Byte-
+  ausgerichtet sind.
+- Zeitgeber- und Interrupt-Architektur modernisiert, ohne den stabilen
+  PIT/PIC-Pfad zu entfernen: HPET, LAPIC und PIT haengen am gemeinsamen
+  Timer-Core, IOAPIC routet die kontrollierten Legacy-Pfade und der alte
+  PIT/PIC-Weg bleibt Fallback.
+- Legacy-IRQ-Umfang fuer 0.9.2 bewusst abgeschlossen: Timer, Keyboard und
+  Maus sind ueber IOAPIC aktiv geroutet; weitere Legacy-IRQs bleiben maskiert,
+  bis ein konkreter Treiber eine eigene Abnahme braucht.
+- HPET als echtes Timer-Backend aktiviert: Comparator 0 wird im periodischen
+  Legacy-IRQ0-Modus auf 100 Hz programmiert, der Timer-Core kann auf HPET
+  umschalten und faellt bei fehlender Boot-Abnahme auf PIT beziehungsweise
+  LAPIC zurueck.
+- R4DOS `HPET`, `IRQ`/`TIMER` und `TIME` zeigen das aktive HPET-Backend
+  inklusive Comparator-Konfiguration, Periodenwert, Tickstand, Frequenz und
+  monotonic-Backend.
+- HPET-Abnahme gegen Standard-PC und Q35 bestanden: Beide QEMU-Pfade melden
+  `HPET timer 100 Hz [OK]`, `TIME` zeigt `monotonic=HPET`, und der Boot
+  erreicht weiter R4Desk beziehungsweise den bekannten Q35-Command-Fallback.
+- ACPI-Unterbau fuer 0.9.2 abgeschlossen: Der statische Reader deckt RSDP,
+  XSDT/RSDT, MCFG, MADT/APIC, FADT/FACP, DSDT-`_S5` und HPET ab, ohne einen
+  allgemeinen AML-Interpreter vorzutäuschen.
+- ACPI-S5-/Shutdown-Semantik geklaert und umgesetzt: R4OS liest das uebliche
+  DSDT-`_S5`-Package als begrenzten statischen Sonderpfad, speichert SLP_TYP
+  A/B und schreibt beim Poweroff FADT-PM1 plus SLP_EN, wenn die DSDT-Pruefung
+  gueltig ist.
+- R4DOS-Kommandos `POWEROFF`/`SHUTDOWN` und `REBOOT` ergaenzt. `POWER` bleibt
+  Diagnose und zeigt DSDT-/X_DSDT-Zeiger, S5-Status, SLP_TYP-Werte und den
+  aktiven Power-/Reset-Vertrag.
+- S5-Abnahme gegen Standard-PC und Q35 bestanden: Beide QEMU-DSDTs liefern
+  `_S5`, der Bootlog meldet `S5 typa=0 typb=0 source=DSDT`, und der Boot
+  erreicht weiter den normalen Desktop- beziehungsweise Q35-Fallbackpfad.
+  Ein Q35-Command-Test mit `POWEROFF` schreibt
+  `ACPI S5 PM1a_CNT ... value=0x2000` und beendet QEMU sauber.
+- Desktop-Zeitbasis auf den gemeinsamen Timer-Core gezogen: R4Desk liest beim
+  Start `time_state().monotonic_hz` und berechnet daraus Loop-Sleep,
+  Doppelklickfenster, Blinkhalbperiode und Closing-Kill-Timeout. Bei 100 Hz
+  bleiben die bisherigen Werte erhalten, aber der Desktop haengt nicht mehr
+  an impliziten PIT-Tickannahmen.
+- Finale Abnahme fuer 0.9.2 bestanden: Standard-QEMU bootet mit APIC/IOAPIC,
+  HPET-Backend, `monotonic=HPET` und R4Desk; Q35 bootet mit MCFG/PCIe,
+  DSDT-`_S5`, HPET und bekanntem Command-Fallback; `-machine pc,acpi=off`
+  bootet als echter 8259-PIC/PIT-Fallback mit `monotonic=PIT` bis R4Desk.
+
+Notizen:
+- ACPI ist fuer R4OS nicht optionaler Komfort, sondern mittelfristige
+  Plattformbasis: Poweroff/Reboot, PCIe-Erkennung, APIC/IOAPIC und Teile der
+  Hardwarebeschreibung haengen daran.
+- Ein AML-Interpreter waere ein grosses eigenes Projekt und fuer 0.9.X nicht
+  noetig. Statische Tabellen reichen fuer die in 0.9.2 ausgelieferten
+  Interrupt-, Timer-, PCIe- und Power-Grundlagen.
+- APIC/IOAPIC machen fuer R4OS mittelfristig klar Sinn. Ohne APIC bleibt das
+  System bei Legacy-IRQs, ohne sauberen SMP-Pfad und mit schlechterer
+  Kompatibilitaet zu modernen Maschinen.
+- HPET ist sinnvoll, aber nicht der einzige moderne Timer. Viele Systeme
+  nutzen LAPIC-Timer plus invariant TSC als wichtige Bausteine. R4OS sollte
+  daher einen Timer-Core bauen statt "PIT direkt durch HPET" zu ersetzen.
+- RTC/CMOS ist keine praezise Scheduler-Zeitquelle. Es ist die Quelle fuer
+  Wandzeit nach dem Boot; fuer Sleep, Scheduling und Animationen bleibt ein
+  monotones Timer-Backend zustaendig.
+- FADT allein liefert PM1-Control und Reset-Register, aber nicht auf jeder
+  Plattform den fuer S5 noetigen SLP_TYP-Wert. R4OS loest das fuer 0.9.2 mit
+  einem engen statischen DSDT-`_S5`-Reader statt mit einem halben
+  AML-Interpreter; wenn `_S5` fehlt oder die DSDT ungueltig ist, bleiben die
+  Emulator-Ports und Halt der dokumentierte Fallback.
+- Die Reihenfolge bleibt konservativ: erst ACPI-MADT sauber parsen, dann
+  LAPIC, dann IOAPIC-Routing, dann Timer-Core/Backends, danach Diagnose und
+  Abnahme gegen PIT/PIC-Fallback. So bleibt der funktionierende Legacy-Pfad
+  jederzeit als Rettungsleine erhalten.
+
+
+Version 0.9.3
+-------------
+
+Status: Erledigt
+
+Offene Punkte:
+- Keine.
+
+Erledigt:
+- Ausgangslage festgehalten: R4Files existiert bereits als gehostete GUI-App,
+  listet C:\, oeffnet Ordner, startet `.R4X`, ordnet Textdateien Notepad und
+  WAV/MID/SID R4Synth zu.
+- Persistentes Datenlaufwerk als eigenes 0.9.X-Thema aufgenommen: `D:\`
+  soll nicht wie Build-Ausgabe behandelt werden, sondern als erster stabiler
+  Ort fuer Nutzerdaten und wiederverwendbare Testdaten.
+- Laufwerksrollen im Kernel festgelegt: `C:` ist System/Boot, `D:` ist
+  persistentes Datenlaufwerk, `X:` ist RAM-/Startlaufwerk. Die
+  Laufwerkstabelle fuehrt diese Rolle pro Mount mit.
+- R4DOS-`DRIVES` zeigt Laufwerksart, Rolle und Groesse, damit der
+  Multi-Volume-Zustand ohne GUI diagnostizierbar ist.
+- ProgramApi Version 43 ergaenzt `drive_info(index, out)`. R4X-Anwendungen
+  koennen damit gemountete Laufwerke, Art, Rolle, Groesse und Namen abfragen,
+  ohne FAT32-Interna oder feste Mount-Annahmen zu kennen.
+- R4Files nutzt `drive_info()` fuer eine Laufwerksleiste mit `C: System`,
+  `D: Data` und `X: RAM`, wechselt FAT32-Ziele bewusst und meldet
+  nicht browsbare Ziele sichtbar.
+- R4Files bewahrt beim Hochnavigieren den aktuellen Laufwerksbuchstaben und
+  faellt nicht mehr implizit auf `C:\` zurueck.
+- `D:\Docs`, `D:\Temp` und `D:\Media` werden beim Booten angelegt, falls sie
+  fehlen. Bestehende Inhalte werden dabei nicht geloescht oder formatiert.
+- Build-/QEMU-Vertrag fuer das Datenlaufwerk dokumentiert: Das 128-MB-
+  FAT32-Data-Image wird als persistentes `D:` behandelt und normale Builds
+  duerfen es nicht neu initialisieren.
+- Dokumentation fuer R4X-API, R4DOS, Storage, Architektur und R4Files auf
+  Laufwerksrollen, `D:`-Semantik und ProgramApi v43 aktualisiert.
+- R4Files-Dateiliste ausgebaut: Sie laedt bis zu 64 echte
+  Verzeichniseintraege, blendet die internen `dir_entry()`-Spezialziele fuer
+  aktuelles/Parent-Verzeichnis aus und scrollt die Auswahl bei
+  Tastatur-Navigation sichtbar mit.
+- R4Files unterstuetzt Refresh ueber Button, F3 und `R`; `C`, `D` und `X`
+  wechseln direkt auf die festen Laufwerksziele.
+- R4Files oeffnet Eintraege per Doppelklick ueber denselben Pfad wie
+  Enter/Open.
+- R4Files kennzeichnet bekannte Typen in Liste und Details als Ordner,
+  R4X-Programm, R4D-Treiber, Textdatei, Audio/Testdatei oder generische Datei.
+- FAT32 reicht Dateigroesse, Attribute, ersten Cluster und die rohen
+  Erstell-/Zugriffs-/Aenderungszeitfelder aus Verzeichniseintraegen in die
+  interne `Entry`-Struktur durch.
+- ProgramApi Version 44 ergaenzt `file_info(path, out)`. R4X-Anwendungen
+  koennen damit Dateigroesse, FAT-Attribute, Cluster, Eintragsnamen und
+  FAT-Zeitfelder abfragen.
+- R4Files nutzt `file_info()` fuer die Details-Seite und zeigt Groesse,
+  Attribute und Aenderungszeit aus dem echten FAT32-Verzeichniseintrag.
+- FAT32 setzt beim Schreiben neuer Dateien und Ordner die Erstell-,
+  Zugriffs- und Aenderungszeitfelder aus der gemeinsamen RTC-/Systemzeit.
+  Falls die RTC-Zeit nicht plausibel ist, wird kontrolliert auf
+  `1980-01-01 00:00` als DOS-kompatibler Minimalwert zurueckgefallen.
+- R4Files zeigt die Dateiliste als Mehrspaltenansicht mit Name, Typ, Groesse
+  und Aenderungszeit.
+- R4Files sortiert per Klick auf die Spaltenkoepfe nach Name, Typ, Groesse
+  oder Aenderungszeit und schaltet bei erneutem Klick die Richtung um. Die
+  aktuelle Auswahl bleibt nach dem Umsortieren soweit moeglich erhalten.
+- R4Files kann Verzeichnisse groesser als die aktuelle 64-Eintraege-Page
+  seitenweise durchblaettern. Prev/Next-Buttons und `[`/`]` bzw. `</>` als
+  Tastaturwege laden die vorige oder naechste Page; der Status zeigt die
+  aktuelle Page und ob weitere Seiten existieren. Die Sortierung bleibt
+  bewusst lokal auf die geladene Page begrenzt, bis eine echte streaming-
+  oder cursorbasierte Directory-API eingefuehrt wird.
+- ProgramApi Version 45 ergaenzt die ersten Datei-/Ordner-Mutationen fuer
+  R4X-Anwendungen: `file_delete`, `dir_create`, `dir_delete` und
+  `file_rename`. Umbenennen ist bewusst auf denselben Ordner begrenzt;
+  Verschieben bleibt ein eigener Copy/Delete-Workflow.
+- R4Files nutzt die neue Mutations-API fuer sichtbares Loeschen von Dateien
+  und leeren Ordnern. Der Delete-Button verlangt einen zweiten Klick auf
+  denselben Eintrag, bevor geloescht wird; Fehler wie nicht leere Ordner
+  werden in der Statuszeile gemeldet.
+- R4Files hat einen gemeinsamen Namensdialog fuer Dateiaktionen bekommen.
+  `New`/`N` legt neue Ordner ueber `dir_create()` an; `Ren`/`M` benennt den
+  markierten Eintrag ueber `file_rename()` innerhalb desselben Ordners um.
+  Namen werden vor dem API-Aufruf als FAT-kompatible 8.3-Kurznamen
+  validiert; ungueltige oder zu lange Namen werden sichtbar abgelehnt.
+- ProgramApi Version 46 ergaenzt `file_copy(src, dst)` fuer sektorweise
+  FAT32-Dateikopien. R4Files nutzt das fuer Copy/Paste:
+  `Copy`/`Y` merkt die markierte Datei als Quelle, `Paste`/`P` kopiert sie in
+  den aktuell geoeffneten Ordner. Bereits vorhandene Ziele verlangen einen
+  zweiten Paste-Klick als Ueberschreib-Bestaetigung.
+- Der FAT32-Kopierpfad ist nicht mehr an einen kompletten Datei-Puffer oder
+  eine feste 8-KB-App-Grenze gebunden: Ziel-Cluster werden reserviert,
+  Quelldaten sektorweise gelesen und sektorweise auf das Ziel geschrieben;
+  bei Fehlern wird die neue Ziel-Clusterkette wieder freigegeben.
+- ProgramApi Version 47 ergaenzt `file_move(src, dst)` fuer Datei-
+  Verschiebungen ueber Ordner- und Laufwerksgrenzen hinweg. R4Files nutzt
+  das fuer Cut/Paste: `Cut`/`U` merkt die markierte Datei als Move-Quelle,
+  `Paste`/`P` verschiebt sie in den aktuell geoeffneten Ordner und verlangt
+  bei vorhandenen Zielen dieselbe zweite Paste-Bestaetigung wie Copy/Paste.
+- R4Files fuehrt die bekannten Open-With-Regeln fuer Text- und Audio-Dateien
+  nun in einem gemeinsamen Regelpfad. Oeffnen, Host-Launch-Policy,
+  Listen-Kuerzel, Typanzeige und Sortierrang verwenden dieselbe Erkennung,
+  statt parallel gepflegte Dateiendungs-Checks zu wiederholen.
+- Dateioperationen sind als zusammenhaengender Dateimanager-Kern vorhanden:
+  Neuer Ordner, Umbenennen, Loeschen, Kopieren und Verschieben laufen ueber
+  ProgramApi-Aufrufe, kritische Operationen verlangen sichtbare
+  Bestaetigungen, und die Details-Seite dient als Eigenschaftenansicht fuer
+  Dateien, Ordner und das aktuelle Laufwerk.
+- R4Files nutzt die R4X-Anwendungsklassen und Launch-Policies konsequent:
+  `.R4X` startet ueber `auto`, gehostete R4Desk-Starts laufen ueber
+  Host-Launch-Requests, bekannte GUI-Zuordnungen wie Notepad bleiben GUI,
+  Console-Zuordnungen wie R4Synth gehen in den Terminalpfad.
+- ProgramApi Version 48 erweitert `drive_info()` um freie Bytes,
+  Gesamtcluster, freie Cluster und Bytes pro Cluster fuer FAT32-Volumes.
+  R4Files zeigt diese Werte in der Laufwerksdetails-Seite und macht `D:\`
+  dadurch als persistentes Datenlaufwerk mit echtem freien Speicher sichtbar.
+- Die Startlogik ist mit 0.9.1 verbunden: R4Files reicht Desktop-Starts als
+  Host-Launch-Requests an R4Desk weiter, Console-Ziele werden im Desktop als
+  Terminalfenster gehostet, und im R4DOS Mode laufen dieselben Console-R4X-
+  Programme ueber den Vollbild-Console-Host des R4DOS-Prompts.
+- R4Desk liefert fuer R4Files eine stabile Single-Instance-Regel. Ein zweiter
+  Start von `/bin/r4files.r4x` erzeugt keine weitere Dateimanager-Instanz,
+  sondern restauriert und fokussiert das bereits laufende R4Files-Fenster.
+- Laufwerksuebergreifende Dateioperationen sind fuer FAT32-Dateien umgesetzt:
+  Copy/Paste und Cut/Paste nutzen Quell- und Zielvolume anhand des jeweiligen
+  Laufwerksbuchstabens und funktionieren damit zwischen `C:` und `D:`.
+  R4Files uebersetzt ProgramApi-Fehlercodes in konkrete Statusmeldungen, z.B.
+  fuer fehlende Zielordner, nicht unterstuetzte Ordner, gleiche Pfade,
+  read-only Quellen sowie Schreibfehler oder volle Datentraeger.
+- Multi-Volume-FAT32 ist als Plattformvertrag fuer 0.9.3 abgeschlossen:
+  R4DOS, ProgramApi und R4Files verwenden FAT32-Volumes anhand des
+  Laufwerksbuchstabens, Boot-Konfiguration und R4D-Treiberpfade lesen
+  Systemdateien ausdruecklich von `C:` statt aus einem globalen
+  "erstes FAT32"-Fallback.
+- R4Files kann neben den festen Direktzielen `C`, `D` und `X` ueber
+  `Drives`/`V` zum naechsten gemounteten FAT32-Laufwerk wechseln. Damit sind
+  weitere FAT32-Volumes erreichbar, ohne fuer jeden neuen Laufwerksbuchstaben
+  einen eigenen Toolbar-Button einzubauen; nicht browsbare Laufwerke melden
+  weiterhin sichtbar, dass sie kein FAT32-Browserziel sind.
+- Die R4Files-Bedienoberflaeche hat den fuer 0.9.3 geplanten Grundumfang:
+  Toolbar, Pfadfeld, Statuszeile, differenzierte Fehlermeldungen, Dialoge
+  fuer Dateinamen und Bestaetigungen sowie einen Open-With-Dialog ueber
+  `With`/`W`. Bekannte Text- und Audio-Dateien waehlen dort ihre Standard-App
+  vor; unbekannte Dateien fallen beim normalen `Open` ebenfalls auf diesen
+  Dialog zurueck.
+- FSDIAG ist fuer die Persistenz-Abnahme von `D:` erweitert: Das Tool prueft
+  Laufwerksinfo fuer `D:`, schreibt und liest `D:\Temp\FSDIAG.TXT` als Marker
+  und meldet beim Start sichtbar, ob dieser Marker bereits vor dem Schreiben
+  vorhanden war. Damit ist die Rebuild-Abnahme von `data.img` ein
+  wiederholbarer R4DOS-/Terminal-Test statt nur eine Build-Script-Annahme.
+- R4Files ist vom kleinen Dateibrowser zum alltagstauglichen R4Desk-
+  Dateimanager fuer 0.9.3 ausgebaut: Laufwerksnavigation, Ordnernavigation,
+  Details, Sortierung, Paging, Open-With, Programmstarts, Kopieren,
+  Verschieben, Umbenennen, Loeschen, neue Ordner und neue leere Dateien sind
+  ueber sichtbare Bedienelemente und Tastaturwege vorhanden. `File`/`F`
+  nutzt ProgramApi `file_write()` mit leerem Inhalt und macht damit auch
+  eigene persistente Testdateien auf `D:` direkt aus dem Desktop heraus
+  moeglich.
+- R4Files-Open-With wurde fuer das R4X-Modulformat gehaertet: Die
+  Dateizuordnung nutzt keine globalen Runtime-Slice-/Pointertabellen mehr,
+  weil rohe R4X-Codebytes keine Relocations fuer solche Datenstrukturen
+  anwenden. Die Toolbar zeichnet ausserdem kompakter, damit Liste und Details
+  beim ersten Present nicht am GUI-Command-Limit scheitern.
+- R4Files-Toolbar-Texte wurden gegen den R4X-Flat-Binary-Pfad gehaertet:
+  Kurzlabels werden aus lokalen nullterminierten Puffern erzeugt, statt ueber
+  Slice-/Ellipsize-Helfer auf Stringliterale zu gehen. Der gehostete
+  GUI-Command-Puffer wurde auf 256 Eintraege erweitert, damit Dateimanager-
+  Frames mit Toolbar, Liste, Details und Dialogen nicht abgeschnitten werden.
+- R4Files wird als groessere GUI-App mit 64-KB-R4X-Stack gebaut. Der
+  Dateimanager haelt inzwischen Eintragstabellen, Dialogzustand und
+  Zeichendaten lokal; der alte 4-KB-Default-Stack konnte Statuswerte wie
+  `Entries` sichtbar korrumpieren.
+- Die freie FAT32-Clusterzahl wird nicht mehr clusterweise ueber einzelne
+  FAT-Lesezugriffe gezaehlt, sondern sektorweise ueber die FAT gelesen. Damit
+  bleiben `drive_info()` und die R4Files-Free-Anzeige exakt, ohne dass
+  Laufwerkswechsel zwischen `C:` und `D:` durch hunderttausende redundante
+  FAT-Zugriffe blockieren.
+- 0.9.3-Abschlussstand festgehalten: R4Files startet wieder ohne Page Fault,
+  Toolbar-Texte sind sichtbar, die Statuszeile zeigt plausible
+  Eintragszahlen, `C:`/`D:` lassen sich wechseln und der offensichtliche
+  Free-Space-Flaschenhals ist beseitigt.
+- Persistenz-Abnahme ist ueber FSDIAG wiederholbar vorbereitet:
+  `D:\Temp\FSDIAG.TXT` dient als Marker, der nach einem normalen Rebuild von
+  `disk.img` in `data.img` erhalten bleiben muss.
+
+Notizen:
+- R4Files ist der sichtbare Ort, an dem viele 0.9.X-Entscheidungen
+  zusammenlaufen: Desktop-Launch, Terminal-Host, Dateizuordnungen,
+  R4DOS-Kompatibilitaet, Systemordner und Dateistempel.
+- R4Files sollte weiter eine normale R4X-/SDK-Anwendung bleiben. Wenn dabei
+  APIs fehlen, ist das ein guter Drucktest fuer SDK und ProgramApi, nicht ein
+  Grund, Dateimanager-Sonderrechte einzubauen.
+- Das DOS-artige Leitbild bleibt erhalten: Der User darf Dateien direkt
+  manipulieren. Bestaetigungen dienen Komfort und Crash-/Datenverlust-
+  Vermeidung, nicht einem Berechtigungsmodell.
+- Das persistente Data-Image ist auch ein guter Testfall fuer die Storage-
+  Architektur: Sobald mehrere FAT32-Volumes existieren, fallen globale
+  Annahmen ueber "das" gemountete FAT32-Laufwerk sofort auf.
+- Sinnvolle Verbesserungen fuer `D:` in 0.9.3: Volume-Label `R4DATA`,
+  Standardordner, freie-Speicher-Anzeige und ein bewusstes Tool zum
+  Neuinitialisieren statt versehentlichem Loeschen im normalen Build.
+- Backup/Export des Data-Images bleibt ein eigenes Komfortthema. Es ist
+  nuetzlich, aber nicht Teil der Abnahme fuer den Dateimanager selbst.
+- Die seitenweise R4Files-Enumeration nutzt weiterhin die bestehende
+  `dir_entry()`-API. Fuer globale Sortierung ueber sehr grosse Ordner hinweg
+  waere spaeter eine cursorbasierte Directory-API sinnvoller als immer
+  groessere fixe App-Puffer.
+- Der File Manager ist als 0.9.3-Funktionsstand abgeschlossen, wird aber
+  spaeter noch einmal ausfuehrlich manuell getestet und weiter ausgebaut.

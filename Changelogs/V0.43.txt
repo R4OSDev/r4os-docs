@@ -1,0 +1,434 @@
+﻿*** Kernel Refactor Roadmap Leitbild ***
+In dieser Roadmap befassen wir uns im Verlauf mehrerer großer Versionen mit der säuberung des Kernels.
+Aktuell wurden viele Funktionen nach
+kernelold.zig ausgelagert und in src/old/ verschoben.
+Wir holen die nach und nach zurück in main.zig, kontrollieren dabei aber alles.
+Was aus dem Kernel raus kann soll in Software, Treiber und Protokolle untergebracht werden.
+Im Zuge dieses Refactor ist auch die Dokumentation zu aktualisieren und pflegen.
+
+Grundsatz fuer alle Unterversionen:
+- Keine halben Umbauten: Eine Unterversion ist erst erledigt, wenn Code, Imports, Doku, Version und Abnahme zusammenpassen.
+- Keine stillen Doppelpfade: Wenn eine Initialisierung nach `main.zig` wandert, darf sie nicht weiterhin produktiv in `kernelold.zig` laufen.
+- Boot-kritische Pfade muessen konservativ behandelt werden. Was fuer Boot, `C:\`, Speicher, Interrupts oder fruehe Ausgabe noetig ist, bleibt built-in, bis ein stabiler Ersatz existiert.
+- Kernel-Verschlankung ist ein ausdrueckliches Ziel. Fallbacks und parallele Built-in-Pfade werden nur genutzt, wenn sie fuer Boot-Stabilitaet, Migration oder echte Abnahme noetig sind.
+- Nicht bootkritische Treiber sollen nach erfolgreicher R4D-Auslagerung aus dem Kernel entfernt werden, statt dauerhaft als Built-in-Fallback liegen zu bleiben.
+- Jeder Umzug braucht klare Modulgrenzen: Boot-Schicht, Runtime-Core, Treiber, API und Diagnose duerfen nicht unkontrolliert vermischt werden.
+- Jede neue Boot-Schicht braucht eine klare Zustands- und Fehlersemantik: entweder erfolgreich initialisiert, sauber uebersprungen oder fatal beendet. Stilles Weiterlaufen nach kaputten Pflichtpfaden ist kein erledigter Zustand.
+- `kernelold.zig` darf waehrend der Migration nur noch als Legacy-Bruecke dienen. Neu umgezogene Initialisierungen muessen aus `kernelold.zig` verschwinden oder dort explizit als bereits initialisierter Zustand konsumiert werden.
+- Zwischenversionen duerfen lauffaehig klein sein, aber nicht fachlich halb: Keine Unterversion wird abgeschlossen, wenn Besitzgrenzen, Boot-Reihenfolge oder Abhaengigkeiten noch absichtlich unklar bleiben.
+- Eine Unterversion darf bewusst nur Vertrag, Diagnose oder Probe liefern,
+  wenn sie klar als nicht-produktiver Ersatz gekennzeichnet ist. Produktive
+  Umschaltung und Entfernen des Altpfads passieren erst nach echter
+  Funktionsabnahme.
+- Jede Pruefung endet mit einer Entscheidung. Ein Punkt bleibt offen, bis das
+  Ergebnis in Code, Doku oder als konkret versionierter Folgepunkt festgehalten
+  ist.
+- Testluecken werden vor dem Abschluss geschlossen. Vorhandene Testskripte
+  werden namentlich genutzt; wenn keines den neuen Vertrag abdeckt, gehoert
+  ein gezieltes Testskript zur Unterversion.
+- Diagnose-Altpfade duerfen nicht still im normalen Produktivpfad erreichbar
+  bleiben. Sie brauchen einen expliziten Diagnose-/Kompatibilitaetsvertrag,
+  sichtbare Statusausgabe und eine eigene Abnahme.
+- Vor jedem Abschluss wird gezielt nach Rest-Imports, Doppelaufrufen und verdeckten Abhaengigkeiten gesucht. Gefundene Altlasten werden entweder beseitigt oder in der Roadmap als bewusster Folgepunkt notiert.
+- Jede abgeschlossene Unterversion erhoeht `Injection/sys/CONFIG/VERSION.R4S` auf die passende Version und wird danach gepusht.
+- Mindestens `DevTools/Scripts/Build.bat -norun` gehoert zu jeder Code-Unterversion. Bei Boot-, IRQ-, Input-, Storage-, USB- oder R4D-Aenderungen gehoert `DevTools/Scripts/Build.bat -test` dazu.
+- GUI-/Hardware-nahe Punkte bekommen zusaetzlich eine klare manuelle Sichtabnahme durch den User, wenn QEMU-Smoke allein nicht reicht.
+
+-------------------------------------------
+Ab hier beginnen die Versionen und ab hier darf auch bereinigt werden.
+Das Refactor Leitbild muss bei einer Roadmap Bereinigung stehen bleiben
+-------------------------------------------
+
+Archivierte Roadmap 0.43.X - Driver-Policy-/R4D-Besitzwechsel
+-------------------------------------------
+Diese Datei archiviert den abgeschlossenen 0.43.X-Stand. Die aktive Roadmap
+wurde danach bereinigt; das Refactor-Leitbild bleibt in `Roadmap.txt` stehen.
+
+Rahmen fuer 0.43.X
+-------------------------------------------
+Ziel ist der naechste chronologische Besitzschnitt nach `usb_hid_boot`: die
+allgemeine Driver-Policy und R4D-Ladephase aus `kernelold.kmain()`.
+Der Block bleibt bewusst auf Driver-Plan/R4D-Policy begrenzt, weil
+`r4p.loadAll()`, Task/Scheduler, DHCP-Boot-Acquire und Launcher jeweils eigene
+spaetere Besitzgrenzen sind.
+
+0.43.X ist kein Treiber-Auslagerungsblock. Es werden keine neuen R4D-Treiber
+erzwungen und keine bootkritischen Built-ins entfernt. Der produktive Schritt
+ist nur der Besitzwechsel fuer:
+
+- `driver_plan.applyCoreDirectives(loaded_config)`
+- `driver_plan.buildAndLoad(loaded_config)`
+- `driver_registry.dump()`
+
+Umfang:
+- Neue Kernel-Boot-Orchestrierung fuer Driver-Policy/R4D-Load anlegen, z.B.
+  `kernel/driver_policy_boot.zig`.
+- `main.zig` ruft den neuen Bootschnitt nach `usb_hid_boot.init()` und vor
+  `kernelold.kmain()` auf.
+- Der neue Bootschnitt konsumiert den bereits geladenen Boot-Config-Zustand
+  aus `loader_boot.config()` und prueft `platform_irq_boot.isInitialized()`.
+- Driver-Plan/R4D-Load wird idempotent und bekommt ein sichtbares Statusmodell:
+  nicht gestartet, Config fehlt, Plattform-IRQ fehlt, Core-Directives
+  angewendet, Driver-Plan gebaut, R4D-Load ausgefuehrt, Warnung, Fehler.
+- Der neue Bootschnitt ist mehr als ein Wrapper: Er besitzt Status-Snapshot,
+  Ergebniszaehler, `status()`/`dumpStatus()`, Bootlog-Vertrag, sichtbare
+  Bootstatus-Zeile und eine klare Entscheidung, ob der Boot fortgesetzt wird.
+- `driver_plan.zig` bekommt, falls noetig, eine kleine strukturierte
+  Ergebnis-/Summary-API fuer den letzten Planlauf. Tests und Diagnose duerfen
+  nicht allein freie Logtexte parsen muessen, um den Bootvertrag zu verstehen.
+- Boot-Fortsetzung oder Fatalpfad werden aus strukturierten Ergebnissen
+  abgeleitet. Freitext-Logs sind Diagnose, nicht die einzige Wahrheit.
+- `driver_registry.dump()` wird als expliziter Diagnoseabschluss des neuen
+  Bootschnitts behandelt und darf nicht als versteckte Legacy-Restaktion in
+  `kernelold.zig` bleiben.
+- Nichtfatal bleiben: fehlende optionale R4D-Dateien, deaktivierte Treiber,
+  nicht vorhandene Hardware und bewusst scheiternde R4D-Init-Pfade, sofern der
+  jeweilige Treibervertrag das so vorsieht.
+- Fatal sind nur verletzte Bootreihenfolge- oder Pflichtzustandsfehler, z.B.
+  fehlende Loader-Config oder fehlender Plattform-IRQ-Bootstatus.
+- AC97-/HDA-R4D-Planergebnisse muessen weiter an `audio_boot` gemeldet werden,
+  damit die bestehende Audio-Diagnose nicht ihren Zustand verliert.
+
+Nicht Umfang:
+- `r4p.loadAll()` und R4P-Protokollstart.
+- Task-/Scheduler-Start.
+- DHCP-Boot-Acquire.
+- Launcher-/Shell-Start.
+- Umbau des R4D-Dateiformats, R4D-Loaders oder DriverApi-Vertrags.
+- Neue R4D-Portierungen oder Entfernen weiterer Built-ins.
+- Aenderungen am fruehen `driver_boot.zig`: dieser bleibt fuer die Driver-
+  Registry-Grundlage vor Storage, Audio, Netzwerk und USB-HID zustaendig.
+
+0.43.X gilt erst als belastbar abgeschlossen, wenn:
+- `kernelold.kmain()` keine direkten Driver-Plan-/R4D-Policy-Aufrufe und
+  keinen produktiven `driver_registry.dump()` mehr besitzt.
+- `kernelold.kmain()` erst mit R4P-Load beginnt; Driver-Policy/R4D ist vorher
+  vollstaendig ueber `main.zig`/`driver_policy_boot` entschieden.
+- ein wiederholter Aufruf von `driver_policy_boot.init()` keinen zweiten
+  Planlauf, keinen erneuten Core-Directive-Eingriff und keinen doppelten
+  R4D-Load ausloest.
+- Der neue Bootschnitt keinen R4P-Load, keinen Scheduler, keinen DHCP-
+  Boot-Acquire und keinen Launcher vorzieht.
+- `driver_plan` einen auswertbaren letzten Lauf meldet: ausgewaehlt,
+  uebersprungen, Duplikate, deaktiviert, Kapazitaetsgrenze, bereits aktiv,
+  geladen, Datei fehlt, ungueltige Datei, Init fehlgeschlagen, Ladefehler und
+  Warnungen.
+- Driver Registry vor und nach dem Policy-Lauf nachvollziehbar ist: Built-ins
+  bleiben erhalten, geplante R4Ds erreichen den erwarteten Zustand, und
+  deaktivierte oder fehlgeschlagene Treiber hinterlassen keinen falschen
+  `active`-Status.
+- `driver_plan.zig`, `r4d.zig`, `audio_boot.zig`, Driver Registry,
+  COMMAND-/DRIVERS-Diagnosen und Device Inventory nach dem Besitzwechsel noch
+  denselben fachlichen Status sehen.
+- PS/2-Deaktivierung, `DISABLE=AT-PIO`-Warnung, fehlende R4D-Dateien,
+  init-fehlgeschlagene R4D-Dateien und normale R4D-Ladepfade reproduzierbar
+  diagnostiziert werden.
+- Bootlog und sichtbare Diagnose einen stabilen `[DRVPOLICY]`-Vertrag mit
+  Phase, Ergebniszaehlern und `boot_continue=...` enthalten.
+- Mindestens `DevTools/Scripts/Build.bat -norun`,
+  `DevTools/Scripts/Build.bat -test` und ein gezielter Driver-Policy-/R4D-
+  Boot-Smoke erfolgreich ausgefuehrt wurden. Bestehende Audio-/Netzwerk-R4D-
+  Smokes duerfen wiederverwendet werden, wenn sie den neuen Bootbesitz
+  tatsaechlich abdecken.
+
+Version 0.43.0
+-------------------------------------------
+Status: Erledigt
+
+Ziel:
+- Driver-Plan/R4D-Bootvertrag, Besitzgrenze und Abnahmematrix festlegen, ohne
+  den produktiven Aufruf bereits halb umzuschalten.
+
+Geplant:
+- Aktuellen Driver-Policy-Block in `kernelold.zig` und seine Abhaengigkeiten
+  inventarisieren: `loader_boot.config()`, `platform_irq_boot`,
+  `driver_plan.zig`, `driver_registry`, `r4d.zig`, `audio_boot`-
+  Rueckmeldungen, COMMAND-/DRIVERS-Diagnosen und Device Inventory.
+- `DRIVER=`-Planregeln vollstaendig erfassen: `MAX_PLAN`, `MAX_NAME`,
+  Gross-/Kleinschreibung, leere Namen, zu lange Namen, Duplikate,
+  deaktivierte Eintraege und Plan-Kapazitaetsgrenze.
+- Entscheiden, welche Zustaende fatal, nichtfatal oder reine Warnung sind.
+- Bootposition verbindlich festlegen: nach `usb_hid_boot.init()` und vor
+  `r4p.loadAll()`.
+- Statusmodell fuer `driver_policy_boot` und strukturierten letzten
+  `driver_plan`-Lauf definieren, bevor produktive Aufrufe verschoben werden.
+- Testmatrix gegen vorhandene Smokes abgleichen: welche Faelle decken
+  Audio-/Netzwerk-/Lifecycle-Tests bereits ab, welche braucht
+  `Run-DriverPolicyBootTest.ps1` neu?
+- Doku- und Testauswirkungen notieren, bevor produktive Aufrufe verschoben
+  werden.
+- Neues statisches Audit-Gate fuer 0.43.X anlegen, z.B.
+  `DevTools/Scripts/TestScripts/CheckDriverPolicyBoot043.zig`.
+- Sichtbare Kernel-Version auf 0.43.0 setzen.
+
+Ergebnis:
+- `Docs/Core/DriverPolicyBoot043.txt` haelt Inventar, chronologische
+  Besitzgrenze, aktuelle Planregeln, Zielstatus, strukturierte Summary,
+  `[DRVPOLICY]`-Bootlog, Fatal-/Nichtfatal-Entscheidung und Abnahmematrix
+  fuer 0.43.X fest.
+- Der produktive Driver-Policy-Aufruf bleibt fuer 0.43.0 vollstaendig in
+  `kernelold.zig`: Loader-Config, Plattform-IRQ-Pruefung,
+  `driver_plan.applyCoreDirectives(...)`, `driver_plan.buildAndLoad(...)`,
+  `driver_registry.dump()` und danach `r4p.loadAll()`.
+- `DevTools/Scripts/TestScripts/CheckDriverPolicyBoot043.zig` prueft den
+  0.43.0-Vertrag statisch gegen Roadmap, Doku, Version, aktuelle
+  Legacy-Besitzgrenze, Plan-/R4D-/Registry-Anker und die Grenze gegen spaetere
+  Bootbereiche.
+- `Docs/Core/KernelBereinigung.txt`, `Docs/Core/Architektur.txt` und
+  `Docs/README.txt` nennen den 0.43.0-Vertrag.
+- Die sichtbare Kernel-Version steht auf 0.43.0.
+
+Abnahme:
+- Rest-Import-/Aufrufsuche fuer Driver-Plan/R4D-Policy in `kernelold.zig`,
+  `main.zig` und den konsumierenden Diagnosepfaden.
+- Abhaengigkeits- und Testmatrix fuer 0.43.1/0.43.2 ist konkret genug, dass
+  kein produktiver Umzug ohne passende Abnahme beginnt. Sie enthaelt
+  mindestens Duplikate, deaktivierte Treiber, mehr als acht geplante Treiber,
+  ungueltige/zu lange Namen, bereits aktive Treiber, fehlende Dateien,
+  ungueltige Dateien, Init-Fehler und normalen R4D-Load.
+- `git diff --check`.
+- `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckDriverPolicyBoot043.zig`.
+- `DevTools/Scripts/Build.bat -norun`.
+
+Version 0.43.1
+-------------------------------------------
+Status: Erledigt
+
+Ziel:
+- Produktiven Driver-Policy-/R4D-Bootbesitz von `kernelold.zig` nach
+  `main.zig` ueberfuehren.
+
+Geplant:
+- `Code/src/kernel/driver_policy_boot.zig` mit idempotentem `init()`,
+  Status-Snapshot, Ergebniszaehlern, `status()`, `dumpStatus()`,
+  Bootlog-Ausgabe und sichtbarer Statuszeile anlegen.
+- `main.zig` importiert und ruft `driver_policy_boot.init()` nach
+  `usb_hid_boot.init()` auf.
+- `kernelold.zig` verliert direkte Aufrufe auf
+  `driver_plan.applyCoreDirectives(...)`, `driver_plan.buildAndLoad(...)` und
+  `driver_registry.dump()`.
+- `kernelold.zig` startet den naechsten Legacy-Block danach fruehestens mit
+  `r4p.loadAll()` und nutzt Driver-Policy-Zustand nur noch als bereits
+  entschiedenen Bootstatus.
+- Der neue Bootschnitt prueft Loader-Config und Plattform-IRQ als
+  Pflichtvorbedingungen.
+- `driver_plan.zig` bleibt fachlich bei Planung und R4D-Load; noetige
+  Summary-/Status-APIs fuer den letzten Lauf gehoeren aber zum Besitzwechsel.
+- Kein reines Durchreichen akzeptieren: Der neue Bootschnitt muss
+  Vorbedingungen, Idempotenz, Ergebnisuebernahme, Diagnose und
+  Boot-Fortsetzungsentscheidung selbst besitzen.
+- Kein R4P-Load, kein Scheduler, kein DHCP und kein Launcher wandern in diesen
+  Bootschnitt.
+- Bestehende Audio-R4D-Rueckmeldungen fuer AC97/HDA bleiben erhalten.
+- `[DRVPOLICY]`-Bootlog und sichtbare Statuszeile melden Phase,
+  Ergebniszaehler, Warn-/Fehlerstatus und `boot_continue=...`.
+- Sichtbare Kernel-Version auf 0.43.1 setzen.
+- `CheckDriverPolicyBoot043.zig` auf den produktiven Besitzschnitt erweitern:
+  `main.zig` muss importieren und aufrufen, `kernelold.zig` darf den direkten
+  Driver-Plan-/R4D-Policy-Pfad nicht mehr besitzen, und `driver_policy_boot`
+  darf keine spaeteren Bereiche vorziehen.
+
+Ergebnis:
+- `Code/src/kernel/driver_policy_boot.zig` besitzt seit 0.43.1 den
+  produktiven Driver-Policy-/R4D-Bootschnitt mit Vorbedingungen, Idempotenz,
+  Status-Snapshot, `dumpStatus()`, `[DRVPOLICY]`-Bootlog, sichtbarer
+  Statuszeile, Registry-Dump-Abschluss und Boot-Fortsetzungsentscheidung.
+- `main.zig` ruft `driver_policy_boot.init()` nach `usb_hid_boot.init()` und
+  vor `kernelold.kmain()` auf.
+- `kernelold.zig` enthaelt keinen `driver_plan`-Import, keinen direkten
+  Driver-Plan-Aufruf, keinen Plattform-IRQ-Policy-Check und keinen
+  produktiven `driver_registry.dump()` mehr. Der naechste Legacy-Block beginnt
+  mit `r4p.loadAll()`.
+- `driver_plan.zig` liefert eine strukturierte Summary des letzten Laufs:
+  Config-Driver, ausgewaehlte/uebersprungene/deaktivierte/duplizierte
+  Eintraege, Kapazitaetsgrenze, bereits aktive Treiber, R4D-Load-Ergebnisse,
+  Warnungen, PS/2-/AT-PIO-Directives und Registry-Vorher/Nachher.
+- AC97-/HDA-R4D-Rueckmeldungen an `audio_boot` bleiben erhalten.
+- `CheckDriverPolicyBoot043.zig`, `Docs/Core/DriverPolicyBoot043.txt`,
+  `Docs/Core/KernelBereinigung.txt` und `Docs/Core/Architektur.txt` sind auf
+  den produktiven 0.43.1-Besitzschnitt erweitert.
+- Die sichtbare Kernel-Version steht auf 0.43.1.
+
+Abnahme:
+- `git diff --check`.
+- `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckDriverPolicyBoot043.zig`.
+- `DevTools/Scripts/Build.bat -norun`.
+- `DevTools/Scripts/Build.bat -test`.
+- Rest-Import-/Aufrufsuche belegt, dass `kernelold.zig` keinen Driver-Policy-
+  Bootbesitz mehr enthaelt.
+
+Version 0.43.2
+-------------------------------------------
+Status: Erledigt
+
+Ziel:
+- Driver-Policy-/R4D-Bootstatus und positive/negative R4D-Pfade belastbar
+  pruefen.
+
+Geplant:
+- Gezielten Driver-Policy-Boot-Smoke anlegen, z.B.
+  `DevTools/Scripts/TestScripts/Run-DriverPolicyBootTest.ps1`.
+- Profile pruefen:
+  - Standard-Boot ohne zusaetzliche geplante R4D-Hardware.
+  - `DISABLE=PS2` schaltet den PS/2-Registry-/Input-Pfad sichtbar ab.
+  - `DISABLE=AT-PIO` bleibt nach Boot-Storage-Init nur eine Warnung.
+  - doppelte `DRIVER=`-Eintraege werden einmal geplant und als Duplikat
+    gezaehlt.
+  - mehr als acht geplante Treiber erreichen sichtbar die Plan-
+    Kapazitaetsgrenze, ohne Speicher oder Namen zu korrumpieren.
+  - lowercase/mixed-case Namen werden konsistent normalisiert.
+  - leere, ungueltige oder zu lange Treibernamen werden sichtbar uebersprungen
+    oder als Ladefehler eingeordnet, aber nicht still abgeschnitten.
+  - bereits aktive Built-ins/R4Ds werden nicht erneut geladen.
+  - fehlende optionale R4D-Datei wird sichtbar, aber nicht fatal.
+  - ungueltige R4D-Datei oder falsche Magic wird sichtbar, aber nicht fatal.
+  - bewusst fehlschlagende R4D-Init bleibt sichtbar, aber nicht fatal, sofern
+    sie nicht bootkritisch ist.
+  - normaler R4D-Loadpfad bleibt aktiv fuer vorhandene Referenztreiber.
+- Der Smoke prueft, dass `driver_policy_boot.init()` im Boot nur einmal
+  produktiv laeuft und der Status danach nur gelesen, nicht neu erzeugt wird.
+- Bestehende Audio-R4D-Smokes weiter nutzen, soweit passend:
+  `Run-AudioR4DPlanTest.ps1`, `Run-Ac97R4DProbeTest.ps1`,
+  `Run-HdaR4DPlanTest.ps1`, `Run-HdaR4DProbeTest.ps1` und
+  `Run-AudioHardwareR4DFinalTest.ps1`.
+- Driver-Registry-Dump und sichtbare Bootstatus-Zeile muessen eindeutig
+  erkennen lassen, ob die Policy angewendet und der R4D-Plan ausgefuehrt
+  wurde.
+- Der Bootlog enthaelt `[DRVPOLICY]`-Zeilen fuer Summary,
+  Registry-Nachzustand und `boot_continue=yes` im nichtfatalen Standardpfad.
+- Sichtbare Kernel-Version auf 0.43.2 setzen.
+
+Ergebnis:
+- `driver_policy_boot` schreibt neben dem `[DRVPOLICY]`-Bootlog eine
+  sichtbare `Driver policy summary ...`-Zeile in den seriellen Boot-Smoke.
+  Die Zeile enthaelt Config-/Plan-/Load-Zaehler, Registry-Vorher/Nachher,
+  PS/2-/AT-PIO-Directives und `continue=yes|no`.
+- `boot_config.zig` nimmt bis zu 12 `DRIVER=`-Eintraege an, waehrend
+  `driver_plan.zig` weiterhin maximal 8 Plaetze besitzt. Dadurch ist die
+  Plan-Kapazitaetsgrenze im Boot reproduzierbar testbar, statt bereits vom
+  Config-Parser verdeckt zu werden.
+- Leere, ungueltige oder zu lange `DRIVER=`-Namen werden nicht mehr still
+  abgeschnitten oder ignoriert. Sie werden als invalides Plan-Element
+  sichtbar gezaehlt und bleiben nichtfatal.
+- `Run-DriverPolicyBootTest.ps1` prueft die 0.43.2-Matrix mit getrennten
+  Bootprofilen: normaler SID-R4D-Load, PS/2-/AT-PIO-Core-Directives,
+  Duplikate und Gross-/Kleinschreibung, bereits aktives PS2, Plan-
+  Kapazitaet, invalide Namen, fehlende HDA.R4D, kaputte HDA.R4D-Magic und
+  bewusst fehlschlagende AC97.R4D-Init.
+- Der neue Smoke prueft, dass pro Boot genau eine sichtbare Policy-Summary
+  erscheint und jeder nichtfatale Matrixfall mit `continue=yes` weiterbootet.
+- Die spezialisierten Audio-/Probe-Smokes bleiben fuer tiefergehende
+  Hardware-/Audio-Abnahmen verfuegbar; die fuer 0.43.2 relevanten
+  Boot-Policy-Faelle missing/load failed/init failed deckt der neue
+  Driver-Policy-Smoke direkt ab.
+- `CheckDriverPolicyBoot043.zig`, `Docs/Core/DriverPolicyBoot043.txt`,
+  `Docs/Core/KernelBereinigung.txt` und `Docs/Core/Architektur.txt` sind auf
+  den 0.43.2-Matrixvertrag erweitert.
+- Die sichtbare Kernel-Version steht auf 0.43.2.
+
+Abnahme:
+- `git diff --check`.
+- `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckDriverPolicyBoot043.zig`.
+- `DevTools/Scripts/Build.bat -norun`.
+- `DevTools/Scripts/Build.bat -test`.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  DevTools/Scripts/TestScripts/Run-DriverPolicyBootTest.ps1`.
+- Passende bestehende Audio-/R4D-Smokes werden ausgefuehrt oder konkret
+  begruendet ersetzt.
+
+Version 0.43.3
+-------------------------------------------
+Status: Erledigt
+
+Ziel:
+- Diagnose- und Konsumentenrand des neuen Driver-Policy-Bootschnitts
+  absichern.
+
+Ergebnis:
+- `SYSINFO.R4X /DRIVERS` ist als produktiver Console-Selftest fuer den
+  Driver-Registry-Konsumentenrand ergaenzt. Der Pfad liest ausschliesslich das
+  R4DEV-Device-Inventory, zaehlt Runtime-Driver-Records, verlangt mindestens
+  einen aktiven R4D-Treiber und meldet fehlgeschlagene Driver-Records sichtbar.
+- `Run-DriverPolicyConsumerTest.ps1` bootet mit einem kontrollierten
+  HDA/SID/OPL3/MIDI-R4D-Plan ohne absichtlich fehlenden Netzwerkadapter. Der
+  Smoke prueft eine einzige Driver-Policy-Summary, aktive R4D-Records in
+  `SYSINFO.R4X /DRIVERS`, dieselben Records in `DEVMGR.R4X` und im exportierten
+  `C:\Temp\HWREPORT.TXT`.
+- `COMMAND.R4X /LEGACY` bleibt im Smoke ein Negativcheck: der deaktivierte
+  `sys.shellRun()`-Kompatibilitaetshook muss `COMMAND legacy bridge: disabled
+  OK` melden. Alte COMMAND-/Diagnosepfade werden damit nicht zur zweiten
+  Boot-Policy-Wahrheit.
+- Runtime-`LOAD`/`UNLOAD` bleibt fachlich vom fruehen `DRIVER=`-Plan getrennt.
+  0.43.3 fuehrt keine neue Runtime-Policy ein; der Konsumentenrand liest den
+  Registry-/Inventory-Nachzustand des einmaligen Boot-Policy-Laufs.
+- `Run-NetDriverLifecycleTest.ps1` bleibt Teil der Abnahme, nutzt dafuer aber
+  den externen Diagnosepfad `C:\DIAG\NETSVC.R4X DRIVERLIFETEST` statt des
+  historischen COMMAND-Builtins `NETDRVTEST`. Damit wird der R4D-/Netzwerk-
+  Lifecycle geprueft, ohne die deaktivierte COMMAND-Legacy-Runtime wieder zur
+  produktiven Diagnosequelle zu machen.
+- `CheckDriverPolicyBoot043.zig`, `Docs/Core/DriverPolicyBoot043.txt`,
+  `Docs/Core/KernelBereinigung.txt` und `Docs/Core/Architektur.txt` sind auf
+  den 0.43.3-Konsumentenvertrag erweitert.
+- Die sichtbare Kernel-Version steht auf 0.43.3.
+
+Abnahme:
+- `git diff --check`.
+- `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckDriverPolicyBoot043.zig`.
+- `DevTools/Scripts/Build.bat -norun`.
+- `DevTools/Scripts/Build.bat -test`.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  DevTools/Scripts/TestScripts/Run-DriverPolicyConsumerTest.ps1`.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  DevTools/Scripts/TestScripts/Run-DriverPolicyBootTest.ps1`.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File
+  DevTools/Scripts/TestScripts/Run-NetDriverLifecycleTest.ps1`.
+
+Version 0.43.4
+-------------------------------------------
+Status: Erledigt
+
+Ziel:
+- 0.43.X als belastbaren Driver-Policy-/R4D-Besitzwechsel abschliessen,
+  dokumentieren und fuer den naechsten chronologischen Block vorbereiten.
+
+Ergebnis:
+- `CheckDriverPolicyBoot043.zig` ist zum Abschlussgate fuer 0.43.X erweitert.
+  Es prueft jetzt Version 0.43.4, erledigte Roadmap-/Doku-Anker,
+  Idempotenz-Anker, eindeutigen `main.zig`-Aufruf nach USB-HID und vor
+  `kernelold.kmain()`, die klare R4P-Grenze und die Abwesenheit produktiver
+  Driver-Policy-/Registry-Besitzreste in `kernelold.zig`.
+- Der Abschluss bestaetigt: `driver_policy_boot.zig` besitzt Statusmodell,
+  Summary, `[DRVPOLICY]`-Bootlog, Registry-Dump, sichtbare Summary-Zeile,
+  nichtfatalen Standardpfad und Idempotenz. `driver_plan.zig` bleibt der
+  fachliche Plan-/Load-Helfer, zieht aber keinen R4P-Load, Scheduler,
+  DHCP-Boot-Acquire oder Launcher vor.
+- Runtime-`LOAD`/`UNLOAD` bleibt bewusst getrennt vom fruehen `DRIVER=`-
+  Bootplan. Diese Runtime-Ladelogik wird nicht nach 0.43.X umgezogen und ist
+  kein zweiter Boot-Policy-Besitzer.
+- Alte COMMAND-/Diagnosepfade bleiben entweder externe produktive Diagnose
+  (`SYSINFO.R4X /DRIVERS`, `DEVMGR.R4X`, `NETSVC.R4X DRIVERLIFETEST`) oder
+  explizite Legacy-/Negativchecks (`COMMAND.R4X /LEGACY`). Sie starten die
+  Driver-Policy nicht erneut.
+- Treiberstand, Driver-README, Supported-Hardware, Architektur,
+  Kernel-Bereinigung und Driver-Policy-Doku beschreiben den finalen Zustand:
+  0.43.X ist kein Treiber-Auslagerungsblock, AC97/HDA/RTL8139/SID/OPL3/MIDI
+  bleiben die bestehenden R4D-Pfade, und bootkritische Built-ins bleiben bis
+  zu eigenen spaeteren Besitzschnitten eingebaut.
+- Der naechste chronologische Block beginnt nach der aktuellen Grenze bei
+  `r4p.loadAll()` beziehungsweise den danach folgenden Legacy-Bereichen
+  Scheduler, DHCP-Boot-Acquire und Launcher. Diese Punkte sind nicht Umfang
+  von 0.43.X.
+- Die sichtbare Kernel-Version steht auf 0.43.4.
+
+Abnahme:
+- `git diff --check`.
+- `DevTools/Zig/zig.exe run DevTools/Scripts/TestScripts/CheckDriverPolicyBoot043.zig`.
+- `DevTools/Scripts/Build.bat -norun`.
+- `DevTools/Scripts/Build.bat -test`.
+- Driver-Policy-/R4D-Smokes aus 0.43.2/0.43.3:
+  `Run-DriverPolicyBootTest.ps1`, `Run-DriverPolicyConsumerTest.ps1` und
+  `Run-NetDriverLifecycleTest.ps1`.
+- Gezielte Rest-Import-/Aufrufsuche belegt, dass `kernelold.zig` keinen
+  Driver-Policy-/R4D-Bootbesitz mehr hat.
+- Roadmap und Docs enthalten keine widerspruechlichen Aussagen zu
+  Driver-Policy, R4D-Load, R4P-Grenze und nicht geplanter Treiberauslagerung.

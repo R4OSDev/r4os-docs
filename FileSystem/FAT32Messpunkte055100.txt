@@ -1,0 +1,86 @@
+﻿FAT32-Messpunkte 0.55.10.0
+===========================
+
+Ziel
+----
+
+0.55.10.0 startet den FAT32-Sonderstrang als Messversion. Die sichtbare
+Systemversion bleibt waehrend der Arbeit bei 0.55.10; der neue technische
+Diagnosevertrag ist ProgramApi v144.
+
+Die Messung soll zeigen, welcher Anteil langer Schreibpausen aus R4SYS-
+Requests, FAT32-Metadatenarbeit, FAT-Kopien, Directory-Scans, Cluster-Walks,
+Flush/Writeback oder Block-I/O kommt. Diese Unterversion optimiert noch
+nicht, sondern macht den Istzustand reproduzierbar.
+
+R4DEV-Snapshot
+--------------
+
+`ProgramPerformanceSummary` waechst append-only um FAT32-Zaehler:
+
+- Sektor-I/O: `fat32_read_sectors`, `fat32_write_sectors`,
+  `fat32_read_failures`, `fat32_write_failures`
+- Flush: `fat32_flushes`, `fat32_flush_failures`,
+  `fat32_flush_total_ticks`, `fat32_flush_max_ticks`,
+  `fat32_flush_last_ticks`
+- Dateioperationen: `fat32_file_writes`, `fat32_file_appends`,
+  `fat32_file_write_ranges`, `fat32_file_write_bytes`,
+  `fat32_file_append_bytes`
+- Directory-Metadaten: `fat32_dir_scans`, `fat32_dir_entries_scanned`,
+  `fat32_dir_entry_updates`
+- FAT/Cluster/Allocation: `fat32_cluster_walk_steps`, `fat32_fat_reads`,
+  `fat32_fat_writes`, `fat32_fat_mirror_writes`,
+  `fat32_alloc_chain_calls`, `fat32_alloc_clusters`,
+  `fat32_alloc_search_steps`
+- Operationslatenz: `fat32_operation_total_ticks`,
+  `fat32_operation_max_ticks`, `fat32_operation_last_ticks`,
+  `fat32_active_operation`, `fat32_last_operation`,
+  `fat32_operation_failures`
+
+Die ProgramApi-Tabelle selbst bekommt keinen neuen Funktionsslot. R4X-
+Programme pruefen die Verfuegbarkeit ueber ProgramApi v144 bzw.
+`supportsFat32Diagnostics()`.
+
+Spaetere FAT32-Sonderversionen bauen denselben append-only Snapshot aus:
+0.55.10.4 ergaenzt mit ProgramApi v145 Responsiveness-/Yield-Zaehler,
+0.55.10.8 ergaenzt mit ProgramApi v146 Run-Allokations- und
+FAT-Sektor-Batching-Zaehler. Auch diese Erweiterungen bleiben reine R4DEV-
+Diagnosefelder ohne eigene Dateisystemlogik.
+
+FSDIAG-Probe
+------------
+
+`FSDIAG.R4X` fuehrt zusaetzlich zu den bestehenden Cache- und Streamtests eine
+FAT32-Messprobe aus:
+
+- vorher/nachher `R4DEV.performanceSummary()`
+- kleine `fileWrite`-Probe nach `C:\TEMP\FATPROBE.BIN`
+- kleine `fileAppend`-Probe auf dieselbe Datei
+- 64-KB-`fileStreamWrite`-Probe nach `C:\TEMP\FATSTRM.BIN` mit 4-KB-Chunks
+- Checksum-Readback der Streamdatei
+- Delta-Ausgabe fuer Dateioperationen, Directory-Metadaten, FAT/Allocation,
+  Cluster-Walks, Sektor-I/O, Flushes und Tickkosten
+
+Erfolgreiche Abnahme meldet:
+
+    FSDIAG fat32 metrics result: OK
+    FSDIAG fat32 metadata: ...
+    FSDIAG fat32 io: ...
+
+Interpretation
+--------------
+
+Die Werte sind keine Performance-Ziele, sondern Baseline. Fuer die folgenden
+Unterversionen gilt:
+
+- 0.55.10.1 reduziert vor allem `fat32_dir_scans`,
+  `fat32_cluster_walk_steps`, `fat32_fat_reads` und Flush-Arbeit bei
+  fortlaufenden Appends.
+- 0.55.10.3 bewertet `fat32_flushes` und `fat32_flush_*_ticks` gegen den
+  Durability-Vertrag.
+- 0.55.10.5 vergleicht SSH/SFTP/SCP/SYSUPD-Transfers gegen diese Baseline.
+
+Der wichtigste negative Befund waere, wenn bei fortlaufendem Stream-Append
+pro Chunk erneut viele Directory-Entries, FAT-Eintraege oder Cluster ab dem
+Dateianfang gesucht werden. Genau dieser Befund waere der direkte
+Arbeitsauftrag fuer 0.55.10.1.

@@ -103,9 +103,25 @@ Details, Modi und Logs stehen in Deployment/BuildUndTest.txt.
 Bestand
 -------
 
-Inventory/Docs.json fuehrt jede Datei unter Docs/ ausser den Changelogs mit
-Beschreibung und Status. Wer ein Dokument anlegt, verschiebt oder entfernt,
-pflegt den Eintrag mit.
+Inventory/Docs.json fuehrt die projektweiten Dokumente mit Name, Pfad,
+Beschreibung, letztem inhaltlichen Pruefstand und optionalen Notizen. Nicht
+aufgenommen werden Changelogs, Inventory selbst und die Grunddateien des
+Docs-Repositories.
+
+Der globale Workspace-Build ergaenzt neue Dokumente mit dem Status New und
+entfernt nicht mehr vorhandene Eintraege automatisch. Bestehende
+Beschreibungen, Statuswerte und Notizen werden dabei nicht veraendert. Nach
+einer inhaltlichen Pruefung wird als Status die ausfuehrende R4OS-Unterversion
+eingetragen. Notes bleibt normalerweise leer und kann bei Bedarf einen
+knappen Hinweis wie Needs Update enthalten.
+
+    Inventory\DocsInventory.bat -Update
+    Inventory\DocsInventory.bat -Check
+
+Der Initial-Build ersetzt die Liste bewusst und setzt alle Dokumente auf New.
+Er wird nur fuer einen ausdruecklichen Neuaufbau verwendet:
+
+    Inventory\DocsInventory.bat -Initial
 
 Archive
 -------

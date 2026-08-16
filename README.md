@@ -8,7 +8,7 @@ with the component that owns the corresponding contract or source code.
 
 ## Structure
 
-    Inventory/  Cross-project inventories; currently empty
+    Inventory/  Cross-project inventories, including the current test inventory
 
 ## License
 

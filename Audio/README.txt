@@ -20,5 +20,11 @@ Drivers advertise capabilities and own hardware-specific conversion,
 DMA, interrupts, stop and recovery. Applications must use the announced
 stream format and close every stream they open.
 
+The generic subsystem runtime uses the application audio facade rather than
+a direct kernel path. Its default transport is 48 kHz stereo signed 16-bit
+little endian in 480-frame quanta, with caller-owned buffering, silence on
+underflow and explicit mute. If the service or stream fails, audio becomes
+degraded while guest time and video continue at their normal paced rate.
+
 Current modules are listed in `Docs/Inventory/AllModules.json`; diagnostics
 and their tests are listed in the corresponding inventories.

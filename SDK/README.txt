@@ -22,5 +22,14 @@ Independent Runtime-R4Ls keep contract, baseline, implementation, bindings
 and tests in their own library unit. The core SDK provides only the generic
 named-table resolver and module-build mechanism.
 
+Subsystem hosts remain ordinary GUI R4X processes. `r4os.subsystem_host`
+provides caller-owned virtual video surfaces, bounded raster presentation and
+guest-neutral input translation. `r4os.subsystem_runtime` composes that host
+with one bounded guest slice per cycle, monotonic pause-aware guest time,
+frame or cycle pacing, explicit lifecycle commands and caller-owned buffered
+S16LE audio through the normal app audio facade. Audio degradation never
+turns into unpaced guest execution; completion, close and failure share an
+idempotent cleanup path.
+
 Build the SDK with `Repositories\SDK\Build.bat test` or as part of
 `Tools\Build.bat -central`.

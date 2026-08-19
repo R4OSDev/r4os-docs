@@ -1,0 +1,650 @@
+﻿# 0.66.X Subsysteme und BASIC-Subsystem
+
+**Status:** Abgeschlossen
+
+## Leitbild
+0.66.X fuehrt Subsysteme als neue, eigenstaendige Rolle im R4OS-Userland
+ein. Ein Subsystem stellt eine fremde Ausfuehrungsumgebung bereit und bindet
+deren Programme kontrolliert an die vorhandenen Plattformfunktionen an. Es
+ist keine neue R4M0-Modulart und kein Kernelbestandteil: Der jeweilige Host
+bleibt ein normales R4X-Programm, waehrend die Subsystemrolle seine Aufgabe,
+Integration und spaetere Auffindbarkeit beschreibt. Jede gestartete
+Gastprogramminstanz besitzt ihren eigenen Laufzeit-, Ein-/Ausgabe- und
+Fehlerzustand.
+
+Als erste Referenz entsteht ein QBasic-kompatibles BASIC-Subsystem. Es soll
+vorhandene BAS-Programme aus dem Dateisystem laden und eine virtuelle
+BASIC-Maschine mit Sprache, Bildschirm, Tastatur, Zeit, Zufall, Audio und
+Dateizugriff auf R4OS abbilden. Das sichtbare Ziel der Releasefamilie ist,
+das klassische GORILLA.BAS in einem Desktopfenster korrekt, fluessig und
+spielbar auszufuehren. Dieses Ziel dient als reale Kompatibilitaets- und
+Integrationsabnahme; die Implementierung bleibt eine allgemeine
+Laufzeitumgebung und wird kein fest eingebauter Port des Spiels.
+
+Die kanonische lokale Abnahmequelle liegt unter
+`D:\R4OS\Artifacts\Distribution\Injection\Temp\gorilla.bas`. Diese
+Fundstelle bleibt waehrend der 0.66.X-Arbeit erhalten und wird nicht durch
+die normale Artefaktbereinigung entfernt. Der gesamte lokale
+`Artifacts/Distribution/Injection`-Baum ist vom Git-Push ausgeschlossen.
+GORILLA.BAS darf fuer Entwicklung, Abnahme und lokale Images direkt verwendet
+werden. Ein Upload eines neuen `Release.zip` ist kein Bestandteil dieser
+Roadmap und bleibt ein spaeterer, bewusst manuell ausgeloester Vorgang.
+
+Der beschaffte Offline-Referenzbestand fuer Sprache und Interpreter liegt
+unter `D:\R4OS\ExFiles\Reference\Basic\`. Er enthaelt zeitgenoessische
+Microsoft-QuickBASIC-Handbuecher sowie eine versionierte, offen lizenzierte
+Interpreterimplementierung als zusaetzlichen Architekturvergleich. Semantik
+und Kompatibilitaet werden gegen diese Quellen und daraus abgeleitete kleine
+Testprogramme entschieden, nicht aus dem Gedaechtnis heraus. Herkunft,
+Abrufstand, Pruefsummen und Rang der Quellen stehen im
+lokalen Referenzindex dieses Verzeichnisses.
+
+Kompatibilitaet, nachvollziehbare Semantik und ein responsives System haben
+Vorrang vor maximaler Ausfuehrungsgeschwindigkeit. BASIC-Quelltext wird vor
+der Ausfuehrung strukturiert verarbeitet, Grafik entsteht zunaechst auf dem
+virtuellen Bildschirm und wird in passenden Frames praesentiert, und laengere
+Programmlauefe geben regelmaessig Rechenzeit ab und verarbeiten Ereignisse.
+Fehlende allgemeine Plattformfaehigkeiten werden an ihrer fachlichen
+Userland-, SDK- oder API-Grenze ergaenzt; BASIC-spezifische Logik gelangt
+nicht in den Kernel.
+
+0.66.X ist nicht automatisch der Anspruch auf eine vollstaendige
+QBasic-Entwicklungsumgebung oder eine allgemeine Emulationssammlung. Der
+genaue Sprachumfang, die Grafik- und Audiotreue sowie Start-, Zuordnungs- und
+Bedienwege werden in den Unterversionen bewusst festgelegt. Am Ende soll
+neben dem spielbaren Referenzprogramm ein wiederverwendbares
+Subsystem-Hostkonzept stehen, auf dem spaetere Sprachlaufzeiten und
+Maschinenemulationen aufbauen koennen.
+
+## Notizen
+Seit der Umstellung auf die Multi-Repository-Struktur koennen bei der Arbeit
+Stolpersteine auftreten, die keine Codefehler sind, sondern aus
+Repository-Grenzen, Werkzeugaufrufen oder falschen Annahmen ueber Pfade,
+Zustaendigkeiten und Buildablaeufe entstehen. Beispiele sind Befehle im
+falschen Repository, nicht gefundene Dateien oder Artefakte sowie ein
+unvollstaendiger Blick auf Aenderungen und Abhaengigkeiten.
+
+Tatsaechlich aufgetretene Arbeitsprobleme werden mit Symptom, Ursache und dem
+kuenftig richtigen Vorgehen im Abschnitt `Stolpersteine` festgehalten.
+Produktfehler und fachliche Erkenntnisse gehoeren weiterhin als offene Punkte
+oder Notizen in die jeweilige Unterversion.
+
+Stolpersteine
+-------------
+
+- Symptom: Bestandsabfragen fanden vermeintliche SDK-, Docs- und
+  Distributionsdateien nicht; ein weiterer Aufruf verwendete nach dem
+  Wechsel in ein Unterrepository erneut einen Workspace-relativen Pfad.
+  Ursache: Pfade aus alten Monorepo-Arbeitsnotizen und der aktuelle
+  Arbeitsordner wurden als weiterhin identisch angenommen. Richtiges
+  Vorgehen: Vor jedem repositorybezogenen Aufruf den fachlichen Besitzer
+  vom Workspace-Root aus aufloesen, den Arbeitsordner bewusst setzen und
+  Pfade danach nur relativ zu genau diesem Besitzerrepository verwenden.
+- Symptom: Ein zusaetzliches Testmanifest fuer den bereits vorhandenen
+  AudioService brach die Workspace-Aggregation mit
+  `WorkspaceArtifactCollision` ab, obwohl sich Full- und Test-Scope nicht
+  ueberschnitten. Ursache: Die Workspace-Map verlangt unabhaengig vom
+  spaeter gewaehlten Profil genau einen Besitzer je Zielartefakt. Richtiges
+  Vorgehen: Ein bestehendes produktives Artefakt fuer ein weiteres Profil
+  ueber das explizite Include des Workspace-Orchestrators auswaehlen und
+  keinen zweiten Manifestbesitzer fuer denselben Zielpfad anlegen.
+- Symptom: Der erste eigenstaendige R4BASIC-Build meldete, dass die lokalen SDK- und Contract-Forks keine passenden Pakete enthalten, obwohl beide Repositorys vorhanden waren. Ursache: Das neue build.zig.zon verwendete anfangs eine lokale Pfadabhaengigkeit und enthielt danach noch einen frei gewaehlt statt von Zig validierten Paket-Fingerprint; der Fork-Aufruf verdeckte dabei die genauere Fingerprint-Diagnose. Richtiges Vorgehen: Fuer neue eigenstaendige Module den aktuellen veroeffentlichten SDK-Pin eines bestehenden Moduls uebernehmen, den neuen Root-Fingerprint einmal direkt von Zig validieren lassen und anschliessend wieder ausschliesslich ueber Build.bat mit den lokalen Forks bauen.
+
+Arbeitsweise
+------------
+
+- Nach dem fachlichen Abschluss jeder Unterversion wird der vollstaendige Multi-Repo-Stand mit `Tools\Github.bat -push -changed` veroeffentlicht. Der Abschluss gilt erst als gesichert, wenn die Nachpruefung 0 fehlgeschlagene und 0 verbleibende pushbare Repositorys meldet. Ein Release-Upload bleibt davon getrennt und wird weiterhin nur ausdruecklich ausgeloest.
+- Symptom: Der direkte Aufruf `Build.bat test` im R4BASIC-Repository wurde von PowerShell nicht gefunden. Ursache: PowerShell durchsucht den aktuellen Ordner nicht implizit nach ausfuehrbaren Dateien. Richtiges Vorgehen: Repositorylokale Buildstarter mit `./Build.bat` beziehungsweise unter Windows mit explizitem relativem Pfad aufrufen.
+- Symptom: Im R4STD-Unterordner wurde ein nicht vorhandener lokaler Buildstarter erwartet. Ursache: R4STD ist eine Einheit des gemeinsamen Libraries-Repositorys und besitzt keinen eigenen Starter. Richtiges Vorgehen: R4STD vom Besitzerrepository aus mit `Repositories/Libraries/Build.bat R4STD test` bauen und testen.
+
+## 0.66.0 Subsysteme als erstklassige R4X-Modulrolle
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+—
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 `MODULE_ROLE=subsystem` als orthogonale Rolle eines normalen GUI-R4X in R4MF-v2-Parser, SDK-Build, ModuleCatalog und Imageplanung eingefuehrt; R4M0-Kind, Dateiendung, Loader und Anwendungsklasse bleiben unveraendert.
+- [Erledigt] #2 `SUBSYSTEM_ID` mit kanonischer Kleinschreibung, 1 bis 63 Byte langer ID-Grammatik und katalogweiter case-insensitiver Eindeutigkeit definiert. Modulname, Dateiname, logische ID und Zielpfad bleiben getrennte Begriffe.
+- [Erledigt] #3 Rollenlose Gastfelder, unvollstaendige Rollen, Nicht-R4X-Rollen, Nicht-GUI-Subsysteme, ungueltige IDs und abweichende Zielpfade werden vom gemeinsamen Parser hart abgewiesen.
+- [Erledigt] #4 Geordnete `GUEST_FORMAT`-, `GUEST_EXTENSION`- und `GUEST_FEATURE`-Felder mit Normalisierung, Zuordnungspruefung, Grenzen und Duplikaterkennung implementiert. Mehrere Hosts duerfen dasselbe Gastformat anbieten.
+- [Erledigt] #5 Rolle, ID und Gastformatdaten aus einer gemeinsamen Ableitung in R4MF-Vertragsplan und R4M0-Metadaten uebernommen sowie in Katalogschema 3 und `MODULES.JSON`-Schema 3 gespiegelt. Der Updater liest weiterhin alte Schema-2-Inventare und bewahrt Subsystemdaten bei normalen Modulupdates.
+- [Erledigt] #6 Den Zielpfad `C:\R4OS\SUBSYSTEMS\<ID>\` und die sechste Workspace-Rolle `Repositories/Subsystems/` in Setup, Buildaggregation, GitHub-Einzel- und Sammelwerkzeug, Settings und Agent-/Projektdokumentation verankert.
+- [Erledigt] #7 Ein gebautes positives SDK-Fixture und zwei eigenstaendige negative Repository-Fixtures angelegt; Parser-, Catalog- und Inventartests sowie `Docs/Inventory/Tests.json` entsprechend erweitert.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Ein gueltiges Subsystemmanifest mit `MODULE_ROLE=subsystem` und `SUBSYSTEM_ID` wird eigenstaendig gebaut, als normales R4X verpackt und im vorgesehenen Subsystempfad in den Imageplan aufgenommen.
+- [Erledigt] Plan, R4M0-Container und erzeugte Inventare enthalten dieselbe Subsystem-ID und dieselben normalisierten Gastformatangaben.
+- [Erledigt] Fehlende, leere, syntaktisch ungueltige oder doppelte Subsystem-IDs sowie Subsystemfelder an einer unzulaessigen Modulart brechen Parser oder Aggregation sichtbar ab.
+- [Erledigt] Zwei unabhaengige Repository-Fixtures mit derselben Subsystem-ID werden profiluebergreifend deterministisch als Konflikt erkannt.
+- [Erledigt] Bestehende normale R4X-, R4L-, R4D- und R4P-Projekte bauen ohne neue Pflichtfelder und behalten ihre bisherigen Lade- und Startvertraege.
+- [Erledigt] Contract-, SDK-, Catalog-, Image- und Workspace-Gates sowie die zugehoerige Dokumentation beschreiben und pruefen den gleichen Vertrag.
+
+### Notizen
+- `SUBSYSTEM_ID` ist die stabile logische Adresse fuer Dateizuordnungen und
+  Starts. Sie wird nicht aus einem veraenderbaren Pfad oder Anzeigenamen
+  abgeleitet.
+- Die Subsystemrolle beschreibt die Aufgabe des Moduls. Fensterhosting und
+  GUI-Speicher bleiben weiterhin Eigenschaften der bestehenden GUI-
+  Anwendungsklasse.
+- Abnahme am 17.08.2026: Contract-Test, SDK-Test inklusive ModuleCatalog,
+  Builds von SYSUPD und UpdateService, Workspace-Modul-Dry-Run,
+  GitHub-Sammelvorschau, Dokumentinventar-Gate und produktiver Testprofilplan
+  erfolgreich. Der Plan installiert `SUBSYSOK.R4X` unter dem kanonischen
+  Subsystempfad; Container, Plan und Inventar tragen `test.basic` sowie
+  dieselben Gastformatwerte.
+- Es wurde kein Image-Release vorbereitet, gepackt oder hochgeladen.
+
+## 0.66.1 Installierter Subsystemkatalog und generische Formataufloesung
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+—
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 `SUBSYSTEM_DISPLAY_NAME` als verpflichtenden, validierten UTF-8-Anzeigenamen getrennt von Modulname und stabiler Subsystem-ID eingefuehrt und in Plan, R4M0-Metadaten, Vollkatalog und installiertes Inventar uebernommen.
+- [Erledigt] #2 Vollkatalog und `MODULES.JSON` auf Schema 4 erweitert. Der Runtimeparser akzeptiert weiterhin Schema 2 und 3, migriert beim Schreiben auf Schema 4 und bewahrt Rollen-, Anzeigenamen- und Gastformatdaten bei normalen Updates.
+- [Erledigt] #3 `r4os.subsystem_catalog` als allokationsarme, nach Subsystem-ID sortierte Projektion genau der installierten `MODULES.JSON`-Eintraege umgesetzt. Eine fehlende Hostdatei, ein abgeschnittenes Inventar oder ungueltige Daten sind Fehler und keine leere Erfolgssicht.
+- [Erledigt] #4 Einen gemeinsamen Userland-Resolver mit der festen Prioritaet Benutzerzuordnung, bestaetigte Probe, konfigurierter Endungsstandard und stabile Endungskandidaten implementiert. Ergebnisse sind sichtbar `unknown`, `selected` oder `ambiguous`; jeder Kandidat verlangt weiterhin die verbindliche Hostvalidierung.
+- [Erledigt] #5 Die versionierten generischen Merkmale `probe.magic-v1` und `probe.text-token-v1` mit einem festen 128-KiB-Probefenster definiert. Unbekannte Merkmale bleiben erweiterbar; fehlerhafte bekannte v1-Deskriptoren werden bereits in Manifest und Inventar abgewiesen.
+- [Erledigt] #6 Mehrere Hosts desselben Formats und mehrere Formate eines Hosts ohne stillen Gewinner unterstuetzt. Kandidaten sortieren ausschliesslich nach stabiler Subsystem- und Format-ID, nicht nach Repository- oder Dateisystemreihenfolge.
+- [Erledigt] #7 Installation, Aktualisierung und exakte Entfernung im Inventarmodell sowie BASIC-, DOS-, ROM-, Mehrdeutigkeits-, Tarn-, Schad-, Host- und Manipulationsfaelle durch permanente SDK-Tests und Dateifixtures abgedeckt; `Docs/Inventory/Tests.json` fortgeschrieben.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Derselbe Imageplan erzeugt bytegleich denselben Subsystemkatalog, unabhaengig von Dateisystem- und Repositoryreihenfolge.
+- [Erledigt] Ein BASIC-Quelltextfixture, ein DOS-aehnliches Binaerfixture und ein ROM-aehnliches Fixture liefern ausschliesslich die jeweils deklarierten Kandidaten; die Tests enthalten keine produktive Emulatorimplementierung.
+- [Erledigt] Zwei passende Subsysteme ergeben eine stabile Kandidatenliste und keinen still gewaehlten Gewinner.
+- [Erledigt] Ein unbekanntes, beschaedigtes oder nur durch seine Endung getarntes Gastprogramm wird sichtbar als unbekannt oder vom Host als ungueltig abgewiesen.
+- [Erledigt] Fehlende Hosts, doppelte IDs, ungueltige Formatangaben und ein unvollstaendiger Katalog fuehren zu einem klaren Fehlerzustand.
+- [Erledigt] Resolver und Katalog bleiben vollstaendig im Userland; es entsteht kein BASIC-, DOS- oder ROM-spezifischer Kernelpfad.
+
+### Notizen
+- Formatdeklarationen liefern Kandidaten. Die Subsystem-ID und eine
+  Benutzerzuordnung bestimmen den gewaehlten Host; der Host selbst bleibt
+  fuer die endgueltige Dateivalidierung verantwortlich.
+- Der installierte Katalog ist bewusst keine zweite Datei oder Registry. Er
+  wird aus `C:\R4OS\CONFIG\MODULES.JSON` projiziert und kann deshalb bei einem
+  atomaren Inventarupdate nicht veralten.
+- Resolver und Probealgorithmen liegen vollstaendig im SDK-Userland. Diese
+  Unterversion enthaelt weder Emulatorcode noch Explorer-Startintegration und
+  fuegt dem Kernel keinen gastformatspezifischen Pfad hinzu.
+- Abnahme am 17.08.2026: Contract- und SDK-Gates, R4M0-Metadatenpruefung,
+  Builds von SYSUPD und UpdateService, Dokumentinventar sowie der produktive
+  Testprofilplan sind erfolgreich. Das erzeugte Schema-4-Inventar umfasst 119
+  Eintraege und traegt fuer `test.basic` Hostpfad, Anzeigename, Modulversion,
+  Format, Endung und beide Merkmale konsistent; der Resolverbestand ist gegen
+  umgekehrte Eintragsreihenfolge bytegleich getestet.
+- Es wurde kein Image-Release vorbereitet, gepackt oder hochgeladen.
+
+## 0.66.2 Explorer und Dateizuordnungen starten Subsystem-Gastprogramme
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+—
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Das gemeinsame R4STD-Dateizuordnungsmodell unterscheidet nun die Handler `APP`, `SUBSYSTEM` und `NONE`. App-Handler behalten R4X-Pfad und Argumenttemplate; Subsystem-Handler speichern ausschliesslich stabile `SUBSYSTEM_ID` und Format-ID.
+- [Erledigt] #2 `ASSOC.R4S` wurde auf explizite Handlertypen umgestellt. APPDEF kann Anwendungen und installierte Subsystemformate gemeinsam anzeigen, als Standard speichern, explizit entfernen und auf die ausgelieferten Defaults zuruecksetzen, ohne Hostpfad oder Anzeigename aus dem Modulkatalog zu kopieren.
+- [Erledigt] #3 R4STD stellt einen gemeinsamen Resolver fuer direkte R4X-Dateien, App-Zuordnungen und Subsysteme bereit. Der installierte Subsystembestand wird ausschliesslich aus `C:\R4OS\CONFIG\MODULES.JSON` geladen und die Gastdatei vor der Auswahl mit den Katalogmerkmalen geprueft.
+- [Erledigt] #4 Explorer verwendet den gemeinsamen Resolver beim normalen Oeffnen, bei Dateizielen aus R4LNK-Verknuepfungen und bei `Open With`. Passende Apps und Subsysteme erscheinen in derselben Auswahl; fehlende, veraltete, mehrdeutige oder ungueltige Handler und Startfehler werden sichtbar gemeldet.
+- [Erledigt] #5 Der Startvertrag `R4SUBSYS1` uebergibt den exakten absoluten Gastpfad und spaeter erweiterbare Optionen als laengencodierte Datensaetze. Dadurch sind Leerzeichen und Trennzeichen keine Shell- oder Quotingfrage; die aktuelle Desktop-Argumentgrenze von 127 Bytes wird vor dem Start geprueft.
+- [Erledigt] #6 Jede Gastoeffnung startet ueber den vorhandenen Desktop-Hostpfad eine neue GUI-R4X-Instanz. Der Subsystempfad nimmt nicht an der Einzelinstanzbehandlung normaler Apps teil.
+- [Erledigt] #7 Ein test-only GUI-Subsystemhost sowie die zwei Gastdateien `C:\TEMP\SUBSYSTEM-A.BAS` und `C:\TEMP\SUBSYSTEM-B.BAS` pruefen Katalogaufloesung, Inhaltsprobe, getrennte Pfadidentitaeten, gemeinsame `Open With`-Auswahl und das Oeffnen ueber eine Dateiverknuepfung. Das Fixture zeigt nur den uebergebenen Pfad und enthaelt keine BASIC- oder Emulatorlogik.
+- [Erledigt] #8 Direkte R4X-Starts und die bisherigen ausgelieferten App-Zuordnungen bleiben kompatibel; alte Zuordnungsdateien ohne explizites `HANDLER`-Feld werden weiterhin als App-Zuordnungen gelesen.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Ein Doppelklick auf die Test-Gastdatei loest deren Subsystem-ID auf und startet genau eine zugehoerige GUI-R4X-Instanz mit dem unverfaelschten Gastpfad.
+- [Erledigt] Das gestartete Fenster kann fokussiert, verschoben, minimiert, maximiert, wiederhergestellt, in der Groesse veraendert und sauber geschlossen werden.
+- [Erledigt] Zwei verschiedene Gastdateien koennen gleichzeitig in voneinander unabhaengigen Instanzen desselben Subsystems laufen.
+- [Erledigt] `Open With` zeigt passende Subsysteme und normale Anwendungen; die gespeicherte Standardwahl bleibt nach einem Neustart erhalten und kann wieder zurueckgesetzt werden.
+- [Erledigt] Eine BAS-Dateizuordnung kann spaeter den BASIC-Host als Standard und Notepad als alternative Bearbeitung anbieten, ohne dass Explorer den Begriff BAS kennt.
+- [Erledigt] R4X-Dateien starten weiterhin direkt, und alle bisherigen ausgelieferten Dateizuordnungen bestehen ihre vorhandenen Tests unveraendert.
+- [Erledigt] Fehlende, mehrdeutige, ungueltige und nicht startbare Handler liefern reproduzierbare sichtbare Fehler beziehungsweise eine bewusste Auswahl.
+
+### Notizen
+- Der Explorer startet keine Emulation selbst. Er waehlt einen Handler und
+  uebergibt eine Gastdatei an einen normalen, vom Desktop gehosteten
+  R4X-Prozess.
+- Das Subsystemfixture ist eine gewoehnliche gehostete GUI-R4X und erbt
+  Fokus, Verschieben, Minimieren, Maximieren, Resize und Schliessen von der
+  bestehenden Desktop-Fensterverwaltung; sein Gastzustand bleibt
+  pro Prozessinstanz getrennt.
+- Die neuen Contract-, SDK-, R4STD-, Explorer-, APPDEF- und
+  Distributionsgates sind erfolgreich. Der vollstaendige
+  `Tools\Build.bat -test`-Lauf hat alle 134 Module neu gebaut, das
+  Testimage erzeugt und verifiziert und den Headless-Test mit
+  `EXPLORER selftest: OK`, sauberem Boot und Poweroff abgeschlossen.
+- Es wurde kein BASIC-Interpreter implementiert und kein Release gepackt
+  oder hochgeladen.
+
+## 0.66.3 Wiederverwendbarer Fenster-, Video- und Eingabehost fuer Subsysteme
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+—
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 `r4os.subsystem_host` als allokationsfreie, in den jeweiligen R4X-Host einkompilierte SDK-Schicht umgesetzt. Sie verwendet caller-eigene Oberflaechen und einen caller-eigenen 128x128-Konvertierungsblock und fuehrt weder Dienst, Runtime-R4L noch prozessuebergreifende Emulator-ABI ein.
+- [Erledigt] #2 Feste virtuelle Indexed8-Oberflaechen mit 256er-XRGB-Palette und direkte XRGB32-Oberflaechen implementiert. Gastmodus und Fenstergroesse bleiben getrennt; ein Moduswechsel ist eine ausdrueckliche Hostoperation.
+- [Erledigt] #3 Seitenverhaeltnistreuen, zentrierten Viewport mit schwarzem Letterboxing, Naechste-Nachbar-Skalierung und einer ab 85 Prozent Viewportausnutzung bevorzugten ganzzahligen Skalierung bereitgestellt.
+- [Erledigt] #4 Voll-, Damage- und unveraenderte Praesentation ueber denselben Presenter umgesetzt. Raster werden hoechstens 128x128 Pixel gross an R4DRAW uebergeben; 640x350 bei einfacher Skalierung ergibt exakt 15 Bloecke. Nach 32 Damage-Frames verdichtet ein Vollframe die persistente Darstellung.
+- [Erledigt] #5 Close, Resize, Fokus, Tastencode, Text und Maus in stabile gastneutrale Ereignisse uebersetzt. Mauskoordinaten werden anhand des aktuellen Viewports zurueckgerechnet; Letterboxbereiche besitzen keine Gastkoordinate und Resize veraendert den Gastmodus nicht.
+- [Erledigt] #6 Die Desktop-Fensteraktivierung zentralisiert und `focus_lost` sowie `focus_gained` fuer gehostete GUI-R4X in die bestehende Ereignisqueue aufgenommen. Erststart, Klick, Taskbar, Restore, Minimize, Close und Tastaturwechsel verwenden denselben Aktivierungspfad.
+- [Erledigt] #7 Das test-only `SUBSYSOK.R4X` um die interaktiven Modi 640x350 Indexed8, 320x200 XRGB32 und 256x224 Indexed8, sichtbare Eingabereaktionen sowie einen echten gehosteten Selbsttest erweitert. Der Test prueft Voll-, Damage-, Paletten-, Modus-, Idle-, Fokus-, Resize- und Eingabeverhalten und misst 24 kontrollierte 640x350-Vollframes.
+- [Erledigt] #8 Das Testprofil startet fuer diese Abnahme R4DESK als echten GUI-Host. Nur der passende Fixture-Prozesshandle mit Exitcode 0 erzeugt den exakten seriellen Erfolgsmarker; danach laeuft die bestehende AUTOEXEC-Suite bis zum kontrollierten Poweroff weiter.
+- [Erledigt] #9 SDK-, Desktop-, Contract-, Testprofil- und Agentdokumentation sowie das Testinventar an den abgeschlossenen Vertrag angepasst.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Die Testoberflaechen 640x350, 320x200 und 256x224 werden in einem normal grossen, frei skalierten und maximierten Fenster ohne Seitenverhaeltnisfehler dargestellt.
+- [Erledigt] Palettenwechsel und XRGB32-Frames erscheinen korrekt; Raster werden automatisch in gueltige Bloecke zerlegt und niemals punktweise an R4DRAW uebergeben.
+- [Erledigt] Resize-, Fokus-, Tastatur- und Mausereignisse erreichen genau die zugehoerige Gastinstanz; Mauskoordinaten bleiben bei Skalierung und Letterboxing korrekt.
+- [Erledigt] Ein unveraendertes Gastbild erzeugt keine fortlaufenden Frames. Eine kontrollierte Animation erreicht mindestens stabile 20 Bilder pro Sekunde in der fuer GORILLA.BAS vorgesehenen 640x350-Oberflaeche.
+- [Erledigt] Schliessen waehrend Darstellung, Resize oder Eingabe beendet das Fixture ohne verlorene Ressourcen oder blockierten Desktop.
+
+### Notizen
+- Die gemeinsame Schicht definiert R4OS-Hosting, nicht die interne CPU-,
+  Konsolen- oder Spracharchitektur eines konkreten Subsystems.
+- Scheduling, Gastzeit, Audio und die Interpreterimplementierung bleiben
+  ausdruecklich ausserhalb dieser Unterversion und sind fuer 0.66.4 und die
+  folgenden BASIC-Schritte vorgesehen.
+- Abnahme am 17.08.2026: alle acht direkten Host-/Rastertests, Contract-Gate,
+  SDK-Gate inklusive gebautem Subsystemfixture, Desktop-Build,
+  Distributionsgates und Testinventar 443/443 erfolgreich. Der finale
+  240-Sekunden-Headless-Gate bootete R4DESK, pruefte den echten GUI-Host mit
+  dem exakten `SUBSYSTEM host selftest: OK`-Marker und beendete den gesamten
+  bestehenden Testlauf nach sauberem Poweroff ohne Fehler.
+- Der vorherige vollstaendige Workspace-Lauf baute alle 134 Module und das
+  Testimage erfolgreich; die anschliessend geaenderten Desktop- und
+  Testprofilanteile wurden erneut gebaut, in das Image uebernommen und
+  headless abgenommen.
+- Die kanonische `gorilla.bas` und der Offline-Referenzbestand bleiben an den
+  im Leitbild dokumentierten Fundstellen unveraendert erhalten. Es wurde
+  kein BASIC-Interpreter implementiert und kein Release vorbereitet,
+  gepackt oder hochgeladen.
+
+## 0.66.4 Kooperative Gastlaufzeit, Zeit, Audio und End-to-End-Abnahme
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+—
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 `r4os.subsystem_runtime` als gastneutrale SDK-Schicht eingefuehrt. Pro Hostzyklus werden hoechstens die konfigurierte Ereigniszahl und genau eine begrenzte Gastscheibe verarbeitet; danach wird bis zum naechsten echten Gast-, Audio- oder Responsivitaetstermin gewartet oder gezielt abgegeben.
+- [Erledigt] #2 Eine monotone, pausenbereinigte Gastuhr und driftfreies Frame-/Zyklus- Pacing umgesetzt. Pause, Fortsetzen und Reset verschieben keine alte Hostzeit in die Gastzeit und erzwingen keine ungebremste Aufholschleife.
+- [Erledigt] #3 Eine caller-owned, frameausgerichtete PCM-Queue mit 48-kHz-Stereo-S16LE- Standard, 10-ms-Quanten, Unterlaufstille, Stummschaltung und begrenztem Catch-up implementiert. Der produktive Sink verwendet ausschliesslich die App-Audio-/AUDSVC-Fassade; fehlendes oder ausfallendes Audio degradiert sichtbar und behaelt das normale Zeitpacing bei.
+- [Erledigt] #4 Den gemeinsamen Lebenszyklus fuer Start, Pause, Fortsetzen, Reset, Gastende, Fenster-Schliessen und Fehlerabbruch mit idempotentem Cleanup festgelegt. Gast-, Host- und Audiofehler konvergieren auf denselben Ressourcenabschluss; die Treiberschnittstellen bleiben fuer spaetere Gasttypen erweiterbar.
+- [Erledigt] #5 Das test-only Subsystemfixture um zwei endliche BAS-Gastvarianten erweitert. Beide verwenden den echten Runtime-Loop, getrennte Video-, Eingabe-, Uhr- und Audiostaende, begrenzte synthetische Gastarbeit sowie Pause, Fortsetzen, Reset, Mute, Gastende beziehungsweise Fenster-Schliessen.
+- [Erledigt] #6 Die Desktop-Abnahme laedt den installierten Katalog, prueft beide Dateien mit dem gemeinsamen R4STD-Resolver, startet zwei getrennte R4SUBSYS1- Prozesse und Fenster, maximiert, fokussiert und bedient sie und ordnet die Abschluesse wieder den exakten Prozesshandles zu.
+- [Erledigt] #7 AUDSVC fuer das Testprofil ueber ein explizites Orchestrator-Include zugeschaltet. Sein produktiver `IMAGE_SCOPE=full` bleibt unveraendert; Slim, Full und Test behalten eindeutige, profilgerechte Artefaktplaene.
+- [Erledigt] #8 Permanente Runtime-, Fixture-, Desktop- und QEMU-Markertests, die SDK-, Desktop-, Audio-, Build- und Testdokumentation sowie Dokument- und Testinventare auf den abgeschlossenen Stand gebracht.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Eine Gastdatei wird aus Explorer ueber ihre Subsystem-ID in einer eigenen Fensterinstanz gestartet und laeuft mit Video, Eingabe, Zeit und Audio bis zur Gastbeendigung oder zum Schliessen des Fensters.
+- [Erledigt] Zwei gleichzeitige Instanzen desselben Hosts behalten getrennte Bildschirme, Eingabequeues, Uhren, Audiopuffer und Fehlerzustaende.
+- [Erledigt] Unter CPU-Last bleiben Fensterbewegung, Resize, Maximieren und Schliessen responsiv; der Gast gibt innerhalb der festgelegten Obergrenze wieder Kontrolle an den Hostloop ab.
+- [Erledigt] Audio-Unterlauf, fehlendes Audiogeraet, ungueltige Gastdatei und ein kontrollierter Gastfehler werden reproduzierbar behandelt und raeumen alle Ressourcen auf.
+- [Erledigt] Der test-only End-to-End-Lauf prueft Start, mehrere Frames, Eingabe, Audiofortschritt, Pause/Fortsetzen, Reset und sauberes Ende ohne fest verdrahtete Kenntnisse eines produktiven Subsystems.
+- [Erledigt] Full- und Slim-Profil enthalten nur die jeweils vorgesehenen Subsystemmodule und einen dazu passenden vollstaendigen Katalog.
+- [Erledigt] Nach Abschluss ist die allgemeine Grundlage fuer das erste produktive BASIC-Subsystem abgenommen; dessen genauer Sprach- und Befehlsumfang wird in den folgenden Unterversionen separat festgelegt.
+
+### Notizen
+- 0.66.0 bis 0.66.4 planen bewusst die allgemeine Subsystemplattform. Die
+  anschliessenden BASIC-Unterversionen werden erst nach der gemeinsamen
+  Festlegung ihres Kompatibilitaetsumfangs eingetragen.
+- Abnahme am 17.08.2026: Die direkten Runtime-Tests bestehen 10 von 10
+  Faellen. SDK-Test, Desktop-Build, Distribution-Test und Dokumentinventar-
+  Gate sind erfolgreich; das Testinventar enthaelt 444 eindeutige Eintraege.
+- Die erzeugten Plaene enthalten 41 Slim-, 95 Full- und 119 Testmodule.
+  Slim enthaelt weder AUDSVC noch das Testsubsystem, Full enthaelt AUDSVC
+  ohne Testsubsystem, und Test enthaelt AUDSVC sowie den vollstaendigen
+  `test.basic`-Katalogeintrag.
+- Der vollstaendige Standardlauf `Tools\Build.bat -test` baute 134 Module,
+  erzeugte ein Testimage mit 289 Dateien, bestand die NTFS-Pruefung und den
+  unveraenderten 240-Sekunden-QEMU-Vertrag. Die exakten Host- und Runtime-
+  Marker bestaetigen zwei isolierte Instanzen, begrenzte Slices, monotone
+  Zeit, gepuffertes Audio, Lebenszyklusoperationen und geschlossene
+  Ressourcen; der Lauf meldete keine Fehler.
+- Die lokale GORILLA.BAS-Abnahmequelle ist mit 29.434 Byte und SHA-256
+  `9926FC1F50C4B489EC4C1B0DA5BD2C497EBF4282B3259C28A835A743E24699F7`
+  unveraendert erhalten; der Offline-Referenzbestand bleibt an der im
+  Leitbild genannten Fundstelle vorhanden.
+- Es wurde noch kein BASIC-Interpreter implementiert und kein Release
+  vorbereitet, gepackt oder hochgeladen.
+
+## 0.66.5 R4BASIC-Projekt, Kompatibilitaetsvertrag und Quellfrontend
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Das produktive R4BASIC-Subsystem wird als eigener GUI-R4X-Host angelegt. Der verbindliche QBasic-4.5-Teilumfang wird aus der unveraenderten GORILLA.BAS, den lokalen Microsoft-Referenzen und gezielten Fixtures abgeleitet; Lexer, Parser und Diagnosen verarbeiten danach den gesamten v1-Umfang, fuehren ihn aber noch nicht aus.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Ein eigenstaendiges Projekt unter Repositories/Subsystems/R4Basic mit R4MF-v2-Subsystemmanifest, GUI-Profil, stabiler ID r4os.basic, Anzeigename R4BASIC und Format basic.qbasic-source anlegen und eigenstaendig baubar machen.
+  - Notizen: Teilstand: Eigenstaendiger lokaler Projektbaum, Manifest, gepinnte SDK-Abhaengigkeit, Settings, Build und Produktstub sind vorhanden. `Build.bat test` baut und inspiziert R4BASIC.R4X erfolgreich. Offen bleiben insbesondere vollstaendige Repository-Grundausstattung, echter GUI-Dateihost, Inventare, Workspace-/Katalogabnahme, Git-Initialisierung und Veroeffentlichung.
+Ergaenzung nach dem Sammel-Push: Das R4Basic-Verzeichnis ist nun ein eigenes main-Repository und der Zwischenstand wurde als Commit f1628aa nach R4OSDev/r4os-subsystem-r4basic veroeffentlicht. Die Aufgabe bleibt wegen der noch fehlenden vollstaendigen Repository-Grundausstattung, Produktintegration, Inventare und Abnahmen offen.
+Abschluss 18.08.2026: Das eigenstaendige GUI-R4X-Projekt besitzt R4MF-v2-Manifest, SUBSYSTEM_ID r4os.basic, Format basic.qbasic-source, Windows- und POSIX-Buildstarter, vollstaendige Repositorygrundausstattung und Apache-2.0-Rechtstexte. Build.bat test und Tools/Build.bat -module R4BASIC sind gruen. Full-Katalog und Full-Image enthalten R4BASIC.R4X am Ziel /R4OS/SUBSYSTEMS/r4os.basic/R4BASIC.R4X. Veroeffentlicht als Commit c823ea7.
+- [Erledigt] #2 Eine versionierte Kompatibilitaetsmatrix aus der unveraenderten GORILLA.BAS, der Microsoft QuickBASIC 4.5 Language Reference und kleinen positiven sowie negativen Fixtures ableiten; die tatsaechlich verwendeten Funktionen einschliesslich INSTR, UCASE$, LTRIM$, STR$, MID$ und SLEEP vollstaendig erfassen.
+  - Notizen: Teilstand: Kanonische GORILLA.BAS und lokaler Referenzbestand wurden ausgewertet; die zusaetzlich tatsaechlich benoetigten Funktionen INSTR, UCASE$, LTRIM$, STR$, MID$ und SLEEP sind erfasst. Die versionierte, quellenbelegte Kompatibilitaetsmatrix und ihre freien positiven/negativen Fixtures sind noch nicht materialisiert.
+Abschluss 18.08.2026: COMPATIBILITY.md friert den quellenbelegten Vertrag 1.0.0 als Matrix ein. Grundlage sind die unveraenderte lokale GORILLA.BAS, die lokal inventarisierten Microsoft-QuickBASIC-4.5-Referenzen und acht originale freie BAS-Fixtures. INSTR, UCASE$, LTRIM$, STR$, MID$ und SLEEP sind ausdruecklich enthalten.
+- [Erledigt] #3 Den v1-Quellvertrag fuer Zeilenenden, Kommentare, REM, Metaanweisungen, Gross-/Kleinschreibung, 8-Bit-Stringsemantik, Typsuffixe, optionale Argumente und mehrere Statements pro Zeile festlegen.
+  - Notizen: Teilstand: Der Frontendentwurf bildet Zeilenenden, Apostroph- und REM-Kommentare, Metaanweisungen, case-insensitive Schluesselwoerter, Typsuffixe, optionale Argumentpositionen und Doppelpunkt-Statements bereits strukturell ab. Der verbindliche schriftliche v1-Vertrag und Grenzfallfixtures fehlen noch; Semantik ist deshalb noch nicht eingefroren.
+Abschluss 18.08.2026: Der v1-Quellvertrag definiert 256-KiB-Grenze, CRLF/LF/CR, bytegenaue Spannen, Kommentare und REM, DYNAMIC/STATIC-Metaanweisungen, ASCII-Case-Folding, 8-Bit-Strings, 40-Byte-Bezeichner, Typsuffixe, optionale Argumentfelder und Doppelpunkt-Statements. Positive und negative Grenztests sichern den Vertrag.
+- [Erledigt] #4 Einen Lexer mit exakten Quellspannen, case-insensitiven Schluesselwoertern, QBasic-Bezeichnern, numerischen Literalen, Strings, Operatoren und Typsuffixen implementieren.
+  - Notizen: Teilstand: Ein allokationsarmer Lexer mit Quellspannen, Schluesselwoertern, Bezeichnern, Zahlen, Strings, Operatoren und Typsuffixen kompiliert; der kleine Frontendtest ist gruen. Breite positive und negative Lexerfixtures sowie systematische Zeilen-/Spaltenpruefungen fehlen noch.
+Abschluss 18.08.2026: Der allokationsarme Lexer erkennt Schluesselwoerter, Bezeichner, dezimale Zahlen, Strings, Operatoren, Metaanweisungen und Typsuffixe mit exakten Byte-, Zeilen- und Spaltenangaben. Tests decken Zeilenenden, Originalschreibweise, 8-Bit-Bytes, die 40/41-Byte-Grenze und sichtbare Pufferueberlaeufe ab.
+- [Erledigt] #5 Einen Parser fuer den gesamten vereinbarten Modul-, Deklarations-, Prozedur-, Kontrollfluss-, Ausdrucks-, Text-, Grafik- und Audio-Syntaxumfang implementieren, ohne unbekannte Syntax still zu ignorieren.
+  - Notizen: Teilstand: Der erste Parserentwurf deckt die geplanten Syntaxfamilien strukturell ab und `Build.bat gorilla-test` tokenisiert/parst die checksumgebundene unveraenderte GORILLA.BAS aktuell ohne Diagnose. Das beweist noch nicht die vollstaendige oder strikte v1-Grammatik; unbekannte Syntax, Grenzfaelle und saemtliche freien Featurefixtures muessen noch geprueft und nachgeschaerft werden.
+Abschluss 18.08.2026: Der Parser validiert den vereinbarten Deklarations-, Prozedur-, Kontrollfluss-, Ausdrucks-, Text-, Grafik-, Audio-, Datei- und begrenzten Legacy-Speicherumfang. Bekannte ausgeschlossene QuickBASIC-Syntax wird explizit diagnostiziert; Funktionsaritaeten sind begrenzt. Die unveraenderte kanonische GORILLA.BAS wird vollstaendig ohne Diagnose geparst.
+- [Erledigt] #6 Deterministische Syntaxdiagnosen mit Datei, Zeile und Spalte sowie begrenzte Fehlererholung fuer mehrere unabhaengige Meldungen bereitstellen.
+  - Notizen: Teilstand: Deterministische Diagnosecodes, Quellspannen, begrenzter Diagnosespeicher und erste Synchronisation sind im kompilierenden Entwurf vorhanden. Mehrfachfehler, exakte Positionen, Recovery-Grenzen sowie die spaetere sichtbare Datei-/Fensterdarstellung sind noch nicht belastbar abgenommen.
+Abschluss 18.08.2026: Diagnosen tragen stabilen Code, Dateiname, exakte Byte-Spanne sowie einbasige Zeile und Spalte. Synchronisation an Zeilenende, Doppelpunkt oder Dateiende erzeugt mehrere unabhaengige Meldungen. Wiederholte Negativlaeufe vergleichen Codes, Spannen und Dateinamen bytegenau; begrenzte Token- und Diagnosespeicher koennen nie still als Erfolg erscheinen.
+- [Erledigt] #7 Frontend-, Manifest- und Negativtests, Dokumentation und Testinventar fuer den eingefrorenen Sprachvertrag anlegen.
+  - Notizen: Teilstand: Ein kleiner Frontendtest und eine getrennte lokale, checksumgebundene GORILLA-Abnahme existieren und sind gruen. Die rechtlich unbedenkliche Fixture-Suite, Manifest-/Negativtests, Dokumentation, Testinventar und permanente Gates fehlen noch.
+Abschluss 18.08.2026: Acht freie BAS-Fixtures, Frontend-Komponententest und getrennte checksumgebundene Lokalabnahme sind dokumentiert und in Tests.json eingetragen. AllModules.json fuehrt 138 Module, Tests.json 454 Tests, davon zehn R4BASIC-Eintraege. README, deutsche Detaildokumentation, Vertrag, Herkunft und Drittanbieterhinweise liegen vor. Test-Image und Full-Image wurden erfolgreich erzeugt.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Das R4BASIC-Modul baut eigenstaendig als normales GUI-R4X-Subsystem und erscheint mit stabiler ID, Anzeigename und Gastformat im erzeugten Modulkatalog.
+  - Notizen: Erfuellt am 18.08.2026: Eigenbuild und Workspace-Modulbuild sind gruen. Der erzeugte Full-Katalog enthaelt genau R4BASIC, R4X, Version 0.1.0, Rolle subsystem, ID r4os.basic, Anzeigename R4BASIC, Format basic.qbasic-source, .bas-Zuordnung und das festgelegte Full-Imageziel. Das Full-Image wurde erfolgreich erzeugt.
+- [Erledigt] Die kanonische GORILLA.BAS mit SHA-256 9926FC1F50C4B489EC4C1B0DA5BD2C497EBF4282B3259C28A835A743E24699F7 wird ohne Quelltextaenderung vollstaendig tokenisiert und geparst.
+  - Notizen: Erfuellt am 18.08.2026: Build.bat gorilla-test prueft vor dem Parse exakt 29.434 Byte und SHA-256 9926FC1F50C4B489EC4C1B0DA5BD2C497EBF4282B3259C28A835A743E24699F7. Die unveraenderten Bytes tokenisieren und parsen mit null Diagnosen.
+- [Erledigt] Jedes fuer v1 zugesagte Sprachmerkmal besitzt mindestens ein positives und ein negatives, rechtlich unbedenkliches BAS-Fixture.
+  - Notizen: Erfuellt am 18.08.2026: Die Matrix in COMPATIBILITY.md ordnet jeder zugesagten Syntaxfamilie positive und negative Originalfixtures zu. Alle vier positiven und vier negativen BAS-Dateien laufen im permanenten Frontendtest; die Negativdiagnosen werden gegen Code und Quellzeile geprueft.
+- [Erledigt] Unbekannte oder bewusst nicht unterstuetzte Syntax erzeugt eine sichtbare Diagnose an der richtigen Quellposition und wird nicht als kompatibel ausgegeben.
+  - Notizen: Erfuellt am 18.08.2026: Unbekannte Bytes, ausgeschlossene Metaanweisungen, bekannte nicht unterstuetzte QuickBASIC-Konstrukte, falsche Arity und fehlerhafte Blockstruktur liefern sichtbare stabile Diagnosen. Ein Positionsgate prueft Dateiname, Zeile 1, Spalte 7 und exakten Byte-Span; Wiederholungslaeufe sind identisch.
+- [Erledigt] Parser und Diagnosen besitzen keine GORILLA-spezifischen Namen, Quellzeilen oder Sonderpfade.
+  - Notizen: Erfuellt am 18.08.2026: Ein permanenter Komponententest durchsucht beide produktiven src-Dateien case-insensitiv nach dem Abnahmeprogrammnamen. Zusaetzlich ergab die Abschlusspruefung keine produktiven Treffer. Die lokale BAS-Datei liegt weder im Repository noch im Full-Image; nur der getrennte Test kennt Pfad und Hash.
+
+### Notizen
+Arbeitsname ist R4BASIC.R4X mit SUBSYSTEM_ID=r4os.basic und GUEST_FORMAT=basic.qbasic-source. R4BASIC v1 ist weder Tiny BASIC noch eine vollstaendige QuickBASIC-Implementierung. Compiler, IDE und Debugger bleiben ausserhalb des Umfangs.
+Zwischenstand 18.08.2026 - bewusste Arbeitspause:
+
+- Die kanonische lokale GORILLA.BAS wurde unveraendert mit 29.434 Byte und SHA-256 9926FC1F50C4B489EC4C1B0DA5BD2C497EBF4282B3259C28A835A743E24699F7 als Abnahmequelle gebunden. Der Offline-Referenzbestand unter D:\R4OS\ExFiles\Reference\Basic wurde fuer die Frontendplanung ausgewertet.
+- Unter D:\R4OS\Repositories\Subsystems\R4Basic liegt ein erster lokaler Projektstand mit R4MF-v2-Manifest, SUBSYSTEM_ID=r4os.basic, GUEST_FORMAT=basic.qbasic-source, Buildanbindung, Produktstub, Frontend und zwei Testeinstiegen. Das Verzeichnis ist noch kein eigenes Git-Repository und wurde weder committed noch veroeffentlicht.
+- Der erste Lexer-/Parser-/Diagnoseentwurf kompiliert. `Build.bat test` baut das GUI-R4X, verpackt und inspiziert R4BASIC.R4X erfolgreich und fuehrt den kleinen Frontendtest erfolgreich aus. `Build.bat gorilla-test` prueft Groesse und SHA-256 der lokalen Originaldatei und tokenisiert/parst sie aktuell ohne Diagnose. Im produktiven Frontend unter `src` existieren keine GORILLA-spezifischen Namen oder Pfade.
+- Das ist noch kein abgeschlossener Kompatibilitaetsnachweis: Die versionierte Matrix und der schriftliche Quellvertrag fehlen, die Testtiefe ist gering, positive und negative freie BAS-Fixtures fehlen weitgehend, und Parserfehlererholung sowie Ablehnung unbekannter Syntax sind noch nicht umfassend belegt. Der Produktstub laedt noch keine Datei und zeigt noch kein Fenster oder Diagnosen.
+- Ebenfalls offen sind Lizenz-/Herkunftsdateien, README und deutsche Detaildokumentation, Build.sh, Modul- und Testinventare, Workspace-/Katalogintegration, eigenes Repository und Veroeffentlichung. Keine Aufgabe und keine Abnahme von 0.66.5 wird durch diesen Zwischenstand als erledigt betrachtet; Releaseversion, Image und Upload blieben unangetastet.
+
+Naechster Einstieg: Zuerst Kompatibilitaetsmatrix und v1-Quellvertrag aus Referenzen und GORILLA-Bestand materialisieren, danach freie positive/negative Fixtures gegen den vorhandenen Frontendentwurf ausbauen und erst dann Parser sowie Diagnosen gezielt verschaerfen.
+Ergaenzung 18.08.2026 nach dem angeforderten Sammel-Push:
+
+`Tools\Github.bat -push -changed` erkannte 144 Repositorys, veroeffentlichte 12 geaenderte Repositorys in Abhaengigkeitsreihenfolge, uebersprang 132 unveraenderte und endete mit 0 Fehlern sowie 0 verbleibenden pushbaren Zielen. Commit-IDs: Contract cd064e2, SDK d631a00, Libraries 850db38, AppDefaults c8c923b, Desktop f1e0067, Explorer c2d42e8, SysUpdate 9570fba, R4Basic f1628aa, Distribution 7014828, Docs ef61d35, Organisationsprofil 6ba72bd und Project 68e6444.
+
+R4Basic wurde dabei als eigenes Repository initialisiert und unter https://github.com/R4OSDev/r4os-subsystem-r4basic veroeffentlicht. Die fruehere Checkpoint-Aussage, der Stand sei noch nicht committed oder veroeffentlicht, ist damit ueberholt. 0.66.5 bleibt trotzdem offen; der Push sichert nur den Zwischenstand und ist kein fachlicher Abschluss oder Release.
+Abschluss 18.08.2026: R4BASIC 0.1.0 liefert fuer R4OS 0.66.5 das eigenstaendige Subsystemprojekt, den versionierten QuickBASIC-v1-Quellvertrag sowie Lexer, Parser und deterministische Diagnosen. Build.bat test, die checksumgebundene GORILLA-Abnahme, der Workspace-Modulbuild, der Full-Plan, das vollstaendige Test-Image und das Full-Image sind gruen. Das Full-Image enthaelt R4BASIC.R4X, aber nicht die lokale gorilla.bas. RELEASE_VERSION ist 0.66.5. Sammel-Push ohne Fehler: R4Basic c823ea7, Distribution 8bde589, Docs 880d711; 0 verbleibende Ziele. Ausfuehrung, VM und Fensterhost bleiben planmaessig den folgenden Unterversionen vorbehalten.
+
+## 0.66.6 Typisierte Bytecode-VM, Ausdruecke und Kontrollfluss
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Das gebundene Programm wird einmalig in eine kompakte, gastneutrale Instruktionsdarstellung ueberfuehrt und von einer typisierten VM ausgefuehrt. Die VM verwendet die vorhandene kooperative Subsystem-Runtime und gibt nach jeder begrenzten Gastscheibe die Kontrolle an Fenster, Eingabe und Scheduler zurueck.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Symboltabellen und Scopes fuer Modulcode, globale und lokale Variablen, Konstanten, Labels, Prozeduren und Funktionen mit DEFINT und Typsuffixen implementieren.
+  - Notizen: Scopes und Symboltabellen fuer Modul, Globals, Locals, Konstanten, Labels, SUB, FUNCTION und DEF FN mit DEFINT, Typsuffixen und DIM SHARED umgesetzt.
+- [Erledigt] #2 Die v1-Werttypen INTEGER, LONG, SINGLE, DOUBLE und dynamische Byte-Strings samt QBasic-Konvertierung, Rundung, Vergleich, Wahrheitswerten und arithmetischen Fehlern implementieren.
+  - Notizen: INTEGER, LONG, SINGLE, DOUBLE und eigene Byte-Strings bis 32767 Byte samt Promotion, Konvertierung, Rundung, Wahrheitswert, Vergleich und sichtbaren Rechenfehlern umgesetzt.
+- [Erledigt] #3 Aus gebundenen Statements und Ausdruecken eine einmalig erzeugte Instruktionsdarstellung mit stabilen Sprungzielen und Quellpositionszuordnung ableiten.
+  - Notizen: Einmaliger Token-, Parse- und Bindepfad erzeugt typisierte Instruktionen mit festen Sprungindizes und unveraenderten Quellspannen.
+- [Erledigt] #4 IF, ELSEIF, SELECT CASE, FOR/NEXT, WHILE/WEND, DO/LOOP, GOTO sowie GOSUB/RETURN in der VM ausfuehren.
+  - Notizen: IF, ELSEIF, ELSE, SELECT CASE, FOR, WHILE, alle DO-Varianten, EXIT, GOTO und GOSUB samt Regression fuer fuehrende DO-Bedingungen ausgefuehrt.
+- [Erledigt] #5 DECLARE, SUB, FUNCTION, CALL, implizite Aufrufe, skalare ByRef-Parameter und einzeilige DEF-FN-Funktionen mit getrennten Aufrufrahmen ausfuehren.
+  - Notizen: DECLARE, SUB, FUNCTION, explizite und implizite Aufrufe, ByRef-Aliase, ByVal, Rekursion, EXIT SUB/FUNCTION und DEF FN mit getrennten Frames umgesetzt.
+- [Erledigt] #6 Die fuer GORILLA.BAS benoetigten mathematischen und Stringfunktionen mit injizierbaren Hostdiensten und reproduzierbaren Fehlern bereitstellen.
+  - Notizen: ABS, ATN, CHR$, CINT, COS, INSTR, INT, LEFT$, LEN, LTRIM$, MID$, SIN, SPACE$, STR$, UCASE$ und VAL mit injizierbarem Math-Host und stabilen Fehlern umgesetzt.
+- [Erledigt] #7 Instruktionsbudget, kooperative Wartepunkte, Abbruch, Instanztrennung, Laufzeitdiagnosen und permanenten VM-Testbestand dokumentieren und abnehmen.
+  - Notizen: Budgetierte Scheiben, Nullbudget-Abbruch, Reset, Runtime-Adapter, getrennte Instanzen, Laufzeitdiagnosen, VM-Vertrag und permanenter Testbestand umgesetzt.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Rechtlich eigene textbasierte BAS-Fixtures liefern fuer Ausdruecke, Spruenge, Schleifen, Prozeduren und Funktionen deterministische erwartete Ergebnisse.
+  - Notizen: Sechs eigene BAS-Fixtures liefern deterministische Ergebnisse fuer Werte, Kontrollfluss, Prozeduren, Built-ins, Endlosschleife und Instanztrennung.
+- [Erledigt] INTEGER-, LONG-, SINGLE-, DOUBLE- und Stringoperationen treffen die festgelegten Konvertierungs-, Rundungs-, Wahrheits- und Fehlerfaelle.
+  - Notizen: Fixture- und Fehlerfaelle decken alle fuenf Werttypen, Promotion, Rundung, Wahrheitswerte, Vergleiche, Stringgrenze sowie Fehler 5, 6, 11, 13 und 70 ab.
+- [Erledigt] Eine absichtlich endlose BASIC-Schleife bleibt schliessbar und blockiert weder Desktopereignisse noch eine zweite R4BASIC-Instanz.
+  - Notizen: vm_infinite.bas bleibt durch feste Instruktionsscheiben reaktionsfaehig; subsystem_runtime verarbeitet Close vor der naechsten Scheibe und eine zweite VM laeuft unabhaengig.
+- [Erledigt] Quelltext wird genau einmal geparst und gebunden; wiederholte Schleifen fuehren nur die vorbereitete Instruktionsdarstellung aus.
+  - Notizen: Program.parse_passes und bind_passes bleiben je 1; wiederholte Scheiben veraendern beide Zaehler nicht und arbeiten nur auf vorbereiteten Instruktionen.
+- [Erledigt] Zwei gleichzeitige VM-Instanzen besitzen getrennte Variablen, Aufrufstapel, Instruktionszeiger, Fehler und Exitcodes.
+  - Notizen: vm_isolation.bas prueft getrennte Globals, Value- und Callstacks, Instruktionszeiger, Laufzeitdiagnosen, Abbruch und Exitcodes zweier gleichzeitiger VMs.
+
+### Notizen
+Es entsteht weder JIT noch nativer BASIC-Compiler. Semantik und sichtbare Fehler folgen dem vereinbarten QBasic-v1-Vertrag; Optimierungen duerfen das beobachtbare Verhalten nicht veraendern.
+Abschluss 0.66.6: R4BASIC 0.2.0 besitzt den typisierten Core-Compiler, die Bytecode-VM und den Adapter an r4os.subsystem_runtime. Build.bat test: 20 Hosttests gruen; checksumgebundene gorilla.bas-Frontendabnahme gruen. Test-Image gebaut und verifiziert, Headless-Markervertrag mit 600-Sekunden-Gegenprobe gruen; Slim und Full neu erzeugt und per NTFSVERIFY geprueft. Full inventarisiert R4BASIC 0.2.0, Distribution meldet 0.66.6. Sammel-Push erfolgreich: R4Basic f6aa878, Distribution 359f77d, Docs ff70878. Stolperstein: Der erste 240-Sekunden-Lauf erreichte R4BUILD, aber nicht Poweroff; eine erste 600-Sekunden-Wiederholung blieb transient am Launcher stehen. Der dritte Lauf desselben Test-Images war in 24,5 Sekunden vollstaendig gruen und beide roten Logs enthielten keinen Panic-, Fatal- oder CPU-Fehlermarker.
+
+## 0.66.7 Arrays, benutzerdefinierte Typen, DATA und Fehlerbehandlung
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die VM erhaelt das erweiterte QBasic-Daten- und Fehlermodell, das GORILLA.BAS fuer Bilddaten, Gebaeudestrukturen, Prozedurparameter und den Grafikmodus-Fallback benoetigt. Hardwarealtlasten werden ausschliesslich in einem privaten Gastmodell nachgebildet.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Feste und dynamische Arrays mit expliziten Unter- und Obergrenzen, mehreren Dimensionen, DIM SHARED, REDIM und ausgelassenen Arraygrenzen in Prozedurparametern implementieren.
+  - Notizen: Compiler und VM unterstuetzen feste und dynamische Arrays mit bis zu 60 Dimensionen, expliziten Bounds, Standard-Untergrenze 0, DIM SHARED und inhaltszuruecksetzendem REDIM.
+- [Erledigt] #2 Benutzerdefinierte TYPE-Datensaetze, skalare Felder, Arrays von Datensaetzen und qualifizierte Feldzugriffe in Binder und VM implementieren.
+  - Notizen: TYPE-Definitionen, skalare Felder, Arrays von Datensaetzen und qualifizierte Feldzugriffe werden gebunden und in rekursivem, instanzeigenem VM-Speicher ausgefuehrt.
+- [Erledigt] #3 ByRef-Uebergabe von Arrays und Datensaetzen sowie die Deklarationskompatibilitaet AS ANY gegen eine konkrete Implementierung typgeprueft abbilden.
+  - Notizen: ByRef verwendet echte Aliase innerhalb VM-eigenen Speichers fuer Arrays, Datensaetze und Arrayelemente. AS ANY in DECLARE ist gegen die konkrete Definition kompatibilitaetsgeprueft; Ausdrucksargumente erhalten QBasic-konforme temporaere Zellen.
+- [Erledigt] #4 DATA-Bloecke, benannte Datenlabels, typrichtiges READ und RESTORE an Programmanfang oder Label implementieren.
+  - Notizen: DATA-Pool, benannte Datenlabels, instanzlokaler Cursor, typgeprueftes READ sowie RESTORE an Programmanfang oder Label sind implementiert.
+- [Erledigt] #5 ON ERROR GOTO, ON ERROR GOTO 0, aktiven Fehlerzustand, RESUME und RESUME NEXT fuer die zugesagten catchbaren Laufzeitfehler implementieren.
+  - Notizen: Statement-Metadaten ermoeglichen ON ERROR GOTO, GOTO 0, RESUME und RESUME NEXT auf Statement-Grenzen. Handlerzustand und Fehlerabschluss bleiben je Gastinstanz isoliert.
+- [Erledigt] #6 DEF SEG=0 sowie PEEK und POKE an Adresse 1047 auf ein instanzlokales virtuelles NumLock-Byte begrenzen und jeden anderen Speicherzugriff abweisen.
+  - Notizen: DEF SEG=0 und das virtuelle BIOS-Byte an Offset 1047 sind instanzlokal implementiert. Jeder andere Segment- oder Offsetzugriff endet sichtbar mit QBasic-Laufzeitfehler 5.
+- [Erledigt] #7 Arrays, UDTs, DATA, ByRef, Fehlerbehandlung, Speichergrenzen und Cleanup durch Komponenten- und Negativtests absichern.
+  - Notizen: 25 oeffentliche Hosttests, darunter 17 Compiler-/VM-Tests, drei neue Fixtures und Leak-Pruefung decken Aggregate, DATA, ByRef, Fehlerpfade, Speichergrenzen, Reset und Instanzisolation ab. Testinventar und Moduldokumentation sind aktualisiert.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollstaendige nichtgrafische Daten- und Prozedurteil von GORILLA.BAS bindet und wird ohne Quelltextaenderung in ausfuehrbare Instruktionen ueberfuehrt.
+  - Notizen: Build.bat gorilla-test prueft die unveraenderte, checksumgebundene GORILLA.BAS aus Artifacts/Distribution/Injection/Temp und bestaetigt den vollstaendigen Frontend- und Binderlauf. Noch nicht implementierte spaetere Hostoperationen bleiben dabei ausdrueckliche Deferred-Guards.
+- [Erledigt] Die in DATA abgelegten positiven und negativen Long-Werte gelangen byte- und typgetreu in die vorgesehenen dynamischen Bildarrays.
+  - Notizen: Der VM-Test liest positive und negative Long-DATA-Werte ohne Rundung oder Vorzeichenverlust in dynamische Arrayelemente und prueft die exakten Ergebnisse.
+- [Erledigt] Arrays und TYPE-Werte bleiben zwischen Modul, SUB und FUNCTION gemaess ByRef- und SHARED-Vertrag konsistent, ohne Zustand zwischen Instanzen zu teilen.
+  - Notizen: Komponenten- und Negativtests bestaetigen SHARED- und ByRef-Sichtbarkeit fuer Arrays, Datensaetze und Arrayelemente ueber SUB/FUNCTION-Grenzen sowie getrennten Zustand und sauberen Reset zweier VM-Instanzen.
+- [Erledigt] Ein synthetischer nicht verfuegbarer Grafikmodus durchlaeuft ON ERROR, RESUME und RESUME NEXT reproduzierbar; ein unbehandelter Fehler beendet nur die betroffene Gastinstanz.
+  - Notizen: Ein injizierter SCREEN-Modus-Hostfehler durchlaeuft ON ERROR, RESUME und RESUME NEXT reproduzierbar auf Statement-Grenzen. Handlerfehler und unbehandelte Fehler beenden ausschliesslich die betroffene VM-Instanz.
+- [Erledigt] PEEK und POKE koennen das private NumLock-Bit lesen und aendern, aber weder beliebige Gastadressen noch R4OS-Speicher erreichen.
+  - Notizen: Positive und negative VM-Tests bestaetigen Zugriff nur auf das private NumLock-Kompatibilitaetsbyte Segment 0, Offset 1047. Beliebige Segmente und Offsets liefern Fehler 5 und koennen keinen R4OS- oder Hostspeicher erreichen.
+
+### Notizen
+Direkter Zugriff auf R4OS- oder Hostspeicher ist ausgeschlossen. Die NumLock-Kompatibilitaet ist auf das in GORILLA.BAS verwendete virtuelle BIOS-Datenbyte begrenzt; alle anderen Segmentzugriffe bleiben sichtbare Laufzeitfehler.
+
+Abschluss 0.66.7: R4BASIC 0.3.0 und VM-/Bytecode-Vertrag 1.1.0 implementieren Arrays, TYPE-Datensaetze, ByRef, DATA/READ/RESTORE, statementgenaue Fehlerbehandlung und das eng begrenzte private NumLock-Kompatibilitaetsbyte. Die unveraenderte GORILLA.BAS bindet vollstaendig. Als Sprachreferenz wurden die lokalen Microsoft-QuickBASIC-4.5-Abschnitte zu DIM, REDIM, TYPE, DATA, READ, RESTORE, DECLARE/AS ANY, ON ERROR, RESUME, DEF SEG, PEEK und POKE herangezogen und in PROVENANCE.txt festgehalten. R4BASIC-Direkttests, Gorilla-Abnahme, Docs-Inventarpruefung, kompletter Workspace-Test mit Testimage, NTFS-Pruefung, Headless-Lauf und Poweroff sowie neu gebaute und verifizierte Slim- und Full-Images sind gruen. Releaseversion ist 0.66.7. Es traten keine neuen Multi-Repo-Stolpersteine auf.
+
+## 0.66.8 Textbildschirm, Eingabe, Zeit, Zufall und sequentielle Dateien
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+R4BASIC erhaelt den textuellen QBasic-Bildschirm, interaktive Tastatureingabe, zeitbasierte kooperative Warteoperationen, reproduzierbaren Zufall und einen bewusst kleinen sequentiellen Dateivertrag ueber die normalen R4OS-Fassaden.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 SCREEN 0, WIDTH, COLOR, CLS, LOCATE, VIEW PRINT und einen deterministischen 80x25-Zellbildschirm mit Cursor, Vorder- und Hintergrundfarbe implementieren.
+  - Notizen: Fester 80x25-Zellbildschirm mit Vorder- und Hintergrundfarbe, Cursor, VIEW-PRINT-Bereich, Scrollen und sichtbarer Revision umgesetzt. WIDTH, COLOR, CLS und LOCATE prüfen unzulässige Werte atomar.
+- [Erledigt] #2 PRINT mit Semikolon, Komma, TAB und SPACE$ sowie INPUT und LINE INPUT einschliesslich Prompts und QBasic-artiger Werteingabe implementieren.
+  - Notizen: PRINT unterstützt Semikolon, Kommazonen, TAB und SPACE$. INPUT und LINE INPUT bearbeiten bis 255 Zeichen mit Prompt, Enter, Backspace und atomarem Redo from start bei ungültiger Eingabe.
+- [Erledigt] #3 Einen instanzlokalen Tastaturpuffer fuer nicht blockierendes INKEY$, Enter, Backspace, druckbare Zeichen und Fokuswechsel an den gastneutralen Hosteingaben anbinden.
+  - Notizen: Jede VM besitzt einen fokusabhängigen 4096-Byte-Tastaturpuffer. INKEY$ ist nicht blockierend; Text-, Enter-, Backspace-, Fokus- und Schließen-Ereignisse werden über den Runtime-Adapter zugestellt.
+- [Erledigt] #4 TIMER und SLEEP auf die monotone pausenbereinigte Gastzeit abbilden; TIMER-Warteschleifen muessen regelmaessig abgeben und die CalcDelay-/Rest-Kalibrierung von GORILLA.BAS in einen spielbaren Bereich bringen.
+  - Notizen: TIMER und SLEEP verwenden monotone Gastzeit. Wartende VMs geben kooperativ ab; 26 Instruktionen je 2 ms bilden das geprüfte Gastpacing. CalcDelay und Rest aus dem öffentlichen Fixture laufen reproduzierbar im spielbaren Bereich.
+- [Erledigt] #5 RANDOMIZE und RND mit QBasic-Aufrufsemantik, instanzlokalem Zustand und injizierbarem deterministischem Seed fuer Tests implementieren.
+  - Notizen: RANDOMIZE und RND verwenden pro VM einen 24-Bit-Zustand. Explizite, interaktive und injizierte Seeds sowie RND ohne Argument, mit 0 und mit negativem Argument sind abgedeckt.
+- [Erledigt] #6 OPEN fuer INPUT, OUTPUT und APPEND sowie CLOSE, PRINT #, INPUT #, LINE INPUT # und EOF ueber die normale R4OS-Storage-Fassade implementieren.
+  - Notizen: OPEN INPUT, OUTPUT und APPEND, CLOSE, PRINT #, INPUT #, LINE INPUT # und EOF sind mit Dateinummern 1 bis 255 und einer 4-MiB-Grenze umgesetzt. Relative Pfade werden gegen das BAS-Verzeichnis aufgelöst; sämtliche Hostzugriffe laufen über r4os.Files im Storage-Adapter.
+- [Erledigt] #7 Text-, Eingabe-, Zeit-, Zufalls- und Dateiverhalten mit interaktiven, deterministischen und negativen BAS-Fixtures dokumentieren und testen.
+  - Notizen: R4BASIC besitzt nun 34 öffentliche Komponentenprüfungen, vier neue BAS-Fixtures und zwei lokale Gorilla-Abnahmen. README, VM-Vertrag, Kompatibilitätsmatrix, deutsche Dokumentation, Provenienz und Testinventar wurden auf VM 1.2 und Modul 0.4 aktualisiert.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Das GORILLA-Intro, die Eingabe zweier Spielernamen sowie Winkel-, Geschwindigkeits- und Schwerkrafteingaben funktionieren mit Enter, Backspace und ungueltigen Zeichen.
+  - Notizen: Die unveränderte, SHA-gebundene GORILLA.BAS durchläuft Intro, zwei Spielernamen, Spielanzahl, Schwerkraft, Winkel und Geschwindigkeit. Die Prüfung enthält Enter, Backspace und ungültige Werte und erreicht danach erwartungsgemäß die erst in 0.66.9 folgende POINT-Grafikgrenze in Zeile 977.
+- [Erledigt] INKEY$ ist nicht blockierend, kann den eigenen Puffer leeren und sieht niemals Eingaben einer zweiten Gastinstanz.
+  - Notizen: Öffentlicher VM-Test bestätigt leeres nicht blockierendes INKEY$, Entnahme aus dem eigenen Puffer, Fokusunterdrückung und vollständige Isolation zweier VM-Instanzen.
+- [Erledigt] SLEEP und TIMER-basierte Warteschleifen halten reale Zeit ein, bleiben pausenbereinigt und blockieren Verschieben, Resize, Maximieren oder Schliessen nicht.
+  - Notizen: Zeit- und Runtime-Tests bestätigen reale SLEEP-Dauer, pausenbereinigten TIMER, kooperative Wartezustände sowie weiterhin verarbeitete Fokus- und Schließen-Ereignisse. Der vollständige Headless-Systemtest blieb grün.
+- [Erledigt] CalcDelay und Rest ergeben unter dem festgelegten Gastpacing reproduzierbar eine fuer die spaetere Animation geeignete Zeitbasis statt moderner ungebremster Busy-Wait-Geschwindigkeit.
+  - Notizen: Das öffentliche vm_pacing.bas bestätigt unter 26 Instruktionen je 2 ms reproduzierbar ungefähr 500 CalcDelay-Zählschritte und ungefähr 0,1 Sekunden Rest-Dauer.
+- [Erledigt] RANDOMIZE mit injiziertem Seed erzeugt reproduzierbare Stadt-, Wind- und Spielwerte; normale TIMER-Seeds bleiben zwischen Instanzen getrennt.
+  - Notizen: Tests bestätigen identische Folgen bei injiziertem Seed, interaktives RANDOMIZE mit Redo, QBasic-artige RND-Modi und getrennte Ergebnisse zweier Instanzen mit unterschiedlichen TIMER-Zeitpunkten.
+- [Erledigt] Sequentielle Textdateien koennen relativ und absolut gelesen sowie geschrieben werden; nicht zugesagte Modi und Geraetenamen liefern sichtbare BASIC-Laufzeitfehler.
+  - Notizen: Öffentliche Datei-Fixtures lesen und schreiben relative sowie absolute Pfade. Negative Prüfungen decken nicht zugesagte Modi, DOS-Gerätenamen, ungültige Dateinummern und Storage-Fehler als sichtbare BASIC-Laufzeitfehler ab.
+
+### Notizen
+Random- und Binary-Dateien, DOS-Geraetenamen, Drucker, COM-Ports und destructive Dateibefehle gehoeren nicht zu v1. Relative Dateipfade werden nachvollziehbar gegen das Verzeichnis der gestarteten BAS-Datei aufgeloest.
+Abgeschlossen mit R4BASIC 0.4 und VM-Vertrag 1.2. Lokal grün: 34 Komponentenprüfungen und 2 Gorilla-Abnahmen. Systemabnahme grün: Tools Build.bat -test einschließlich 135 Module und Headless-QEMU sowie Slim- und Full-Image-Build mit jeweiliger Verifikation. Full enthält R4BASIC 0.4.0 unter dem Subsystem r4os.basic. Release 0.66.8 ist gesetzt; es wurde bewusst kein Releasepaket erzeugt oder hochgeladen.
+
+## 0.66.9 QBasic-Grafikmodi und kompatible Bildoperationen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die virtuelle BASIC-Anzeige erhaelt die fuer GORILLA.BAS benoetigten CGA- und EGA-Modi samt QBasic-artiger Koordinaten, Palette, Zeichenoperationen und kompatiblem GET/PUT-Bildformat. Alle Pixeloperationen bleiben im Gastpuffer und werden nur als fertige Rasterframes praesentiert.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 SCREEN 1 mit 320x200 Pixeln und vier Farben sowie SCREEN 9 mit 640x350 Pixeln und 16 Attributfarben auf instanzlokalen Indexed8-Oberflaechen implementieren.
+  - Notizen: src/graphics_screen.zig besitzt pro VM eigene Indexed8-Pixel, eine eigene 256-Eintrag-Palette und Damagezustand. SCREEN 1 stellt 320x200 mit Attributen 0 bis 3 bereit, SCREEN 9 stellt 640x350 mit Attributen 0 bis 15 bereit.
+- [Erledigt] #2 QBasic-artige Koordinatenkonvertierung, Rundung, Clipping, aktuellen Grafikpunkt und Textzellenausgabe innerhalb der Grafikmodi festlegen und implementieren.
+  - Notizen: BASIC-Zahlen werden vor der Grafikoperation ueber den normalen VM-Konvertierungspfad gerundet. Linien werden auf die Gastflaeche geclippt, STEP verwendet den aktuellen Grafikpunkt. Der Textzustand arbeitet mit 40 beziehungsweise 80 Spalten und wird per lokaler 8x8-Font in 8x8- beziehungsweise 8x14-Zellen gerastert.
+- [Erledigt] #3 PALETTE, PSET, POINT und LINE einschliesslich Rechteck B und gefuelltem Rechteck BF implementieren.
+  - Notizen: PALETTE, PSET, POINT und LINE laufen als echte Bytecode-Operationen. LINE unterstuetzt Linie, B und BF; Palettenaenderungen wirken auf vorhandene Indexpixel und erzeugen einen Voll-Damageframe.
+- [Erledigt] #4 CIRCLE mit optionalen Start- und Endwinkeln sowie Aspect und PAINT mit optionaler Randfarbe implementieren.
+  - Notizen: CIRCLE unterstuetzt optionale Farbe, Start, Ende und Aspect einschliesslich der von GORILLA.BAS verwendeten negativen Radialmarken. PAINT verwendet einen begrenzten instanzlokalen Flood-Fill mit optionaler Randfarbe.
+- [Erledigt] #5 Grafik-GET und PUT fuer SCREEN 1 und 9 mit dem von QBasic erwarteten Arrayheader, gepackten Bilddaten sowie den Aktionen PSET und XOR implementieren.
+  - Notizen: GET und PUT serialisieren numerische Arrays bytegenau. Der Vier-Byte-Header sowie SCREEN-1-Zweibitdaten und die vier SCREEN-9-Bitebenen sind umgesetzt; PSET und attributweises XOR laufen ohne Programmspezialfall.
+- [Erledigt] #6 Voll-, Damage- und unveraenderte Frames ueber r4os.subsystem_host praesentieren; kein BASIC-Grafikbefehl darf punktweise R4DRAW aufrufen.
+  - Notizen: runtime_adapter.syncVideo bindet die fertige Indexed8-Oberflaeche an r4os.subsystem_host. Der Hosttest bestaetigt 15 Rasterbloecke fuer 640x350, kleine Damageframes, keine unveraenderten Frames und sichere Neubindung nach Reset. Kein Grafikprimitiv ruft R4DRAW punktweise auf.
+- [Erledigt] #7 Goldene Rasterfixtures fuer Palette, Stadt, Figuren, Rohdaten-Banane, XOR-Bewegung, Explosion, POINT-Kollision und Modusfallback anlegen.
+  - Notizen: vm_graphics.bas, vm_packed_images.bas, graphics_host_test.zig und die unveraenderte lokale GORILLA.BAS bilden Palette, Stadt/Figuren, gepackte LONG-Bilder, XOR, Explosion/Kollision, Modusfallback und Praesentation ab. Der kanonische Endzustand besitzt den festen Pixelhash 0x9022E6B6962C1EB9.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] SCREEN 9 liefert die vorgesehene 640x350-EGA-Anzeige; ein kontrolliert nicht verfuegbarer Modus 9 faellt ueber den BASIC-Fehlerpfad auf SCREEN 1 zurueck.
+  - Notizen: Der Komponentenlauf bestaetigt SCREEN 9 mit 640x350. Ein injiziert nicht verfuegbarer Modus 9 erzeugt den fangbaren BASIC-Fehler 5; der unveraenderte Fehlerhandler wechselt danach erfolgreich auf SCREEN 1 mit 320x200.
+- [Erledigt] Stadt, Fenster, Sonne und Gorillas stimmen fuer festgelegte Seeds mit den erwarteten Rasterhashes und Farbpaletten ueberein.
+  - Notizen: Die unveraenderte lokale GORILLA.BAS laeuft mit Seed 0x00424242 durch Stadtaufbau und einen grafischen Zug. Der Endrasterhash ist 0x9022E6B6962C1EB9; die programmierten Paletteneintraege 0, 1, 2, 3 und 9 werden exakt geprueft.
+- [Erledigt] Die aus GORILLA-DATA gelesenen Long-Arrays ergeben ohne Sonderfallcode die richtigen Bananen- und Gorillabilder in GET und PUT.
+  - Notizen: Die kanonische Originaldatei liest ihre signierten LONG-DATA-Bloecke und verwendet sie durch den allgemeinen Array-Rohbytepfad fuer Gorilla-GET/PUT und Bananen-PUT. Das zusaetzliche synthetische Fixture prueft beide gepackten Modi unabhaengig davon.
+- [Erledigt] PUT XOR zeichnet und entfernt eine bewegte Banane ohne bleibende Pixel; POINT erkennt Sonne, Gebaeude, Hintergrund und Gorilla reproduzierbar.
+  - Notizen: Das synthetische Fixture bestaetigt zeichnendes und rueckstandslos entfernendes PUT XOR in SCREEN 1 und 9. Der kanonische Lauf durchquert mit POINT die echte Stadt-, Hintergrund-, Sonnen- und Figurenlogik bis zum reproduzierbaren Kollisions- und Explosionspfad.
+- [Erledigt] 640x350-Animation erreicht mindestens stabile 20 Bilder pro Sekunde und erzeugt bei unveraendertem Gastbild keine fortlaufenden Frames.
+  - Notizen: graphics_host_test erzeugt einen Vollframe und 30 einzelne Damageframes, bleibt unter der 20-FPS-Grenzdauer und unterdrueckt danach unveraenderte Frames. Der systemweite Headless-Marker meldet ebenfalls fps>=20 und idle=no-frame.
+- [Erledigt] Resize, Maximieren, Letterboxing und zwei gleichzeitige Grafikinstanzen veraendern weder Gastmodus noch Palette oder Bildspeicher der jeweils anderen Instanz.
+  - Notizen: Der Hosttest bestaetigt Resize auf 1280x720, Integer-Scale 2 und 10 Pixel Letterboxing; Maximieren verwendet denselben Resizepfad. Der VM-Test bestaetigt getrennte Pixel- und Palettenpuffer zweier Instanzen, der Resettest eine sichere Presenter-Neubindung.
+
+### Notizen
+v1 unterstuetzt ausschliesslich SCREEN 0, 1 und 9. Weitere Modi, DRAW, PCOPY, BSAVE und BLOAD bleiben ausdrueckliche Nichtziele.
+GORILLA.BAS wird fuer 0.66.9 direkt aus Artifacts/Distribution/Injection/Temp/gorilla.bas verwendet. Der lokale Injection-Baum wird nicht gepusht; ein Upload eines neuen Release.zip ist nicht Teil der Roadmap. Zusaetzliche Copyright- oder Release-Sperren im BASIC-Test- und Buildweg sind nicht vorgesehen. Die SHA-256-Pruefung bleibt ausschliesslich eine technische Identitaets- und Reproduzierbarkeitspruefung.
+R4BASIC steht auf Modul 0.5.0 und VM-Vertrag 1.3.0. Build.bat test und Build.bat gorilla-test sind gruen. Tools/Build.bat -test baute 135 Module, erzeugte und verifizierte das Testimage und bestand Boot, Marker und Poweroff im Headless-QEMU-Lauf. Das Full-Image wurde anschliessend neu geplant, mit R4BASIC 0.5.0 unter /R4OS/SUBSYSTEMS/r4os.basic/R4BASIC.R4X erzeugt und per NTFSVERIFY geprueft. Der Release-Uploadweg wurde nicht aufgerufen.
+Sammel-Push erfolgreich abgeschlossen: R4BASIC 9ac83fe, Distribution e597ce2, Docs 7dec1f1. Die Github.bat-Nachpruefung meldete 0 fehlgeschlagene und 0 verbleibende pushbare Repositories.
+
+## 0.66.10 PLAY, BEEP, Explorer-Integration und GORILLA.BAS-Endabnahme
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+R4BASIC v1 wird mit der benoetigten Music Macro Language, PCM-Ausgabe, produktiver BAS-Zuordnung, sichtbaren Fehlern und der vollstaendigen lokalen GORILLA.BAS-Abnahme fertiggestellt. Permanente allgemeine Fixtures und die unveraenderte lokale Originaldatei decken gemeinsam den produktiven Vertrag ab.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Einen PLAY-MML-Parser fuer die von GORILLA.BAS verwendeten Modus-, Tempo-, Oktav-, Laengen-, Noten-, Pausen-, Nummern- und Vorzeichenkommandos implementieren.
+  - Notizen: PLAY-MML ist in der instanzlokalen Audio-Engine umgesetzt: O0-6, Oktavwechsel, L1-64, T32-255, MB/MF, MN/ML/MS, A-G, Vorzeichen, Punktierung, P und N0-84 werden atomar und begrenzt geparst.
+- [Erledigt] #2 BEEP sowie eine einfache PCM-Stimmenerzeugung mit korrekter MB-/MF-Wartesemantik ueber die gepufferte Subsystem-Audiolaufzeit anbinden.
+  - Notizen: BEEP und PLAY erzeugen 48-kHz-Stereo-S16LE-PCM. MF wartet ueber Gastzeit, MB laeuft gepuffert weiter; Audio bleibt ausserhalb von Video- und Eingabehost.
+- [Erledigt] #3 Das produktive R4BASIC-Manifest installieren und .BAS standardmaessig dem Format basic.qbasic-source zuordnen; Notepad bleibt als alternative Bearbeitung in Open With verfuegbar.
+  - Notizen: R4BASIC 1.0.0 wird produktiv unter /R4OS/SUBSYSTEMS/r4os.basic installiert. BAS ist basic.qbasic-source zugeordnet; Notepad bleibt als erste Open-With-Alternative erhalten.
+- [Erledigt] #4 Fenstertitel, Syntax- und Laufzeitfehleranzeige, Gastende, Fenster-Close, Audio-Degradation und idempotenten Ressourcenabbau fuer den produktiven Host fertigstellen.
+  - Notizen: Der produktive R4SUBSYS1-Host besitzt Datei- und Fehleranzeigen, instanzbezogenen Titel, Close/Resize/Input, sichtbare Audio-Degradation und gemeinsamen idempotenten Abbau fuer Ende, Close und Fehler.
+- [Erledigt] #5 Die lokale GORILLA.BAS anhand ihrer festen SHA-256-Pruefsumme direkt aus Artifacts/Distribution/Injection in Entwicklungs-, Abnahme- und lokale Image-Laeufe einbinden; ein Release-Upload bleibt ausserhalb der Roadmap.
+  - Notizen: Die lokale Datei wird unveraendert aus Artifacts/Distribution/Injection/Temp/gorilla.bas nach /Temp/gorilla.bas geplant. Groesse 29434 Byte, SHA-256 9926FC1F50C4B489EC4C1B0DA5BD2C497EBF4282B3259C28A835A743E24699F7. Kein Release-Upload ausgefuehrt.
+- [Erledigt] #6 Permanente allgemeine BAS-Fixtures fuer Sprache, Grafik, Eingabe, Zeit und Audio sowie die direkte lokale End-to-End-Abnahme mit der unveraenderten Originaldatei bereitstellen.
+  - Notizen: Permanente allgemeine VM-, Grafik-, Eingabe-, Zeit-, Isolations- und Audio-Fixtures sind vorhanden. Der direkte Gorilla-Test kompiliert die unveraenderte lokale Datei und spielt deterministisch eine vollstaendige Runde bis zum aktualisierten Punktestand.
+- [Erledigt] #7 SDK-, Subsystem-, Explorer-, Desktop-, Distribution- und Workspace-Gates, Dokumentation, Inventare und Releaseversion fuer den abgeschlossenen R4BASIC-v1-Vertrag aktualisieren.
+  - Notizen: Dokumentation, Test- und Modulinventare, produktive/testbezogene Zuordnungen sowie RELEASE_VERSION=0.66.10 sind aktualisiert. Komponenten-, Workspace-, Profil-, Image- und Headless-Gates sind gruen.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Die unveraenderte lokale GORILLA.BAS wird durch normales Oeffnen im Explorer ueber r4os.basic in einer eigenen R4BASIC-Fensterinstanz gestartet.
+  - Notizen: Produktive Full-Integration belegt: ASSOC.R4S loest BAS zu r4os.basic/basic.qbasic-source auf, MODULES.JSON katalogisiert R4BASIC 1.0.0 mit seinem Subsystemziel, Explorer-Resolver und Subsystemstart sind getestet, und der Full-Plan enthaelt die unveraenderte Datei als /Temp/gorilla.bas.
+- [Erledigt] Zwei Spielernamen koennen eingegeben und mindestens eine vollstaendige Runde mit Stadt, Wind, Wurf, Flugbahn, Kollision, Explosion, Siegestanz und Punktestand gespielt werden.
+  - Notizen: Der direkte unveraenderte GORILLA.BAS-End-to-End-Test speist zwei Namen und Wuerfe ein und prueft Stadt/Wind, Flug, Gebaeudekollision, Selbsttreffer, Explosion, Siegestanz und aktualisierten Punktestand samt deterministischem Grafikhash.
+- [Erledigt] BEEP und alle im Spiel verwendeten PLAY-Sequenzen sind erkennbar, zeitlich plausibel und blockieren im MB-Modus weder Animation noch Fensterereignisse.
+  - Notizen: Parser-, PCM-, VM- und Runtime-Tests decken alle 12 PLAY- und 2 BEEP-Stellen des Spiels, Vordergrundwartezeit, MB-Fortsetzung und gepufferte Ausgabe ab.
+- [Erledigt] Fehlendes oder ausfallendes Audio degradiert sichtbar; Gastzeit, Eingabe und Grafik laufen im normalen Pacing weiter und alle Ressourcen werden beim Ende geschlossen.
+  - Notizen: Der No-Sink-Test prueft den sichtbaren degraded-Zustand, fortlaufende Gastzeit und VM-Ausfuehrung sowie genau einmaligen, idempotenten Ressourcenabbau.
+- [Erledigt] Fenster bleiben waehrend Intro, Berechnung und Animation verschiebbar, skalierbar, maximierbar und schliessbar; zwei Spiele besitzen getrennte Eingaben, Uhren, Bilder, Zufalls- und Audiostaende.
+  - Notizen: Subsystem-Host-Gates decken Move, Resize, Maximierung, Close und Eingabetransformation ab. R4BASIC-Tests pruefen zwei unabhaengige Instanzen; VM-, Fehler-, Zeit-, Zufalls- und Audiozustand liegen pro Instanz.
+- [Erledigt] Syntaxfehler, nicht unterstuetzte Befehle und kontrollierte Laufzeitfehler zeigen Datei und Quellposition und beenden nur die betroffene Gastinstanz sauber.
+  - Notizen: Compilerdiagnosen tragen Datei, Zeile und Spalte; produktive Statusbilder unterscheiden Start-, Lade-, Compiler-, Laufzeit- und Hostfehler. Close, normales Ende und Fehler verwenden denselben instanzlokalen Abbau.
+- [Erledigt] Der vollstaendige Workspace-, Profil-, Image- und Headless-Test ist gruen. Artifacts/Distribution/Injection bleibt ungepusht und die Roadmap fuehrt keinen Upload eines neuen Release.zip aus.
+  - Notizen: Gruene Abschlusslaeufe: 42 R4BASIC-Hosttests, gorilla-test, R4STD- und Distributionsgates, Explorer/AppDefaults-Builds, kompletter Tools/Build.bat -test mit 135 Modulen und erfolgreichem QEMU-Headless-Lauf sowie Full-Image und NTFS-Verify. Die lokale Injection blieb ignoriert; kein Release.zip wurde hochgeladen.
+
+### Notizen
+Die lokale GORILLA.BAS bleibt unter D:\R4OS\Artifacts\Distribution\Injection\Temp\gorilla.bas. Artifacts/Distribution/Injection wird nicht gepusht. Entwicklungs-, Abnahme- und lokale Image-Builds duerfen die Datei direkt verwenden; ein Upload eines neuen Release.zip ist nicht Teil der Roadmap. Vor einem spaeteren manuellen Release-Upload wird die lokale Beigabe wieder entfernt. Audiotreue ist erkennbar und zeitlich korrekt, aber nicht bitgenau zu PC-Speaker oder historischer FM-Hardware.
+Abschlussstand 0.66.10: R4BASIC v1.0.0 und VM-Vertrag 1.4.0 besitzen produktiven R4SUBSYS1-Fensterhost, SCREEN-0-Textanzeige, Grafik, Eingabe, Gastzeit sowie PLAY/BEEP ueber gepuffertes PCM. BAS wird produktiv ueber r4os.basic gestartet und bleibt ueber Notepad bearbeitbar. Die lokale Originaldatei unter D:\R4OS\Artifacts\Distribution\Injection\Temp\gorilla.bas ist 29434 Byte gross und hat SHA-256 9926FC1F50C4B489EC4C1B0DA5BD2C497EBF4282B3259C28A835A743E24699F7; der Full-Imageplan uebernimmt sie nach C:\Temp\gorilla.bas. 42 R4BASIC-Hosttests, der direkte Gorilla-End-to-End-Test, alle Komponenten- und Inventargates, der vollstaendige Testprofil-/QEMU-Headless-Lauf sowie Full-Image und NTFS-Verify sind gruen. Artifacts/Distribution/Injection bleibt ungepusht; ein Release-Upload wurde nicht ausgeloest.

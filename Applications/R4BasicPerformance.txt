@@ -1,0 +1,66 @@
+R4BASIC execution and performance contract
+==========================================
+
+Baseline and cause
+------------------
+R4BASIC 1.0 capped every scheduled VM slice at 26 instructions and returned
+a wake time two guest milliseconds in the future. Runnable code was therefore
+limited to about 13,000 bytecode instructions per second before interpreter
+or graphics cost mattered.
+
+Current slice model
+-------------------
+- The shared subsystem runtime still invokes exactly one GuestDriver step per
+  host cycle and offers a maximum budget of 4,096 instructions.
+- The R4BASIC adapter consumes that budget in 64-instruction check blocks.
+  Production supplies the R4SYS monotonic clock and stops a step after eight
+  milliseconds. One already-started opcode/check block is the bounded
+  overshoot.
+- Runnable code returns progress with no artificial wake deadline. The host
+  polls input and lifecycle commands before the next step and yields when the
+  runtime reports a zero wait.
+- WAIT/SLEEP, foreground audio and input retain their real guest deadlines.
+  Pause time never advances the monotonic guest clock.
+
+Historical TIMER polling
+------------------------
+Removing global pacing must not turn CalcDelay/Rest-style TIMER loops into an
+unbounded host-speed benchmark. The VM therefore permits one TIMER read per
+guest millisecond in scheduled mode. An earlier repeated poll returns a
+cooperative wait until that guest deadline; all non-TIMER bytecode continues
+at the measured slice rate. Direct deterministic VM tests may leave this
+adapter behavior disabled.
+
+Measurement
+-----------
+VM counters split completed bytecodes into value, arithmetic, control,
+graphics, text and host groups. Adapter counters report steps, instructions,
+maximum instructions, budget/time limits, waits, frame-ready steps and tick
+duration. Tests/performance_test.zig proves a runnable step consumes 4,096
+instructions with no fixed wake (more than 157 times the former per-cycle
+budget) and that an injected slow clock stops a resumable step at the time
+boundary. The complete checksum-bound gorilla.bas semantic/golden test remains
+unchanged.
+
+R4BASIC /PERFTEST runs a bounded in-system CPU loop and prints a parseable
+marker. Test-QemuPerformanceMarker.ps1 requires at least 52,000 instructions
+per second, a maximum 4,096-instruction step and no fixed sleep.
+
+The Standard-QEMU measurement on 20 August 2026 used a temporary test-only
+console packaging of the same R4BASIC 1.1 source and four platform imports;
+the productive subsystem manifest and final GUI artifact were restored
+afterward. The parser accepted 118,784 instructions in 51 guest ticks:
+2,329,098 instructions per second, 29 slices, a 4,096-instruction maximum,
+zero time-limited slices and no fixed sleep. This is about 179 times the
+13,000-instruction/s 0.66.X cap and over 44 times the 52,000 acceptance floor.
+The ordinary Test profile was then rebuilt and passed its complete headless
+marker contract again.
+
+Outstanding visual acceptance
+-----------------------------
+The host and component gates establish scheduler capacity and semantics, not
+actual QEMU window presentation. The remaining interactive acceptance opens
+the unchanged local gorilla.bas through Explorer and checks at least 20
+presented frames per second plus keyboard/Close latency below 100 ms. The same
+flow and hardware-independent guest timing must then be checked on the Lenovo
+laptop. These rows remain open until observed rather than inferred.

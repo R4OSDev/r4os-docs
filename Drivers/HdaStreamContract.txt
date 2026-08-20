@@ -1,0 +1,90 @@
+R4OS HDA stream contract
+========================
+
+Scope
+-----
+HDA.R4D owns conversion into the active hardware format, the software PCM
+queue, the cyclic DMA ring, HDA interrupts and stream recovery. AUDSVC owns
+application stream multiplexing; callers do not know the HDA period size.
+The current hardware format is 48,000 Hz, stereo, signed 16-bit little endian.
+
+Write contract
+--------------
+- writePcm accepts every non-empty, frame-aligned packet in a supported input
+  format. Packet boundaries never become DMA boundaries.
+- Streaming conversion preserves partial source frames between calls. A
+  complete converted frame is appended exactly once to the software queue.
+- The queue contains 64 hardware periods. Capacity failure is reported and
+  counted; old audio is never overwritten.
+- A short final packet is zero-filled only during Drain. Ordinary writes do
+  not add silence to reach a period boundary. Drain appends three explicitly
+  counted zero periods after all requested frames so codec and host-backend
+  queues can emit their buffered tail before RUN is cleared; these postroll
+  periods are not underrun recovery.
+
+DMA geometry and ownership
+--------------------------
+- One period is 480 frames or 1,920 bytes, exactly 10 ms in the hardware
+  format. The ring contains 16 128-byte-aligned periods.
+- BDL, CBL and LVI are programmed while RUN is clear. All 16 BDLEs have IOC
+  set and remain unchanged for the complete RUN phase.
+- PeriodBook tracks producer, current hardware period, ready ownership and
+  queued count independently. The producer may not write the active hardware
+  period and may not overwrite a ready period.
+- Playback starts with all sixteen ready periods (160 ms). Drain may start a tail
+  with one ready period. LPIB selects the current cyclic period; implausible
+  positions cannot address outside the fixed ring.
+- A consumed period is cleared before reuse. Silence is therefore observable
+  only when hardware reaches a period for which no PCM data was available.
+
+Interrupt and refill contract
+-----------------------------
+- MSI is preferred. Correctly routed INTx lines remain the fallback.
+- INTCTL enables the selected stream and global controller interrupt. The
+  stream descriptor enables IOC, FIFOE and DESE reporting.
+- The ISR reads INTSTS and SD_STS, counts BCIS/FIFOE/DESE, clears only the
+  reported write-one-to-clear bits and schedules coalesced Driver Work.
+- The ISR allocates nothing, waits nowhere, copies no PCM and emits no normal
+  log stream. Driver Work reaps completions, advances ownership from LPIB,
+  fills complete periods and performs a pending recovery.
+- At most one refill job is pending. Two completion handles permit the next
+  IRQ to release the previous job without unbounded allocation.
+
+Underrun and recovery
+---------------------
+An underrun is counted only when LPIB advances into a period without ready
+ownership while the stream is not draining. Each such period increments both
+underruns and silence_refills. Upstream drops, backend errors and service
+latency stay separate counters. DESE requests controlled recovery; FIFOE is
+recorded as a stream error. The first underrun may emit one warning, but the
+normal path remains silent.
+
+Lifecycle
+---------
+Open and the first writes fill the queue and ring. Stop first performs a
+bounded 250-ms Drain including the three-period postroll, clears RUN and waits
+against a monotonic deadline. The
+RUN-clear timeout is at least 10 ms as required by Intel HDA033-A. The stream
+descriptor is then reset and BDL/CBL/LVI are reprogrammed only while stopped,
+so a later stream starts from a defined position. Stop, error, Close and
+shutdown share idempotent cleanup and release pending Driver Work.
+
+Measurement surface
+-------------------
+The existing audio backend and performance status expose write/refill counts
+and durations, ring fill, drops, underruns, silence periods and errors. A
+status snapshot refreshes ownership directly from LPIB before publishing the
+fill level; this keeps producer pacing valid when QEMU coalesces or delays IRQ
+work.
+HDA diagnostics additionally retain IRQ mode and route, IRQ/BCIS/FIFOE/DESE
+counts, LPIB, start/stop/drain/recovery counts and timeouts. AudioDiag prints
+only one aggregate result line after a test; it never logs every interrupt.
+
+Verified baseline, 19 August 2026
+---------------------------------
+Standard QEMU uses q35 with ich9-intel-hda and hda-duplex. The driver selected
+MSI and LPIB. The 60-second AudioDiag run delivered 2,880,000 frames in 6,000
+writes with zero upstream drops, underruns, backend errors, backend failures
+and silence periods. The separate QEMU WAV capture found no 480/544 padding
+pattern. The Lenovo codec, IRQ route and listening tests remain a physical
+hardware acceptance and are not inferred from QEMU.

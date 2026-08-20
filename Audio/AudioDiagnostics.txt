@@ -1,0 +1,57 @@
+R4OS audio continuity diagnostics
+=================================
+
+AUDIOD.R4X is the Test-profile end-to-end diagnostic for R4AUDIO, AUDSVC and
+the selected hardware backend. It uses 48,000-Hz stereo S16 PCM and prints
+aggregate counters only after playback.
+
+Default capture
+---------------
+The default mode preloads sixteen 480-frame square-wave quanta and then five
+frame-aligned packets of 1, 239, 17, 310 and 33 frames. This bounded burst
+fills and wraps the 16-period HDA ring without comparing QEMUs guest timer
+with its host audio thread under TCG load. The pattern exercises one-frame
+edges and packet/period independence without adding diagnostic silence.
+Expected source length is 8,280 frames.
+
+Invoke-QemuWavCapture.ps1 starts the Test image with QEMUs WAV audiodev,
+waits for the normal guest poweroff, validates all standard serial markers
+and passes the WAV to Analyze-QemuWav.ps1. QEMU streaming WAV files with zero
+RIFF/data length fields are accepted by using the actual file end.
+
+The analyzer separates AudioDiag's amplitude-4096 diagnostic tone from the
+lower-amplitude subsystem-runtime selftest that precedes it in the same WAV.
+It groups only short resampler zero crossings, requires the resulting signal
+span to stay within 5 percent of the 8,280-frame source duration and detects
+the known legacy signature from cluster spans. Its selftest contains a good
+fixture, the old sequence of 480 signal plus 544 zero frames and an injected
+sample-loss fixture. Ring wrap and packet phase are covered by the HDA and
+AudioDiag host tests.
+
+Long mode
+---------
+AUDIOD.R4X /LONG produces 6,000 quanta, or 2,880,000 frames/60 seconds. It
+fills the HDA ring to sixteen periods and then submits when the reported backend
+fill drops below that threshold. This deliberately follows device consumption
+instead of QEMUs guest timer, because the emulated audio thread and guest
+clock may drift under TCG load. The test therefore measures continuous ring
+operation, not agreement between two emulator clocks.
+
+Result separation
+-----------------
+The line beginning with "AUDIOD path" reports five independent deltas:
+upstreamDropped, driverUnderruns, driverErrors, backendFail and silencePeriods.
+A successful continuity run requires all five to be zero. Additional lines
+show stream/service write latency, high water, refill count and final queue.
+No interrupt-by-interrupt or write-by-write log is emitted.
+
+Current QEMU commands
+---------------------
+From Repositories/Diagnostics/AudioDiag:
+
+    Build.bat test
+    powershell -File Tests\Invoke-QemuWavCapture.ps1 -Profile Test
+
+For the 60-second gate, place /LONG on the AUDIOD line of the local Test
+AUTOEXEC, rebuild the Test image, run the headless acceptance, then restore
+the default capture. The committed Test profile always uses default mode.

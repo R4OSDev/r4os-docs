@@ -1,0 +1,66 @@
+HDA reference comparison for R4OS 0.67.X
+========================================
+
+Reference set
+-------------
+The reproducible, SHA-256-checked source archive is local at
+ExFiles/Reference/Hardware/HDA/. Download-References.ps1 verifies 20 files:
+Intel HDA 1.0a, Intel HDA033-A and HDA043-A, QEMU commit
+a4bb4b10c9d43d416f6e8bc9bb5c8f372fd80769, and Linux stable commit
+2609d60e2f6d0b8a96563baa08b56482962cebaa. These files are development
+references and are not shipped in R4OS images.
+
+Code-related comparison
+-----------------------
+Area                 Reference anchor                 Previous R4OS state                 Current R4OS state
+BDL/CBL/LVI          HDA 1.0a 3.3.35, 4.5.2          Four 4,096-byte entries were         Sixteen fixed 1,920-byte entries;
+                                                          rewritten by writePcm while RUN.   programmed only while RUN=0.
+Packet/period split  HDA 1.0a 4.5.2/4.5.3            Every 1,920-byte caller quantum      ByteQueue joins arbitrary aligned
+                                                          became 4,096 bytes with padding.   packets into complete periods.
+RUN lifecycle        HDA 1.0a 4.5.2; HDA033-A        Loop-count stop; no normative        Monotonic >=10-ms RUN-clear wait,
+                                                          timing contract.                  reset and stopped reprogramming.
+Completion events    HDA 1.0a 3.3.37                  Status was polled by writes and       MSI preferred, INTx fallback;
+                                                          wait loops; no HDA ISR.             IOC ISR plus bounded Driver Work.
+BCIS/FIFOE/DESE      HDA 1.0a 3.3.37                  Cleared opportunistically with        Individually counted, W1C-acked;
+                                                          no durable fault separation.        DESE schedules recovery.
+Position             HDA 1.0a 3.3.35; Linux notes    No producer/consumer ownership        LPIB maps the current ring period;
+                                                          model.                              PeriodBook validates ownership.
+Prefill              HDA 1.0a 4.5.3; Linux stream    One packet could start playback.      Full ring: 16 periods/160 ms before RUN.
+Underrun             HDA 1.0a 4.5.3                  Normal short packets manufactured     Only missing ready ownership at a
+                                                          544 zero frames each.               hardware advance counts/zeros.
+EE buffering         Intel HDA043-A                   Not modelled.                         Optional; fixed full ring remains
+                                                                                              compatible and does not claim EEA.
+QEMU behavior        intel-hda.c, hda-codec.c         480/544 discontinuity was audible.    WAV capture is continuous and the
+                                                                                              legacy pattern detector reports 0.
+Linux comparison     sound/hda/core/stream.c          No copied implementation.             Independent R4OS design adopts the
+                                                                                              same fixed-BDL/position principles.
+
+Root cause
+----------
+R4BASIC and r4os.subsystem_runtime submit 480 frames, or 1,920 bytes, every
+10 ms. The previous HDA driver placed each packet in a 4,096-byte BDLE and
+zeroed the remaining 2,176 bytes. At stereo S16 that is exactly 544 unwanted
+zero frames after 480 useful frames. BEEP.R4X happened to write 1,024-frame
+blocks and therefore concealed the general defect; R4BASIC never routed its
+BEEP statement through BEEP.R4X.
+
+Validation
+----------
+- stream_ring.zig host tests cover wrapped byte queues, producer ownership,
+  missing periods, recovery and cyclic wraparound.
+- AudioDiag pattern tests cover nonzero samples and phase preservation across
+  packet boundaries; long-mode pacing follows the published HDA fill level.
+- Analyze-QemuWav.ps1 selftests reject injected 480/544, sample-loss and
+  internal-silence fixtures.
+- Standard-QEMU short capture: 8,280 input frames, continuous signal,
+  Known480_544Patterns=0, all path error counters zero.
+- Standard-QEMU long run: 2,880,000 frames, 6,000 writes, all path error and
+  silence counters zero. Long-mode feeding follows HDA fill level so QEMU
+  guest-clock drift is not misreported as a hardware-ring underrun.
+
+Open hardware row
+-----------------
+The Lenovo IdeaPad L340-15API still needs a cold-boot record with PCI codec,
+MSI/INTx route, LPIB behavior, five-minute tone, repeated start/stop/close,
+BEEP.R4X and R4BASIC BEEP/PLAY. Until that run exists, QEMU evidence must not
+be described as a physical HDA acceptance.

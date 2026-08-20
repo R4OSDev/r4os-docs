@@ -28,3 +28,7 @@ degraded while guest time and video continue at their normal paced rate.
 
 Current modules are listed in `Docs/Inventory/AllModules.json`; diagnostics
 and their tests are listed in the corresponding inventories.
+
+The current HDA stream geometry, ownership, IRQ and lifecycle rules are in
+`Docs/Drivers/HdaStreamContract.txt`. `AudioDiagnostics.txt` documents the
+deterministic AudioDiag patterns, QEMU WAV analysis and 60-second ring test.

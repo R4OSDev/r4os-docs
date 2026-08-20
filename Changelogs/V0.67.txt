@@ -1,0 +1,173 @@
+# 0.67.X HDA + Basic Performance
+
+**Status:** Abgeschlossen
+
+## Leitbild
+0.67.X macht die in 0.66.X geschaffene BASIC-Laufzeit alltagstauglich: Rechenintensive Programme wie gorilla.bas sollen flüssig und mit sauberem, unterbrechungsfreiem Sound laufen. Dafür werden Interpreter-Ausführung, Zeitverhalten und Audiopfad gemeinsam vermessen, Engpässe an ihren fachlichen Besitzgrenzen behoben und durch reproduzierbare Belastungs- und Regressionstests abgesichert. Die Verbesserungen sollen nicht auf einzelne Programme zugeschnitten sein, sondern der gesamten BASIC-Laufzeit und den beteiligten Plattformpfaden zugutekommen, ohne Korrektheit, kooperatives Scheduling oder die Stabilität anderer Anwendungen zu verschlechtern.
+
+## Notizen
+Veroeffentlichter Automatikstand 20.08.2026:
+- HDA c51313c, AudioDiag 00d9f5c, R4BASIC f9eb0a4, Distribution bca427b und Docs 5bcf1f8 wurden ueber Tools/Github.bat gepusht.
+- Vollstaendiger Workspace-Test mit 135 Modulen, Standard-QEMU-Headless-Abnahme, Audio-Nullzaehlern sowie Slim-/Full-Image und NTFS-Verify ist gruen.
+- Standard-QEMU-R4BASIC-Benchmark: 2.329.098 Instruktionen/s, maxSlice=4096, noFixedSleep=1.
+- Offen und nicht inferiert bleiben: QEMU-Hoertest BEEP.R4X/R4BASIC BEEP+PLAY/gorilla.bas, interaktive gorilla.bas-FPS-/Eingabe-/Close-Abnahme und alle Lenovo-Hardwarezeilen.
+- Deshalb bleiben 0.67.0, 0.67.1, 0.67.2 und 0.67.X offen; RELEASE_VERSION bleibt 0.66.10.
+- Die bereits vorhandene Root-Aenderung an AGENTS.md wurde nicht committed oder gepusht.
+Interaktive QEMU-Abnahme 20.08.2026: Performancearbeit nicht um neue Aufgaben erweitern. Tastatur/Close sind OK; Animation mit Sound nicht voll fluessig und Audio klingt wie Krach. Weitere Arbeit konzentriert sich auf Audio bei unveraendert offenen bestehenden Abnahmen.
+Audio-Fortsetzung veroeffentlicht 20.08.2026: SDK c22870e, Kernel 2dfb1ff, AUDSVC 4b6a28e, HDA 5cb03fc, R4BASIC c90c0b0, Docs 164dc47 und Project ecb5c7b. Damit ist auch der zuvor lokale SSH-Debugweg in AGENTS.md veroeffentlicht. Weitere QEMU-TCG-Pufferoptimierung ist beendet; Lenovo-Hoerabnahme bleibt offen.
+Abschluss 20.08.2026:
+- Alle geplanten Aufgaben in 0.67.0 bis 0.67.2 sind abgearbeitet; es bestehen keine offenen Aufgaben oder Abnahmen mehr.
+- HDA-Ring, AudioDiag, AUDSVC-Lebenszyklus und R4BASIC-Audiopump sind technisch umgesetzt und durch Komponenten-, 135-Modul-, Headless-QEMU-, Audio-Kontinuitaets- und Imagepruefungen abgesichert.
+- Die finale Benutzerabnahme bestaetigt, dass Close waehrend Audio und sofortiges erneutes Oeffnen funktionieren. gorilla.bas bleibt besonders mit aktiver Audioausgabe zu langsam; Klang/Fluessigkeit werden als bekannte QEMU-Einschraenkung akzeptiert und nicht in einer weiteren Optimierungsrunde verfolgt.
+- Lenovo-basierte Audioabnahmen wurden verworfen, weil auf dem vorhandenen Laptop keine nutzbare Audioausgabe besteht; ein moeglicherweise fehlender Audiotreiber ist ein separates kuenftiges Thema.
+- RELEASE_VERSION bleibt 0.66.10, da keine 0.67-Unterversion als Produktrelease freigegeben wurde.
+
+## 0.67.0 HDA-Referenzvertrag und Audiomessung
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Der R4OS-Audiopfad wird vor dem Umbau reproduzierbar vermessen. Intel HDA 1.0a samt HDA033-A/HDA043-A, die exakt eingesetzte QEMU-Revision und Linux 7.1.6 werden in einen R4OS-spezifischen Streamvertrag, eine Abweichungsmatrix und deterministische AudioDiag-Pruefungen ueberfuehrt. QEMU liefert die messbare WAV-/Registerbasis; der Lenovo-Laptop ergaenzt die reale Codec- und Interruptbasis.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Den kuratierten HDA-Referenzbestand gegen HDA.R4D auswerten und eine codebezogene Abweichungsmatrix fuer BDL/CBL/LVI, RUN-Lebenszyklus, BCIS/FIFOE/DESE, LPIB/Positionspuffer, Interrupts, Vorfuellung, Underrun und Recovery erstellen.
+  - Notizen: Normative Basis ist Intel HDA 1.0a; HDA033-A setzt fuer RUN-Clear einen zeitbasierten Mindesttimeout von 10 ms. QEMU und Linux dienen als Implementierungsvergleich, nicht als zu kopierende Vorlage.
+- [Erledigt] #2 Einen verbindlichen R4OS-HDA-Streamvertrag festlegen: beliebige frame-ausgerichtete PCM-Schreibgroessen, vom Aufruferquantum unabhaengige Perioden, vor RUN fest aufgebaute BDL/CBL/LVI, getrennte Producer-/Consumerzustaende, dokumentierte Vorfuellung sowie Stille ausschliesslich bei echtem Underrun.
+  - Notizen: Die BDL bleibt bei RUN=1 unveraendert. Stop, Drain, Fehler und Close erhalten einen gemeinsamen idempotenten Ressourcenpfad.
+- [Erledigt] #3 AudioDiag um deterministische PCM-Muster und einen QEMU-WAV-Auswertepfad erweitern: 480-Frame-Quanten, Ein-Frame-Kanten, wechselnde frame-ausgerichtete Paketgroessen, Ring-Wraparound, Ton/Stille-Flanken und langer Dauerton.
+  - Notizen: Der Auswerter prueft Samplezahl, Zeitlage, unangeforderte Nullserien und Datenkorruption. Das aktuelle 480-Nutzframes/544-Nullframes-Muster muss als Regression reproduzierbar erkannt werden.
+- [Erledigt] #4 End-to-End-Messpunkte fuer Schreibdauer, Fuellstand, erzeugte/eingereichte/verlorene Frames, Streamposition, Interruptart und -anzahl, BCIS/FIFOE/DESE, Underruns, Silence-Recovery, Refill- und Stop-Timeouts bereitstellen, ohne den Normalpfad mit serieller Logausgabe zu belasten.
+  - Notizen: Vorhandene Status- und R4DEV-Diagnosewege bevorzugen; neue Plattform-API nur mit nachgewiesener Luecke.
+
+### Verworfene Aufgaben
+- [Verworfen] #5 Messbaselines auf der Standard-QEMU-Konfiguration mit ich9-intel-hda/hda-duplex und auf dem Lenovo-Laptop erfassen; Codec, PCI-Funktion, IRQ-Modus, Positionsermittlung, Start/Stop-Verhalten und den BASIC-BEEP/PLAY-Fehler getrennt dokumentieren.
+  - Notizen: Der Laptop ist Abnahmeplattform, aber kein Ersatz fuer die deterministische QEMU-WAV-Pruefung.
+Standard-QEMU ist mit ich9-intel-hda/hda-duplex, MSI, LPIB, WAV-Muster und getrennten Pfadzaehlern dokumentiert. Lenovo-Codec, reale IRQ-Route und subjektive BEEP/PLAY-Beobachtung bleiben offen.
+
+### Abnahmen
+- [Erledigt] Der SHA-256-gepruefte Referenzbestand ist vollstaendig reproduzierbar und jede fuer R4OS relevante Abweichung des aktuellen HDA-Streams ist mit Spezifikationsanker und Codepfad dokumentiert.
+- [Erledigt] AudioDiag und der QEMU-WAV-Auswerter erkennen das aktuelle 480/544-Frame-Lueckenmuster sowie absichtlich eingebrachte Sampleverlust-, Nullserien- und Wraparound-Fehler deterministisch.
+- [Erledigt] Eine Messung kann Datenmangel oberhalb des Treibers, echten HDA-Underrun, Streamfehler und Backend-/Hostlatenz getrennt ausweisen; der Messpfad veraendert die Wiedergabe nicht messbar und erzeugt keine Normalpfad-Logflut.
+- [Verworfen] Fuer Standard-QEMU und Lenovo-Laptop liegt je eine wiederholbare Ausgangsmessung samt Audiogeraet, IRQ-/Positionsmodus, Zaehlerstand und BASIC-BEEP/PLAY-Beobachtung vor.
+  - Notizen: QEMU-Ausgangsmessung liegt reproduzierbar vor. Die geforderte zweite Ausgangsmessung auf dem Lenovo-Laptop samt Hoerbeobachtung fehlt noch.
+Finaler Beschluss 20.08.2026: Lenovo-Ausgangsmessung mangels nutzbarer Audioausgabe verworfen; QEMU-Referenz- und Messbasis bleibt vollstaendig.
+
+### Notizen
+Fachliche Besitzer: HDA.R4D fuer Hardwarestream und DMA, AudioDiag fuer Diagnose. AUDSVC, R4AUDIO und r4os.subsystem_runtime werden nur fuer End-to-End-Messpunkte beruehrt. Der Kernel wird nur erweitert, wenn irq_register, pci_enable_msi und driver_work_submit eine konkret nachgewiesene Anforderung nicht abdecken. Referenzbestand: ExFiles/Reference/Hardware/HDA/.
+Automatisierbarer Referenz-, Vertrags- und QEMU-Messteil abgeschlossen. Aufgaben 1 bis 4 sowie Abnahmen 269 bis 271 sind belegt; Aufgabe 5 und Abnahme 272 bleiben ausschliesslich wegen der Lenovo-/Hoerbasis offen.
+
+## 0.67.1 Lueckenloser HDA-Ringbetrieb
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+HDA.R4D erhaelt einen kontinuierlichen, interruptgesteuerten PCM-Ring. Kurze App- und Subsystemquanten werden ohne Nullpadding in feste DMA-Perioden zusammengefuehrt; BDL und zyklischer Puffer bleiben waehrend RUN stabil. Refill, Underrun-Recovery und Lebenszyklus werden auf QEMU und echter Laptop-Hardware abgesichert.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Das aktuelle Nullpadding je writePcm-Aufruf durch einen framegenauen Software-PCM-Puffer und einen vor RUN fest aufgebauten zyklischen DMA-Ring ersetzen; beliebige gueltige Schreibgroessen ueber Paket- und Periodengrenzen hinweg korrekt zusammenfuehren.
+  - Notizen: Producer und Hardware-Consumer erhalten explizite Besitz- und Wraparoundzustaende. Alte Audiodaten duerfen weder wiederholt noch vorzeitig ueberschrieben werden.
+- [Erledigt] #2 Den HDA-Interruptpfad mit MSI-Praeferenz und geroutetem INTx-Fallback umsetzen; Controller- und Streamstatus korrekt maskieren/quittieren und BCIS, FIFOE sowie DESE erfassen.
+  - Notizen: In der ISR keine Allokation, keine Wartefunktion, kein Loggingstrom und keine umfangreiche PCM-Kopie. Refill und Recovery laufen als zusammengefasste, begrenzte Driver-Work-Arbeit.
+- [Erledigt] #3 Vorfuellung, Positionsvalidierung, periodengenaues Refill und Underrun-Recovery ausarbeiten; LPIB beziehungsweise Positionspuffer plausibilisieren und Stille nur fuer tatsaechlich fehlende Frames erzeugen.
+  - Notizen: QEMU- und Laptopabweichungen werden als explizite, messbare Quirks behandelt und nicht durch ungerichtete Delays verdeckt.
+- [Erledigt] #4 Start, Drain, Stop, Fehler, Close, Treiberentladung und erneuten Start in einen idempotenten Lebenszyklus ueberfuehren; RUN-Clear zeitbasiert abwarten und bei Timeout kontrolliert recovern.
+  - Notizen: Kein unbeschraenktes Polling oder Busy-Waiting im produktiven Wiedergabepfad.
+- [Erledigt] #5 Ring-/Wraparound-/Besitzlogik durch Hosttests und AudioDiag absichern, QEMU-WAV-Regressionspruefung in den Testlauf aufnehmen sowie Modul-, Test- und Dokumentinventare fuer alle geaenderten Artefakte aktualisieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Eine Folge aus 480-Frame-PCM-Quanten erscheint im QEMU-WAV-Ergebnis mit korrekter Samplezahl und ohne die bisherigen unangeforderten 544 Nullframes pro Paket; Ton/Stille-Flanken und wechselnde Paketgroessen bleiben samplegenau.
+- [Erledigt] AudioDiag spielt unter normaler Last in Standard-QEMU 60 Sekunden kontinuierlich ohne Underrun nach der Vorfuellung, ohne Streamfehler und ohne Refill-Timeout; die Wiedergabe wird nachweislich durch HDA-Interrupts statt eine Schreib-Pollschleife fortgesetzt.
+- [Verworfen] BEEP.R4X sowie R4BASIC BEEP und PLAY in gorilla.bas laufen in QEMU ohne regelmaessiges Haken; Audiofehler degradieren den Teilpfad, waehrend Gastzeit, Eingabe, Video und Close reaktionsfaehig bleiben.
+  - Notizen: Deterministische HDA- und Subsystem-Audiopfade sind gruen; der geforderte interaktive Hoertest von BEEP.R4X und R4BASIC BEEP/PLAY in gorilla.bas wurde noch nicht beobachtet.
+Interaktive QEMU-Abnahme 20.08.2026: NICHT bestanden. gorilla.bas ist besonders bei aktiver Soundausgabe noch nicht vollstaendig fluessig; BEEP/PLAY klingt gegenueber dem Original nicht sauber, sondern wie Krach. Tastatur und Close reagieren korrekt. Fokus der weiteren Arbeit ist der R4BASIC-Synthese-/Audiopumpenpfad vor AUDSVC; der HDA-Kontinuitaetstest bleibt gruen.
+Fortsetzung 20.08.2026: Der periodische Stale-Replay-/Krachfehler ist mit korrektem S16-Format, Ringbesitz, Backpressure und gebuendelter R4BASIC-Einreichung beseitigt. Vier-vCPU-TCG erzeugt bei spaeter Gast-Servicezustellung weiterhin echte Stillen. Dieser QEMU-Grenzfall wird gemaess Uservorgabe nicht weiter durch groessere Produktpuffer optimiert; Abnahme bleibt bis zum Lenovo-Hoertest offen. Tastatur und Close bleiben reaktionsfaehig.
+Korrekturstand 20.08.2026: Die hostzyklusweise busy-Pollschleife wurde entfernt; nach einmaliger Vorfuellung laeuft R4BASIC deadline-getaktet mit einer 40-ms-Quantum pro Termin. Der Close/Neustart-Fehlerpfad wurde durch sofortigen normalen HDA-Stream-Close, tolerierte spaete AUDSVC-Antworten, Open-Rollback und begrenzte 3x50-ms-Open-Wiederholung geschlossen. Automatische Komponenten-, Gesamt-, QEMU-Audio- und Imagepruefungen sind gruen. Die Abnahme bleibt offen, bis gorilla.bas interaktiv mit Sound sowie Close waehrend Ton und sofortigem Neustart erneut geprueft wurde.
+Finale QEMU-Abnahme 20.08.2026: Close waehrend Audio und sofortiges zweites Oeffnen funktionieren; der vorherige Zustand "Audio nicht verfuegbar" ist damit behoben. gorilla.bas bleibt mit Audio jedoch zu langsam. Auf Wunsch wird keine weitere Performance-/Audioptimierungsrunde begonnen; die kombinierte Fluessigkeits-/Klangabnahme wird als bekannte Einschraenkung verworfen.
+- [Verworfen] Auf dem Lenovo-Laptop bestehen Kaltstart, fuenf Minuten Dauerton, wiederholtes Start/Stop/Close und erneute Wiedergabe ohne hoerbare periodische Aussetzer, festhaengenden Stream oder Ressourcenverlust.
+  - Notizen: Noch offen: Lenovo-Kaltstart, fuenf Minuten Dauerton und wiederholter Start/Stop/Close.
+Fortsetzung 20.08.2026: Die moderate Produktkonfiguration bleibt bei 160 ms Start- und 320 ms Laufreserve. Der Lenovo-Test entscheidet ueber Klang, Dauerton und Start/Stop/Close; QEMU-TCG-Stillen werden nicht als Hardwarebefund gewertet.
+Finaler Beschluss 20.08.2026: Lenovo-Abnahme verworfen, da auf dem vorhandenen Laptop keine nutzbare Audioausgabe vorliegt und vermutlich zunaechst ein passender Audiotreiber fehlt. Dieses neue Treiberthema ist nicht Bestandteil von 0.67.X.
+- [Erledigt] Alle neuen Ring-, IRQ-, Recovery- und Lebenszyklustests bestehen; vorhandene Audio-, Driver-API-, AUDSVC- und Subsystem-Runtime-Regressionstests bleiben gruen.
+
+### Notizen
+Die Umsetzung bleibt primaer im HDA-Treiber. MSI wird bevorzugt, korrekt geroutetes INTx bleibt Fallback. Die ISR bleibt minimal und delegiert begrenzte Nachfuell-/Recoveryarbeit an den bestehenden Driver-Work-Pfad. Ein Audioausfall darf BASIC-Gastzeit und Video weder beschleunigen noch blockieren.
+Zwischenstand 20.08.2026:
+- HDA.R4D 0.2.0 ist lokal umgesetzt: framegenaue Software-PCM-Queue, fester 16x10-ms-BDL-Ring, voller 160-ms-Prefill vor RUN, LPIB-basierter Besitz/Wraparound, MSI mit INTx-Fallback, minimale ISR mit gebuendeltem Driver Work, begrenzter Drain/Stop/Recovery und drei getrennt gezaehlte Postroll-Perioden.
+- Befund: Der zuvor veroeffentlichte Backendfuellstand konnte bei unter TCG gebuendelter IRQ-Arbeit veralten; AudioDiag sah dadurch reproduzierbar 3 bis 8 Ringluecken. backendStatus aktualisiert den Besitz nun vor der Fuellstandsmeldung direkt aus LPIB. Der volle Prefill verhindert zusaetzlich, dass die langsamere Gast-Servicezustellung den HDA-Consumer vor dem abgeschlossenen Burst einholt.
+- QEMU-WAV-Kurzabnahme gruen: 8.280 Quellframes, bei 44,1 kHz exakt 7.607 Frames zusammenhaengender Diagnosespanne, ein Cluster, kein 480/544-Altmuster; upstreamDropped=0, driverUnderruns=0, driverErrors=0, backendFail=0, silencePeriods=0.
+- QEMU-Langlauf gruen: 2.880.000 Frames/60 Sekunden in 6.000 Writes; alle fuenf Pfadzaehler null, keine Refill- oder Streamfehler.
+- Ring-/Besitztests, HDA- und AudioDiag-Komponentenbuild sowie WAV-Analyzer-Selbsttest sind gruen. Referenzmaterial mit Pruefsummen liegt lokal unter ExFiles/Reference/Hardware/HDA; technische Vertrage und Vergleich sind unter Docs/Drivers dokumentiert.
+- Noch offen: interaktiver BEEP/PLAY/gorilla.bas-Hoertest in QEMU, Lenovo-Kaltstart und fuenf Minuten Dauerton sowie der abschliessende komplette Workspace-Regressionslauf. Deshalb bleiben Unterversion und Abnahmen formal offen. RELEASE_VERSION ist unveraendert; kein Push erfolgt.
+Abschlussstand Automatik 20.08.2026: kompletter Workspace-Build mit 135 Modulen, Test-Image, NTFS-Verify und Standard-QEMU headless ist gruen. AudioDiag meldet upstreamDropped=0, driverUnderruns=0, driverErrors=0, backendFail=0 und silencePeriods=0. Slim und Full wurden danach neu erzeugt und NTFS-verifiziert. Offen bleiben nur QEMU-Hoertest/gorilla.bas und Lenovo-Hardwareabnahme.
+Fortsetzung 20.08.2026:
+- HDA.R4D 0.3.0 verwendet den korrekten 0x0011-S16-Streamdeskriptor, einen zusammenhaengenden 64x10-ms-DMA-Ring, Producer-Neuausrichtung und kontrollierte Recovery nach einem unbeobachteten 640-ms-Ringfenster.
+- HDA startet mit 160 ms und begrenzt die laufende Reserve auf 320 ms. service_api_result_busy wird HDA -> Kernel -> AUDSVC -> AppAudio unveraendert weitergegeben; die SDK behaelt das PCM und versucht es spaeter erneut.
+- R4BASIC 1.2.0 reicht vier 40-ms-Quanten mit 24 kHz ein; HDA wandelt auf 48 kHz. Der fruehere periodische Stale-Replay-/Krachfehler ist in der Vier-vCPU-TCG-Aufnahme beseitigt.
+- Spaetere echte Stillen entstehen bei langsamer QEMU-TCG-Servicezustellung. Nach Uservorgabe erfolgen dafuer keine weiteren QEMU-spezifischen Produktpuffer- oder Performance-Runden; die Lenovo-Hoerabnahme bleibt offen.
+- SDK-, Kernel-, HDA- und R4BASIC-Tests, AUDSVC-Build sowie finales Full-Image und NTFS-Verify sind gruen. RELEASE_VERSION bleibt 0.66.10.
+Veroeffentlicht 20.08.2026: SDK c22870e, Kernel 2dfb1ff, AUDSVC 4b6a28e, HDA 5cb03fc, R4BASIC c90c0b0, Docs 164dc47 und Project ecb5c7b. Der Project-Stand enthaelt den kompakten SSH-Debugweg in AGENTS.md. Der Sammel-Push meldet keine verbleibenden pushbaren oder fehlerhaften Repositories.
+Fortsetzung 20.08.2026 – schneller Close/Neustart und Audiolast:
+- Ursache der starken Verlangsamung: R4BASIC aktivierte nach der einmaligen Vorfuellung eine kapazitaetsgetriebene SDK-Schleife. Dadurch entstanden in praktisch jedem Hostzyklus synchrone AUDSVC-Aufrufe, die bei gefuelltem HDA-Ring nur busy lieferten. Diese Pollschleife ist entfernt: einmalig vier 40-ms-Quanten vorfuellen, danach genau eine Quantum-Einreichung pro 40-ms-Audiotermin; busy wird fruehestens am naechsten Termin erneut versucht.
+- Ursache von "Audio nicht verfuegbar" nach Close und sofortigem Neustart: Der 100-ms-Client-Timeout traf auf bis zu 250 ms HDA-Drain. Die spaete Antwort auf den bereits abgebrochenen Request wurde von AUDSVC als fatal behandelt und beendete den Dienst. HDA 0.3.1 verwirft beim normalen Stream-Close Restdaten und setzt den Deskriptor sofort zurueck; Drain bleibt nur beim Treiber-Shutdown. AUDSVC 0.1.3 toleriert Antworten auf abgebrochene Requests und rollt einen nicht mehr zustellbaren Open sauber zurueck. SDK/R4BASIC 1.2.1 wiederholen voruebergehend fehlgeschlagene Stream-Opens begrenzt dreimal im Abstand von 50 ms, ohne voreilig den Fenstertitel zu degradieren.
+- SDK-, HDA- und R4BASIC-Tests, AUDSVC-Build, kompletter 135-Modul-Testlauf, headless QEMU inklusive Audio-Kontinuitaet sowie finales Full-Image/NTFS-Verify sind gruen. Keine neue Performance-Aufgabe angelegt.
+- Offen bleibt die interaktive QEMU-Abnahme von gorilla.bas: Klang, Sound-on-Fluessigkeit sowie Close waehrend Ton und sofortiger Neustart. Die Lenovo-Abnahme wird fuer diesen Befund nicht herangezogen, solange dort keine nutzbare Audioausgabe vorliegt.
+Veroeffentlicht 20.08.2026: SDK 0720b59, AUDSVC f7438a8, HDA ea53337, R4BASIC 6d12dec und Docs 149d57c. Der Sammel-Push meldet keine verbleibenden pushbaren oder fehlerhaften Repositories.
+Finale Benutzerabnahme 20.08.2026: Der schnelle Close/Neustart ist behoben und Audio funktioniert beim zweiten Oeffnen. Die Ausfuehrung mit aktivem Audio bleibt zu langsam; dies wird als bekannte QEMU-Einschraenkung akzeptiert und nicht weiter verfolgt.
+
+## 0.67.2 R4BASIC-Durchsatz und Spieltempo
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die kuenstliche Obergrenze von 26 Bytecode-Instruktionen je 2 ms wird durch eine gemessene, kooperative und weiterhin begrenzte Ausfuehrung ersetzt. gorilla.bas dient als End-to-End-Belastung, ohne dass Interpreter oder Grafik auf dieses eine Programm zugeschnitten werden. Gastzeit, historische BASIC-Timingmuster, Eingabe, Darstellung und Audio bleiben voneinander sauber entkoppelt.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Reproduzierbare R4BASIC-Benchmarks und Profilzaehler fuer Bytecode-Durchsatz, Scheibendauer, Wartezeit, Opcodegruppen, Grafikoperationen, Framebereitstellung und Eingabelatenz erstellen; gorilla.bas durch kleinere isolierte Lastfaelle ergaenzen.
+  - Notizen: Die 0.66.X-Basis mit maximal ungefaehr 13.000 Instruktionen pro Sekunde wird vor der Aenderung festgehalten.
+- [Erledigt] #2 Die feste Begrenzung auf 26 Instruktionen mit anschliessender 2-ms-Wartezeit durch ein begrenztes Scheibenmodell mit Instruktions- und Zeitobergrenze ersetzen, das den vorhandenen Runtime-Budgetvertrag nutzt und lauffaehigen Gastcode nicht kuenstlich schlafen legt.
+  - Notizen: Pro Hostzyklus bleibt es bei genau einer Gastscheibe; Pause, Close und Hostereignisse duerfen nicht durch lange Gastarbeit verhungern.
+- [Erledigt] #3 TIMER, pausenbereinigte Gastzeit, CalcDelay-/Rest-artige historische Timingmuster, WAIT-/SLEEP-Verhalten und Audioerzeugung gegen den neuen Durchsatz pruefen und die Kompatibilitaetsregeln explizit festhalten.
+  - Notizen: Programmlaufzeit darf nicht wieder von zufaelliger Host-CPU-Geschwindigkeit oder einer unbeschraenkten Busy-Schleife abhaengen.
+- [Erledigt] #4 Nach dem Pacing-Umbau die verbleibenden gemessenen VM-, Wert-, String-, Array- und Grafikhotspots allgemein optimieren; semantische Schnellpfade nur mit direktem Vergleich gegen den bestehenden Interpretervertrag einfuehren.
+  - Notizen: Keine Sondererkennung fuer gorilla.bas oder einzelne Quellzeilen.
+Nach Entfernung der pauschalen Drossel zeigte die isolierte Messung keinen weiteren dominanten VM-, Wert-, String-, Array- oder Grafikhotspot. Deshalb wurde bewusst kein gorilla.bas-spezifischer Schnellpfad eingefuehrt.
+- [Erledigt] #5 Benchmark-, Semantik-, Zeit-, Eingabe-, Grafik-, Audio- und Lebenszyklusregressionen in die zustaendigen Testlaeufe aufnehmen und Modul-, Test- sowie Dokumentinventare aktualisieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der isolierte CPU-/Bytecode-Benchmark erreicht in Standard-QEMU mindestens den vierfachen Durchsatz der festgehaltenen 0.66.X-Basis und zeigt keine pauschale 2-ms-Wartephase, solange der Gast lauffaehig ist.
+  - Notizen: Standard-QEMU 20.08.2026: 118.784 Instruktionen in 51 Gastticks, 2.329.098 Instruktionen/s, 29 Scheiben, maxSlice=4096, timeLimited=0, noFixedSleep=1. Damit etwa Faktor 179 gegenueber der 13.000er Basis und Faktor 44,8 ueber der 52.000er Abnahmegrenze.
+- [Verworfen] gorilla.bas erreicht in animierten Spielphasen in Standard-QEMU stabil mindestens 20 praesentierte Bilder pro Sekunde; Tastaturreaktion und Close bleiben auch unter Last innerhalb von 100 ms.
+  - Notizen: Die Messung verwendet dieselbe QEMU-, Anzeige- und Buildkonfiguration wie die Basis.
+Host-Grafikgate belegt fps>=20; die geforderte interaktive gorilla.bas-Messung mit real praesentierten Bildern sowie Tastatur-/Close-Latenz ist noch offen.
+Interaktive QEMU-Beobachtung 20.08.2026: Tastatur und Close sind reaktionsfaehig. Die Animation ist noch nicht durchgehend fluessig, besonders waehrend Sound; das >=20-fps-Ziel ist damit nicht abgenommen.
+Finale QEMU-Abnahme 20.08.2026: Tastatur und Close sind reaktionsfaehig, das geforderte durchgehend fluessige Spieltempo wird besonders mit Audio nicht erreicht. Bekannte Einschraenkung; keine weitere Performance-Runde gewuenscht.
+- [Erledigt] Bestehende BASIC-Semantik-, Grafik-, Datei-, Zufalls-, TIMER-, WAIT-/SLEEP- und Fehlerfaelle bleiben korrekt; CalcDelay-/Rest-artige Programme laufen reproduzierbar und weder CPU- noch Hosttickabhaengig ungebremst.
+- [Verworfen] gorilla.bas spielt BEEP/PLAY waehrend der schnelleren Ausfuehrung ohne neue Audio-Underruns; ein degradierter Audiopfad veraendert weder Gasttempo noch Video.
+  - Notizen: Audio- und Degradationsregressionen sind gruen; die kombinierte interaktive gorilla.bas-Beobachtung waehrend der schnelleren Ausfuehrung fehlt noch.
+Interaktive QEMU-Abnahme 20.08.2026: NICHT bestanden. BEEP/PLAY klingt wie Krach und aktive Soundausgabe verschlechtert die wahrgenommene Fluessigkeit. Audio-/Gasttempo-Kopplung wird weiter untersucht.
+Finale QEMU-Abnahme 20.08.2026: Der Audio-Neustart ist stabil, aktive Audioausgabe verlangsamt gorilla.bas aber weiterhin. Die Abnahme wird als bekannte Einschraenkung verworfen; es wird keine neue Aufgabe angelegt.
+- [Verworfen] Der komplette gorilla.bas-Ablauf wird zusaetzlich auf dem Lenovo-Laptop geprueft und zeigt gegenueber QEMU keine hardwareabhaengige BASIC-Taktung oder Lebenszyklusabweichung.
+  - Notizen: Lenovo-Laptoplauf noch nicht durchgefuehrt.
+Finaler Beschluss 20.08.2026: Lenovo-Vergleich mangels nutzbarer Audioausgabe verworfen; ein moeglicherweise fehlender Laptop-Audiotreiber wird nicht in 0.67.X aufgenommen.
+
+### Notizen
+Fachlicher Besitzer ist das Subsystem R4BASIC. r4os.subsystem_runtime behaelt genau eine begrenzte Gastscheibe pro Hostzyklus und monotone pausenbereinigte Gastzeit. Erst nach Entfernung der pauschalen Drossel werden nachgewiesene Interpreter- oder Grafikhotspots optimiert.
+Automatisierbarer Abschlussstand 20.08.2026: Hosttests, checksumgebundene komplette gorilla.bas-Runde, Semantik-/Zeit-/Audio-/Lebenszyklusregressionen und kompletter Workspace-Test sind gruen. Der echte Standard-QEMU-CPU-Benchmark erreicht 2.329.098 Instruktionen/s ohne feste Schlafphase. Offen bleiben die interaktive Fenster-/Eingabe-/Audioabnahme mit gorilla.bas und der Lenovo-Vergleich.
+Uservorgabe nach der interaktiven Abnahme: keine neuen Performance-Aufgaben anlegen. Vorhandene offene Zeilen weiter abarbeiten, die weitere Implementierungsarbeit aber auf Audio konzentrieren.
+Finale Benutzerabnahme 20.08.2026: Alle geplanten Performanceaufgaben sind abgearbeitet. Das interaktive >=20-FPS-Ziel wird besonders unter Audio nicht erreicht. Auf Wunsch keine neue Aufgabe und keine weitere Optimierungsrunde; Abschluss mit dokumentierter Einschraenkung.
+

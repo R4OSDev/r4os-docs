@@ -7,11 +7,16 @@ HDA.R4D owns conversion into the active hardware format, the software PCM
 queue, the cyclic DMA ring, HDA interrupts and stream recovery. AUDSVC owns
 application stream multiplexing; callers do not know the HDA period size.
 The current hardware format is 48,000 Hz, stereo, signed 16-bit little endian.
+The HDA stream descriptor and converter verbs use format 0x0011: 48-kHz base,
+16-bit field value 1 and stereo channels-minus-one value 1. Format 0x0021 is
+20-bit and must never describe these S16 DMA buffers.
 
 Write contract
 --------------
-- writePcm accepts every non-empty, frame-aligned packet in a supported input
-  format. Packet boundaries never become DMA boundaries.
+- writePcm accepts non-empty, frame-aligned packets in a supported input
+  format while the bounded playback reserve has room. At the 32-period target
+  it returns service_api_result_busy without consuming data. Packet boundaries
+  never become DMA boundaries.
 - Streaming conversion preserves partial source frames between calls. A
   complete converted frame is appended exactly once to the software queue.
 - The queue contains 64 hardware periods. Capacity failure is reported and
@@ -25,15 +30,17 @@ Write contract
 DMA geometry and ownership
 --------------------------
 - One period is 480 frames or 1,920 bytes, exactly 10 ms in the hardware
-  format. The ring contains 16 128-byte-aligned periods.
-- BDL, CBL and LVI are programmed while RUN is clear. All 16 BDLEs have IOC
+  format. The ring contains 64 128-byte-aligned periods in one contiguous DMA
+  allocation; a separate BDLE describes each period.
+- BDL, CBL and LVI are programmed while RUN is clear. All 64 BDLEs have IOC
   set and remain unchanged for the complete RUN phase.
 - PeriodBook tracks producer, current hardware period, ready ownership and
   queued count independently. The producer may not write the active hardware
   period and may not overwrite a ready period.
-- Playback starts with all sixteen ready periods (160 ms). Drain may start a tail
-  with one ready period. LPIB selects the current cyclic period; implausible
-  positions cannot address outside the fixed ring.
+- Playback starts with sixteen ready periods (160 ms) and then admits PCM up
+  to a 32-period running reserve (320 ms). Drain may start a tail with one
+  ready period. LPIB selects the current cyclic period; implausible positions
+  cannot address outside the fixed ring.
 - A consumed period is cleared before reuse. Silence is therefore observable
   only when hardware reaches a period for which no PCM data was available.
 
@@ -57,7 +64,9 @@ ownership while the stream is not draining. Each such period increments both
 underruns and silence_refills. Upstream drops, backend errors and service
 latency stay separate counters. DESE requests controlled recovery; FIFOE is
 recorded as a stream error. The first underrun may emit one warning, but the
-normal path remains silent.
+normal path remains silent. If hardware advances beyond the remembered
+producer, the next producer slot is realigned immediately after the current
+hardware period; newly accepted PCM is never written behind the consumer.
 
 Lifecycle
 ---------
@@ -71,6 +80,13 @@ shutdown share idempotent cleanup and release pending Driver Work.
 
 Measurement surface
 -------------------
+If no producer, IRQ job or status observation reaches the stream for one
+complete 640 ms DMA window, the modulo LPIB position can no longer distinguish
+no movement from a full wrap. HDA therefore stops and resets the descriptor,
+zeros the complete ring and drops software-queued stale PCM before later
+playback can restart. Old ring contents are never replayed as if they were
+current audio.
+
 The existing audio backend and performance status expose write/refill counts
 and durations, ring fill, drops, underruns, silence periods and errors. A
 status snapshot refreshes ownership directly from LPIB before publishing the

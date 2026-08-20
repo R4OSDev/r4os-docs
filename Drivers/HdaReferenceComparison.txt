@@ -13,8 +13,9 @@ references and are not shipped in R4OS images.
 Code-related comparison
 -----------------------
 Area                 Reference anchor                 Previous R4OS state                 Current R4OS state
-BDL/CBL/LVI          HDA 1.0a 3.3.35, 4.5.2          Four 4,096-byte entries were         Sixteen fixed 1,920-byte entries;
-                                                          rewritten by writePcm while RUN.   programmed only while RUN=0.
+BDL/CBL/LVI          HDA 1.0a 3.3.35, 4.5.2          Four 4,096-byte entries were         64 fixed 1,920-byte entries in one
+                                                          rewritten by writePcm while RUN.   contiguous allocation; programmed
+                                                                                              only while RUN=0.
 Packet/period split  HDA 1.0a 4.5.2/4.5.3            Every 1,920-byte caller quantum      ByteQueue joins arbitrary aligned
                                                           became 4,096 bytes with padding.   packets into complete periods.
 RUN lifecycle        HDA 1.0a 4.5.2; HDA033-A        Loop-count stop; no normative        Monotonic >=10-ms RUN-clear wait,
@@ -25,7 +26,10 @@ BCIS/FIFOE/DESE      HDA 1.0a 3.3.37                  Cleared opportunistically 
                                                           no durable fault separation.        DESE schedules recovery.
 Position             HDA 1.0a 3.3.35; Linux notes    No producer/consumer ownership        LPIB maps the current ring period;
                                                           model.                              PeriodBook validates ownership.
-Prefill              HDA 1.0a 4.5.3; Linux stream    One packet could start playback.      Full ring: 16 periods/160 ms before RUN.
+Stream format        HDA 1.0a 3.7.1; QEMU defs       0x0021 advertised 20-bit samples      0x0011 advertises the actual 48-kHz,
+                                                          while DMA contained stereo S16.     stereo S16 DMA representation.
+Prefill/backpressure HDA 1.0a 4.5.3; Linux stream    One packet could start playback.      RUN after 16 periods; bounded busy
+                                                                                              response at 32 running periods.
 Underrun             HDA 1.0a 4.5.3                  Normal short packets manufactured     Only missing ready ownership at a
                                                           544 zero frames each.               hardware advance counts/zeros.
 EE buffering         Intel HDA043-A                   Not modelled.                         Optional; fixed full ring remains
@@ -35,14 +39,34 @@ QEMU behavior        intel-hda.c, hda-codec.c         480/544 discontinuity was 
 Linux comparison     sound/hda/core/stream.c          No copied implementation.             Independent R4OS design adopts the
                                                                                               same fixed-BDL/position principles.
 
-Root cause
-----------
-R4BASIC and r4os.subsystem_runtime submit 480 frames, or 1,920 bytes, every
-10 ms. The previous HDA driver placed each packet in a 4,096-byte BDLE and
+Root causes
+-----------
+R4BASIC and r4os.subsystem_runtime originally submitted 480 frames, or 1,920
+bytes, every 10 ms. The previous HDA driver placed each packet in a 4,096-byte BDLE and
 zeroed the remaining 2,176 bytes. At stereo S16 that is exactly 544 unwanted
 zero frames after 480 useful frames. BEEP.R4X happened to write 1,024-frame
 blocks and therefore concealed the general defect; R4BASIC never routed its
 BEEP statement through BEEP.R4X.
+
+After fixing that packet/period mismatch, the R4BASIC gorilla.bas capture
+still sounded noisy and contained short fragments. The stream descriptor used
+0x0021. Intel HDA and the pinned QEMU source define bits 6:4 value 2 as 20-bit,
+while R4OS DMA buffers contain signed 16-bit samples. The corrected descriptor
+value is 0x0011: 48-kHz base, bits 6:4 value 1 for 16-bit, and channels-minus-
+one value 1 for stereo. The exact QEMU anchors are
+QEMU-a4bb4b10/hw-audio-intel-hda-defs.h and
+QEMU-a4bb4b10/hw-audio-hda-codec.c in the local reference archive.
+
+The remaining four-vCPU TCG gaps had two independent causes. First,
+PeriodBook could leave its producer behind an LPIB consumer jump, so new PCM
+waited a complete ring traversal. The producer now realigns directly after
+the current hardware period and a complete unobserved 640-ms window forces a
+stopped descriptor reset. Second, synchronous 10-ms AUDSVC writes were too
+expensive to refill QEMU's host-paced HDA model. Kernel and service now
+preserve service_api_result_busy, the SDK retries without consuming caller
+PCM, and R4BASIC sends 960-frame 24-kHz S16 packets which HDA linearly expands
+to four 48-kHz hardware periods. HDA starts at 160 ms and bounds the running
+reserve at 320 ms.
 
 Validation
 ----------
@@ -57,6 +81,11 @@ Validation
 - Standard-QEMU long run: 2,880,000 frames, 6,000 writes, all path error and
   silence counters zero. Long-mode feeding follows HDA fill level so QEMU
   guest-clock drift is not misreported as a hardware-ring underrun.
+- The 20 August gorilla.bas four-vCPU TCG capture no longer contains the
+  characteristic 160/320-ms stale replay. With the retained 320-ms running
+  reserve its first six eighth notes are complete; later TCG stalls still add
+  silence and therefore remain a QEMU listening limitation rather than a
+  physical-HDA acceptance.
 
 Open hardware row
 -----------------

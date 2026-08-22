@@ -1,0 +1,1994 @@
+# 0.68.X Performance
+
+**Status:** Abgeschlossen
+
+## Leitbild
+0.68.X stellt die Performance von R4OS erstmals systematisch und über alle Schichten hinweg auf den Prüfstand. Ziel ist es, die Ursachen der bereits sichtbaren Verzögerungen belastbar zu messen, grundlegende Flaschenhälse zu finden und daraus eine priorisierte, nachvollziehbare Grundlage für spätere Optimierungen zu schaffen. Das QBasic-Subsystem und der Klickifax-Browser dienen dabei als wichtige Referenzfälle, begrenzen den Untersuchungsumfang aber ausdrücklich nicht.
+
+Dazu werden reproduzierbare Ausgangswerte, geeignete Mess- und Diagnosemöglichkeiten sowie aussagekräftige End-to-End-Szenarien geschaffen. Untersucht werden insbesondere CPU-Auslastung und Wartezeiten, Scheduler und Programmlebenszyklus, Speicherverwaltung und Kopierpfade, Interrupts und Timer, Systemaufrufe und IPC, Grafik- und Eingabepfade, Netzwerk, Massenspeicher und Dateisysteme sowie das Zusammenspiel von Anwendungen, Services, Subsystemen, Treibern und Kernel. Der NTFS-Bereich wird gezielt erneut auf algorithmische, I/O-bezogene und strukturelle Engpässe geprüft. Ebenso wird bewertet, ob bislang ungenutzte oder fehlende CPU-Funktionen, Kernelmechanismen oder Treiberfähigkeiten eine bessere Performance ermöglichen könnten.
+
+0.68.X ist ausdrücklich eine Analyseversion. Erkannte Performanceprobleme werden in dieser Version nicht optimiert oder behoben. Stattdessen werden Messwerte, reproduzierbare Symptome, Hypothesen, bestätigte Ursachen, betroffene Komponenten, Abhängigkeiten, Risiken, erwartete Auswirkungen und priorisierte Handlungsempfehlungen fortlaufend unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben. Empfehlungen ordnen jede spätere Maßnahme der fachlich verantwortlichen Komponente zu; Änderungen am Kernel werden nur empfohlen, wenn sie dort technisch zwingend hingehören. Am Ende von 0.68.X soll ein belastbares, systemweites Lagebild vorliegen, das die wesentlichen Performancehemmnisse nach Bedeutung und voraussichtlichem Nutzen ihrer Behebung priorisiert und als konkrete Planungsgrundlage für nachfolgende Versionen dient.
+
+## Notizen
+Seit der Umstellung auf die Multi-Repository-Struktur koennen bei der Arbeit
+Stolpersteine auftreten, die keine Codefehler sind, sondern aus
+Repository-Grenzen, Werkzeugaufrufen oder falschen Annahmen ueber Pfade,
+Zustaendigkeiten und Buildablaeufe entstehen. Beispiele sind Befehle im
+falschen Repository, nicht gefundene Dateien oder Artefakte sowie ein
+unvollstaendiger Blick auf Aenderungen und Abhaengigkeiten.
+
+Tatsaechlich aufgetretene Arbeitsprobleme werden mit Symptom, Ursache und dem
+kuenftig richtigen Vorgehen im Abschnitt `Stolpersteine` in den Roadmap-Notizen festgehalten.
+Produktfehler und fachliche Erkenntnisse gehoeren weiterhin als offene Punkte
+oder Notizen in die jeweilige Unterversion.
+
+Stolpersteine:
+
+## 0.68.1 Quellenlandkarte und Analyseplanung
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Der kanonische R4OS-Produktquellbestand und alle zugehörigen Module werden systematisch erfasst und nach Eigentümern, Abhängigkeiten und performance-relevanten Laufzeitpfaden gegliedert. Aus dieser Bestandsaufnahme wird eine möglichst vollständige und ausreichend feingranulare Folge weiterer 0.68.X-Unterversionen für die eigentliche Performance-Analyse abgeleitet und in der Roadmap angelegt. 0.68.1 untersucht noch keine Engpässe im Detail und implementiert keine Optimierungen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Den verbindlichen Untersuchungsumfang und die Ausschlusskriterien für die gesamte Performance-Analyse festlegen.
+  - Notizen: Kanonische Produktquellen und laufzeitrelevante Konfigurationen einschließen; Server/, R4CodePad, Dokumentationen als Analyseziel, Artefakte, installierte Quellkopien und Fremdpakete ausschließen. Grenzfälle anhand ihres unmittelbaren Einflusses auf das R4OS-Laufzeitverhalten entscheiden.
+Umfang festgelegt: kanonische R4OS-Produktquellen und unmittelbar laufzeitwirksame Konfigurationen sind enthalten. Server/, R4CodePad, Dokumentation als Analyseziel, Artefakte, DevKit-Kopien, Fremdpakete und rein hostseitige Werkzeuge sind ausgeschlossen.
+- [Erledigt] #2 Alle in den Umfang fallenden Quell-Repositories und Module vollständig erfassen und ihren fachlichen Besitzern zuordnen.
+  - Notizen: Projektstruktur, module.R4MF, Build-Entdeckung, AllModules-Inventar und die tatsächlichen Quellbäume als Hilfsmittel verwenden. Kernel, Contract, SDK, Runtime-Libraries und laufzeitrelevante Distributionsteile ebenso berücksichtigen wie Apps, Services, Diagnostics, Drivers, Protocols und Subsystems.
+Erfasst wurden 138 kanonische Module: 41 Apps, 15 Services, 36 Diagnostics, 15 Drivers, 27 Protocols, 1 Subsystem und 3 Runtime-Libraries. Zusätzlich wurden Kernel, Contract, SDK und laufzeitrelevante Distributionsteile nach Besitzerbereichen aufgenommen.
+- [Erledigt] #3 Eine Abdeckungsmatrix der Komponenten, Abhängigkeiten und wesentlichen Laufzeitpfade erstellen.
+  - Notizen: Für jede Komponente Quellort, Rolle, direkte Abhängigkeiten, zentrale Ausführungspfade und mögliche Überschneidungen mit anderen Analysebereichen festhalten. Die Matrix dient der Vollständigkeitskontrolle und wird in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+Die Quellen- und Abdeckungsmatrix wurde unter ExFiles/Reports/GPT_5.6_Sol.txt erstellt. Sie enthält zentrale Quellbereiche, Folgeanalysen und die vollständige Zuordnung aller Modulrollen.
+- [Erledigt] #4 Querschnittliche und komponentenspezifische Analysebereiche aus der Quellenlandkarte ableiten.
+  - Notizen: Unter anderem Start und Initialisierung, CPU-Funktionen, Interrupts und Timer, Scheduler, Speicher und Kopierpfade, Systemaufrufe und IPC, Treiber, Massenspeicher, Dateisysteme und NTFS, Grafik und Eingabe, Desktop, Netzwerk, Audio, Runtime-Libraries, Formate, Services, Apps und Subsysteme einschließlich QBasic und Klickifax berücksichtigen. Bereiche anhand des tatsächlichen Quellbestands ergänzen oder weiter unterteilen.
+Aus der Quellenlandkarte wurden 65 Folgeanalysen abgeleitet: Kernpfade, Storage/NTFS, USB, Netzwerk, Audio, Libraries, SDK, Apps, Web/Klickifax, R4Basic, Querschnitt und Abschlussbewertung.
+- [Erledigt] #5 Für jeden Analysebereich eine oder mehrere ausreichend kleine Folge-Unterversionen entwerfen.
+  - Notizen: Je Unterversion konkrete Quellziele, Analysefragen, Mess- oder Reproduktionsansatz, erwartete Befunde für den zentralen Bericht, Abhängigkeiten und sinnvolle Reihenfolge festlegen. Bereiche nicht nur zur Begrenzung der Roadmapgröße zusammenfassen. Keine Optimierungs- oder Implementierungsaufgaben einplanen.
+Für 0.68.2 bis 0.68.66 wurden konkrete Quellen, Analysefragen, Evidenzziele, Reihenfolge und Berichtspflicht definiert. Jede Unterversion bleibt rein analytisch und enthält keine Optimierungsaufgabe.
+- [Erledigt] #6 Den geplanten Analyseumfang auf Lücken, Doppelungen und falsch eingeordnete Pakete prüfen.
+  - Notizen: Jede relevante Produktivkomponente muss mindestens einer Folge-Unterversion zugeordnet oder mit Begründung ausgeschlossen sein. Gemeinsame End-to-End-Pfade müssen trotz Repositorygrenzen zusammenhängend analysierbar bleiben.
+Die Zuordnung wurde maschinell gegen Docs/Inventory/AllModules.json geprüft: 138 Inventarschlüssel, 138 zugeordnete Schlüssel, keine Lücke und kein unbekanntes Modul. Querschnittspfade und begründete Ausschlüsse sind im Bericht dokumentiert.
+- [Erledigt] #7 Alle abgeleiteten 0.68.X-Unterversionen vollständig und geordnet in der Roadmap anlegen.
+  - Notizen: Die Einträge müssen den reinen Analysecharakter von 0.68.X wahren, auf konkrete Quellen und Fragestellungen verweisen und ExFiles/Reports/GPT_5.6_Sol.txt als gemeinsame Ergebnisablage verwenden.
+Alle 65 Folge-Unterversionen wurden geordnet in der Roadmap angelegt. Jede besitzt drei Analyseaufgaben, eine Abnahme und verweist auf ExFiles/Reports/GPT_5.6_Sol.txt.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Die Abdeckungsmatrix weist jeden relevanten R4OS-Produktquellbereich und jedes Modul einer geplanten Analyse zu oder begründet dessen Ausschluss.
+  - Notizen: Server/, R4CodePad und reine Dokumentations- oder Paketbestände dürfen nicht als Analyseziele enthalten sein.
+Abnahme erfüllt: Die Matrix deckt alle 138 kanonischen Module sowie Kernel, Contract, SDK und laufzeitrelevante Distributionsteile ab; die Ausschlüsse sind ausdrücklich festgehalten.
+- [Erledigt] Die Roadmap enthält eine vollständige, sinnvoll geordnete Folge ausreichend feingranularer 0.68.X-Analyse-Unterversionen ohne Optimierungsumsetzung.
+  - Notizen: Jede Folge-Unterversion benennt ihren Quellumfang, ihre Analyseziele und den erwarteten Beitrag zu ExFiles/Reports/GPT_5.6_Sol.txt.
+Abnahme erfüllt: 0.68.2 bis 0.68.66 sind vollständig, geordnet, feingranular und ohne Optimierungsumsetzung angelegt.
+
+### Notizen
+Im Mittelpunkt stehen die Produktivquellen in den kanonischen Repositories sowie die eigenständigen Projekte unter Apps, Services, Diagnostics, Drivers, Protocols und Subsystems. Server/ und R4CodePad sind vollständig ausgeschlossen. Dokumentationen und Inventare dürfen zur Orientierung und Vollständigkeitsprüfung herangezogen werden, sind aber selbst kein Analysegegenstand. Ebenso werden Artefakte, installierte DevKit-Kopien, Fremdpakete und rein hostseitige Werkzeuge nicht als Performance-Ziele eingeplant; Host- oder Buildcode wird nur berücksichtigt, wenn er das Laufzeitverhalten oder die Konfiguration des erzeugten R4OS unmittelbar beeinflusst. Eine große Zahl klar abgegrenzter Folge-Unterversionen ist ausdrücklich erwünscht. Ergebnisse dieser Bestandsaufnahme werden in ExFiles/Reports/GPT_5.6_Sol.txt festgehalten.
+0.68.1 abgeschlossen: Quellenbestand erfasst, Bericht und Abdeckungsmatrix angelegt, alle 138 kanonischen Module validiert und 65 Folge-Unterversionen von 0.68.2 bis 0.68.66 erstellt. Es wurden keine Performance-Optimierungen implementiert.
+
+## 0.68.2 Messrahmen und Befundschema
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für PerformanceDiag sowie vorhandene Boot-, Loader-, Timer- und Diagnosemesspunkte werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Messrahmen und Befundschema« nachvollziehen.
+  - Notizen: Primärer Umfang: PerformanceDiag sowie vorhandene Boot-, Loader-, Timer- und Diagnosemesspunkte. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+Geprüft wurden PerformanceDiag vollständig sowie die Aufrufketten über SDK, R4SYS/R4DEV, Kernel-Timer, Boot- und Loaderinstrumentierung und die relevanten PIT-/HPET-/LAPIC-Backends. Die Besitzer- und Datenflussgrenzen sind im Bericht dokumentiert.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Messauflösung, Messkosten, Reproduzierbarkeit, Baselines, Befund-IDs und Evidenzklassen. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+Bestätigt wurden unter anderem die falsche 100-Hz-Umrechnung des Blit-Benchmarks, die nicht kontinuierliche Zeitbasis beim Timerbackendwechsel, nicht messbare frühe Bootphasen, Millisekunden-Quantisierung kurzer Loaderpfade, zustandsverändernde Diagnoseprobes und fehlende Latenzverteilungen. Hypothesen und Evidenzlücken sind getrennt gekennzeichnet.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+Zwölf Befunde/Evidenzlücken PERF-MEAS-001 bis PERF-MEAS-012 sowie Evidenzschema, Prioritäten, Messprotokoll, Quellen, Reichweite, Besitzer und spätere Empfehlungen wurden in ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben. Keine Optimierung implementiert.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+Der vollständige Umfang von 0.68.2 ist geprüft. Der zentrale Bericht enthält zwölf stabile Befund-IDs, die Messgrenzen und alle festgestellten Evidenzlücken. PerformanceDiag baut unverändert erfolgreich; es wurden keine Performanceoptimierungen umgesetzt.
+
+### Notizen
+Analyseschwerpunkte: Messauflösung, Messkosten, Reproduzierbarkeit, Baselines, Befund-IDs und Evidenzklassen. Zugeordnete kanonische Module: Diagnostic/PerformanceDiag. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+
+## 0.68.3 Boot- und Initialisierungspfad
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für Kernel main.zig, bootloader, kernel/*_boot.zig sowie laufzeitrelevante Distribution-Profile und Injection werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Boot- und Initialisierungspfad« nachvollziehen.
+  - Notizen: Primärer Umfang: Kernel main.zig, bootloader, kernel/*_boot.zig sowie laufzeitrelevante Distribution-Profile und Injection. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+Geprüft wurden der Limine-Einstieg, bootloader/boot_info, Kernel/main.zig, die fachlichen *_boot-Fassaden, Bootstatus/-log/-anzeige, Scheduler- und Speicher-Selbsttests, PCI/PCIe, XHCI/USB-Massenspeicher, Recovery, ServiceManager-Handoff, BootCoreDiag sowie die laufzeitrelevanten Distribution-Profile und Injections.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: serielle Initialisierungsphasen, Polling und Timeouts, redundante Probes, Loggingkosten und Zeit bis zur interaktiven Laufzeit. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+Bestätigt wurden unter anderem die nicht abgeschlossene Bootzeit, der dauerhaft schedulierte Boot-Task, ungegatete Selbsttests, aktive USB-Wartezeiten, doppelte PCI/PCIe-Probes, der serielle ServiceManager-Pfad, Bootbildkosten, wirkungslose LOG-Verbosity und redundante Preload-Module. Hardwareabhängige Größen wurden ausdrücklich als Evidenzlücken markiert.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+Im zentralen Bericht sind PERF-BOOT-001 bis PERF-BOOT-015 mit Status, Priorität, Besitzer, Quellen, Mechanismus, Auswirkung und späterer Empfehlung dokumentiert. Es wurde kein Optimierungscode umgesetzt.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+Die Quellabdeckung und 15 belastbaren Befunde beziehungsweise Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben. Kernel, BootCoreDiag und Distributionstest waren erfolgreich. Geändert wurde nur die Release-Metadatei; Performanceoptimierungen wurden nicht implementiert.
+
+### Notizen
+Analyseschwerpunkte: serielle Initialisierungsphasen, Polling und Timeouts, redundante Probes, Loggingkosten und Zeit bis zur interaktiven Laufzeit. Zugeordnete kanonische Module: Diagnostic/BootCoreDiag. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+Abgeschlossen mit PERF-BOOT-001 bis PERF-BOOT-015. Zentrale P0/P1-Themen: ungültige Bootabschlussmessung, aktive USB-Wartepfade, dauerhafter Boot-Task, ungegatete Selbsttests und serieller Service-/Initialisierungspfad. Bericht aktualisiert; keine Optimierung implementiert.
+
+## 0.68.4 CPU-, FPU- und SIMD-Fähigkeiten
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für Kernel arch/x86_64, platform/cpu.zig, FPU- und XSAVE-Pfade sowie CPU-nahe Diagnosen werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »CPU-, FPU- und SIMD-Fähigkeiten« nachvollziehen.
+  - Notizen: Primärer Umfang: Kernel arch/x86_64, platform/cpu.zig, FPU- und XSAVE-Pfade sowie CPU-nahe Diagnosen. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+Geprüft wurden platform/cpu, arch/x86_64 einschließlich FPU/XSAVE und Kontextwechsel, Taskanlage und Scheduler, externe R4D-IRQ-Guards, driver_work, SDK-Compilerziele, die kanonischen module.R4MF, R4DEV sowie HardwareDiag und SimdDiag.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: erkannte und ungenutzte CPU-Funktionen, FPU/SIMD-Zustandskosten, fehlende Instruktionspfade und Kernel-soft-float-Grenzen. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+Bestätigt wurden BSP-only ohne AP-Startup, 136/138 größenoptimierte kanonische Module, ein nicht dispatchtes AVX2/AES/PCLMUL-Modulziel, soft-float/SIMD-freier Kernel, eager R4X-FPU-Zustand, pauschale R4D-IRQ-Guards, fehlendes XSAVEOPT, ungenutzte CPU-Beschleuniger sowie fehlende PMU-/Frequenzbeobachtung.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+PERF-CPU-001 bis PERF-CPU-013 sind im zentralen Bericht mit Priorität, Quellen, Mechanismus, Wirkung, Evidenzgrenzen, Besitzern und späteren Empfehlungen dokumentiert. Es wurde keine Optimierung implementiert.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+Der vollständige CPU-/FPU-/SIMD-Quellumfang ist geprüft und 13 Befunde beziehungsweise Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben. HardwareDiag, SimdDiag und Kernel bauen erfolgreich. Bis auf die verpflichtende Release-Metadatei wurden keine Produktquellen verändert.
+
+### Notizen
+Analyseschwerpunkte: erkannte und ungenutzte CPU-Funktionen, FPU/SIMD-Zustandskosten, fehlende Instruktionspfade und Kernel-soft-float-Grenzen. Zugeordnete kanonische Module: Diagnostic/HardwareDiag, Diagnostic/SimdDiag. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+Abgeschlossen mit PERF-CPU-001 bis PERF-CPU-013. Zentrale Grenzen: ausschließliche BSP-Nutzung, 136/138 größenoptimierte Module, einheitliches nicht dispatchtes AVX2-Ziel sowie pauschale FPU-Zustandsarbeit für R4X und R4D-IRQs. Bericht aktualisiert; keine Optimierung implementiert.
+
+## 0.68.5 Interrupts, Timer und Zeitbasis
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für IDT, PIC, APIC, IOAPIC, PIT, HPET, LAPIC, irq_router, kernel/timer und platform/time werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Interrupts, Timer und Zeitbasis« nachvollziehen.
+  - Notizen: Primärer Umfang: IDT, PIC, APIC, IOAPIC, PIT, HPET, LAPIC, irq_router, kernel/timer und platform/time. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Interruptlatenz, EOI- und Routingkosten, Timerfrequenzen, Umschaltungen, Tickarbeit, Deadline-Auflösung und Busy-Waits. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Interruptlatenz, EOI- und Routingkosten, Timerfrequenzen, Umschaltungen, Tickarbeit, Deadline-Auflösung und Busy-Waits. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+Abschluss 0.68.5: IDT/IRQ-Rahmen, PIC/IOAPIC/LAPIC, PIT/HPET, IRQ-Router, Timeruebergabe, Scheduler-Tick, R4X-Besitzeraufloesung, RTC/CMOS sowie R4SYS-/SDK-Zeitpfade wurden quellenbasiert analysiert. 15 Befunde PERF-TIME-001 bis PERF-TIME-015 stehen in ExFiles/Reports/GPT_5.6_Sol.txt. Keine Performanceoptimierung implementiert. Kernelbuild und Distribution Build.bat test erfolgreich. RELEASE_VERSION=0.68.5; Distribution-Commit cc386a6 gepusht.
+
+## 0.68.6 Scheduler, Tasks und Synchronisation
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für Kernel sched, Taskkontexte, Waitqueues, Mutex, Event und Semaphore werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Scheduler, Tasks und Synchronisation« nachvollziehen.
+  - Notizen: Primärer Umfang: Kernel sched, Taskkontexte, Waitqueues, Mutex, Event und Semaphore. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Kontextwechsel, Runqueue-Scans, Preemption, FPU-State, Stackkosten, Wakeups, Lockkonkurrenz und kooperative Fairness. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Kontextwechsel, Runqueue-Scans, Preemption, FPU-State, Stackkosten, Wakeups, Lockkonkurrenz und kooperative Fairness. Zugeordnete kanonische Module: Diagnostic/ThreadDiag, Diagnostic/StackDiag. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+Abschluss 0.68.6: Scheduler und Kontextwechsel, Taskregistry und Reaping, WaitQueues, Mutex/UnwindGuard/Event/Completion/Semaphore, R4X-Stackanbindung, R4DEV-Telemetrie sowie ThreadDiag/StackDiag wurden analysiert. 16 Befunde PERF-SCHED-001 bis PERF-SCHED-016 wurden in ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben. Es wurden keine Optimierungen implementiert. ThreadDiag-, StackDiag- und Kernel-Build sowie Distribution-Test waren erfolgreich. RELEASE_VERSION=0.68.6; Distribution-Commit 8249561 wurde gepusht.
+
+## 0.68.7 Physischer und virtueller Speicher
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für memory/map, blocks, phys, paging, page_tables und virt werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Physischer und virtueller Speicher« nachvollziehen.
+  - Notizen: Primärer Umfang: memory/map, blocks, phys, paging, page_tables und virt. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Frame- und Range-Suchen, Seitentabellenarbeit, Mappinggranularität, TLB-Wirkung, Fragmentierung und Allokationskomplexität. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Frame- und Range-Suchen, Seitentabellenarbeit, Mappinggranularität, TLB-Wirkung, Fragmentierung und Allokationskomplexität. Zugeordnete kanonische Module: Diagnostic/AppHeapDiag, Diagnostic/MemorySuite. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+Abschluss 0.68.7: Physische Frameverwaltung, Blockbesitz, virtuelle Ranges, Demand Commit, Seitentabellen und TLB-Arbeit, Page-State, Reclaim sowie AppHeapDiag und MemorySuite wurden analysiert. 17 Befunde PERF-MEM-001 bis PERF-MEM-017 wurden in ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben. Schwerpunkte sind mehrfache globale Scans pro 4-KiB-Fault, Page-State-Vollscans und Sparse Release ueber die gesamte Reservation. Es wurden keine Optimierungen implementiert. AppHeapDiag-, MemorySuite- und Kernel-Build sowie Distribution-Test waren erfolgreich. RELEASE_VERSION=0.68.7; Distribution-Commit be1a70a wurde gepusht.
+
+## 0.68.8 Heap, Reclaim und Kopierpfade
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für Kernel-Heap, backing_store, reclaim, SDK vm_allocator und lebenszyklusnahe Bereinigung werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Heap, Reclaim und Kopierpfade« nachvollziehen.
+  - Notizen: Primärer Umfang: Kernel-Heap, backing_store, reclaim, SDK vm_allocator und lebenszyklusnahe Bereinigung. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Allokationsmuster, Metadaten-Scans, Nullung, Kopierketten, Reclaim-Arbeit, Peak-Speicher und verzögerte Freigabe. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Allokationsmuster, Metadaten-Scans, Nullung, Kopierketten, Reclaim-Arbeit, Peak-Speicher und verzögerte Freigabe. Zugeordnete kanonische Module: Diagnostic/CleanupDiag. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+0.68.8 wurde als reine Quellanalyse abgeschlossen. Geprüft wurden Kernel/memory/heap.zig, backing_store.zig, reclaim.zig, virt.zig, fs/page_cache.zig, sched/task.zig, program/r4x.zig, kernel/memory_boot.zig, SDK/r4os/vm_allocator.zig und Diagnostics/CleanupDiag. Im zentralen Bericht wurden 18 neue eindeutige Befunde PERF-HEAP-001 bis PERF-HEAP-018 dokumentiert. Schwerpunkte sind Commit-/Decommit-Churn in Kernel- und SDK-Allocator, lineare Block- und Extent-Suchen, mehrfache Backing-Scans pro 4-KiB-I/O, die für jedes Frame neu beginnende VM-Evictionsuche, vollständige GUI-Frame-Kopien bei inkrementellen Änderungen, serieller Programmteardown und fehlende Zeitmessungen in CleanupDiag. Es wurden keine Performanceoptimierungen implementiert. Erfolgreich geprüft: CleanupDiag-Build, SDK-Build, Kernel-Build und Distribution Build.bat test. RELEASE_VERSION wurde auf 0.68.8 gesetzt.
+
+## 0.68.9 Plattformvertrag, ABI und R4M0
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für Contract API, ABI, Module, R4M0, R4XStart und generierte Tabellenlayouts werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Plattformvertrag, ABI und R4M0« nachvollziehen.
+  - Notizen: Primärer Umfang: Contract API, ABI, Module, R4M0, R4XStart und generierte Tabellenlayouts. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Tabellenabfragen, Funktionsdispatch, Payloadgrößen, Kopiergrenzen, Alignment, Relocationen und manifestbedingte Laufzeitkosten. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Tabellenabfragen, Funktionsdispatch, Payloadgrößen, Kopiergrenzen, Alignment, Relocationen und manifestbedingte Laufzeitkosten. Zugeordnete kanonische Module: Protocol/Conformance. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+0.68.9 abgeschlossen. Plattformvertrag, erzeugte Tabellenlayouts, R4XStart, SDK-Dispatch, Modulregistry, R4L-Aufloesung, der gemeinsame R4M0-Range-Reader sowie R4X-, R4D-, R4P- und Conformance-Pfade wurden quellenbasiert analysiert. 18 Befunde PERF-ABI-001 bis PERF-ABI-018 sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert. Kritischer Befund: jede 24-Byte-Relokation erzeugt eine eigene synchrone Dateianfrage; die Artefaktstichprobe enthaelt 23.510 Relokationen fuer Klickifax, 19.921 fuer KlickifaxLive und 2.110 fuer R4Basic. Es wurden keine Performanceoptimierungen implementiert. Contract-Generatorcheck, SDK-, Kernel- und Conformance-Build sowie Distribution-Testprofil waren erfolgreich. RELEASE_VERSION steht auf 0.68.9; Distribution-Commit 1854737 wurde gepusht.
+
+## 0.68.10 Modulregistry und Ladevorgänge
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für Kernel modules, module_file, module_r4m, program/r4x, r4d, r4p sowie SDK runtime_r4l werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Modulregistry und Ladevorgänge« nachvollziehen.
+  - Notizen: Primärer Umfang: Kernel modules, module_file, module_r4m, program/r4x, r4d, r4p sowie SDK runtime_r4l. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Dateizugriffe, Validierung, Section-Mapping, Relocation, Importauflösung, Registry-Suchen, Ressourcenlesen und wiederholte Arbeit. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Dateizugriffe, Validierung, Section-Mapping, Relocation, Importauflösung, Registry-Suchen, Ressourcenlesen und wiederholte Arbeit. Zugeordnete kanonische Module: Diagnostic/LoaderDiag, Diagnostic/ResourceDiag. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+Quellenanalyse abgeschlossen. 18 neue PERF-LOAD-Befunde, positive Abgrenzungen und Evidenzluecken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert. Schwerpunkte: eager R4P-/R4D-Loads, quadratische FAT-Verzeichnisenumeration, Ressourcen-Stat/Read und Desktop-Negativlookups, R4P-Rollenscans, Registry-Lifecycle, Runtime-R4L und Telemetrieluecken. Keine Performanceoptimierung implementiert. Erfolgreich verifiziert: SDK, Libraries, Kernel, LoaderDiag, ResourceDiag und Distribution Build.bat test. RELEASE_VERSION=0.68.10; Distribution-Push 6632bf9.
+
+## 0.68.11 Programmlebenszyklus und R4SYS
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für Kernel program/r4x, r4x_start, r4sys sowie SDK program, r4xstart und gemeinsame Startquellen werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Programmlebenszyklus und R4SYS« nachvollziehen.
+  - Notizen: Primärer Umfang: Kernel program/r4x, r4x_start, r4sys sowie SDK program, r4xstart und gemeinsame Startquellen. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Prozessstart, Instanzerzeugung, Heap und Stacks, Task-/Threadinventare, Deferred Reaper, Exit und R4SYS-Dispatch. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Prozessstart, Instanzerzeugung, Heap und Stacks, Task-/Threadinventare, Deferred Reaper, Exit und R4SYS-Dispatch. Zugeordnete kanonische Module: Diagnostic/CStartSmoke, Diagnostic/R4XStartSmoke. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+
+## 0.68.12 Services, IPC und Workqueues
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für Kernel ipc, services, service_core, service_ipc und driver_work werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Services, IPC und Workqueues« nachvollziehen.
+  - Notizen: Primärer Umfang: Kernel ipc, services, service_core, service_ipc und driver_work. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Queueoperationen, Payloadkopien, Lookup, Wakeups, Backpressure, Completion, Polling und Cleanup bei Fehlern. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Queueoperationen, Payloadkopien, Lookup, Wakeups, Backpressure, Completion, Polling und Cleanup bei Fehlern. Zugeordnete kanonische Module: Diagnostic/ServiceClassDiag. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+
+## 0.68.13 Plattform-, Geräte- und Treiberkern
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für ACPI, PCI, PCIe, device_inventory, driver_api, driver registry, DMA und IRQ werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Plattform-, Geräte- und Treiberkern« nachvollziehen.
+  - Notizen: Primärer Umfang: ACPI, PCI, PCIe, device_inventory, driver_api, driver registry, DMA und IRQ. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Enumeration, Config-Zugriffe, Mapping, Bounce- und Kopierpfade, IRQ-Dispatch, Workqueues und gemeinsame Treibergrenzen. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Enumeration, Config-Zugriffe, Mapping, Bounce- und Kopierpfade, IRQ-Dispatch, Workqueues und gemeinsame Treibergrenzen. Zugeordnete kanonische Module: Diagnostic/DriverDiag. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+
+## 0.68.14 Display-, Framebuffer- und Presentpfad
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für Kernel display, framebuffer, surface, presenter, surface_pipeline sowie R4DRAW/R4DESK-Kernelanbindung werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Display-, Framebuffer- und Presentpfad« nachvollziehen.
+  - Notizen: Primärer Umfang: Kernel display, framebuffer, surface, presenter, surface_pipeline sowie R4DRAW/R4DESK-Kernelanbindung. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Full-Frame- und Rect-Kopien, Readback, Blits, Dirty Regions, Formatumwandlung, Präsentationsfrequenz und redundante Frames. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Full-Frame- und Rect-Kopien, Readback, Blits, Dirty Regions, Formatumwandlung, Präsentationsfrequenz und redundante Frames. Zugeordnete kanonische Module: Diagnostic/DisplayDiag. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+
+## 0.68.15 Eingabe vom Gerät bis zum Ereignis
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für PS/2-Tastatur und -Maus, Layouts, Desktop-Events und R4DESK-Eingabeübergabe werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Eingabe vom Gerät bis zum Ereignis« nachvollziehen.
+  - Notizen: Primärer Umfang: PS/2-Tastatur und -Maus, Layouts, Desktop-Events und R4DESK-Eingabeübergabe. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: IRQ-Arbeit, Scancode- und Layoutverarbeitung, Queueing, Koaleszierung, Eventlatenz und unnötige Pollschleifen. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: IRQ-Arbeit, Scancode- und Layoutverarbeitung, Queueing, Koaleszierung, Eventlatenz und unnötige Pollschleifen. Zugeordnete kanonische Module: Diagnostic/InputDiag. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+
+## 0.68.16 Block-I/O, Requests und MBR
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für storage/block, storage/mbr, fs/request, Drive-Registry und Controller-Grundlage werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Block-I/O, Requests und MBR« nachvollziehen.
+  - Notizen: Primärer Umfang: storage/block, storage/mbr, fs/request, Drive-Registry und Controller-Grundlage. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Requestzerlegung, Queueing, Worker-Wakeups, synchrone Wartepfade, Blockgrößen, Kopien und Durchsatzbegrenzung. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Requestzerlegung, Queueing, Worker-Wakeups, synchrone Wartepfade, Blockgrößen, Kopien und Durchsatzbegrenzung. Zugeordnete kanonische Module: Diagnostic/AsyncIoDiag, Diagnostic/StorageDiag. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+
+## 0.68.17 AHCI- und ATA-PIO-Pfade
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für Kernel-Storage-Probes sowie AHCI.R4D und ATAPIO.R4D werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »AHCI- und ATA-PIO-Pfade« nachvollziehen.
+  - Notizen: Primärer Umfang: Kernel-Storage-Probes sowie AHCI.R4D und ATAPIO.R4D. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: PIO gegenüber DMA, Queue-Tiefe, PRDT, Alignment, Interrupts, Polling, Timeouts, Flushes und Sektoraggregation. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: PIO gegenüber DMA, Queue-Tiefe, PRDT, Alignment, Interrupts, Polling, Timeouts, Flushes und Sektoraggregation. Zugeordnete kanonische Module: Driver/AHCI, Driver/ATAPIO. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+
+## 0.68.18 NVMe-Pfad
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für Kernel-NVMe-Probe und NVME.R4D werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »NVMe-Pfad« nachvollziehen.
+  - Notizen: Primärer Umfang: Kernel-NVMe-Probe und NVME.R4D. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Admin- und I/O-Queues, Doorbells, Completion, Queue-Tiefe, DMA, Interrupts, Polling und Transfergrößen. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Admin- und I/O-Queues, Doorbells, Completion, Queue-Tiefe, DMA, Interrupts, Polling und Transfergrößen. Zugeordnete kanonische Module: Driver/NVME. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+
+## 0.68.19 VFS, FAT32 und Page Cache
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für fs/vfs, drive, request, page_cache, FAT32 und glob werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »VFS, FAT32 und Page Cache« nachvollziehen.
+  - Notizen: Primärer Umfang: fs/vfs, drive, request, page_cache, FAT32 und glob. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Pfadauflösung, Verzeichnis- und Volume-Suchen, Cachetreffer, Eviction, Writeback, kleine I/Os und Metadatenarbeit. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Pfadauflösung, Verzeichnis- und Volume-Suchen, Cachetreffer, Eviction, Writeback, kleine I/Os und Metadatenarbeit. Zugeordnete kanonische Module: Diagnostic/FsDiag. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+
+## 0.68.20 NTFS-Metadaten und Lesepfad
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für Kernel fs/ntfs, Support/ntfs_format, Support/ntfs_volume, SDK ntfs_format/ntfs_volume und NtfsDiag werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »NTFS-Metadaten und Lesepfad« nachvollziehen.
+  - Notizen: Primärer Umfang: Kernel fs/ntfs, Support/ntfs_format, Support/ntfs_volume, SDK ntfs_format/ntfs_volume und NtfsDiag. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Bootsektor, MFT, Attribute, Runlists, Verzeichnisindex, Pfadauflösung, Cacheverhalten, Read Amplification und kleine Lesezugriffe. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Bootsektor, MFT, Attribute, Runlists, Verzeichnisindex, Pfadauflösung, Cacheverhalten, Read Amplification und kleine Lesezugriffe. Zugeordnete kanonische Module: Diagnostic/NtfsDiag. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+
+## 0.68.21 NTFS-Schreib-, Cache- und Wiederanlaufpfad
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für gemeinsamer NTFS-Kern, Kerneladapter, Page Cache, Writeback und Recovery-nahe Aufrufer werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »NTFS-Schreib-, Cache- und Wiederanlaufpfad« nachvollziehen.
+  - Notizen: Primärer Umfang: gemeinsamer NTFS-Kern, Kerneladapter, Page Cache, Writeback und Recovery-nahe Aufrufer. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Metadatenupdates, Allokation, Fragmentierung, Flushreihenfolge, Wiederholung, Cachekohärenz, Fehlerpfade und synchrone Barrieren. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Metadatenupdates, Allokation, Fragmentierung, Flushreihenfolge, Wiederholung, Cachekohärenz, Fehlerpfade und synchrone Barrieren. Zugeordnete kanonische Module: Diagnostic/NtfsDiag. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+
+## 0.68.22 USB-Host und XHCI
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für Kernel USB-Core, Hostcontroller, XHCI-Ringe, Events, Endpoints, Recovery, XHCI.R4D und UsbDiag werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »USB-Host und XHCI« nachvollziehen.
+  - Notizen: Primärer Umfang: Kernel USB-Core, Hostcontroller, XHCI-Ringe, Events, Endpoints, Recovery, XHCI.R4D und UsbDiag. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Boot-Waits, Ringzyklus, Eventrouting, IRQ-Last, Transfers, Doorbells, Endpoint-Recovery, Polling und Timeouts. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Boot-Waits, Ringzyklus, Eventrouting, IRQ-Last, Transfers, Doorbells, Endpoint-Recovery, Polling und Timeouts. Zugeordnete kanonische Module: Driver/XHCI, Diagnostic/UsbDiag. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+Abschluss 0.68.22: Der festgelegte USB-/XHCI-Quellumfang wurde vollständig analysiert. 26 belastbare Befunde sind als PERF-XHCI-001 bis PERF-XHCI-026 in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert. SDK- und Kernel-Tests, XHCI- und UsbDiag-Normalbuild sowie Distribution Build.bat test sind grün; XHCI und UsbDiag besitzen keinen eigenen test-Step. Es wurden keine Produktoptimierungen umgesetzt. RELEASE_VERSION steht auf 0.68.22. Gemäß Nutzeranweisung wurde kein Push ausgeführt.
+
+## 0.68.23 USB-HID und Eingabeprotokolle
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für Kernel USB-HID sowie UsbHidBoot.R4P und UsbHidReport.R4P werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »USB-HID und Eingabeprotokolle« nachvollziehen.
+  - Notizen: Primärer Umfang: Kernel USB-HID sowie UsbHidBoot.R4P und UsbHidReport.R4P. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Reportdecoding, Interrupttransfers, Pollintervalle, Eventduplikate, Queueing und Latenz bis zur Desktop-Eingabe. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Reportdecoding, Interrupttransfers, Pollintervalle, Eventduplikate, Queueing und Latenz bis zur Desktop-Eingabe. Zugeordnete kanonische Module: Protocol/UsbHidBoot, Protocol/UsbHidReport. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+Abschluss 0.68.23: Der festgelegte USB-HID- und Eingabeprotokoll-Quellumfang wurde vollständig analysiert. 14 belastbare Befunde und Evidenzlücken sind als PERF-HID-001 bis PERF-HID-014 in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert. SDK- und Kernel-Tests, die Normalbuilds von UsbHidBoot, UsbHidReport, Desktop und UsbDiag sowie Distribution Build.bat test sind grün. Es wurden keine Produktoptimierungen oder Tests umgesetzt. RELEASE_VERSION steht auf 0.68.23. Gemäß Nutzeranweisung wurde kein Push ausgeführt.
+
+## 0.68.24 USB-Massenspeicher
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für Kernel USB-MSC, USBMSC.R4D, UsbMscBot.R4P und UsbScsiBlock.R4P werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »USB-Massenspeicher« nachvollziehen.
+  - Notizen: Primärer Umfang: Kernel USB-MSC, USBMSC.R4D, UsbMscBot.R4P und UsbScsiBlock.R4P. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Bulktransfers, BOT-Phasen, SCSI-Übersetzung, Retrypolicy, Blockgrößen, Kopien, Queueing und Fehler-Recovery. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Bulktransfers, BOT-Phasen, SCSI-Übersetzung, Retrypolicy, Blockgrößen, Kopien, Queueing und Fehler-Recovery. Zugeordnete kanonische Module: Driver/USBMSC, Protocol/UsbMscBot, Protocol/UsbScsiBlock, Diagnostic/UsbDiag. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+Abschluss 0.68.24 am 2026-08-21: Kernel-USBMSC, USBMSC.R4D, UsbMscBot.R4P, UsbScsiBlock.R4P, UsbDiag sowie die unmittelbaren XHCI-, Block-, Pagecache-, FAT32-, NTFS-, R4P- und Storage-Boot-Uebergaenge wurden rein analytisch untersucht. 17 neue Befunde PERF-USBMSC-001 bis PERF-USBMSC-017 dokumentieren BOT-Phasen, 4-KB-Grenze, MMIO-/R4P-Fixkosten, aktive Waits, globalen Controllerbesitz, Queueing, Kopien, FAT32-Groessenkonflikt, Flush, Retry/Recovery, Sensepolitik, Geraete-/LUN-/Sektorgrenzen, UAS-Luecke und fehlende Laufzeitevidenz. Bericht: ExFiles/Reports/GPT_5.6_Sol.txt, 651989 Byte, 11644 Zeilen, 441 eindeutige PERF-IDs, ASCII/LF, SHA256 E32DBF3027E2FEBB4130AEB6D426DC7C8471470C56BC415C7E362C5962738094. Gruen: SDK Build.bat test, Kernel Build.bat test, normale Builds USBMSC, UsbMscBot, UsbScsiBlock und UsbDiag sowie Distribution Build.bat test. RELEASE_VERSION=0.68.24 mit UTF-8-BOM. Keine Produktquelle, Optimierung, Modul-/Kernelversion oder neuer Test wurde geaendert. Relevante Repositories sind sauber, ausgenommen der beabsichtigte Distribution-Release-Marker. Gemaess Benutzeranweisung wurde kein Push ausgefuehrt.
+
+## 0.68.25 Netzwerkgrundlage und Paketpfade
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für Kernel net/core, ethernet, arp, ipv4, icmp und RX/TX-Demux werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Netzwerkgrundlage und Paketpfade« nachvollziehen.
+  - Notizen: Primärer Umfang: Kernel net/core, ethernet, arp, ipv4, icmp und RX/TX-Demux. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Paketkopien, Allokationen, Checksummen, Adapter- und Socketscans, ARP-Cache, Queueing, IRQ-zu-Task-Übergänge und Drop-Pfade. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Paketkopien, Allokationen, Checksummen, Adapter- und Socketscans, ARP-Cache, Queueing, IRQ-zu-Task-Übergänge und Drop-Pfade. Zugeordnete kanonische Module: Diagnostic/NetDiag, Diagnostic/NetIoDiag. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+Abschluss 0.68.25: Der gemeinsame Netzwerkpfad wurde in sieben direkten Quellen (7.566 Zeilen, 276.718 Byte) sowie an seinen unmittelbaren R4P-, R4NET-, R4D- und IRQ-Grenzen analysiert. 18 neue, eindeutige Befunde PERF-NET-001 bis PERF-NET-018 stehen in ExFiles/Reports/GPT_5.6_Sol.txt. Bericht: 681.955 Byte, 12.157 Zeilen, 459/459 eindeutige PERF-IDs, SHA-256 5A22F1A44EC71F852BE6A72E2017DAC1FA1511D1AAB8E5AF37D26671FD86A7BE, ASCII/LF-validiert. SDK test, Kernel test, NetDiag-Build, NetIoDiag-Build und Distribution test sind erfolgreich. RELEASE_VERSION wurde BOM-erhaltend auf 0.68.25 gesetzt. Es wurde keine Performanceoptimierung und keine Produktquellaenderung umgesetzt. Gemaess Userweisung wurde kein Push ausgefuehrt.
+
+## 0.68.26 Transport, Sockets und Netz-IPC
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für Kernel tcp, udp, timing, ipc_services und R4NET-Fassade werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Transport, Sockets und Netz-IPC« nachvollziehen.
+  - Notizen: Primärer Umfang: Kernel tcp, udp, timing, ipc_services und R4NET-Fassade. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: State-Machine-Scans, Timer, Retransmits, Windowing, Bufferung, Socketlookups, IPC-Kopien, Backpressure und Wakeups. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: State-Machine-Scans, Timer, Retransmits, Windowing, Bufferung, Socketlookups, IPC-Kopien, Backpressure und Wakeups. Zugeordnete kanonische Module: Diagnostic/NetSvcDiag, Diagnostic/NetR4pDiag, Diagnostic/NetworkFacadeCDiag. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+Abschluss 0.68.26: Acht direkte Quellen mit 6.744 Zeilen und 242.965 Byte sowie die unmittelbaren Core-, Service-IPC- und SDK-Grenzen wurden analysiert. 20 eindeutige Befunde PERF-TRN-001 bis PERF-TRN-020 wurden ausschliesslich in ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben. Bericht: 713.691 Byte, 12.719 Zeilen, 479/479 eindeutige Befund-IDs, SHA-256 34CCD58144E94927FAD3B80BC50B08E1FCAF8C0E6DE2A3579EB6CD53CC5C6645; ASCII/LF ohne Trailing Whitespace. RELEASE_VERSION wurde BOM-erhaltend auf 0.68.26 gesetzt. Gruen: Kernel Build.bat test, SDK Build.bat test, NetSvcDiag, NetR4pDiag, NetworkFacadeCDiag und Distribution Build.bat test. Keine Performanceoptimierung oder Produktquellaenderung; gemaess Uservorgabe kein Push.
+
+## 0.68.27 Netzwerktreiber
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für RTL8139.R4D, RTL8168.R4D und VirtioNet.R4D werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Netzwerktreiber« nachvollziehen.
+  - Notizen: Primärer Umfang: RTL8139.R4D, RTL8168.R4D und VirtioNet.R4D. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: RX/TX-Ringe, Deskriptoren, DMA, IRQ-Moderation, Kopien, Bufferrecycling, Batchgrößen und gerätespezifische Engpässe. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: RX/TX-Ringe, Deskriptoren, DMA, IRQ-Moderation, Kopien, Bufferrecycling, Batchgrößen und gerätespezifische Engpässe. Zugeordnete kanonische Module: Driver/RTL8139, Driver/RTL8168, Driver/VirtioNet. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+0.68.27 abgeschlossen. Analysiert wurden sieben produktive Treiberquellen (4.361 Zeilen, 168.687 Byte) fuer RTL8139.R4D, RTL8168.R4D und VirtioNet.R4D sowie das RTL8168-Hostmodell als Evidenzquelle. Im zentralen Bericht wurden 21 eindeutige Befunde PERF-NIC-001 bis PERF-NIC-021 dokumentiert; Bericht: 745.861 Byte, 13.292 LF, ASCII/LF, SHA256 2F525BB70E438A6468F4F474BFC34154B63C578DA984086FE77D4E27D7903BCC. Schwerpunkte: R4D-Capability-Luecken, DMA-Kopien und synchrones Bufferrecycling, Post-TX-Polls, RTL8139-/Virtio-Backpressure, IRQ-Fanout und IRQ-Arbeit, fehlende Moderation, Ringkapazitaeten, RTL8168-MSI/Fences/Firmware-Recovery sowie Mess- und Standardprofil-Luecken. Verifikation: RTL8139, RTL8168 und VirtioNet jeweils Build.bat erfolgreich; RTL8168-Hostmodell und Contract manuell 24/24 Tests erfolgreich; Distribution Build.bat test erfolgreich. RELEASE_VERSION=0.68.27 mit UTF-8-BOM; Kernel- und Modulversionen unveraendert. Keine Performanceoptimierung und kein Produktquellcode geaendert. Gemaess Nutzeranweisung wurde kein Push ausgefuehrt.
+
+## 0.68.28 Netzwerkprotokollmodule
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für NetEthernet, NetArp, NetIpv4, NetIcmp, NetUdp, NetTcp, NetDhcp und NetDns werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Netzwerkprotokollmodule« nachvollziehen.
+  - Notizen: Primärer Umfang: NetEthernet, NetArp, NetIpv4, NetIcmp, NetUdp, NetTcp, NetDhcp und NetDns. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Moduldispatch, Parser, Checksummen, Kopien, temporäre Puffer, lineare Suchen, Timeouts und Doppelarbeit zum Kernelpfad. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Moduldispatch, Parser, Checksummen, Kopien, temporäre Puffer, lineare Suchen, Timeouts und Doppelarbeit zum Kernelpfad. Zugeordnete kanonische Module: Protocol/NetEthernet, Protocol/NetArp, Protocol/NetIpv4, Protocol/NetIcmp, Protocol/NetUdp, Protocol/NetTcp, Protocol/NetDhcp, Protocol/NetDns. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+0.68.28 abgeschlossen: Acht produktive Netzwerk-R4P-Quellen (1.736 Zeilen/57.335 Byte) sowie Operationsvertrag, Netcore-Wrapper, R4P-Dispatcher und vorhandene Diagnoseevidenz wurden analysiert. 16 eindeutige Befunde PERF-R4PNET-001..016 wurden ausschließlich in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert (773.534 Byte, 13.785 LF, SHA256 C0E308370D10EE0E8C4E55D8C9FEBBA22E991F110B96E9A2749B9F014E673424; ASCII/LF, keine doppelten IDs). Alle acht Modulbuilds sowie Repositories/Distribution/Build.bat test waren erfolgreich. RELEASE_VERSION steht auf 0.68.28, BOM/LF erhalten; Kernel- und Modulversionen blieben unverändert. Keine Performanceoptimierung, kein Produktquellcode und kein neues Gate wurden umgesetzt. Auf ausdrücklichen Wunsch wurde nicht gepusht.
+
+## 0.68.29 Netzwerkdienste und Werkzeuge
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für DHCP-, DNS-, TCP- und UDP-Services sowie die R4OS-Netzwerkprogramme werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Netzwerkdienste und Werkzeuge« nachvollziehen.
+  - Notizen: Primärer Umfang: DHCP-, DNS-, TCP- und UDP-Services sowie die R4OS-Netzwerkprogramme. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Service-Polling, IPC-Rundreisen, Buffergrößen, Timeouts, wiederholte Konfiguration, Textformatierung und Verhalten bei typischen Nutzlasten. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Service-Polling, IPC-Rundreisen, Buffergrößen, Timeouts, wiederholte Konfiguration, Textformatierung und Verhalten bei typischen Nutzlasten. Zugeordnete kanonische Module: Service/DhcpService, Service/DnsService, Service/TcpService, Service/UdpService, App/Dhcp, App/DnsLookup, App/IpConfig, App/NetCat, App/NetConfig, App/Ping, App/Recv, App/Send, App/TcpEcho. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+Analyse 0.68.29 abgeschlossen. Geprueft wurden 13 produktive main.zig-Dateien mit 9.760 Zeilen und 374.680 Byte sowie die unmittelbaren SDK-, Service-, R4NET-, Transport-, Dateisystem- und Testgrenzen. Dokumentiert sind 20 neue Befunde PERF-NETSVC-001 bis PERF-NETSVC-020. Der zentrale Bericht umfasst nun 808.706 Byte, 14.399 LF-Zeilen und 536 global eindeutige Befund-IDs; SHA-256: 6E881E26699D384A99FDCE36CE46655EE2E12D0C2C5242F170023415BC1BE427. Alle 13 Modulbuilds waren erfolgreich und melden zusammen 340.591 Byte Code. Repositories/Distribution/Build.bat test war erfolgreich. RELEASE_VERSION wurde BOM- und LF-erhaltend auf 0.68.29 gesetzt; Kernel- und Modulversionen blieben unveraendert. Es wurden keine Optimierung, keine Produktquellaenderung und kein neues Gate umgesetzt. Gemaess Benutzeranweisung erfolgte kein Push.
+
+## 0.68.30 TLS und Authentifizierung
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für R4TLS.R4P und R4AUTH.R4P werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »TLS und Authentifizierung« nachvollziehen.
+  - Notizen: Primärer Umfang: R4TLS.R4P und R4AUTH.R4P. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Handshake, Zertifikats- und Schlüsselsuchen, Kryptoprimitiven, Recordgrößen, Allokationen, Kopien und fehlende CPU-Beschleunigung. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Handshake, Zertifikats- und Schlüsselsuchen, Kryptoprimitiven, Recordgrößen, Allokationen, Kopien und fehlende CPU-Beschleunigung. Zugeordnete kanonische Module: Protocol/R4Tls, Protocol/R4Auth. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+Abschluss 0.68.30 (2026-08-21): R4TLS.R4P und R4AUTH.R4P sowie ihre performancekritischen Aufrufer- und Transportgrenzen wurden rein analytisch untersucht. Im zentralen Bericht sind 20 neue, eindeutige Befunde PERF-TLSAUTH-001 bis PERF-TLSAUTH-020 dokumentiert. Hauptthemen sind fehlende Verbindungs- und Session-Wiederverwendung, wiederholte AES/GHASH-Schluesselvorbereitung pro Record, grosse Nullungs- und Kopierpuffer, die kleinteilige TCPSVC-Grenze, wiederholte Materialsuche und RSA-Selbstpruefung, vermeidbare PRF-Arbeit sowie wiederholtes NTLM-Parsing und -Hashing. AES-NI und PCLMUL sind im ReleaseSmall-Ziel bestaetigt; Heap-Allokationen und interne Wartepfade wurden in beiden Protokollen nicht gefunden. Eine moegliche SHA-Beschleunigung bleibt eine spaetere Messfrage, keine bestaetigte fehlende Kernel-Funktion. R4TLS- und R4AUTH-Modulbuilds sowie Repositories/Distribution/Build.bat test waren erfolgreich. Bericht: 844067 Bytes, 15020 LF-Zeilen, ASCII, 556 eindeutige Gesamtbefunde, SHA-256 9D7738832E349602AE14B2BAD36CC9975FC1B36B8416A2216E7BF3E4F1AE046C. RELEASE_VERSION wurde auf 0.68.30 gesetzt. Es wurden keine Optimierungen oder Produktquellcode-Aenderungen umgesetzt und kein Push ausgefuehrt.
+
+## 0.68.31 HTTP-Pfad und HTTP-Werkzeuge
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für R4HTTP.R4P, HttpGet und gemeinsame SDK-HTTP-, URL- und Fetch-Helfer werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »HTTP-Pfad und HTTP-Werkzeuge« nachvollziehen.
+  - Notizen: Primärer Umfang: R4HTTP.R4P, HttpGet und gemeinsame SDK-HTTP-, URL- und Fetch-Helfer. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Requestaufbau, Headerparser, Chunking, Redirects, Range-Transfers, Bufferung, Streaming, Abbruch und Netz-Rundreisen. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Requestaufbau, Headerparser, Chunking, Redirects, Range-Transfers, Bufferung, Streaming, Abbruch und Netz-Rundreisen. Zugeordnete kanonische Module: Protocol/R4Http, App/HttpGet. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+Abschluss 0.68.31 (2026-08-21): R4HTTP.R4P, HTTPGET.R4X sowie die kanonischen SDK-Schichten http, app_web, web_fetch und web_url wurden mitsamt unmittelbaren app_network-, Klickifax- und UpdateService-Grenzen rein analytisch untersucht. 20 neue eindeutige Befunde PERF-HTTP-001 bis PERF-HTTP-020 sind im zentralen Bericht dokumentiert. Die staerksten Befunde sind der synchrone Ressourcenwasserfall, erzwungenes Connection-close ohne Wiederverwendung, parallele Raw-/Body-Vollpuffer, wiederholtes Gesamtdecoding und quadratische Praefixkopien bei inkrementellem Chunked-Fetch, bedingungsloses Accept-Encoding identity, fehlender CORS-Preflightcache, per-Eingangsschritt erneuerte Timeouts sowie die alte pollingintensive Netzwerkfassade von HTTPGET. Der x86_64-Layoutprobe bestaetigte 70.664 Byte fuer web_fetch.Headers und 2.064 Byte fuer web_url.SearchParams; die temporaere Probe wurde entfernt. R4HTTP-Build (14.163 Codebytes, Container 20.981 Byte), HTTPGET-Build (18.851 Codebytes, Container 25.956 Byte), SDK Build.bat test und Distribution Build.bat test waren erfolgreich. Bericht: 874831 Byte, 15563 LF-Zeilen, ASCII, 576 eindeutige Gesamtbefunde, SHA-256 0D4145FE702F63AF2AD9CEDE178B2E460DD5DBE70AB1415F2979206AE8A46035. RELEASE_VERSION wurde auf 0.68.31 gesetzt. Es wurden keine Performanceoptimierungen oder Produktquellcode-Aenderungen umgesetzt und kein Push ausgefuehrt.
+
+## 0.68.32 SSH-Dienst
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für SshService werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »SSH-Dienst« nachvollziehen.
+  - Notizen: Primärer Umfang: SshService. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Handshake und Kryptografie, Paketparser, Channel- und Terminalpfad, Bufferung, Polling, Rekey, Netzwerk- und Desktopübergänge. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Handshake und Kryptografie, Paketparser, Channel- und Terminalpfad, Bufferung, Polling, Rekey, Netzwerk- und Desktopübergänge. Zugeordnete kanonische Module: Service/SshService. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+
+## 0.68.33 FTP- und Serial-Link-Pfade
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für FtpService, SerialLinkService, NetSerialLink.R4P und SerialLinkDiag werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »FTP- und Serial-Link-Pfade« nachvollziehen.
+  - Notizen: Primärer Umfang: FtpService, SerialLinkService, NetSerialLink.R4P und SerialLinkDiag. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Kommandoparser, Datenkanäle, serielle Frames, Pufferung, Kopien, Timeouts, Polling, Backpressure und Fehlerwiederholung. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Kommandoparser, Datenkanäle, serielle Frames, Pufferung, Kopien, Timeouts, Polling, Backpressure und Fehlerwiederholung. Zugeordnete kanonische Module: Service/FtpService, Service/SerialLinkService, Protocol/NetSerialLink, Diagnostic/SerialLinkDiag. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+
+## 0.68.34 RDP, Remote Frames und WindowService
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für RdpService, WindowService und RemoteFrameDiag werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »RDP, Remote Frames und WindowService« nachvollziehen.
+  - Notizen: Primärer Umfang: RdpService, WindowService und RemoteFrameDiag. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Frameerfassung, Dirty Regions, Encoding, Kopien, Netztransport, Eingaberückweg, Fensterdispatch und unveränderte Frames. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Frameerfassung, Dirty Regions, Encoding, Kopien, Netztransport, Eingaberückweg, Fensterdispatch und unveränderte Frames. Zugeordnete kanonische Module: Service/RdpService, Service/WindowService, Diagnostic/RemoteFrameDiag. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+
+## 0.68.35 Audio-Kern und AudioService
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für Kernel audio/core und pcm, R4AUDIO-Fassade, AudioService und AudioDiag werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Audio-Kern und AudioService« nachvollziehen.
+  - Notizen: Primärer Umfang: Kernel audio/core und pcm, R4AUDIO-Fassade, AudioService und AudioDiag. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+Vollstaendig gelesen und verfolgt: neun Primaerquellen in Kernel, SDK, AudioService und AudioDiag mit 3.311 Zeilen und 127.563 Byte; unmittelbare ABI-, Programmlifecycle-, HDA-/AC97- und Aufrufergrenzen wurden fuer Besitz, PCM, Backpressure, Drain und Messwerte einbezogen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Mischen, Formatgrenzen, PCM-Kopien, Bufferquanten, Deadlines, Busy-Antworten, Polling, Wakeups, Latenz und Underruns. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+22 belastbare Befunde dokumentiert. Schwerpunkte: fehlender Mixer, redundanter Scheinring, 16-KB-Heapbindung pro Open, wirkungslose Lautstaerke, stumme Scheinerfolge, globale Fremdschliessung, fehlender Drainvertrag, skalarer PCM-Pfad, extreme Ratenexpansion, Servicekadenz, Kopierkette, Head-of-line-Blocking, verwaiste Sessions und Diagnoseblindstellen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+Bericht erweitert und formal validiert: ExFiles/Reports/GPT_5.6_Sol.txt, 1.000.624 Byte, SHA-256 9EF358416B757F2A0EC7868DD4222E78A40DF5B1879AADEAFBDD0CB765E8C1CE, 658 eindeutige PERF-IDs, davon 22 neu fuer 0.68.35; ASCII-only, LF-only und ohne doppelte ID.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+Abnahme erfuellt: vollstaendiger festgelegter Quellumfang analysiert, Befunde und Evidenzgrenzen im zentralen Bericht festgeschrieben. Kernel-Hosttests, kompletter SDK-Test, AUDSVC-Build, AUDIOD-Build samt zwei PCM-Tests und WAV-Analyzer-Selbsttest sowie Distribution Build.bat test sind gruen. Keine Produktoptimierung umgesetzt.
+
+### Notizen
+Analyseschwerpunkte: Mischen, Formatgrenzen, PCM-Kopien, Bufferquanten, Deadlines, Busy-Antworten, Polling, Wakeups, Latenz und Underruns. Zugeordnete kanonische Module: Service/AudioService, Diagnostic/AudioDiag. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+Abschlussnachweis 0.68.35: 22 neue Audio-/PCM-/Service-/Diagnosebefunde im zentralen Bericht; Report-SHA-256 9EF358416B757F2A0EC7868DD4222E78A40DF5B1879AADEAFBDD0CB765E8C1CE. Release-Marker auf 0.68.35 gesetzt, relevante Builds und Tests gruen. Keine Produktquelle optimiert und gemaess Nutzeranweisung kein Push ausgefuehrt.
+
+## 0.68.36 HDA und AC97
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für HDA.R4D und AC97.R4D mit Kernel-DMA-, IRQ- und Audioanbindung werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »HDA und AC97« nachvollziehen.
+  - Notizen: Primärer Umfang: HDA.R4D und AC97.R4D mit Kernel-DMA-, IRQ- und Audioanbindung. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+Abgeschlossen: Vollstaendig gelesen wurden HDA/src/main.zig (1.824 Zeilen, 66.551 Bytes), HDA/src/stream_ring.zig (220 Zeilen, 8.265 Bytes) und AC97/src/main.zig (534 Zeilen, 18.477 Bytes), zusammen 2.578 primaere Quellzeilen und 93.293 Bytes. Einbezogen wurden ausserdem Build- und Modulvertraege sowie die relevanten SDK-/Kernelpfade fuer DMA, IRQ, Driver-Work, Audiobackend, Stop und Unload.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: DMA-Ringe, Reserve, Refill, Interruptfrequenz, LPIB/Position, Kopien, Reset, Backpressure und Gerätestillstand. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+Abgeschlossen: 19 neue Befunde wurden belastbar getrennt dokumentiert (PERF-AUDDRV-001..003, PERF-HDA-001..009, PERF-AC97-001..007). Schwerpunkte sind fehlende DMA-Adressmasken, nicht erzwungene Raten, HDA-Prefill/Kurzstreams, 100 IRQ-/Workqueuezyklen pro Sekunde, verlorenes Wakeup, Doppelpuffer/Kopien, INTx-Fanout, Drain- und Beobachtungsluecken sowie AC97-Portpolling, fehlende Backpressure, Resamplerreset, Telemetrie-, Synchronisations- und Resetkosten.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+Abgeschlossen: Der zentrale Bericht enthaelt nun 677 eindeutige PERF-Befunde und 1.028.717 Bytes. SHA-256: CF9FFB4434EC4A0984F2D79EE919D6CB9168E4B0B5130D8E4D5DA27089729557. Der neue Abschnitt 0.68.36 ist ASCII-/LF-sauber, enthaelt keine doppelten Kennungen und ordnet Messprioritaeten sowie spaetere Besitzer zu. Keine Optimierung wurde implementiert.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+Erfuellt: HDA Build.bat test bestand einschliesslich fuenf Stream-Ring-Tests; AC97 Build.bat bestand; Distribution Build.bat test bestand fuer Slim, Full, Test, QEMU-Marker und Release-Tool. HDA- und AC97-Repositories blieben sauber. Nur der vorgeschriebene Distribution-Release-Marker wurde auf 0.68.36 gesetzt; keine Produktquelle wurde veraendert.
+
+### Notizen
+Analyseschwerpunkte: DMA-Ringe, Reserve, Refill, Interruptfrequenz, LPIB/Position, Kopien, Reset, Backpressure und Gerätestillstand. Zugeordnete kanonische Module: Driver/HDA, Driver/AC97. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+0.68.36 rein analytisch abgeschlossen. Bericht formal validiert, relevante Builds und Distribution-Abnahme bestanden, RELEASE_VERSION=0.68.36. Gemaess Benutzeranweisung wurde kein Push ausgefuehrt.
+
+## 0.68.37 MIDI, OPL3 und SID
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für MIDI-, OPL3- und SID-Treiber und -Protokolle sowie Beep, R4Synth und SynthDiag werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »MIDI, OPL3 und SID« nachvollziehen.
+  - Notizen: Primärer Umfang: MIDI-, OPL3- und SID-Treiber und -Protokolle sowie Beep, R4Synth und SynthDiag. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+Vollstaendig gelesen und abgegrenzt: neun Primaermodule mit elf Zig-Quelldateien, 4.229 Zeilen und 131.352 Byte. Einbezogen wurden MIDI.R4D, OPL3.R4D, SID.R4D, AudioMidi.R4P, AudioOpl3.R4P, AudioSid.R4P, Beep.R4X, R4Synth.R4X, SynthDiag.R4X sowie die direkt beteiligten Kernel-, DriverApi-, R4AUDIO-, R4P-, SDK- und Audioboot-Grenzen. Server/, R4CodePad, Dokumentationen und fachfremde Pakete blieben ausserhalb des Analyseumfangs.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Eventdispatch, Registerschreiben, Syntheseschleifen, PCM-Erzeugung, Timing, Bufferung, AudioService-Übergang und Leerlaufkosten. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+23 neue Befunde dokumentiert. P0-Schwerpunkte: 100-Hz-Annahmen bei realen 1.000 Hz und dadurch etwa zehnfache Produzentenlast; PCM-loser Synth-Rendervertrag; MIDI-Platzhalter als scheinbar renderfaehiges Backend; verworfene OPL3-Bloecke; inaktive SID-R4P-Bruecke; verschluckte Backendfehler; bis zu zehn Millionen SID-Interpretersteps/s. Eine temporaere, danach entfernte Hostsonde mass denselben OPL3-Quellstand: ReleaseSmall 502,4738 ms gegen ReleaseFast 399,1314 ms bei aktiver Last, 20,6 Prozent Reduktion. Hypothesen und Hostgrenzen sind getrennt ausgewiesen; keine Optimierung wurde umgesetzt.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+Berichtsabschnitt 0.68.37 unter ExFiles/Reports/GPT_5.6_Sol.txt abgeschlossen. Endstand: 1.058.287 Byte, SHA-256 F814674AEDC2B1F516FE898881D2DDD6F90A4C45C71791727667D300B7C208BF, 23 neue und 700 gesamte eindeutige PERF-IDs, keine Duplikate, keine CR- oder Nicht-ASCII-Bytes. Enthalten sind Quellen, Mechanismen, Auswirkungen, Prioritaeten, Besitzer, Messprogramm, Grenzen sowie die ausdrueckliche NTFS-/CPU-Negativabgrenzung.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+Abnahme erfuellt: alle neun Primaermodule bauten unveraendert erfolgreich (zusammen 41.493 Codebytes, 127.689 Containerbytes, 977 Relokationen). Kernel Build.bat test, SDK Build.bat test und Distribution Build.bat test waren erfolgreich. Alle Modul-, Kernel- und SDK-Repositories sind sauber; als erwartete Versionsaenderung steht nur RELEASE_VERSION=0.68.37 in Distribution. Temporaere Messdateien wurden entfernt. Es wurden weder Produktoptimierungen noch neue Tests implementiert.
+
+### Notizen
+Analyseschwerpunkte: Eventdispatch, Registerschreiben, Syntheseschleifen, PCM-Erzeugung, Timing, Bufferung, AudioService-Übergang und Leerlaufkosten. Zugeordnete kanonische Module: Driver/MIDI, Driver/OPL3, Driver/SID, Protocol/AudioMidi, Protocol/AudioOpl3, Protocol/AudioSid, App/Beep, App/R4Synth, Diagnostic/SynthDiag. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+Unterversion analytisch abgeschlossen. RELEASE_VERSION wurde auf 0.68.37 gesetzt; UTF-8-BOM und LF blieben erhalten. Auf ausdruecklichen Wunsch wurde kein Push ausgefuehrt.
+
+## 0.68.38 R4STD und JSON
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für R4STD, JSON.R4P und StdDiag werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »R4STD und JSON« nachvollziehen.
+  - Notizen: Primärer Umfang: R4STD, JSON.R4P und StdDiag. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Text-, Parser-, Config-, Datums- und Zeitpfade, temporäre Allokationen, Kopien, lineare Scans, Dateihelfer und ABI-Dispatch. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Text-, Parser-, Config-, Datums- und Zeitpfade, temporäre Allokationen, Kopien, lineare Scans, Dateihelfer und ABI-Dispatch. Zugeordnete kanonische Module: RuntimeLibrary/R4STD, Protocol/JSON, Diagnostic/StdDiag. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+Analyse abgeschlossen. Primaerbasis: 23 ABI-/Produktionsquellen, 9.308 Zeilen, 361.531 Byte. 22 neue eindeutige Befunde (PERF-R4STD, PERF-R4SCFG, PERF-R4ASSOC, PERF-R4TIME, PERF-JSON, PERF-STDDIAG); Bericht nun 722 PERF-IDs, ASCII/LF, SHA-256 6227882FD67AF37F14D775FD2017C0FAC954A0F58850D57EF8C401306DBD3001. Hauptbefunde: wiederholte R4S-Vollscans und -Dateireads, rund 12 VFS-Calls je atomischem Config-Update, 161 R4L-Writercalls im ASSOC-Maximalfall, 477 KB subsystem_runtime-Zustand je Verbraucher sowie ein R4DEV/R4P-Dispatch je JSON-Token. Unveraenderte Builds erfolgreich: R4STD test, JSON test, StdDiag; Distribution test erfolgreich. Release-Marker 0.68.38, keine Produktoptimierung, kein Push gemaess Uservorgabe.
+
+## 0.68.39 R4IMG
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für R4IMG-Implementierung und ihre Decoder werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »R4IMG« nachvollziehen.
+  - Notizen: Primärer Umfang: R4IMG-Implementierung und ihre Decoder. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Decoderkomplexität, Allokationen, Farb- und Formatumwandlung, Zeilenkopien, große Bilder, Fehlerpfade und Verbraucherübergaben. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Decoderkomplexität, Allokationen, Farb- und Formatumwandlung, Zeilenkopien, große Bilder, Fehlerpfade und Verbraucherübergaben. Zugeordnete kanonische Module: RuntimeLibrary/R4IMG. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+Analyse abgeschlossen. Primaerbasis: 11 relevante Implementierungs-, Binding- und Decoderdateien, 11.529 Zeilen, 435.646 Byte. 24 neue eindeutige Befunde (PERF-R4IMG, PERF-SVG, PERF-KFXIMG, PERF-WALLIMG, PERF-R4IMGTEST); Bericht nun 746 PERF-IDs, ASCII/LF, SHA-256 469F75E0F65669144037FFAEBEBDFE44943BEE5E088771EEAEC78F8B1EDB53EF. Hauptbefunde: deaktivierte stb-SIMD-Pfade, RGBA-Zwischenpuffer, beim Full-HD-BMP nur 18,2 Prozent Nutzung des 45.684.844-Byte-Scratchvertrags, 38,3312 ms ReleaseSmall-Hostmedian fuer opake Identitaetsskalierung, flaechige SVG-Kantenarbeit, fehlendes Klickifax-Gesamtbudget und bis zu 298,5625 MB rechnerischer Wallpaper-Wechselpeak. Unveraenderter R4IMG-Testbuild und Distribution test erfolgreich. Release-Marker 0.68.39, keine Produktoptimierung, kein Push gemaess Uservorgabe.
+
+## 0.68.40 R4FONT und Schriftpfade
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für R4FONT, Fonts-App, Kernelfont und gemeinsame SDK-Schriftpfade werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »R4FONT und Schriftpfade« nachvollziehen.
+  - Notizen: Primärer Umfang: R4FONT, Fonts-App, Kernelfont und gemeinsame SDK-Schriftpfade. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Fontdecoding, Glyphensuchen, Rasterung, Cachekeys, Cachetreffer, Maskenkopien, Fallbacks und wiederholtes Laden. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Fontdecoding, Glyphensuchen, Rasterung, Cachekeys, Cachetreffer, Maskenkopien, Fallbacks und wiederholtes Laden. Zugeordnete kanonische Module: RuntimeLibrary/R4FONT, App/Fonts. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+Abgeschlossen am 22.08.2026. Geprueft wurden R4FONT, FaceStore/font_import, Fonts-App, Kernel-Fontkatalog/R4DRAW/Desktop, gemeinsame SDK-Webfontpfade sowie die produktiven Klickifax-Schrift-, Masken- und persistenten Cachepfade. 26 belastbare Befunde und Evidenzluecken wurden ohne Optimierungs- oder Produktquellenaenderung in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert. Reproduzierbare Hostsonden verglichen R4FONT ReleaseSmall/ReleaseFast und den echten ReleaseSafe-Kernelfontpfad; ihre Grenzen als Nicht-Gastmessung sind im Bericht festgehalten. R4FONT-Test, Fonts-Build, Klickifax-Test, SDK-Test, Kernel-Test und Distribution-Test waren erfolgreich. Bericht: 1.150.935 Byte, ASCII/LF, 772 eindeutige PERF-Ueberschriften, SHA-256 5D71C4B7CCCC21750613E8C73C4DF47A1492B7AECBB67D86E0F1BE5F0D7B6C9C. RELEASE_VERSION steht auf 0.68.40. Gemaess Nutzeranweisung wurde kein Push gestartet.
+
+## 0.68.41 SDK-Start, Fassaden und Modulruntime
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für SDK r4os und Shared für Start, Plattformfassaden, Modulmanifest, Runtime-R4L und Allokation werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »SDK-Start, Fassaden und Modulruntime« nachvollziehen.
+  - Notizen: Primärer Umfang: SDK r4os und Shared für Start, Plattformfassaden, Modulmanifest, Runtime-R4L und Allokation. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Startkosten, API-Query-Caching, Wrapperkopien, Handle- und Pfadumwandlung, C-Brücken, Manifestparser und redundante Abstraktionsschichten. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Startkosten, API-Query-Caching, Wrapperkopien, Handle- und Pfadumwandlung, C-Brücken, Manifestparser und redundante Abstraktionsschichten. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+Analyse abgeschlossen: 33 primaere SDK-/Shared-Quellen entlang der Start-, Fassaden-, Pfad-, Runtime-R4L-, Allokator- und R4MF-Kette geprueft. Sechs neue Befunde unter PERF-SDK-001 bis -006 dokumentiert; bestehende ABI-, Zeit-, Netzwerk-, Loader-, Heap- und Buildprofilbefunde nicht dupliziert. SDK-Test und Distribution-Test erfolgreich, RELEASE_VERSION=0.68.41. Keine Optimierung, keine funktionale Produktquellaenderung und auf Wunsch kein Push.
+
+## 0.68.42 Registry, Konfiguration und Zeitsystem
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für Kernel/SDK Registry und Config, TimeService sowie zugehörige Einstellungsprogramme werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Registry, Konfiguration und Zeitsystem« nachvollziehen.
+  - Notizen: Primärer Umfang: Kernel/SDK Registry und Config, TimeService sowie zugehörige Einstellungsprogramme. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Parsing, Datei-I/O, Schlüssel- und Pfadsuchen, Serialisierung, Wiederholung, Cacheverhalten, Zeitumrechnung und UI-Neuladen. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Parsing, Datei-I/O, Schlüssel- und Pfadsuchen, Serialisierung, Wiederholung, Cacheverhalten, Zeitumrechnung und UI-Neuladen. Zugeordnete kanonische Module: Service/TimeService, App/AppDefaults, App/Appearance, App/Clock, App/RegEdit, App/RegistryTool, App/TimeSettings, Diagnostic/R4CfgDiag. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+Analyse abgeschlossen: 23 primaere Quellen entlang der Registry-, Config- und Zeitkette geprueft. Zwoelf neue Befunde unter PERF-REG-001 bis -008, PERF-TIMESVC-001 bis -003 und PERF-REGTIME-001 dokumentiert; bestehende R4S-, Service-, Zeit-, Heap-, VFS- und NTFS-Befunde nicht dupliziert. Kernel-, SDK-, R4STD- und Appearance-Tests, betroffene Modul-Builds sowie Distribution-Test erfolgreich, RELEASE_VERSION=0.68.42. Keine Optimierung, keine funktionale Produktquellaenderung und auf Wunsch kein Push.
+
+## 0.68.43 Logging und Clipboard-Dienste
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für Kernel-Logging, LogService, ClipboardService und zugehörige Diagnosen werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Logging und Clipboard-Dienste« nachvollziehen.
+  - Notizen: Primärer Umfang: Kernel-Logging, LogService, ClipboardService und zugehörige Diagnosen. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Formatierung, Serial-Sink, Ringpuffer, Datei- und IPC-Schreiblast, Queueing, Payloadkopien, Polling und dauerhaft aktive Kosten. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Formatierung, Serial-Sink, Ringpuffer, Datei- und IPC-Schreiblast, Queueing, Payloadkopien, Polling und dauerhaft aktive Kosten. Zugeordnete kanonische Module: Service/LogService, Service/ClipboardService, Diagnostic/LogServiceDiag, Diagnostic/ClipboardDiag. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+Analyse abgeschlossen: 21 primaere Quell- und Vertragsdateien entlang der Logging- und Clipboard-Ketten geprueft. Zehn neue Befunde unter PERF-LOGSVC-001 bis -006, PERF-CLIP-001 bis -003 und PERF-LOGCLIP-001 dokumentiert; bestehende Bootlog-, COM1-, Service-, RDP-, VFS- und NTFS-Befunde nicht dupliziert. Kernel- und SDK-Test, betroffene Service-, Diagnose- und LogCenter-Builds sowie Distribution-Test erfolgreich, RELEASE_VERSION=0.68.43. Keine Optimierung, keine funktionale Produktquellaenderung und auf Wunsch kein Push.
+
+## 0.68.44 System-Update-Pfad
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für Kernel/SDK Update-, Recovery-, Inventory-, Batch- und Claimquellen, UpdateService und Updateprogramme werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »System-Update-Pfad« nachvollziehen.
+  - Notizen: Primärer Umfang: Kernel/SDK Update-, Recovery-, Inventory-, Batch- und Claimquellen, UpdateService und Updateprogramme. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Katalog- und Inventarscans, Hashing, Paket-I/O, Transaktionen, Journale, Kopien, Netzpfade, Wiederanlauf und UI-Aktualisierung. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Katalog- und Inventarscans, Hashing, Paket-I/O, Transaktionen, Journale, Kopien, Netzpfade, Wiederanlauf und UI-Aktualisierung. Zugeordnete kanonische Module: Service/UpdateService, App/SysUpdate, App/UpdateCenter. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+Analyse abgeschlossen: 22 primaere Quell- und Vertragsdateien entlang des System-Update-Pfads geprueft. Vierzehn neue Befunde unter PERF-UPD-001 bis -014 dokumentiert; bestehende NTFS-, R4S-, Service-, JSON-, HTTP-, CPU- und TLS-Befunde nicht dupliziert. Kernel- und SDK-Test, UpdateService-Test und -Build, UpdateCenter-Modelltest und -Build, SysUpdate-Build sowie Distribution-Test erfolgreich, RELEASE_VERSION=0.68.44. Keine Optimierung, keine funktionale Produktquellaenderung und auf Wunsch kein Push.
+
+## 0.68.45 Desktop und Compositor
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für Desktop-App mit app, draw, scene, compositor, window, items, snapshots und Oberfläche werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Desktop und Compositor« nachvollziehen.
+  - Notizen: Primärer Umfang: Desktop-App mit app, draw, scene, compositor, window, items, snapshots und Oberfläche. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Eventloop, Fenster- und Itemscans, Repaintgrenzen, Scene-Kopien, Dirty Regions, Text und Icons, Timer, Layout und Leerlaufarbeit. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Eventloop, Fenster- und Itemscans, Repaintgrenzen, Scene-Kopien, Dirty Regions, Text und Icons, Timer, Layout und Leerlaufarbeit. Zugeordnete kanonische Module: App/Desktop. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+0.68.45 abgeschlossen: Alle 28 Zig-Quelldateien des kanonischen Desktopmoduls (16.782 Zeilen, 704.651 Byte) sowie die notwendigen GUI-Frame-, Kernel- und Aufrufergrenzen wurden systematisch analysiert. 15 neue Befunde und Evidenzlücken stehen als PERF-DESK-001 bis PERF-DESK-015 in ExFiles/Reports/GPT_5.6_Sol.txt. Schwerpunkte sind vollständige Szenendurchläufe bei kleinem Damage, 1x1-Iconfills, wiederholte Terminalvollarbeit, GUI-Vollsnapshots und -invalidierungen, Shape-Masken, Raster-/Text-Clipping, doppelte Taskbar, breite Hoverbereiche, Draggrid, Startup-, Timer- und Layoutkosten. Desktop-, Kernel- und SDK-Tests, Desktop-Build sowie Distribution-Test mit RELEASE_VERSION 0.68.45 waren erfolgreich. Es wurde keine Optimierung und keine funktionale Produktquelländerung umgesetzt. Gemäß Nutzeranweisung erfolgte kein Push.
+
+## 0.68.46 SDK-GUI, Zeichnen und Rasterung
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für SDK gui, gui_shapes, raster, chart und App-GUI-Fassade werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »SDK-GUI, Zeichnen und Rasterung« nachvollziehen.
+  - Notizen: Primärer Umfang: SDK gui, gui_shapes, raster, chart und App-GUI-Fassade. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+Primaerumfang vollstaendig erfasst: SDK gui.zig, gui_shapes.zig, raster.zig, chart.zig und app_gui.zig, zusammen 5.753 Zeilen und 238.414 Byte. Direkte R4DRAW-, R4DESK-, Kernel- und repraesentative App-Aufrufergrenzen wurden zur Reichweitenermittlung verfolgt; Server/, R4CodePad, Dokumentationen und Paketkopien blieben ausgeschlossen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Widgetlayout, Hit-Tests, Ereignisdispatch, Clipping, Rasteroperationen, Text, temporäre Puffer, Full-Frame-Arbeit und API-Aufrufe. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+Widgetlayout, Hit-Tests, Eventdispatch, Clipping, Raster, Chart, Text, temporaere Puffer, Full-Frame-Arbeit und API-Aufrufe wurden systematisch analysiert. 16 belastbare Befunde PERF-SDKGUI-001 bis -016 trennen bestaetigte Ursachen, Reichweitengrenzen und Messluecken. Es wurde keine Optimierung implementiert.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+Der zentrale Bericht enthaelt den Abschnitt 0.68.46 mit Quellenbasis, Querverweisen, Quantifizierungen, Besitzern, spaeteren Empfehlungen und Abschluss. Endstand: 1.315.886 Byte, SHA-256 B1E0FA56E275E42B29CD8FFCBEFE6472C74AFCF800349080E14EA12391AB6220, ASCII-only, LF-only, 845 eindeutige PERF-Ueberschriften.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+Abnahme erfuellt: fuenf primaere SDK-Dateien und relevante Besitzer-/Aufruferketten geprueft; alle belastbaren Befunde und Grenzen in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert. SDK-Test/-Build, Kernel-Test, Builds von Notepad, MemView, Calculator, Example und Paint sowie Distribution-Test mit Marker 0.68.46 erfolgreich. Die Apps besitzen keine eigenen test-Buildschritte. Keine Produktoptimierung, kein Push.
+
+### Notizen
+Analyseschwerpunkte: Widgetlayout, Hit-Tests, Ereignisdispatch, Clipping, Rasteroperationen, Text, temporäre Puffer, Full-Frame-Arbeit und API-Aufrufe. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+Abschluss 0.68.46: 16 neue Befunde PERF-SDKGUI-001 bis -016. Schwerpunkte sind RTC-Lesen bei Forever-Wait, Clipboard-Servicecall je Eventloop-Poll, doppelte Begin/Clear-Frameallokation, primitiveweise ABI-/Heaparbeit, dreifache Textmessung, quadratisches Ellipsizing, TextArea-Praefixscans, byteweises Paste-Shifting, Full-Frame-Arbeit und der pixels-mal-segments-Chartpfad. gui_shapes zeigte producerseitig keinen neuen dominanten Engpass. Keine neue NTFS-, Treiber- oder zwingende CPU-Funktionsluecke. Bericht SHA-256 B1E0FA56E275E42B29CD8FFCBEFE6472C74AFCF800349080E14EA12391AB6220; RELEASE_VERSION=0.68.46. Rein analytisch, ohne Optimierung und ohne Push.
+
+## 0.68.47 Terminal- und Konsolenpfad
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für Terminal-App sowie relevante Shell-, Desktop- und Kernelkonsolenübergänge werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Terminal- und Konsolenpfad« nachvollziehen.
+  - Notizen: Primärer Umfang: Terminal-App sowie relevante Shell-, Desktop- und Kernelkonsolenübergänge. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Zeichenverarbeitung, Zeilenpuffer, Scrollen, Repaint, Eingabe, Prozessstart, Ausgabe-Batching und große Textmengen. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Zeichenverarbeitung, Zeilenpuffer, Scrollen, Repaint, Eingabe, Prozessstart, Ausgabe-Batching und große Textmengen. Zugeordnete kanonische Module: App/Terminal. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+
+## 0.68.48 Explorer und dateiorientierte Oberfläche
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für Explorer, SDK Recent Documents, Pfad-, Datei- und Ressourcenfassaden werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Explorer und dateiorientierte Oberfläche« nachvollziehen.
+  - Notizen: Primärer Umfang: Explorer, SDK Recent Documents, Pfad-, Datei- und Ressourcenfassaden. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Verzeichnisauflistung, Sortierung, Metadaten- und Iconzugriffe, Pfadauflösung, Cacheverhalten, UI-Updates und langsame Datenträger. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Verzeichnisauflistung, Sortierung, Metadaten- und Iconzugriffe, Pfadauflösung, Cacheverhalten, UI-Updates und langsame Datenträger. Zugeordnete kanonische Module: App/Explorer. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+
+## 0.68.49 Systemverwaltungsprogramme
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für BootInfo, DeviceManager, LogCenter, MemView, ServiceManager, Services und SysInfo werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Systemverwaltungsprogramme« nachvollziehen.
+  - Notizen: Primärer Umfang: BootInfo, DeviceManager, LogCenter, MemView, ServiceManager, Services und SysInfo. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Inventar- und Statusabfragen, große Listen, Formatierung, periodische Aktualisierung, IPC, Datei-I/O, GUI-Redraw und Leerlaufpolling. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Inventar- und Statusabfragen, große Listen, Formatierung, periodische Aktualisierung, IPC, Datei-I/O, GUI-Redraw und Leerlaufpolling. Zugeordnete kanonische Module: App/BootInfo, App/DeviceManager, App/LogCenter, App/MemView, App/ServiceManager, App/Services, App/SysInfo. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+
+## 0.68.50 Produktivitäts- und Hilfsprogramme
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für Calculator, Help, Notepad und Paint werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Produktivitäts- und Hilfsprogramme« nachvollziehen.
+  - Notizen: Primärer Umfang: Calculator, Help, Notepad und Paint. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+Calculator, Help, Notepad und Paint sowie ihre direkten SDK-, R4IMG-, VFS-, Kernel- und NTFS-Grenzen wurden vollständig quellenbasiert verfolgt. Primärumfang: 5 Dateien, 4.285 Zeilen, 161.650 Byte; Quellhashes sind im Bericht festgehalten.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Eventloops, Text- und Bilddatenstrukturen, Laden/Speichern, Redraw, Undo-nahe Kopien, große Dateien/Bilder und Leerlaufkosten. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+16 App-spezifische Befunde wurden als PERF-PROD-001 bis -016 belegt. Schwerpunkte: GUI- und Leerlaufarbeit, HELP-Ausgabe und -Enumeration, Notepad-Laden/Editieren/Suche/Auswahl, Dateidialoge sowie Paint-Zustand, Zeichenpfad und BMP-I/O. Keine Optimierung wurde umgesetzt.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+Der Abschnitt 0.68.50 beginnt in ExFiles/Reports/GPT_5.6_Sol.txt bei Zeile 25.458. Endstand: 1.460.524 Byte, SHA-256 FF5DD92AAEFB41708BF15090A1F3BE7B072697D56642C2C3CED71606B33124EB, ASCII/LF und 905 eindeutige PERF-IDs.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+Abnahme erfüllt: alle vier App-Builds sowie SDK-, Kernel-, R4IMG- und Distribution-Test erfolgreich; Distributionmarker 0.68.50 mit UTF-8-BOM/LF geprüft. Produktquellen und Modul-/Kernelversionen blieben unverändert. Auf Wunsch wurde kein Push ausgeführt.
+
+### Notizen
+Analyseschwerpunkte: Eventloops, Text- und Bilddatenstrukturen, Laden/Speichern, Redraw, Undo-nahe Kopien, große Dateien/Bilder und Leerlaufkosten. Zugeordnete kanonische Module: App/Calculator, App/Help, App/Notepad, App/Paint. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+Abschluss: Die Analyse ist ausschließlich im zentralen Bericht dokumentiert. 16 PERF-PROD-Befunde; stärkste statische Verstärker sind Notepads 2.195.452 Layoutbesuche beim 32-KB-Laden, Paints Vollraster-/Scratchpfade, HELP-Ausgabefragmentierung und die Pollschleifen von Notepad/Paint. Kein Push und keine Optimierung.
+
+## 0.68.51 R4OS-Entwicklungswerkzeuge
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für R4Build, R4CC, R4Code, R4Pack und SDK-R4CP-Konvertierung werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »R4OS-Entwicklungswerkzeuge« nachvollziehen.
+  - Notizen: Primärer Umfang: R4Build, R4CC, R4Code, R4Pack und SDK-R4CP-Konvertierung. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+Abschluss 0.68.51: Neun Primaer-/Corequellen, vier unmittelbare Besitzerdateien, vier Modulmanifeste und vier kanonische Projektvorlagen wurden vollstaendig verfolgt (21 Dateien, 29.872 Zeilen, 1.252.652 Byte). Einbezogen waren die direkten R4MF-, R4CP-, R4STD-, GUI-, Lifecycle-, VFS- und NTFS-Grenzen; Server und R4CodePad blieben ausgeschlossen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Quellparsing, Dateiscans, Compiler-/Packpfade, Editoroperationen, Prozessstarts, Speicherwachstum, große Projekte und Ausgabe-I/O. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+Die Analyse ergab 18 Befunde PERF-DEV-001 bis -018. Dominant sind R4Codes synchrone 512-Byte-Ladekette mit 8.716.282 Layoutbesuchen am Maximum, wiederholte Ganzdokumentscans und Vollframes, blockierendes Foreground-Warten, wiederholtes Manifestparsing, Logslot-Verschiebungen sowie R4PACKs Speicher- und Kopierpfade. Eine direkte Probe bestaetigte zudem, dass die kanonische Konsolenvorlage nach ihren Scans mit MissingWriteCall endet. Weder eine fehlende CPU-/Treiberfunktion noch ein neuer interner NTFS-Defekt wurde belegt.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+Alle Befunde, Prioritaeten, Grenzen, Evidenzluecken und spaeteren Empfehlungen stehen ausschliesslich im Abschnitt 0.68.51 von ExFiles/Reports/GPT_5.6_Sol.txt (SHA-256 A73850F147425BE78E09A04F0629D7CBCF225DD12CC8ECE0E8D8AC027003F612). Der Bericht blieb ASCII- und LF-rein; alle 923 PERF-Ueberschriften sind eindeutig. Keine Optimierung und keine funktionale Produktaenderung wurden umgesetzt.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+Erfuellt: Der festgelegte Quellumfang ist analysiert und mit 18 eindeutigen PERF-DEV-Befunden dokumentiert. Die vier normalen Modulbuilds sowie SDK-, R4STD-, Kernel- und Distribution-Test waren erfolgreich; die vier Apps besitzen keinen Host-Testschritt. Geaendert wurden nur der zentrale Analysebericht und der vorgeschriebene Distributionmarker 0.68.51.
+
+### Notizen
+Analyseschwerpunkte: Quellparsing, Dateiscans, Compiler-/Packpfade, Editoroperationen, Prozessstarts, Speicherwachstum, große Projekte und Ausgabe-I/O. Zugeordnete kanonische Module: App/R4Build, App/R4CC, App/R4Code, App/R4Pack. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+0.68.51 abgeschlossen: 18 neue PERF-DEV-Befunde wurden in ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben. Vier Modulbuilds und die vorhandenen SDK-, R4STD-, Kernel- und Distribution-Tests waren erfolgreich. RELEASE_VERSION steht auf 0.68.51. Keine Optimierungen, keine Produktquellaenderungen und auf ausdruecklichen Wunsch kein Push.
+
+## 0.68.52 HTML, CSS und Layout
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für SDK html, css und web_layout sowie R4HTML.R4P und R4CSS.R4P werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »HTML, CSS und Layout« nachvollziehen.
+  - Notizen: Primärer Umfang: SDK html, css und web_layout sowie R4HTML.R4P und R4CSS.R4P. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Tokenisierung, Parser, Selektorabgleich, Kaskade, Styleinvalidierung, Boxlayout, wiederholte Durchläufe, Allokationen und tiefe Dokumente. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Tokenisierung, Parser, Selektorabgleich, Kaskade, Styleinvalidierung, Boxlayout, wiederholte Durchläufe, Allokationen und tiefe Dokumente. Zugeordnete kanonische Module: Protocol/R4Html, Protocol/R4Css. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+0.68.52 quellenbasiert abgeschlossen. 18 kanonische und direkte Grenzquellen (29.937 Zeilen, 1.467.309 Byte) wurden fuer HTML-Tokenisierung/DOM, CSS-Parser/Selektoren/Kaskade/Invalidierung und Block-/Flex-/Gridlayout untersucht. 20 eindeutige Befunde stehen als PERF-WEBLAY-001 bis -020 in ExFiles/Reports/GPT_5.6_Sol.txt. Dominante Befunde: 29.527.916.543 Byte kumulierte Entity-Suchfenster, 37.736.449 Attributlistenoperationen, duplizierte CSS-Deklarationen, Vollregel-Scans, ungebremste funktionale Selektorrekursion, vier Kaskadenaufrufe fuer einen einfachen Rootblock, drei Unterbaumlayouts/fuenf Styles je Flex-Column-Kind und ein von Klickifax ungenutzter Vollhash. SDK-, Klickifax- und Distribution-Test sowie normale R4HTML-, R4CSS- und Klickifax-Builds erfolgreich; R4HTML/R4CSS besitzen keinen Host-test-Step. RELEASE_VERSION lokal auf 0.68.52 gesetzt. Keine Optimierung, keine funktionale Produktaenderung und gemaess Uservorgabe kein Push.
+
+## 0.68.53 JavaScript-Ausführungskern
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für SDK javascript, vm_allocator und R4JS.R4P werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »JavaScript-Ausführungskern« nachvollziehen.
+  - Notizen: Primärer Umfang: SDK javascript, vm_allocator und R4JS.R4P. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+Vollstaendig erfasst: SDK javascript.zig samt javascript_unicode, javascript_regex_unicode, javascript_string_case und javascript_string_normalization, SDK vm_allocator, Protocol/R4Js sowie die direkten Grenzen web_runtime, web_documents, program/r4sys, Klickifax, KlickifaxLive und MemorySuite. Server/, R4CodePad, Dokumentationen und Paketkopien blieben ausgeschlossen. 15 relevante Dateien umfassen 101.904 Zeilen und 5.560.609 Byte; der reproduzierbare Quellenstand ist im Bericht mit SHA-256 festgehalten.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Parser, Bytecode/Ausführung, Objekt- und Propertyzugriffe, Scopeketten, Allokation, Garbage-nahe Arbeit, Hostaufrufe und lange Tasks. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+Alle Schwerpunkte analysiert. 22 Befunde PERF-JSCORE-001 bis -022 dokumentieren unter anderem Vollprogrammhash je Funktionsaufruf, 343.521.365 Parser-Knotenpruefungen, 4.718.832 Byte je Program, 34.677.632 Byte je Runtime, lineare Property-/Scope-/Internsuchen, mindestens 98.304 Zellbesuche je GC, quadratische Collections/Insertion Sort, Long-Task-Luecken, synchrone Hostcalls, Fiber-, RegExp- und VM-Allokatorkosten. Zwei ReleaseFast-Hostproben bestaetigen Parser- und Fingerprintskalierung. Fehlende Messungen sowie CPU-/Treiber-/NTFS-Abgrenzung sind explizit festgehalten.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+Ergebnisse ausschliesslich in ExFiles/Reports/GPT_5.6_Sol.txt ab Zeile 27.418 festgeschrieben. Endstand: 1.571.240 Byte, SHA-256 4D1801A7F1BC69E6579EAD4EDAF5D62B689DE3824E2720610B7DFDABE86FE6E4, ASCII-only, LF-only, 965 eindeutige PERF-Ueberschriften. Empfehlungen sind spaeteren Fassungen und Besitzern zugeordnet; keine Optimierung wurde implementiert.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+Abnahme erfuellt: vollstaendiger festgelegter Quellumfang und direkte Besitzergrenzen geprueft, 22 belastbare Befunde/Evidenzluecken zentral dokumentiert, temporaere Proben entfernt. SDK- und Klickifax-Test sowie normale R4JS-, Klickifax-, KlickifaxLive- und MemorySuite-Builds erfolgreich; fehlende R4JS-/Diagnose-test-Steps und fehlende vm_allocator-Unit-Tests dokumentiert. Distribution-Test mit RELEASE_VERSION=0.68.53 erfolgreich. Keine Produktquelle und kein Modulartefakt funktional geaendert.
+
+### Notizen
+Analyseschwerpunkte: Parser, Bytecode/Ausführung, Objekt- und Propertyzugriffe, Scopeketten, Allokation, Garbage-nahe Arbeit, Hostaufrufe und lange Tasks. Zugeordnete kanonische Module: Protocol/R4Js. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+Abschluss 0.68.53: JavaScript-Ausfuehrungskern rein analytisch untersucht; PERF-JSCORE-001 bis -022 im zentralen Bericht. Hauptprioritaeten fuer spaeter: Vollprogrammhash je Call, arguments/eval-Parserquadratik, Program-/Runtime-Arbeitsmenge, Property/Scope/String/GC, Collections/Sort, native Arbeitsbudgets, Hosttelemetrie und kompilierte RegExp-Strukturen. Bericht SHA-256 4D1801A7F1BC69E6579EAD4EDAF5D62B689DE3824E2720610B7DFDABE86FE6E4. Kein Push gemaess Nutzeranweisung.
+
+## 0.68.54 JavaScript-RegExp, Unicode und Strings
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für SDK javascript_regex_unicode, javascript_unicode, Stringnormalisierung und Groß-/Kleinschreibung werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »JavaScript-RegExp, Unicode und Strings« nachvollziehen.
+  - Notizen: Primärer Umfang: SDK javascript_regex_unicode, javascript_unicode, Stringnormalisierung und Groß-/Kleinschreibung. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+Quellkette vollstaendig nachvollzogen: vier kanonische Unicode-17-Tabellen, SDK javascript.zig, R4JS-Manifest/-Grenze sowie direkte Web-/Klickifax-Aufrufer. Der reproduzierbare Primaerstand umfasst sieben Dateien mit 76.393 Zeilen und 4.263.241 Byte. Installierte SDK-Kopien, Dokumentationen, Server/ und R4CodePad wurden ausgeschlossen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Automaten- und Backtrackingkosten, Unicode-Tabellen, Normalisierung, Fallabbildung, Stringkopien, temporäre Puffer und pathologische Eingaben. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+Statische Analyse und unveraenderte ReleaseFast-Sonden abgeschlossen. Bestaetigt wurden unter anderem unkompilierte RegExp-Ausfuehrung, ca. 8,8 us je Kandidatenposition beim Ein-Literal-Miss, quadratischer Lookbehind bis 47,01 s fuer zehn 1.024-Byte-Misses, quadratische Combining-Sortierung bis 160,53 ms, 1.698 lineare Property-Aliase, Emoji-Vollscans, 16.904-Byte-Zustandspuffer sowie harte 15/16-Atom- und 64/65-Quantifiergrenzen. Native Langlaeufer bleiben im VM-Stepbudget unsichtbar.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+PERF-JSUNI-001 bis PERF-JSUNI-022 mit Quellen, Mechanismus, Evidenz, Reichweite, Prioritaet, Besitzer und spaeteren Empfehlungen in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert. Bericht: 1.604.358 Byte, LF-only, ASCII-only, 987 eindeutige PERF-Ueberschriften, SHA-256 8A6F5911600E4A00C0E2A2BE7FE813567500A5FF8AB47D83C2796408E31D1438.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+Abnahme erfuellt: Vollstaendiger Quellumfang geprueft und 22 Befunde/Evidenzgrenzen festgeschrieben. SDK- und Klickifax-Test, R4JS-Normalbuild, KlickifaxLive-Normalbuild und Distribution-Test mit Marker 0.68.54 waren erfolgreich; R4JS besitzt keinen test-Step. Temp-Sonden entfernt, keine Produktquelle optimiert oder funktional geaendert, kein Push ausgefuehrt.
+
+### Notizen
+Analyseschwerpunkte: Automaten- und Backtrackingkosten, Unicode-Tabellen, Normalisierung, Fallabbildung, Stringkopien, temporäre Puffer und pathologische Eingaben. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+0.68.54 abgeschlossen. Schwerpunktbefunde: unkompilierter RegExp-Interpreter, quadratischer Lookbehind, native Arbeit ausserhalb Stepbudget, lineare Unicode-Property-Aliase, Emoji-Vollscans, quadratische Combining-Mark-Sortierung sowie harte RegExp-State-/Tiefengrenzen. Ergebnisse stehen ausschliesslich in ExFiles/Reports/GPT_5.6_Sol.txt; Release-Marker 0.68.54; keine Optimierung und kein Push.
+
+## 0.68.55 Webruntime, DOM und Navigation
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für SDK web_runtime, web_documents, navigation, forms, security, storage und Ereignisbindungen werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Webruntime, DOM und Navigation« nachvollziehen.
+  - Notizen: Primärer Umfang: SDK web_runtime, web_documents, navigation, forms, security, storage und Ereignisbindungen. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: DOM-Mutationen, Observer, Eventqueues, Dokumentlebenszyklus, History, Originprüfungen, Storage-I/O, Subdokumente und Task-Pump. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: DOM-Mutationen, Observer, Eventqueues, Dokumentlebenszyklus, History, Originprüfungen, Storage-I/O, Subdokumente und Task-Pump. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+
+## 0.68.56 Webressourcen, Fetch, Bilder und Schriften
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für SDK web_resources, fetch, url, encoding, images, canvas, background, fonts und Fontcaches werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Webressourcen, Fetch, Bilder und Schriften« nachvollziehen.
+  - Notizen: Primärer Umfang: SDK web_resources, fetch, url, encoding, images, canvas, background, fonts und Fontcaches. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Ressourcengraph, Netzparallelität, Decode, Cachetreffer, persistente Caches, Rasterung, Canvas-Kopien, Invalidierung und Speicherpeaks. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Ressourcengraph, Netzparallelität, Decode, Cachetreffer, persistente Caches, Rasterung, Canvas-Kopien, Invalidierung und Speicherpeaks. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+
+## 0.68.57 Klickifax-Anwendung
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für Klickifax main, model, native_paint, loading_view, storage_layout und Dokumentfont-Cache werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Klickifax-Anwendung« nachvollziehen.
+  - Notizen: Primärer Umfang: Klickifax main, model, native_paint, loading_view, storage_layout und Dokumentfont-Cache. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Eventloop, Navigation, Dokumentaufbau, Paint, Scrollen, Fontcache, Speicherhaltung, wiederholte Frames, UI-Reaktion und große Seiten. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Eventloop, Navigation, Dokumentaufbau, Paint, Scrollen, Fontcache, Speicherhaltung, wiederholte Frames, UI-Reaktion und große Seiten. Zugeordnete kanonische Module: App/Klickifax. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+
+## 0.68.58 Klickifax-End-to-End
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für Klickifax über SDK-Webruntime, R4IMG/R4FONT/R4STD, Netzwerk, TLS/HTTP, GUI, Desktop und KlickifaxLive werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Klickifax-End-to-End« nachvollziehen.
+  - Notizen: Primärer Umfang: Klickifax über SDK-Webruntime, R4IMG/R4FONT/R4STD, Netzwerk, TLS/HTTP, GUI, Desktop und KlickifaxLive. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Zeitanteile und Übergaben von URL bis erstem Paint, Interaktion, Scrollen, Skript, Ressourcen, Cache, IPC, Kopien und gemeinsame Engpässe. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Zeitanteile und Übergaben von URL bis erstem Paint, Interaktion, Scrollen, Skript, Ressourcen, Cache, IPC, Kopien und gemeinsame Engpässe. Zugeordnete kanonische Module: Diagnostic/KlickifaxLive. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+
+## 0.68.59 R4Basic-Frontend und Compiler
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für R4Basic frontend, compiler, Parser, Semantik und Bytecode-Erzeugung werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »R4Basic-Frontend und Compiler« nachvollziehen.
+  - Notizen: Primärer Umfang: R4Basic frontend, compiler, Parser, Semantik und Bytecode-Erzeugung. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Tokenisierung, lineare oder wiederholte Suchen, Datenstrukturen, Stringarbeit, große Programme, Compile-on-open und Speicherwachstum. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Tokenisierung, lineare oder wiederholte Suchen, Datenstrukturen, Stringarbeit, große Programme, Compile-on-open und Speicherwachstum. Zugeordnete kanonische Module: Subsystem/R4Basic. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+
+## 0.68.60 R4Basic-Bytecode und VM
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für R4Basic bytecode, value und vm werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »R4Basic-Bytecode und VM« nachvollziehen.
+  - Notizen: Primärer Umfang: R4Basic bytecode, value und vm. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Instruktionsdispatch, Stacks, Variablen, Arrays, Typkonversionen, Built-ins, Schleifen, Slicing, Checks pro Instruktion und Speicherzugriffe. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Instruktionsdispatch, Stacks, Variablen, Arrays, Typkonversionen, Built-ins, Schleifen, Slicing, Checks pro Instruktion und Speicherzugriffe. Zugeordnete kanonische Module: Subsystem/R4Basic. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+
+## 0.68.61 R4Basic-Host, Video und Eingabe
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für R4Basic main, runtime_adapter, Text-/Grafikscreen sowie SDK subsystem_host und subsystem_runtime werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »R4Basic-Host, Video und Eingabe« nachvollziehen.
+  - Notizen: Primärer Umfang: R4Basic main, runtime_adapter, Text-/Grafikscreen sowie SDK subsystem_host und subsystem_runtime. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Hostzyklus, Scheibengröße, Frameerkennung, Rasterblöcke, unveränderte Bilder, Letterbox, Eingabeübersetzung, Gastzeit und Redraw. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+
+### Notizen
+Analyseschwerpunkte: Hostzyklus, Scheibengröße, Frameerkennung, Rasterblöcke, unveränderte Bilder, Letterbox, Eingabeübersetzung, Gastzeit und Redraw. Zugeordnete kanonische Module: Subsystem/R4Basic. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+
+## 0.68.62 R4Basic-Audio, Speicher und End-to-End
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für R4Basic audio und storage_adapter über Scheduler, R4SUBSYS1, Desktop, R4DRAW, R4AUDIO und AudioService werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »R4Basic-Audio, Speicher und End-to-End« nachvollziehen.
+  - Notizen: Primärer Umfang: R4Basic audio und storage_adapter über Scheduler, R4SUBSYS1, Desktop, R4DRAW, R4AUDIO und AudioService. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: PCM-Erzeugung, Quanten, Busy-Retry, Deadline-Pacing, Datei-I/O, Hostübergänge, Konkurrenz mit Video und Ursache sichtbarer Langsamkeit. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+Abnahme erfuellt: Der abgegrenzte Umfang ist vollstaendig dokumentiert, Evidenzluecken sind explizit markiert und spaetere Messpunkte/Besitzer sind zugeordnet. RELEASE_VERSION=0.68.62; Produktquellen unveraendert.
+
+### Notizen
+Analyseschwerpunkte: PCM-Erzeugung, Quanten, Busy-Retry, Deadline-Pacing, Datei-I/O, Hostübergänge, Konkurrenz mit Video und Ursache sichtbarer Langsamkeit. Zugeordnete kanonische Module: Subsystem/R4Basic. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+Abschluss 2026-08-22: 22 Primaerquellen (28.549 Zeilen, 1.165.354 Byte) end-to-end analysiert; alle Quellhashes unveraendert. 23 eindeutige Befunde PERF-R4E2E-001 bis -023 im zentralen Bericht. Reproduziert wurden insbesondere stille Audio-Dauerlast, Null-Wait nach Degradierung und 1.025 synchrone Reads fuer 4 MB. R4Basic test und gorilla-test, SDK test, AudioService Build, Marker-Selftest und Distribution test sind gruen. Bericht SHA-256: 3DED0AE6060567CDECBECC1486527541C39EA5849E841223B5274998F006C433. Keine Optimierung, keine Kernel-/Modulversion, kein Push.
+
+## 0.68.63 Diagnose-, Beispiel- und Negativmodule
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für sämtliche Diagnosequellen sowie Example-App/-Service/-Treiber/-Protokoll, AudioFail, BadDep und Smoke werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Diagnose-, Beispiel- und Negativmodule« nachvollziehen.
+  - Notizen: Primärer Umfang: sämtliche Diagnosequellen sowie Example-App/-Service/-Treiber/-Protokoll, AudioFail, BadDep und Smoke. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+Geprueft: 36 Diagnosemodule und 7 kanonische Example-/Negativ-/Smoke-Module. Primaersnapshot: 51 Quellen, 1.151.554 Byte, 25.249 Zeilen; Manifest-SHA-256 9F439E983A90CFD090A3A0C3938DF7DCF08FDAD6B4391AFA61186353202865AD. Scope: 39 test, 2 none, 2 full; Server/ und R4CodePad ausgeschlossen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Beobachtereinfluss, Messauflösung, Selbstlast, falsche Baselines, Fixturegrenzen und Ausschluss nichtproduktiver Kosten aus Systembefunden. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+Bestaetigt wurden Diagnose-Eigenlast, falsche Baselines, grobe/global kumulative Messwerte, invasive Systemzustandsaenderungen und Fixturegrenzen. Hervorgehoben: PerformanceDiag-Nachlastbaseline, 100-Hz-Blitformel, KlickifaxLive mit mindestens 1.632 leeren Pump-Ausgaben, FsDiag-Kommentar mit 4,4 bis 5,74 s fuer drei Recent-Documents-Operationen sowie fehlende NTFS-C:- und Loader-Startzeitmessung.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+Dokumentiert in ExFiles/Reports/GPT_5.6_Sol.txt als PERF-DIAG-001 bis -024 mit Besitzern, Evidenz, Reichweite, Prioritaet und spaeteren Messanforderungen. Keine Optimierung oder funktionale Produktaenderung.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+Abnahme: alle 43 Modul-Standard-Builds gruen; AudioDiag-Test gruen; Distribution Build.bat test mit RELEASE_VERSION=0.68.63 gruen. Alle 51 Primaerquellen unveraendert. Bericht: 1.904.958 Byte, 34.317 LF, CR=0, non-ASCII=0, 1.171 eindeutige PERF-Ueberschriften, SHA-256 7D095746FC5C903F6C42E3CEAF8DEA8EA1D53E105D98AE91A251827B581E2EAD. Kein Push.
+
+### Notizen
+Analyseschwerpunkte: Beobachtereinfluss, Messauflösung, Selbstlast, falsche Baselines, Fixturegrenzen und Ausschluss nichtproduktiver Kosten aus Systembefunden. Zugeordnete kanonische Module: App/Example, Service/ExampleService, Driver/AudioFail, Driver/Example, Protocol/BadDep, Protocol/Example, Protocol/Smoke. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+Abgeschlossen als reine Quellanalyse. Ergebnis: 24 neue PERF-DIAG-Befunde; Testfixture-, Beispiel- und Negativkosten sind klar von produktiver Grundlast getrennt. Versionsmarker 0.68.63, keine Kernel-/Modulversion geaendert, kein Push.
+
+## 0.68.64 Systemweite End-to-End- und Konkurrenzpfade
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für alle zuvor untersuchten Besitzer in kombinierten Start-, Interaktions-, Rechen-, I/O-, Netz- und Audioabläufen werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Systemweite End-to-End- und Konkurrenzpfade« nachvollziehen.
+  - Notizen: Primärer Umfang: alle zuvor untersuchten Besitzer in kombinierten Start-, Interaktions-, Rechen-, I/O-, Netz- und Audioabläufen. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+Abgeschlossen: 86 Grenzquellen (5.901.593 Byte, 138.948 LF-Zeilen) ueber Kernel, Apps, SDK, R4Basic, Treiber, Protokolle, 14 Autostartservices und Distribution verfolgt. Start-, Interaktions-, Datei-, Browser- und Audioketten samt Besitzergrenzen verbunden. Quellmanifest SHA-256 D5E12DEFE77A30978CA32F7BEC3762411106A2CB2201DEDCE7D955C13AFD0437.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Konkurrenz um CPU, Speicher, IRQs, Queues und Geräte, Prioritätsinversion, kaskadierte Kopien, Wakeup-Stürme und Engpassverlagerung. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+Abgeschlossen: 24 eindeutige PERF-SYSX-Befunde dokumentieren Single-CPU-Konkurrenz, rechnerisch bis zu 9.005 Slim- bzw. 13.055 Full-Leerlauf-Wachgelegenheiten/s, synchronisierte Timeoutbursts, fehlende sofortige Wake-Praeemption, bedingte xHCI-Prioritaetsinversion, globale FS/Page-Cache/Blocktrichter, Storagepolling, Speicherrueckkopplung, DMA-Konkurrenz, Vollframe-, Browser-, Audio-, R4Basic- und IRQ-Kaskaden. Obergrenzen, bedingte Mechanismen und Messluecken sind ausdruecklich von beobachteten Laufzeitwerten getrennt.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+Abgeschlossen: Befunde PERF-SYSX-001 bis -024, Prioritaeten, Besitzer, Quellen, Mechanismen, Reichweite, Risiken und spaetere Messpunkte stehen ausschliesslich in ExFiles/Reports/GPT_5.6_Sol.txt. Eine End-to-End-Messmatrix fuer Boot/Idle, Interaktion, Klickifax, R4Basic und Mischlast sowie eine Engpassverlagerungsmatrix wurden festgeschrieben. Keine Optimierung implementiert.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+Erfuellt: 24 neue eindeutige Befunde; Bericht 1.936.862 Byte, 34.880 LF, ASCII-only, LF-only, insgesamt 1.195 eindeutige PERF-Ueberschriften. Kernel-, SDK- und R4Basic-Tests sowie Standard-Builds von Desktop, Klickifax, AudioService und HDA und Distribution-Test gruen. Alle 86 Quellen nach Builds unveraendert. RELEASE_VERSION=0.68.64 mit UTF-8-BOM/LF; Kernel- und Modulversionen unveraendert. Kein Push.
+
+### Notizen
+Analyseschwerpunkte: Konkurrenz um CPU, Speicher, IRQs, Queues und Geräte, Prioritätsinversion, kaskadierte Kopien, Wakeup-Stürme und Engpassverlagerung. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+Abschluss 0.68.64: Systemweite Korrelation ergab gekoppelte Engpaesse statt eines isolierten Klickifax-/R4Basic-Problems. Hauptgrenzen sind Single-CPU-/Wake-Konkurrenz, die aufgeschluesselte C:-FS/NTFS/Cache/Block/Backend-Kette und fehlende durchgaengige Kausaltelemetrie. 24 Befunde und spaetere Messmatrix im zentralen Bericht; Analyse-only, kein Push.
+
+## 0.68.65 Fehlende CPU-, Kernel- und Treiberfähigkeiten
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für konsolidierte Befunde aus CPU-, Kernel-, Plattform- und Treiberanalysen werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Fehlende CPU-, Kernel- und Treiberfähigkeiten« nachvollziehen.
+  - Notizen: Primärer Umfang: konsolidierte Befunde aus CPU-, Kernel-, Plattform- und Treiberanalysen. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+Quellumfang abgeschlossen: 158 produktive Quellen aus CPU/Arch, Timer/IRQ, Scheduler/Sync, Speicher/Paging, Block/FS/NTFS, Display/Audio/Netz, R4D-Grenzen und 13 produktiven Treibern; Server, R4CodePad, Doku und Fremdpakete ausgeschlossen. Snapshot: 5.069.683 Bytes, 127.665 LF-Zeilen, Manifest-SHA-256 A00005F345B9158946EA2BEC060BC8D81D9248784378E3EE01C29B565DA8ABFB. Vorhandene Grundlagen und begrenzte/fehlende Faehigkeiten wurden getrennt.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: fehlende Beschleuniger, Timer-, Scheduling-, Speicher-, I/O-, DMA-, Interrupt-, Cache- und Batchmechanismen samt Nutzen, Risiko und Besitzer. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+28 konsolidierte Befunde PERF-CAP-001 bis -028 dokumentiert. Abgedeckt sind PMU/effective clock, SMP/Affinitaet, ISA/XSTATE, Timer, Wake/Prioritaet/PI, Driver-Work, PMM/Paging, DMA/Scatter-Gather, MSI-X, Block-Async/Policy, AHCI, NVMe, ATA-PIO, USB, Net-Offloads, Display, Audio, Pagecache, NTFS, Batchvertraege und bewusst nachrangige CPU-Funktionen. Jeder Befund trennt Status, Nutzen, Risiko, Abhaengigkeit und Besitzer.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+Zentraler Bericht erweitert und verifiziert: ExFiles/Reports/GPT_5.6_Sol.txt = 1.979.508 Bytes, 35.630 LF-Zeilen, ASCII-only/LF-only, SHA-256 33B19370436D96995FB42AC363E173C4B3485B7359BF255631CFAA9AFD68442E. Insgesamt 1.223 eindeutige PERF-IDs, davon 28 PERF-CAP. Priorisierte spaetere Abhaengigkeitsfolge festgeschrieben; keine Optimierung umgesetzt.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+Abnahme erfuellt: Der 158-Dateien-Quellsnapshot blieb nach allen Builds unveraendert. Kernel/SDK-Tests, Standard-Builds aller 13 produktiven R4D-Treiber, Desktop, AudioService, PerformanceDiag, HardwareDiag und Distribution-Test sind gruen. RELEASE_VERSION=0.68.65 mit BOM/LF; Kernel- und Modulversionen unveraendert. Keine Produktoptimierung und kein Push.
+
+### Notizen
+Analyseschwerpunkte: fehlende Beschleuniger, Timer-, Scheduling-, Speicher-, I/O-, DMA-, Interrupt-, Cache- und Batchmechanismen samt Nutzen, Risiko und Besitzer. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+Abgeschlossen als reine Capability-Analyse. Hauptschluss: Nicht eine einzelne CPU-Instruktion, sondern BSP-, Besitz-, Wake-, DMA-, IRQ-, asynchrone I/O-, Cache- und Displaygrenzen bestimmen die breite Performance. Vorhandene Grundlagen wurden explizit gewuerdigt; PMU/Kausalitaet und Besitzvertraege stehen vor SMP/GPU/globalem SIMD. Bericht und Buildnachweise siehe ExFiles/Reports/GPT_5.6_Sol.txt. Kein Push gemaess Uservorgabe.
+
+## 0.68.66 Abschlussauswertung und Priorisierung
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Quellen für vollständiger Bericht und alle Analyse-Unterversionen werden systematisch auf Performancehemmnisse, unnötige Arbeit, Wartezeiten und fehlende Beschleunigungsmöglichkeiten untersucht. Der Schritt bleibt rein analytisch und setzt keine Optimierung um.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Quellstruktur und vollständige Laufzeitkette für »Abschlussauswertung und Priorisierung« nachvollziehen.
+  - Notizen: Primärer Umfang: vollständiger Bericht und alle Analyse-Unterversionen. Relevante Aufrufer, Übergaben, Datenbewegungen und Besitzergrenzen einbeziehen.
+0.68.66 abgeschlossen: Der vollstaendige Berichtseingang mit 1.223 eindeutigen Befunden und alle 65 abgeschlossenen Vor-Unterversionen wurden inventarisiert. Die Roadmapabdeckung umfasst 199/199 erledigte Aufgaben und 66/66 erledigte Abnahmen. Besitzer-, Quellen- und End-to-End-Ketten wurden fuer die Abschlussauswertung normalisiert; Server/, R4CodePad, Dokumentationen und Fremdpakete blieben als Performanceziele ausgeschlossen.
+- [Erledigt] #2 Performancekritische Kosten-, Warte- und Wiederholungspfade im festgelegten Umfang analysieren.
+  - Notizen: Gezielt prüfen: Dubletten, Widersprüche, Evidenzqualität, Reichweite, erwarteter Nutzen, Abhängigkeiten und umsetzbare Prioritäten für spätere Versionen. Hypothesen von bestätigten Ursachen trennen und fehlende Messmöglichkeiten benennen.
+Das Gesamtbild wurde auf Dubletten, Widersprueche, Evidenzqualitaet, Reichweite, Nutzen und Abhaengigkeiten geprueft. Es gibt keine exakten oder normalisierten Titel-Dubletten. Konzeptuelle Ueberschneidungen wurden in acht Grundursachengruppen erhalten und verknuepft. Scheinbare Konflikte zu Prioritaetsklassen, Pagecache-Hash, Blockqueue, HDA-BDL, Display-Stride, x2APIC/TSC-Deadline, produktiven Treiberpfaden, Wake-Obergrenzen und NTFS-Reichweite wurden schichtengenau aufgeloest. Die historische P0/P1-Dichte von 1.041/1.223 wurde nicht als globale Reihenfolge uebernommen.
+- [Erledigt] #3 Befunde, Prioritäten und spätere Handlungsempfehlungen im zentralen Bericht dokumentieren.
+  - Notizen: Konkrete Quellpfade, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiken, Abhängigkeiten und fachlichen Besitzer festhalten. Keine Optimierung implementieren.
+Die Abschlussauswertung wurde in ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben. Vierzehn eindeutige PERF-PRIO-Entscheidungen ordnen spaetere Arbeit in Messung, gemeinsame Softwaregrenzen, Referenzpfade, Hardware-/Vertragsprogramme, Architekturprogramme und bewusst zurueckgestellte Ziele. Jede Entscheidung nennt Besitzer, konkrete Quellen, Mechanismus, Evidenz, Reichweite, erwarteten Nutzen, Risiko, Abhaengigkeit, Empfehlung und Mess-Gate. Es wurde keine Optimierung oder funktionale Produktaenderung implementiert.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der vollständige Quellumfang dieser Unterversion ist geprüft und alle belastbaren Befunde oder ausdrücklich festgestellten Evidenzlücken sind in ExFiles/Reports/GPT_5.6_Sol.txt dokumentiert.
+  - Notizen: Es wurden keine Performance-Optimierungen umgesetzt; Empfehlungen sind klar späteren Versionen und fachlichen Besitzern zugeordnet.
+Abnahme 0.68.66: Der Bericht enthaelt 1.237 eindeutige PERF-Befunde, darunter 14 PERF-PRIO-Befunde, bei 2.029.324 Bytes und 36.565 LF-Zeilen. Null CR, null Nicht-ASCII-Bytes, keine doppelte ID; alle 84 explizit genannten Quellpfade und alle Befundverweise existieren. SHA-256 CAEAE659AD59D917979ADB0E9700729081EE12ED329BAE09D5E6E61951F7528A. Kernel- und SDK-Tests, die Standard-Builds von R4Basic, Klickifax, Desktop, AudioService und PerformanceDiag sowie Distribution Build.bat test sind gruen. RELEASE_VERSION steht auf 0.68.66; Kernel- und Modulversionen blieben unveraendert. Kein Push.
+
+### Notizen
+Analyseschwerpunkte: Dubletten, Widersprüche, Evidenzqualität, Reichweite, erwarteter Nutzen, Abhängigkeiten und umsetzbare Prioritäten für spätere Versionen. Alle Befunde, Evidenzlücken, Auswirkungen und Empfehlungen werden unter ExFiles/Reports/GPT_5.6_Sol.txt festgeschrieben.
+0.68.66 abgeschlossen: 1.223 Eingangsbefunde systematisch konsolidiert, Formatdrift und historische Prioritaetsinflation offengelegt, konzeptionelle Dubletten und scheinbare Widersprueche schichtengenau geklaert und 14 abhaengige Portfolioentscheidungen mit Mess-Gates festgeschrieben. Der finale Bericht besitzt 1.237 eindeutige Befunde. Alle Verifikationen sind gruen. Keine Optimierung, keine funktionale Produktaenderung und kein Push.

@@ -5,9 +5,9 @@ Diese Datei wird deterministisch aus `API/ApiContract.json` erzeugt. Manuelle Ä
 Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenzen und Conformance-Fixtures werden produktiv aus diesem Schema erzeugt; handgeschriebene Dateien bleiben nur Fassaden oder erklaerende Texte.
 
 - Schema: v11, Baseline `standalone-contract-0.64.11`
-- Reachability: 110 von 110 Typen aufgelöst oder explizit klassifiziert
+- Reachability: 111 von 111 Typen aufgelöst oder explizit klassifiziert
 - Zentrale SDK-only-Wurzeln: 0; Runtime-R4Ls besitzen libraryeigene Vertraege
-- Operationen: 0; Fehlerdomänen: 61; Konstanten: 1143; Limits: 94
+- Operationen: 0; Fehlerdomänen: 61; Konstanten: 1168; Limits: 94
 
 ## App-Profile
 
@@ -42,6 +42,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `ProgramStoragePerformanceInfo` | fixed_layout | extern_struct | 440/8 | 440/8 | 440/8 | 440/8 |
 | `ProgramBootPhasePerformanceInfo` | fixed_layout | extern_struct | 72/8 | 72/8 | 72/8 | 72/8 |
 | `ProgramBootPhaseClockInfo` | fixed_layout | extern_struct | 96/8 | 96/8 | 96/8 | 96/8 |
+| `ProgramBootPerformanceInfo` | fixed_layout | extern_struct | 144/8 | 144/8 | 144/8 | 144/8 |
 | `ProgramIrqTimingInfo` | fixed_layout | extern_struct | 112/8 | 112/8 | 112/8 | 112/8 |
 | `ProgramMemoryBlockInfo` | fixed_layout | extern_struct | 96/8 | 96/8 | 96/8 | 96/8 |
 | `ProgramVmReserveProbe` | fixed_layout | extern_struct | 144/8 | 144/8 | 144/8 | 144/8 |
@@ -1455,6 +1456,43 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `unavailable_spans` | 56 | 4 | 4 | `u32` | - |
 | `reserved0` | 60 | 4 | 4 | `u32` | - |
 | `name` | 64 | 32 | 1 | `[32]u8` | - |
+
+### `ProgramBootPerformanceInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 144 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `state` | 8 | 4 | 4 | `u32` | - |
+| `completion_reason` | 12 | 4 | 4 | `u32` | - |
+| `flags` | 16 | 4 | 4 | `u32` | - |
+| `current_phase` | 20 | 4 | 4 | `u32` | - |
+| `phase_count` | 24 | 4 | 4 | `u32` | - |
+| `timing_span_count` | 28 | 4 | 4 | `u32` | - |
+| `timing_unavailable_spans` | 32 | 4 | 4 | `u32` | - |
+| `timing_dropped_spans` | 36 | 4 | 4 | `u32` | - |
+| `clock_flags` | 40 | 4 | 4 | `u32` | - |
+| `clock_source` | 44 | 4 | 4 | `u32` | - |
+| `clock_generation` | 48 | 4 | 4 | `u32` | - |
+| `configured_attempts` | 52 | 4 | 4 | `u32` | - |
+| `fallback_attempts` | 56 | 4 | 4 | `u32` | - |
+| `launch_failures` | 60 | 4 | 4 | `u32` | - |
+| `shell_instance_id` | 64 | 4 | 4 | `u32` | - |
+| `reserved0` | 68 | 4 | 4 | `u32` | - |
+| `boot_start_tick` | 72 | 8 | 8 | `u64` | - |
+| `boot_end_tick` | 80 | 8 | 8 | `u64` | - |
+| `total_ticks` | 88 | 8 | 8 | `u64` | - |
+| `boot_start_ns` | 96 | 8 | 8 | `u64` | - |
+| `boot_end_ns` | 104 | 8 | 8 | `u64` | - |
+| `total_ns` | 112 | 8 | 8 | `u64` | - |
+| `clock_resolution_ns` | 120 | 8 | 8 | `u64` | - |
+| `transition_count` | 128 | 8 | 8 | `u64` | - |
+| `reserved1` | 136 | 8 | 8 | `u64` | - |
 
 ### `ProgramIrqTimingInfo`
 
@@ -5205,11 +5243,36 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `r4xstart_r4desk_magic` | `826623058` | `u32` | magic | number | `r4xstart_r4desk` | fixed_contract |
 | `r4xstart_r4desk_version` | `7` | `u32` | version | number | `r4xstart_r4desk` | fixed_contract |
 | `r4xstart_r4dev_magic` | `827737170` | `u32` | magic | number | `r4xstart_r4dev` | fixed_contract |
-| `r4xstart_r4dev_version` | `6` | `u32` | version | number | `r4xstart_r4dev` | fixed_contract |
+| `r4xstart_r4dev_version` | `7` | `u32` | version | number | `r4xstart_r4dev` | fixed_contract |
 | `r4xstart_r4draw_magic` | `827802706` | `u32` | magic | number | `r4xstart_r4draw` | fixed_contract |
 | `r4xstart_r4draw_version` | `2` | `u32` | version | number | `r4xstart_r4draw` | fixed_contract |
 | `r4xstart_r4net_magic` | `826625618` | `u32` | magic | number | `r4xstart_r4net` | fixed_contract |
 | `r4xstart_r4net_version` | `1` | `u32` | version | number | `r4xstart_r4net` | fixed_contract |
+| `boot_ready_result_completed` | `0` | `i32` | value | status_code | `boot_ready` | fixed_contract |
+| `boot_ready_result_already_completed` | `1` | `i32` | value | status_code | `boot_ready` | fixed_contract |
+| `boot_ready_error_not_boot_shell` | `-1` | `i32` | value | status_code | `boot_ready` | fixed_contract |
+| `boot_ready_error_boot_failed` | `-2` | `i32` | value | status_code | `boot_ready` | fixed_contract |
+| `boot_performance_version` | `1` | `u32` | version | number | `performance_boot_summary` | fixed_contract |
+| `boot_performance_size` | `144` | `u32` | value | bytes | `performance_boot_summary` | fixed_contract |
+| `boot_performance_state_uninitialized` | `0` | `u32` | value | number | `performance_boot_summary` | fixed_contract |
+| `boot_performance_state_running` | `1` | `u32` | value | number | `performance_boot_summary` | fixed_contract |
+| `boot_performance_state_ready` | `2` | `u32` | value | number | `performance_boot_summary` | fixed_contract |
+| `boot_performance_state_fallback_ready` | `3` | `u32` | value | number | `performance_boot_summary` | fixed_contract |
+| `boot_performance_state_failed` | `4` | `u32` | value | number | `performance_boot_summary` | fixed_contract |
+| `boot_completion_reason_none` | `0` | `u32` | value | number | `performance_boot_summary` | fixed_contract |
+| `boot_completion_reason_configured_shell_ready` | `1` | `u32` | value | number | `performance_boot_summary` | fixed_contract |
+| `boot_completion_reason_terminal_fallback_ready` | `2` | `u32` | value | number | `performance_boot_summary` | fixed_contract |
+| `boot_completion_reason_recovery_fallback_ready` | `3` | `u32` | value | number | `performance_boot_summary` | fixed_contract |
+| `boot_completion_reason_no_shell` | `4` | `u32` | value | number | `performance_boot_summary` | fixed_contract |
+| `boot_completion_reason_fatal_error` | `5` | `u32` | value | number | `performance_boot_summary` | fixed_contract |
+| `boot_completion_reason_shell_exited_before_ready` | `6` | `u32` | value | number | `performance_boot_summary` | fixed_contract |
+| `boot_performance_flag_initialized` | `1` | `u32` | flag | bitmask | `performance_boot_summary` | fixed_contract |
+| `boot_performance_flag_completed` | `2` | `u32` | flag | bitmask | `performance_boot_summary` | fixed_contract |
+| `boot_performance_flag_ready` | `4` | `u32` | flag | bitmask | `performance_boot_summary` | fixed_contract |
+| `boot_performance_flag_fallback` | `8` | `u32` | flag | bitmask | `performance_boot_summary` | fixed_contract |
+| `boot_performance_flag_failed` | `16` | `u32` | flag | bitmask | `performance_boot_summary` | fixed_contract |
+| `boot_performance_flag_timing_valid` | `32` | `u32` | flag | bitmask | `performance_boot_summary` | fixed_contract |
+| `boot_performance_flag_frozen` | `64` | `u32` | flag | bitmask | `performance_boot_summary` | fixed_contract |
 | `performance_irq_coverage_dispatch` | `1` | `u32` | flag | bitmask | `performance_irq_timing` | fixed_contract |
 | `performance_irq_coverage_external_handler` | `2` | `u32` | flag | bitmask | `performance_irq_timing` | fixed_contract |
 | `performance_irq_coverage_delivery_unavailable` | `4` | `u32` | flag | bitmask | `performance_irq_timing` | fixed_contract |
@@ -5229,7 +5292,7 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `monotonic_clock_source_hpet` | `2` | `u32` | value | number | `monotonic_clock` | fixed_contract |
 | `monotonic_clock_source_periodic_event` | `3` | `u32` | value | number | `monotonic_clock` | fixed_contract |
 | `r4xstart_r4sys_magic` | `827937618` | `u32` | magic | number | `r4xstart_r4sys` | fixed_contract |
-| `r4xstart_r4sys_version` | `12` | `u32` | version | number | `r4xstart_r4sys` | fixed_contract |
+| `r4xstart_r4sys_version` | `13` | `u32` | version | number | `r4xstart_r4sys` | fixed_contract |
 | `registry_path_max_bytes` | `255` | `u16` | value | bytes | `text_path_time` | fixed_contract |
 | `registry_value_type_binary` | `5` | `u16` | value | number | `registry_value` | fixed_contract |
 | `registry_value_type_bool` | `4` | `u16` | value | number | `registry_value` | fixed_contract |
@@ -5491,10 +5554,10 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `r4xstart_import_size` | `40` | `u32` | bytes | `r4xstart_import` | fixed_contract |
 | `r4xstart_r4audio_size` | `184` | `u32` | bytes | `r4xstart_r4audio` | fixed_contract |
 | `r4xstart_r4desk_size` | `432` | `u32` | bytes | `r4xstart_r4desk` | fixed_contract |
-| `r4xstart_r4dev_size` | `320` | `u32` | bytes | `r4xstart_r4dev` | fixed_contract |
+| `r4xstart_r4dev_size` | `328` | `u32` | bytes | `r4xstart_r4dev` | fixed_contract |
 | `r4xstart_r4draw_size` | `272` | `u32` | bytes | `r4xstart_r4draw` | fixed_contract |
 | `r4xstart_r4net_size` | `288` | `u32` | bytes | `r4xstart_r4net` | fixed_contract |
-| `r4xstart_r4sys_size` | `968` | `u32` | bytes | `r4xstart_r4sys` | fixed_contract |
+| `r4xstart_r4sys_size` | `976` | `u32` | bytes | `r4xstart_r4sys` | fixed_contract |
 | `registry_name_max` | `64` | `usize` | count | `registry_name` | fixed_contract |
 | `serial_link_payload_max` | `256` | `usize` | count | `serial_link` | fixed_contract |
 | `service_api_endpoint_queue_depth` | `8` | `usize` | count | `service_api` | fixed_contract |

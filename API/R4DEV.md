@@ -26,10 +26,16 @@ Fault-Injection-Schnittstelle. Fixed-layout-Kompatibilitaetstypen bleiben
 binaer eingefroren; neue Telemetrie verwendet append-only Nachfolgetypen und
 neue Slots.
 
+`ProgramPerformanceSummary` Version 2 haengt Clock-, Boot- und Loaderfelder
+an den Version-1-Prefix an. Der Aufrufer setzt Version und Puffergroesse; der
+Provider schreibt nur den ausgehandelten Prefix. Die zusaetzlichen Slots fuer
+Bootphasen- und IRQ-Zeit liefern aufgeloeste Nanosekunden, Quellenmetadaten,
+Abdeckung und explizite Nichtverfuegbarkeit statt stiller Scheinwerte.
+
 <!-- R4OS-APIREF:BEGIN R4DEV (generiert von ApiContractGen aus ApiContract.json - NICHT von Hand editieren) -->
 ## Tabellen-Referenz R4DEV (generiert)
 
-Kernel-Gruppentabelle `R4XStartR4Dev` v5, 304 Bytes, 34 Funktionsfelder und 36 Slots insgesamt.
+Kernel-Gruppentabelle `R4XStartR4Dev` v6, 320 Bytes, 36 Funktionsfelder und 38 Slots insgesamt.
 Signatur-Wahrheit: `abi.R4DevFns` (Feldname == Tabellenfeld).
 Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 
@@ -71,4 +77,6 @@ Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 | 33 | 280 | function | `execution_inventory_summary` | `*const fn (*ProgramInventorySummary) callconv(.c) i32` |
 | 34 | 288 | function | `program_instance_storage_summary_v2` | `*const fn (*ProgramInstanceStorageSummary) callconv(.c) i32` |
 | 35 | 296 | function | `kernel_version` | `*const fn (*KernelVersion) callconv(.c) i32` |
+| 36 | 304 | function | `performance_boot_phase_clock` | `*const fn (u32, *ProgramBootPhaseClockInfo) callconv(.c) i32` |
+| 37 | 312 | function | `performance_irq_timing` | `*const fn (u32, *ProgramIrqTimingInfo) callconv(.c) i32` |
 <!-- R4OS-APIREF:END R4DEV -->

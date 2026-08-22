@@ -14,10 +14,16 @@ Zig-Context: r4os.r4sys.Context
 Optionale Felder werden mit ctx.hasFn("feld") geprueft. Die Tabelle ist
 append-only. reserved_shell_run bei Offset 408 ist 0 und kein Funktionsfeld.
 
+`monotonic_clock` liefert einen kontinuierlichen Nanosekundeninstant ohne
+RTC-/CMOS-Zugriff. Quelle, Generation, Aufloesung, Qualitaetsflags und die
+separate rationale Rate des periodischen PIT-/HPET-/LAPIC-Ereignisses werden
+gemeinsam zurueckgegeben. Nicht kalibrierbare Hardware verwendet einen
+explizit degradierten periodischen Fallback.
+
 <!-- R4OS-APIREF:BEGIN R4SYS (generiert von ApiContractGen aus ApiContract.json - NICHT von Hand editieren) -->
 ## Tabellen-Referenz R4SYS (generiert)
 
-Kernel-Gruppentabelle `R4XStartR4Sys` v11, 960 Bytes, 115 Funktionsfelder und 118 Slots insgesamt.
+Kernel-Gruppentabelle `R4XStartR4Sys` v12, 968 Bytes, 116 Funktionsfelder und 119 Slots insgesamt.
 Signatur-Wahrheit: `abi.R4SysFns` (Feldname == Tabellenfeld).
 Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 
@@ -141,4 +147,5 @@ Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 | 115 | 936 | function | `module_resource_read` | `*const fn ([*:0]const u8, u32, u32, ?[*:0]const u8, [*]u8, u32) callconv(.c) i32` |
 | 116 | 944 | function | `program_module_path` | `*const fn ([*]u8, u32) callconv(.c) i32` |
 | 117 | 952 | function | `program_module_running` | `*const fn ([*:0]const u8) callconv(.c) i32` |
+| 118 | 960 | function | `monotonic_clock` | `*const fn (*MonotonicClockInfo) callconv(.c) i32` |
 <!-- R4OS-APIREF:END R4SYS -->

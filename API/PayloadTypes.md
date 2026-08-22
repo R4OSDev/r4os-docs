@@ -5,9 +5,9 @@ Diese Datei wird deterministisch aus `API/ApiContract.json` erzeugt. Manuelle Ä
 Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenzen und Conformance-Fixtures werden produktiv aus diesem Schema erzeugt; handgeschriebene Dateien bleiben nur Fassaden oder erklaerende Texte.
 
 - Schema: v11, Baseline `standalone-contract-0.64.11`
-- Reachability: 107 von 107 Typen aufgelöst oder explizit klassifiziert
+- Reachability: 110 von 110 Typen aufgelöst oder explizit klassifiziert
 - Zentrale SDK-only-Wurzeln: 0; Runtime-R4Ls besitzen libraryeigene Vertraege
-- Operationen: 0; Fehlerdomänen: 61; Konstanten: 1125; Limits: 94
+- Operationen: 0; Fehlerdomänen: 61; Konstanten: 1143; Limits: 94
 
 ## App-Profile
 
@@ -37,10 +37,12 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `ProgramMemoryPagerGateProbe` | extensible | extern_struct | 248/8 | 248/8 | 248/8 | 248/8 |
 | `ProgramMemoryPageIoProbe` | extensible | extern_struct | 304/8 | 304/8 | 304/8 | 304/8 |
 | `ProgramMemoryVmPageStateProbe` | extensible | extern_struct | 288/8 | 288/8 | 288/8 | 288/8 |
-| `ProgramPerformanceSummary` | extensible | extern_struct | 4440/8 | 4440/8 | 4440/8 | 4440/8 |
+| `ProgramPerformanceSummary` | extensible | extern_struct | 4576/8 | 4576/8 | 4576/8 | 4576/8 |
 | `ProgramTaskPerformanceInfo` | fixed_layout | extern_struct | 304/8 | 304/8 | 304/8 | 304/8 |
 | `ProgramStoragePerformanceInfo` | fixed_layout | extern_struct | 440/8 | 440/8 | 440/8 | 440/8 |
 | `ProgramBootPhasePerformanceInfo` | fixed_layout | extern_struct | 72/8 | 72/8 | 72/8 | 72/8 |
+| `ProgramBootPhaseClockInfo` | fixed_layout | extern_struct | 96/8 | 96/8 | 96/8 | 96/8 |
+| `ProgramIrqTimingInfo` | fixed_layout | extern_struct | 112/8 | 112/8 | 112/8 | 112/8 |
 | `ProgramMemoryBlockInfo` | fixed_layout | extern_struct | 96/8 | 96/8 | 96/8 | 96/8 |
 | `ProgramVmReserveProbe` | fixed_layout | extern_struct | 144/8 | 144/8 | 144/8 | 144/8 |
 | `ProgramVmRegionInfo` | fixed_layout | extern_struct | 96/8 | 96/8 | 96/8 | 96/8 |
@@ -65,6 +67,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `ConsoleState` | fixed_layout | extern_struct | 64/4 | 64/4 | 64/4 | 64/4 |
 | `KernelVersion` | extensible | extern_struct | 24/4 | 24/4 | 24/4 | 24/4 |
 | `TimeState` | fixed_layout | extern_struct | 32/8 | 32/8 | 32/8 | 32/8 |
+| `MonotonicClockInfo` | fixed_layout | extern_struct | 80/8 | 80/8 | 80/8 | 80/8 |
 | `KeyboardLayoutInfo` | fixed_layout | extern_struct | 36/4 | 36/4 | 36/4 | 36/4 |
 | `DriveInfo` | fixed_layout | extern_struct | 56/8 | 56/8 | 56/8 | 56/8 |
 | `FileInfo` | fixed_layout | extern_struct | 96/8 | 96/8 | 96/8 | 96/8 |
@@ -629,7 +632,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 - Quelle: `API/ApiContract.json`
 - Klasse: `extensible`
 - Repräsentation: `extern_struct`
-- Version/Größe/Alignment: 1 / 4440 / 8
+- Version/Größe/Alignment: 2 / 4576 / 8
 
 | Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
 |---|---:|---:|---:|---|---|
@@ -1278,6 +1281,29 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `fat32_inusemap_clusters` | 4416 | 8 | 8 | `u64` | - |
 | `fat32_inusemap_alloc_hits` | 4424 | 8 | 8 | `u64` | - |
 | `fat32_inusemap_alloc_misses` | 4432 | 8 | 8 | `u64` | - |
+| `monotonic_clock_flags` | 4440 | 4 | 4 | `u32` | - |
+| `monotonic_clock_source` | 4444 | 4 | 4 | `u32` | - |
+| `monotonic_clock_generation` | 4448 | 4 | 4 | `u32` | - |
+| `monotonic_event_backend` | 4452 | 4 | 4 | `u32` | - |
+| `monotonic_clock_resolution_ns` | 4456 | 8 | 8 | `u64` | - |
+| `monotonic_source_frequency_hz` | 4464 | 8 | 8 | `u64` | - |
+| `monotonic_event_frequency_numerator` | 4472 | 8 | 8 | `u64` | - |
+| `monotonic_event_frequency_denominator` | 4480 | 8 | 8 | `u64` | - |
+| `monotonic_event_requested_hz` | 4488 | 4 | 4 | `u32` | - |
+| `monotonic_event_effective_hz` | 4492 | 4 | 4 | `u32` | - |
+| `boot_timing_valid` | 4496 | 4 | 4 | `u32` | - |
+| `boot_timing_unavailable_spans` | 4500 | 4 | 4 | `u32` | - |
+| `boot_timing_dropped_spans` | 4504 | 4 | 4 | `u32` | - |
+| `loader_timing_valid_spans` | 4508 | 4 | 4 | `u32` | - |
+| `loader_timing_unavailable_spans` | 4512 | 4 | 4 | `u32` | - |
+| `monotonic_reserved0` | 4516 | 4 | 4 | `u32` | - |
+| `boot_total_ns` | 4520 | 8 | 8 | `u64` | - |
+| `boot_now_ns` | 4528 | 8 | 8 | `u64` | - |
+| `loader_total_ns` | 4536 | 8 | 8 | `u64` | - |
+| `loader_r4p_runtime_total_ns` | 4544 | 8 | 8 | `u64` | - |
+| `loader_service_boot_ns` | 4552 | 8 | 8 | `u64` | - |
+| `loader_config_load_ns` | 4560 | 8 | 8 | `u64` | - |
+| `monotonic_reserved1` | 4568 | 8 | 8 | `u64` | - |
 
 ### `ProgramTaskPerformanceInfo`
 
@@ -1405,6 +1431,61 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `transitions` | 32 | 4 | 4 | `u32` | - |
 | `reserved0` | 36 | 4 | 4 | `u32` | - |
 | `name` | 40 | 32 | 1 | `[32]u8` | - |
+
+### `ProgramBootPhaseClockInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 96 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `index` | 8 | 4 | 4 | `u32` | - |
+| `phase` | 12 | 4 | 4 | `u32` | - |
+| `clock_flags` | 16 | 4 | 4 | `u32` | - |
+| `clock_source` | 20 | 4 | 4 | `u32` | - |
+| `clock_generation` | 24 | 4 | 4 | `u32` | - |
+| `transitions` | 28 | 4 | 4 | `u32` | - |
+| `first_ns` | 32 | 8 | 8 | `u64` | - |
+| `last_ns` | 40 | 8 | 8 | `u64` | - |
+| `total_ns` | 48 | 8 | 8 | `u64` | - |
+| `unavailable_spans` | 56 | 4 | 4 | `u32` | - |
+| `reserved0` | 60 | 4 | 4 | `u32` | - |
+| `name` | 64 | 32 | 1 | `[32]u8` | - |
+
+### `ProgramIrqTimingInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 112 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `irq` | 8 | 1 | 1 | `u8` | - |
+| `registered` | 9 | 1 | 1 | `u8` | - |
+| `shared` | 10 | 1 | 1 | `u8` | - |
+| `masked` | 11 | 1 | 1 | `u8` | - |
+| `coverage_flags` | 12 | 4 | 4 | `u32` | - |
+| `clock_flags` | 16 | 4 | 4 | `u32` | - |
+| `clock_source` | 20 | 4 | 4 | `u32` | - |
+| `clock_generation` | 24 | 4 | 4 | `u32` | - |
+| `unavailable_samples` | 28 | 4 | 4 | `u32` | - |
+| `dispatch_samples` | 32 | 8 | 8 | `u64` | - |
+| `handler_samples` | 40 | 8 | 8 | `u64` | - |
+| `observer_reads` | 48 | 8 | 8 | `u64` | - |
+| `delivery_samples` | 56 | 8 | 8 | `u64` | - |
+| `dispatch_total_ns` | 64 | 8 | 8 | `u64` | - |
+| `dispatch_max_ns` | 72 | 8 | 8 | `u64` | - |
+| `dispatch_last_ns` | 80 | 8 | 8 | `u64` | - |
+| `handler_total_ns` | 88 | 8 | 8 | `u64` | - |
+| `handler_max_ns` | 96 | 8 | 8 | `u64` | - |
+| `handler_last_ns` | 104 | 8 | 8 | `u64` | - |
 
 ### `ProgramMemoryBlockInfo`
 
@@ -2001,6 +2082,30 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `monotonic_ticks` | 16 | 8 | 8 | `u64` | - |
 | `monotonic_hz` | 24 | 4 | 4 | `u32` | - |
 | `monotonic_backend` | 28 | 4 | 4 | `u32` | - |
+
+### `MonotonicClockInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 80 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `flags` | 8 | 4 | 4 | `u32` | - |
+| `source` | 12 | 4 | 4 | `u32` | - |
+| `generation` | 16 | 4 | 4 | `u32` | - |
+| `event_backend` | 20 | 4 | 4 | `u32` | - |
+| `instant_ns` | 24 | 8 | 8 | `u64` | - |
+| `frequency_hz` | 32 | 8 | 8 | `u64` | - |
+| `resolution_ns` | 40 | 8 | 8 | `u64` | - |
+| `source_frequency_hz` | 48 | 8 | 8 | `u64` | - |
+| `event_frequency_numerator` | 56 | 8 | 8 | `u64` | - |
+| `event_frequency_denominator` | 64 | 8 | 8 | `u64` | - |
+| `event_requested_hz` | 72 | 4 | 4 | `u32` | - |
+| `event_effective_hz` | 76 | 4 | 4 | `u32` | - |
 
 ### `KeyboardLayoutInfo`
 
@@ -5021,7 +5126,7 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `performance_simd_abi_avx2` | `3` | `u32` | value | number | `performance_simd` | fixed_contract |
 | `performance_simd_abi_none` | `0` | `u32` | value | number | `performance_simd` | fixed_contract |
 | `performance_simd_abi_sse2` | `1` | `u32` | value | number | `performance_simd` | fixed_contract |
-| `performance_snapshot_version` | `1` | `u32` | version | number | `performance_snapshot` | fixed_contract |
+| `performance_snapshot_version` | `2` | `u32` | version | number | `performance_snapshot` | fixed_contract |
 | `program_completion_flag_display_used` | `4` | `u32` | flag | bitmask | `program_completion` | fixed_contract |
 | `program_completion_flag_output` | `2` | `u32` | flag | bitmask | `program_completion` | fixed_contract |
 | `program_completion_flag_owner` | `8` | `u32` | flag | bitmask | `program_completion` | fixed_contract |
@@ -5100,13 +5205,31 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `r4xstart_r4desk_magic` | `826623058` | `u32` | magic | number | `r4xstart_r4desk` | fixed_contract |
 | `r4xstart_r4desk_version` | `7` | `u32` | version | number | `r4xstart_r4desk` | fixed_contract |
 | `r4xstart_r4dev_magic` | `827737170` | `u32` | magic | number | `r4xstart_r4dev` | fixed_contract |
-| `r4xstart_r4dev_version` | `5` | `u32` | version | number | `r4xstart_r4dev` | fixed_contract |
+| `r4xstart_r4dev_version` | `6` | `u32` | version | number | `r4xstart_r4dev` | fixed_contract |
 | `r4xstart_r4draw_magic` | `827802706` | `u32` | magic | number | `r4xstart_r4draw` | fixed_contract |
 | `r4xstart_r4draw_version` | `2` | `u32` | version | number | `r4xstart_r4draw` | fixed_contract |
 | `r4xstart_r4net_magic` | `826625618` | `u32` | magic | number | `r4xstart_r4net` | fixed_contract |
 | `r4xstart_r4net_version` | `1` | `u32` | version | number | `r4xstart_r4net` | fixed_contract |
+| `performance_irq_coverage_dispatch` | `1` | `u32` | flag | bitmask | `performance_irq_timing` | fixed_contract |
+| `performance_irq_coverage_external_handler` | `2` | `u32` | flag | bitmask | `performance_irq_timing` | fixed_contract |
+| `performance_irq_coverage_delivery_unavailable` | `4` | `u32` | flag | bitmask | `performance_irq_timing` | fixed_contract |
+| `performance_irq_coverage_irq_safe_clock` | `8` | `u32` | flag | bitmask | `performance_irq_timing` | fixed_contract |
+| `performance_irq_coverage_mixed_generation` | `16` | `u32` | flag | bitmask | `performance_irq_timing` | fixed_contract |
+| `monotonic_clock_frequency_hz` | `1000000000` | `u64` | value | hertz | `monotonic_clock` | fixed_contract |
+| `monotonic_clock_flag_valid` | `1` | `u32` | flag | bitmask | `monotonic_clock` | fixed_contract |
+| `monotonic_clock_flag_continuous` | `2` | `u32` | flag | bitmask | `monotonic_clock` | fixed_contract |
+| `monotonic_clock_flag_high_resolution` | `4` | `u32` | flag | bitmask | `monotonic_clock` | fixed_contract |
+| `monotonic_clock_flag_irq_independent` | `8` | `u32` | flag | bitmask | `monotonic_clock` | fixed_contract |
+| `monotonic_clock_flag_invariant` | `16` | `u32` | flag | bitmask | `monotonic_clock` | fixed_contract |
+| `monotonic_clock_flag_early_origin` | `32` | `u32` | flag | bitmask | `monotonic_clock` | fixed_contract |
+| `monotonic_clock_flag_calibrated` | `64` | `u32` | flag | bitmask | `monotonic_clock` | fixed_contract |
+| `monotonic_clock_flag_degraded` | `128` | `u32` | flag | bitmask | `monotonic_clock` | fixed_contract |
+| `monotonic_clock_source_unavailable` | `0` | `u32` | value | number | `monotonic_clock` | fixed_contract |
+| `monotonic_clock_source_tsc` | `1` | `u32` | value | number | `monotonic_clock` | fixed_contract |
+| `monotonic_clock_source_hpet` | `2` | `u32` | value | number | `monotonic_clock` | fixed_contract |
+| `monotonic_clock_source_periodic_event` | `3` | `u32` | value | number | `monotonic_clock` | fixed_contract |
 | `r4xstart_r4sys_magic` | `827937618` | `u32` | magic | number | `r4xstart_r4sys` | fixed_contract |
-| `r4xstart_r4sys_version` | `11` | `u32` | version | number | `r4xstart_r4sys` | fixed_contract |
+| `r4xstart_r4sys_version` | `12` | `u32` | version | number | `r4xstart_r4sys` | fixed_contract |
 | `registry_path_max_bytes` | `255` | `u16` | value | bytes | `text_path_time` | fixed_contract |
 | `registry_value_type_binary` | `5` | `u16` | value | number | `registry_value` | fixed_contract |
 | `registry_value_type_bool` | `4` | `u16` | value | number | `registry_value` | fixed_contract |
@@ -5368,10 +5491,10 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `r4xstart_import_size` | `40` | `u32` | bytes | `r4xstart_import` | fixed_contract |
 | `r4xstart_r4audio_size` | `184` | `u32` | bytes | `r4xstart_r4audio` | fixed_contract |
 | `r4xstart_r4desk_size` | `432` | `u32` | bytes | `r4xstart_r4desk` | fixed_contract |
-| `r4xstart_r4dev_size` | `304` | `u32` | bytes | `r4xstart_r4dev` | fixed_contract |
+| `r4xstart_r4dev_size` | `320` | `u32` | bytes | `r4xstart_r4dev` | fixed_contract |
 | `r4xstart_r4draw_size` | `272` | `u32` | bytes | `r4xstart_r4draw` | fixed_contract |
 | `r4xstart_r4net_size` | `288` | `u32` | bytes | `r4xstart_r4net` | fixed_contract |
-| `r4xstart_r4sys_size` | `960` | `u32` | bytes | `r4xstart_r4sys` | fixed_contract |
+| `r4xstart_r4sys_size` | `968` | `u32` | bytes | `r4xstart_r4sys` | fixed_contract |
 | `registry_name_max` | `64` | `usize` | count | `registry_name` | fixed_contract |
 | `serial_link_payload_max` | `256` | `usize` | count | `serial_link` | fixed_contract |
 | `service_api_endpoint_queue_depth` | `8` | `usize` | count | `service_api` | fixed_contract |

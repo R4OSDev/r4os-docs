@@ -32,7 +32,10 @@ Completion- und Admission-Zaehler und Version 4 Service-Payloadkopien sowie
 Metadatenresets. Version 5 ergaenzt Queue-Scanarbeit, Endpoint-Revalidierungen
 und Registry-/Endpoint-Lockzeiten fuer sieben feste Operationsfamilien.
 Version 6 ergaenzt den deterministischen Timing-Abstand und die echte Anzahl
-gemessener Lockhaltezeiten. Der Aufrufer setzt Version und Puffergroesse; der
+gemessener Lockhaltezeiten. Version 7 fuegt die lineare Service-
+Registryenumeration hinzu: externe Indexabfragen, angeforderte Refreshes,
+tatsaechlich besuchte Eintraege, Programminstanzlookups und Endemarkierungen.
+Der Aufrufer setzt Version und Puffergroesse; der
 Provider schreibt nur den ausgehandelten Prefix. Zeitfelder liefern aufgeloeste Nanosekunden,
 Quellenmetadaten und explizite Nichtverfuegbarkeit statt stiller Scheinwerte.
 

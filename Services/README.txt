@@ -56,6 +56,16 @@ is timed; otherwise hold timing uses the published deterministic stride and
 reports the exact number of samples. This avoids placing multiple HPET MMIO
 reads on every uncontended service hot-path acquisition.
 
+The public ServiceInfo and ServiceDetail enumerators share one dense internal
+index map in physical registry order. Register and unregister rebuild that map;
+ordinary status changes do not. An index query refreshes only its selected
+service, revalidates registry generation, slot, name and instance identity,
+then returns the existing API payload. The end marker performs no refresh.
+Consequently one complete N-service enumeration performs N refresh visits
+instead of the former `(N + 1) * N` visits. The performance snapshot reports
+index queries, requested refreshes, actual visits, program-instance lookups and
+end markers separately.
+
 A service communicates through R4SYS service endpoints and uses R4NET,
 R4AUDIO, R4DESK or other public groups as required. It must not add a private
 kernel path or a second filesystem/network implementation.

@@ -26,11 +26,15 @@ Fault-Injection-Schnittstelle. Fixed-layout-Kompatibilitaetstypen bleiben
 binaer eingefroren; neue Telemetrie verwendet append-only Nachfolgetypen und
 neue Slots.
 
-`ProgramPerformanceSummary` Version 2 haengt Clock-, Boot- und Loaderfelder
-an den Version-1-Prefix an. Der Aufrufer setzt Version und Puffergroesse; der
-Provider schreibt nur den ausgehandelten Prefix. Die zusaetzlichen Slots fuer
-Bootphasen- und IRQ-Zeit liefern aufgeloeste Nanosekunden, Quellenmetadaten,
-Abdeckung und explizite Nichtverfuegbarkeit statt stiller Scheinwerte.
+`ProgramPerformanceSummary` ist append-only. Version 2 haengt Clock-, Boot-
+und Loaderfelder an den Version-1-Prefix an, Version 3 request-spezifische
+Completion- und Admission-Zaehler und Version 4 Service-Payloadkopien sowie
+Metadatenresets. Version 5 ergaenzt Queue-Scanarbeit, Endpoint-Revalidierungen
+und Registry-/Endpoint-Lockzeiten fuer sieben feste Operationsfamilien.
+Version 6 ergaenzt den deterministischen Timing-Abstand und die echte Anzahl
+gemessener Lockhaltezeiten. Der Aufrufer setzt Version und Puffergroesse; der
+Provider schreibt nur den ausgehandelten Prefix. Zeitfelder liefern aufgeloeste Nanosekunden,
+Quellenmetadaten und explizite Nichtverfuegbarkeit statt stiller Scheinwerte.
 
 `performance_boot_summary` liefert den kleinen passiven
 `ProgramBootPerformanceInfo`-Datensatz. Solange der Boot laeuft, sind

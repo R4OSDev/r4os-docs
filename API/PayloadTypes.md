@@ -5,9 +5,9 @@ Diese Datei wird deterministisch aus `API/ApiContract.json` erzeugt. Manuelle Ä
 Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenzen und Conformance-Fixtures werden produktiv aus diesem Schema erzeugt; handgeschriebene Dateien bleiben nur Fassaden oder erklaerende Texte.
 
 - Schema: v11, Baseline `standalone-contract-0.64.11`
-- Reachability: 111 von 111 Typen aufgelöst oder explizit klassifiziert
+- Reachability: 115 von 115 Typen aufgelöst oder explizit klassifiziert
 - Zentrale SDK-only-Wurzeln: 0; Runtime-R4Ls besitzen libraryeigene Vertraege
-- Operationen: 0; Fehlerdomänen: 61; Konstanten: 1175; Limits: 94
+- Operationen: 0; Fehlerdomänen: 61; Konstanten: 1175; Limits: 102
 
 ## App-Profile
 
@@ -86,6 +86,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `ServiceDetail` | fixed_layout | extern_struct | 520/8 | 520/8 | 520/8 | 520/8 |
 | `ServiceMessageHeader` | fixed_layout | extern_struct | 28/4 | 28/4 | 28/4 | 28/4 |
 | `IpcSummary` | fixed_layout | extern_struct | 56/8 | 56/8 | 56/8 | 56/8 |
+| `IpcPerformanceSummary` | extensible | extern_struct | 240/8 | 240/8 | 240/8 | 240/8 |
 | `IpcChannelInfo` | fixed_layout | extern_struct | 88/8 | 88/8 | 88/8 | 88/8 |
 | `TcpSummary` | fixed_layout | extern_struct | 160/8 | 160/8 | 160/8 | 160/8 |
 | `TcpConnectionInfo` | fixed_layout | extern_struct | 80/8 | 80/8 | 80/8 | 80/8 |
@@ -132,6 +133,9 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `ProgramTaskSnapshot` | extensible | extern_struct | 96/8 | 96/8 | 96/8 | 96/8 |
 | `ProgramThreadSnapshot` | extensible | extern_struct | 136/8 | 136/8 | 136/8 | 136/8 |
 | `ProgramInventorySummary` | extensible | extern_struct | 160/8 | 160/8 | 160/8 | 160/8 |
+| `ProgramDriverWorkPerformanceMetrics` | fixed_layout | extern_struct | 640/8 | 640/8 | 640/8 | 640/8 |
+| `ProgramDriverWorkPerformanceInfo` | extensible | extern_struct | 808/8 | 808/8 | 808/8 | 808/8 |
+| `ProgramPciInventoryPerformanceInfo` | extensible | extern_struct | 280/8 | 280/8 | 280/8 | 280/8 |
 
 ## Typdetails
 
@@ -2530,6 +2534,51 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `errors` | 40 | 8 | 8 | `u64` | - |
 | `echo_tests` | 48 | 8 | 8 | `u64` | - |
 
+### `IpcPerformanceSummary`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `extensible`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 240 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `worker_started` | 8 | 4 | 4 | `u32` | - |
+| `worker_task_id` | 12 | 4 | 4 | `u32` | - |
+| `active_channels` | 16 | 4 | 4 | `u32` | - |
+| `queue_used` | 20 | 4 | 4 | `u32` | - |
+| `queue_ready` | 24 | 4 | 4 | `u32` | - |
+| `queue_running` | 28 | 4 | 4 | `u32` | - |
+| `queue_limit` | 32 | 4 | 4 | `u32` | - |
+| `reserved0` | 36 | 4 | 4 | `u32` | - |
+| `handler_queued` | 40 | 8 | 8 | `u64` | - |
+| `handler_completed` | 48 | 8 | 8 | `u64` | - |
+| `handler_failures` | 56 | 8 | 8 | `u64` | - |
+| `handler_direct` | 64 | 8 | 8 | `u64` | - |
+| `handler_waits` | 72 | 8 | 8 | `u64` | - |
+| `handler_wait_timeouts` | 80 | 8 | 8 | `u64` | - |
+| `handler_queue_ns` | 88 | 8 | 8 | `u64` | - |
+| `handler_queue_max_ns` | 96 | 8 | 8 | `u64` | - |
+| `handler_run_ns` | 104 | 8 | 8 | `u64` | - |
+| `handler_run_max_ns` | 112 | 8 | 8 | `u64` | - |
+| `handler_e2e_ns` | 120 | 8 | 8 | `u64` | - |
+| `handler_e2e_max_ns` | 128 | 8 | 8 | `u64` | - |
+| `request_bytes` | 136 | 8 | 8 | `u64` | - |
+| `response_bytes` | 144 | 8 | 8 | `u64` | - |
+| `payload_copy_bytes` | 152 | 8 | 8 | `u64` | - |
+| `payload_clear_bytes` | 160 | 8 | 8 | `u64` | - |
+| `queue_full` | 168 | 8 | 8 | `u64` | - |
+| `queue_empty` | 176 | 8 | 8 | `u64` | - |
+| `admission_waits` | 184 | 8 | 8 | `u64` | - |
+| `admission_timeouts` | 192 | 8 | 8 | `u64` | - |
+| `recv_buffer_small` | 200 | 8 | 8 | `u64` | - |
+| `response_search_slots` | 208 | 8 | 8 | `u64` | - |
+| `stale_drops` | 216 | 8 | 8 | `u64` | - |
+| `lock_contentions` | 224 | 8 | 8 | `u64` | - |
+| `irq_denied` | 232 | 8 | 8 | `u64` | - |
+
 ### `IpcChannelInfo`
 
 - Quelle: `API/ApiContract.json`
@@ -3642,6 +3691,197 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `program_reserved` | 144 | 4 | 4 | `u32` | - |
 | `heap_active_blocks` | 148 | 4 | 4 | `u32` | - |
 | `heap_used_bytes` | 152 | 8 | 8 | `u64` | - |
+
+### `ProgramDriverWorkPerformanceMetrics`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 640 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `submitted` | 0 | 8 | 8 | `u64` | - |
+| `submitted_actual_irq` | 8 | 8 | 8 | `u64` | - |
+| `submitted_actual_task` | 16 | 8 | 8 | `u64` | - |
+| `submitted_irq_class` | 24 | 8 | 8 | `u64` | - |
+| `submitted_task_class` | 32 | 8 | 8 | `u64` | - |
+| `started` | 40 | 8 | 8 | `u64` | - |
+| `started_irq_class` | 48 | 8 | 8 | `u64` | - |
+| `started_task_class` | 56 | 8 | 8 | `u64` | - |
+| `completed` | 64 | 8 | 8 | `u64` | - |
+| `completed_irq_class` | 72 | 8 | 8 | `u64` | - |
+| `completed_task_class` | 80 | 8 | 8 | `u64` | - |
+| `failed` | 88 | 8 | 8 | `u64` | - |
+| `cancelled` | 96 | 8 | 8 | `u64` | - |
+| `dropped` | 104 | 8 | 8 | `u64` | - |
+| `full_rejections` | 112 | 8 | 8 | `u64` | - |
+| `retained_full_rejections` | 120 | 8 | 8 | `u64` | - |
+| `waits` | 128 | 8 | 8 | `u64` | - |
+| `wait_timeouts` | 136 | 8 | 8 | `u64` | - |
+| `wait_denied_irq` | 144 | 8 | 8 | `u64` | - |
+| `wait_failed` | 152 | 8 | 8 | `u64` | - |
+| `wait_total_ns` | 160 | 8 | 8 | `u64` | - |
+| `wait_max_ns` | 168 | 8 | 8 | `u64` | - |
+| `wait_last_ns` | 176 | 8 | 8 | `u64` | - |
+| `wake_publications` | 184 | 8 | 8 | `u64` | - |
+| `wake_waiters` | 192 | 8 | 8 | `u64` | - |
+| `wake_misses` | 200 | 8 | 8 | `u64` | - |
+| `releases` | 208 | 8 | 8 | `u64` | - |
+| `release_busy` | 216 | 8 | 8 | `u64` | - |
+| `release_wakes` | 224 | 8 | 8 | `u64` | - |
+| `invalid_handles` | 232 | 8 | 8 | `u64` | - |
+| `stale_handles` | 240 | 8 | 8 | `u64` | - |
+| `publication_pending_releases` | 248 | 8 | 8 | `u64` | - |
+| `waiter_blocked_releases` | 256 | 8 | 8 | `u64` | - |
+| `claimed_releases` | 264 | 8 | 8 | `u64` | - |
+| `queue_total_ns` | 272 | 8 | 8 | `u64` | - |
+| `queue_max_ns` | 280 | 8 | 8 | `u64` | - |
+| `queue_last_ns` | 288 | 8 | 8 | `u64` | - |
+| `run_total_ns` | 296 | 8 | 8 | `u64` | - |
+| `run_max_ns` | 304 | 8 | 8 | `u64` | - |
+| `run_last_ns` | 312 | 8 | 8 | `u64` | - |
+| `e2e_total_ns` | 320 | 8 | 8 | `u64` | - |
+| `e2e_max_ns` | 328 | 8 | 8 | `u64` | - |
+| `e2e_last_ns` | 336 | 8 | 8 | `u64` | - |
+| `timing_unavailable` | 344 | 8 | 8 | `u64` | - |
+| `completion_age_current_ns` | 352 | 8 | 8 | `u64` | - |
+| `completion_age_max_ns` | 360 | 8 | 8 | `u64` | - |
+| `selection_irq` | 368 | 8 | 8 | `u64` | - |
+| `selection_task` | 376 | 8 | 8 | `u64` | - |
+| `selection_irq_preferred` | 384 | 8 | 8 | `u64` | - |
+| `selection_task_fairness` | 392 | 8 | 8 | `u64` | - |
+| `selection_empty` | 400 | 8 | 8 | `u64` | - |
+| `scan_passes` | 408 | 8 | 8 | `u64` | - |
+| `scan_slots` | 416 | 8 | 8 | `u64` | - |
+| `critical_sections` | 424 | 8 | 8 | `u64` | - |
+| `critical_from_irq` | 432 | 8 | 8 | `u64` | - |
+| `critical_timing_samples` | 440 | 8 | 8 | `u64` | - |
+| `critical_timing_unavailable` | 448 | 8 | 8 | `u64` | - |
+| `critical_total_ns` | 456 | 8 | 8 | `u64` | - |
+| `critical_max_ns` | 464 | 8 | 8 | `u64` | - |
+| `critical_last_ns` | 472 | 8 | 8 | `u64` | - |
+| `cleanup_calls` | 480 | 8 | 8 | `u64` | - |
+| `cleanup_quiesced` | 488 | 8 | 8 | `u64` | - |
+| `cleanup_failed_context` | 496 | 8 | 8 | `u64` | - |
+| `cleanup_queued_cancelled` | 504 | 8 | 8 | `u64` | - |
+| `cleanup_waits` | 512 | 8 | 8 | `u64` | - |
+| `cleanup_wait_timeouts` | 520 | 8 | 8 | `u64` | - |
+| `cleanup_wait_failures` | 528 | 8 | 8 | `u64` | - |
+| `cleanup_wait_total_ns` | 536 | 8 | 8 | `u64` | - |
+| `cleanup_wait_max_ns` | 544 | 8 | 8 | `u64` | - |
+| `cleanup_released` | 552 | 8 | 8 | `u64` | - |
+| `cleanup_late_finishes` | 560 | 8 | 8 | `u64` | - |
+| `cleanup_scan_passes` | 568 | 8 | 8 | `u64` | - |
+| `cleanup_scan_slots` | 576 | 8 | 8 | `u64` | - |
+| `long_callbacks` | 584 | 8 | 8 | `u64` | - |
+| `waiter_enrollments` | 592 | 8 | 8 | `u64` | - |
+| `waiter_wake_returns` | 600 | 8 | 8 | `u64` | - |
+| `waiter_cancel_returns` | 608 | 8 | 8 | `u64` | - |
+| `sleep_waits` | 616 | 8 | 8 | `u64` | - |
+| `sleep_denied_irq` | 624 | 8 | 8 | `u64` | - |
+| `sleep_total_ticks` | 632 | 8 | 8 | `u64` | - |
+
+### `ProgramDriverWorkPerformanceInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `extensible`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 808 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `selected_owner` | 8 | 4 | 4 | `u32` | - |
+| `owner_present` | 12 | 4 | 4 | `u32` | - |
+| `initialized` | 16 | 4 | 4 | `u32` | - |
+| `worker_started` | 20 | 4 | 4 | `u32` | - |
+| `worker_task_id` | 24 | 4 | 4 | `u32` | - |
+| `worker_count` | 28 | 4 | 4 | `u32` | - |
+| `queue_capacity` | 32 | 4 | 4 | `u32` | - |
+| `free_slots` | 36 | 4 | 4 | `u32` | - |
+| `used_slots` | 40 | 4 | 4 | `u32` | - |
+| `queued_slots` | 44 | 4 | 4 | `u32` | - |
+| `running_slots` | 48 | 4 | 4 | `u32` | - |
+| `completed_slots` | 52 | 4 | 4 | `u32` | - |
+| `cancelled_slots` | 56 | 4 | 4 | `u32` | - |
+| `irq_queued_slots` | 60 | 4 | 4 | `u32` | - |
+| `task_queued_slots` | 64 | 4 | 4 | `u32` | - |
+| `queue_high_water` | 68 | 4 | 4 | `u32` | - |
+| `used_high_water` | 72 | 4 | 4 | `u32` | - |
+| `retained_high_water` | 76 | 4 | 4 | `u32` | - |
+| `irq_burst_limit` | 80 | 4 | 4 | `u32` | - |
+| `current_irq_burst` | 84 | 4 | 4 | `u32` | - |
+| `waiters_current` | 88 | 4 | 4 | `u32` | - |
+| `waiters_max` | 92 | 4 | 4 | `u32` | - |
+| `last_submitted_owner` | 96 | 4 | 4 | `u32` | - |
+| `last_started_owner` | 100 | 4 | 4 | `u32` | - |
+| `last_completed_owner` | 104 | 4 | 4 | `u32` | - |
+| `last_cleanup_owner` | 108 | 4 | 4 | `u32` | - |
+| `owner_used_slots` | 112 | 4 | 4 | `u32` | - |
+| `owner_queued_slots` | 116 | 4 | 4 | `u32` | - |
+| `owner_running_slots` | 120 | 4 | 4 | `u32` | - |
+| `owner_completed_slots` | 124 | 4 | 4 | `u32` | - |
+| `owner_cancelled_slots` | 128 | 4 | 4 | `u32` | - |
+| `owner_irq_queued_slots` | 132 | 4 | 4 | `u32` | - |
+| `owner_task_queued_slots` | 136 | 4 | 4 | `u32` | - |
+| `owner_used_high_water` | 140 | 4 | 4 | `u32` | - |
+| `owner_retained_high_water` | 144 | 4 | 4 | `u32` | - |
+| `monotonic_clock_flags` | 148 | 4 | 4 | `u32` | - |
+| `owner_waiters_current` | 152 | 4 | 4 | `u32` | - |
+| `owner_waiters_max` | 156 | 4 | 4 | `u32` | - |
+| `long_callback_threshold_ns` | 160 | 8 | 8 | `u64` | - |
+| `metrics` | 168 | 640 | 8 | `r4os.abi.ProgramDriverWorkPerformanceMetrics` | - |
+
+### `ProgramPciInventoryPerformanceInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `extensible`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 280 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `flags` | 8 | 4 | 4 | `u32` | - |
+| `generation` | 12 | 4 | 4 | `u32` | - |
+| `capacity` | 16 | 4 | 4 | `u32` | - |
+| `mcfg_segment` | 20 | 4 | 4 | `u32` | - |
+| `mcfg_start_bus` | 24 | 4 | 4 | `u32` | - |
+| `mcfg_end_bus` | 28 | 4 | 4 | `u32` | - |
+| `found` | 32 | 8 | 8 | `u64` | - |
+| `stored` | 40 | 8 | 8 | `u64` | - |
+| `dropped` | 48 | 8 | 8 | `u64` | - |
+| `ecam_stored` | 56 | 8 | 8 | `u64` | - |
+| `legacy_stored` | 64 | 8 | 8 | `u64` | - |
+| `vendor_probes_ecam` | 72 | 8 | 8 | `u64` | - |
+| `vendor_probes_legacy` | 80 | 8 | 8 | `u64` | - |
+| `class_reads` | 88 | 8 | 8 | `u64` | - |
+| `header_reads` | 96 | 8 | 8 | `u64` | - |
+| `enumeration_config_reads` | 104 | 8 | 8 | `u64` | - |
+| `function_pages` | 112 | 8 | 8 | `u64` | - |
+| `early_stops` | 120 | 8 | 8 | `u64` | - |
+| `ecam_config_reads` | 128 | 8 | 8 | `u64` | - |
+| `ecam_config_writes` | 136 | 8 | 8 | `u64` | - |
+| `legacy_config_reads` | 144 | 8 | 8 | `u64` | - |
+| `legacy_config_writes` | 152 | 8 | 8 | `u64` | - |
+| `mapping_checks` | 160 | 8 | 8 | `u64` | - |
+| `mapping_hits` | 168 | 8 | 8 | `u64` | - |
+| `mapping_misses` | 176 | 8 | 8 | `u64` | - |
+| `mapping_fast_accesses` | 184 | 8 | 8 | `u64` | - |
+| `invalid_accesses` | 192 | 8 | 8 | `u64` | - |
+| `class_find_calls` | 200 | 8 | 8 | `u64` | - |
+| `class_candidates` | 208 | 8 | 8 | `u64` | - |
+| `detail_materializations` | 216 | 8 | 8 | `u64` | - |
+| `interrupt_dword_reads` | 224 | 8 | 8 | `u64` | - |
+| `command_reads` | 232 | 8 | 8 | `u64` | - |
+| `bar_reads` | 240 | 8 | 8 | `u64` | - |
+| `enumeration_total_ns` | 248 | 8 | 8 | `u64` | - |
+| `ecam_enumeration_ns` | 256 | 8 | 8 | `u64` | - |
+| `legacy_enumeration_ns` | 264 | 8 | 8 | `u64` | - |
+| `timing_unavailable` | 272 | 8 | 8 | `u64` | - |
 
 ## Fehlerdomänen
 
@@ -5281,7 +5521,7 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `r4xstart_r4desk_magic` | `826623058` | `u32` | magic | number | `r4xstart_r4desk` | fixed_contract |
 | `r4xstart_r4desk_version` | `7` | `u32` | version | number | `r4xstart_r4desk` | fixed_contract |
 | `r4xstart_r4dev_magic` | `827737170` | `u32` | magic | number | `r4xstart_r4dev` | fixed_contract |
-| `r4xstart_r4dev_version` | `7` | `u32` | version | number | `r4xstart_r4dev` | fixed_contract |
+| `r4xstart_r4dev_version` | `8` | `u32` | version | number | `r4xstart_r4dev` | fixed_contract |
 | `r4xstart_r4draw_magic` | `827802706` | `u32` | magic | number | `r4xstart_r4draw` | fixed_contract |
 | `r4xstart_r4draw_version` | `2` | `u32` | version | number | `r4xstart_r4draw` | fixed_contract |
 | `r4xstart_r4net_magic` | `826625618` | `u32` | magic | number | `r4xstart_r4net` | fixed_contract |
@@ -5535,6 +5775,14 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `clipboard_max_text_bytes` | `4095` | `u32` | bytes | `clipboard_max` | fixed_contract |
 | `console_output_capacity` | `16384` | `u32` | bytes | `console_output` | fixed_contract |
 | `driver_work_queue_capacity` | `16` | `u32` | bytes | `driver_work` | fixed_contract |
+| `pci_inventory_capacity` | `64` | `u32` | count | `pci_inventory` | fixed_contract |
+| `pci_inventory_flag_enumerated` | `1` | `u32` | bitmask | `pci_inventory` | fixed_contract |
+| `pci_inventory_flag_ecam` | `2` | `u32` | bitmask | `pci_inventory` | fixed_contract |
+| `pci_inventory_flag_legacy` | `4` | `u32` | bitmask | `pci_inventory` | fixed_contract |
+| `pci_inventory_flag_partial` | `8` | `u32` | bitmask | `pci_inventory` | fixed_contract |
+| `pci_inventory_flag_truncated` | `16` | `u32` | bitmask | `pci_inventory` | fixed_contract |
+| `pci_inventory_flag_ecam_aperture_ready` | `32` | `u32` | bitmask | `pci_inventory` | fixed_contract |
+| `pci_inventory_flag_ecam_rejected_segment` | `64` | `u32` | bitmask | `pci_inventory` | fixed_contract |
 | `environment_block_max` | `2048` | `usize` | count | `environment_block` | fixed_contract |
 | `environment_name_max` | `32` | `usize` | count | `environment_name` | fixed_contract |
 | `environment_value_max` | `512` | `usize` | count | `environment_value` | fixed_contract |
@@ -5592,7 +5840,7 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `r4xstart_import_size` | `40` | `u32` | bytes | `r4xstart_import` | fixed_contract |
 | `r4xstart_r4audio_size` | `184` | `u32` | bytes | `r4xstart_r4audio` | fixed_contract |
 | `r4xstart_r4desk_size` | `432` | `u32` | bytes | `r4xstart_r4desk` | fixed_contract |
-| `r4xstart_r4dev_size` | `328` | `u32` | bytes | `r4xstart_r4dev` | fixed_contract |
+| `r4xstart_r4dev_size` | `344` | `u32` | bytes | `r4xstart_r4dev` | fixed_contract |
 | `r4xstart_r4draw_size` | `272` | `u32` | bytes | `r4xstart_r4draw` | fixed_contract |
 | `r4xstart_r4net_size` | `288` | `u32` | bytes | `r4xstart_r4net` | fixed_contract |
 | `r4xstart_r4sys_size` | `976` | `u32` | bytes | `r4xstart_r4sys` | fixed_contract |

@@ -35,8 +35,8 @@ Version 6 ergaenzt den deterministischen Timing-Abstand und die echte Anzahl
 gemessener Lockhaltezeiten. Version 7 fuegt die lineare Service-
 Registryenumeration hinzu: externe Indexabfragen, angeforderte Refreshes,
 tatsaechlich besuchte Eintraege, Programminstanzlookups und Endemarkierungen.
-Der Aufrufer setzt Version und Puffergroesse; der
-Provider schreibt nur den ausgehandelten Prefix. Zeitfelder liefern aufgeloeste Nanosekunden,
+Der Aufrufer setzt Version und Puffergroesse; der Provider schreibt nur den
+ausgehandelten Prefix. Zeitfelder liefern aufgeloeste Nanosekunden,
 Quellenmetadaten und explizite Nichtverfuegbarkeit statt stiller Scheinwerte.
 
 `performance_boot_summary` liefert den kleinen passiven
@@ -45,10 +45,16 @@ Endpunkt und Dauer live; Readiness, Fallback oder Fehler frieren dieselben
 Felder und alle Phasenspannen gemeinsam ein. Die Abfrage sammelt keine breite
 Subsystemtelemetrie und veraendert den Messzustand nicht.
 
+`performance_driver_work` stellt die besitzerbezogene Workqueue- und Cleanup-
+Telemetrie bereit. `performance_pci_inventory` beschreibt die kanonische
+ECAM-/Legacy-Inventur, Found/Stored/Dropped/Truncated, Config- und Mappingarbeit
+sowie Such-, Detail- und Zeitzaehler. Beide Slots sind append-only und fuer
+aeltere Kernel optional.
+
 <!-- R4OS-APIREF:BEGIN R4DEV (generiert von ApiContractGen aus ApiContract.json - NICHT von Hand editieren) -->
 ## Tabellen-Referenz R4DEV (generiert)
 
-Kernel-Gruppentabelle `R4XStartR4Dev` v7, 328 Bytes, 37 Funktionsfelder und 39 Slots insgesamt.
+Kernel-Gruppentabelle `R4XStartR4Dev` v9, 344 Bytes, 39 Funktionsfelder und 41 Slots insgesamt.
 Signatur-Wahrheit: `abi.R4DevFns` (Feldname == Tabellenfeld).
 Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 
@@ -93,4 +99,6 @@ Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 | 36 | 304 | function | `performance_boot_phase_clock` | `*const fn (u32, *ProgramBootPhaseClockInfo) callconv(.c) i32` |
 | 37 | 312 | function | `performance_irq_timing` | `*const fn (u32, *ProgramIrqTimingInfo) callconv(.c) i32` |
 | 38 | 320 | function | `performance_boot_summary` | `*const fn (*ProgramBootPerformanceInfo) callconv(.c) i32` |
+| 39 | 328 | function | `performance_driver_work` | `*const fn (u32, *ProgramDriverWorkPerformanceInfo) callconv(.c) i32` |
+| 40 | 336 | function | `performance_pci_inventory` | `*const fn (*ProgramPciInventoryPerformanceInfo) callconv(.c) i32` |
 <!-- R4OS-APIREF:END R4DEV -->

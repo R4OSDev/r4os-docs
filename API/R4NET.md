@@ -17,7 +17,7 @@ mit hasFn. Fachliche Status- und Fehlercodes stehen in abi.zig.
 <!-- R4OS-APIREF:BEGIN R4NET (generiert von ApiContractGen aus ApiContract.json - NICHT von Hand editieren) -->
 ## Tabellen-Referenz R4NET (generiert)
 
-Kernel-Gruppentabelle `R4XStartR4Net` v1, 288 Bytes, 32 Funktionsfelder und 34 Slots insgesamt.
+Kernel-Gruppentabelle `R4XStartR4Net` v1, 288 Bytes, 34 Funktionsfelder und 34 Slots insgesamt.
 Signatur-Wahrheit: `abi.R4NetFns` (Feldname == Tabellenfeld).
 Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 
@@ -55,6 +55,6 @@ Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 | 29 | 248 | function | `serial_link_send_message` | `*const fn ([*]const u8, u32) callconv(.c) i32` |
 | 30 | 256 | function | `serial_link_host_test` | `*const fn () callconv(.c) i32` |
 | 31 | 264 | function | `serial_link_inbox` | `*const fn (*SerialLinkMessage) callconv(.c) i32` |
-| 32 | 272 | reserved | `reserved0` | - |
-| 33 | 280 | reserved | `reserved1` | - |
+| 32 | 272 | function | `net_service_request` | `*const fn (u32, u16, u32, u16, [*]const u8, u32, [*]u8, u32) callconv(.c) i32` |
+| 33 | 280 | function | `ipc_performance` | `*const fn (u32, *IpcPerformanceSummary) callconv(.c) i32` |
 <!-- R4OS-APIREF:END R4NET -->

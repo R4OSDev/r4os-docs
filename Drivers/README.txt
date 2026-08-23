@@ -30,5 +30,17 @@ back immediately. Reprobe first halts the previous controller, clears its DMA
 registers, frees retained runtimes and controller rings, and restores the PCI
 command; a failed halt retains the old resources and rejects the reprobe.
 
+Root-port changes have one controller-owned runtime path. Port Status Change
+Events are drained even when no command or transfer is waiting, retained in a
+per-port pending set, then acknowledged only after targeted debounce, slot
+reclaim and optional re-enumeration. Repeated events for the same port are
+coalesced with counters instead of being reported as stale completions. USB-HID
+bindings are reconciled from the resulting USB device catalog.
+
+USB keyboards publish only through the canonical input queue. The HID poller
+does not own a second character ring and pauses before accepting a report until
+the complete worst-case decoded report fits. Queue fill, high-water and drops
+remain visible through the input diagnostics.
+
 Drivers are fully trusted. PCI/MMIO/port access is validated for obvious
 technical errors only. A faulty driver can still crash or corrupt the system.

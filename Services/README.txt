@@ -22,6 +22,20 @@ plus request-ID validation prevents a reused slot from satisfying an older
 caller. Services must use this central contract instead of implementing their
 own polling, retry or admission loops.
 
+Request and response payload storage is reused without clearing the complete
+4-KB arrays. `request_len` and `response_len` are the sole publication
+boundaries: submit, receive, reply and take copy only that many bytes. Slot
+reclamation resets IDs, lengths, status and request-specific synchronization;
+endpoint retirement first wakes all waiters and then resets only endpoint,
+queue and semaphore metadata. Bytes beyond a published length are never
+returned, including after a shorter request reuses a formerly full slot.
+
+The append-only performance snapshot reports lifetime service payload copy
+bytes, payload clear bytes, slot metadata resets, endpoint metadata resets and
+endpoint payload-reset bytes. Normal operation keeps both payload-clear
+counters at zero while the metadata-reset counters prove that slot and
+endpoint reuse actually occurred.
+
 A service communicates through R4SYS service endpoints and uses R4NET,
 R4AUDIO, R4DESK or other public groups as required. It must not add a private
 kernel path or a second filesystem/network implementation.

@@ -56,6 +56,10 @@ Interrupt and refill contract
   fills complete periods and performs a pending recovery.
 - At most one refill job is pending. Two completion handles permit the next
   IRQ to release the previous job without unbounded allocation.
+- A monotone IRQ generation closes the worker-completion race: work that
+  arrived during a refill pass is either reclaimed by that worker or owned by
+  an already submitted successor. Shutdown must join every retained handle
+  before DMA can be released.
 
 Underrun and recovery
 ---------------------
@@ -73,11 +77,16 @@ Lifecycle
 Open and the first writes fill the queue and ring. An application stream Close
 drops queued PCM, clears RUN and resets the descriptor without a playback
 drain, keeping the synchronous AUDSVC close inside its 100-ms contract. Driver
-shutdown may first perform the bounded 250-ms Drain including the three-period
+shutdown may first perform the bounded 400-ms Drain including the three-period
 postroll. Both paths use a monotonic RUN-clear timeout of at least 10 ms as
 required by Intel HDA033-A. BDL/CBL/LVI are reprogrammed only while stopped,
 so a later stream starts from a defined position. Stop, error, Close and
 shutdown share idempotent cleanup and release pending Driver Work.
+
+BDL and stream allocations are constrained below 4 GiB whenever GCAP does not
+advertise 64-bit addressing. Shutdown drains and stops RUN, disables controller
+interrupts, unregisters IRQ routes, rolls MSI back and joins Driver Work before
+freeing DMA or unregistering the audio backend.
 
 Measurement surface
 -------------------

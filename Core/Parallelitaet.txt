@@ -21,3 +21,23 @@ Rules
 Module tasks may use SIMD. The scheduler saves a CPUID/XCR0-sized FPU state
 for SIMD-capable tasks. The standard module target assumes AVX2; the kernel
 is built without SIMD and remains ReleaseSafe.
+
+Scheduler work sets
+-------------------
+
+The stable Task registry owns identity and inventory only. Three intrusive
+projections derive from it under the IRQ-disabled state-transition boundary:
+the Ready FIFO, finite timed waits, and deferred-reap candidates. Runnable
+selection and starvation diagnostics visit Ready tasks, timeout dispatch
+visits timed waits only when the minimum deadline is due, and a reaper pass
+visits only the candidates present at its start. Blocked unrelated tasks do
+not increase these hot paths.
+
+Priority selection takes the first task of the best class from the Ready
+FIFO; every eighth cooperative selection retains the existing cross-priority
+fairness turn. A wake of a higher-priority task publishes Ready state and a
+reschedule request while still inside the producer's critical section. The
+request can bypass the normal 30 ms quantum, but an actual context switch is
+allowed only at the safe IRQ-exit boundary after WaitQueue locks, handler work,
+and EOI have completed. Kernel instruction pointers and active preemption
+guards keep the request pending instead of violating lifecycle or lock rules.

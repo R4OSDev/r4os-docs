@@ -8,8 +8,12 @@ second audio engine, hardware inventory or driver path.
 `app.audio()` opens PCM streams with an explicit sample format, rate and
 channel count. A successful stream owns one handle and must be closed. Writes
 retain the caller's buffer only for the duration defined by the generated
-operation contract. Volume, status, MIDI, SID and OPL3 operations are
-available only when their table fields exist.
+operation contract. `app_audio.WriteResult` reports bytes accepted before
+Busy, timeout, or failure; `app_audio.WriteCursor` validates that progress
+against the remaining frame-aligned client block without converting the
+terminal result into success. Retry timing remains the caller's decision.
+Volume, status, MIDI, SID and OPL3 operations are available only when their
+table fields exist.
 
 The active R4D backend owns hardware conversion, DMA, interrupts and recovery.
 An SDK facade never calls a kernel hardware path directly.

@@ -37,7 +37,15 @@ The generic subsystem runtime uses the application audio facade rather than
 a direct kernel path. Its default transport is 48 kHz stereo signed 16-bit
 little endian in 480-frame quanta, with caller-owned buffering, silence on
 underflow and explicit mute. If the service or stream fails, audio becomes
-degraded while guest time and video continue at their normal paced rate.
+degraded, clears its queued PCM once and leaves the audio deadline schedule;
+guest time and video continue at their normal paced rate without repeated
+PCM generation, scratch submission or a zero-wait loop.
+
+PCM clients retain frame-aligned progress reported before Busy, timeout or a
+hard error. R4Synth sends matching stereo S16LE WAV data directly and paces
+only accepted frames after a 160-ms prefill. Beep uses 960-frame, 3840-byte
+single-request blocks; its ten-block self-test reaches the HDA start window
+and represents a complete 200-ms short tone.
 
 Current modules are listed in `Docs/Inventory/AllModules.json`; diagnostics
 and their tests are listed in the corresponding inventories.

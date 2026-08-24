@@ -26,7 +26,23 @@ the page cache invalidates only that prefix after a partial failure and keeps
 the unwritten suffix intact. Drivers such as USB mass storage therefore keep
 their small transport limit without imposing it on FAT32 or other callers.
 
-Filesystem mutations are serialized by the owning volume rules. Long loops
+Runtime dispatch is owned per registered controller identity. Devices behind
+one controller retain their ordered synchronous callback lane; independent
+controllers have separate workers, so a sleeping backend callback cannot
+hold up an unrelated controller. Worker creation failure falls back safely to
+the primary lane and remains visible in the performance snapshot.
+
+The general block API treats caller memory as potentially pageable and uses a
+bounded non-pageable bounce buffer. The page cache may select the explicit
+direct API only while `io_busy` pins the exact PMM-backed cache frame, or for
+kernel-owned stack/heap staging whose owner stays alive until completion. A
+direct request never detaches after a timeout; it retains the borrower until
+the synchronous backend callback returns. Direct, bounce, copy and timeout
+counters are exported for verification.
+
+Filesystem requests are serialized by the owning A-Z volume lane. Cross-drive
+copy/move acquires only its two lanes in stable alphabetical order, while
+owner-free stream cleanup conservatively acquires every lane. Long loops
 cooperate with the scheduler; page-cache writeback does not replace explicit
 durability points. Flush, atomic replacement and shutdown propagate backend
 errors instead of reporting false success.

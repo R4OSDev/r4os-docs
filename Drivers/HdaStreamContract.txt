@@ -1,4 +1,4 @@
-R4OS HDA stream contract
+﻿R4OS HDA stream contract
 ========================
 
 Scope
@@ -13,6 +13,11 @@ The HDA stream descriptor and converter verbs use format 0x0011: 48-kHz base,
 
 Write contract
 --------------
+- The public backend descriptor admits 8,000 through 192,000 Hz, mono or
+  stereo, and U8 or S16LE input. The kernel checks these copied descriptor
+  limits before dispatching an R4D write; HDA repeats the check before taking
+  the stream lock or entering queue and resampler work. Rejected input returns
+  service_api_result_invalid without accepting frames.
 - writePcm accepts non-empty, frame-aligned packets in a supported input
   format while the bounded playback reserve has room. At the 32-period target
   it returns service_api_result_busy without consuming data. Packet boundaries
@@ -75,13 +80,14 @@ hardware period; newly accepted PCM is never written behind the consumer.
 Lifecycle
 ---------
 Open and the first writes fill the queue and ring. An application stream Close
-drops queued PCM, clears RUN and resets the descriptor without a playback
-drain, keeping the synchronous AUDSVC close inside its 100-ms contract. Driver
-shutdown may first perform the bounded 400-ms Drain including the three-period
-postroll. Both paths use a monotonic RUN-clear timeout of at least 10 ms as
-required by Intel HDA033-A. BDL/CBL/LVI are reprogrammed only while stopped,
-so a later stream starts from a defined position. Stop, error, Close and
-shutdown share idempotent cleanup and release pending Driver Work.
+pumps remaining canonical PCM and requests the bounded backend Drain. HDA
+emits queued requested frames and the three-period postroll before clearing
+RUN; a 400-ms drain timeout is returned as an error instead of silently
+discarding the tail. Driver shutdown uses the same bounded Drain. Both paths
+use a monotonic RUN-clear timeout of at least 10 ms as required by Intel
+HDA033-A. BDL/CBL/LVI are reprogrammed only while stopped, so a later stream
+starts from a defined position. Stop, error, Close and shutdown share
+idempotent cleanup and release pending Driver Work.
 
 BDL and stream allocations are constrained below 4 GiB whenever GCAP does not
 advertise 64-bit addressing. Shutdown drains and stops RUN, disables controller

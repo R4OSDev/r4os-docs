@@ -47,6 +47,39 @@ cooperate with the scheduler; page-cache writeback does not replace explicit
 durability points. Flush, atomic replacement and shutdown propagate backend
 errors instead of reporting false success.
 
+Page-cache identities remain hash-addressed, while free slots and clean LRU
+and dirty FIFO candidates use intrusive bounded queues. Clean and dirty
+selection probes at most the eight block-device shards and prefers eviction
+from the requesting device. Normal hit, slot, eviction, reclaim and dirty
+selection therefore do not scan all 512 cache entries. A full entry scan is
+reserved for device invalidation or an instrumented index-consistency
+diagnostic; the latter is exported as a performance error counter.
+
+Each device activates dirty-pressure writeback at 64 pages (256 KB) and keeps
+the pressure state until at most 32 pages (128 KB) remain. The batch-role
+`pgcache-wb` worker also selects the oldest device FIFO head after a maximum
+dirty age of two seconds. One activation writes at most four pages, issues
+only one synchronous block request at a time and rotates fairly over devices.
+A failed page remains dirty at the FIFO head and applies a one-second
+device-local retry backoff, so one failing or heavily dirty device cannot
+feed an unbounded request burst ahead of another device.
+
+Background writeback establishes persistence progress but deliberately does
+not issue a backend flush barrier. Explicit whole-device, operation-batch and
+shutdown flushes still drain their complete ownership set and then call the
+backend barrier. They wait for a target-device dirty page already pinned by
+background I/O, so the temporary queue detachment cannot create a false clean
+result. Reclaim never discards dirty data, and device invalidation cancels
+speculative work before draining and removing the device identities.
+
+Read-ahead is limited to a successful bulk read of at least 16 contiguous
+sectors. It requests only the following page, uses a replaceable generation
+that demand I/O or device invalidation can cancel, never evicts a page, and
+stops when only 32 free cache slots remain. At most two speculative resident
+pages are charged to each device; demand reads consume that charge, while
+writes and eviction remove it without reporting a speculative hit. Dirty
+progress always has priority over read-ahead in the worker.
+
 Regular FAT32 mutations tag every cached dirty sector with an operation-local
 write batch. Their commit writes only that batch, including selected sectors
 inside an otherwise foreign-dirty 4-KB page, and then issues the unchanged

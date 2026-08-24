@@ -13,6 +13,12 @@ Zig-Context: r4os.r4audio.Context
 Audioprogramme deklarieren R4AUDIO im Manifest. Optionale Felder werden mit
 hasFn geprueft.
 
+Synth-Renderanforderungen erzeugen 1 bis 1024 Frames mit 48 kHz, Stereo und
+signed 16-bit little-endian PCM. Der Audio-Core schreibt den vollstaendigen
+Block an das aktive R4D-Backend. Backpressure bleibt sichtbar und bewahrt den
+unveraenderten Block fuer einen Wiederholungsversuch. Explizite Synthnamen
+werden exakt aufgeloest und muessen produktiv PCM rendern koennen.
+
 <!-- R4OS-APIREF:BEGIN R4AUDIO (generiert von ApiContractGen aus ApiContract.json - NICHT von Hand editieren) -->
 ## Tabellen-Referenz R4AUDIO (generiert)
 

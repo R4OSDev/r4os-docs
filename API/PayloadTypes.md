@@ -5,7 +5,7 @@ Diese Datei wird deterministisch aus `API/ApiContract.json` erzeugt. Manuelle Ä
 Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenzen und Conformance-Fixtures werden produktiv aus diesem Schema erzeugt; handgeschriebene Dateien bleiben nur Fassaden oder erklaerende Texte.
 
 - Schema: v11, Baseline `standalone-contract-0.64.11`
-- Reachability: 115 von 115 Typen aufgelöst oder explizit klassifiziert
+- Reachability: 117 von 117 Typen aufgelöst oder explizit klassifiziert
 - Zentrale SDK-only-Wurzeln: 0; Runtime-R4Ls besitzen libraryeigene Vertraege
 - Operationen: 0; Fehlerdomänen: 61; Konstanten: 1175; Limits: 102
 
@@ -136,6 +136,8 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `ProgramDriverWorkPerformanceMetrics` | fixed_layout | extern_struct | 640/8 | 640/8 | 640/8 | 640/8 |
 | `ProgramDriverWorkPerformanceInfo` | extensible | extern_struct | 808/8 | 808/8 | 808/8 | 808/8 |
 | `ProgramPciInventoryPerformanceInfo` | extensible | extern_struct | 280/8 | 280/8 | 280/8 | 280/8 |
+| `ProgramInputPerformanceInfo` | extensible | extern_struct | 248/8 | 248/8 | 248/8 | 248/8 |
+| `ServiceDeadlineFooter` | fixed_layout | extern_struct | 24/8 | 24/8 | 24/8 | 24/8 |
 
 ## Typdetails
 
@@ -3883,6 +3885,70 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `legacy_enumeration_ns` | 264 | 8 | 8 | `u64` | - |
 | `timing_unavailable` | 272 | 8 | 8 | `u64` | - |
 
+### `ProgramInputPerformanceInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `extensible`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 248 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `keyboard_queue_capacity` | 8 | 4 | 4 | `u32` | - |
+| `keyboard_queue_pending` | 12 | 4 | 4 | `u32` | - |
+| `keyboard_queue_high_water` | 16 | 4 | 4 | `u32` | - |
+| `gui_queue_capacity` | 20 | 4 | 4 | `u32` | - |
+| `gui_queue_pending` | 24 | 4 | 4 | `u32` | - |
+| `gui_queue_high_water` | 28 | 4 | 4 | `u32` | - |
+| `gui_queue_active` | 32 | 4 | 4 | `u32` | - |
+| `console_queue_capacity` | 36 | 4 | 4 | `u32` | - |
+| `console_queue_pending` | 40 | 4 | 4 | `u32` | - |
+| `console_queue_high_water` | 44 | 4 | 4 | `u32` | - |
+| `console_queue_active` | 48 | 4 | 4 | `u32` | - |
+| `program_start_attach_pending` | 52 | 4 | 4 | `u32` | - |
+| `i8042_irq1_count` | 56 | 8 | 8 | `u64` | - |
+| `i8042_irq12_count` | 64 | 8 | 8 | `u64` | - |
+| `i8042_byte_count` | 72 | 8 | 8 | `u64` | - |
+| `i8042_keyboard_byte_count` | 80 | 8 | 8 | `u64` | - |
+| `i8042_mouse_byte_count` | 88 | 8 | 8 | `u64` | - |
+| `i8042_keyboard_bytes_on_irq12` | 96 | 8 | 8 | `u64` | - |
+| `i8042_mouse_bytes_on_irq1` | 104 | 8 | 8 | `u64` | - |
+| `i8042_drain_limit_hits` | 112 | 8 | 8 | `u64` | - |
+| `keyboard_push_attempts` | 120 | 8 | 8 | `u64` | - |
+| `keyboard_accepted` | 128 | 8 | 8 | `u64` | - |
+| `keyboard_dropped` | 136 | 8 | 8 | `u64` | - |
+| `gui_push_attempts` | 144 | 8 | 8 | `u64` | - |
+| `gui_accepted` | 152 | 8 | 8 | `u64` | - |
+| `gui_mouse_move_coalesced` | 160 | 8 | 8 | `u64` | - |
+| `gui_mouse_move_evicted` | 168 | 8 | 8 | `u64` | - |
+| `gui_rejected` | 176 | 8 | 8 | `u64` | - |
+| `console_push_calls` | 184 | 8 | 8 | `u64` | - |
+| `console_batch_calls` | 192 | 8 | 8 | `u64` | - |
+| `console_bytes_attempted` | 200 | 8 | 8 | `u64` | - |
+| `console_bytes_accepted` | 208 | 8 | 8 | `u64` | - |
+| `console_full_events` | 216 | 8 | 8 | `u64` | - |
+| `program_launch_attempts` | 224 | 8 | 8 | `u64` | - |
+| `program_entries_started` | 232 | 8 | 8 | `u64` | - |
+| `program_attach_wait_events` | 240 | 8 | 8 | `u64` | - |
+
+### `ServiceDeadlineFooter`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 24 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `magic` | 0 | 4 | 4 | `u32` | - |
+| `version` | 4 | 2 | 2 | `u16` | - |
+| `size` | 6 | 2 | 2 | `u16` | - |
+| `payload_len` | 8 | 4 | 4 | `u32` | - |
+| `reserved0` | 12 | 4 | 4 | `u32` | - |
+| `deadline_tick` | 16 | 8 | 8 | `u64` | - |
+
 ## Fehlerdomänen
 
 ### `arp`
@@ -4707,7 +4773,7 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `dns_flag_a_record` | `1` | `u32` | flag | bitmask | `dns` | fixed_contract |
 | `dns_op_build_a_query` | `1` | `u32` | identity | number | `dns_op` | fixed_contract |
 | `dns_op_handle_response` | `2` | `u32` | identity | number | `dns_op` | fixed_contract |
-| `driver_api_version` | `17` | `u32` | version | number | `driver_api` | fixed_contract |
+| `driver_api_version` | `18` | `u32` | version | number | `driver_api` | fixed_contract |
 | `driver_magic` | `826888260` | `u32` | magic | number | `driver` | fixed_contract |
 | `driver_work_flag_from_irq` | `1` | `u32` | flag | bitmask | `driver_work` | fixed_contract |
 | `driver_work_flag_none` | `0` | `u32` | flag | bitmask | `driver_work` | fixed_contract |

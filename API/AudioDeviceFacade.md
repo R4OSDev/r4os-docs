@@ -14,6 +14,17 @@ available only when their table fields exist.
 The active R4D backend owns hardware conversion, DMA, interrupts and recovery.
 An SDK facade never calls a kernel hardware path directly.
 
+`midiRender(handle, frames)` requests 1 to 1024 frames from the selected
+synth engine. The productive format is 48 kHz stereo signed 16-bit
+little-endian PCM. Explicit engine names are exact and must provide a PCM
+render callback; event-only MIDI.R4D is therefore not a renderer. Backend
+backpressure and hard errors are returned to the application, which retries
+the unchanged block only for backpressure.
+
+SID operations use the same productive backend path. The SID driver delegates
+model and register classification to AudioSid.R4P through DriverApi v18;
+protocol, emulation and backend errors are observable through the facade.
+
 ## Devices and diagnostics
 
 `app.devices()` exposes read-only device, driver, protocol, boot and

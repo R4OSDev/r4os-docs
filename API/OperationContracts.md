@@ -2,8 +2,8 @@
 
 Diese Matrix wird vollständig aus `ApiContract.json` erzeugt. Sie ist die lesbare Sicht auf Reife, Anforderungen, Fehler, Besitz, Blocking, Threading, Lifecycle und Wiederholung. Manuelle Änderungen sind nicht zulässig.
 
-- Physische Gruppenslots: 300; Funktionen: 292; reserviert/Tombstone: 8
-- Sichtbarkeit: public=208, advanced=84, internal=8
+- Physische Gruppenslots: 302; Funktionen: 294; reserviert/Tombstone: 8
+- Sichtbarkeit: public=208, advanced=86, internal=8
 - Zentrale SDK-only-Operationen: 0
 - Statusdomänen: 16
 - Sprachparität: public/advanced verlangt Zig und C; internal bleibt intern
@@ -205,6 +205,7 @@ Diese Matrix wird vollständig aus `ApiContract.json` erzeugt. Sie ist die lesba
 | R4DESK | 49 | `program_spawn_with_console_host` | function | public | R4DESK | ja | `desktop` | returns_owned_handle | call | nonblocking | owner_thread_only | explicit_close_required | none | may_have_occurred | never_automatic | fixed_capacity | zig_and_c_required | none | not_cancellable | none | owner_thread_only | none | call | none |
 | R4DESK | 50 | `program_spawn_with_console_host_handle` | function | public | R4DESK | ja | `program` | returns_owned_handle | call | may_block | owner_thread_only | explicit_close_required | success_only | atomic_on_success | never_automatic | fixed_capacity | zig_and_c_required | none | not_cancellable | none | owner_thread_only | none | call | request_close_wait_reap |
 | R4DESK | 51 | `program_set_window_handle` | function | public | R4DESK, R4SYS | ja | `program` | borrowed | call | nonblocking | owner_thread_only | none | none | atomic_on_success | idempotent | none | zig_and_c_required | none | not_cancellable | none | owner_thread_only | none | call | none |
+| R4DESK | 52 | `console_push_input` | function | advanced | R4DESK | ja | `desktop` | borrowed | call | nonblocking | owner_thread_only | none | none | may_have_occurred | never_automatic | fixed_capacity | zig_and_c_required | none | not_cancellable | none | owner_thread_only | none | call | none |
 | R4DRAW | 0 | `screen_width` | function | public | R4DRAW | ja | `draw` | none | none | nonblocking | owner_thread_only | none | none | none | idempotent | none | zig_and_c_required | none | not_cancellable | none | owner_thread_only | none | none | none |
 | R4DRAW | 1 | `screen_height` | function | public | R4DRAW | ja | `draw` | none | none | nonblocking | owner_thread_only | none | none | none | idempotent | none | zig_and_c_required | none | not_cancellable | none | owner_thread_only | none | none | none |
 | R4DRAW | 2 | `clear` | function | public | R4DRAW | ja | `draw` | none | none | nonblocking | owner_thread_only | none | none | may_have_occurred | never_automatic | none | zig_and_c_required | none | not_cancellable | none | owner_thread_only | none | none | none |
@@ -273,7 +274,7 @@ Diese Matrix wird vollständig aus `ApiContract.json` erzeugt. Sie ist die lesba
 | R4NET | 33 | `ipc_performance` | function | advanced | R4NET | ja | `network` | caller_buffer | call | nonblocking | thread_safe | none | success_only | none | idempotent | required_size_reported | zig_and_c_required | none | not_cancellable | none | reentrant | none | call | none |
 | R4AUDIO | 0 | `audio_open_stream` | function | public | R4AUDIO | ja | `audio` | returns_owned_handle | none | nonblocking | caller_serialized | explicit_close_required | none | may_have_occurred | never_automatic | none | zig_and_c_required | none | not_cancellable | none | serialized | none | none | none |
 | R4AUDIO | 1 | `audio_write` | function | public | R4AUDIO | ja | `audio` | borrowed | call | may_block | caller_serialized | none | progress_reported | confirmed_progress | retry_from_reported_progress | fixed_capacity | zig_and_c_required | none | not_cancellable | none | serialized | none | call | none |
-| R4AUDIO | 2 | `audio_close` | function | public | R4AUDIO | ja | `audio` | consumes_owned_handle | none | nonblocking | caller_serialized | invalidates_on_success | none | may_have_occurred | never_automatic | none | zig_and_c_required | none | not_cancellable | none | serialized | none | none | none |
+| R4AUDIO | 2 | `audio_close` | function | public | R4AUDIO | ja | `audio` | consumes_owned_handle | none | may_block | caller_serialized | invalidates_on_success | none | may_have_occurred | never_automatic | none | zig_and_c_required | none | not_cancellable | none | serialized | none | none | none |
 | R4AUDIO | 3 | `audio_set_volume` | function | public | R4AUDIO | ja | `audio` | none | none | nonblocking | caller_serialized | none | none | may_have_occurred | never_automatic | none | zig_and_c_required | none | not_cancellable | none | serialized | none | none | none |
 | R4AUDIO | 4 | `sid_acquire` | function | public | R4AUDIO | ja | `audio` | returns_owned_handle | none | nonblocking | caller_serialized | explicit_close_required | none | may_have_occurred | never_automatic | none | zig_and_c_required | none | not_cancellable | none | serialized | none | none | none |
 | R4AUDIO | 5 | `sid_write_register` | function | public | R4AUDIO | ja | `audio` | none | none | may_block | caller_serialized | none | none | may_have_occurred | never_automatic | none | zig_and_c_required | none | not_cancellable | none | serialized | none | none | none |
@@ -333,3 +334,4 @@ Diese Matrix wird vollständig aus `ApiContract.json` erzeugt. Sie ist die lesba
 | R4DEV | 38 | `performance_boot_summary` | function | advanced | R4DEV | ja | `device` | caller_buffer | call | nonblocking | thread_safe | none | success_only | none | idempotent | none | zig_and_c_required | none | not_cancellable | none | reentrant | none | call | none |
 | R4DEV | 39 | `performance_driver_work` | function | advanced | R4DEV | ja | `device` | caller_buffer | call | nonblocking | thread_safe | none | success_only | none | idempotent | none | zig_and_c_required | none | not_cancellable | none | reentrant | none | call | none |
 | R4DEV | 40 | `performance_pci_inventory` | function | advanced | R4DEV | ja | `device` | caller_buffer | call | nonblocking | thread_safe | none | success_only | none | idempotent | none | zig_and_c_required | none | not_cancellable | none | reentrant | none | call | none |
+| R4DEV | 41 | `performance_input` | function | advanced | R4DEV | ja | `device` | caller_buffer | call | nonblocking | thread_safe | none | success_only | none | idempotent | none | zig_and_c_required | none | not_cancellable | none | reentrant | none | call | none |

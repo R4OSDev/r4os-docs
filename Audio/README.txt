@@ -20,6 +20,19 @@ Drivers advertise capabilities and own hardware-specific conversion,
 DMA, interrupts, stop and recovery. Applications must use the announced
 stream format and close every stream they open.
 
+Synth engines render productively into the common 48 kHz, stereo, signed
+16-bit little-endian PCM path. A render request contains 1 to 1024 frames;
+the audio core writes the complete block to the active R4D backend. Backend
+backpressure is returned to the caller and preserves the same pending block
+for retry. An explicitly requested synth name is exact: event-only engines
+such as MIDI.R4D are not accepted as renderers, while OPL3.R4D supplies the
+normal MIDI PCM implementation.
+
+SID.R4D owns its emulation state and reaches the installed AudioSid.R4P
+through DriverApi v18 protocol dispatch. SID frame rendering uses the same
+backend and retry rules; protocol, runtime and backend failures remain
+visible to applications instead of being converted into success.
+
 The generic subsystem runtime uses the application audio facade rather than
 a direct kernel path. Its default transport is 48 kHz stereo signed 16-bit
 little endian in 480-frame quanta, with caller-owned buffering, silence on

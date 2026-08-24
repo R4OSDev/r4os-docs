@@ -95,6 +95,22 @@ only the backend-confirmed prefix on partial failure. The shared NTFS volume
 core still owns write ordering and calls the unchanged flush seam at each
 durability boundary.
 
+Decoded NTFS metadata is cached separately from sector payloads. Each mounted
+NTFS volume owns exactly eight fixed MFT-record slots, four decoded
+attribute/runlist slots, two decoded INDX-block slots and eight positive or
+negative path-component slots. Entries are tied to the mount and content
+generation; negative entries expire after one second. The normal path cache
+uses the volume `$UpCase` collation, while recovery-only transient lookups
+bypass it.
+
+Any NTFS write invalidates decoded metadata before the first physical sector
+can become visible. This single boundary covers create, rename, delete,
+write, truncate, recovery and partial failures; mount and explicit media
+generation changes have their own invalidations. Global reclaim drops at most
+eight decoded entries per request and examines at most 22 slots in each of
+the four fixed mount slots. The fixed cache control storage remains resident
+and never owns page-cache sectors or a second file payload.
+
 NTFS cluster allocation plans the complete run set before changing $Bitmap.
 If a bitmap update fails, all possibly written ranges are rolled back. Abort
 cleanup releases records and clusters in an ownership-safe order; a failed

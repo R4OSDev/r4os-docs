@@ -21,6 +21,29 @@ The system is resource-limited, not compiled around fixed program, task or
 thread capacities. Chunked registries may grow and shrink while keeping live
 objects and embedded synchronization primitives at stable addresses.
 
+Indexed metadata
+----------------
+
+Physical block ownership is indexed by an AVL interval tree, a block-ID hash
+and a free-slot bitmap. A successful 4-KiB claim therefore searches the
+physical neighborhood and available metadata words instead of repeatedly
+walking all 8192 block records. Split and merge updates are journaled; a late
+error restores the touched records and their indices before returning.
+
+Virtual ranges maintain a sorted address index in addition to their stable ID
+index. Address faults use binary lookup. Commit spans and Page-State spans are
+linked to their owning range and use global constant-time free lists, so an
+operation visits only that range's ordered metadata. Boundary slots needed by
+partial updates are reserved before mutation, adjacent compatible spans are
+coalesced locally, and release removes mappings and physical ownership before
+discarding the range metadata.
+
+VM reclaim keeps a range-and-page cursor between returned frames and between
+calls. Multi-frame reclaim resumes after the last inspected page rather than
+starting at the first virtual range for every frame. Range, span and page
+steps, index probes, rollbacks and rebuilds are exported through the R4DEV
+performance snapshot for conformance and tail analysis.
+
 Safety invariants
 -----------------
 
@@ -33,6 +56,10 @@ Safety invariants
   operation; it is not a wait-spanning owner lock.
 - A failed reclaim, page-in or inventory pass cannot be reported as an empty
   successful result.
+- The physical interval/ID/free-slot indices, the range address/ID indices,
+  every range-local span list and their free lists must describe exactly the
+  same active metadata. Boot self-tests validate those invariants after memory
+  initialization and after heap activity.
 
 The public VM, async-I/O and performance views are exposed through R4SYS and
 R4DEV and described by the generated API reference.

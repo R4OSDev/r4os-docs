@@ -27,11 +27,21 @@ Scheduler work sets
 
 The stable Task registry owns identity and inventory only. Three intrusive
 projections derive from it under the IRQ-disabled state-transition boundary:
-the Ready FIFO, finite timed waits, and deferred-reap candidates. Runnable
-selection and starvation diagnostics visit Ready tasks, timeout dispatch
-visits timed waits only when the minimum deadline is due, and a reaper pass
-visits only the candidates present at its start. Blocked unrelated tasks do
-not increase these hot paths.
+the Ready FIFO, a stable ordered finite-deadline queue, and deferred-reap
+candidates. Runnable selection and starvation diagnostics visit Ready tasks;
+timeout dispatch starts at the deadline head and stops at the first future
+wait. Equal deadlines retain enrollment order. One timer IRQ wakes at most 64
+due tasks, leaving an ordered and diagnosed backlog for the next delivery. A
+reaper pass visits only the candidates present at its start. Blocked unrelated
+tasks do not increase these hot paths.
+
+Active execution retains the periodic scheduler source needed for preemption.
+When the current task is truly idle, HPET or the calibrated LAPIC is switched
+to a one-shot for the queue head; an empty deadline queue disarms it. An
+external wake cancels the pending shot and reevaluates the head. Long deadlines
+use bounded hardware checkpoints. PIT systems remain periodic, while logical
+ticks, watchdog budgets and runtime accounting continue on the same epoch and
+do not count IRQ deliveries as elapsed time.
 
 Priority selection takes the first task of the best class from the Ready
 FIFO; every eighth cooperative selection retains the existing cross-priority

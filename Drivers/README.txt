@@ -59,6 +59,13 @@ movement, frame copies and protocol execution belong to the `net-rx` task.
 on a busy result the driver retains the exact device entry and schedules a
 retry. TX-, link- and configuration-only causes do not run the RX stack.
 
+DriverApi v24 and NetBackend v2 append explicit queue, ownership, segment,
+checksum, VLAN/segmentation, moderation, notification and completion offers.
+The post-registration query separates accepted and rejected bits. Every
+metadata packet retains canonical flat bytes; unknown or rejected optional
+metadata takes that byte-identical software path. BSP Netcore selects one
+queue and only VirtioNet's validated RX TCP/UDP checksum capability.
+
 The canonical xHCI path frees per-slot DMA only after a successful Disable
 Slot or after the whole controller is proven halted. Partial allocations are
 rolled back immediately. Reprobe and unload first mask the event interrupt,

@@ -37,7 +37,27 @@ completion. Its `queue_depth` is the hardware-owned in-flight limit; the block
 core independently owns up to 16 waiting/active slots and selects their stable
 request-ID order. Version-1 and null-submit descriptors remain on the
 synchronous depth-one adapter, regardless of an older advertised queue depth.
-No AHCI or NVMe driver is parallelized merely by this contract.
+No driver is parallelized merely by this contract.
+
+NVME.R4D is the first hardware backend that implements the version-2 path.
+During the pre-scheduler volume scan, its version-1 callbacks drive the same
+DMA mappings, submission rings and completion drain synchronously. Runtime
+workers switch the unchanged backend registration to nonblocking submit.
+The driver scans all platform-supported NVMe functions and continuable active
+namespace pages, negotiates SQ/CQ pairs, clamps each ring to CAP.MQES and
+retains a valid one-command fallback. Namespaces share the negotiated queues
+fairly; an inventory beyond the fixed platform capacity fails explicitly
+rather than being truncated silently.
+
+NVMe transfers use owner-bound segmented streaming mappings. PRP1 and PRP2
+cover small requests; larger requests use one audited PRP-list page and are
+bounded by MDTS and 2 MB. Multiple commands may be active with distinct CIDs
+and generations. One publication pass rings each changed SQ tail once, and
+one drain pass consumes all visible CQ phase entries before acknowledging the
+new head. Timeout and cancellation use Abort first; controller reset changes
+all ownership generations, completes accepted requests exactly once, rebuilds
+the queues and requires an unchanged namespace inventory before reopening.
+The bounded polling/deferred-work path remains the fallback without MSI-X.
 
 An accepted asynchronous request owns its exact generation handle and buffer
 until one completion. The IRQ-facing callback only claims that handle; the

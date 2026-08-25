@@ -23,7 +23,7 @@ der Kernel weder den Live-Shadow noch die beiden Mapping-Snapshots;
 <!-- R4OS-APIREF:BEGIN R4DESK (generiert von ApiContractGen aus ApiContract.json - NICHT von Hand editieren) -->
 ## Tabellen-Referenz R4DESK (generiert)
 
-Kernel-Gruppentabelle `R4XStartR4Desk` v9, 464 Bytes, 55 Funktionsfelder und 56 Slots insgesamt.
+Kernel-Gruppentabelle `R4XStartR4Desk` v10, 472 Bytes, 56 Funktionsfelder und 57 Slots insgesamt.
 Signatur-Wahrheit: `abi.R4DeskFns` (Feldname == Tabellenfeld).
 Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 
@@ -85,4 +85,5 @@ Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 | 53 | 440 | function | `remote_frame_acquire` | `*const fn () callconv(.c) i32` |
 | 54 | 448 | function | `remote_frame_release` | `*const fn () callconv(.c) i32` |
 | 55 | 456 | function | `remote_frame_consumers` | `*const fn () callconv(.c) u32` |
+| 56 | 464 | function | `remote_frame_publish_regions` | `*const fn (*const RemoteFrameInfo, [*]const u32, u32, [*]const DisplayDamageRect, u32) callconv(.c) i32` |
 <!-- R4OS-APIREF:END R4DESK -->

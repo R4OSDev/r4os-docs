@@ -2,7 +2,7 @@
 ============
 
 Loadable drivers are independent R4D repositories under
-`Repositories/Drivers/`. Current storage, USB, network, audio and synthesizer
+`Repositories/Drivers/`. Current storage, USB, network, audio, display and synthesizer
 drivers are listed in `Docs/Inventory/AllModules.json`.
 
 An R4D driver is an R4M0 module with `DriverInit` and `DriverShutdown`
@@ -42,6 +42,14 @@ DriverApi v21 and UsbHostController v2 make port, control, bulk, interrupt,
 reset, clear-halt and poll/completion operations productively dispatchable.
 The host status reports capabilities, queue depth, maximum transfer size,
 active transfers, completions, IRQs, poll fallbacks, cancellations and errors.
+
+DISPBLIT.R4D owns the sole external synchronous display fast-copy backend.
+DriverApi v22 lends its callback the kernel-owned linear target, one XRGB32
+source and at most eight validated regions. It retains no address or fence;
+owner cleanup closes callback admission first. Unsupported targets, absence
+and every callback error use the complete kernel boot-framebuffer fallback.
+This is CPU copy acceleration and does not claim modeset, pageflip or GPU
+ownership.
 
 The canonical xHCI path frees per-slot DMA only after a successful Disable
 Slot or after the whole controller is proven halted. Partial allocations are

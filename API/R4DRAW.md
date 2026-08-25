@@ -21,7 +21,7 @@ Tabellen den zeilenweisen Kompatibilitaetspfad.
 <!-- R4OS-APIREF:BEGIN R4DRAW (generiert von ApiContractGen aus ApiContract.json - NICHT von Hand editieren) -->
 ## Tabellen-Referenz R4DRAW (generiert)
 
-Kernel-Gruppentabelle `R4XStartR4Draw` v3, 280 Bytes, 33 Funktionsfelder und 33 Slots insgesamt.
+Kernel-Gruppentabelle `R4XStartR4Draw` v4, 304 Bytes, 36 Funktionsfelder und 36 Slots insgesamt.
 Signatur-Wahrheit: `abi.R4DrawFns` (Feldname == Tabellenfeld).
 Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 
@@ -60,4 +60,7 @@ Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 | 30 | 256 | function | `gui_frame_info` | `*const fn (?*const ProgramProcessHandle, *GuiFrameInfo) callconv(.c) i32` |
 | 31 | 264 | function | `gui_frame_read` | `*const fn (*const ProgramProcessHandle, u64, ?[*]GuiFrameCommand, u64, ?[*]u8, u64, *GuiFrameInfo) callconv(.c) i32` |
 | 32 | 272 | function | `display_blit_xrgb32_stride` | `*const fn (i32, i32, u32, u32, [*]const u32, u32, u32) callconv(.c) i32` |
+| 33 | 280 | function | `display_present_regions` | `*const fn (*const DisplayPresentRequest, [*]const u32, u32, [*]const DisplayDamageRect, u32, *DisplayPresentResult) callconv(.c) i32` |
+| 34 | 288 | function | `display_present_capabilities` | `*const fn (*DisplayPresentCapabilities) callconv(.c) i32` |
+| 35 | 296 | function | `display_present_completion` | `*const fn (u64, *DisplayPresentCompletion) callconv(.c) i32` |
 <!-- R4OS-APIREF:END R4DRAW -->

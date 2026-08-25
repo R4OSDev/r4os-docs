@@ -5,9 +5,9 @@ Diese Datei wird deterministisch aus `API/ApiContract.json` erzeugt. Manuelle Ä
 Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenzen und Conformance-Fixtures werden produktiv aus diesem Schema erzeugt; handgeschriebene Dateien bleiben nur Fassaden oder erklaerende Texte.
 
 - Schema: v11, Baseline `standalone-contract-0.64.11`
-- Reachability: 122 von 122 Typen aufgelöst oder explizit klassifiziert
+- Reachability: 127 von 127 Typen aufgelöst oder explizit klassifiziert
 - Zentrale SDK-only-Wurzeln: 0; Runtime-R4Ls besitzen libraryeigene Vertraege
-- Operationen: 0; Fehlerdomänen: 61; Konstanten: 1212; Limits: 102
+- Operationen: 0; Fehlerdomänen: 61; Konstanten: 1232; Limits: 102
 
 ## App-Profile
 
@@ -48,6 +48,11 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `ProgramVmReserveProbe` | fixed_layout | extern_struct | 144/8 | 144/8 | 144/8 | 144/8 |
 | `ProgramVmRegionInfo` | fixed_layout | extern_struct | 96/8 | 96/8 | 96/8 | 96/8 |
 | `PagingSummary` | fixed_layout | extern_struct | 152/8 | 152/8 | 152/8 | 152/8 |
+| `DisplayDamageRect` | fixed_layout | extern_struct | 16/4 | 16/4 | 16/4 | 16/4 |
+| `DisplayPresentCapabilities` | fixed_layout | extern_struct | 80/4 | 80/4 | 80/4 | 80/4 |
+| `DisplayPresentCompletion` | fixed_layout | extern_struct | 32/8 | 32/8 | 32/8 | 32/8 |
+| `DisplayPresentRequest` | fixed_layout | extern_struct | 48/8 | 48/8 | 48/8 | 48/8 |
+| `DisplayPresentResult` | fixed_layout | extern_struct | 96/8 | 96/8 | 96/8 | 96/8 |
 | `DisplaySummary` | fixed_layout | extern_struct | 200/8 | 200/8 | 200/8 | 200/8 |
 | `GuiWindowInfo` | fixed_layout | extern_struct | 40/4 | 40/4 | 40/4 | 40/4 |
 | `GuiSize` | fixed_layout | extern_struct | 8/4 | 8/4 | 8/4 | 8/4 |
@@ -1799,6 +1804,103 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `map_pages` | 128 | 8 | 8 | `u64` | - |
 | `unmap_pages` | 136 | 8 | 8 | `u64` | - |
 | `invlpg_flushes` | 144 | 8 | 8 | `u64` | - |
+
+### `DisplayDamageRect`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 16 / 4
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `x` | 0 | 4 | 4 | `i32` | - |
+| `y` | 4 | 4 | 4 | `i32` | - |
+| `w` | 8 | 4 | 4 | `u32` | - |
+| `h` | 12 | 4 | 4 | `u32` | - |
+
+### `DisplayPresentCapabilities`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 80 / 4
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 2 | 2 | `u16` | - |
+| `size` | 2 | 2 | 2 | `u16` | - |
+| `flags` | 4 | 4 | 4 | `u32` | - |
+| `formats` | 8 | 4 | 4 | `u32` | - |
+| `max_regions` | 12 | 4 | 4 | `u32` | - |
+| `tile_width` | 16 | 4 | 4 | `u32` | - |
+| `tile_height` | 20 | 4 | 4 | `u32` | - |
+| `backend_kind` | 24 | 4 | 4 | `u32` | - |
+| `reserved0` | 28 | 4 | 4 | `u32` | - |
+| `backend_name` | 32 | 24 | 1 | `[24]u8` | - |
+| `fallback_name` | 56 | 24 | 1 | `[24]u8` | - |
+
+### `DisplayPresentCompletion`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 32 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 2 | 2 | `u16` | - |
+| `size` | 2 | 2 | 2 | `u16` | - |
+| `flags` | 4 | 4 | 4 | `u32` | - |
+| `fence` | 8 | 8 | 8 | `u64` | - |
+| `completed_fence` | 16 | 8 | 8 | `u64` | - |
+| `result` | 24 | 4 | 4 | `i32` | - |
+| `reserved0` | 28 | 4 | 4 | `u32` | - |
+
+### `DisplayPresentRequest`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 48 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `magic` | 0 | 4 | 4 | `u32` | - |
+| `version` | 4 | 2 | 2 | `u16` | - |
+| `size` | 6 | 2 | 2 | `u16` | - |
+| `flags` | 8 | 4 | 4 | `u32` | - |
+| `format` | 12 | 4 | 4 | `u32` | - |
+| `source_width` | 16 | 4 | 4 | `u32` | - |
+| `source_height` | 20 | 4 | 4 | `u32` | - |
+| `source_stride_pixels` | 24 | 4 | 4 | `u32` | - |
+| `reserved0` | 28 | 4 | 4 | `u32` | - |
+| `source_generation` | 32 | 8 | 8 | `u64` | - |
+| `input_tick` | 40 | 8 | 8 | `u64` | - |
+
+### `DisplayPresentResult`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 96 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 2 | 2 | `u16` | - |
+| `size` | 2 | 2 | 2 | `u16` | - |
+| `flags` | 4 | 4 | 4 | `u32` | - |
+| `source_generation` | 8 | 8 | 8 | `u64` | - |
+| `present_generation` | 16 | 8 | 8 | `u64` | - |
+| `fence` | 24 | 8 | 8 | `u64` | - |
+| `completed_fence` | 32 | 8 | 8 | `u64` | - |
+| `region_count` | 40 | 4 | 4 | `u32` | - |
+| `pixel_count` | 44 | 4 | 4 | `u32` | - |
+| `fallback_regions` | 48 | 4 | 4 | `u32` | - |
+| `backend_error` | 52 | 4 | 4 | `i32` | - |
+| `present_tick` | 56 | 8 | 8 | `u64` | - |
+| `elapsed_ticks` | 64 | 8 | 8 | `u64` | - |
+| `backend_name` | 72 | 24 | 1 | `[24]u8` | - |
 
 ### `DisplaySummary`
 
@@ -4992,6 +5094,26 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `dhcp_status_flag_pending` | `4` | `u32` | flag | bitmask | `dhcp_status` | fixed_contract |
 | `dhcp_status_flag_retry_wait` | `64` | `u32` | flag | bitmask | `dhcp_status` | fixed_contract |
 | `dhcp_status_flag_task_started` | `16` | `u32` | flag | bitmask | `dhcp_status` | fixed_contract |
+| `display_damage_max_regions` | `8` | `u32` | value | count | `display_present` | fixed_contract |
+| `display_present_backend_bootfb_cpu` | `1` | `u32` | value | number | `display_present` | fixed_contract |
+| `display_present_backend_external_blit` | `2` | `u32` | value | number | `display_present` | fixed_contract |
+| `display_present_cap_accelerated_blit` | `8` | `u32` | flag | bitmask | `display_present` | fixed_contract |
+| `display_present_cap_cpu_fallback` | `1` | `u32` | flag | bitmask | `display_present` | fixed_contract |
+| `display_present_cap_exact_regions` | `2` | `u32` | flag | bitmask | `display_present` | fixed_contract |
+| `display_present_cap_external_backend` | `16` | `u32` | flag | bitmask | `display_present` | fixed_contract |
+| `display_present_cap_sync_fence` | `4` | `u32` | flag | bitmask | `display_present` | fixed_contract |
+| `display_present_completion_complete` | `1` | `u32` | flag | bitmask | `display_present_completion` | fixed_contract |
+| `display_present_error_invalid` | `-1` | `i32` | value | number | `display_present` | fixed_contract |
+| `display_present_error_out_of_range` | `-2` | `i32` | value | number | `display_present` | fixed_contract |
+| `display_present_error_unavailable` | `-3` | `i32` | value | number | `display_present` | fixed_contract |
+| `display_present_format_xrgb32` | `1` | `u32` | value | number | `display_present` | fixed_contract |
+| `display_present_magic` | `1346647122` | `u32` | magic | number | `display_present` | fixed_contract |
+| `display_present_request_flag_input_tick_valid` | `1` | `u32` | flag | bitmask | `display_present_request` | fixed_contract |
+| `display_present_result_accelerated` | `4` | `u32` | flag | bitmask | `display_present_result` | fixed_contract |
+| `display_present_result_completed` | `2` | `u32` | flag | bitmask | `display_present_result` | fixed_contract |
+| `display_present_result_fallback` | `8` | `u32` | flag | bitmask | `display_present_result` | fixed_contract |
+| `display_present_result_success` | `1` | `u32` | flag | bitmask | `display_present_result` | fixed_contract |
+| `display_present_version` | `1` | `u16` | version | number | `display_present` | fixed_contract |
 | `display_summary_backend_bootfb` | `1` | `u8` | value | number | `display_summary` | fixed_contract |
 | `display_summary_backend_none` | `0` | `u8` | value | number | `display_summary` | fixed_contract |
 | `display_summary_cache_bootloader_default` | `1` | `u8` | value | number | `display_summary` | fixed_contract |
@@ -5012,7 +5134,7 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `dns_flag_a_record` | `1` | `u32` | flag | bitmask | `dns` | fixed_contract |
 | `dns_op_build_a_query` | `1` | `u32` | identity | number | `dns_op` | fixed_contract |
 | `dns_op_handle_response` | `2` | `u32` | identity | number | `dns_op` | fixed_contract |
-| `driver_api_version` | `21` | `u32` | version | number | `driver_api` | fixed_contract |
+| `driver_api_version` | `22` | `u32` | version | number | `driver_api` | fixed_contract |
 | `driver_magic` | `826888260` | `u32` | magic | number | `driver` | fixed_contract |
 | `driver_work_flag_from_irq` | `1` | `u32` | flag | bitmask | `driver_work` | fixed_contract |
 | `driver_work_flag_none` | `0` | `u32` | flag | bitmask | `driver_work` | fixed_contract |

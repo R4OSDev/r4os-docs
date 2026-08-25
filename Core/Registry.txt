@@ -8,9 +8,19 @@ as an ordinary file.
 
 Registry paths begin with `SYSTEM`. Values are typed strings, integers,
 booleans or binary data. Reads return borrowed data only for the duration
-defined by the API. Mutations rebuild and validate the hive before an atomic
-TMP/BAK replacement. Selected noncritical UI traces may be deferred, but
-shutdown flushes them before final storage flush.
+defined by the API. R4SYS keeps the complete validated view bound to its R4R1
+generation. Repeated reads of that generation search resident bytes and do
+not allocate, reload or revalidate the file. A short state lock protects only
+the resident view; no Registry lock spans file I/O, waits or heap activity.
+
+Mutations are serialized separately, build the next generation into an
+inactive fixed slot and keep readers on the previous complete generation
+while TMP is written and verified. The filesystem's atomic ownership transfer
+publishes TMP as SYSTEM.R4R and retains the previous object as SYSTEM.BAK.
+Only a verified durable target switches the resident view; a definite failure
+leaves the old generation visible, while an ambiguous completion is retried
+before another read or write may proceed. Selected noncritical UI traces may
+be deferred, but shutdown flushes them before final storage flush.
 
 R4S files are separate schema-oriented text configuration files. They are
 used for services, associations, desktop, input, time, updates and

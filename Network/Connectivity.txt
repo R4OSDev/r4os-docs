@@ -13,6 +13,20 @@ driver interface. Ethernet, ARP, IPv4, ICMP, UDP, TCP, DHCP and DNS roles are
 loadable modules. DHCPSVC, DNSSVC, TCPSVC and UDPSVC own long-running service
 state and expose bounded endpoints to applications.
 
+Receive work has one bounded context boundary. An external NIC interrupt
+acknowledges and classifies its device cause, then publishes the exact adapter
+through DriverApi v23. The event-driven `net-rx` task moves the device cursor,
+copies frames into Netcore's fixed 64-slot queue and dispatches at most 32
+protocol frames per activation. TX-, link- and configuration-only causes do
+not execute the RX stack. A full common queue leaves the current device entry
+owned by the driver for an event-driven retry. The 10-ms all-adapter poll is a
+watchdog for missing IRQ routing, not the normal intake clock.
+
+Queue ownership and latency stay observable: accepted frames equal processed,
+transition-cancelled and currently occupied slots. NETRX additionally reports
+high-water, backpressure, batch-budget ends, IRQ/event/fallback wakes and the
+schedule-plus-handoff latency tail.
+
 QEMU user networking and host forwarding are host profiles, not assumptions
 inside guest services. Real hardware receives addresses and routes through
 the same R4NET/service path.

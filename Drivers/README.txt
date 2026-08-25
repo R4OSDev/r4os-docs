@@ -51,6 +51,14 @@ and every callback error use the complete kernel boot-framebuffer fallback.
 This is CPU copy acceleration and does not claim modeset, pageflip or GPU
 ownership.
 
+DriverApi v23 gives network R4Ds one IRQ-safe operation:
+`net_schedule_rx(adapter_index)`. A NIC handler first acknowledges and
+classifies a bounded cause, then publishes RX or recovery work. Cursor
+movement, frame copies and protocol execution belong to the `net-rx` task.
+`net_receive_frame` copies into a fixed common queue and reports backpressure;
+on a busy result the driver retains the exact device entry and schedules a
+retry. TX-, link- and configuration-only causes do not run the RX stack.
+
 The canonical xHCI path frees per-slot DMA only after a successful Disable
 Slot or after the whole controller is proven halted. Partial allocations are
 rolled back immediately. Reprobe and unload first mask the event interrupt,

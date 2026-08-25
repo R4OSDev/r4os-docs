@@ -59,6 +59,29 @@ all ownership generations, completes accepted requests exactly once, rebuilds
 the queues and requires an unchanged namespace inventory before reopening.
 The bounded polling/deferred-work path remains the fallback without MSI-X.
 
+AHCI.R4D implements the same version-2 ownership boundary for SATA. It scans
+all supported AHCI functions and suitable SATA ports, performs IDENTIFY DEVICE
+before registration and derives capacity, 512-byte through 4-KB logical
+sectors, LBA range, cache/flush support, NCQ and drive queue depth. The usable
+depth is the HBA/drive intersection clamped to 16 tags; a drive or HBA without
+NCQ uses the same backend at depth one. Inventory beyond the fixed eight-port
+platform capacity fails explicitly.
+
+Each AHCI request pins an owner-bound streaming mapping and converts it into
+at most 64 PRDT entries, with a 2-MB request limit. NCQ uses the command slot
+as its ATA tag. A completion owns a request only after both PxCI and PxSACT
+have cleared that tag; a non-zero PRDBC must additionally report the full
+transfer, while zero remains compatible with NCQ HBAs that do not update it.
+IRQs capture status and delegate completion to finite driver-work passes,
+while the same bounded drain polls when no route is available. MSI/INTx is
+configured only at driver initialization, but HBA sources remain masked for
+the synchronous pre-LAPIC boot phase and are armed by the first asynchronous
+runtime request. Flush remains exclusive against all other tags.
+Error-FIS, taskfile/link failure, timeout and cancellation close admission,
+stop and COMRESET the port, complete old generations exactly once and require
+an unchanged IDENTIFY result before reopening. Failed port quiescence
+escalates to an HBA reset; uncertain DMA ownership keeps the backend closed.
+
 An accepted asynchronous request owns its exact generation handle and buffer
 until one completion. The IRQ-facing callback only claims that handle; the
 controller worker performs terminal accounting, wakes the caller and releases

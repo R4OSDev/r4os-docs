@@ -55,16 +55,22 @@ Interrupt and refill contract
 - INTCTL enables the selected stream and global controller interrupt. The
   stream descriptor enables IOC, FIFOE and DESE reporting.
 - The ISR reads INTSTS and SD_STS, counts BCIS/FIFOE/DESE, clears only the
-  reported write-one-to-clear bits and schedules coalesced Driver Work.
+  reported write-one-to-clear bits and schedules coalesced deadline work.
 - The ISR allocates nothing, waits nowhere, copies no PCM and emits no normal
   log stream. Driver Work reaps completions, advances ownership from LPIB,
   fills complete periods and performs a pending recovery.
-- At most one refill job is pending. Two completion handles permit the next
-  IRQ to release the previous job without unbounded allocation.
+- Every request declares a deadline 10 ms after submission, a stable HDA
+  serialization key and a callback budget derived from 2 ms but never above
+  the DriverApi-v20 four-tick maximum. It enters the separate bounded EDF
+  lane and executes on the single `r4d-audio` short-completion worker, not the
+  normal IRQ/task Driver FIFO.
+- Every callback performs exactly one bounded refill or recovery pass. At most
+  one successor is queued for HDA. Two completion handles permit it to coexist
+  with the currently returning callback without unbounded allocation.
 - A monotone IRQ generation closes the worker-completion race: work that
-  arrived during a refill pass is either reclaimed by that worker or owned by
-  an already submitted successor. Shutdown must join every retained handle
-  before DMA can be released.
+  arrived during a refill pass is represented by a freshly deadline-stamped
+  successor or already belongs to the successor claimed by the racing IRQ.
+  Shutdown must join every retained handle before DMA can be released.
 
 Underrun and recovery
 ---------------------
@@ -89,6 +95,11 @@ HDA033-A. BDL/CBL/LVI are reprogrammed only while stopped, so a later stream
 starts from a defined position. Stop, error, Close and shutdown share
 idempotent cleanup and release pending Driver Work.
 
+AUDSVC creates only a logical client stream at Open. HDA therefore receives
+no open, DMA start or zero-filled PCM quantum until the first non-silent
+write. A complete silent service block is consumed without a backend write;
+if HDA is active, the service closes it once through this same bounded Drain.
+
 BDL and stream allocations are constrained below 4 GiB whenever GCAP does not
 advertise 64-bit addressing. Shutdown drains and stops RUN, disables controller
 interrupts, unregisters IRQ routes, rolls MSI back and joins Driver Work before
@@ -111,6 +122,14 @@ work.
 HDA diagnostics additionally retain IRQ mode and route, IRQ/BCIS/FIFOE/DESE
 counts, LPIB, start/stop/drain/recovery counts and timeouts. AudioDiag prints
 only one aggregate result line after a test; it never logs every interrupt.
+Driver Work performance snapshot v2 adds deadline queue/running/high-water,
+queue ticks, start misses, callback-budget overruns and admission rejections
+globally and for the HDA owner.
+
+The 64x10-ms contiguous DMA geometry remains unchanged in 0.69.42. Existing
+cursor, queue, underrun and deadline observations did not demonstrate a cost
+that justifies changing periods or adopting segment DMA; the roadmap permits
+that change only after such evidence.
 
 Verified baseline, 19 August 2026
 ---------------------------------

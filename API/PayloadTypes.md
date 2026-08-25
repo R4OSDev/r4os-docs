@@ -37,7 +37,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `ProgramMemoryPagerGateProbe` | extensible | extern_struct | 248/8 | 248/8 | 248/8 | 248/8 |
 | `ProgramMemoryPageIoProbe` | extensible | extern_struct | 304/8 | 304/8 | 304/8 | 304/8 |
 | `ProgramMemoryVmPageStateProbe` | extensible | extern_struct | 288/8 | 288/8 | 288/8 | 288/8 |
-| `ProgramPerformanceSummary` | extensible | extern_struct | 5192/8 | 5192/8 | 5192/8 | 5192/8 |
+| `ProgramPerformanceSummary` | extensible | extern_struct | 6000/8 | 6000/8 | 6000/8 | 6000/8 |
 | `ProgramTaskPerformanceInfo` | fixed_layout | extern_struct | 304/8 | 304/8 | 304/8 | 304/8 |
 | `ProgramStoragePerformanceInfo` | fixed_layout | extern_struct | 440/8 | 440/8 | 440/8 | 440/8 |
 | `ProgramBootPhasePerformanceInfo` | fixed_layout | extern_struct | 72/8 | 72/8 | 72/8 | 72/8 |
@@ -134,7 +134,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `ProgramThreadSnapshot` | extensible | extern_struct | 136/8 | 136/8 | 136/8 | 136/8 |
 | `ProgramInventorySummary` | extensible | extern_struct | 160/8 | 160/8 | 160/8 | 160/8 |
 | `ProgramDriverWorkPerformanceMetrics` | fixed_layout | extern_struct | 640/8 | 640/8 | 640/8 | 640/8 |
-| `ProgramDriverWorkPerformanceInfo` | extensible | extern_struct | 808/8 | 808/8 | 808/8 | 808/8 |
+| `ProgramDriverWorkPerformanceInfo` | extensible | extern_struct | 928/8 | 928/8 | 928/8 | 928/8 |
 | `ProgramPciInventoryPerformanceInfo` | extensible | extern_struct | 280/8 | 280/8 | 280/8 | 280/8 |
 | `ProgramInputPerformanceInfo` | extensible | extern_struct | 248/8 | 248/8 | 248/8 | 248/8 |
 | `ServiceDeadlineFooter` | fixed_layout | extern_struct | 24/8 | 24/8 | 24/8 | 24/8 |
@@ -639,7 +639,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 - Quelle: `API/ApiContract.json`
 - Klasse: `extensible`
 - Repräsentation: `extern_struct`
-- Version/Größe/Alignment: 7 / 5192 / 8
+- Version/Größe/Alignment: 12 / 6000 / 8
 
 | Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
 |---|---:|---:|---:|---|---|
@@ -1342,6 +1342,127 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `service_registry_refresh_visits` | 5168 | 8 | 8 | `u64` | - |
 | `service_registry_instance_lookups` | 5176 | 8 | 8 | `u64` | - |
 | `service_registry_index_end_markers` | 5184 | 8 | 8 | `u64` | - |
+| `hot_path_memory_block_physical_index_entries` | 5192 | 4 | 4 | `u32` | - |
+| `hot_path_memory_block_physical_step_max` | 5196 | 4 | 4 | `u32` | - |
+| `hot_path_memory_block_id_index_entries` | 5200 | 4 | 4 | `u32` | - |
+| `hot_path_memory_block_id_step_max` | 5204 | 4 | 4 | `u32` | - |
+| `hot_path_memory_block_free_slot_word_step_max` | 5208 | 4 | 4 | `u32` | - |
+| `hot_path_memory_vm_range_address_entries` | 5212 | 4 | 4 | `u32` | - |
+| `hot_path_memory_vm_range_address_probe_max` | 5216 | 4 | 4 | `u32` | - |
+| `hot_path_memory_vm_range_address_probe_last` | 5220 | 4 | 4 | `u32` | - |
+| `hot_path_memory_vm_commit_span_active` | 5224 | 4 | 4 | `u32` | - |
+| `hot_path_memory_vm_commit_span_step_max` | 5228 | 4 | 4 | `u32` | - |
+| `hot_path_memory_vm_page_state_span_active` | 5232 | 4 | 4 | `u32` | - |
+| `hot_path_memory_vm_page_state_span_step_max` | 5236 | 4 | 4 | `u32` | - |
+| `hot_path_memory_block_physical_lookups` | 5240 | 8 | 8 | `u64` | - |
+| `hot_path_memory_block_physical_steps` | 5248 | 8 | 8 | `u64` | - |
+| `hot_path_memory_block_physical_mutations` | 5256 | 8 | 8 | `u64` | - |
+| `hot_path_memory_block_physical_rebuilds` | 5264 | 8 | 8 | `u64` | - |
+| `hot_path_memory_block_id_lookups` | 5272 | 8 | 8 | `u64` | - |
+| `hot_path_memory_block_id_steps` | 5280 | 8 | 8 | `u64` | - |
+| `hot_path_memory_block_free_slot_lookups` | 5288 | 8 | 8 | `u64` | - |
+| `hot_path_memory_block_free_slot_word_steps` | 5296 | 8 | 8 | `u64` | - |
+| `hot_path_memory_block_claim_transactions` | 5304 | 8 | 8 | `u64` | - |
+| `hot_path_memory_block_claim_rollbacks` | 5312 | 8 | 8 | `u64` | - |
+| `hot_path_memory_vm_range_address_lookups` | 5320 | 8 | 8 | `u64` | - |
+| `hot_path_memory_vm_range_address_probe_total` | 5328 | 8 | 8 | `u64` | - |
+| `hot_path_memory_vm_commit_span_lookups` | 5336 | 8 | 8 | `u64` | - |
+| `hot_path_memory_vm_commit_span_steps` | 5344 | 8 | 8 | `u64` | - |
+| `hot_path_memory_vm_page_state_span_lookups` | 5352 | 8 | 8 | `u64` | - |
+| `hot_path_memory_vm_page_state_span_steps` | 5360 | 8 | 8 | `u64` | - |
+| `hot_path_memory_vm_reclaim_range_steps` | 5368 | 8 | 8 | `u64` | - |
+| `hot_path_memory_vm_reclaim_span_steps` | 5376 | 8 | 8 | `u64` | - |
+| `hot_path_memory_vm_reclaim_page_steps` | 5384 | 8 | 8 | `u64` | - |
+| `hot_path_memory_vm_reclaim_wraps` | 5392 | 8 | 8 | `u64` | - |
+| `fs_drive_gate_count` | 5400 | 4 | 4 | `u32` | - |
+| `fs_active_requests` | 5404 | 4 | 4 | `u32` | - |
+| `fs_parallel_active_max` | 5408 | 4 | 4 | `u32` | - |
+| `storage_controller_count` | 5412 | 4 | 4 | `u32` | - |
+| `storage_worker_count` | 5416 | 4 | 4 | `u32` | - |
+| `storage_worker_parallel_active` | 5420 | 4 | 4 | `u32` | - |
+| `storage_worker_parallel_active_max` | 5424 | 4 | 4 | `u32` | - |
+| `storage_dispatch_reserved0` | 5428 | 4 | 4 | `u32` | - |
+| `fs_single_drive_requests` | 5432 | 8 | 8 | `u64` | - |
+| `fs_cross_drive_requests` | 5440 | 8 | 8 | `u64` | - |
+| `fs_global_requests` | 5448 | 8 | 8 | `u64` | - |
+| `storage_worker_start_failures` | 5456 | 8 | 8 | `u64` | - |
+| `storage_direct_requests` | 5464 | 8 | 8 | `u64` | - |
+| `storage_direct_bytes` | 5472 | 8 | 8 | `u64` | - |
+| `storage_bounce_allocations` | 5480 | 8 | 8 | `u64` | - |
+| `storage_bounce_bytes` | 5488 | 8 | 8 | `u64` | - |
+| `storage_bounce_copy_bytes` | 5496 | 8 | 8 | `u64` | - |
+| `storage_direct_timeout_waits` | 5504 | 8 | 8 | `u64` | - |
+| `fs_cache_bulk_write_requests` | 5512 | 8 | 8 | `u64` | - |
+| `fs_cache_bulk_write_sectors` | 5520 | 8 | 8 | `u64` | - |
+| `fs_cache_selective_flushes` | 5528 | 8 | 8 | `u64` | - |
+| `fs_cache_selective_writeback_sectors` | 5536 | 8 | 8 | `u64` | - |
+| `fs_cache_selective_foreign_dirty_sectors_skipped` | 5544 | 8 | 8 | `u64` | - |
+| `fs_cache_policy_version` | 5552 | 4 | 4 | `u32` | - |
+| `fs_cache_policy_device_capacity` | 5556 | 4 | 4 | `u32` | - |
+| `fs_cache_policy_dirty_high_pages` | 5560 | 4 | 4 | `u32` | - |
+| `fs_cache_policy_dirty_low_pages` | 5564 | 4 | 4 | `u32` | - |
+| `fs_cache_policy_max_dirty_age_ticks` | 5568 | 8 | 8 | `u64` | - |
+| `fs_cache_policy_background_page_budget` | 5576 | 4 | 4 | `u32` | - |
+| `fs_cache_policy_worker_started` | 5580 | 4 | 4 | `u32` | - |
+| `fs_cache_policy_worker_task_id` | 5584 | 4 | 4 | `u32` | - |
+| `fs_cache_policy_device_dirty_high_water` | 5588 | 4 | 4 | `u32` | - |
+| `fs_cache_policy_worker_wakeups` | 5592 | 8 | 8 | `u64` | - |
+| `fs_cache_policy_background_drains` | 5600 | 8 | 8 | `u64` | - |
+| `fs_cache_policy_background_sectors` | 5608 | 8 | 8 | `u64` | - |
+| `fs_cache_policy_background_pressure_drains` | 5616 | 8 | 8 | `u64` | - |
+| `fs_cache_policy_background_age_drains` | 5624 | 8 | 8 | `u64` | - |
+| `fs_cache_policy_background_errors` | 5632 | 8 | 8 | `u64` | - |
+| `fs_cache_policy_clean_device_probes` | 5640 | 8 | 8 | `u64` | - |
+| `fs_cache_policy_dirty_device_probes` | 5648 | 8 | 8 | `u64` | - |
+| `fs_cache_policy_full_scan_fallbacks` | 5656 | 8 | 8 | `u64` | - |
+| `fs_cache_read_ahead_requests` | 5664 | 8 | 8 | `u64` | - |
+| `fs_cache_read_ahead_issued` | 5672 | 8 | 8 | `u64` | - |
+| `fs_cache_read_ahead_hits` | 5680 | 8 | 8 | `u64` | - |
+| `fs_cache_read_ahead_cancellations` | 5688 | 8 | 8 | `u64` | - |
+| `fs_cache_read_ahead_budget_skips` | 5696 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_cache_version` | 5704 | 4 | 4 | `u32` | - |
+| `ntfs_metadata_cache_active_volumes` | 5708 | 4 | 4 | `u32` | - |
+| `ntfs_metadata_cache_bytes_per_volume` | 5712 | 4 | 4 | `u32` | - |
+| `ntfs_metadata_cache_slot_capacity` | 5716 | 4 | 4 | `u32` | - |
+| `ntfs_metadata_record_capacity` | 5720 | 4 | 4 | `u32` | - |
+| `ntfs_metadata_attribute_capacity` | 5724 | 4 | 4 | `u32` | - |
+| `ntfs_metadata_index_capacity` | 5728 | 4 | 4 | `u32` | - |
+| `ntfs_metadata_path_capacity` | 5732 | 4 | 4 | `u32` | - |
+| `ntfs_metadata_record_entries` | 5736 | 4 | 4 | `u32` | - |
+| `ntfs_metadata_attribute_entries` | 5740 | 4 | 4 | `u32` | - |
+| `ntfs_metadata_index_entries` | 5744 | 4 | 4 | `u32` | - |
+| `ntfs_metadata_path_entries` | 5748 | 4 | 4 | `u32` | - |
+| `ntfs_metadata_mount_generation` | 5752 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_content_generation` | 5760 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_negative_ttl_ticks` | 5768 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_record_hits` | 5776 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_record_misses` | 5784 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_record_stores` | 5792 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_record_evictions` | 5800 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_attribute_hits` | 5808 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_attribute_misses` | 5816 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_attribute_stores` | 5824 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_attribute_evictions` | 5832 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_index_hits` | 5840 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_index_misses` | 5848 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_index_stores` | 5856 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_index_evictions` | 5864 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_path_queries` | 5872 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_path_positive_hits` | 5880 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_path_negative_hits` | 5888 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_path_misses` | 5896 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_path_positive_stores` | 5904 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_path_negative_stores` | 5912 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_path_expirations` | 5920 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_lookup_tree_walks` | 5928 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_recovery_cache_bypasses` | 5936 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_mount_invalidations` | 5944 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_mutation_invalidations` | 5952 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_external_invalidations` | 5960 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_invalidated_entries` | 5968 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_reclaim_requests` | 5976 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_reclaim_scans` | 5984 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_reclaimed_entries` | 5992 | 8 | 8 | `u64` | - |
 
 ### `ProgramTaskPerformanceInfo`
 
@@ -3789,7 +3910,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 - Quelle: `API/ApiContract.json`
 - Klasse: `extensible`
 - Repräsentation: `extern_struct`
-- Version/Größe/Alignment: 1 / 808 / 8
+- Version/Größe/Alignment: 2 / 928 / 8
 
 | Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
 |---|---:|---:|---:|---|---|
@@ -3835,6 +3956,26 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `owner_waiters_max` | 156 | 4 | 4 | `u32` | - |
 | `long_callback_threshold_ns` | 160 | 8 | 8 | `u64` | - |
 | `metrics` | 168 | 640 | 8 | `r4os.abi.ProgramDriverWorkPerformanceMetrics` | - |
+| `deadline_worker_started` | 808 | 4 | 4 | `u32` | - |
+| `deadline_worker_task_id` | 812 | 4 | 4 | `u32` | - |
+| `deadline_worker_count` | 816 | 4 | 4 | `u32` | - |
+| `deadline_queue_capacity` | 820 | 4 | 4 | `u32` | - |
+| `deadline_queued_slots` | 824 | 4 | 4 | `u32` | - |
+| `deadline_running_slots` | 828 | 4 | 4 | `u32` | - |
+| `deadline_queue_high_water` | 832 | 4 | 4 | `u32` | - |
+| `owner_deadline_queued_slots` | 836 | 4 | 4 | `u32` | - |
+| `owner_deadline_running_slots` | 840 | 4 | 4 | `u32` | - |
+| `owner_deadline_queue_high_water` | 844 | 4 | 4 | `u32` | - |
+| `deadline_submitted` | 848 | 8 | 8 | `u64` | - |
+| `deadline_started` | 856 | 8 | 8 | `u64` | - |
+| `deadline_completed` | 864 | 8 | 8 | `u64` | - |
+| `deadline_misses` | 872 | 8 | 8 | `u64` | - |
+| `deadline_budget_overruns` | 880 | 8 | 8 | `u64` | - |
+| `deadline_queue_rejections` | 888 | 8 | 8 | `u64` | - |
+| `deadline_queue_total_ticks` | 896 | 8 | 8 | `u64` | - |
+| `deadline_queue_max_ticks` | 904 | 8 | 8 | `u64` | - |
+| `deadline_lateness_total_ticks` | 912 | 8 | 8 | `u64` | - |
+| `deadline_lateness_max_ticks` | 920 | 8 | 8 | `u64` | - |
 
 ### `ProgramPciInventoryPerformanceInfo`
 
@@ -4698,7 +4839,7 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `audio_service_request_magic` | `1364350273` | `u32` | magic | number | `audio_service_request` | fixed_contract |
 | `audio_service_request_version` | `1` | `u16` | version | number | `audio_service_request` | fixed_contract |
 | `audio_service_status_magic` | `1397970241` | `u32` | magic | number | `audio_service_status` | fixed_contract |
-| `audio_service_status_version` | `1` | `u16` | version | number | `audio_service_status` | fixed_contract |
+| `audio_service_status_version` | `2` | `u16` | version | number | `audio_service_status` | fixed_contract |
 | `audio_sid_model_6581` | `2` | `u8` | value | number | `audio_sid` | fixed_contract |
 | `audio_sid_model_8580` | `1` | `u8` | value | number | `audio_sid` | fixed_contract |
 | `audio_sid_op_configure_model` | `1` | `u32` | identity | number | `audio_sid` | fixed_contract |
@@ -4773,7 +4914,7 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `dns_flag_a_record` | `1` | `u32` | flag | bitmask | `dns` | fixed_contract |
 | `dns_op_build_a_query` | `1` | `u32` | identity | number | `dns_op` | fixed_contract |
 | `dns_op_handle_response` | `2` | `u32` | identity | number | `dns_op` | fixed_contract |
-| `driver_api_version` | `18` | `u32` | version | number | `driver_api` | fixed_contract |
+| `driver_api_version` | `20` | `u32` | version | number | `driver_api` | fixed_contract |
 | `driver_magic` | `826888260` | `u32` | magic | number | `driver` | fixed_contract |
 | `driver_work_flag_from_irq` | `1` | `u32` | flag | bitmask | `driver_work` | fixed_contract |
 | `driver_work_flag_none` | `0` | `u32` | flag | bitmask | `driver_work` | fixed_contract |
@@ -5508,7 +5649,7 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `performance_simd_abi_avx2` | `3` | `u32` | value | number | `performance_simd` | fixed_contract |
 | `performance_simd_abi_none` | `0` | `u32` | value | number | `performance_simd` | fixed_contract |
 | `performance_simd_abi_sse2` | `1` | `u32` | value | number | `performance_simd` | fixed_contract |
-| `performance_snapshot_version` | `7` | `u32` | version | number | `performance_snapshot` | fixed_contract |
+| `performance_snapshot_version` | `12` | `u32` | version | number | `performance_snapshot` | fixed_contract |
 | `program_completion_flag_display_used` | `4` | `u32` | flag | bitmask | `program_completion` | fixed_contract |
 | `program_completion_flag_output` | `2` | `u32` | flag | bitmask | `program_completion` | fixed_contract |
 | `program_completion_flag_owner` | `8` | `u32` | flag | bitmask | `program_completion` | fixed_contract |
@@ -5695,7 +5836,7 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `storage_backend_source_disk` | `2` | `u32` | value | number | `storage_backend` | fixed_contract |
 | `storage_backend_source_preload` | `1` | `u32` | value | number | `storage_backend` | fixed_contract |
 | `storage_backend_status_busy` | `1` | `i32` | value | number | `storage_backend` | fixed_contract |
-| `storage_backend_version` | `1` | `u32` | version | number | `storage_backend` | fixed_contract |
+| `storage_backend_version` | `2` | `u32` | version | number | `storage_backend` | fixed_contract |
 | `synth_engine_flag_midi` | `1` | `u32` | flag | bitmask | `synth_engine` | fixed_contract |
 | `synth_engine_flag_opl3` | `2` | `u32` | flag | bitmask | `synth_engine` | fixed_contract |
 | `synth_engine_flag_sid` | `4` | `u32` | flag | bitmask | `synth_engine` | fixed_contract |

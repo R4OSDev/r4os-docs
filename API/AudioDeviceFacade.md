@@ -15,6 +15,13 @@ terminal result into success. Retry timing remains the caller's decision.
 Volume, status, MIDI, SID and OPL3 operations are available only when their
 table fields exist.
 
+An AUDSVC open initially owns a logical client stream only. The first
+non-silent PCM write materializes the kernel/backend stream. A complete zero
+block is reported as consumed without a backend payload and closes an active
+backend stream once; later signal may materialize it again. Status version 2
+exposes materialized sessions, lazy opens, suppressed silence bytes/writes and
+idle closes without enlarging the fixed status record.
+
 The active R4D backend owns hardware conversion, DMA, interrupts and recovery.
 An SDK facade never calls a kernel hardware path directly.
 
@@ -35,6 +42,11 @@ protocol, emulation and backend errors are observable through the facade.
 performance views. Enumerations use explicit counts/cursors and report stale
 or incomplete snapshots. Diagnostic self-tests are bounded operations, not a
 general fault-injection interface.
+
+`PerformanceView.driverWork(owner)` exposes Driver Work snapshot version 2.
+Besides the normal fair IRQ/task FIFO it reports the isolated audio EDF lane,
+deadline queue and worker state, queue ticks, start misses, callback-budget
+overruns and admission rejections globally or for one selected R4D owner.
 
 Zig and C use the same generated layouts, result domains and buffer rules.
 The SDK repository tests validate both facades and their negative lifecycle

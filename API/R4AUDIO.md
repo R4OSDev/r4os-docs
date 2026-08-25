@@ -13,6 +13,16 @@ Zig-Context: r4os.r4audio.Context
 Audioprogramme deklarieren R4AUDIO im Manifest. Optionale Felder werden mit
 hasFn geprueft.
 
+AUDSVC vergibt beim Open zuerst nur einen logischen, clientgebundenen Stream.
+Der Kernel-/Treiberstream wird beim ersten PCM-Block mit mindestens einem von
+null verschiedenen Byte materialisiert. Ein vollstaendig stiller Block wird
+als konsumiert bestaetigt, aber nicht an den Backendtreiber geschrieben; ist
+ein Backendstream aktiv, wird er dabei genau einmal geschlossen. Ein spaeteres
+Signal materialisiert ihn erneut. `AudioServiceStatus` v2 belegt diese
+Lebenszyklen append-only mit `materialized_sessions`, `lazy_open_count`,
+`silence_write_count`, `silence_bytes` und `idle_close_count` im bisherigen
+festen Layout.
+
 Synth-Renderanforderungen erzeugen 1 bis 1024 Frames mit 48 kHz, Stereo und
 signed 16-bit little-endian PCM. Der Audio-Core schreibt den vollstaendigen
 Block an das aktive R4D-Backend. Backpressure bleibt sichtbar und bewahrt den

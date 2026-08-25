@@ -35,11 +35,23 @@ visible to applications instead of being converted into success.
 
 The generic subsystem runtime uses the application audio facade rather than
 a direct kernel path. Its default transport is 48 kHz stereo signed 16-bit
-little endian in 480-frame quanta, with caller-owned buffering, silence on
-underflow and explicit mute. If the service or stream fails, audio becomes
-degraded, clears its queued PCM once and leaves the audio deadline schedule;
-guest time and video continue at their normal paced rate without repeated
-PCM generation, scratch submission or a zero-wait loop.
+little endian in 480-frame quanta with caller-owned buffering. It opens no
+service/backend stream until the first non-silent quantum. Empty, silent,
+paused and muted cycles submit no full zero payload; an active sink is closed
+once and may be materialized again by later signal. If the service or stream
+fails, audio becomes degraded, clears its queued PCM once and leaves the audio
+deadline schedule; guest time and video continue at their normal paced rate
+without repeated PCM generation, scratch submission or a zero-wait loop.
+
+HDA and AC97 submit refill/status/recovery passes through DriverApi v20. Each
+request declares a 10 ms absolute deadline, a bounded callback budget and a
+stable device key. A separate EDF queue and one `r4d-audio` short-completion
+worker isolate those passes from normal Driver Work while globally
+serializing them. Normal admission reserves deadline capacity and the
+scheduler demotes the worker after its four-tick/four-dispatch boost, so audio
+cannot form an unbounded priority lane. The current HDA and AC97 DMA geometry
+is intentionally unchanged: the available cursor, queue, underrun and
+deadline evidence did not justify a period or segment-DMA change.
 
 PCM clients retain frame-aligned progress reported before Busy, timeout or a
 hard error. R4Synth sends matching stereo S16LE WAV data directly and paces

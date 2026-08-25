@@ -46,7 +46,12 @@ Felder und alle Phasenspannen gemeinsam ein. Die Abfrage sammelt keine breite
 Subsystemtelemetrie und veraendert den Messzustand nicht.
 
 `performance_driver_work` stellt die besitzerbezogene Workqueue- und Cleanup-
-Telemetrie bereit. `performance_pci_inventory` beschreibt die kanonische
+Telemetrie bereit. Version 2 ergaenzt die getrennte Audio-Deadline-Lane mit
+Kapazitaet, reservierter Aufnahme, laufendem Besitzer sowie Submitted-,
+Started-, Completed-, Miss-, Budget- und Reject-Zaehlern. Die allgemeinen
+Task-/IRQ-Zaehler bleiben davon getrennt; ein Snapshot weist dadurch sowohl
+Fairness des normalen Pfads als auch die begrenzte Deadline-Isolation aus.
+`performance_pci_inventory` beschreibt die kanonische
 ECAM-/Legacy-Inventur, Found/Stored/Dropped/Truncated, Config- und Mappingarbeit
 sowie Such-, Detail- und Zeitzaehler. Beide Slots sind append-only und fuer
 aeltere Kernel optional.

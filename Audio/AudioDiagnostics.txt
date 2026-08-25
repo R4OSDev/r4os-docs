@@ -1,4 +1,4 @@
-R4OS audio continuity diagnostics
+﻿R4OS audio continuity diagnostics
 =================================
 
 AUDIOD.R4X is the Test-profile end-to-end diagnostic for R4AUDIO, AUDSVC and
@@ -7,13 +7,18 @@ aggregate counters only after playback.
 
 Default capture
 ---------------
-The default mode submits sixteen 480-frame square-wave quanta and then five
+The default mode first opens one logical AUDSVC stream and submits a
+480-frame all-zero quantum. The service must accept it without materializing
+the kernel/backend stream. It then submits sixteen 480-frame square-wave
+quanta and five
 frame-aligned packets of 1, 239, 17, 310 and 33 frames. This bounded burst
 crosses the two-period HDA start reserve and occupies part of the fixed
 64-period ring without comparing QEMUs guest timer with its host audio thread
-under TCG load. The pattern exercises one-frame edges, packet/period
-independence and a partial drain tail without adding diagnostic silence.
-Expected source length is 8,280 frames.
+under TCG load. A final all-zero quantum must close the materialized backend
+once without being written as PCM. The pattern exercises lazy open, real
+idle, one-frame edges, packet/period independence and a partial drain tail
+without adding diagnostic silence to the hardware stream. Expected signal
+length remains 8,280 frames.
 
 Invoke-QemuWavCapture.ps1 starts the Test image with QEMUs WAV audiodev,
 waits for the normal guest poweroff, validates all standard serial markers
@@ -44,7 +49,10 @@ The line beginning with "AUDIOD path" reports five independent deltas:
 upstreamDropped, driverUnderruns, driverErrors, backendFail and silencePeriods.
 A successful continuity run requires all five to be zero. Additional lines
 show stream/service write latency, high water, refill count and final queue.
-No interrupt-by-interrupt or write-by-write log is emitted.
+`AUDIOD idle` requires exactly one lazy materialization, two suppressed
+silence writes and one idle close. `AUDIOD deadline` requires productive
+deadline submissions/starts and zero new misses, callback-budget overruns or
+queue rejections. No interrupt-by-interrupt or write-by-write log is emitted.
 
 Current QEMU commands
 ---------------------

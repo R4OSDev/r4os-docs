@@ -26,6 +26,22 @@ the page cache invalidates only that prefix after a partial failure and keeps
 the unwritten suffix intact. Drivers such as USB mass storage therefore keep
 their small transport limit without imposing it on FAT32 or other callers.
 
+USB mass storage dispatches CBW, data and CSW through the canonical USB-host
+registry. The present transport remains a deliberately bounded BOT fallback:
+queue depth one, LUN 0 only, reported maximum LUN 0, and no UAS or streams.
+Its command payload is limited to 64 KiB. READ/WRITE(10) remains the compact
+path while the complete request fits the 32-bit LBA range; READ/WRITE(16) owns
+larger addresses. READ CAPACITY(10) is tried first and its 0xFFFFFFFF sentinel
+selects READ CAPACITY(16), so capacities beyond 2 TiB remain 64-bit exact.
+
+The USB block device publishes the medium's actual power-of-two logical block
+size from 512 bytes through 64 KiB and derives its per-request sector limit
+from the 64-KiB transport bound. Thus 4Kn media are described and addressed
+without 512-byte arithmetic. The current page-cache/filesystem mounting path
+still accepts only 512-byte sectors; non-512 USB media remain visible at the
+block boundary but are not falsely mounted through that older filesystem
+adapter.
+
 Runtime dispatch is owned per registered controller identity. Devices behind
 one controller retain their ordered synchronous callback lane; independent
 controllers have separate workers, so a sleeping backend callback cannot

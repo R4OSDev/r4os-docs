@@ -35,11 +35,20 @@ the kernel until a proven preload or early-load path exists. Once a loadable
 driver owns a non-critical production path, a parallel built-in fallback must
 not remain silently active.
 
-The built-in xHCI path frees per-slot DMA only after a successful Disable Slot
-or after the whole controller is proven halted. Partial allocations are rolled
-back immediately. Reprobe first halts the previous controller, clears its DMA
-registers, frees retained runtimes and controller rings, and restores the PCI
-command; a failed halt retains the old resources and rejects the reprobe.
+XHCI.R4D is the activation and registry owner of exactly one kernel-resident
+xHCI implementation. The module owns no parallel PCI/MMIO/DMA path. Only when
+that activation is absent may the kernel start one built-in fallback owner.
+DriverApi v21 and UsbHostController v2 make port, control, bulk, interrupt,
+reset, clear-halt and poll/completion operations productively dispatchable.
+The host status reports capabilities, queue depth, maximum transfer size,
+active transfers, completions, IRQs, poll fallbacks, cancellations and errors.
+
+The canonical xHCI path frees per-slot DMA only after a successful Disable
+Slot or after the whole controller is proven halted. Partial allocations are
+rolled back immediately. Reprobe and unload first mask the event interrupt,
+halt the previous controller, clear its DMA registers, free retained runtimes
+and controller rings, and restore the PCI command. A failed halt retains the
+old resources and vetoes reprobe or unload.
 
 Root-port changes have one controller-owned runtime path. Port Status Change
 Events are drained even when no command or transfer is waiting, retained in a
@@ -47,6 +56,14 @@ per-port pending set, then acknowledged only after targeted debounce, slot
 reclaim and optional re-enumeration. Repeated events for the same port are
 coalesced with counters instead of being reported as stale completions. USB-HID
 bindings are reconciled from the resulting USB device catalog.
+
+After scheduler start, the shared event ring is woken by the cached legacy
+INTx route and drained outside IRQ context. A bounded 10-ms poll remains the
+fallback for missing routing and deadlines. Up to 32 generation-safe transfer
+objects bind the exact slot, endpoint and TD pointers. HID may therefore keep
+one interrupt transfer pending while USB storage owns another endpoint.
+Bulk transfers use page-bounded TRB chains up to 64 KiB; a chain crossing the
+producer wrap carries ownership through the Link TRB.
 
 USB keyboards publish only through the canonical input queue. The HID poller
 does not own a second character ring and pauses before accepting a report until

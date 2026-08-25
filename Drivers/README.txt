@@ -12,12 +12,23 @@ and registered backends, but this is a stability mechanism rather than a
 security boundary.
 
 DriverApi 17 adds address-constrained DMA regions and explicit MSI rollback.
-Drivers whose descriptors cannot address above 4 GiB must request a maximum
-physical address of 0xFFFFFFFF instead of truncating an unrestricted address.
+DriverApi 19 additionally maps existing resident buffers into at most 64 hard
+DMA segments with explicit coherent/streaming ownership and bounded bounce
+fallback. Drivers whose descriptors cannot address above 4 GiB must use an
+inclusive maximum address of 0xFFFFFFFF instead of truncating an unrestricted
+address. Mapping teardown precedes pin teardown and both are owner- and
+generation-checked.
+
+StorageBackend 2 separates nonblocking submit and exact completion. Cancel is
+advisory; only completion or a successful quiescing reset releases an accepted
+buffer. The block core owns waiting slots and ordered flush barriers, while
+`queue_depth` limits actual hardware in-flight requests. Old and null-submit
+backends remain synchronous at depth one.
+
 MSI allocations are owner-tracked by the kernel and are disabled before IRQ,
 work and DMA owner cleanup; drivers still stop their hardware and explicitly
-release MSI on normal shutdown. A failed hardware stop or work join vetoes
-resource release and leaves the owner quarantined.
+release MSI on normal shutdown. A failed hardware stop, active storage request
+or work join vetoes resource release and leaves the owner quarantined.
 
 Boot-critical memory, interrupt, early display and storage paths remain in
 the kernel until a proven preload or early-load path exists. Once a loadable

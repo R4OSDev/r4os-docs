@@ -32,6 +32,28 @@ controllers have separate workers, so a sleeping backend callback cannot
 hold up an unrelated controller. Worker creation failure falls back safely to
 the primary lane and remains visible in the performance snapshot.
 
+The version-2 R4D storage descriptor separates nonblocking submit from
+completion. Its `queue_depth` is the hardware-owned in-flight limit; the block
+core independently owns up to 16 waiting/active slots and selects their stable
+request-ID order. Version-1 and null-submit descriptors remain on the
+synchronous depth-one adapter, regardless of an older advertised queue depth.
+No AHCI or NVMe driver is parallelized merely by this contract.
+
+An accepted asynchronous request owns its exact generation handle and buffer
+until one completion. The IRQ-facing callback only claims that handle; the
+controller worker performs terminal accounting, wakes the caller and releases
+owned bounce memory. Duplicate and late completions cannot address a reused
+slot. Cancel is advisory. A successful reset is the only substitute for a
+physical completion because it proves old commands quiescent before their
+handles and buffers are retired.
+
+Reads and writes may use all hardware slots, but a flush is an exclusive FIFO
+barrier: earlier work drains first, the flush runs alone, and later work cannot
+pass it. A timeout may detach a kernel-owned bounce buffer for late completion;
+a direct resident borrower remains protected by its task unwind token until
+completion or reset. Unregister closes admission and vetoes unload until every
+operation pin, request, callback and waiter has quiesced.
+
 The general block API treats caller memory as potentially pageable and uses a
 bounded non-pageable bounce buffer. The page cache may select the explicit
 direct API only while `io_busy` pins the exact PMM-backed cache frame, or for

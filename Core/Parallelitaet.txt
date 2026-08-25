@@ -22,6 +22,52 @@ Module tasks may use SIMD. The scheduler saves a CPUID/XCR0-sized FPU state
 for SIMD-capable tasks. The standard module target assumes AVX2; the kernel
 is built without SIMD and remains ReleaseSafe.
 
+SMP ownership foundation
+------------------------
+
+The x86_64 SMP foundation admits at most 32 ACPI processors. The BSP starts
+each AP sequentially through a private low-memory INIT/SIPI trampoline and a
+bounded wait. An AP becomes schedulable only after its CPU-local GDT, TSS,
+GS base, FPU state, IDT, LAPIC and scheduler idle state are complete. Missing,
+duplicate, disabled or failed APs stay outside the schedulable mask and never
+prevent the BSP from continuing; one CPU is a permanent supported mode.
+
+CPU-local state is one cache-line-sized `CpuLocal` record addressed through
+GS. It owns the CPU index and APIC ID, lifecycle state, scheduler readiness,
+legacy-critical depth and productive-work state. Current/idle task, Ready
+queue and reschedule request are also per CPU. Initial placement chooses the
+least-loaded online CPU, but a suspended stack stays bound to that CPU; this
+foundation does not migrate live continuations.
+
+The ownership matrix is deliberately conservative:
+
+- Per CPU: GDT/TSS/fault stacks, FPU register initialization, LAPIC timer,
+  current and idle task, Ready queue, reschedule state and IRQ-dispatch depth.
+- Cross-CPU serialized: Task identity, timed waits, deferred reap, heap and
+  resident VM metadata, boot log, IRQ registration/statistics and existing
+  owners that historically used disabled interrupts as their boundary.
+- BSP-only until separately audited: pageable-VM I/O/reclaim, foreground and
+  shell/console programs, services, GUI owners, R4D callbacks and ordinary
+  legacy kernel workers.
+- Parallel-enabled: explicitly marked CPU-only kernel work and the internal
+  LoaderDiag `LSTRX.R4X` background fixture. Child threads inherit the exact
+  audited owner class.
+
+The transitional cross-CPU owner boundary is reentrant and uses
+acquire/release publication. It is a no-sleep boundary: no I/O, wait, yield or
+callback may occur while nested inside it. A context switch releases its
+outer token only after the outgoing RSP is durable, and a remotely woken task
+is queued only after its old CPU has physically switched out. This closes the
+lost-wake, duplicate-stack and premature-reap windows without inventing a
+public lock or affinity contract.
+
+AP task switches currently occur at explicit cooperative scheduler points;
+interrupt-frame preemption remains on the BSP. Each AP still owns a periodic
+LAPIC accounting timer and receives reschedule IPIs. PCI INTx and single-
+message MSI registrations choose internal online targets after AP activation.
+No public CPU-affinity, priority or multi-vector ABI is exposed. Shutdown and
+reboot remove APs from scheduling and stop them with a bounded IPI handshake.
+
 New kernel threads enter their common trampoline through a synthetic context
 switch rather than a hardware `call`. Its six saved-register words and one
 reserved top word preserve the SysV x86_64 entry rule (RSP modulo 16 equals

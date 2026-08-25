@@ -13,10 +13,15 @@ Zig-Context: r4os.r4draw.Context
 R4DRAW beschreibt Rendering, R4DESK den Fenster-/Desktop-Lebenszyklus.
 Optionale Felder werden mit hasFn geprueft.
 
+`display_blit_xrgb32_stride` transportiert ein Rechteck mit explizitem
+Source-Stride in einem Aufruf. Der alte dicht gepackte Slot 9 bleibt
+unveraendert; Aufrufer pruefen den neuen Slot und verwenden nur gegen aeltere
+Tabellen den zeilenweisen Kompatibilitaetspfad.
+
 <!-- R4OS-APIREF:BEGIN R4DRAW (generiert von ApiContractGen aus ApiContract.json - NICHT von Hand editieren) -->
 ## Tabellen-Referenz R4DRAW (generiert)
 
-Kernel-Gruppentabelle `R4XStartR4Draw` v2, 272 Bytes, 32 Funktionsfelder und 32 Slots insgesamt.
+Kernel-Gruppentabelle `R4XStartR4Draw` v3, 280 Bytes, 33 Funktionsfelder und 33 Slots insgesamt.
 Signatur-Wahrheit: `abi.R4DrawFns` (Feldname == Tabellenfeld).
 Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 
@@ -54,4 +59,5 @@ Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 | 29 | 248 | function | `gui_frame_cancel` | `*const fn () callconv(.c) i32` |
 | 30 | 256 | function | `gui_frame_info` | `*const fn (?*const ProgramProcessHandle, *GuiFrameInfo) callconv(.c) i32` |
 | 31 | 264 | function | `gui_frame_read` | `*const fn (*const ProgramProcessHandle, u64, ?[*]GuiFrameCommand, u64, ?[*]u8, u64, *GuiFrameInfo) callconv(.c) i32` |
+| 32 | 272 | function | `display_blit_xrgb32_stride` | `*const fn (i32, i32, u32, u32, [*]const u32, u32, u32) callconv(.c) i32` |
 <!-- R4OS-APIREF:END R4DRAW -->

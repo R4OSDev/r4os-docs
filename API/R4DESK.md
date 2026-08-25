@@ -14,10 +14,16 @@ Zig-Context: r4os.r4desk.Context
 Die Gruppe wird nur im Manifest angefordert, wenn die Anwendung Desktop- oder
 Fensterfunktionen benoetigt. Optionale Felder werden mit hasFn geprueft.
 
+Remote-Readback ist nachfragegesteuert. Ein echter Konsument ruft
+`remote_frame_acquire` auf, wartet auf den dadurch angeforderten Vollframe und
+ruft auf jedem Exitpfad `remote_frame_release` auf. Ohne Konsumenten behaelt
+der Kernel weder den Live-Shadow noch die beiden Mapping-Snapshots;
+`remote_frame_consumers` erzeugt selbst keinen Frame.
+
 <!-- R4OS-APIREF:BEGIN R4DESK (generiert von ApiContractGen aus ApiContract.json - NICHT von Hand editieren) -->
 ## Tabellen-Referenz R4DESK (generiert)
 
-Kernel-Gruppentabelle `R4XStartR4Desk` v7, 432 Bytes, 51 Funktionsfelder und 52 Slots insgesamt.
+Kernel-Gruppentabelle `R4XStartR4Desk` v9, 464 Bytes, 55 Funktionsfelder und 56 Slots insgesamt.
 Signatur-Wahrheit: `abi.R4DeskFns` (Feldname == Tabellenfeld).
 Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 
@@ -75,4 +81,8 @@ Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 | 49 | 408 | function | `program_spawn_with_console_host` | `*const fn ([*:0]const u8, [*:0]const u8, u32, u32) callconv(.c) i32` |
 | 50 | 416 | function | `program_spawn_with_console_host_handle` | `*const fn ([*:0]const u8, [*:0]const u8, u32, u32, *ProgramProcessHandle) callconv(.c) i32` |
 | 51 | 424 | function | `program_set_window_handle` | `*const fn (*const ProgramProcessHandle, i32) callconv(.c) i32` |
+| 52 | 432 | function | `console_push_input` | `*const fn (u32, [*]const u8, u32) callconv(.c) i32` |
+| 53 | 440 | function | `remote_frame_acquire` | `*const fn () callconv(.c) i32` |
+| 54 | 448 | function | `remote_frame_release` | `*const fn () callconv(.c) i32` |
+| 55 | 456 | function | `remote_frame_consumers` | `*const fn () callconv(.c) u32` |
 <!-- R4OS-APIREF:END R4DESK -->

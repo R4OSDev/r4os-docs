@@ -22,6 +22,25 @@ leaves the old generation visible, while an ambiguous completion is retried
 before another read or write may proceed. Selected noncritical UI traces may
 be deferred, but shutdown flushes them before final storage flush.
 
+Large enumerations use the optional generation-keyed snapshot contract.
+`registry_snapshot_begin` captures the hive generation, the flat key-table
+index and the exact child-key or value range. Each `registry_snapshot_page`
+then advances directly within that range; it never rescans entries before the
+cursor. A page contains at most 32 caller-owned entries and at most 16384
+caller-owned data bytes. A value that does not fit still advances the cursor
+with its full length and an explicit data-omitted flag. If the active
+generation changes, the page returns `restart` with zero rows. Callers must
+discard every prior page from that attempt; an incomplete or restarted
+snapshot is never a truncated success.
+
+`registry_batch_mutate` accepts at most 32 offset-based Set/Delete operations
+whose paths, names and payloads live in one caller-owned blob of at most 16384
+bytes. R4SYS validates the complete batch, builds exactly one inactive
+candidate, commits it once and publishes one generation. Duplicate targets,
+invalid payloads, capacity failures, missing delete targets and commit errors
+leave the previous visible generation unchanged and never expose a partial
+batch. The older single-value operations and their ABI slots remain valid.
+
 R4S files are separate schema-oriented text configuration files. They are
 used for services, associations, desktop, input, time, updates and
 component-local settings. R4STD owns the reusable R4S/config parsing and

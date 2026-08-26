@@ -21,9 +21,10 @@ Current slice model
   active cycles continue directly, while an explicit cooperative scheduler
   yield is requested at most once per eight host milliseconds. At 1 kHz this
   changes the former projected 9,034 yields/s into a fixed ceiling of 125/s.
-- Console INPUT, bare RANDOMIZE and indefinite SLEEP return an event-only
-  wait. Positive SLEEP, TIMER and foreground audio retain their exact
-  one-shot guest deadline. Pause and static status windows use the existing
+- Console INPUT, bare RANDOMIZE, indefinite SLEEP and foreground audio return
+  an event-only wait. Positive SLEEP and TIMER retain their exact one-shot
+  guest deadline; foreground audio is woken by source-frame transport
+  feedback. Pause and static status windows use the existing
   lost-wakeup-safe R4DESK activity sequence; only the unsupported-facade
   fallback and anomalous zero-operation progress retain a one-tick sleep.
 - Host input and lifecycle events are still drained before exactly one guest
@@ -37,7 +38,7 @@ progress is counted separately as `zero_progress_waits`.
 
 Lossless input model
 --------------------
-R4BASIC 1.2.12 / VM contract 1.10.0 declares the input shape it actually
+R4BASIC 1.2.13 / VM contract 1.11.0 declares the input shape it actually
 consumes. The SDK translates each printable raw key directly into one text
 event, leaves Enter and Backspace as key events, and filters pointer events
 before `Viewport.mapClientPoint`. The generic SDK default remains compatible
@@ -88,7 +89,7 @@ compatibility path.
 
 Linear raster operations
 ------------------------
-R4BASIC 1.2.12 / VM contract 1.10.0 keeps the established QBasic pixels and
+R4BASIC 1.2.13 / VM contract 1.11.0 keeps the established QBasic pixels and
 packed image formats while moving raster work to rows, spans and one local
 damage-region list per changed operation. Up to eight separated regions are
 retained; touching rectangles merge and overflow uses the smallest area
@@ -134,6 +135,43 @@ cooperative wait until that guest deadline; all non-TIMER bytecode continues
 at the measured slice rate. Direct deterministic VM tests may leave this
 adapter behavior disabled.
 
+Demand-driven audio model
+-------------------------
+R4BASIC 1.2.13 no longer couples BASIC progress to a calculated guest-time
+audio deadline. Every PLAY/BEEP appends a cumulative source-frame fence. MF
+and BEEP retry their bytecode instruction only after runtime feedback has
+classified every frame up to that fence as accepted by AudioService,
+deliberately suppressed silence, or an explicit discard. MB still lets the
+next BASIC instruction execute immediately; when a fast END follows in the
+same slice, the adapter keeps only the host transport alive until its pending
+frame fence is resolved. The VM never equates service acceptance with hardware
+playback. R4AUDIO/AUDSVC currently exposes no per-stream hardware cursor, so
+the report fixes that state as `playback=unavailable`.
+
+The generic runtime opens no stream for an empty or all-zero renderer. Pause
+and mute close an active stream once and submit no replacement zeros. Eight
+independent silent R4BASIC VMs therefore use zero of the eight AudioService
+sessions; an active path remains isolated rather than sharing a R4BASIC
+hardware mixer. Passive counters separate active/silent/paused/muted cycles
+and bytes, service opens/writes/closes, Busy/resync, and scheduled, accepted,
+suppressed, discarded, resolved and unresolved source frames.
+
+R4BASIC retains four 40-ms source quanta for the 160-ms HDA start reserve,
+but Open, prefill, steady write and deferred Close are serialized to at most
+one synchronous service operation per host cycle. Pending video is published
+first. Successful prefill and resync writes continue through fresh cycles;
+Busy retains the exact PCM and retries after 10 ms rather than advancing a
+whole 40-ms quantum. The R4BASIC facade bounds an individual service call to
+25 ms and keeps the existing three open retries 50 ms apart. A late resync
+reports discarded queue bytes instead of silently advancing unrendered notes.
+
+PLAY appends transactionally into the retained event list after one bounded
+capacity reservation. Invalid input rolls the logical length back, so music
+settings and queued events stay atomic without a temporary event list and
+second persistent copy. An 85-entry compile-time phase-step table replaces
+one floating-point power per note. The 4,096-note component case proves one
+capacity growth, 4,096 direct appends and 4,096 table lookups.
+
 Measurement
 -----------
 VM counters split completed bytecodes into value, arithmetic, control,
@@ -145,7 +183,9 @@ frame-ready/backlog/present data, total clock reads, active VM nanoseconds and
 ns/instruction. RuntimeStats separates cycles, host polls, active/waiting/
 paused states, direct continues, bounded yields, fallback sleeps, event
 waits/wakes/timeouts and all present outcomes. The storage adapter adds file
-call/byte/failure counts under the same launch ID.
+call/byte/failure counts under the same launch ID. AudioStats adds service
+operation count/high-water, state-specific work, accepted/suppressed/discarded
+bytes, Busy and resync; the VM publishes the matching source-frame fences.
 
 Tests/performance_test.zig proves a runnable steady-clock step consumes
 262,144 instructions with no fixed wake, exactly 17 external cancel callbacks
@@ -235,7 +275,9 @@ executed. It also separates active/waiting/paused cycles, bounded host polls,
 direct continues, event waits, fallback sleeps and every presentation result.
 The one-shot first-frame report correlates these values with active VM time,
 adaptive clock blocks, file calls, input, audio, presenter work and frame age;
-it never emits text per cycle or frame.
+it never emits text per cycle or frame. The Distribution marker contract
+requires the audio service-operation high-water to remain at most one and
+checks the exact resolved-frame accounting identity.
 
 Dispatch and bytecode locality
 ------------------------------
@@ -468,6 +510,23 @@ drop reason and deterministic overflow at 4,096 queued entries. The one warm
 accepted as host-environment variation rather than attributed to the input
 path. The result is stored under run ID
 `r4os-0.69.63-perfdiag-clock-warm-20260826t074024762z-d336a2f1`.
+
+The 0.69.64 completion gate made the R4Basic audio path demand-driven and
+transport-bound. Eight real silent guests opened no AudioService session and
+performed no write. Active playback opens lazily after the first non-silent
+quantum, performs at most one open/write/close service operation per host
+cycle, retries Busy after 10 ms without losing the queued quantum and closes
+idempotently. Foreground PLAY/BEEP waits for accepted, suppressed or discarded
+source frames instead of guest time; background audio survives an immediate
+END until that transport progress is resolved. The direct PLAY builder
+appended 4,096 notes after one bounded reservation and used the fixed phase-step
+table without a temporary sequence or runtime power calculation. The one warm
+`perfdiag.clock.calls-10000.v1` completion benchmark produced
+1,804/1,022/790/790/787 ns per call, mean 1,038 ns. Against the directly
+comparable 0.69.63 mean of 796 ns this is 242 ns or 30.40 percent slower. The
+change is accepted as variation of the migrated host environment rather than
+attributed to the audio path. The result is stored under run ID
+`r4os-0.69.64-perfdiag-clock-warm-20260826t083506096z-27b20e74`.
 
 Outstanding visual acceptance
 -----------------------------

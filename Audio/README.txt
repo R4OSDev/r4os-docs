@@ -42,6 +42,15 @@ once and may be materialized again by later signal. If the service or stream
 fails, audio becomes degraded, clears its queued PCM once and leaves the audio
 deadline schedule; guest time and video continue at their normal paced rate
 without repeated PCM generation, scratch submission or a zero-wait loop.
+Open, write and deferred close are limited to one service operation per host
+cycle and occur only after a pending video publication. Prefill and late
+resync therefore interleave with input, VM and presentation cycles instead of
+forming a synchronous multi-write burst. Busy preserves the exact source PCM
+and uses an independent 10 ms retry deadline. Source-frame feedback separates
+AudioService acceptance, deliberate silence suppression and explicit discard.
+The current platform contract exposes no per-stream hardware playback cursor;
+callers must report that state as unavailable rather than deriving played
+frames from accepted frames or guest time.
 
 HDA and AC97 submit refill/status/recovery passes through DriverApi v20. Each
 request declares a 10 ms absolute deadline, a bounded callback budget and a

@@ -61,11 +61,14 @@ pair of TIMER reads produces one deadline wait and succeeds when retried at
 the exact next guest millisecond. The complete checksum-bound gorilla.bas
 semantic/golden test remains unchanged.
 
-R4BASIC /PERFTEST runs a bounded in-system CPU loop and prints a parseable
-marker. Test-QemuPerformanceMarker.ps1 requires at least 52,000 instructions
-per second, a maximum 4,096-instruction step, no more than 17 clock reads per
-step, nonzero ns/instruction and boundary-bounded cancel, metadata, text and
-Cell evidence without a fixed sleep.
+R4BASIC /PERFTEST runs six bounded in-system workloads for numeric dispatch,
+4-KB string assignment, LEN, UCASE$, procedure calls and arrays. It prints one
+parseable marker per workload plus an exact summary. The marker gate requires
+at least 52,000 numeric instructions per second, a maximum 4,096-instruction
+step, no more than 17 clock reads per step, nonzero ns/instruction and no fixed
+sleep. It additionally proves one 4-KB clone per loaded assignment value,
+zero string clones for borrowed LEN/UCASE$ arguments and one retained local
+pool whose reuse plus growth count equals the procedure-call count.
 
 The canonical GORILLA first-frame acceptance on 26 August 2026 executed one
 256-instruction time-limited block with two clock reads in both the Standard
@@ -83,6 +86,13 @@ were 900/883/883/885/884 ns per call (mean 887, p50 884, p95/p99 900). The
 mean is 21 ns or 2.425 percent slower than 0.69.56's 866 ns; this independent
 R4SYS clock countercheck is recorded as accepted host-environment variation
 and does not invalidate the workload-specific VM evidence above.
+
+The sole regular 0.69.58 completion benchmark used the same perfdiag-clock
+0.3.16 warm environment and five samples. The samples were
+882/868/871/875/869 ns per call (mean 873, p50 871, p95/p99 882). The mean is
+14 ns or 1.578 percent faster than 0.69.57's 887 ns. Run
+`r4os-0.69.58-perfdiag-clock-warm-20260826t023325264z-673abd75` is imported
+into the validated 83-record benchmark history.
 
 RuntimeStats distinguishes requested slice capacity from operations actually
 executed. It also separates presentation attempts, published frames and
@@ -116,6 +126,39 @@ separate internal type, so global/local and flattened ByRef targets are not
 resolved again by load/store. A same-type store transfers the owned stack
 value; conversion and QBasic rounding remain active only when the bound target
 really differs.
+
+String ownership, built-ins and procedure frames
+------------------------------------------------
+R4BASIC 1.2.7 uses bytecode contract 1.5.0 and VM contract 1.7.0. Loading a
+string variable still creates the distinct owner required by QBasic assignment
+semantics, but a same-type store now moves that owner instead of cloning it a
+second time. A simple `B$ = A$` therefore performs exactly one full-string
+clone and leaves source and destination independently owned.
+
+The compiler emits scalar references for simple string lvalues used as
+read-only built-in arguments. Numeric arguments retain their established value
+evaluation because copying those fixed-width scalars has no string/heap cost.
+The VM presents those Cells as non-owning Value views to LEN, INSTR, UCASE$,
+VAL and the other built-ins; expression results remain owned stack values.
+Only owned arguments are destroyed after the call, while every returned string
+has independent storage. The compiler and VM count borrowed/owned arguments,
+string clones and clone bytes so error and lifetime paths remain observable.
+
+Procedure-local storage is retained by active recursion depth rather than
+allocated for every call. A generation per depth lazily materializes only
+parameters, returns and locals actually reached by bytecode. An intrusive list
+tracks those initialized slots for exact reverse cleanup on RETURN, runtime
+error, reset and VM destruction. Recursion uses a separate pool depth, and two
+VM instances never share capacity or Cells. Calls, pool growth/reuse, initialized
+Cells and aggregate initializations are reported independently.
+
+Numeric PRINT and STR$ format into a bounded 128-byte stack buffer; STR$ then
+allocates only its final QBasic result. VAL parses ordinary E/e or exponent-free
+text directly. D/d text up to 128 bytes is normalized on the stack, while a
+longer value grows one retained VM scratch buffer and reuses it. The first-frame
+`R4BASIC ownership` record publishes all these counters, and the Distribution
+marker gate validates their pool, initialization, format and scratch
+invariants.
 
 First-frame launch timeline
 ---------------------------
@@ -206,6 +249,21 @@ used 510,062 ms and 637,515 ms respectively. The R4M0 grew from 373,691 to
 saving and 636,511-ms launch-to-frame saving outweigh the 209,032-byte module
 and 16,052-ms loader costs for this Full-only compiler host. This result is not
 a global optimization-policy change.
+
+R4BASIC 1.2.7 repeated that decision with the same Test guest and six separated
+200-ms VM workloads. ReleaseSmall/ReleaseFast throughput in instructions per
+second was 1,976,676/3,461,120 numeric, 53,227/75,665 for 4-KB assignment,
+2,805,760/4,403,200 for LEN, 43,303/61,835 for UCASE$, 1,945,600/3,440,640 for
+calls and 1,822,720/3,461,120 for arrays. ReleaseFast was therefore 1.422x to
+1.899x faster across every measured class. Its R4M0 grew from 398,635 to
+652,723 bytes and its loadable image from 82 to 132 4-KB pages. The measured
+loader path grew from 46,433,510 to 87,951,890 ns and admission-to-app from
+50,614,590 to 90,793,990 ns. Compilation then reversed that startup cost:
+trace start to first guest frame fell from 1,250,932,830 to 691,028,100 ns,
+a 44.8-percent improvement. Both complete headless gates and both marker
+parses passed. The broad 42.2 to 89.9 percent runtime gain and faster complete
+launch outweigh 254,088 file bytes and 50 loaded pages for the interactive
+Full-only subsystem, so `OPTIMIZE=speed` remains the module-local setting.
 
 The Standard-QEMU measurement on 20 August 2026 used a temporary test-only
 console packaging of the same R4BASIC 1.2.1 source and four platform imports;

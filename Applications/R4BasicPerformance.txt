@@ -11,24 +11,43 @@ or graphics cost mattered.
 Current slice model
 -------------------
 - The shared subsystem runtime still invokes exactly one GuestDriver step per
-  host cycle and offers a maximum budget of 4,096 instructions.
-- The R4BASIC adapter consumes that budget in 256-instruction check blocks.
-  Production supplies one R4SYS monotonic clock source and stops a step after
-  eight milliseconds. One already-started block is the bounded overshoot; a
-  full step needs at most 17 clock calls instead of 66.
-- Runnable code returns progress with no artificial wake deadline. The host
-  polls input and lifecycle commands before the next step and yields after
-  productive work. A progress result with zero executed operations and no
-  deadline is idle polling and sleeps one bounded host tick instead of
-  repeatedly scanning the scheduler through `taskYield`.
-- WAIT/SLEEP, foreground audio and input retain their real guest deadlines.
-  Pause time never advances the monotonic guest clock.
+  host cycle and offers an absolute budget of 262,144 instructions.
+- The R4BASIC adapter starts with a 256-instruction clock block and adapts
+  later blocks toward one millisecond, never below 64 or above 16,384
+  instructions. Production supplies one R4SYS monotonic source and stops at
+  the first observed boundary at or beyond eight milliseconds. The stable
+  fast full-budget test uses 18 clock reads; the gate caps every step at 20.
+- Runnable code returns progress with no artificial wake deadline. Successive
+  active cycles continue directly, while an explicit cooperative scheduler
+  yield is requested at most once per eight host milliseconds. At 1 kHz this
+  changes the former projected 9,034 yields/s into a fixed ceiling of 125/s.
+- Console INPUT, bare RANDOMIZE and indefinite SLEEP return an event-only
+  wait. Positive SLEEP, TIMER and foreground audio retain their exact
+  one-shot guest deadline. Pause and static status windows use the existing
+  lost-wakeup-safe R4DESK activity sequence; only the unsupported-facade
+  fallback and anomalous zero-operation progress retain a one-tick sleep.
+- Host input and lifecycle events are still drained before exactly one guest
+  step. One outer host tick is read per cycle; GuestClock is not synchronized
+  twice with the same value. Pause time never advances guest time.
 
-The two direct R4BASIC `taskYield` sites are deliberately productive: the
-interactive performance probe yields only after a nonempty VM step, and the
-compile-progress view yields after a bounded lexer/binder update plus host
-Close polling. Idle guest progress goes exclusively through the blocking
-shared-runtime path and is counted as `zero_progress_waits`.
+The only remaining direct R4BASIC `taskYield` site is the compile-progress
+view after a bounded lexer/binder update plus Close polling. The production VM
+loop owns its bounded yield cadence in `r4os.subsystem_runtime`; idle guest
+progress is counted separately as `zero_progress_waits`.
+
+Display and backlog model
+-------------------------
+VM initialization no longer allocates, clears, rasterizes and publishes an
+empty 640x400 SCREEN 0 before the first BASIC instruction. Text output or an
+explicit SCREEN operation prepares the real surface after guest execution. A
+display-silent running or waiting guest receives a delayed fallback surface;
+an immediately terminating guest receives none. Reset remains eager because
+the old presenter must never retain a freed surface.
+
+The 33-ms guest cadence now records deferred checks, missed deadlines and
+maximum backlog. Each synchronous present records due/start/end age and cost,
+and distinguishes published, unchanged, hidden, dropped and failed outcomes.
+Full and damage work remains separately visible in the shared presenter.
 
 Historical TIMER polling
 ------------------------
@@ -45,15 +64,20 @@ VM counters split completed bytecodes into value, arithmetic, control,
 graphics, text and host groups and additionally expose cancel-flag/callback,
 group lookup, text sync, cold metadata, Cell resolve/alias, store/conversion,
 bound comparison and TIMER paths. Adapter counters report steps,
-instructions, budget/time limits, frame-ready steps, total and per-step clock
-reads, elapsed nanoseconds and ns/instruction. RuntimeStats separates
-productive yields, sleeps and zero-operation waits.
+instructions, budget/time limits, adaptive block size, lazy display work,
+frame-ready/backlog/present data, total clock reads, active VM nanoseconds and
+ns/instruction. RuntimeStats separates cycles, host polls, active/waiting/
+paused states, direct continues, bounded yields, fallback sleeps, event
+waits/wakes/timeouts and all present outcomes. The storage adapter adds file
+call/byte/failure counts under the same launch ID.
 
-Tests/performance_test.zig proves a runnable step consumes 4,096 instructions
-with no fixed wake, exactly 16 external cancel callbacks and 17 clock reads.
-The direct cancel flag remains checked at every instruction, while numeric
-work performs no per-instruction text probe. An injected slow clock stops a
-resumable step at the 8-ms boundary. A straight-line typed workload proves
+Tests/performance_test.zig proves a runnable steady-clock step consumes
+262,144 instructions with no fixed wake, exactly 17 external cancel callbacks
+and 18 clock reads. It also proves numeric work allocates no unused display,
+first text output prepares a guest-driven frame, and console INPUT carries a
+zero event-only deadline. The direct cancel flag remains checked at every
+instruction. An injected slow clock stops a resumable step at the 8-ms
+boundary. A straight-line typed workload proves
 14 direct Cell operations cause 14 rather than 28 resolutions, five
 same-type stores move ownership, only two real target conversions remain,
 and two integer plus one floating comparison take their bound paths. A dense
@@ -64,17 +88,20 @@ semantic/golden test remains unchanged.
 R4BASIC /PERFTEST runs six bounded in-system workloads for numeric dispatch,
 4-KB string assignment, LEN, UCASE$, procedure calls and arrays. It prints one
 parseable marker per workload plus an exact summary. The marker gate requires
-at least 52,000 numeric instructions per second, a maximum 4,096-instruction
-step, no more than 17 clock reads per step, nonzero ns/instruction and no fixed
+at least 52,000 numeric instructions per second, a maximum 262,144-instruction
+step, no more than 20 clock reads per step, nonzero ns/instruction and no fixed
 sleep. It additionally proves one 4-KB clone per loaded assignment value,
 zero string clones for borrowed LEN/UCASE$ arguments and one retained local
 pool whose reuse plus growth count equals the procedure-call count.
 
-The canonical GORILLA first-frame acceptance on 26 August 2026 executed one
-256-instruction time-limited block with two clock reads in both the Standard
-one-CPU and SMP four-CPU guests. It measured 54,136 and 37,821 ns/instruction
-respectively. Each guest reported one external cancel callback, 256 compact
-group lookups, seven text checks, two text renders and only 56 cold-metadata
+The canonical 0.69.60 GORILLA first-frame acceptance on 26 August 2026
+executed one 256-instruction time-limited block with two clock reads in both
+the Standard one-CPU and SMP four-CPU guests. It measured 39,199 and 36,174
+ns/instruction respectively. Each guest reported two host cycles, two Close
+checks, two host polls, one direct continuation, no fallback sleep or event-
+wait failure and one guest-driven published frame; `initial_frame_ns` stayed
+zero. Each guest also reported one external cancel callback, 256 compact
+group lookups, three text checks, one text render and only 56 cold-metadata
 reads. The same real workload resolved 90 Cells with zero alias hops, moved
 32 same-type stores and performed one actual target conversion. Its 4,554
 instructions occupy 54,648 hot and 109,296 cold bytes, exactly matching the
@@ -101,12 +128,21 @@ The sole regular 0.69.59 completion benchmark used the same perfdiag-clock
 `r4os-0.69.59-perfdiag-clock-warm-20260826t034857158z-bf622161` is imported
 into the validated 84-record benchmark history.
 
+The sole regular 0.69.60 completion benchmark used the same perfdiag-clock
+0.3.16 warm environment and five samples. The samples were
+904/887/886/886/884 ns per call (mean 889, p50 886, p95/p99 904). The mean is
+38 ns or 4.465 percent slower than 0.69.59's 851 ns; this independent R4SYS
+clock countercheck is accepted as variation of the migrated Linux host
+environment and does not contradict the workload-specific host-cycle evidence.
+Run `r4os-0.69.60-perfdiag-clock-warm-20260826t043317549z-ed81036a` is
+imported into the validated 85-record benchmark history.
+
 RuntimeStats distinguishes requested slice capacity from operations actually
-executed. It also separates presentation attempts, published frames and
-hidden/unchanged skips. R4BASIC uses the shared Runtime.run loop, so its yield,
-sleep and zero-progress counters describe the productive host loop rather
-than staying at zero. The one-shot first-frame report combines these values
-with adapter, VM, presenter and audio counters; it never emits text per frame.
+executed. It also separates active/waiting/paused cycles, bounded host polls,
+direct continues, event waits, fallback sleeps and every presentation result.
+The one-shot first-frame report correlates these values with active VM time,
+adaptive clock blocks, file calls, input, audio, presenter work and frame age;
+it never emits text per cycle or frame.
 
 Dispatch and bytecode locality
 ------------------------------
@@ -121,8 +157,8 @@ normal dispatch fetches only one third of the former 36-byte record. At the
 
 Cold metadata is read only when control enters a different BASIC statement
 or an error needs its exact span. The injected cancellation callback is read
-once per 256-operation VM chunk; the independently set Close flag still wins
-between individual instructions. Opcode-group accounting uses a complete
+once per bounded adaptive VM chunk; the independently set Close flag still
+wins between individual instructions. Opcode-group accounting uses a complete
 compact table. Text rasterization is checked after text bytecode and at real
 display boundaries rather than after numeric and control bytecode.
 
@@ -136,7 +172,8 @@ really differs.
 
 String ownership, built-ins and procedure frames
 ------------------------------------------------
-R4BASIC 1.2.7 uses bytecode contract 1.5.0 and VM contract 1.7.0. Loading a
+R4BASIC 1.2.9 retains bytecode contract 1.5.0 and advances the VM contract to
+1.8.0 for the event-driven host-cycle rules. Loading a
 string variable still creates the distinct owner required by QBasic assignment
 semantics, but a same-type store now moves that owner instead of cloning it a
 second time. A simple `B$ = A$` therefore performs exactly one full-string
@@ -209,7 +246,9 @@ the same ID. The loader record contains actual range-read and filesystem-gate
 deltas plus section, import and relocation counts. R4BASIC writes one bounded
 `C:\TEMP\R4BASIC.LAST` snapshot at the first guest-driven published frame;
 source I/O, compilation, VM/host initialization, first executed slice, lazy
-audio open and first frame all use the common monotonic nanosecond clock.
+audio open and first frame all use the common monotonic nanosecond clock. The
+legacy `initial_frame_ns` field must remain zero, proving that no
+pre-instruction full frame was emitted.
 
 The Test profile adds a separate headless mode without replacing the two
 synthetic subsystem lifecycle instances. It resolves `r4os.basic` explicitly,

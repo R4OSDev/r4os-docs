@@ -35,6 +35,31 @@ view after a bounded lexer/binder update plus Close polling. The production VM
 loop owns its bounded yield cadence in `r4os.subsystem_runtime`; idle guest
 progress is counted separately as `zero_progress_waits`.
 
+Lossless input model
+--------------------
+R4BASIC 1.2.12 / VM contract 1.10.0 declares the input shape it actually
+consumes. The SDK translates each printable raw key directly into one text
+event, leaves Enter and Backspace as key events, and filters pointer events
+before `Viewport.mapClientPoint`. The generic SDK default remains compatible
+with hosts that require separate key and text events plus mapped pointers.
+
+Every raw GUI event receives one monotone host sequence and retains its raw
+tick. Derived events preserve both values; a queued BASIC byte keeps them
+until `INKEY$`, `INPUT`, `LINE INPUT`, `SLEEP`, or RANDOMIZE consumes it.
+The VM distinguishes unfocused input, invalid codepoints, unsupported keys or
+events, a full 4,096-byte queue, and allocation failure. A rejected delivery
+returns `HostPollResult.ignored`: it is counted but cannot wake an event-only
+guest or masquerade as accepted work. Input accepted while paused remains in
+sequence and is consumed only after resume.
+
+The first-frame snapshot publishes `R4BASIC input` with raw, translated,
+filtered, accepted, control, dropped and consumed counts, pending-text and
+mouse work, queue fill/high water, per-reason drops, WindowInfo calls and
+viewport calculations. `R4BASIC input-correlation` preserves the latest raw,
+delivered, accepted, dropped and consumed sequence/tick pairs and associates
+the latest consumed event with the first later published frame. These are
+passive counters; the hot input path emits no per-event log.
+
 Display and backlog model
 -------------------------
 VM initialization no longer allocates, clears, rasterizes and publishes an
@@ -63,7 +88,7 @@ compatibility path.
 
 Linear raster operations
 ------------------------
-R4BASIC 1.2.11 / VM contract 1.9.0 keeps the established QBasic pixels and
+R4BASIC 1.2.12 / VM contract 1.10.0 keeps the established QBasic pixels and
 packed image formats while moving raster work to rows, spans and one local
 damage-region list per changed operation. Up to eight separated regions are
 retained; touching rectangles merge and overflow uses the smallest area
@@ -427,6 +452,22 @@ pixels; it emitted no XRGB fallback frame. The independent warm
 mean was 873 ns, so the lower-is-better metric improved by 90 ns or 10.31
 percent. The result is stored under run ID
 `r4os-0.69.62-perfdiag-clock-warm-20260826t065814695z-5ca2341c`.
+
+The 0.69.63 completion gate exercised the productive text-only/no-pointer
+profile with the canonical GORILLA guest. Before the first guest frame it
+observed three raw and three logical lifecycle events, no filtered or pending
+text event, no mouse event or coordinate mapping, 48 window-info reads, two
+input-side window-info reads and 48 viewport calculations. No keyboard input
+was injected into this non-interactive baseline, so adapter acceptance, drop,
+queue and consumption counters all remained zero; the separate owner tests
+cover ordered text delivery, control events, pause/resume retention, every
+drop reason and deterministic overflow at 4,096 queued entries. The one warm
+`perfdiag.clock.calls-10000.v1` completion benchmark produced
+800/792/791/801/796 ns per call, mean 796 ns. Against the directly comparable
+0.69.62 mean of 783 ns this is 13 ns or 1.66 percent slower. The change is
+accepted as host-environment variation rather than attributed to the input
+path. The result is stored under run ID
+`r4os-0.69.63-perfdiag-clock-warm-20260826t074024762z-d336a2f1`.
 
 Outstanding visual acceptance
 -----------------------------

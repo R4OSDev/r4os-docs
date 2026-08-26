@@ -31,5 +31,10 @@ S16LE audio through the normal app audio facade. Audio degradation never
 turns into unpaced guest execution; completion, close and failure share an
 idempotent cleanup path.
 
+Subsystem input policies preserve stable raw sequences and ticks while
+choosing key-plus-text or single-text delivery and mapped or prefiltered
+pointers. Passive filter/drop counters remain available without hot logs;
+ignored deliveries never wake an event-only guest.
+
 Build the SDK with `Repositories\SDK\Build.bat test` or as part of
 `Tools\Build.bat -central`.

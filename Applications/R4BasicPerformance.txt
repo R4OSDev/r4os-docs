@@ -12,15 +12,23 @@ Current slice model
 -------------------
 - The shared subsystem runtime still invokes exactly one GuestDriver step per
   host cycle and offers a maximum budget of 4,096 instructions.
-- The R4BASIC adapter consumes that budget in 64-instruction check blocks.
-  Production supplies the R4SYS monotonic clock and stops a step after eight
-  milliseconds. One already-started opcode/check block is the bounded
-  overshoot.
+- The R4BASIC adapter consumes that budget in 256-instruction check blocks.
+  Production supplies one R4SYS monotonic clock source and stops a step after
+  eight milliseconds. One already-started block is the bounded overshoot; a
+  full step needs at most 17 clock calls instead of 66.
 - Runnable code returns progress with no artificial wake deadline. The host
-  polls input and lifecycle commands before the next step and yields when the
-  runtime reports a zero wait.
+  polls input and lifecycle commands before the next step and yields after
+  productive work. A progress result with zero executed operations and no
+  deadline is idle polling and sleeps one bounded host tick instead of
+  repeatedly scanning the scheduler through `taskYield`.
 - WAIT/SLEEP, foreground audio and input retain their real guest deadlines.
   Pause time never advances the monotonic guest clock.
+
+The two direct R4BASIC `taskYield` sites are deliberately productive: the
+interactive performance probe yields only after a nonempty VM step, and the
+compile-progress view yields after a bounded lexer/binder update plus host
+Close polling. Idle guest progress goes exclusively through the blocking
+shared-runtime path and is counted as `zero_progress_waits`.
 
 Historical TIMER polling
 ------------------------
@@ -34,24 +42,80 @@ adapter behavior disabled.
 Measurement
 -----------
 VM counters split completed bytecodes into value, arithmetic, control,
-graphics, text and host groups. Adapter counters report steps, instructions,
-maximum instructions, budget/time limits, waits, frame-ready steps and tick
-duration. Tests/performance_test.zig proves a runnable step consumes 4,096
-instructions with no fixed wake (more than 157 times the former per-cycle
-budget) and that an injected slow clock stops a resumable step at the time
-boundary. The complete checksum-bound gorilla.bas semantic/golden test remains
-unchanged.
+graphics, text and host groups and additionally expose cancel-flag/callback,
+group lookup, text sync, cold metadata, Cell resolve/alias, store/conversion,
+bound comparison and TIMER paths. Adapter counters report steps,
+instructions, budget/time limits, frame-ready steps, total and per-step clock
+reads, elapsed nanoseconds and ns/instruction. RuntimeStats separates
+productive yields, sleeps and zero-operation waits.
+
+Tests/performance_test.zig proves a runnable step consumes 4,096 instructions
+with no fixed wake, exactly 16 external cancel callbacks and 17 clock reads.
+The direct cancel flag remains checked at every instruction, while numeric
+work performs no per-instruction text probe. An injected slow clock stops a
+resumable step at the 8-ms boundary. A straight-line typed workload proves
+14 direct Cell operations cause 14 rather than 28 resolutions, five
+same-type stores move ownership, only two real target conversions remain,
+and two integer plus one floating comparison take their bound paths. A dense
+pair of TIMER reads produces one deadline wait and succeeds when retried at
+the exact next guest millisecond. The complete checksum-bound gorilla.bas
+semantic/golden test remains unchanged.
 
 R4BASIC /PERFTEST runs a bounded in-system CPU loop and prints a parseable
 marker. Test-QemuPerformanceMarker.ps1 requires at least 52,000 instructions
-per second, a maximum 4,096-instruction step and no fixed sleep.
+per second, a maximum 4,096-instruction step, no more than 17 clock reads per
+step, nonzero ns/instruction and boundary-bounded cancel, metadata, text and
+Cell evidence without a fixed sleep.
+
+The canonical GORILLA first-frame acceptance on 26 August 2026 executed one
+256-instruction time-limited block with two clock reads in both the Standard
+one-CPU and SMP four-CPU guests. It measured 49,238 and 47,506 ns/instruction
+respectively. Each guest reported one external cancel callback, 256 compact
+group lookups, seven text checks, two text renders and only 56 cold-metadata
+reads. The same real workload resolved 95 Cells with zero alias hops, moved
+27 same-type stores and performed one actual target conversion. Its 4,573
+instructions occupy 54,876 hot and 109,752 cold bytes, exactly matching the
+12-/24-byte split.
+
+The sole regular 0.69.57 completion benchmark used perfdiag-clock 0.3.16,
+warm cache and five samples in r4os-q35-haswell-1vcpu-1g-tcg-v1. The samples
+were 900/883/883/885/884 ns per call (mean 887, p50 884, p95/p99 900). The
+mean is 21 ns or 2.425 percent slower than 0.69.56's 866 ns; this independent
+R4SYS clock countercheck is recorded as accepted host-environment variation
+and does not invalidate the workload-specific VM evidence above.
 
 RuntimeStats distinguishes requested slice capacity from operations actually
 executed. It also separates presentation attempts, published frames and
-hidden/unchanged skips. R4BASIC uses the shared Runtime.run loop, so its yield
-and sleep counters describe the productive host loop rather than staying at
-zero. The one-shot first-frame report combines these values with adapter,
-presenter and audio counters; it never emits text per frame.
+hidden/unchanged skips. R4BASIC uses the shared Runtime.run loop, so its yield,
+sleep and zero-progress counters describe the productive host loop rather
+than staying at zero. The one-shot first-frame report combines these values
+with adapter, VM, presenter and audio counters; it never emits text per frame.
+
+Dispatch and bytecode locality
+------------------------------
+R4BASIC 1.2.6 stores the hot opcode and two operands in one 12-byte
+instruction stream. The exact 16-byte source span plus statement start and
+successor occupy a parallel 24-byte cold stream. Both have identical lengths
+and preserve O(1) diagnostics, ON ERROR, RESUME and RESUME NEXT, but the
+normal dispatch fetches only one third of the former 36-byte record. At the
+262,144-instruction limit the hot stream is 3 MB and the cold stream 6 MB; the
+196,609-instruction dense maximum-source fixture reports 2,359,308 hot and
+4,718,616 cold bytes instead of fetching all 6.750 MB as one stream.
+
+Cold metadata is read only when control enters a different BASIC statement
+or an error needs its exact span. The injected cancellation callback is read
+once per 256-operation VM chunk; the independently set Close flag still wins
+between individual instructions. Opcode-group accounting uses a complete
+compact table. Text rasterization is checked after text bytecode and at real
+display boundaries rather than after numeric and control bytecode.
+
+The compiler records comparison operand promotion in the existing operand.
+INTEGER and LONG pairs compare exactly as integers; floating and mixed
+floating comparisons retain the previous binary64 path. ResolvedCell is a
+separate internal type, so global/local and flattened ByRef targets are not
+resolved again by load/store. A same-type store transfers the owned stack
+value; conversion and QBasic rounding remain active only when the bound target
+really differs.
 
 First-frame launch timeline
 ---------------------------
@@ -81,7 +145,7 @@ or zero-work phases.
 
 Compiler scalability and launch responsiveness
 ----------------------------------------------
-R4BASIC 1.2.5 classifies its 103 supported and 84 reserved keywords through a
+R4BASIC 1.2.6 classifies its 103 supported and 84 reserved keywords through a
 compile-time hash table whose current worst lookup is eight probes. Separate
 case-insensitive open-addressing indices own globals, per-procedure locals,
 procedures, record types, per-record fields and scoped labels. Branch and DATA
@@ -102,7 +166,8 @@ The compiler first performs an allocation-free lexical census and allocates
 exactly the token count later emitted. At the 256-KiB source limit the dense
 case contains 262,145 20-byte tokens, or 5,242,900 bytes, instead of an
 unconditional maximum buffer. A token-derived demand pass precisely reserves
-the eleven long-lived builder lists. Numeric and string literals use a
+the twelve long-lived builder lists, including parallel hot and cold
+instruction storage. Numeric and string literals use a
 content index; integer values, exact SINGLE/DOUBLE bits and string bytes are
 the identity, so repeated constants retain one program entry. Decimal and
 D/d-exponent parsing does not allocate a temporary heap copy.
@@ -118,7 +183,7 @@ deterministic 128-level limit.
 The host acceptance pairs sparse and dense valid 256-KiB sources. Sparse
 source must remain below a 512-KiB requested peak. For 65,536 repetitions of
 `A=1:` the PageAllocator measurement is 12,605,977 peak bytes, 7,340,137
-retained program bytes, 7,095,028 initial-list bytes, 16 allocations, three
+retained program bytes, 7,095,028 initial-list bytes, 17 allocations, four
 reallocations and zero copied bytes; all 65,536 integer literals reuse one
 constant. Stable acceptance ceilings are 20 MB peak, 8 MB retained program,
 128 allocations and 8 MB copied. The productive GORILLA marker additionally

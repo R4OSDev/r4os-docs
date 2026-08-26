@@ -81,7 +81,7 @@ or zero-work phases.
 
 Compiler scalability and launch responsiveness
 ----------------------------------------------
-R4BASIC 1.2.4 classifies its 103 supported and 84 reserved keywords through a
+R4BASIC 1.2.5 classifies its 103 supported and 84 reserved keywords through a
 compile-time hash table whose current worst lookup is eight probes. Separate
 case-insensitive open-addressing indices own globals, per-procedure locals,
 procedures, record types, per-record fields and scoped labels. Branch and DATA
@@ -95,6 +95,35 @@ fixup and reused-binding counts. Host stress coverage binds 128 record types,
 512 arrays, 256 procedures and 1,024 fixups twice with identical bytecode and
 at most 64 observed name probes. A separate test accepts a complete 256 KiB
 source and cancels the same workload during lexing without leaked ownership.
+
+Compiler-state bounds
+---------------------
+The compiler first performs an allocation-free lexical census and allocates
+exactly the token count later emitted. At the 256-KiB source limit the dense
+case contains 262,145 20-byte tokens, or 5,242,900 bytes, instead of an
+unconditional maximum buffer. A token-derived demand pass precisely reserves
+the eleven long-lived builder lists. Numeric and string literals use a
+content index; integer values, exact SINGLE/DOUBLE bits and string bytes are
+the identity, so repeated constants retain one program entry. Decimal and
+D/d-exponent parsing does not allocate a temporary heap copy.
+
+Production transfers the loaded mutable source allocation through
+compileOwnedObserved and the Program keeps that same storage. The API consumes
+the allocation on success, diagnostics, cancellation and allocation failure;
+the borrowed entry points remain available and copy. Compiler diagnostics
+retain at most the first 20 records while exposing total and truncation
+counts. Frontend and bytecode compilation reject expression nesting beyond a
+deterministic 128-level limit.
+
+The host acceptance pairs sparse and dense valid 256-KiB sources. Sparse
+source must remain below a 512-KiB requested peak. For 65,536 repetitions of
+`A=1:` the PageAllocator measurement is 12,605,977 peak bytes, 7,340,137
+retained program bytes, 7,095,028 initial-list bytes, 16 allocations, three
+reallocations and zero copied bytes; all 65,536 integer literals reuse one
+constant. Stable acceptance ceilings are 20 MB peak, 8 MB retained program,
+128 allocations and 8 MB copied. The productive GORILLA marker additionally
+publishes requested token/list/peak/program figures and actual VM allocator
+allocation, free, active, peak, reserve and commit snapshots around compile.
 
 The productive GUI creates its program window before compilation. Lexing
 reports after at most 2 KiB and binding/fixup work after at most 256 entries;

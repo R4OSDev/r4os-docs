@@ -1,29 +1,9 @@
-﻿# R4DESK
-
-R4DESK ist die Desktop- und Fenstergruppe. Sie besitzt Eingabeereignisse,
-Console-Hosts, Fenster, Controls, Menues, Dialoge, Clipboard, GUI-Zustand und
-Remote-/Desktop-Frame-Informationen.
-
-Import: R4DESK:Query:1
-
-Bereitstellung: eingebauter Kernel-Provider; keine R4L-Datei und kein
-eigenstaendiger Installations- oder Updatepfad.
-
-Zig-Context: r4os.r4desk.Context
-
-Die Gruppe wird nur im Manifest angefordert, wenn die Anwendung Desktop- oder
-Fensterfunktionen benoetigt. Optionale Felder werden mit hasFn geprueft.
-
-Remote-Readback ist nachfragegesteuert. Ein echter Konsument ruft
-`remote_frame_acquire` auf, wartet auf den dadurch angeforderten Vollframe und
-ruft auf jedem Exitpfad `remote_frame_release` auf. Ohne Konsumenten behaelt
-der Kernel weder den Live-Shadow noch die beiden Mapping-Snapshots;
-`remote_frame_consumers` erzeugt selbst keinen Frame.
+﻿# Plattformgruppe R4DESK
 
 <!-- R4OS-APIREF:BEGIN R4DESK (generiert von ApiContractGen aus ApiContract.json - NICHT von Hand editieren) -->
 ## Tabellen-Referenz R4DESK (generiert)
 
-Kernel-Gruppentabelle `R4XStartR4Desk` v10, 472 Bytes, 56 Funktionsfelder und 57 Slots insgesamt.
+Kernel-Gruppentabelle `R4XStartR4Desk` v11, 480 Bytes, 57 Funktionsfelder und 58 Slots insgesamt.
 Signatur-Wahrheit: `abi.R4DeskFns` (Feldname == Tabellenfeld).
 Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 
@@ -86,4 +66,5 @@ Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 | 54 | 448 | function | `remote_frame_release` | `*const fn () callconv(.c) i32` |
 | 55 | 456 | function | `remote_frame_consumers` | `*const fn () callconv(.c) u32` |
 | 56 | 464 | function | `remote_frame_publish_regions` | `*const fn (*const RemoteFrameInfo, [*]const u32, u32, [*]const DisplayDamageRect, u32) callconv(.c) i32` |
+| 57 | 472 | function | `console_input_wait` | `*const fn (u64, u64, *u64) callconv(.c) i32` |
 <!-- R4OS-APIREF:END R4DESK -->

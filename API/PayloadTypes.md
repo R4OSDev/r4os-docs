@@ -5,9 +5,9 @@ Diese Datei wird deterministisch aus `API/ApiContract.json` erzeugt. Manuelle Ä
 Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenzen und Conformance-Fixtures werden produktiv aus diesem Schema erzeugt; handgeschriebene Dateien bleiben nur Fassaden oder erklaerende Texte.
 
 - Schema: v11, Baseline `standalone-contract-0.64.11`
-- Reachability: 127 von 127 Typen aufgelöst oder explizit klassifiziert
+- Reachability: 129 von 129 Typen aufgelöst oder explizit klassifiziert
 - Zentrale SDK-only-Wurzeln: 0; Runtime-R4Ls besitzen libraryeigene Vertraege
-- Operationen: 0; Fehlerdomänen: 61; Konstanten: 1232; Limits: 102
+- Operationen: 0; Fehlerdomänen: 62; Konstanten: 1279; Limits: 102
 
 ## App-Profile
 
@@ -61,7 +61,9 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `GuiFrameCommand` | fixed_layout | extern_struct | 96/8 | 96/8 | 96/8 | 96/8 |
 | `GuiPathSegment` | fixed_layout | extern_struct | 32/4 | 32/4 | 32/4 | 32/4 |
 | `GuiShapeResource` | fixed_layout | extern_struct | 160/4 | 160/4 | 160/4 | 160/4 |
+| `GuiFrameGenerationInfo` | extensible | extern_struct | 144/8 | 144/8 | 144/8 | 144/8 |
 | `GuiFrameInfo` | extensible | extern_struct | 176/8 | 176/8 | 176/8 | 176/8 |
+| `GuiIndexed8Resource` | fixed_layout | extern_struct | 64/4 | 64/4 | 64/4 | 64/4 |
 | `GuiFontInfo` | fixed_layout | extern_struct | 316/4 | 316/4 | 316/4 | 316/4 |
 | `GuiTextMetrics` | fixed_layout | extern_struct | 24/4 | 24/4 | 24/4 | 24/4 |
 | `ClipboardInfo` | fixed_layout | extern_struct | 16/4 | 16/4 | 16/4 | 16/4 |
@@ -146,7 +148,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `ProgramDriverWorkPerformanceMetrics` | fixed_layout | extern_struct | 640/8 | 640/8 | 640/8 | 640/8 |
 | `ProgramDriverWorkPerformanceInfo` | extensible | extern_struct | 928/8 | 928/8 | 928/8 | 928/8 |
 | `ProgramPciInventoryPerformanceInfo` | extensible | extern_struct | 280/8 | 280/8 | 280/8 | 280/8 |
-| `ProgramInputPerformanceInfo` | extensible | extern_struct | 248/8 | 248/8 | 248/8 | 248/8 |
+| `ProgramInputPerformanceInfo` | extensible | extern_struct | 408/8 | 408/8 | 408/8 | 408/8 |
 | `ServiceDeadlineFooter` | fixed_layout | extern_struct | 24/8 | 24/8 | 24/8 | 24/8 |
 
 ## Typdetails
@@ -2116,6 +2118,37 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `reserved1` | 152 | 4 | 4 | `u32` | - |
 | `reserved2` | 156 | 4 | 4 | `u32` | - |
 
+### `GuiFrameGenerationInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `extensible`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 144 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `flags` | 8 | 4 | 4 | `u32` | - |
+| `damage_count` | 12 | 4 | 4 | `u32` | - |
+| `owner` | 16 | 16 | 8 | `r4os.abi.ProgramProcessHandle` | - |
+| `generation` | 32 | 8 | 8 | `u64` | - |
+| `base_generation` | 40 | 8 | 8 | `u64` | - |
+| `command_count` | 48 | 8 | 8 | `u64` | - |
+| `resource_bytes` | 56 | 8 | 8 | `u64` | - |
+| `total_command_count` | 64 | 8 | 8 | `u64` | - |
+| `total_resource_bytes` | 72 | 8 | 8 | `u64` | - |
+| `chain_depth` | 80 | 4 | 4 | `u32` | - |
+| `command_version` | 84 | 4 | 4 | `u32` | - |
+| `command_size` | 88 | 4 | 4 | `u32` | - |
+| `region_size` | 92 | 4 | 4 | `u32` | - |
+| `delta_commit_count` | 96 | 8 | 8 | `u64` | - |
+| `full_commit_count` | 104 | 8 | 8 | `u64` | - |
+| `indexed8_command_count` | 112 | 8 | 8 | `u64` | - |
+| `indexed8_resource_bytes` | 120 | 8 | 8 | `u64` | - |
+| `avoided_clone_bytes` | 128 | 8 | 8 | `u64` | - |
+| `generation_read_count` | 136 | 8 | 8 | `u64` | - |
+
 ### `GuiFrameInfo`
 
 - Quelle: `API/ApiContract.json`
@@ -2150,6 +2183,32 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `reserved2` | 152 | 8 | 8 | `u64` | - |
 | `reserved3` | 160 | 8 | 8 | `u64` | - |
 | `reserved4` | 168 | 8 | 8 | `u64` | - |
+
+### `GuiIndexed8Resource`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 64 / 4
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `source_x` | 8 | 4 | 4 | `u32` | - |
+| `source_y` | 12 | 4 | 4 | `u32` | - |
+| `source_w` | 16 | 4 | 4 | `u32` | - |
+| `source_h` | 20 | 4 | 4 | `u32` | - |
+| `guest_w` | 24 | 4 | 4 | `u32` | - |
+| `guest_h` | 28 | 4 | 4 | `u32` | - |
+| `viewport_x` | 32 | 4 | 4 | `i32` | - |
+| `viewport_y` | 36 | 4 | 4 | `i32` | - |
+| `viewport_w` | 40 | 4 | 4 | `u32` | - |
+| `viewport_h` | 44 | 4 | 4 | `u32` | - |
+| `palette_entries` | 48 | 4 | 4 | `u32` | - |
+| `palette_offset` | 52 | 4 | 4 | `u32` | - |
+| `pixels_offset` | 56 | 4 | 4 | `u32` | - |
+| `pixel_stride` | 60 | 4 | 4 | `u32` | - |
 
 ### `GuiFontInfo`
 
@@ -4231,7 +4290,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 - Quelle: `API/ApiContract.json`
 - Klasse: `extensible`
 - Repräsentation: `extern_struct`
-- Version/Größe/Alignment: 1 / 248 / 8
+- Version/Größe/Alignment: 2 / 408 / 8
 
 | Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
 |---|---:|---:|---:|---|---|
@@ -4273,6 +4332,26 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `program_launch_attempts` | 224 | 8 | 8 | `u64` | - |
 | `program_entries_started` | 232 | 8 | 8 | `u64` | - |
 | `program_attach_wait_events` | 240 | 8 | 8 | `u64` | - |
+| `console_read_calls` | 248 | 8 | 8 | `u64` | - |
+| `console_read_empty` | 256 | 8 | 8 | `u64` | - |
+| `console_read_bytes` | 264 | 8 | 8 | `u64` | - |
+| `console_wait_calls` | 272 | 8 | 8 | `u64` | - |
+| `console_wait_blocks` | 280 | 8 | 8 | `u64` | - |
+| `console_wait_immediate` | 288 | 8 | 8 | `u64` | - |
+| `console_wait_wakes` | 296 | 8 | 8 | `u64` | - |
+| `console_wait_timeouts` | 304 | 8 | 8 | `u64` | - |
+| `console_wait_cancellations` | 312 | 8 | 8 | `u64` | - |
+| `console_output_write_calls` | 320 | 8 | 8 | `u64` | - |
+| `console_output_source_bytes` | 328 | 8 | 8 | `u64` | - |
+| `console_output_visible_append_bytes` | 336 | 8 | 8 | `u64` | - |
+| `console_output_capture_append_bytes` | 344 | 8 | 8 | `u64` | - |
+| `console_output_shared_bytes` | 352 | 8 | 8 | `u64` | - |
+| `console_output_revision_batches` | 360 | 8 | 8 | `u64` | - |
+| `console_output_desktop_signals` | 368 | 8 | 8 | `u64` | - |
+| `console_output_compactions` | 376 | 8 | 8 | `u64` | - |
+| `console_output_compaction_bytes` | 384 | 8 | 8 | `u64` | - |
+| `console_output_segment_drops` | 392 | 8 | 8 | `u64` | - |
+| `console_output_segment_drop_bytes` | 400 | 8 | 8 | `u64` | - |
 
 ### `ServiceDeadlineFooter`
 
@@ -4357,6 +4436,19 @@ Geltung: `clipboard`, Einheit: `status_code`, Stabilität: `fixed_contract`.
 | `clipboard_error_invalid` | -1 | `i32` |
 | `clipboard_error_too_large` | -2 | `i32` |
 | `clipboard_error_unsupported` | -4 | `i32` |
+
+### `console_input_wait`
+
+Geltung: `console_input_wait`, Einheit: `status_code`, Stabilität: `fixed_contract`.
+
+| Name | Wert | Typ |
+|---|---:|---|
+| `console_input_wait_ready` | 1 | `i32` |
+| `console_input_wait_timeout` | 0 | `i32` |
+| `console_input_wait_error_invalid` | -1 | `i32` |
+| `console_input_wait_error_closed` | -2 | `i32` |
+| `console_input_wait_error_failed` | -3 | `i32` |
+| `console_input_wait_error_unsupported` | -4 | `i32` |
 
 ### `dhcp`
 
@@ -5134,7 +5226,7 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `dns_flag_a_record` | `1` | `u32` | flag | bitmask | `dns` | fixed_contract |
 | `dns_op_build_a_query` | `1` | `u32` | identity | number | `dns_op` | fixed_contract |
 | `dns_op_handle_response` | `2` | `u32` | identity | number | `dns_op` | fixed_contract |
-| `driver_api_version` | `22` | `u32` | version | number | `driver_api` | fixed_contract |
+| `driver_api_version` | `24` | `u32` | version | number | `driver_api` | fixed_contract |
 | `driver_magic` | `826888260` | `u32` | magic | number | `driver` | fixed_contract |
 | `driver_work_flag_from_irq` | `1` | `u32` | flag | bitmask | `driver_work` | fixed_contract |
 | `driver_work_flag_none` | `0` | `u32` | flag | bitmask | `driver_work` | fixed_contract |
@@ -5180,6 +5272,7 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `gui_frame_command_kind_rounded_rect` | `8` | `u32` | value | number | `gui_frame` | fixed_contract |
 | `gui_frame_command_kind_shadow` | `9` | `u32` | value | number | `gui_frame` | fixed_contract |
 | `gui_frame_command_kind_argb32` | `10` | `u32` | value | number | `gui_frame` | fixed_contract |
+| `gui_frame_command_kind_indexed8` | `11` | `u32` | value | number | `gui_frame` | fixed_contract |
 | `gui_path_segment_kind_close` | `5` | `u32` | value | number | `gui_path` | fixed_contract |
 | `gui_path_segment_kind_cubic` | `4` | `u32` | value | number | `gui_path` | fixed_contract |
 | `gui_path_segment_kind_line` | `2` | `u32` | value | number | `gui_path` | fixed_contract |
@@ -5211,6 +5304,18 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `gui_frame_flag_last_oom` | `4` | `u32` | flag | bitmask | `gui_frame` | fixed_contract |
 | `gui_frame_info_size` | `176` | `u32` | value | bytes | `gui_frame` | fixed_contract |
 | `gui_frame_info_version` | `1` | `u32` | version | number | `gui_frame` | fixed_contract |
+| `gui_frame_generation_flag_delta` | `2` | `u32` | flag | bitmask | `gui_frame` | fixed_contract |
+| `gui_frame_generation_flag_full` | `1` | `u32` | flag | bitmask | `gui_frame` | fixed_contract |
+| `gui_frame_generation_flag_indexed8` | `4` | `u32` | flag | bitmask | `gui_frame` | fixed_contract |
+| `gui_frame_generation_info_size` | `144` | `u32` | value | bytes | `gui_frame` | fixed_contract |
+| `gui_frame_generation_info_version` | `1` | `u32` | version | number | `gui_frame` | fixed_contract |
+| `gui_frame_max_damage_regions` | `8` | `u32` | value | records | `gui_frame` | fixed_contract |
+| `gui_frame_max_delta_chain` | `32` | `u32` | value | generations | `gui_frame` | fixed_contract |
+| `gui_indexed8_palette_entries` | `256` | `u32` | value | entries | `gui_indexed8` | fixed_contract |
+| `gui_indexed8_palette_offset` | `64` | `u32` | value | bytes | `gui_indexed8` | fixed_contract |
+| `gui_indexed8_pixels_offset` | `1088` | `u32` | value | bytes | `gui_indexed8` | fixed_contract |
+| `gui_indexed8_resource_size` | `64` | `u32` | value | bytes | `gui_indexed8` | fixed_contract |
+| `gui_indexed8_resource_version` | `1` | `u32` | version | number | `gui_indexed8` | fixed_contract |
 | `gui_frame_state_building` | `1` | `u32` | value | number | `gui_frame` | fixed_contract |
 | `gui_frame_state_idle` | `0` | `u32` | value | number | `gui_frame` | fixed_contract |
 | `gui_font_builtin_id` | `0` | `u32` | value | number | `gui_font` | fixed_contract |
@@ -5589,10 +5694,24 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `memory_window_temp_kernel` | `0` | `u8` | value | number | `memory_window` | fixed_contract |
 | `mmio_map_write_combining` | `1` | `u32` | value | number | `mmio_map` | fixed_contract |
 | `nanoseconds_per_second` | `1000000000` | `u64` | value | nanoseconds | `text_path_time` | fixed_contract |
+| `net_backend_cap_async_tx_completion` | `1024` | `u64` | flag | bitmask | `net_backend` | fixed_contract |
+| `net_backend_cap_interrupt_moderation` | `128` | `u64` | flag | bitmask | `net_backend` | fixed_contract |
+| `net_backend_cap_multiqueue` | `512` | `u64` | flag | bitmask | `net_backend` | fixed_contract |
+| `net_backend_cap_rx_l4_checksum_valid` | `1` | `u64` | flag | bitmask | `net_backend` | fixed_contract |
+| `net_backend_cap_rx_scatter` | `4` | `u64` | flag | bitmask | `net_backend` | fixed_contract |
+| `net_backend_cap_rx_vlan_strip` | `16` | `u64` | flag | bitmask | `net_backend` | fixed_contract |
+| `net_backend_cap_tx_l4_checksum_partial` | `2` | `u64` | flag | bitmask | `net_backend` | fixed_contract |
+| `net_backend_cap_tx_notification_suppression` | `256` | `u64` | flag | bitmask | `net_backend` | fixed_contract |
+| `net_backend_cap_tx_scatter` | `8` | `u64` | flag | bitmask | `net_backend` | fixed_contract |
+| `net_backend_cap_tx_segmentation` | `64` | `u64` | flag | bitmask | `net_backend` | fixed_contract |
+| `net_backend_cap_tx_vlan_insert` | `32` | `u64` | flag | bitmask | `net_backend` | fixed_contract |
 | `net_backend_flag_broadcast` | `2` | `u32` | flag | bitmask | `net_backend` | fixed_contract |
 | `net_backend_flag_link_up` | `1` | `u32` | flag | bitmask | `net_backend` | fixed_contract |
 | `net_backend_flag_trusted` | `4` | `u32` | flag | bitmask | `net_backend` | fixed_contract |
-| `net_backend_version` | `1` | `u32` | version | number | `net_backend` | fixed_contract |
+| `net_backend_negotiation_version` | `1` | `u32` | version | number | `net_backend` | fixed_contract |
+| `net_backend_version` | `2` | `u32` | version | number | `net_backend` | fixed_contract |
+| `net_buffer_ownership_borrowed_until_return` | `0` | `u32` | value | enumeration | `net_buffer_ownership` | fixed_contract |
+| `net_buffer_ownership_transferred_until_completion` | `1` | `u32` | value | enumeration | `net_buffer_ownership` | fixed_contract |
 | `net_bus_pci` | `1` | `u8` | value | number | `net_bus` | fixed_contract |
 | `net_bus_pcie` | `2` | `u8` | value | number | `net_bus` | fixed_contract |
 | `net_bus_serial` | `3` | `u8` | value | number | `net_bus` | fixed_contract |
@@ -5643,6 +5762,25 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `net_diag_op_r4p` | `12` | `u32` | identity | number | `net_diag` | fixed_contract |
 | `net_diag_op_reset` | `6` | `u32` | identity | number | `net_diag` | fixed_contract |
 | `net_diag_op_timing` | `1` | `u32` | identity | count | `net_diag` | fixed_contract |
+| `net_packet_completion_cancelled` | `-2` | `i32` | value | number | `net_packet_completion` | fixed_contract |
+| `net_packet_completion_error` | `-1` | `i32` | value | number | `net_packet_completion` | fixed_contract |
+| `net_packet_completion_ok` | `0` | `i32` | value | number | `net_packet_completion` | fixed_contract |
+| `net_packet_completion_shutdown` | `-4` | `i32` | value | number | `net_packet_completion` | fixed_contract |
+| `net_packet_completion_timeout` | `-3` | `i32` | value | number | `net_packet_completion` | fixed_contract |
+| `net_packet_flag_rx_l4_checksum_valid` | `1` | `u64` | flag | bitmask | `net_packet` | fixed_contract |
+| `net_packet_flag_scatter` | `16` | `u64` | flag | bitmask | `net_packet` | fixed_contract |
+| `net_packet_flag_segmentation` | `8` | `u64` | flag | bitmask | `net_packet` | fixed_contract |
+| `net_packet_flag_tx_l4_checksum_partial` | `2` | `u64` | flag | bitmask | `net_packet` | fixed_contract |
+| `net_packet_flag_vlan_tag_valid` | `4` | `u64` | flag | bitmask | `net_packet` | fixed_contract |
+| `net_packet_max_segments` | `8` | `u16` | value | count | `net_packet` | fixed_contract |
+| `net_packet_version` | `1` | `u32` | version | number | `net_packet` | fixed_contract |
+| `net_rx_handoff_busy` | `-4` | `i32` | value | number | `net_rx_handoff` | fixed_contract |
+| `net_rx_handoff_invalid_adapter` | `-1` | `i32` | value | number | `net_rx_handoff` | fixed_contract |
+| `net_rx_handoff_invalid_frame` | `-2` | `i32` | value | number | `net_rx_handoff` | fixed_contract |
+| `net_rx_handoff_ok` | `0` | `i32` | value | number | `net_rx_handoff` | fixed_contract |
+| `net_rx_handoff_software_fallback` | `1` | `i32` | value | number | `net_rx_handoff` | fixed_contract |
+| `net_rx_handoff_unavailable` | `-3` | `i32` | value | number | `net_rx_handoff` | fixed_contract |
+| `net_rx_handoff_wrong_context` | `-5` | `i32` | value | number | `net_rx_handoff` | fixed_contract |
 | `net_service_dhcp_action_acquire` | `1` | `u16` | value | number | `net_service` | fixed_contract |
 | `net_service_dhcp_action_release` | `3` | `u16` | value | number | `net_service` | fixed_contract |
 | `net_service_dhcp_action_renew` | `2` | `u16` | value | number | `net_service` | fixed_contract |
@@ -5926,6 +6064,7 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `program_registry_self_test_phase_task` | `5` | `u32` | value | enumeration | `program_registry_self_test` | fixed_contract |
 | `program_registry_summary_flag_failure_armed` | `1` | `u32` | flag | bitmask | `program_registry_summary` | fixed_contract |
 | `protocol_api_version` | `1` | `u32` | version | number | `protocol_api` | fixed_contract |
+| `protocol_buffer_flag_rx_l4_checksum_valid` | `1` | `u32` | flag | bitmask | `protocol_buffer` | fixed_contract |
 | `protocol_magic` | `826888272` | `u32` | magic | number | `protocol` | fixed_contract |
 | `r4d_version` | `1` | `u32` | version | number | `r4d` | fixed_contract |
 | `r4l_abi_magic` | `827077714` | `u32` | magic | number | `r4l_abi` | fixed_contract |

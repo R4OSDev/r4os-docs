@@ -1,0 +1,373 @@
+R4OS HDA-Perfektionsanalyse 0.71.5
+=================================
+
+Status und Zweck
+----------------
+Stand: 28.08.2026, Analyse abgeschlossen. Diese Datei beschreibt den
+vorgefundenen Produktstand; sie enthaelt keine vorgezogene funktionale
+Treiberkorrektur. Stabile Befund-IDs beginnen mit HDA-0715-. Jeder
+Pflichtbefund ist genau einer Folgeunterversion zugeordnet.
+
+Verbindliches Reifeziel
+-----------------------
+HDA gilt fuer R4OS 0.71.X im folgenden endlichen Umfang als ausgereift:
+
+- Ein oder mehrere PCI-/PCIe-HDA-Controller der Klasse 04/03 werden begrenzt
+  enumeriert. Aus mehreren Controllern und Codecs wird nachvollziehbar ein
+  tatsaechlich routbarer analoger Ausgabepfad gewaehlt; reine HDMI-/Digital-
+  Controller duerfen die interne Analogausgabe nicht verdraengen.
+- Erforderliche Zielmodelle sind QEMU q35/ICH9 mit hda-duplex und der reale
+  Lenovo IdeaPad L340-15API mit den bekannten HDA-Funktionen 1002:15DE und
+  1022:15E3. Weitere spezifikationskonforme Controller duerfen funktionieren,
+  werden ohne eigene Evidenz aber nicht als allgemein abgenommen behauptet.
+- Erforderliche Ausgabeziele sind interner Lautsprecher, analoger Kopfhoerer
+  und analoger Line-Out. Pin-Defaults, vollstaendige Verbindungswege,
+  Selektoren/Mixer, Amp-Caps, EAPD, Power-D0 und Jackzustand werden beachtet.
+  Ein eingesteckter Kopfhoerer soll gegenueber dem Lautsprecher bevorzugt
+  werden; fehlende oder unzuverlaessige Jack-Evidenz bleibt diagnostisch
+  sichtbar und faellt deterministisch auf den besten festen Analogpfad zurueck.
+- Das Hardwareformat ist 48 kHz, Stereo, Signed 16 Bit Little Endian. Der
+  vorhandene Softwarepfad darf weiterhin 8 bis 192 kHz, mono/stereo sowie U8
+  und S16LE annehmen und in dieses Format wandeln. Controller, Converter und
+  Route muessen 48-kHz/S16/Stereo vor der Aktivierung nachweislich tragen;
+  Streamdeskriptor und Converter erhalten dasselbe Format 0x0011.
+- AUDSVC mischt parallele logische Streams. Genau ein produktiver HDA-
+  Hardwareausgabestream ist deshalb Absicht, keine fehlende Parallelitaet.
+  Mehrere Hardwarestreams und Mehrkanalausgabe sind kein 0.71.X-Ziel.
+- CORB/RIRB ist der regulaere, begrenzte Verbtransport. Immediate Command darf
+  ein expliziter, diagnostisch sichtbarer Fallback bleiben. Reset, STATESTS,
+  Kommandos und Antworten besitzen zeitbasierte Fristen und definierte
+  Fehlerzustaende; kein Hardwarewait ist unbeschraenkt.
+- Der feste 64x10-ms-BDL-Ring bleibt bestehen. DMA-Positionspuffer und LPIB
+  werden plausibilisiert; ein nicht fortschreitender Stream, FIFOE, DESE,
+  unmoegliche Positionen und Transportfehler fuehren zu begrenzter Recovery
+  oder sauberem Fehler statt stale Wiedergabe.
+- MSI bleibt bevorzugt. INTx wird nur auf einer belegten Route registriert;
+  ungerichtetes Registrieren mehrerer vermuteter GSIs ist nicht reifefaehig.
+  ISR, Driver Work, Stop, Close, Dienstneustart und Unload halten ihre
+  Besitzer- und Ressourcenreihenfolge auch auf SMP ein.
+- Initialisierung und Diagnose nennen PCI-Funktion, Controllerfaehigkeiten,
+  Transport, Codec, gewaehlte Route, Pin-Typ, Format, IRQ-/Positionsmodus und
+  Fehlerstufe. Laufzeitzaehler trennen Upstreammangel, Unterlauf, FIFO-/
+  Deskriptorfehler, Recovery und Timeout ohne Normalpfad-Logflut.
+- QEMU-Hosttests, Testimage, Standard- und SMP-QEMU, WAV-Kontinuitaet,
+  Langlauf und Wiederholungslebenszyklus sind Pflicht. Die Lenovo-Abnahme ist
+  eine eigene letzte Unterversion und darf nicht aus QEMU inferiert werden.
+
+Bewusst ausserhalb dieses Reifeumfangs liegen Aufnahme, Mikrofon, SPDIF,
+HDMI/DisplayPort-Audio, mehr als zwei Kanaele, direkte 44,1-kHz-Hardwaremodi,
+Energy Efficient Audio, Suspend/Resume und Runtime-D3. R4AUDIO besitzt keinen
+Capturevertrag und R4OS keinen Suspend-/Runtime-Power-Lebenszyklus; diese
+Bereiche still in HDA.R4D zu beginnen waere eine Scope-Erweiterung. Kaltstart,
+Controller-/Codec-D0 und definierter Shutdown sind dagegen Pflicht. Quirks
+sind nur fuer belegte Hardwareabweichungen erlaubt und muessen eng an
+Vendor/Device/Codec/Subsystem gebunden sein.
+
+Besitzergrenzen
+---------------
+- Drivers/HDA besitzt PCI-Auswahl innerhalb der HDA-Klasse, MMIO, Reset,
+  CORB/RIRB/Immediate, Codec-Topologie, Analogroute, Pin/Amp/EAPD/Jack,
+  Stream-DMA, Position, IRQ, Recovery, Status und Unload.
+- AUDSVC besitzt Mehrclient-Mix, Master-/Einzelpegel und Persistenz. Dafuer ist
+  kein neuer HDA-Befund offen.
+- R4AUDIO und Contract besitzen die Anwendungsformate. Der festgelegte
+  Reifeumfang benoetigt keine neue Plattform-API.
+- Kernel/R4DEV besitzt PCI-Inventar, BAR-Mapping, DMA, MSI, IRQ-Router und
+  deadline-isolierte Driver Work. Eine Erweiterung ist nur zulaessig, wenn
+  die Umsetzung eine mit dem vorhandenen Vertrag nicht darstellbare Luecke
+  reproduziert. Die Analyse belegt aktuell keine solche Pflichtaenderung.
+- AudioDiag besitzt die End-to-End- und WAV-Messung. Reine Hostskript- und
+  Auswerterkorrekturen aus 0.71.5 aendern kein R4OS-Produktartefakt.
+
+Referenzbasis
+-------------
+Lokaler, nicht ausgelieferter Bestand:
+ExFiles/Reference/Hardware/HDA/.
+
+- Intel High Definition Audio Specification Revision 1.0a vom 17.06.2010,
+  offizieller Ursprung
+  https://www.intel.com/content/dam/www/public/us/en/documents/product-specifications/high-definition-audio-specification.pdf
+  sowie HDA033-A und HDA043-A. Intel bestaetigt Revision 1.0a weiterhin als
+  aktuelle Basisspezifikation. Die PDFs sind urheberrechtlich geschuetzte
+  Entwicklungsreferenzen.
+- QEMU v11.0.2, signiertes Tag, Commit
+  e545d8bb9d63e9dd61542b88463183314cff9482,
+  https://gitlab.com/qemu-project/qemu/-/tags/v11.0.2. Die ausgefuehrte Debian-
+  Paketversion, Quellpakethashes, der Binärhash und standard.conf stehen in
+  Host-QEMU-11.0.2-Debian.txt. Der historische a4bb4b10-Bestand bleibt als
+  exakte 0.67-Basis erhalten. QEMU ist ueberwiegend GPL-2.0-or-later.
+- Linux stable 7.1.6, Commit
+  2609d60e2f6d0b8a96563baa08b56482962cebaa. Neben Controller und Stream sind
+  seit 0.71.5 Codec-Core, Auto-Parser, Jack, generisches Routing,
+  Realtek/ALC269 und der Lenovo-Helfer gepinnt. Linux ist GPL-2.0-only.
+
+Download-References.ps1 enthaelt fuer alle 43 Dateien feste URLs und
+SHA-256-Werte, prueft PDF-Signatur und Dateilaenge und funktioniert unter
+Windows und Debian Linux. README.txt dokumentiert Herkunft, Einzelhashes und
+Lizenz. Es wurde kein fremder Code in R4OS uebernommen.
+
+Reproduzierbare Baseline
+------------------------
+Produktstand:
+- Release: 0.71.4
+- HDA.R4D: 0.3.7, Commit
+  ad2902a74488381da12275a2ec38303282e6c1a0
+- HDA main.zig SHA-256:
+  82c8f9d0ab05c235cf8e193a8701ff9e424838956c4b3f7f7d6e698d9695fa17
+- Testimage SHA-256:
+  bc811fc485059b911873e8d3d521a3faea5e396fcf11cfcadd2484dca2a0e9af
+- Host: QEMU 11.0.2, Debian 1:11.0.2+ds-2~bpo13+1; q35,
+  ich9-intel-hda 8086:293E, hda-duplex, QEMU-Codecvendor 1AF4.
+
+Ausgefuehrte Nachweise:
+- Repositories/Drivers/HDA/Build.sh test: gruen; R4M0-Inspektion und die
+  vorhandenen ByteQueue-, PeriodBook- und Work-Gate-Tests bestanden.
+- AudioDiag Analyze-QemuWav.ps1 -SelfTest: gruen.
+- AudioDiag Invoke-QemuWavCapture.ps1 -Profile Test: gruen. 8.280
+  Quellframes in 21 Writes; upstreamDropped=0, driverUnderruns=0,
+  driverErrors=0, backendFail=0, silencePeriods=0; Deadline 21/21 ohne Miss,
+  Overrun oder Reject. QEMU-WAV: 44.100 Hz, erwartete 7.607, beobachtete 7.606
+  zusammenhaengende Frames, Known480_544Patterns=0.
+- Capture-Log SHA-256:
+  4e2ffa77299aa3f4f611202fd7075d7b2f1067e7a1b13603e6f51be26c857af0
+  WAV SHA-256:
+  c6bbeec7eb987042fb4ef122a569dcf171e32c2139d7fea82855cc3452b8f4d3
+
+Der WAV-Starter war auf Debian zunaechst nicht ausfuehrbar, weil er nur
+qemu-system-x86_64.exe suchte. Danach maskierte der globale Schwellwert das
+AUDIOD-Signal mit den seit 0.71.4 zusaetzlich aufgezeichneten, lauteren
+Testsignalen. 0.71.5 korrigiert nur diesen Hostpfad: OS-richtiger QEMU-Name,
+OS-richtige Pfadgrenze/WindowStyle und signatur-/dauerbasierte Auswahl des
+stabilen Stereo-AUDIOD-Plateaus samt Mixed-Audio-Selbsttest. Der unveraenderte
+HDA-Pfad ist damit messbar gruen; das erste rote Ergebnis war kein 480/544-
+Treiberrezidiv.
+
+Reale Hardwareevidenz:
+- Das Lenovo L340-15API besitzt laut erfasstem PCI-Inventar zwei HDA-
+  Funktionen: 1002:15DE und 1022:15E3. Linux ordnet 1022:15E3 der AMD-Raven-
+  HDA-Familie zu; 1002-Funktionen koennen den separaten HDMI-Pfad darstellen.
+- 0.67.X verwarf die Hardwareabnahme ausdruecklich, weil unter R4OS keine
+  nutzbare Audioausgabe bestand. Codec-ID, Pin-Defaults, gewaehlte PCI-
+  Funktion, IRQ- und Positionsmodus wurden nie belastbar erfasst.
+- Der frueher verwendete Host 192.168.178.207 ist aus der aktuellen
+  Buildumgebung nicht geroutet. Es fand in 0.71.5 kein Hardwareboot und kein
+  Hoertest statt. Diese Zeile ist eine Evidenzluecke, kein Erfolg.
+
+Tatsaechlicher Daten-, Steuerungs- und Ressourcenfluss
+------------------------------------------------------
+1. R4AUDIO reicht App-PCM an AUDSVC. AUDSVC mischt logische Streams und ruft
+   den einen registrierten Kernel-AudioBackend auf.
+2. HDA writePcm validiert 8..192 kHz, mono/stereo und U8/S16LE, wandelt auf
+   48-kHz/S16LE/stereo und schreibt in eine 64-Perioden-ByteQueue.
+3. fillDmaPeriods uebertraegt vollstaendige 1.920-Byte-Perioden in den festen
+   64x10-ms-DMA-Ring. BDL, CBL und LVI werden bei RUN=0 aufgebaut.
+4. HDA verwendet den ersten Output-Streamdeskriptor hinter allen Input-
+   Deskriptoren, setzt Streamtag 1 und Deskriptorformat 0x0011. Die Codecseite
+   erhaelt nur SET_CONVERTER_STREAM_CHANNEL; SET_CONVERTER_FORMAT fehlt.
+5. Der heutige Codecpfad nimmt unabhaengig den ersten Audio-Output-Converter
+   und den ersten outputfaehigen Pin. Nur eine direkte Pin->Converter-
+   Verbindung wird gesucht. Ein dazwischenliegender Mixer/Selector, Range-
+   Eintraege und Pin-Default werden nicht als Route verarbeitet.
+6. Pin-Output wird aktiviert, EAPD bei gemeldeter Pin-Cap gesetzt und fixe
+   Amp-Payload 0xB040 an Converter/Pin gesendet. Power-State, Amp-Caps,
+   Zwischenwidget-Amps und 0-dB-Gain werden nicht hergeleitet.
+7. MSI wird bevorzugt. Im INTx-Fallback registriert der Treiber heute die
+   PCI-Line und zusaetzlich jede GSI 16..23. Die ISR quittiert Streamstatus,
+   erhoeht BCIS versehentlich zweimal und plant begrenzte Driver Work.
+8. Driver Work aktualisiert Besitz allein aus LPIB, fuellt nach oder recovered
+   DESE. FIFOE wird nur gezaehlt. Ausbleibende Beobachtung fuer 640 ms triggert
+   Recovery; wiederholte Beobachtung einer eingefrorenen gleichen LPIB-
+   Position besitzt keinen eigenen Fortschrittsnachweis.
+9. Close/Shutdown drainiert begrenzt, wartet zeitbasiert mindestens 10 ms auf
+   RUN-Clear, sperrt Interrupts, meldet IRQ/MSI ab, joint Completionhandles und
+   gibt danach DMA frei. Die produktive Reihenfolge ist sinnvoll, aber fuer
+   wiederholten Teilinitfehler, Unload/Reload und gleichzeitige IRQ-/Close-
+   Fenster fehlt gezielte Evidenz.
+
+Traceability- und Reifematrix
+-----------------------------
+Klassifikationen: vorhanden, teilweise, fehlerhaft, fehlend, unbelegt,
+Nichtziel.
+
+Bereich                         Ist 0.71.5      Besitzer  Ziel/Nachweis
+PCI-Discovery                   fehlerhaft      HDA       HDA-0715-001; 0.71.6
+Mehrcontroller                  fehlend         HDA       HDA-0715-001; Lenovo-Modelltest
+GCAP/Streamzahlen/64-bit DMA    teilweise       HDA       0.71.6/0.71.8
+Reset/STATESTS                  teilweise       HDA       HDA-0715-002; Resetmodelle
+CORB/RIRB                       fehlend         HDA       HDA-0715-002; Ringtests/QEMU
+Immediate-Transport             vorhanden       HDA       expliziter Fallback 0.71.6
+Zeitbasierte Initfristen         fehlerhaft      HDA       HDA-0715-002; Timeouttests
+Mehrcodec                       teilweise       HDA       HDA-0715-003; 15 Adressen
+Funktionsgruppen                teilweise       HDA       HDA-0715-003; alle AFGs
+Widgetinventar                  teilweise       HDA       HDA-0715-003; keine stille Kappung
+Verbindungslisten/-Ranges       fehlerhaft      HDA       HDA-0715-004; Parsermodelle
+Vollstaendige Route             fehlend         HDA       HDA-0715-004; Graphmodelle
+Pin-Defaults/Analogtyp          fehlend         HDA       HDA-0715-004; Lenovo-Modell
+Power D0                       fehlend         HDA       HDA-0715-005
+Amp-Caps/0-dB/Zwischen-Amps      fehlerhaft      HDA       HDA-0715-005
+EAPD                            teilweise       HDA       HDA-0715-005
+Jack-Sense/Auto-Umschaltung      fehlend         HDA       HDA-0715-006
+Gebundene Quirks                fehlend         HDA       HDA-0715-006; nur mit Evidenz
+Inputformat-Konvertierung        vorhanden       HDA       bestehende PCM-Tests
+Converterformat/-caps           fehlerhaft      HDA       HDA-0715-005
+Streamdeskriptorformat 0x0011    vorhanden       HDA       WAV/QEMU
+Output-/Bidi-Streamauswahl       teilweise       HDA       HDA-0715-007
+BDL/CBL/LVI/Ringbesitz           vorhanden       HDA       Hosttests/WAV/Langlauf
+Positions-DMA-Puffer             fehlend         HDA       HDA-0715-009
+LPIB/Plausibilitaet/Stall        teilweise       HDA       HDA-0715-009
+MSI                             vorhanden       HDA/R4DEV QEMU + Lenovo
+INTx                            fehlerhaft      HDA       HDA-0715-008; exakt oder Fehler
+BCIS/FIFOE/DESE                  fehlerhaft      HDA       HDA-0715-008
+ISR/Deadline-Work               teilweise       HDA/R4DEV HDA-0715-008; Race-/SMP-Test
+Recovery                        teilweise       HDA       HDA-0715-008/-009
+AUDSVC-Mehrclients               vorhanden       AUDSVC    AudioDiag Master/Fanout
+Hardware-Mehrstreams             Nichtziel       HDA       AUDSVC mischt
+Close/Shutdown                  teilweise       HDA       HDA-0715-010
+Unload/Reload/Teilinitfehler      unbelegt        HDA/R4DEV HDA-0715-010
+SMP/Ressourcenbegrenzung         teilweise       HDA/R4DEV 0.71.8/0.71.9
+Detaildiagnose                  teilweise       HDA       HDA-0715-011
+QEMU-Kontinuitaet                vorhanden       AudioDiag 0.71.5-Baseline
+QEMU-Langlauf/Lifecycle          teilweise       HDA       0.71.9
+Lenovo-Analogausgabe             unbelegt        HDA       HDA-0715-012; 0.71.10
+HDMI/SPDIF/Capture/Mehrkanal      Nichtziel       --        expliziter Scopebeschluss
+EEA/Suspend/Runtime-D3           Nichtziel       --        fehlender Systemvertrag
+
+Stabile Befunde
+----------------
+HDA-0715-001 - Falsche Controllerwahl auf Mehr-HDA-Systemen
+Prioritaet: kritisch. Der Treiber ruft pciFindByClass nur mit Startindex 0 auf
+und behaelt genau diese Funktion. Das Lenovo besitzt 1002:15DE und 1022:15E3;
+damit kann ein reiner HDMI-Pfad statt des analogen Raven-Pfads gewaehlt werden.
+Auswirkung: erfolgreicher Treiberstart ohne hoerbaren internen Lautsprecher.
+Besitzer: HDA. Abhaengigkeit: keine. Ziel: 0.71.6. Nachweis: synthetische
+Mehrcontrollerauswahl, QEMU-Eincontroller und Lenovo-Dualcontroller.
+
+HDA-0715-002 - Unreifer Reset- und Verbtransport
+Prioritaet: kritisch. Ein Controller mit gesetztem CRST wird normalerweise
+nicht zurueckgesetzt; Reset und Immediate Command verwenden CPU-abhaengige
+10.000-Iterationsgrenzen. CORB/RIRB fehlt vollstaendig. STATESTS wird nach
+passivem Start nicht als stabiler, quittierter Lebenszyklus gefuehrt.
+Auswirkung: Firmwarealtzustand, sporadische Timeouts und fehlende
+Kompatibilitaet mit Controllern ohne brauchbaren Immediate-Pfad. Besitzer:
+HDA. Ziel: 0.71.6. Nachweis: reine Ring-/Timeout-/Wraptests, QEMU-Kalt- und
+Warmstarts, sichtbarer Transportfallback.
+
+HDA-0715-003 - Stille Discovery-Kappung
+Prioritaet: hoch. MAX_CODECS=4 und MAX_WIDGETS=48 brechen Discovery still ab;
+pro Codec wird nur die erste Audio Function Group betrachtet. HDA besitzt 15
+Codecadressen und 8-Bit-Node-IDs. Auswirkung: ein spaeterer analoger Codec
+oder Pfad kann fehlen, waehrend die Diagnose Vollstaendigkeit suggeriert.
+Besitzer: HDA. Ziel: 0.71.6. Nachweis: Kapazitaetsgrenzen, mehrere AFGs und
+expliziter overflow/reject statt stiller Kappung.
+
+HDA-0715-004 - Keine topologisch belegte Analogroute
+Prioritaet: kritisch. Erster Converter und erster Output-Pin werden
+unabhaengig gewaehlt. Nur direkte Verbindungen werden gesucht; Range-Encoding,
+Mixer, Selektoren, Pin-Default-Device/Association/Sequence und Port-
+Connectivity fehlen. Auswirkung: falscher oder nicht verbundener Pin,
+insbesondere HDMI statt Speaker. Besitzer: HDA. Abhaengigkeit: 0.71.6.
+Ziel: 0.71.7. Nachweis: QEMU-Direktroute, mehrstufige Analogroute,
+Range-Connection, HDMI-vs-Speaker und unvollstaendige Graphen.
+
+HDA-0715-005 - Converter, Power und Verstaerker werden unvollstaendig gesetzt
+Prioritaet: kritisch. Der Streamdeskriptor nutzt 0x0011, der Converter erhaelt
+aber kein SET_CONVERTER_FORMAT. PCM-/Streamformat-Caps, Power-State und
+Amp-Caps werden nicht gelesen; 0xB040 ist ein fixer Gainwert und Zwischenamps
+bleiben unangetastet. Dokumentationsaussagen, beide Seiten nutzten 0x0011,
+sind damit falsch. Auswirkung: QEMU toleriert einen Pfad, reale Codecs bleiben
+stumm oder verzerren. Besitzer: HDA. Ziel: 0.71.7. Nachweis: generierte
+Verbfolge und Capability-/0-dB-Modelle, QEMU und Lenovo.
+
+HDA-0715-006 - Jack- und Quirkgrenze fehlt
+Prioritaet: hoch. Pin Sense, Unsolicited Responses und analoges Umschalten
+existieren nicht; es gibt keine eng gebundene Quirkdarstellung. Auswirkung:
+Kopfhoerer und interne Lautsprecher verhalten sich nicht alltagstauglich;
+Hardwareabweichungen wuerden zu ungerichteten Sonderfaellen verleiten.
+Besitzer: HDA. Abhaengigkeit: 0.71.6/0.71.7. Ziel: 0.71.7, reale Quirks erst
+0.71.10. Nachweis: Jackmodell, deterministischer Fallback und Lenovo.
+
+HDA-0715-007 - Streamauswahl prueft den gueltigen Ausgabepfad nicht voll
+Prioritaet: hoch. Bei null Output-Streams wird ein vorhandener bidirektionaler
+Stream nicht erwogen; Controller-/Converterfaehigkeit fuer das feste Format
+wird nicht gemeinsam validiert. Auswirkung: unbegruendete Ablehnung oder
+Programmierung eines nicht getragenen Formats. Besitzer: HDA. Ziel: 0.71.8.
+Nachweis: GCAP-/Streamauswahlmodelle und Formatfail-closed.
+
+HDA-0715-008 - IRQ- und Fehlerbehandlung enthaelt konkrete Fehler
+Prioritaet: hoch. Die ISR erhoeht BCIS zweimal. INTx registriert neben der
+gemeldeten Line pauschal GSI 16..23. FIFOE wird gezaehlt, triggert aber keine
+Recovery. Completion-Reaping kann aus IRQ, Worker und Taskkontext eintreten,
+ohne dass ein gezielter Race-/Kontexttest diesen Gebrauch belegt.
+Auswirkung: falsche Diagnose, fremde IRQ-Bindungen und liegenbleibender
+Fehlerstream. Besitzer: HDA; R4DEV nur bei reproduzierter API-Luecke. Ziel:
+0.71.8. Nachweis: W1C-/Zaehler-, exakte Route-, FIFOE/DESE- und Race-Tests.
+
+HDA-0715-009 - Position und Stillstand sind nur teilweise abgesichert
+Prioritaet: hoch. Nur LPIB wird gelesen; der optionale DMA-Positionspuffer
+fehlt. Die 640-ms-Regel misst Zeit seit irgendeiner Beobachtung, nicht seit
+der letzten Positionsbewegung. Regelmaessige Statusaufrufe koennen einen
+eingefrorenen Stream deshalb endlos als beobachtet behandeln. Besitzer: HDA.
+Ziel: 0.71.8. Nachweis: Positionsquellenvergleich, Wrap, Freeze, Sprung,
+unplausible Werte und Recovery.
+
+HDA-0715-010 - Lebenszyklus ist nicht fuer alle Fehlfenster belegt
+Prioritaet: hoch. Der normale QEMU-Close ist gruen, aber Teilinitfehler nach
+Reset/Transport/Route, gleichzeitiger IRQ/Close, wiederholtes Unload/Reload,
+Drain-Timeout und erneute Wiedergabe besitzen keine systematische
+Ressourcenbilanz. Besitzer: HDA. Ziel: 0.71.9. Nachweis: Zustandsmodell,
+Fehlerinjektion, Wiederholungen, SMP und Owner-Cleanup.
+
+HDA-0715-011 - Diagnose und Tests decken nur den Ringpfad ausreichend
+Prioritaet: mittel. Initdetails liegen nur im DMESG-Log; die automatisierte
+Baseline publiziert nicht Controller, Codec, Route, Transport oder Position.
+Die sechs HDA-Hosttests pruefen Queue/Besitz/Work-Gate, aber weder Discovery,
+Verbtransport, Topologie, Caps, Jack, IRQstatus noch Lifecycle. Besitzer:
+HDA und AudioDiag. Ziel: 0.71.9. Nachweis: bestehende Testschritte erweitern,
+kein neues globales Gate ohne Bedarf.
+
+HDA-0715-012 - Reale Analogausgabe ist unbelegt
+Prioritaet: kritisch fuer die finale Freigabe. Der einzige konkrete Laptop
+hat zwei HDA-Funktionen und unter 0.67 keine nutzbare Ausgabe; ein Codec- oder
+Hoernachweis fehlt. Besitzer: HDA, menschliche Hoerbeobachtung in der finalen
+Abnahme. Ziel: 0.71.10. Nachweis: Kalt/Warm, PCI/Codec/Route, MSI oder belegtes
+INTx, Position, Speaker/Headphone, fuenf Minuten, Wiederholungen und Recovery.
+
+HDA-0715-013 - Debian-WAV-Evidenz war nicht reproduzierbar
+Prioritaet: Analyseblocker, in 0.71.5 erledigt. Der Starter war Windows-only
+und der Auswerter verwechselte zusaetzliche laute Testsignale mit AUDIOD.
+Besitzer: AudioDiag-Hosttests. Nachweis: Linux-Capture und Mixed-Audio-
+Selbsttest gruen. Dieser Befund erzeugt keine Produkt-Folgeunterversion.
+
+Endliche Folgeunterversionen
+----------------------------
+0.71.6 HDA-Controllerauswahl und Kommandotransport
+  Behebt HDA-0715-001 bis -003: begrenzte Mehrcontroller/-codec-Discovery,
+  deterministischer Besitz/Reset, zeitbasierte Fristen und CORB/RIRB mit
+  sichtbarem Immediate-Fallback. Liefert die stabile Topologiebasis.
+
+0.71.7 HDA-Codec-Topologie und analoge Ausgabe
+  Behebt HDA-0715-004 bis -006: vollstaendiger Verbindungsgraph,
+  Pin-Defaults, Analogranking, Converterformat/-caps, Power, Amp-Caps,
+  Zwischenwidgets, EAPD und Jackumschaltung. Keine HDMI-/Capture-Erweiterung.
+
+0.71.8 HDA-Streamposition, Interrupts und Recovery
+  Behebt HDA-0715-007 bis -009: Output/Bidi-Auswahl, DMA-Positionspuffer mit
+  LPIB-Fallback, Fortschrittsbeweis, exakte IRQ-Route, korrekte Statuszaehler
+  sowie FIFOE/DESE/Freeze-Recovery und Race-sichere Driver Work.
+
+0.71.9 HDA-Lebenszyklus, Diagnose und QEMU-Reifeabnahme
+  Behebt HDA-0715-010/-011: Teilinit- und Abbauzustandsmaschine,
+  Unload/Reload-/Close-/SMP-/Fehlermodelle, vollstaendige kompakte Diagnose,
+  Standard/SMP-QEMU, WAV, Langlauf und mehrere AUDSVC-Streams.
+
+0.71.10 HDA-Realhardwareabnahme und finale Haertung
+  Schließt HDA-0715-012. Lenovo-Dualcontroller, echter Codec und Analogroute
+  werden erfasst; Kalt/Warm, Speaker/Headphone, fuenf Minuten und wiederholter
+  Lebenszyklus werden abgenommen. Nur hier belegte Hardwareabweichungen duerfen
+  als eng gebundene Quirks umgesetzt und danach erneut komplett regressiert
+  werden. Abschluss bedeutet, dass alle vorherigen Befunde und Abnahmen gruen
+  sind; fehlender Hardwarezugang darf nicht als bestanden markiert werden.
+
+Damit ist jeder Pflichtbefund genau einer Umsetzung oder finalen Abnahme
+zugeordnet. Es gibt keinen offenen Sammelplatzhalter und keine weitere
+Unterversion fuer die ausdruecklichen Nichtziele.

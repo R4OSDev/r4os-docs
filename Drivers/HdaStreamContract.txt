@@ -7,9 +7,12 @@ HDA.R4D owns conversion into the active hardware format, the software PCM
 queue, the cyclic DMA ring, HDA interrupts and stream recovery. AUDSVC owns
 application stream multiplexing; callers do not know the HDA period size.
 The current hardware format is 48,000 Hz, stereo, signed 16-bit little endian.
-The HDA stream descriptor and converter verbs use format 0x0011: 48-kHz base,
+The required stream descriptor and converter format is 0x0011: 48-kHz base,
 16-bit field value 1 and stereo channels-minus-one value 1. Format 0x0021 is
-20-bit and must never describe these S16 DMA buffers.
+20-bit and must never describe these S16 DMA buffers. As established by the
+0.71.5 analysis, HDA.R4D currently programs 0x0011 only on the stream
+descriptor and omits SET_CONVERTER_FORMAT; HDA-0715-005/0.71.7 owns closing
+that contract violation.
 
 Write contract
 --------------
@@ -51,7 +54,9 @@ DMA geometry and ownership
 
 Interrupt and refill contract
 -----------------------------
-- MSI is preferred. Correctly routed INTx lines remain the fallback.
+- MSI is preferred. Correctly routed INTx lines remain the required fallback.
+  The current broad registration of the reported line plus GSI 16 through 23
+  is not compliant and is tracked as HDA-0715-008/0.71.8.
 - INTCTL enables the selected stream and global controller interrupt. The
   stream descriptor enables IOC, FIFOE and DESE reporting.
 - The ISR reads INTSTS and SD_STS, counts BCIS/FIFOE/DESE, clears only the
@@ -77,9 +82,10 @@ Underrun and recovery
 An underrun is counted only when LPIB advances into a period without ready
 ownership while the stream is not draining. Each such period increments both
 underruns and silence_refills. Upstream drops, backend errors and service
-latency stay separate counters. DESE requests controlled recovery; FIFOE is
-recorded as a stream error. The first underrun may emit one warning, but the
-normal path remains silent. If hardware advances beyond the remembered
+latency stay separate counters. DESE and FIFOE must request controlled
+recovery; the current FIFOE count-only behavior and duplicate BCIS increment
+are tracked as HDA-0715-008/0.71.8. The first underrun may emit one warning,
+but the normal path remains silent. If hardware advances beyond the remembered
 producer, the next producer slot is realigned immediately after the current
 hardware period; newly accepted PCM is never written behind the consumer.
 
@@ -131,11 +137,14 @@ cursor, queue, underrun and deadline observations did not demonstrate a cost
 that justifies changing periods or adopting segment DMA; the roadmap permits
 that change only after such evidence.
 
-Verified baseline, 19 August 2026
+Verified baseline, 28 August 2026
 ---------------------------------
 Standard QEMU uses q35 with ich9-intel-hda and hda-duplex. The driver selected
-MSI and LPIB. The 60-second AudioDiag run delivered 2,880,000 frames in 6,000
-writes with zero upstream drops, underruns, backend errors, backend failures
-and silence periods. The separate QEMU WAV capture found no 480/544 padding
-pattern. The Lenovo codec, IRQ route and listening tests remain a physical
-hardware acceptance and are not inferred from QEMU.
+MSI and LPIB. The current short AudioDiag run delivered 8,280 source frames in
+21 writes with zero upstream drops, underruns, backend errors, backend
+failures and silence periods. The separate QEMU WAV capture observed 7,606 of
+7,607 expected resampled frames in one continuous span and found no 480/544
+padding pattern. The historical 60-second run remains the ring baseline. The
+Lenovo codec, IRQ route and listening tests remain a physical hardware
+acceptance and are not inferred from QEMU. The complete gap assessment and
+finite remediation chain are in Drivers/HdaPerfectionAnalysis0715.txt.

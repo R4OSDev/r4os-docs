@@ -16,7 +16,7 @@ stream descriptor receives the same format after its reset.
 
 Controller discovery and command transport
 ------------------------------------------
-HDA 0.3.8 enumerates every class-04/03 PCI function in the bounded canonical
+HDA 0.3.10 enumerates every class-04/03 PCI function in the bounded canonical
 inventory. It resets and inventories each candidate, requires complete codec
 discovery plus an analog output pin, ranks analog evidence deterministically
 and then reinitializes only the selected controller. A digital-only function
@@ -81,8 +81,8 @@ per 250 ms through the existing status/write path under the stream lock.
 Trigger Required is honored. Presence selects the proven headphone route;
 absence selects speaker, then line-out. If the pin has no trustworthy sense
 evidence, the same speaker/line-out/headphone fallback stays fixed and is
-reported explicitly. Unsolicited jack responses remain disabled until the
-interrupt work is hardened in 0.71.8.
+reported explicitly. Unsolicited jack responses remain disabled; any later
+activation must use the same hardened IRQ/Worker path.
 
 Write contract
 --------------
@@ -115,25 +115,31 @@ DMA geometry and ownership
 - PeriodBook tracks producer, current hardware period, ready ownership and
   queued count independently. The producer may not write the active hardware
   period and may not overwrite a ready period.
+- GCAP input, output and bidirectional counts are summed within the exact
+  30-descriptor controller limit. A dedicated output descriptor is preferred;
+  a bidirectional fallback has its output-direction bit set. Missing route,
+  format capability or descriptor capacity fails before RUN.
 - Playback starts with two ready periods (20 ms) and then admits PCM up to a
   32-period running reserve (320 ms). Drain may start a tail with one
-  ready period. LPIB selects the current cyclic period; implausible positions
-  cannot address outside the fixed ring.
+  ready period. A validated DMA position entry and LPIB select the current
+  cyclic period; implausible positions cannot address outside the fixed ring.
 - A consumed period is cleared before reuse. Silence is therefore observable
   only when hardware reaches a period for which no PCM data was available.
 
 Interrupt and refill contract
 -----------------------------
-- MSI is preferred. Correctly routed INTx lines remain the required fallback.
-  The current broad registration of the reported line plus GSI 16 through 23
-  is not compliant and is tracked as HDA-0715-008/0.71.8.
+- MSI is preferred. INTx is accepted only when PCI configuration supplies a
+  representable line together with pin 1 through 4. Missing exact evidence is
+  a visible failure; no neighboring GSI is inferred or registered.
 - INTCTL enables the selected stream and global controller interrupt. The
   stream descriptor enables IOC, FIFOE and DESE reporting.
-- The ISR reads INTSTS and SD_STS, counts BCIS/FIFOE/DESE, clears only the
-  reported write-one-to-clear bits and schedules coalesced deadline work.
-- The ISR allocates nothing, waits nowhere, copies no PCM and emits no normal
-  log stream. Driver Work reaps completions, advances ownership from LPIB,
-  fills complete periods and performs a pending recovery.
+- The ISR reads INTSTS and SD_STS, counts BCIS/FIFOE/DESE exactly once per
+  observation, clears only the reported write-one-to-clear bits and atomically
+  latches both error classes for coalesced deadline work.
+- The ISR allocates nothing, waits nowhere, calls no Completion API, copies no
+  PCM and emits no normal log stream. Driver Work advances ownership from the
+  plausible DMA/LPIB position, fills complete periods and performs a pending
+  recovery.
 - Every request declares a deadline 10 ms after submission, a stable HDA
   serialization key and a callback budget derived from 2 ms but never above
   the DriverApi-v20 four-tick maximum. It enters the separate bounded EDF
@@ -145,17 +151,28 @@ Interrupt and refill contract
 - A monotone IRQ generation closes the worker-completion race: work that
   arrived during a refill pass is represented by a freshly deadline-stamped
   successor or already belongs to the successor claimed by the racing IRQ.
-  Shutdown must join every retained handle before DMA can be released.
+  Completion inspection/release is serialized between worker and task context
+  by an atomic gate. Shutdown claims the gate and must cancel or join every
+  retained handle before DMA can be released.
 
 Underrun and recovery
 ---------------------
-An underrun is counted only when LPIB advances into a period without ready
-ownership while the stream is not draining. Each such period increments both
-underruns and silence_refills. Upstream drops, backend errors and service
-latency stay separate counters. DESE and FIFOE must request controlled
-recovery; the current FIFOE count-only behavior and duplicate BCIS increment
-are tracked as HDA-0715-008/0.71.8. The first underrun may emit one warning,
-but the normal path remains silent. If hardware advances beyond the remembered
+The controller DMA position buffer is 128-byte aligned, sized to eight bytes
+per real descriptor and constrained to the advertised address width. Enable,
+base readback, entry offset, reset clearing, shutdown disable and free order
+are bounded. DMA position and LPIB must both lie within CBL and agree within a
+two-period read skew; unavailable, invalid or repeatedly divergent DMA data
+degrades visibly to LPIB.
+
+An underrun is counted only when the plausible position advances into a period
+without ready ownership while the stream is not draining. Each such period
+increments both underruns and silence_refills. Upstream drops, backend errors
+and service latency stay separate counters. Repeated observation of one value
+does not refresh the last-movement deadline. Wrap is accepted as progress;
+freeze, an elapsed-time-impossible jump, FIFOE and DESE request one controlled
+recovery. Recovery accounts and clears queued software and ready-ring frames,
+so stale audio cannot replay. The first underrun may emit one warning, but the
+normal path remains silent. If hardware advances beyond the remembered
 producer, the next producer slot is realigned immediately after the current
 hardware period; newly accepted PCM is never written behind the consumer.
 
@@ -176,28 +193,32 @@ no open, DMA start or zero-filled PCM quantum until the first non-silent
 write. A complete silent service block is consumed without a backend write;
 if HDA is active, the service closes it once through this same bounded Drain.
 
-BDL and stream allocations are constrained below 4 GiB whenever GCAP does not
-advertise 64-bit addressing. Shutdown drains and stops RUN, disables controller
-interrupts, unregisters IRQ routes, rolls MSI back and joins Driver Work before
-freeing DMA or unregistering the audio backend.
+BDL, stream and position allocations are constrained below 4 GiB whenever
+GCAP does not advertise 64-bit addressing. Shutdown drains and stops RUN,
+disables controller interrupts, unregisters IRQ routes, rolls MSI back and
+joins Driver Work before disabling and freeing position, stream or BDL DMA and
+before unregistering the audio backend.
 
 Measurement surface
 -------------------
-If no producer, IRQ job or status observation reaches the stream for one
-complete 640 ms DMA window, the modulo LPIB position can no longer distinguish
-no movement from a full wrap. HDA therefore stops and resets the descriptor,
-zeros the complete ring and drops software-queued stale PCM before later
-playback can restart. Old ring contents are never replayed as if they were
-current audio.
+The monotone progress tracker records observation and actual byte movement
+separately. Re-reading an unchanged position cannot mask a freeze. Circular
+wrap is computed within CBL; a movement larger than elapsed-time throughput
+plus two periods is impossible. After one complete 640 ms ring window without
+movement, or after an impossible position, HDA stops and resets the descriptor,
+zeros the complete ring and drops software-queued and ready-ring stale PCM
+before later playback can restart. Old contents are never replayed as current
+audio.
 
 The existing audio backend and performance status expose write/refill counts
 and durations, ring fill, drops, underruns, silence periods and errors. A
-status snapshot refreshes ownership directly from LPIB before publishing the
-fill level; this keeps producer pacing valid when QEMU coalesces or delays IRQ
-work.
+status snapshot refreshes ownership from the plausible DMA/LPIB source before
+publishing the fill level; this keeps producer pacing valid when QEMU coalesces
+or delays IRQ work.
 HDA diagnostics additionally retain IRQ mode and route, IRQ/BCIS/FIFOE/DESE
-counts, LPIB, start/stop/drain/recovery counts and timeouts. AudioDiag prints
-only one aggregate result line after a test; it never logs every interrupt.
+counts, LPIB and DMA position, chosen source, fallback/mismatch/freeze/jump
+counts, start/stop/drain/recovery counts and timeouts. AudioDiag prints only
+one aggregate result line after a test; it never logs every interrupt.
 Driver Work performance snapshot v2 adds deadline queue/running/high-water,
 queue ticks, start misses, callback-budget overruns and admission rejections
 globally and for the HDA owner.
@@ -207,9 +228,9 @@ cursor, queue, underrun and deadline observations did not demonstrate a cost
 that justifies changing periods or adopting segment DMA; the roadmap permits
 that change only after such evidence.
 
-Verified baseline through 0.71.7, 28 August 2026
+Verified baseline through 0.71.8, 28 August 2026
 ------------------------------------------------
-HDA 0.3.9 passes its owner build and the complete 134-module workspace build.
+HDA 0.3.10 passes its owner build and the complete 134-module workspace build.
 The clean Test image passed both standard and four-CPU SMP headless acceptance
 with HDA active, zero upstream drops, driver underruns, driver errors, backend
 failures and silence periods. The image contains no Immediate opt-in, and the
@@ -217,16 +238,20 @@ driver now fails closed when CORB/RIRB is unavailable; successful activation
 therefore proves that QEMU used the regular command transport.
 
 Standard QEMU uses q35 with ich9-intel-hda and hda-duplex. The driver selected
-MSI and LPIB. Its direct pin-3 to DAC-2 connection is topologically proven;
-the capability-derived verb plan verifies D0, cleared stream/channel, format
+MSI and exercised the DMA/LPIB plausibility path. Its direct pin-3 to DAC-2
+connection is topologically proven; the capability-derived verb plan verifies
+D0, cleared stream/channel, format
 0x0011 and final stream 1/channel 0 before playback. The current AudioDiag run
 reports zero upstream drops, underruns, backend errors, backend failures and
-silence periods. The separate final QEMU WAV capture observed 7,606 of 7,607
+silence periods. The separate final QEMU WAV capture observed all 7,607
 expected resampled frames in one continuous span and found no 480/544 padding
 pattern. The synthetic models additionally cover multistage mixer/selector
 paths, both range forms, invalid graphs, pin ranking, power/format rejection,
-amp payloads, EAPD and jack fallback. The historical 60-second run remains the
-ring baseline. The Lenovo codec, jack switching and listening tests remain a
-physical hardware acceptance and are not inferred from QEMU. The complete gap
+amp payloads, EAPD, jack fallback, Output/Bidi descriptor choice, aligned
+position layout, source fallback, wrap/freeze/jump, exact W1C accounting,
+FIFOE/DESE recovery, exact INTx evidence and serialized completion reaping.
+The historical 60-second run remains the ring baseline. The Lenovo codec,
+jack switching and listening tests remain a physical hardware acceptance and
+are not inferred from QEMU. The complete gap
 assessment and finite remediation chain are in
 Drivers/HdaPerfectionAnalysis0715.txt.

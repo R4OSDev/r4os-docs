@@ -16,7 +16,7 @@ stream descriptor receives the same format after its reset.
 
 Controller discovery and command transport
 ------------------------------------------
-HDA 0.3.10 enumerates every class-04/03 PCI function in the bounded canonical
+HDA 0.3.11 enumerates every class-04/03 PCI function in the bounded canonical
 inventory. It resets and inventories each candidate, requires complete codec
 discovery plus an analog output pin, ranks analog evidence deterministically
 and then reinitializes only the selected controller. A digital-only function
@@ -181,12 +181,22 @@ Lifecycle
 Open and the first writes fill the queue and ring. An application stream Close
 pumps remaining canonical PCM and requests the bounded backend Drain. HDA
 emits queued requested frames and the three-period postroll before clearing
-RUN; a 400-ms drain timeout is returned as an error instead of silently
-discarding the tail. Driver shutdown uses the same bounded Drain. Both paths
+RUN. On a 400-ms drain timeout it performs a forced stop, accounts and clears
+software PCM, ready periods and resampler state, and only then returns the
+error. Driver shutdown uses the same bounded Drain and may continue safe
+teardown after that forced stop. Both paths
 use a monotonic RUN-clear timeout of at least 10 ms as required by Intel
 HDA033-A. BDL/CBL/LVI are reprogrammed only while stopped, so a later stream
 starts from a defined position. Stop, error, Close and shutdown share
 idempotent cleanup and release pending Driver Work.
+
+An explicit ledger mirrors concrete ownership in acquisition order: PCI,
+MMIO, reset, transport, discovery, route, stream DMA, optional position DMA,
+IRQ, backend and Driver Work. Partial composite acquisitions are still freed
+from their actual handles. The owner tests inject failure after every ledger
+stage, require reverse release and repeat the complete teardown without a
+second release. A transport, IRQ/MSI or completion that cannot be proven
+quiescent vetoes further unsafe frees and retains ownership for retry.
 
 AUDSVC creates only a logical client stream at Open. HDA therefore receives
 no open, DMA start or zero-filled PCM quantum until the first non-silent
@@ -215,10 +225,14 @@ and durations, ring fill, drops, underruns, silence periods and errors. A
 status snapshot refreshes ownership from the plausible DMA/LPIB source before
 publishing the fill level; this keeps producer pacing valid when QEMU coalesces
 or delays IRQ work.
-HDA diagnostics additionally retain IRQ mode and route, IRQ/BCIS/FIFOE/DESE
-counts, LPIB and DMA position, chosen source, fallback/mismatch/freeze/jump
-counts, start/stop/drain/recovery counts and timeouts. AudioDiag prints only
-one aggregate result line after a test; it never logs every interrupt.
+Two bounded `HDA.DIAG` records expose this state through LOGSVC. `core` names
+the selected PCI function and ID, GCAP stream counts, command transport,
+codec/AFG, analog pin-to-converter route and format. `run` names phase, IRQ
+mode, DMA/LPIB position mode, write/underrun, FIFO/descriptor,
+position/stream-recovery, timeout/drain, work-drop and live ownership values.
+The immutable core record is refreshed once on the first runtime Close so it
+cannot age out before the late Test-profile diagnostic. Close and shutdown
+may emit aggregate records; writes, verbs and individual interrupts do not.
 Driver Work performance snapshot v2 adds deadline queue/running/high-water,
 queue ticks, start misses, callback-budget overruns and admission rejections
 globally and for the HDA owner.
@@ -228,14 +242,19 @@ cursor, queue, underrun and deadline observations did not demonstrate a cost
 that justifies changing periods or adopting segment DMA; the roadmap permits
 that change only after such evidence.
 
-Verified baseline through 0.71.8, 28 August 2026
+Verified baseline through 0.71.9, 28 August 2026
 ------------------------------------------------
-HDA 0.3.10 passes its owner build and the complete 134-module workspace build.
+HDA 0.3.11 passes its owner build and the complete 134-module workspace build.
 The clean Test image passed both standard and four-CPU SMP headless acceptance
 with HDA active, zero upstream drops, driver underruns, driver errors, backend
-failures and silence periods. The image contains no Immediate opt-in, and the
-driver now fails closed when CORB/RIRB is unavailable; successful activation
-therefore proves that QEMU used the regular command transport.
+failures and silence periods. Four post-restart Open/Write/Drain/Close cycles,
+two logical streams and the compact HDA diagnostic markers were also accepted.
+The lifecycle fault model unwinds every ownership stage in reverse order and
+proves repeated teardown does not release a resource twice and a fresh owner
+generation can reacquire and release every resource without retained PCM. The image contains
+no Immediate opt-in, and the driver fails closed when CORB/RIRB is unavailable;
+successful activation therefore proves that QEMU used the regular command
+transport.
 
 Standard QEMU uses q35 with ich9-intel-hda and hda-duplex. The driver selected
 MSI and exercised the DMA/LPIB plausibility path. Its direct pin-3 to DAC-2
@@ -243,15 +262,20 @@ connection is topologically proven; the capability-derived verb plan verifies
 D0, cleared stream/channel, format
 0x0011 and final stream 1/channel 0 before playback. The current AudioDiag run
 reports zero upstream drops, underruns, backend errors, backend failures and
-silence periods. The separate final QEMU WAV capture observed all 7,607
-expected resampled frames in one continuous span and found no 480/544 padding
-pattern. The synthetic models additionally cover multistage mixer/selector
+silence periods. The 60-second run emitted 2,880,000 frames in 6,000 writes
+with the same zero-error path counters. The separate final short QEMU WAV
+capture observed a 7,606-frame continuous span for 7,607 expected resampled
+frames and found no 480/544 padding pattern. The synthetic models additionally
+cover multistage mixer/selector
 paths, both range forms, invalid graphs, pin ranking, power/format rejection,
 amp payloads, EAPD, jack fallback, Output/Bidi descriptor choice, aligned
 position layout, source fallback, wrap/freeze/jump, exact W1C accounting,
-FIFOE/DESE recovery, exact INTx evidence and serialized completion reaping.
-The historical 60-second run remains the ring baseline. The Lenovo codec,
-jack switching and listening tests remain a physical hardware acceptance and
-are not inferred from QEMU. The complete gap
-assessment and finite remediation chain are in
+FIFOE/DESE recovery, exact INTx evidence, serialized completion reaping and
+forced stale-PCM cleanup after drain timeout or hardware failure. Dynamic HDA
+unload is not exposed as a userland operation; the supported owner
+unload/reload generation is covered by the host lifecycle model, while AUDSVC
+restart and replay are
+verified in QEMU. The Lenovo codec, jack switching and listening tests remain
+a physical hardware acceptance and are not inferred from QEMU. The complete
+gap assessment and finite remediation chain are in
 Drivers/HdaPerfectionAnalysis0715.txt.

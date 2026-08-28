@@ -5,9 +5,9 @@ Diese Datei wird deterministisch aus `API/ApiContract.json` erzeugt. Manuelle Ä
 Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenzen und Conformance-Fixtures werden produktiv aus diesem Schema erzeugt; handgeschriebene Dateien bleiben nur Fassaden oder erklaerende Texte.
 
 - Schema: v11, Baseline `standalone-contract-0.64.11`
-- Reachability: 129 von 129 Typen aufgelöst oder explizit klassifiziert
+- Reachability: 133 von 133 Typen aufgelöst oder explizit klassifiziert
 - Zentrale SDK-only-Wurzeln: 0; Runtime-R4Ls besitzen libraryeigene Vertraege
-- Operationen: 0; Fehlerdomänen: 62; Konstanten: 1279; Limits: 102
+- Operationen: 0; Fehlerdomänen: 62; Konstanten: 1324; Limits: 109
 
 ## App-Profile
 
@@ -150,6 +150,10 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `ProgramPciInventoryPerformanceInfo` | extensible | extern_struct | 280/8 | 280/8 | 280/8 | 280/8 |
 | `ProgramInputPerformanceInfo` | extensible | extern_struct | 408/8 | 408/8 | 408/8 | 408/8 |
 | `ServiceDeadlineFooter` | fixed_layout | extern_struct | 24/8 | 24/8 | 24/8 | 24/8 |
+| `TrayServiceRequest` | fixed_layout | extern_struct | 1184/8 | 1184/8 | 1184/8 | 1184/8 |
+| `TrayEvent` | fixed_layout | extern_struct | 80/8 | 80/8 | 80/8 | 80/8 |
+| `TrayServiceResponse` | fixed_layout | extern_struct | 192/8 | 192/8 | 192/8 | 192/8 |
+| `TrayDesktopExchange` | fixed_layout | extern_struct | 1344/8 | 1344/8 | 1344/8 | 1344/8 |
 
 ## Typdetails
 
@@ -4369,6 +4373,114 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `reserved0` | 12 | 4 | 4 | `u32` | - |
 | `deadline_tick` | 16 | 8 | 8 | `u64` | - |
 
+### `TrayServiceRequest`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 1184 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `magic` | 0 | 4 | 4 | `u32` | - |
+| `version` | 4 | 2 | 2 | `u16` | - |
+| `size` | 6 | 2 | 2 | `u16` | - |
+| `owner` | 8 | 16 | 8 | `r4os.abi.ProgramProcessHandle` | - |
+| `item_id` | 24 | 8 | 8 | `u64` | - |
+| `item_revision` | 32 | 8 | 8 | `u64` | - |
+| `item_flags` | 40 | 4 | 4 | `u32` | - |
+| `status_flags` | 44 | 4 | 4 | `u32` | - |
+| `after_sequence` | 48 | 8 | 8 | `u64` | - |
+| `deadline_tick` | 56 | 8 | 8 | `u64` | - |
+| `tooltip_length` | 64 | 2 | 2 | `u16` | - |
+| `icon_width` | 66 | 2 | 2 | `u16` | - |
+| `icon_height` | 68 | 2 | 2 | `u16` | - |
+| `icon_format` | 70 | 2 | 2 | `u16` | - |
+| `tooltip` | 72 | 64 | 1 | `[64]u8` | - |
+| `icon` | 136 | 1024 | 4 | `[256]u32` | - |
+| `reserved0` | 1160 | 24 | 1 | `[24]u8` | - |
+
+### `TrayEvent`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 80 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `magic` | 0 | 4 | 4 | `u32` | - |
+| `version` | 4 | 2 | 2 | `u16` | - |
+| `size` | 6 | 2 | 2 | `u16` | - |
+| `sequence` | 8 | 8 | 8 | `u64` | - |
+| `owner` | 16 | 16 | 8 | `r4os.abi.ProgramProcessHandle` | - |
+| `item_id` | 32 | 8 | 8 | `u64` | - |
+| `item_revision` | 40 | 8 | 8 | `u64` | - |
+| `kind` | 48 | 2 | 2 | `u16` | - |
+| `flags` | 50 | 2 | 2 | `u16` | - |
+| `wheel_delta` | 52 | 4 | 4 | `i32` | - |
+| `x` | 56 | 4 | 4 | `i32` | - |
+| `y` | 60 | 4 | 4 | `i32` | - |
+| `tick` | 64 | 8 | 8 | `u64` | - |
+| `dropped_before` | 72 | 4 | 4 | `u32` | - |
+| `reserved0` | 76 | 4 | 4 | `u32` | - |
+
+### `TrayServiceResponse`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 192 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `magic` | 0 | 4 | 4 | `u32` | - |
+| `version` | 4 | 2 | 2 | `u16` | - |
+| `size` | 6 | 2 | 2 | `u16` | - |
+| `result` | 8 | 4 | 4 | `i32` | - |
+| `flags` | 12 | 4 | 4 | `u32` | - |
+| `desktop_epoch` | 16 | 8 | 8 | `u64` | - |
+| `registry_revision` | 24 | 8 | 8 | `u64` | - |
+| `owner` | 32 | 16 | 8 | `r4os.abi.ProgramProcessHandle` | - |
+| `item_id` | 48 | 8 | 8 | `u64` | - |
+| `item_revision` | 56 | 8 | 8 | `u64` | - |
+| `item_flags` | 64 | 4 | 4 | `u32` | - |
+| `status_flags` | 68 | 4 | 4 | `u32` | - |
+| `registered_count` | 72 | 2 | 2 | `u16` | - |
+| `visible_count` | 74 | 2 | 2 | `u16` | - |
+| `capacity` | 76 | 2 | 2 | `u16` | - |
+| `queued_events` | 78 | 2 | 2 | `u16` | - |
+| `dropped_events` | 80 | 4 | 4 | `u32` | - |
+| `reserved0` | 84 | 4 | 4 | `u32` | - |
+| `event` | 88 | 80 | 8 | `r4os.abi.TrayEvent` | - |
+| `reserved1` | 168 | 24 | 1 | `[24]u8` | - |
+
+### `TrayDesktopExchange`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 1344 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `magic` | 0 | 4 | 4 | `u32` | - |
+| `version` | 4 | 2 | 2 | `u16` | - |
+| `size` | 6 | 2 | 2 | `u16` | - |
+| `desktop_owner` | 8 | 16 | 8 | `r4os.abi.ProgramProcessHandle` | - |
+| `known_revision` | 24 | 8 | 8 | `u64` | - |
+| `cursor` | 32 | 2 | 2 | `u16` | - |
+| `next_cursor` | 34 | 2 | 2 | `u16` | - |
+| `flags` | 36 | 4 | 4 | `u32` | - |
+| `result` | 40 | 4 | 4 | `i32` | - |
+| `registered_count` | 44 | 2 | 2 | `u16` | - |
+| `capacity` | 46 | 2 | 2 | `u16` | - |
+| `desktop_epoch` | 48 | 8 | 8 | `u64` | - |
+| `registry_revision` | 56 | 8 | 8 | `u64` | - |
+| `event` | 64 | 80 | 8 | `r4os.abi.TrayEvent` | - |
+| `item` | 144 | 1184 | 8 | `r4os.abi.TrayServiceRequest` | - |
+| `reserved0` | 1328 | 16 | 1 | `[16]u8` | - |
+
 ## Fehlerdomänen
 
 ### `arp`
@@ -4564,6 +4676,7 @@ Geltung: `io`, Einheit: `status_code`, Stabilität: `fixed_contract`.
 | `io_error_busy` | -7 | `i32` |
 | `io_error_cancelled` | -9 | `i32` |
 | `io_error_invalid` | -1 | `i32` |
+| `io_error_lock_violation` | -11 | `i32` |
 | `io_error_no_instance` | -2 | `i32` |
 | `io_error_no_slots` | -3 | `i32` |
 | `io_error_not_found` | -5 | `i32` |
@@ -5349,8 +5462,11 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `icmp_op_handle_rx` | `1` | `u32` | identity | number | `icmp_op` | fixed_contract |
 | `icmp_op_handle_tx` | `2` | `u32` | identity | number | `icmp_op` | fixed_contract |
 | `icmp_op_is_echo_request` | `5` | `u32` | identity | number | `icmp_op` | fixed_contract |
+| `io_file_lock_flag_unlock` | `1` | `u32` | flag | bitmask | `io_file_lock` | fixed_contract |
 | `io_info_version` | `1` | `u32` | version | number | `io_info` | fixed_contract |
 | `io_kind_file_append` | `4` | `u32` | identity | number | `io_kind` | fixed_contract |
+| `io_kind_file_info` | `11` | `u32` | identity | number | `io_kind` | fixed_contract |
+| `io_kind_file_lock` | `12` | `u32` | identity | number | `io_kind` | fixed_contract |
 | `io_kind_file_read` | `1` | `u32` | identity | number | `io_kind` | fixed_contract |
 | `io_kind_file_read_at` | `2` | `u32` | identity | number | `io_kind` | fixed_contract |
 | `io_kind_file_stream_abort` | `8` | `u32` | identity | number | `io_kind` | fixed_contract |
@@ -5358,6 +5474,7 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `io_kind_file_stream_finish` | `7` | `u32` | identity | number | `io_kind` | fixed_contract |
 | `io_kind_file_stream_write` | `6` | `u32` | identity | number | `io_kind` | fixed_contract |
 | `io_kind_file_write` | `3` | `u32` | identity | number | `io_kind` | fixed_contract |
+| `io_kind_file_write_at` | `10` | `u32` | identity | number | `io_kind` | fixed_contract |
 | `io_kind_none` | `0` | `u32` | identity | number | `io_kind` | fixed_contract |
 | `io_kind_service_call` | `9` | `u32` | identity | number | `io_kind` | fixed_contract |
 | `io_state_completed` | `3` | `u32` | identity | number | `io_state` | fixed_contract |
@@ -6365,6 +6482,47 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `window_service_snapshot_version` | `1` | `u16` | version | number | `window_service_snapshot` | fixed_contract |
 | `window_service_status_magic` | `1398230615` | `u32` | magic | number | `window_service_status` | fixed_contract |
 | `window_service_status_version` | `1` | `u16` | version | number | `window_service_status` | fixed_contract |
+| `tray_event_flag_overflow` | `1` | `u16` | flag | bitmask | `tray_event` | fixed_contract |
+| `tray_event_kind_primary` | `1` | `u16` | identity | number | `tray_event` | fixed_contract |
+| `tray_event_kind_double` | `2` | `u16` | identity | number | `tray_event` | fixed_contract |
+| `tray_event_kind_context` | `3` | `u16` | identity | number | `tray_event` | fixed_contract |
+| `tray_event_kind_wheel` | `4` | `u16` | identity | number | `tray_event` | fixed_contract |
+| `tray_icon_format_argb32` | `1` | `u16` | identity | number | `tray_icon` | fixed_contract |
+| `tray_item_flag_visible` | `1` | `u32` | flag | bitmask | `tray_item` | fixed_contract |
+| `tray_item_flag_enabled` | `2` | `u32` | flag | bitmask | `tray_item` | fixed_contract |
+| `tray_item_flag_attention` | `4` | `u32` | flag | bitmask | `tray_item` | fixed_contract |
+| `tray_response_flag_exists` | `1` | `u32` | flag | bitmask | `tray_response` | fixed_contract |
+| `tray_response_flag_layout_visible` | `2` | `u32` | flag | bitmask | `tray_response` | fixed_contract |
+| `tray_response_flag_changed` | `4` | `u32` | flag | bitmask | `tray_response` | fixed_contract |
+| `tray_response_flag_event` | `8` | `u32` | flag | bitmask | `tray_response` | fixed_contract |
+| `tray_service_op_status` | `1792` | `u16` | identity | number | `tray_service` | fixed_contract |
+| `tray_service_op_upsert` | `1793` | `u16` | identity | number | `tray_service` | fixed_contract |
+| `tray_service_op_remove` | `1794` | `u16` | identity | number | `tray_service` | fixed_contract |
+| `tray_service_op_wait_event` | `1795` | `u16` | identity | number | `tray_service` | fixed_contract |
+| `tray_service_op_desktop_sync` | `1796` | `u16` | identity | number | `tray_service` | fixed_contract |
+| `tray_service_op_desktop_activate` | `1797` | `u16` | identity | number | `tray_service` | fixed_contract |
+| `tray_service_op_desktop_visibility` | `1798` | `u16` | identity | number | `tray_service` | fixed_contract |
+| `tray_desktop_exchange_magic` | `1146369106` | `u32` | magic | number | `tray_desktop_exchange` | fixed_contract |
+| `tray_desktop_exchange_version` | `1` | `u16` | version | number | `tray_desktop_exchange` | fixed_contract |
+| `tray_desktop_flag_item` | `1` | `u32` | flag | bitmask | `tray_desktop_exchange` | fixed_contract |
+| `tray_desktop_flag_complete` | `2` | `u32` | flag | bitmask | `tray_desktop_exchange` | fixed_contract |
+| `tray_desktop_flag_restart` | `4` | `u32` | flag | bitmask | `tray_desktop_exchange` | fixed_contract |
+| `tray_desktop_flag_layout_visible` | `8` | `u32` | flag | bitmask | `tray_desktop_exchange` | fixed_contract |
+| `tray_desktop_cursor_poll` | `65535` | `u16` | identity | number | `tray_desktop_exchange` | fixed_contract |
+| `tray_service_request_magic` | `1364472914` | `u32` | magic | number | `tray_service_request` | fixed_contract |
+| `tray_service_request_version` | `1` | `u16` | version | number | `tray_service_request` | fixed_contract |
+| `tray_service_response_magic` | `1347695698` | `u32` | magic | number | `tray_service_response` | fixed_contract |
+| `tray_service_response_version` | `1` | `u16` | version | number | `tray_service_response` | fixed_contract |
+| `tray_event_magic` | `1163146322` | `u32` | magic | number | `tray_event` | fixed_contract |
+| `tray_event_version` | `1` | `u16` | version | number | `tray_event` | fixed_contract |
+| `tray_result_ok` | `0` | `i32` | value | status_code | `tray_result` | fixed_contract |
+| `tray_result_not_found` | `-1` | `i32` | value | status_code | `tray_result` | fixed_contract |
+| `tray_result_full` | `-2` | `i32` | value | status_code | `tray_result` | fixed_contract |
+| `tray_result_bad_request` | `-3` | `i32` | value | status_code | `tray_result` | fixed_contract |
+| `tray_result_stale` | `-4` | `i32` | value | status_code | `tray_result` | fixed_contract |
+| `tray_result_not_owner` | `-5` | `i32` | value | status_code | `tray_result` | fixed_contract |
+| `tray_result_busy` | `-6` | `i32` | value | status_code | `tray_result` | fixed_contract |
+| `tray_result_timeout` | `-7` | `i32` | value | status_code | `tray_result` | fixed_contract |
 
 ## Limits
 
@@ -6446,7 +6604,7 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `r4xstart_r4dev_size` | `344` | `u32` | bytes | `r4xstart_r4dev` | fixed_contract |
 | `r4xstart_r4draw_size` | `272` | `u32` | bytes | `r4xstart_r4draw` | fixed_contract |
 | `r4xstart_r4net_size` | `288` | `u32` | bytes | `r4xstart_r4net` | fixed_contract |
-| `r4xstart_r4sys_size` | `1000` | `u32` | bytes | `r4xstart_r4sys` | fixed_contract |
+| `r4xstart_r4sys_size` | `1024` | `u32` | bytes | `r4xstart_r4sys` | fixed_contract |
 | `registry_name_max` | `64` | `usize` | count | `registry_name` | fixed_contract |
 | `serial_link_payload_max` | `256` | `usize` | count | `serial_link` | fixed_contract |
 | `service_api_endpoint_queue_depth` | `8` | `usize` | count | `service_api` | fixed_contract |
@@ -6472,3 +6630,10 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `window_service_max_windows` | `16` | `usize` | count | `window_service` | fixed_contract |
 | `window_service_path_bytes` | `96` | `usize` | bytes | `window_service` | fixed_contract |
 | `window_service_title_bytes` | `48` | `usize` | bytes | `window_service` | fixed_contract |
+| `tray_event_queue_capacity` | `8` | `usize` | count | `tray_event` | fixed_contract |
+| `tray_icon_height` | `16` | `usize` | pixels | `tray_icon` | fixed_contract |
+| `tray_icon_pixel_count` | `256` | `usize` | count | `tray_icon` | fixed_contract |
+| `tray_icon_width` | `16` | `usize` | pixels | `tray_icon` | fixed_contract |
+| `tray_max_items` | `16` | `usize` | count | `tray_registry` | fixed_contract |
+| `tray_max_owners` | `16` | `usize` | count | `tray_registry` | fixed_contract |
+| `tray_tooltip_bytes` | `64` | `usize` | bytes | `tray_item` | fixed_contract |

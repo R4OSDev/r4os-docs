@@ -10,6 +10,26 @@ register, wait, receive, reply and unregister. Successful close/unregister
 invalidates the wrapper. Payload and response buffers remain caller-owned for
 the documented call duration.
 
+### Desktop notification area
+
+`app.tray()` in Zig and `r4_app_tray()` in C bind a client to its exact
+program generation and expose status, upsert, remove and finite event-wait
+operations as a logical tray contract multiplexed on the existing `WINSVC`
+endpoint. WINSVC brokers copied state and events while the exact R4DESK
+generation remains the sole owner of layout, rendering and input. Upsert
+copies a bounded tooltip and an exact 16x16 straight-alpha ARGB32 icon into
+one atomic request; the provider keeps no buffer ownership after the call.
+
+Item IDs are stable only inside one owner generation and revisions must
+increase when state changes. Responses expose the Desktop epoch, registry
+revision, capacity and whether an item currently exists and is layout-visible.
+An epoch change means that the provider must publish its current state again.
+Primary, double, context and wheel events carry a per-owner monotonic sequence;
+only one finite wait may be outstanding per owner. Providers must tolerate a
+missing service, timeouts, bounded queue overflow and Desktop restart without
+polling continuously. The facade uses the normal Userland service IPC and does
+not add a platform-table function or a separate service process.
+
 ## DNS, TCP and UDP
 
 Resolver, TCP socket/listener and UDP socket wrappers use DNSSVC, TCPSVC and

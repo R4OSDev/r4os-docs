@@ -22,6 +22,14 @@ backend stream once; later signal may materialize it again. Status version 2
 exposes materialized sessions, lazy opens, suppressed silence bytes/writes and
 idle closes without enlarging the fixed status record.
 
+`app.audio().masterState()` and `setMasterState()` are the bounded typed view
+of AUDSVC's append-only master contract. The state distinguishes selected and
+effective unsigned 16.16 gain, explicit mute, last audible gain, revision,
+service epoch and persistence diagnostics. A positive explicit master volume
+unmutes; the legacy set-volume operation deliberately preserves mute. AUDSVC
+alone fans the effective master gain out to active streams and persists it,
+so UI clients must not keep a second mixer truth.
+
 The active R4D backend owns hardware conversion, DMA, interrupts and recovery.
 An SDK facade never calls a kernel hardware path directly.
 

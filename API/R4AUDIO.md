@@ -23,6 +23,15 @@ Lebenszyklen append-only mit `materialized_sessions`, `lazy_open_count`,
 `silence_write_count`, `silence_bytes` und `idle_close_count` im bisherigen
 festen Layout.
 
+Die append-only AUDSVC-Operationen `MASTER_STATUS` und `SET_MASTER_STATE`
+stellen den kanonischen globalen Masterzustand bereit. `AudioServiceMasterState`
+trennt ausgewaehlten und effektiven unsigned-16.16-Gain, explizites Mute,
+letzte hoerbare Lautstaerke, Masterrevision, Service-Epoche und
+Persistenzdiagnose. `SET_MASTER_VOLUME` bleibt kompatibel und hebt Mute nicht
+auf; eine positive explizite Masteraenderung entstummt. AUDSVC faechert den
+wirksamen Gain auf bestehende Streams auf und speichert den Zustand sicher in
+`C:\R4OS\CONFIG\AUDIO.R4S`.
+
 Synth-Renderanforderungen erzeugen 1 bis 1024 Frames mit 48 kHz, Stereo und
 signed 16-bit little-endian PCM. Der Audio-Core schreibt den vollstaendigen
 Block an das aktive R4D-Backend. Backpressure bleibt sichtbar und bewahrt den

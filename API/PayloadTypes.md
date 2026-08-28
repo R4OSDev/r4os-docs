@@ -5,9 +5,9 @@ Diese Datei wird deterministisch aus `API/ApiContract.json` erzeugt. Manuelle Ä
 Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenzen und Conformance-Fixtures werden produktiv aus diesem Schema erzeugt; handgeschriebene Dateien bleiben nur Fassaden oder erklaerende Texte.
 
 - Schema: v11, Baseline `standalone-contract-0.64.11`
-- Reachability: 133 von 133 Typen aufgelöst oder explizit klassifiziert
+- Reachability: 135 von 135 Typen aufgelöst oder explizit klassifiziert
 - Zentrale SDK-only-Wurzeln: 0; Runtime-R4Ls besitzen libraryeigene Vertraege
-- Operationen: 0; Fehlerdomänen: 62; Konstanten: 1324; Limits: 109
+- Operationen: 0; Fehlerdomänen: 62; Konstanten: 1338; Limits: 109
 
 ## App-Profile
 
@@ -150,6 +150,8 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `ProgramPciInventoryPerformanceInfo` | extensible | extern_struct | 280/8 | 280/8 | 280/8 | 280/8 |
 | `ProgramInputPerformanceInfo` | extensible | extern_struct | 408/8 | 408/8 | 408/8 | 408/8 |
 | `ServiceDeadlineFooter` | fixed_layout | extern_struct | 24/8 | 24/8 | 24/8 | 24/8 |
+| `AudioServiceMasterRequest` | fixed_layout | extern_struct | 32/8 | 32/8 | 32/8 | 32/8 |
+| `AudioServiceMasterState` | fixed_layout | extern_struct | 128/8 | 128/8 | 128/8 | 128/8 |
 | `TrayServiceRequest` | fixed_layout | extern_struct | 1184/8 | 1184/8 | 1184/8 | 1184/8 |
 | `TrayEvent` | fixed_layout | extern_struct | 80/8 | 80/8 | 80/8 | 80/8 |
 | `TrayServiceResponse` | fixed_layout | extern_struct | 192/8 | 192/8 | 192/8 | 192/8 |
@@ -4373,6 +4375,49 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `reserved0` | 12 | 4 | 4 | `u32` | - |
 | `deadline_tick` | 16 | 8 | 8 | `u64` | - |
 
+### `AudioServiceMasterRequest`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 32 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `magic` | 0 | 4 | 4 | `u32` | - |
+| `version` | 4 | 2 | 2 | `u16` | - |
+| `size` | 6 | 2 | 2 | `u16` | - |
+| `flags` | 8 | 4 | 4 | `u32` | - |
+| `fixed_volume` | 12 | 4 | 4 | `u32` | - |
+| `expected_revision` | 16 | 8 | 8 | `u64` | - |
+| `reserved0` | 24 | 8 | 1 | `[8]u8` | - |
+
+### `AudioServiceMasterState`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 128 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `magic` | 0 | 4 | 4 | `u32` | - |
+| `version` | 4 | 2 | 2 | `u16` | - |
+| `size` | 6 | 2 | 2 | `u16` | - |
+| `flags` | 8 | 4 | 4 | `u32` | - |
+| `service_flags` | 12 | 4 | 4 | `u32` | - |
+| `master_revision` | 16 | 8 | 8 | `u64` | - |
+| `service_epoch` | 24 | 8 | 8 | `u64` | - |
+| `selected_volume_fixed` | 32 | 4 | 4 | `u32` | - |
+| `effective_volume_fixed` | 36 | 4 | 4 | `u32` | - |
+| `last_audible_volume_fixed` | 40 | 4 | 4 | `u32` | - |
+| `reserved0` | 44 | 4 | 4 | `u32` | - |
+| `persist_writes` | 48 | 8 | 8 | `u64` | - |
+| `persist_failures` | 56 | 8 | 8 | `u64` | - |
+| `master_changes` | 64 | 8 | 8 | `u64` | - |
+| `config_loads` | 72 | 8 | 8 | `u64` | - |
+| `reserved1` | 80 | 48 | 1 | `[48]u8` | - |
+
 ### `TrayServiceRequest`
 
 - Quelle: `API/ApiContract.json`
@@ -5217,6 +5262,18 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `audio_midi_event_program` | `4` | `u8` | value | number | `audio_midi` | fixed_contract |
 | `audio_midi_op_classify_event` | `1` | `u32` | identity | number | `audio_midi` | fixed_contract |
 | `audio_midi_op_self_test` | `2` | `u32` | identity | number | `audio_midi` | fixed_contract |
+| `audio_master_request_flag_muted` | `4` | `u32` | flag | bitmask | `audio_master_request` | fixed_contract |
+| `audio_master_request_flag_set_muted` | `2` | `u32` | flag | bitmask | `audio_master_request` | fixed_contract |
+| `audio_master_request_flag_set_volume` | `1` | `u32` | flag | bitmask | `audio_master_request` | fixed_contract |
+| `audio_master_request_magic` | `1296118866` | `u32` | magic | number | `audio_master_request` | fixed_contract |
+| `audio_master_request_version` | `1` | `u16` | version | number | `audio_master_request` | fixed_contract |
+| `audio_master_state_flag_config_defaulted` | `4` | `u32` | flag | bitmask | `audio_master_state` | fixed_contract |
+| `audio_master_state_flag_config_error` | `16` | `u32` | flag | bitmask | `audio_master_state` | fixed_contract |
+| `audio_master_state_flag_config_loaded` | `2` | `u32` | flag | bitmask | `audio_master_state` | fixed_contract |
+| `audio_master_state_flag_muted` | `1` | `u32` | flag | bitmask | `audio_master_state` | fixed_contract |
+| `audio_master_state_flag_persist_pending` | `8` | `u32` | flag | bitmask | `audio_master_state` | fixed_contract |
+| `audio_master_state_magic` | `1396782162` | `u32` | magic | number | `audio_master_state` | fixed_contract |
+| `audio_master_state_version` | `1` | `u16` | version | number | `audio_master_state` | fixed_contract |
 | `audio_opl3_action_all_notes_off` | `5` | `u8` | value | number | `audio_opl3` | fixed_contract |
 | `audio_opl3_action_control` | `4` | `u8` | value | number | `audio_opl3` | fixed_contract |
 | `audio_opl3_action_ignore` | `0` | `u8` | value | number | `audio_opl3` | fixed_contract |
@@ -5236,8 +5293,10 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `audio_service_flag_service_ready` | `8` | `u32` | flag | bitmask | `audio_service` | fixed_contract |
 | `audio_service_flag_sessions_open` | `4` | `u32` | flag | bitmask | `audio_service` | fixed_contract |
 | `audio_service_op_close_stream` | `5` | `u16` | identity | number | `audio_service` | fixed_contract |
+| `audio_service_op_master_status` | `7` | `u16` | identity | number | `audio_service` | fixed_contract |
 | `audio_service_op_open_stream` | `3` | `u16` | identity | number | `audio_service` | fixed_contract |
 | `audio_service_op_set_master_volume` | `2` | `u16` | identity | number | `audio_service` | fixed_contract |
+| `audio_service_op_set_master_state` | `8` | `u16` | identity | number | `audio_service` | fixed_contract |
 | `audio_service_op_set_stream_volume` | `6` | `u16` | identity | number | `audio_service` | fixed_contract |
 | `audio_service_op_status` | `1` | `u16` | identity | number | `audio_service` | fixed_contract |
 | `audio_service_op_write_stream` | `4` | `u16` | identity | number | `audio_service` | fixed_contract |

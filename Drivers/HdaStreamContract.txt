@@ -14,6 +14,31 @@ The required stream descriptor and converter format is 0x0011: 48-kHz base,
 descriptor and omits SET_CONVERTER_FORMAT; HDA-0715-005/0.71.7 owns closing
 that contract violation.
 
+Controller discovery and command transport
+------------------------------------------
+HDA 0.3.8 enumerates every class-04/03 PCI function in the bounded canonical
+inventory. It resets and inventories each candidate, requires complete codec
+discovery plus an analog output pin, ranks analog evidence deterministically
+and then reinitializes only the selected controller. A digital-only function
+cannot hide a later analog controller. Rejected candidates stop command DMA,
+free both rings and restore the original PCI Command word.
+
+The controller is always quiesced and passed through CRST low/hold/high,
+including a firmware-initialized state. Command-DMA stop, both CRST edges and
+post-reset STATESTS use monotone tick deadlines. Discovery evaluates all 15
+codec addresses, every advertised audio function group and valid node ranges
+through exclusive node 256. A failed command, malformed range, duplicate node
+or capacity violation makes the candidate incomplete instead of truncating it.
+
+CORB/RIRB is the normal transport. The driver negotiates 2-, 16- or 256-entry
+rings, constrains DMA for 32-bit controllers, resets both hardware pointers,
+handles wrap and full conditions and accepts only a matching solicited codec
+response before the shared command deadline. Memory error, overrun, mismatch,
+unsolicited response and timeout remain distinct observations. Immediate
+Command is disabled by default and is attempted only after the explicit
+`OPTION HDA immediate=on` opt-in; `OPTION HDA corb=off` may force that visible
+diagnostic path. A normal QEMU boot must report `corb-rirb` and zero fallback.
+
 Write contract
 --------------
 - The public backend descriptor admits 8,000 through 192,000 Hz, mono or
@@ -137,8 +162,17 @@ cursor, queue, underrun and deadline observations did not demonstrate a cost
 that justifies changing periods or adopting segment DMA; the roadmap permits
 that change only after such evidence.
 
-Verified baseline, 28 August 2026
----------------------------------
+Verified baseline through 0.71.6, 28 August 2026
+------------------------------------------------
+HDA 0.3.8 passes its owner build and the complete 134-module workspace build.
+The clean Test image passed both standard and four-CPU SMP headless acceptance
+with HDA active, zero upstream drops, driver underruns, driver errors, backend
+failures and silence periods. The image contains no Immediate opt-in, and the
+driver now fails closed when CORB/RIRB is unavailable; successful activation
+therefore proves that QEMU used the regular command transport. The separate
+WAV run observed the complete continuous 7,607-frame signal
+and no known 480/544 padding pattern.
+
 Standard QEMU uses q35 with ich9-intel-hda and hda-duplex. The driver selected
 MSI and LPIB. The current short AudioDiag run delivered 8,280 source frames in
 21 writes with zero upstream drops, underruns, backend errors, backend

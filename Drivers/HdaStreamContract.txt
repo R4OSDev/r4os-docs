@@ -9,10 +9,10 @@ application stream multiplexing; callers do not know the HDA period size.
 The current hardware format is 48,000 Hz, stereo, signed 16-bit little endian.
 The required stream descriptor and converter format is 0x0011: 48-kHz base,
 16-bit field value 1 and stereo channels-minus-one value 1. Format 0x0021 is
-20-bit and must never describe these S16 DMA buffers. As established by the
-0.71.5 analysis, HDA.R4D currently programs 0x0011 only on the stream
-descriptor and omits SET_CONVERTER_FORMAT; HDA-0715-005/0.71.7 owns closing
-that contract violation.
+20-bit and must never describe these S16 DMA buffers. Since 0.71.7 HDA.R4D
+requires the codec PCM/stream capabilities and programs and verifies 0x0011
+on the selected analog converter before assigning stream 1/channel 0. The
+stream descriptor receives the same format after its reset.
 
 Controller discovery and command transport
 ------------------------------------------
@@ -38,6 +38,51 @@ unsolicited response and timeout remain distinct observations. Immediate
 Command is disabled by default and is attempted only after the explicit
 `OPTION HDA immediate=on` opt-in; `OPTION HDA corb=off` may force that visible
 diagnostic path. A normal QEMU boot must report `corb-rirb` and zero fallback.
+
+Codec topology and analog route
+-------------------------------
+Every widget connection list is read in short or long form. Range entries are
+expanded into their normative individual NID order, and that expanded index
+is retained as the SET_CONNECT_SEL/amp-input index. First or consecutive
+range markers, backwards ranges, NID zero, nodes outside the supported
+eight-bit space and bounded edge-pool exhaustion invalidate the candidate.
+
+The per-codec directed graph follows sink-to-source HDA connections. A bounded
+cycle-safe breadth-first search accepts only present nodes in one audio
+function group and a complete pin -> mixer/selector -> analog stereo output
+converter route. Missing nodes, cross-AFG edges, cycles without a converter,
+digital converters and incomplete routes fail closed. Controller selection
+requires this proven and fully programmable route in addition to complete
+transport and inventory evidence.
+
+Pin Config Default port connectivity and device select only speaker,
+headphone and line-out pins. SPDIF, HDMI and other digital devices never enter
+the analog ranking. The deterministic order is speaker, headphone, line-out;
+within a role a nonzero/lower association, lower sequence and lower NID win.
+The converter and every route widget must advertise stereo. The resolved
+widget/AFG capability set must contain PCM, 48 kHz and 16-bit support.
+
+The bounded codec verb plan has one safe order:
+
+- Set the audio function group and every power-controllable route widget to
+  D0, then poll the reported actual state through a monotone deadline.
+- Clear and verify the converter stream/channel, wait one tick, set and verify
+  converter format 0x0011.
+- Program the selected input on every selector and any ambiguous pin. Unmute
+  the selected mixer/selector/pin input and every route output amp on both
+  channels. Gain is the advertised 0-dB offset clamped to NumSteps; no fixed
+  gain payload or broad codec quirk is permitted.
+- Enable output and headphone drive as advertised, set EAPD only when the pin
+  capability permits it, then assign and verify stream 1/channel 0.
+
+The route and exact bounded verb-plan sequence are diagnostic output. A
+presence-capable headphone pin is read at initialization and then at most once
+per 250 ms through the existing status/write path under the stream lock.
+Trigger Required is honored. Presence selects the proven headphone route;
+absence selects speaker, then line-out. If the pin has no trustworthy sense
+evidence, the same speaker/line-out/headphone fallback stays fixed and is
+reported explicitly. Unsolicited jack responses remain disabled until the
+interrupt work is hardened in 0.71.8.
 
 Write contract
 --------------
@@ -162,23 +207,26 @@ cursor, queue, underrun and deadline observations did not demonstrate a cost
 that justifies changing periods or adopting segment DMA; the roadmap permits
 that change only after such evidence.
 
-Verified baseline through 0.71.6, 28 August 2026
+Verified baseline through 0.71.7, 28 August 2026
 ------------------------------------------------
-HDA 0.3.8 passes its owner build and the complete 134-module workspace build.
+HDA 0.3.9 passes its owner build and the complete 134-module workspace build.
 The clean Test image passed both standard and four-CPU SMP headless acceptance
 with HDA active, zero upstream drops, driver underruns, driver errors, backend
 failures and silence periods. The image contains no Immediate opt-in, and the
 driver now fails closed when CORB/RIRB is unavailable; successful activation
-therefore proves that QEMU used the regular command transport. The separate
-WAV run observed the complete continuous 7,607-frame signal
-and no known 480/544 padding pattern.
+therefore proves that QEMU used the regular command transport.
 
 Standard QEMU uses q35 with ich9-intel-hda and hda-duplex. The driver selected
-MSI and LPIB. The current short AudioDiag run delivered 8,280 source frames in
-21 writes with zero upstream drops, underruns, backend errors, backend
-failures and silence periods. The separate QEMU WAV capture observed 7,606 of
-7,607 expected resampled frames in one continuous span and found no 480/544
-padding pattern. The historical 60-second run remains the ring baseline. The
-Lenovo codec, IRQ route and listening tests remain a physical hardware
-acceptance and are not inferred from QEMU. The complete gap assessment and
-finite remediation chain are in Drivers/HdaPerfectionAnalysis0715.txt.
+MSI and LPIB. Its direct pin-3 to DAC-2 connection is topologically proven;
+the capability-derived verb plan verifies D0, cleared stream/channel, format
+0x0011 and final stream 1/channel 0 before playback. The current AudioDiag run
+reports zero upstream drops, underruns, backend errors, backend failures and
+silence periods. The separate final QEMU WAV capture observed 7,606 of 7,607
+expected resampled frames in one continuous span and found no 480/544 padding
+pattern. The synthetic models additionally cover multistage mixer/selector
+paths, both range forms, invalid graphs, pin ranking, power/format rejection,
+amp payloads, EAPD and jack fallback. The historical 60-second run remains the
+ring baseline. The Lenovo codec, jack switching and listening tests remain a
+physical hardware acceptance and are not inferred from QEMU. The complete gap
+assessment and finite remediation chain are in
+Drivers/HdaPerfectionAnalysis0715.txt.

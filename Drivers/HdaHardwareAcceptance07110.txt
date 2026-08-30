@@ -1,0 +1,228 @@
+R4OS HDA hardware acceptance 0.71.10
+====================================
+
+Status
+------
+This is the reproducible procedure for the final Lenovo IdeaPad L340-15API
+acceptance. Preparing or booting the image is not a hardware pass. The result
+remains incomplete until a human listening observation and the corresponding
+diagnostic files exist for both a cold and a warm boot.
+
+Target and boundaries
+---------------------
+- Required PCI functions: 1002:15DE and 1022:15E3. The PCI inventory and HDA
+  candidate records must correlate both BDFs with the selected or rejected
+  result. A start message for only the selected function is insufficient.
+- Required output: internal speaker and analog headphones. HDMI, capture,
+  microphone and digital output remain outside 0.71.X.
+- Required evidence: controller capabilities, CORB/RIRB or explicit fallback,
+  codec/AFG, pin defaults, complete analog route, format 0x0011, MSI or exact
+  INTx, advancing DMA/LPIB position and separated error counters.
+- A quirk is permitted only after a repeatable observation on this machine and
+  must be bound to the narrow vendor/device/codec/subsystem identity. Linux
+  source alone is never evidence for an R4OS quirk.
+
+Build the interactive image
+---------------------------
+From the workspace root on Windows or Debian Linux:
+
+    pwsh -NoLogo -NoProfile -File Repositories/Drivers/HDA/Tests/Prepare-HardwareAcceptanceImage.ps1
+
+The output is written below
+`Artifacts/Distribution/Hardware/HDA-0.71.10/`. `MANIFEST.txt` binds the
+image and image plan hashes plus the HDA and Distribution commits. The script
+uses an otherwise empty local `PrivateInjection` only while building, verifies
+the hardware image, copies it aside, removes the temporary overlay, then
+rebuilds and verifies the normal Full profile. It never writes to a removable
+device.
+
+Flash `R4OS-0.71.10-HDA-Hardware-Full-x86_64.img` manually with a raw-image
+writer. Confirm the SHA-256 against `MANIFEST.txt`. Keep all valuable media
+recoverable; R4OS is a trusted single-user development system, not a hardened
+environment.
+
+The image starts from the Full profile and replaces AUTOEXEC only for the
+interactive acceptance. It additionally carries the test-only AUDIOD and
+HWDIAG artifacts plus BEEP, R4BASIC, AUDSVC, SSHD and Log Center. Their exact
+commits and artifact hashes are bound in MANIFEST.txt; no normal profile is
+changed. AUTOEXEC starts the services and uses the current owner-bound
+`HWDIAG /EXPORT` and `LOGCENTER /EXPORT` surfaces to create the initial
+hardware, boot-log and HDA-driver files under C:\TEMP. Historical kernel-shell
+commands such as PCIE, AUDIO, DMESG and HWLOG are not used because the current
+userland Terminal neither owns them nor redirects external R4X output.
+
+HDA-COLD.BAT, HDA-LONG.BAT and HDA-WARM.BAT make the repeatable captures
+available directly in C:\TEMP. They intentionally do not decide the listening
+result. The image must print
+`[HDA07110] Snapshot erstellt. Physische Hoerabnahme noch NICHT bestanden.`
+
+Pre-desktop boot isolation
+--------------------------
+The first physical boot of the HDA-enabled acceptance image stopped at the
+graphical loading screen with the bar reported at approximately 90--99
+percent. R4OS reports audio foundation at 90 percent, enters ordered R4D
+driver loading at 98 percent and hands off to runtime/services/Desktop at 99
+percent. HDA is the second configured R4D after DISPBLIT. The visual report
+therefore narrows the failure to the late boot path but does not by itself
+prove that HDA is responsible.
+
+Build the controlled isolation image with:
+
+    pwsh -NoLogo -NoProfile -File Repositories/Drivers/HDA/Tests/Prepare-HardwareAcceptanceImage.ps1 -IsolationNoHda
+
+It is written below
+`Artifacts/Distribution/Hardware/HDA-0.71.10/Isolation-NoHda/` and has a
+separate manifest. The HDA artifact remains on disk, but the temporary image
+configuration removes `DRIVER=HDA` and adds `DISABLE=HDA`; normal Full is
+rebuilt and verified after the copy. This image is only a binary boot
+isolation and can never satisfy the HDA or listening acceptance.
+
+Cold-boot this image with headphones unplugged and do not start any audio
+program. If Desktop appears, provide its wired-network address for SSH. An
+SSH terminal uses `/NOAUTOEXEC`, so the investigator runs `C:\AUTOEXEC.BAT`
+once and collects HWDIAG before preparing a narrower HDA probe. Interpret the
+result strictly:
+
+- Desktop appears only with this image: the configured HDA load path is the
+  reproduced boundary; identify the exact PCI candidate and failing stage
+  before implementing a quirk.
+- The boot still stops: HDA has not been isolated as the cause; preserve a
+  straight-on photograph of the complete loading bar and isolate the
+  corresponding later boot phase instead.
+- In either case, keep 0.71.10 open and return to the HDA-enabled acceptance
+  only after the boot defect has been reproduced, corrected and regressed.
+
+Both the HDA-enabled image and this no-HDA image stopped at the same late boot
+position. The two-line 0.71.11 boot status subsequently localized the second
+physical run to `Dienste starten` / `Dienst: UPDSVC`. `UPDSVC.R4X` is the last
+automatic service and, at roughly 4.2 MB, the largest boot service by a wide
+margin. The displayed name alone still cannot distinguish its synchronous R4X
+load from the final ServiceManager handoff.
+
+Build the controlled UPDSVC isolation image with:
+
+    pwsh -NoLogo -NoProfile -File Repositories/Drivers/HDA/Tests/Prepare-HardwareAcceptanceImage.ps1 -IsolationNoUpdSvc
+
+It is written below
+`Artifacts/Distribution/Hardware/HDA-0.71.10/Isolation-NoUpdSvc/`. Its
+temporary `SERVICES.R4S` changes exactly the UPDSVC start mode from `auto` to
+`manual`; HDA and every other configured service remain enabled. Normal Full
+is rebuilt and verified after the isolated copy. If this image reaches the
+Desktop, leave the machine running and provide its IP address before manually
+starting UPDSVC. That permits SSH evidence collection before the isolated
+start is reproduced. This image is diagnostic only and cannot satisfy either
+0.71.10 or 0.71.11 by itself.
+
+Cold-boot capture
+-----------------
+1. Remove analog headphones. Power the Lenovo fully off, wait at least 30
+   seconds, insert the prepared USB medium and boot it.
+2. Full boots to the Desktop. Open Terminal and wait for AUTOEXEC to print the
+   HDA07110 snapshot marker. An SSH terminal deliberately uses `/NOAUTOEXEC`;
+   when entering remotely, run `C:\AUTOEXEC.BAT` once before continuing.
+3. Copy the SHA-256 from the host manifest into
+   `HDA-OBSERVATIONS.TXT`. Record the operator, time, medium and headphones.
+4. At the R4OS prompt run:
+
+       C:\TEMP\HDA-COLD.BAT
+
+   The batch records VER, SYSINFO and IPCONFIG on screen. HWDIAG writes the
+   device inventory and audio controller records to HDA-COLD-HWDIAG.TXT.
+   Log Center also exports an auxiliary COLD boot log. HDA driver-source
+   records, including the controller-candidate decisions, are exported only
+   after playback has emitted bounded `HDA.DIAG` snapshots; they are preserved
+   by HDA-LONG.BAT as HDA-COLD-FINAL-HDA.TXT. Every owner-bound export is
+   followed by `SET`; any non-zero ERRORLEVEL fails the capture.
+
+5. Require both 1002:15DE and 1022:15E3 in HWDIAG. After the playback and
+   long-run captures, correlate their BDFs with every `HDA.R4D controller
+   candidate` line in HDA-COLD-FINAL-HDA.TXT. Require one justified selected
+   analog candidate, a real codec/AFG and route, transport, IRQ and position.
+   Do not infer the rejected candidate from its PCI ID alone.
+
+Listening and jack switching
+----------------------------
+Set a moderate volume before using headphones.
+
+1. Run `BEEP` with headphones unplugged. Record clean internal-speaker output.
+2. Enter `DESKTOP`, open the volume tray icon left of the clock and repeat
+   BEEP from a terminal at low and high volume and while muted. Record that
+   mute is silent and that volume changes are monotonic and free of artifacts.
+3. Open `C:\TEMP\HDA-AUDIO.BAS` from Explorer. Record the separate R4BASIC
+   BEEP and PLAY sequences; press a key after the program reports completion.
+4. Insert analog headphones, wait two seconds, repeat BEEP and the BAS file.
+   Audio must move deterministically to the headphones without stale speaker
+   playback. Remove the plug and repeat BEEP; the speaker must return.
+5. Run `AUDIOD /OUT=C:\TEMP\HDA-COLD-AUDIOD-HDA.TXT` once. Require
+   `AUDIOD result: OK`, the lifecycle, HDA diagnostic and HDA evidence OK
+   markers, two logical streams, service restart/replay and all path error
+   counters at zero. The exported file must contain every controller candidate,
+   the selection and bounded core/close records. Record the human listening
+   result separately.
+
+Five-minute and repeated lifecycle run
+--------------------------------------
+Run the prepared batch once without rebooting or interrupting it:
+
+    C:\TEMP\HDA-LONG.BAT
+
+It invokes `AUDIOD /LONG /OUT=...` five times. Each invocation is a 60-second
+signal run and also exercises close, multiple logical clients, AUDSVC restart
+and replay. Each run writes its own HDA-LONG-N-HDA.TXT before the bounded log
+window can advance. The batch prints `SET` after every run so the operator can
+record that run's ERRORLEVEL. R4OS batch processing continues after an error:
+every one of the five results must therefore be inspected independently. All
+five runs must report result and evidence OK and zero upstream drops, driver
+underruns/errors, backend failures, silence periods, deadline
+misses/overruns/rejections and stale playback. A human must listen for gaps,
+clicks, periodic fragments, wrong output switching or replayed old samples.
+
+After the fifth run the batch copies its atomic HDA evidence to
+HDA-COLD-FINAL-HDA.TXT and preserves separate COLD-FINAL HWDIAG and auxiliary
+complete LOGSVC exports listed in the observation form.
+
+The current R4OS surface does not expose dynamic R4D unload as a userland
+command. Do not report a live HDA unload that was not performed. The internal
+owner unload/reload generation is covered by the HDA host model; AUDSVC
+restart/replay and the following warm driver reinitialization are separate
+physical evidence.
+
+Warm boot and replay
+--------------------
+Run `REBOOT`. After AUTOEXEC returns to the prompt, repeat BEEP and the BAS
+file, then run
+
+    AUDIOD /OUT=C:\TEMP\HDA-WARM-AUDIOD-HDA.TXT
+
+Require result and evidence OK. Then capture with:
+
+    C:\TEMP\HDA-WARM.BAT
+
+The same analog path must initialize with advancing position and no inherited
+DMA, stale PCM, resource failure or unexplained counter increase. A changed
+IRQ or position mode is acceptable only when the diagnostics explain a valid
+fallback.
+
+Collect evidence
+----------------
+If wired networking is available, `IPCONFIG /ALL` gives the address and
+`SERVMAN STATUS SSHD` must show the endpoint. From a trusted host, use the
+standard account and the conservative OpenSSH SFTP settings:
+
+    sftp -B 32768 -R 1 -o Ciphers=chacha20-poly1305@openssh.com r4os@ADDRESS
+
+Download all cold/warm files from `/C/TEMP/` and the filled observation form.
+Password: `rosebud`. If networking is unavailable, copy the files to a
+separate writable medium from R4OS. Hearing statements must always identify
+the human observer; diagnostic counters cannot replace them.
+
+Decision and follow-up
+----------------------
+- No observed deviation: leave the quirk set empty, record all evidence and
+  run the final owner, QEMU, WAV, long, image and full-workspace regressions.
+- Observed deviation: reproduce it in at least one further cold or warm cycle,
+  preserve both evidence sets, implement only the narrowest justified quirk,
+  then repeat every physical and automated acceptance.
+- Missing Lenovo, incomplete hearing notes, missing dual-controller evidence
+  or a failed run: keep 0.71.10 open. QEMU and historical 0.67 evidence are
+  not substitutes.

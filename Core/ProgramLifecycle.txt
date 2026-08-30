@@ -39,6 +39,15 @@ deferred Reap entfernt und nimmt nicht weiter an der Schedulerrotation teil.
 Davon getrennt friert erst der Readinessmarker das Bootmessfenster ein und
 uebergibt Bootrenderer sowie Ausgabesink an die Benutzersitzung.
 
+Solange der Bootrenderer aktiv ist, veroeffentlicht der interne Shelllauncher
+vor jeder Admission-Grenze einen kurzen Detailmarker. Er unterscheidet
+Pfadauflosung, Header/Image/Stack, Registry- und Completion-Reservierung,
+Instanz/Task/Thread-Publikation, Ready-Aufnahme, Shelltask-Pin und den Aufruf
+von `R4XStart`. Bleibt der letzte Marker bei `R4XStart aufrufen`, hat der
+Bootshelltask den Benutzercode erreicht, aber noch kein `boot_ready` gemeldet.
+Diese Diagnose aendert weder den R4XStart-Vertrag noch die Lebensdauer- oder
+Schedulinggrenzen.
+
 Hard kill and reaping may continue only when the target holds no tracked lock
 and has no unwind guard. Owner resources are detached before their backing
 payload is freed. Program, task and thread registries are not locked across
@@ -52,6 +61,28 @@ owners bind an immutable, generation-checked execution context before their
 blocked Task is published Ready. Current R4X ownership is therefore resolved
 directly and the owner storage remains alive until the exact Task generation
 has been released.
+
+A naturally returned ProgramThread transfers its Task storage to the scheduler
+reaper through `exitCurrentAndRetire`. It remains the owner of its kernel exit
+epilogue until it has released its execution pin and that scheduler reaper has
+removed the exact Task generation. Publishing the instance as retired may wake
+the program reaper, but that reaper neither kills nor claims an `exited` thread
+while either owner is still present. Only after the terminal context switch
+and independent Task release may ProgramThread, I/O and program payload
+teardown continue. A hard-killed thread remains program-reaper-owned and is
+not covered by this wait. This separation prevents two reapers from competing
+for the terminal Task transition, stranding the last instance pin or releasing
+the exit stack before foreground completion can be published.
+
+The fixed stream-slot table publishes a small generation-checked owner and
+volume projection under the IRQ/SMP serialization boundary. ProgramThread and
+process cleanup first consult that projection. An owner without stream leases
+needs no filesystem gate; otherwise each actually occupied volume lane is
+acquired independently and only as an immediate attempt. A busy relevant lane
+defers retirement without parking the reaper, while unrelated volume work can
+never delay an owner that has no stream on that volume. The same projection
+serializes fixed-slot reservation across concurrent streams on different
+volumes.
 
 Console wait and retained output
 --------------------------------

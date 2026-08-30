@@ -15,3 +15,73 @@ when the image or geometry cannot be used.
 The bootscreen is kernel-owned because it appears before the normal module,
 filesystem and desktop path. Userland image formats and R4IMG are not imported
 into this early stage.
+
+Boot status rows
+----------------
+
+The framebuffer renderer reserves exactly two rows below the progress bar.
+The first row names the operation that has just started. Major boot phases use
+short action names, and the R4D plan publishes `Treiber: NAME` before loading
+and initializing each configured driver. A potentially blocking call must
+therefore never begin before its status is visible.
+
+The second row is normally empty. While the service manager loads its plan it
+shows `Dienstplan laden`; before each configured service start it changes to
+`Dienst: NAME`. During the synchronous start boundary it may narrow this to
+`NAME: Pfad pruefen`, `NAME: laden` and `NAME: gestartet`; reaching the end of
+the registry shows `Dienstplan fertig`. During the synchronous foreground
+return, bounded `SERVMAN:` markers distinguish program return, thread/instance
+completion, the boundary before and after execution-pin release, scheduler
+Task teardown, ProgramThread pins/joins, caller-I/O cancellation, stream and
+stack release, asynchronous-I/O/output/context/image teardown, completion
+publication and handback to the boot launcher. A repeated deferred attempt
+leaves the concrete wait reason visible instead of falling back to the generic
+Task-teardown label. In particular, `SERVMAN: Streams warten` means that the
+nonblocking lifecycle cleanup found a busy volume lane containing a stream
+lease of that exact owner and will retry without parking the program reaper.
+Owners without stream leases do not enter a filesystem gate. This transient
+detail is cleared before the desktop launch.
+
+The configured shell launch then publishes each boundary before entering it:
+path resolution, API preparation, registry-slot and completion reservation,
+header and image loading, stack allocation, instance/task/thread publication,
+Ready-queue admission, shell-task execution, instance pinning and the call to
+`R4XStart`. The last detail therefore distinguishes a loader or scheduler
+stall from userland initialization that has entered `R4XStart` but has not yet
+reported its first usable frame through `boot_ready`. Every stage is mirrored
+into the boot log as a bounded `[LAUNCH] shell stage=` record.
+
+The path-resolution boundary first probes the boot volume lane without
+waiting. `FS-Sperre wartet` means another filesystem request owns that lane;
+the normal bounded acquisition still follows. `Dateipfad suchen` means the
+lane was acquired and the configured shell is being resolved in the VFS/NTFS
+lookup. The probe changes only the visible diagnosis, not launch semantics or
+the existing filesystem timeout.
+
+When the occupied lane has a stable runtime owner, the second row replaces
+the generic wait text with `MODULE: ACTIVITY`. `MODULE` is obtained only after
+pinning the exact task generation; `ACTIVITY` is its scheduler wait reason
+(for example `block-completion`), otherwise the async request's basename or a
+short filesystem-operation class. `FS-Halter fehlt` means that the recorded
+task generation can no longer be pinned and identifies an abandoned-owner
+invariant separately from a live but blocked request. The complete numeric
+task, generation and request kind are mirrored into the boot log.
+
+A recognized actionable boot error replaces the detail with a short error;
+the first such message wins so later generic fallout cannot hide the original
+clue. Driver and service start failures use `Fehler: NAME`. Fatal handling,
+the complete boot log and the crash screen keep their existing semantics. In
+particular, a crash screen replaces this diagnostic status instead of becoming
+part of it.
+
+Each row accepts at most 32 printable ASCII bytes. Control characters are
+flattened, unsupported bytes are replaced, and the visible text is clipped to
+the row width. Every update clears both complete row backgrounds before
+drawing with the kernel's built-in 8x8 font, so a shorter successor leaves no
+stale glyphs. Large supported framebuffers use scale two; smaller ones use
+scale one and move the progress bar upward as needed to keep the bar and both
+rows inside the framebuffer.
+
+This path remains allocation-free and does not depend on filesystems,
+services, modules or the desktop. The renderer is retired unchanged when the
+first usable desktop frame or terminal prompt takes ownership of the display.

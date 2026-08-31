@@ -1,7 +1,7 @@
 ﻿# R4OS software structure
 
-R4OS source code is split into repositories by ownership. The workspace
-checkout is normally rooted at `D:\R4OS`.
+R4OS source code is split into repositories by ownership. All paths in this
+document are relative to the portable workspace root on Windows or Linux.
 
 | Component | Workspace location | Responsibility |
 | --- | --- | --- |
@@ -14,6 +14,7 @@ checkout is normally rooted at `D:\R4OS`.
 | Diagnostics | `Repositories/Diagnostics/` | Test and inspection R4X programs |
 | Drivers | `Repositories/Drivers/` | Loadable R4D hardware drivers |
 | Protocols | `Repositories/Protocols/` | Loadable R4P protocol modules |
+| Subsystems | `Repositories/Subsystems/` | Userland guest-format hosts such as R4Basic and R4GB |
 | Distribution | `Repositories/Distribution/` | Image plans, overlays, QEMU configuration and releases |
 
 Each canonical module owns a `module.R4MF`, a local `Build.bat`, sources and

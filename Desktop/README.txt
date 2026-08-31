@@ -52,3 +52,11 @@ resolves a guest file to a stable installed subsystem ID and sends an
 R4X process. Video, input, guest time and audio remain owned by the subsystem
 process and its SDK host/runtime layers, so two guest files have distinct
 window, process and runtime state.
+
+The headless product acceptance exercises this boundary for R4GB through the
+same installed catalog, ID-only `.gb`/`.gbc` associations, bounded probe, Open
+With selection, and `R4SUBSYS1` launch used by Explorer. Two generated free
+cartridges run concurrently with separately focused physical keyboard input,
+video, App-Audio, battery SRAM/RTC persistence, and cooperative Close. A third
+CGB-only fixture must expose its concrete rejection in a valid hosted window
+before it closes. The test never opens a commercial ROM.

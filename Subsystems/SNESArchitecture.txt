@@ -1,0 +1,216 @@
+﻿# R4SNES-Architektur und Umsetzungsplan 0.73.X
+
+Stand: 0.73.1, 01.09.2026
+
+## Ziel und verbindliche Entscheidungen
+
+R4SNES wird ein eigenständiges, öffentliches Zig-Subsystem für Super-Nintendo-Cartridges. Es läuft als normales GUI-R4X im Userland. SNES-spezifische CPU-, Bus-, PPU-, APU-, Cartridge- und Coprozessorlogik bleibt vollständig im Repository `Repositories/Subsystems/R4SNES`; der Kernel erhält nur Korrekturen an bereits allgemeinen Hardware- oder Plattformgrenzen.
+
+Die geplante Modulidentität lautet `R4SNES`, die stabile Subsystem-ID `r4os.snes` und die Gastformat-ID `snes.cartridge`. `.sfc` und `.smc` sind nur Kandidatenendungen. Erst die begrenzte Cartridge-Prüfung entscheidet über Annahme, Board und Region. Das öffentliche Zielrepository ist `R4OSDev/r4os-subsystem-r4snes`, das installierte Modul liegt unter `C:\R4OS\SUBSYSTEMS\r4os.snes\R4SNES.R4X`.
+
+Controllerport 1 wird ausschließlich von der vereinbarten Tastaturbelegung gespeist. Controllerport 2 ist elektrisch als nicht angeschlossenes serielles Eingabegerät modelliert und besitzt keine Hostbelegung. USB-Gamepads, Maus, Multitap und sonstige Controller gehören nicht zu 0.73.X. Echter USB-Controller-Support ist ein späteres Vorhaben und verdrahtet dann beide Ports neu.
+
+Der private End-to-End-Titel ist die europäische, ungeheaderte 524288-Byte-LoROM `C:\TEMP\SMW.SFC` mit 2048 Bytes SRAM und SHA-256 `B5BE1DBA3012B6811A5660FBF2981CB23CDD1E48F845A42DF00F0F55B19F0392`. Sie bleibt ausschließlich in `Artifacts/Distribution/PrivateInjection/Temp/SMW.SFC`, darf kein öffentliches Testartefakt werden und ist kein Grund für titelbezogene Sonderpfade.
+
+## Besitzer und Änderungsflächen
+
+| Fläche | Fachlicher Besitzer | Geplante Änderung |
+|---|---|---|
+| SNES-Hardware, Cartridge, Coprozessoren, Testharness, R4X | R4SNES | Neue unabhängige Implementierung und Owner-Tests |
+| Öffentliche Tastennamen und ABI-Inventar | Contract | Append-only Konstanten für physische Keypad-HID-Usages; kein Layoutwechsel von `PhysicalKeyEvent` |
+| PS/2- und USB-HID-Übersetzung | Kernel | USB-Keypad 0x59–0x63 ergänzen, rechtes Strg als Extended-Key erhalten; PS/2-Pfad nur gegenprüfen |
+| Eventtransport und Fokusfreigabe | Desktop | Bestehenden generischen Transport unverändert nutzen und regressionsprüfen |
+| Fenster-, Eingabe- und Laufzeitadapter | SDK | `r4os.subsystem_host` und `r4os.subsystem_runtime` wiederverwenden; gemeinsamen Persistenzhelfer extrahieren |
+| Persistenzreferenz | R4GB | Bewährte Mechanik ohne Game-Boy-Annahmen in den SDK-Quellhelfer überführen und R4GB migrationsfrei darauf umstellen |
+| Katalog, Assoziation, Imageplan, private Injection | Distribution | R4SNES in Full/Test aufnehmen, `.sfc/.smc` registrieren und private SMW-Injection ausschließlich für lokale Bilder erhalten |
+| Doppelklick/Open-With | Explorer | Bestehende katalogbasierte `R4SUBSYS1`-Auflösung ohne SNES-Sonderfall nachweisen |
+| Dokumentation und Inventare | Docs | Architektur, Qualifikationsmatrix, Modul- und Testinventare versionsgerecht pflegen |
+
+Eine neue Plattform-ABI ist nicht nötig: `PhysicalKeyEvent.key` transportiert bereits generische HID-Keyboard-Usages und `r4os.subsystem_host` hält 256 physische Tasten. Die Contract-Arbeit benennt lediglich bislang unbenannte Werte. Eine Änderung an Eventgröße, Aufrufnummern oder Fenstervertrag wäre eine unzulässige Ausweitung, solange ein Gegenbeweis fehlt.
+
+## Wiederverwendung aus 0.72.X
+
+R4SNES übernimmt folgende Prinzipien, nicht den Game-Boy-Code:
+
+- Pro geöffnetem Gast genau eine private Maschine und ein neues R4X-Fenster.
+- Genau eine begrenzte Gastscheibe pro Hostzyklus über `r4os.subsystem_runtime`; Gastzeit kommt nie aus Hostwartezeiten.
+- `r4os.subsystem_host` besitzt Skalierung, Letterbox, Fokusfreigabe und höchstens 128 x 128 Pixel große Rasterblöcke. Scheduling und Audio bleiben außerhalb des Fensterhosts.
+- Native generationstreue Bildflächen; ein unverändertes vollständiges Gastbild erzeugt keinen Frame.
+- Caller-eigene PCM-Puffer und Audio ausschließlich über App-Audio/AUDSVC. Audioausfall setzt nur den Audiopfad auf `degraded`.
+- F5 Pause, F6 Fortsetzen, F8 Reset, F9 Stumm und F10 Ton an. Reset erzeugt eine neue Maschinengeneration; Close, Fehler und wiederholtes Close laufen in denselben idempotenten Abbau.
+- ROM-basierte, pfadunabhängige Speicheridentität; ein Schreiber je Identität; verzögerte Snapshots; gleicher-Verzeichnis-Stage, Last-Good-Backup, begrenzte Wiederholung, Recovery sowie zwingendes Drain/Join vor Lease-Freigabe.
+- `MODULES.JSON` Schema 4 ist die einzige installierte Subsystemkatalogquelle. `ASSOC.R4S` speichert nur stabile Subsystem- und Gastformat-ID.
+
+Der Persistenzalgorithmus ist allgemein genug, um in einer späteren Stufe als einkompilierter SDK-Quellhelfer `r4os.subsystem_persistence` extrahiert zu werden. Das erzeugt weder ein neues R4L noch eine neue Kernel-ABI. Policy, SRAM-/RTC-Codec und Boardsemantik bleiben Eigentum des jeweiligen Subsystems.
+
+## Instanz- und Zustandsmodell
+
+Jeder Start besitzt ausschließlich instanzlokal:
+
+1. das unveränderliche kanonische Cartridge-Image, Headerbefund, Region und ein Boardobjekt;
+2. einen 24-Bit-Adressbus mit expliziten Open-Bus-Latches, Zugriffsgeschwindigkeit und gerätebezogenen Read/Write/Idle-Ereignissen;
+3. S-CPU/5A22-Zustand mit vollständigem 65C816-Registersatz, Interrupt- und Wait/Stop-Zuständen;
+4. 128 KiB WRAM, PPU mit 64 KiB VRAM, 512 Byte CGRAM und 544 Byte OAM;
+5. DMA/HDMA-Kanäle, Auto-Joypad und die beiden seriellen Controllerports;
+6. S-SMP mit SPC700, 64 KiB ARAM, I/O-Ports und Timern sowie eine S-DSP-Instanz;
+7. optionale Board-Coprozessoren und batteriegestützte Speicherbereiche;
+8. Hostadapter für Eingabe, Video, Audio, Persistenz und Lebenszyklus.
+
+Kein Gastregister enthält Hostzeiger. ROM, RAM und Gerätesichten werden über geprüfte Indizes angesprochen. Statische Decode-Tabellen dürfen geteilt werden; veränderbarer Maschinen-, Filter-, Timer-, Video-, Audio-, Controller-, Coprozessor- und Speicherzustand niemals. Mehrere Fenster dürfen dieselbe nicht batteriegestützte ROM parallel öffnen. Bei batteriegestütztem Zustand besitzt nur eine Instanz Schreibrecht; eine zweite endet sichtbar mit `Busy`, statt einen Last-Writer-Wins-Pfad zu eröffnen.
+
+## Zeit-, Bus- und Ausführungsmodell
+
+Die gemeinsame Zeitbasis sind ganzzahlige S-CPU-Masterclocks. NTSC und PAL sind explizite Profile mit eigenen Quarz-, Scanline-, Frame- und Overscanparametern. Eine CPU-Operation wird nicht als unteilbarer Instruktionsblock verbucht: Opcode-Fetch, Operandzugriff, Lesen, Schreiben und Idle werden als Mikrooperationen an den Bus gemeldet. Dadurch sehen MMIO, Interruptflanken, Refresh, DMA und HDMA die richtige Reihenfolge.
+
+Der Scheduler wählt am aktuellen Zeitstempel in fester Reihenfolge das nächste fällige Ereignis aus. S-CPU, PPU, DRAM-Refresh, DMA/HDMA und Controller-Automatik verwenden die Masterclock-Achse. Die APU besitzt ihre eigene Oszillator-Domäne und wird über einen ganzzahligen rationalen Phasenakkumulator aus derselben Gastzeit vorangebracht. Es gibt keine Gleitkomma-Wanduhrkopplung. Bei gleichem Anfangszustand müssen unterschiedliche Scheibenteilungen denselben Zustandsdigest erzeugen.
+
+Eine produktive Laufzeitscheibe verarbeitet höchstens 32768 S-CPU-Masterclocks. Jeder innere Schritt ist zusätzlich auf höchstens einen Bus- oder Geräteübergang begrenzt; auch DMA darf zwischen Bytes unterbrochen werden. Pause friert alle Gastdomänen und den RTC-Nachlaufbezug ein, ohne Hostmonotonie rückwärts zu rechnen. Reset verwirft Maschine, Audiofilter, Framegeneration und gehaltene Controllerzustände, behält aber die Cartridge- und Persistenzidentität.
+
+Der Bus klassifiziert jeden Zugriff als 6, 8 oder 12 Masterclocks beziehungsweise als gerätespezifischen Zyklus. Er modelliert FastROM, WRAM, MMIO, Cartridgefenster, Spiegelungen und offene Busse ausdrücklich. Unbekannte Bereiche liefern das belegte Latchverhalten und niemals zufälligen Hostspeicher.
+
+## S-CPU und Basissystem
+
+Der 65C816-Kern implementiert Emulation/Native Mode, 8-/16-Bit-Akkumulator und Indexbreite, Direct Page, Daten- und Programmbank, Stackvarianten, alle legalen Opcodes, Interruptvektoren, WAI/STP, Blockmoves, Decimal Mode und die belegten Read-modify-write-Reihenfolgen. Der offizielle W65C816S-Datensatz ist die ISA-Grundlage; SNES-spezifische Buszyklen und 5A22-Abweichungen werden mit offenen ROMs sowie mindestens zwei unabhängigen Implementierungen gegengeprüft.
+
+Zum 5A22-System gehören WRAM-Ports, H/V-Zähler, NMI/IRQ, Multiplikation/Division, MEMSEL, DRAM-Refresh, Controller-Serialisierung und Auto-Joypad. DMA und HDMA sind eigene Busmaster mit acht Kanälen, Transfermodi, indirekten Tabellen, Wiederholung, Line Counter, Channel Priority, Start-/Abbruchzeitpunkten und belegten Konflikten. Kein DMA-Pfad darf Hostspeicher außerhalb des Gastbusses adressieren.
+
+## PPU und Video
+
+Die PPU läuft dot- und scanlinebezogen. Sie modelliert Modi 0 bis 7, alle BG-Bittiefen, Tilemaps, Offset-per-Tile, Mode 7, OAM-Auswahl und Sprite-Limits, Fenster, Main/Subscreen, Color Math, Fixed Color, Mosaic, Direct Color, VRAM-Inkrement/Remapping, CGRAM/OAM-Latches, Forced Blank, H/V-Latch, Overscan, Hires, Pseudo-Hires und Interlace. Zugriffsverbote und Registeränderungen während einer Zeile werden am Buszeitpunkt ausgewertet.
+
+R4SNES veröffentlicht XRGB32 in der tatsächlich aktiven Gastgeometrie: 256 oder 512 Pixel breit, 224 oder 239 Zeilen progressiv sowie 448 oder 478 Zeilen interlaced. Es skaliert nicht vorab. Der Host zerlegt Änderungen in höchstens 128 x 128 große Blöcke, erhält die Framegeneration und letterboxt. Automatische Bildnachweise vergleichen XRGB-Digests, Pixelmasken oder gezielte Register-/Scanlineprotokolle; rein subjektive Sichtprüfung bleibt bis zur letzten Unterversion ausgeschlossen.
+
+## S-SMP, IPL, S-DSP und Audio
+
+Der S-SMP umfasst einen vollständigen SPC700-Kern, 64 KiB ARAM, drei Timer, CPU/APU-Portlatches und CONTROL/TEST-Verhalten. Alle 256 Opcodepfade werden mit 256000 gepinnten Einzelschrittvektoren geprüft und anschließend mit dem Gilyon-System-ROM gegengeprüft.
+
+R4OS liefert die proprietären 64 IPL-Bytes nicht aus. Der Standardpfad bildet das dokumentierte Upload-Handshaking, die Portreihenfolge und die Wartezeiten als semantisches IPL-Gerät nach und übergibt danach an den hochgeladenen SPC700-Code. Optional darf der Nutzer unter `C:\R4OS\SUBSYSTEMS\r4os.snes\FIRMWARE\SPC700.IPL` ein eigenes exakt 64 Byte großes Abbild bereitstellen; es wird begrenzt validiert und über den realen SPC700-Pfad ausgeführt. Fehlende oder ungültige optionale Firmware darf weder geschätzt noch aus dem Netz geladen werden. Tests müssen beide Pfade und eine klare Ablehnung von Programmen abdecken, die im semantischen Modus beliebige IPL-Bytes voraussetzen.
+
+Die S-DSP-Implementierung umfasst acht Stimmen, BRR, Pitch, Noise, Pitch Modulation, KON/KOFF, ADSR/GAIN, Gaussian Interpolation, Main/Echo Volume, FIR und Echo-RAM. Der native 32-kHz-Strom wird mit deterministischem ganzzahligen Phasenakkumulator auf 48-kHz-Stereo-S16LE gebracht. Pro Runtimezyklus werden höchstens 2048 Frames in caller-eigenen Puffern erzeugt; Warteschlangen sind begrenzt und melden Unter-/Überlauf. Audiofehler verändern weder CPU-/PPU-Takt noch Framefolge.
+
+## Tastatur und Controller
+
+| SNES-Signal | Physische Taste | HID-Usage |
+|---|---|---|
+| Hoch/Runter/Links/Rechts | Pfeiltasten | 0x52 / 0x51 / 0x50 / 0x4F |
+| Start | Eingabetaste | 0x28 |
+| Select | rechtes Strg | 0xE4 |
+| X | Num8 | 0x60 |
+| A | Num6 | 0x5E |
+| B | Num2 | 0x5A |
+| Y | Num4 | 0x5C |
+| L | Num7 | 0x5F |
+| R | Num9 | 0x61 |
+
+Die Belegung arbeitet mit physischen Key-down-/Key-up-Ereignissen und ist unabhängig von Layout, Zeichencode und Num Lock. Wiederholte Key-down-Ereignisse sind idempotent. Fokusverlust, Reset und Close lösen alle gehaltenen Leitungen. Gegensätzliche Richtungen bleiben als reale gleichzeitige Leitungen sichtbar; eine Richtungspriorität wäre unzulässige Hostpolitik.
+
+Der PS/2-Set-1-Pfad bildet die sechs benötigten Numpad-Tasten bereits auf die obigen HID-Usages ab und erkennt erweitertes rechtes Strg. Im USB-HID-Pfad fehlen derzeit die Keypad-Usages 0x59 bis 0x63 und rechtes Strg wird fälschlich als nicht-erweitertes 0x1D eingespeist. Diese beiden allgemeinen Kernelkorrekturen und append-only Contract-Namen sind Voraussetzung für die Subsystembelegung. Automatische Tests speisen PS/2-Bytes und USB-HID-Reports ein, prüfen den identischen `PhysicalKeyEvent`-Strom, den unveränderten Desktoptransport, Fokusfreigabe und schließlich die zwölf seriellen Controllerbits.
+
+Port 2 liefert bei Latch/Clock die hardwaregerechten Werte eines nicht angeschlossenen Controllers. Er nimmt weder Tastaturereignisse noch einen versteckten Alias von Port 1 an.
+
+## Cartridge, Boards und kanonische Identität
+
+Das Frontend liest höchstens 64 MiB und verändert die Quelldatei nie. Eine Endung macht sie nur zum Kandidaten. Ein optionaler 512-Byte-Copier-Header wird genau dann entfernt, wenn Länge, Headerplausibilität und mindestens ein kanonischer Headerkandidat zusammenpassen. Kandidaten liegen bei LoROM 0x007FC0, HiROM 0x00FFC0, ExLoROM 0x407FC0 und ExHiROM 0x40FFC0. Die Bewertung berücksichtigt Map Mode, Checksum/Complement, Resetvektor, plausible Startbytes, ROM-/RAM-Größe, Region und Boardkennung. Gleichwertige oder widersprüchliche Kandidaten werden sichtbar abgewiesen.
+
+Die normalisierten Programmdaten nach Copier-Header-Entfernung bestimmen als SHA-256 die persistente Cartridge-Identität. Dateiname, Großschreibung und Quellpfad sind irrelevant. Extern bereitgestellte Coprozessorfirmware gehört nicht in diesen Hash; Boardtyp und normalisierte Programmdaten müssen aber übereinstimmen. LoROM, HiROM, ExLoROM und ExHiROM werden als konkrete Board-Decoder implementiert, nicht als Maskierungsheuristik.
+
+Headerchecksum und -größe sind Plausibilitätsmerkmale, keine alleinige Wahrheit. Homebrew mit belegter Geometrie kann trotz nicht passender Checksum angenommen werden; abgeschnittene, übergroße, mehrdeutige oder inkonsistente Bilder enden mit einer konkreten Diagnose. NTSC-J/NTSC-U/PAL werden aus Header und Boardprofil abgeleitet; eine explizite diagnostische Übersteuerung darf nur im Testharness existieren.
+
+## Persistenzvertrag
+
+Produktiver Stamm ist ausschließlich `C:\R4OS\SUBSYSTEMS\r4os.snes\SAVE\`. Eine batteriegestützte Cartridge schreibt `HASH.SAV` als exakt boarddeklarierte rohe SRAM-/BW-RAM-Länge. RTC-Hardware schreibt `HASH.RTC` in einem versionierten, längen- und checksumgeprüften Format mit Chiptyp, Registerzustand, Latch/Halt/Overflow und monotoner Hostzeitbasis. Nicht batteriegestützte Boards erzeugen keine Dateien. Save States gehören nicht zu 0.73.X.
+
+Pro Hash existiert eine create-only Writer-Lease. Dirty-Daten werden in unveränderliche Snapshots kopiert und von genau einem seriellen Worker zusammengefasst. Veröffentlichung erfolgt im Zielverzeichnis über Stage, kanonisches Ziel und Last-Good-Backup. Transiente NTFS-Fehler werden begrenzt wiederholt. Nach Absturz wird unter derselben Lease nur eine exakt lange und, bei RTC, gültige Stage wiederaufgenommen. Beschädigte Stages schlagen geschlossen fehl und erhalten das Backup. Close und alle Fehlerpfade drainen und joinen den Worker, bevor Lease, Cartridge oder Fenster freigegeben werden.
+
+Die Echtzeitnachholung ist chipbezogen und darf bei rückwärts gehender Hostzeit nie rückwärts zählen. Pause zählt nicht als geschlossenes Subsystem. Mehrere unterschiedliche ROMs schreiben unabhängig; dieselbe batteriegestützte Identität hat genau einen Schreiber.
+
+## Erweiterungschip-Fähigkeitsmatrix
+
+| Familie | Entscheidung für 0.73.X | Grundlage und Grenze |
+|---|---|---|
+| OBC-1 | Implementieren | Vollständig adressierbares Object-RAM/Mapper-Verhalten; synthetische Boardtests genügen |
+| S-RTC | Implementieren | Registerprotokoll und Kalenderzustand sind dokumentiert; benötigt versionierte RTC-Persistenz |
+| S-DD1 | Implementieren | Mapping, DMA-Anbindung und Dekompressionsalgorithmus sind offen in mehreren Quellen beschrieben |
+| SPC7110 + Epson RTC | Implementieren | Mapper, Dekompressor, Datenport und RTC sind ausreichend dokumentiert; eigene Vektorfixtures erforderlich |
+| Super FX GSU-1/GSU-2 | Implementieren | ISA, Cache, Pixelpipeline und Bus sind dokumentiert; OpenSNES-Beispiele und synthetische Programme stehen als offene Nachweise bereit |
+| SA-1 | Implementieren | Wiederverwendbarer 65C816-Kern plus dokumentierte MMIO, IRQ, DMA, I-/BW-RAM; sechs offene Hardware-ROMs vorhanden |
+| CX4 | Implementieren | Befehls-/Kommandoschnittstelle, DMA und mathematisches Verhalten sind über unabhängige offene Quellen vergleichbar; keine titelbezogene Tabelle |
+| DSP-1/1A/1B/2/3/4 | Implementieren mit Nutzerfirmware | Generischer NEC-uPD77C25-Kern und Boardprotokoll werden mit selbst erzeugter Firmware getestet. Die geschützten 0x2000-Byte-Programme werden nicht verteilt; pro Revision ist eine geprüfte Datei unter `FIRMWARE` erforderlich |
+| ST010/ST011 | Implementieren mit Nutzerfirmware | Derselbe NEC-Kern mit Setz-Boardmapping; geschützte 0xD000-Byte-Firmware wird nicht verteilt oder angenähert |
+| ST018 | Implementieren mit Nutzerfirmware | ARMv3-Kern, 128-KiB-Programm-ROM, 32-KiB-Daten-ROM, 16-KiB-WRAM und Hostinterface sind implementierbar; das 0x28000-Byte-Abbild muss der Nutzer bereitstellen |
+| MSU-1 | Nicht Teil von 0.73.X | Inoffizielle Erweiterung, keine originale SNES-Cartridge-Hardware |
+| Super Game Boy, Satellaview, Sufami Turbo | Nicht Teil von 0.73.X | Eigenständige Systeme/Adapter mit zusätzlicher Firmware, Medien- oder Peripheriegrenze statt bloßem Cartridge-Chip |
+| Super Scope, Maus, Multitap, Justifier | Nicht Teil von 0.73.X | Eingabeperipherie; Controllerport 2 bleibt unverbunden |
+
+`Implementieren mit Nutzerfirmware` bedeutet echte allgemeine CPU-/Busunterstützung, keine HLE-Befehlstabelle aus kommerziellen Spielen. Fehlt die exakte Firmware, zeigt das Cartridgefenster den benötigten Chip, Dateinamen und die erwartete Größe und endet begrenzt. R4OS lädt nie selbst Firmware aus dem Netz. Offene synthetische Firmware testet Decoder, Timing, Hostkommunikation und Fehlerpfade; eine spätere rechtmäßig bereitgestellte Firmware kann denselben Pfad nutzen. Wird bei der Implementierung eine hier angenommene Dokumentations- oder Testlücke nachgewiesen, darf eine dynamische Unterversion die Evidenz ergänzen; andernfalls muss die Familie sauber auf `unsupported` zurückgestuft und begründet werden.
+
+## Referenz- und Teststrategie
+
+Die maschinenlesbare Detailzuordnung steht in `Docs/Subsystems/SNESQualificationMatrix.json`. Der lokale gepinnte Bestand liegt unter `ExFiles/Reference/SNES` und wird durch `References.json` samt Revisionen, Lizenzen, Datei- und Baumdigests gebunden. Er enthält 147 eigentliche offene Test-ROMs; zwei zusätzliche `.sfc`-Dateien unter `Tools` sind Werkzeugfixtures und zählen ausdrücklich nicht zum Korpus. Außerdem sind 256000 SPC700-Einzelschrittvektoren vorhanden.
+
+Die Beweisreihenfolge lautet:
+
+1. reproduzierbare synthetische Owner-Modelle und Einzelschrittvektoren;
+2. offene ROMs mit maschinenlesbarer Abschlusszelle oder eindeutigem Protokoll;
+3. reale-Hardware-Sollbilder beziehungsweise dokumentierte Registerdumps;
+4. differenzielle Diagnose gegen mindestens zwei unabhängige Implementierungen;
+5. subjektive Sicht-, Hör- und Lenovo-Prüfung ausschließlich in der letzten Unterversion.
+
+Eine fremde Implementierung allein ist nie Hardwarewahrheit. Ares, Mesen2, Snes9x und SNES-SPC dienen nur dem Vergleich; ihre Lizenzen werden nicht durch Abschreiben umgangen. R4SNES wird in Zig neu implementiert. Fremdcode darf nur nach expliziter Lizenzprüfung und mit erforderlichen Hinweisen übernommen werden. Kommerzielle ROMs, proprietäre IPL-/DSP-/ST-Firmware und lokale `ExFiles` werden nie committed oder zur öffentlichen Buildvoraussetzung.
+
+Gilyon deckt alle normalen 65C816- beziehungsweise SPC700-Instruktionen breit ab, aber nicht allein Buszyklen, Interrupts, WAI/STP, PPU, DSP oder Systemtiming. Die 256000 SPC700-Vektoren prüfen Endzustände, nicht automatisch jeden Dummy-Read. Undisbeliever enthält viele visuelle und revisionsabhängige Fälle; solche ROMs werden nur dann zum Gate, wenn ein belastbares Pixel-, Register- oder Abschlussprotokoll gebunden ist. Die 29 historischen ROMs sind ein Reproduktionssnapshot und keine unabhängige zweite Hardwarequelle. Von den sechs SA-1-ROMs sind zwei selbstwertende Tests; vier Utilities werden gegen mitgelieferte Hardwarebilder/-tabellen oder gezielte Speicherprotokolle geprüft. HDRV ist interaktiv und wird vor der Schlussabnahme nur über geskriptete Eingabe, Geometrie und Audio-/Frameinvarianten verwendet.
+
+## Produktintegration und Fehlervertrag
+
+Der R4SUBSYS1-Start validiert Gastformat und Datei erneut, erstellt genau ein Fenster und zeigt Lade-, Header-, Board-, Firmware-, Persistenz- oder Laufzeitfehler darin mit konkreter Stufe. Ein Fehler in einer Instanz beendet keine andere. Alle Besitzer werden in umgekehrter Reihenfolge und idempotent freigegeben.
+
+Der installierte Katalog beschreibt `.sfc/.smc`, Probe, Anzeigename, Modulpfad und `snes.cartridge`. Explorer-Doppelklick und Open-With lösen ausschließlich über Katalog plus `ASSOC.R4S` auf. Test- und Full-Image enthalten das öffentliche R4SNES-Artefakt; SMW erscheint nur, wenn das lokale PrivateInjection-Overlay ausdrücklich verwendet wird, und landet dann unter `C:\TEMP\SMW.SFC`.
+
+Automatische End-to-End-Fixtures werden aus originalem öffentlichem Quelltext im R4SNES-Repository gebaut. Mindestens zwei verschiedene offene Cartridges laufen 60 Gastsekunden parallel, erhalten getrennte Eingabe, Video, Audio und Persistenz und schließen unabhängig. Eine batteriegestützte Fixture prüft Neustartpersistenz; ungültige, mehrdeutige und firmwareabhängige Images prüfen sichtbare Ablehnung.
+
+## Budgets und Reifestufen
+
+- Cartridge-Eingabe: maximal 64 MiB; alle Größenrechnungen checked, kein Hostzeiger im Gastzustand.
+- Runtime: höchstens 32768 Masterclocks und genau eine Scheibe pro Hostzyklus; Partitionsinvarianz wird mindestens mit 256, 4096 und 32768 Clocks geprüft.
+- Video: maximal 512 x 478 XRGB32 pro Generation, Rasterblöcke höchstens 128 x 128, kein Present bei unveränderter Generation.
+- Audio: caller-eigene Blöcke bis 2048 Stereo-Frames, begrenzte Queue, keine Beschleunigung oder Blockade der Gastzeit bei Degradation.
+- Persistenz: ein serieller Worker pro Instanz, begrenzte Retries, Drain/Join vor Lease-Freigabe; Close muss im QEMU-TCG-Gate innerhalb von 2 Sekunden enden.
+- Langlauf: je mindestens 60 Gastsekunden auf Standard- und SMP4-QEMU; keine unbounded Slice, kein verlorener Fortschritt, keine PCM-Überläufe im gesunden Backend und maximal 250 ms gemessene Host-Scheduling-Lücke. Abweichende real gemessene Budgets dürfen nur mit dokumentierter Ursachenmessung geändert werden.
+- Determinismus: gleiche Eingaben, Region und ROM ergeben unabhängig von Hosttempo und Scheibenteilung identische periodische CPU-/Bus-/PPU-/APU-Digests.
+
+Owner-Tests bleiben beim Besitzer. Ein neues globales Gate entsteht nur, wenn Repository-, Imageplan- und bestehende Headless-Schichten eine echte Integrationsgrenze nicht abdecken. `Docs/Inventory/Tests.json` wird erst aktualisiert, wenn Tests tatsächlich implementiert sind.
+
+## Geplante Abhängigkeitsfolge
+
+| Version | Ergebnis |
+|---|---|
+| 0.73.2 | Öffentliches R4SNES-Projekt, Eingabevertrag und Testfundament |
+| 0.73.3 | Cartridge-Parser, Boards und 24-Bit-Bus |
+| 0.73.4 | Vollständiger 65C816-Kern |
+| 0.73.5 | 5A22-Taktwerk, MMIO, Interrupts und Controller |
+| 0.73.6 | DMA/HDMA und Buskonflikte |
+| 0.73.7 | PPU-Basis, Modi 0–4 und Sprites |
+| 0.73.8 | PPU-Modi 5–7, Fenster, Farbe, Hires/Interlace und Videoausgabe |
+| 0.73.9 | SPC700, S-SMP, Ports, Timer und IPL-Pfade |
+| 0.73.10 | S-DSP und vollständige Audioausgabe |
+| 0.73.11 | Gemeinsamer Persistenzhelfer, SRAM/BW-RAM und RTC |
+| 0.73.12 | OBC-1 und S-RTC |
+| 0.73.13 | S-DD1 und SPC7110/Epson-RTC |
+| 0.73.14 | Super FX GSU-1/GSU-2 |
+| 0.73.15 | SA-1 |
+| 0.73.16 | CX4 |
+| 0.73.17 | DSP-1/1A/1B/2/3/4 mit Nutzerfirmware |
+| 0.73.18 | ST010/ST011 mit Nutzerfirmware |
+| 0.73.19 | ST018 mit Nutzerfirmware |
+| 0.73.20 | Produktiver R4SUBSYS1-Host, Lebenszyklus und Mehrinstanzbetrieb |
+| 0.73.21 | Explorer-, Katalog-, Distribution- und vollständige automatische E2E-Integration |
+| 0.73.22 | Automatisierte SNES-Reife und Release Candidate |
+| 0.73.23 | Einzige manuelle Sicht-, Spiel-, Audio- und Lenovo-Abnahme einschließlich SMW |
+
+Während der Umsetzung dürfen evidenzbedingt weitere Unterversionen eingefügt werden. Dann wird die manuelle Schlussstufe umnummeriert oder nach hinten verschoben, sodass sie stets exakt die letzte bleibt. Keine technische Vorstufe darf von einer Benutzerbeobachtung abhängen. Falls in der Schlussstufe Eingaben benötigt werden, wird der Benutzer gemäß Roadmapnotiz mit Rolle, Ziel, Kontext, Voraussetzungen, Schritten, Abbruchfällen und festem Antwortformat prompt-engineered angeleitet.
+
+## Geschlossene Fragen und beobachtete Risiken
+
+Die bekannten Designfragen sind geschlossen: Userland-Eigentum, Zeitbasis, Videoformat, Audiofluss, Saveort, Tastaturbelegung, Port 2, Cartridgeidentität, Firmwarepolitik und Erweiterungschipklassen sind festgelegt. Der Start von 0.73.2 benötigt keine weitere Benutzerentscheidung.
+
+Die größten Risiken sind PPU-/DMA-Zeitdetails, APU-Taktdrift, rechtlich nicht distributierbare Firmware und die Laufzeitkosten der Coprozessoren. Sie werden durch Mikrooperationen, rationale Taktkopplung, klare Firmware-Ablehnung, komponentenweise Referenzgates und frühe Budgetmessung begrenzt. Offene visuelle ROMs ohne belastbares Sollbild bleiben Diagnosematerial und werden nicht durch einen zufällig passenden Emulator-Screenshot zur Wahrheit erklärt.

@@ -1,0 +1,463 @@
+# 0.72.X Gameboy
+
+**Status:** Abgeschlossen
+
+## Leitbild
+0.72.X führt mit einer maximal ausgereiften Emulation des monochromen Game Boy das zweite produktive R4OS-Subsystem ein. Das verbindliche Hardwareziel ist DMG-01. Cartridge-Images, die auf einem monochromen Game Boy lauffähig sind, werden im DMG-Verhalten ausgeführt; Dual-Mode-Cartridges laufen dabei ausschließlich im DMG-Modus, reine CGB-Cartridges werden verständlich abgewiesen. CGB- und SGB-Hardware sind keine Ziele dieser Roadmap. Das Subsystem öffnet echte Cartridge-Images über den bestehenden installierten Subsystemkatalog und den R4SUBSYS1-Startvertrag. Die produktive Zuordnung von *.gb und *.gbc auf r4os.gb macht einen Explorer-Doppelklick zum normalen Startweg und führt jede geöffnete ROM als eigene, vollständig isolierte GUI-R4X-Instanz im Desktop aus. Die Endung .gbc bleibt dabei nur ein Kandidatenhinweis: Ausgeführt werden ausschließlich Images, deren Cartridge-Header den DMG-Betrieb erlaubt; reine CGB-Cartridges werden verständlich abgewiesen. Explorer, Dateizuordnung und Katalog wählen nur den passenden Host; die verbindliche Prüfung und Ausführung des Gastformats bleiben Eigentum des Subsystems.
+
+Die Emulation entsteht als eigenständige R4OS-Implementierung in einem eigenen öffentlichen Subsystem-Repository. CPU, Adressraum, Cartridge und Bankumschaltung, Timer, Interrupts, Grafik, Eingabe und Audio gehören zum privaten Zustand jeder Gastinstanz. Weder Game-Boy-spezifische Logik noch ein Emulator-Core gelangen in den Kernel. Gastadressen sind niemals Hostzeiger, virtuelle Hardware erhält keinen direkten Zugriff auf R4OS-Hardware, und der produktive Pfad hängt nicht von einem mitgelieferten proprietären Boot-ROM ab.
+
+Der vorhandene r4os.subsystem_host übernimmt weiterhin Fenster, Viewport, seitenverhältnistreue Skalierung, Letterboxing und die Präsentation des nativen Gastbilds. Die Game-Boy-Oberfläche wird ohne vorzeitige hostseitige Vergrößerung bereitgestellt; unveränderte Bilder erzeugen keinen Frame. r4os.subsystem_runtime bleibt Eigentümer von kooperativer Ausführung, monotoner pausenbereinigter Gastzeit, begrenzten Gast-Scheiben und caller-eigenem PCM. Audio läuft ausschließlich über App-Audio und AUDSVC; ein Audioausfall darf Gastzeit, Video und Eingabe weder beschleunigen noch blockieren.
+
+Echte Spielsteuerung benötigt gedrückte und losgelassene physische Tasten. Der bestehende GUI- und Subsystem-Eingabepfad wird deshalb an seiner gemeinsamen R4DESK-, Contract- und SDK-Grenze append-only um geordnete Key-down- und Key-up-Ereignisse, layoutunabhängige physische Tastenidentitäten einschließlich linker und rechter Modifikatoren sowie einen definierten Fokusverlust erweitert. Bei Fokusverlust werden alle im Gast gehaltenen Tasten freigegeben. 0.72.X bedient den Gast ausschließlich per Tastatur: Pfeiltasten bilden das Steuerkreuz, Eingabe bildet Start, rechtes Strg bildet Select, linkes Alt bildet B und die Leertaste bildet A. Einzelne Modifikatortasten müssen das fokussierte Gastfenster deshalb selbst als physische Tasten erreichen; zusammengefasste Modifier-Bits, Zeichenwerte, Polling-, Toggle- oder Wiederholungsheuristiken sind kein Ersatz für den vollständigen Tastenzustand.
+
+Eine Dateiendung oder Katalogprobe macht eine ROM nur zum Kandidaten. Der Host mit der stabilen SUBSYSTEM_ID r4os.gb validiert das vollständige Cartridge-Image begrenzt und reproduzierbar, weist beschädigte sowie nicht unterstützte Varianten sichtbar ab und verändert die ROM niemals. Persistente Cartridge-Daten liegen getrennt vom installierten R4X und von der unveränderlichen ROM unter C:\R4OS\SUBSYSTEMS\r4os.gb\SAVE\. Nur ein laut Cartridge-Typ batteriegestützter Zustand wird dauerhaft geführt. Der vollständige ROM-Inhalt bestimmt dessen stabilen Hashschlüssel unabhängig von Dateiname und Ablageort; HASH.SAV enthält das rohe Cartridge-RAM und HASH.RTC gegebenenfalls einen versionierten MBC3-Uhrzustand. Die RTC bildet Latch, Halt, Tageszähler und Überlauf ab und holt bei geschlossenem Subsystem die tatsächlich verstrichene Zeit aus der R4OS-Zeitquelle nach. Dirty-State wird verzögert und atomar geschrieben sowie bei sauberem Close zwingend geleert. Pro ROM-Identität besitzt höchstens eine laufende Instanz Schreibbesitz; weitere Instanzen dürfen keinen konkurrierenden Last-Writer-Wins-Pfad eröffnen.
+
+Sichtbare lokale Referenzziele sind die bereitgestellte TETRIS-ROM Revision 01 unter C:\TEMP\TETRIS.GB, die deutsche Pokémon-Rot-ROM unter C:\TEMP\POKERED.GB und die deutsche Pokémon-Gold-ROM unter C:\TEMP\POKEGOLD.GBC. Tetris prüft den ROM-only-Pfad; Pokémon Rot prüft batteriegestütztes Cartridge-RAM über Speichern, Close und erneutes Öffnen. Pokémon Gold ist eine DMG-kompatible Dual-Mode-Cartridge und prüft im monochromen Modus MBC3, SRAM und RTC einschließlich tatsächlich verstrichener Zeit zwischen zwei Starts. Alle drei sollen im normalen R4OS-Desktop korrekt, flüssig und spielbar laufen, einschließlich stabiler Bildausgabe, gehaltener und losgelassener Tasten, passender Gastzeit, Audio sowie sauberem Fokus-, Pause-, Reset- und Close-Verhalten. Eine offene RTC-Test-ROM belegt den vollständigen MBC3-Uhrvertrag zusätzlich reproduzierbar und ohne proprietäre Testabhängigkeit. Die Referenz-ROMs sind reale lokale End-to-End-Abnahmen und keine Umfangsselektoren: Die Implementierung bleibt ein allgemeines Hardwaremodell und enthält keinen titelbezogenen Sonderpfad.
+
+Die bereitgestellten kommerziellen ROMs bleiben ausschließlich im ignorierten lokalen Artifacts-Injection-Baum. Sie werden weder in ein öffentliches Repository aufgenommen noch Bestandteil eines zur Weitergabe bestimmten Images oder Releasearchivs. Proprietäre Boot-ROMs, Spieleinhalte, Markenassets und anderer nicht freigegebener Nintendo-Inhalt werden nicht verteilt. Dauerhafte öffentliche Tests verwenden eigene synthetische oder nachweislich offen lizenzierte ROM-Fixtures mit dokumentierter Herkunft.
+
+Kompatibilität, deterministisches Verhalten und ein responsiver Desktop haben Vorrang vor maximaler Emulationsgeschwindigkeit. Maximal ausgereifter DMG-Support bedeutet ein allgemeines, testbelegtes Modell von CPU, Timer, Interrupts, DMA, PPU, APU, serieller Basishardware und den für DMG-Cartridges benötigten Controllern, nicht bloß das erfolgreiche Starten der beiden Referenzspiele. Save States und Gamepad-Eingabe sind ausdrücklich nicht Teil von 0.72.X. Externe Gerätefunktionen wie Link, Printer, Kamera-Zufuhr, Infrarot oder Sensorik sind ebenfalls kein Abnahmeumfang dieser Roadmap; Cartridges müssen bei nicht verfügbarer Zusatzhardware definiert reagieren, statt den Host zu gefährden. Die später gewünschte Link-Funktion soll R4OS-Instanzen über TCP/IP verbinden, doch 0.72.X enthält dafür weder Transport, Protokoll noch vorbereitende Teilimplementierung. Game Boy Color, Super Game Boy und eine allgemeine Emulationssammlung bleiben außerhalb des Leitbilds. Die öffentliche hardwareorientierte Testbasis ist im gepinnten lokalen Referenzbestand unter ExFiles/Reference/GameBoy dokumentiert und umfasst insbesondere Pan Docs, GB-CTR, SM83-SingleStep-Vektoren, Mooneye, DMG Acid2, Mealybug Tearoom, SameSuite und RTC3Test. Dauerhafte Tests übernehmen daraus nur eindeutig lizenzierte Quellen und Fixtures mit dokumentierter Herkunft.
+
+## Notizen
+Die Roadmap ist bewusst dynamisch: Wenn sich während der Umsetzung zeigt, dass zusätzliche Unterversionen fachlich sinnvoll sind, dürfen sie in die laufende 0.72.X-Roadmap eingeplant werden.
+Manuelle Sichtabnahmen durch den Nutzer und Realhardwaretests auf dem Laptop werden ausschließlich in der letzten geplanten Unterversion durchgeführt. Alle vorherigen Unterversionen müssen mit automatisierbaren Host-, Modell-, Image- und Headless-Nachweisen abschließbar sein, damit die Umsetzung bis zur finalen Abnahme ohne Wartepunkt fortschreiten kann.
+Abschlussbereinigung: Tetris.gb, PokeRed.gb und PokeGold.gbc wurden nach der erfolgreichen Abnahme aus Artifacts/Distribution/PrivateInjection/Temp entfernt. Der aktive PrivateInjection-Baum enthaelt keine .gb/.gbc-Datei mehr; kommerzielle ROMs werden weiterhin nicht veroeffentlicht.
+
+## 0.72.1 Subsystemprojekt, Eingabevertrag und Testfundament
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Das kanonische r4os.gb-Subsystemprojekt und alle gemeinsam benötigten Plattformgrundlagen schaffen. Der Schritt legt Architektur, DMG-Modell, lizenzierte Teststrategie und den vollständigen physischen Tastenzustand fest, enthält aber noch keinen behaupteten Spielbetrieb.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Das eigenständige öffentliche Subsystemprojekt unter Repositories/Subsystems mit SUBSYSTEM_ID=r4os.gb, GUI-R4X-Artefakt, R4MF-v2-Manifest, Windows-/Linux-Buildstartern, Apache-2.0-Rechtstexten und der generischen R4OSDev-Repositoryzuordnung anlegen.
+  - Notizen: Modulname, Anzeigename, stabile Gastformat-ID und Zielpfad kanonisch festlegen. *.gb und *.gbc sind Kandidaten desselben DMG-Cartridge-Formats; die endgültige Validierung bleibt beim Host.
+- [Erledigt] #2 Die interne Besitzer- und Zustandsarchitektur für Cartridge, Bus, SM83, Timer, Interrupts, DMA, PPU, APU, Joypad, serielle Basishardware, Persistenz und Hostadapter dokumentieren und als getrennte, instanzlokale Komponenten anlegen.
+  - Notizen: Gastadressen sind Integer im privaten Gastadressraum und niemals Hostzeiger. Kein direkter Zugriff auf R4OS-Hardware und kein Emulator-Core im Kernel.
+- [Erledigt] #3 Ein deterministisches DMG-Modell ohne mitgeliefertes proprietäres Boot-ROM definieren: unterstützte DMG-CPU-Revisionen, Produktionsstandard, Post-Boot-Register-/MMIO-Zustand und revisionabhängige Testprofile festlegen.
+  - Notizen: Revisionstests dürfen nicht still miteinander vermischt werden. Abweichungen zwischen DMG-CPU 0/A/B/C werden dort modelliert, wo sie beobachtbar und belegt sind.
+- [Erledigt] #4 Den append-only R4DESK-, Contract-, Kernel-, Desktop- und SDK-Eingabevertrag um geordnete Key-down-/Key-up-Ereignisse, layoutunabhängige physische Tasten-IDs einschließlich linker/rechter Modifikatoren und einen definierten Fokusverlust erweitern.
+  - Notizen: subsystem_host muss alle gehaltenen Tasten bei Fokusverlust genau einmal freigeben. Zeichenereignisse, Wiederholung und Modifier-Bits bleiben getrennte Informationen.
+- [Erledigt] #5 Ein lokales Subsystem-Testharness für SM83-JSON-Vektoren und offene Test-ROMs aufbauen und den gepinnten Referenzbestand auf CPU, Timer, DMA, PPU, APU, Mapper und RTC abbilden.
+  - Notizen: Dauerhafte Fixtures nur mit eindeutiger Lizenz und Herkunft. Kommerzielle ROMs und ExFiles werden weder committed noch zur öffentlichen Testvoraussetzung.
+- [Erledigt] #6 Modulentdeckung, Owner-Build, vorhandene Contract-/SDK-/Desktop-Tests, Inventare und ein sicher ablehnendes Hostgerüst integrieren; nur tatsächlich geänderte Artefaktversionen erhöhen.
+  - Notizen: Kein neues globales Gate, sofern die vorhandenen Owner- und Imagepfade die Fälle dauerhaft tragen können.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Das neue Subsystem baut unter Windows und Linux eigenständig sowie über den Workspace-Orchestrator, erzeugt ein normales GUI-R4X und erscheint mit eindeutiger r4os.gb-Identität im generierten Subsystemkatalog.
+- [Erledigt] Physische Key-down-/Key-up-Ereignisse unterscheiden linkes und rechtes Strg/Alt, bleiben sequenziert und geben bei Fokusverlust alle gehaltenen Tasten frei; bestehende Anwendungen und r4os.basic bleiben ABI- und verhaltenskompatibel.
+- [Erledigt] Das Testharness kann den vollständigen lokalen SM83-Vektorbestand und gepinnte offene ROMs deterministisch einlesen, Ergebnisse reproduzierbar zuordnen und fehlende optionale Referenzen verständlich überspringen.
+- [Erledigt] Das Hostgerüst lehnt noch nicht implementierte, beschädigte und reine CGB-Cartridges begrenzt ab, ohne ROM-Änderung, Hostzeigerleck, proprietäres Boot-ROM oder Game-Boy-Code außerhalb des Subsystems.
+
+### Notizen
+Fachliche Besitzer sind das neue Subsystemrepository sowie für den allgemeinen Eingabevertrag Contract, Kernel/R4DESK, SDK und Desktop. Game-Boy-spezifische Logik bleibt vollständig im Subsystem. Alle Abnahmen dieser und der folgenden Unterversionen bis 0.72.10 müssen ohne manuelle Nutzerprüfung abschließbar sein.
+Automatisch abgeschlossen am 30.08.2026: Contract-Generator/-Selftest, SDK-Test, Kernel-Test, Desktop-Test, R4BASIC-Test, R4GB-Owner-Test und Full-Referenzharness gruen. Referenzharness: 500 Dateien/500000 SM83-Vektoren sowie 226 offene Test-ROMs. Workspace -module R4GB und -plan Full gruen; MODULES.JSON enthaelt R4GB 0.1.0, r4os.gb, .gb/.gbc und den Logo-Probe. Oeffentliches Repository R4OSDev/r4os-subsystem-r4gb angelegt. Kommerzielle Nutzer-ROMs bleiben ausschliesslich im lokalen PrivateInjection-Overlay.
+
+## 0.72.2 Cartridge-Parser, Adressraum und Bankcontroller
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Cartridge-Images vollständig und begrenzt validieren, den 64-KiB-Adressraum als echten Gastbus aufbauen und die für normale DMG-Software maßgeblichen Bankcontroller implementieren. Speicherzugriff und Mapperzustand bilden danach eine belastbare Grundlage für die CPU.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Cartridge-Dateien anhand tatsächlicher Länge, Headerfeldern, ROM-/RAM-Größe, Cartridge-Typ, CGB-/SGB-Flags und Prüfsummen begrenzt einlesen und ein unveränderliches ROM-Modell erzeugen.
+  - Notizen: Dateiendung und Katalogprobe sind nur Kandidatenhinweise. Dual-Mode läuft als DMG; CGB-only, abgeschnittene, widersprüchliche und übergroße Images erhalten konkrete Fehler.
+- [Erledigt] #2 Den vollständigen DMG-Adressraum mit ROM, VRAM, externem RAM, WRAM/Echo, OAM, unbenutztem Bereich, I/O, HRAM und IE als expliziten Bus mit gerätebezogenen Lese-/Schreibgrenzen implementieren.
+  - Notizen: Boot-ROM-Overlay bleibt deaktiviert, solange kein rechtmäßig bereitgestelltes Boot-ROM ausdrücklich verwendet wird; der produktive Start beginnt im definierten Post-Boot-Zustand.
+- [Erledigt] #3 ROM-only, ROM+RAM, MBC1 einschließlich großer und Multicart-Verdrahtung sowie MBC2 mit internem Nibble-RAM und Adressbit-selektierter Steuerung implementieren.
+- [Erledigt] #4 MBC3/MBC30 mit ROM-/RAM-Banking und RTC-Registerfenster sowie MBC5 mit neuntbitigem ROM-Bankregister, RAM-Banking und korrekter Trennung des Rumble-Bits implementieren.
+  - Notizen: Die RTC-Zeitfortschreibung und Dateipersistenz werden in 0.72.7 angeschlossen; nicht vorhandene Rumble-Ausgabe verändert das Banking nicht.
+- [Erledigt] #5 Für jeden bekannten Cartridge-Typ eine zentrale Capability- und Supporttabelle schaffen und MMM01, MBC6, MBC7, HuC1, HuC3, TAMA5 und Kamera eindeutig zwischen digital unterstützbarem Kern und nicht verfügbarer Zusatzhardware unterscheiden.
+  - Notizen: Unbelegte Sonderhardware niemals approximieren. Ein kontrollierter Unsupported-Fehler ist besser als falsches Banking oder unsicherer Hostzugriff; bei belegtem Zusatzaufwand darf die Roadmap dynamisch wachsen.
+- [Erledigt] #6 Mapper-, Größen-, Spiegelungs-, verbotene-Bank- und Busgrenzfälle mit synthetischen ROMs sowie den geeigneten Mooneye-Mappertests in der Owner-Suite abdecken.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] TETRIS.GB wird als unverändertes ROM-only-DMG-Image erkannt; eine synthetische Dual-Mode-Cartridge wird im DMG-Modus akzeptiert und ein gleich aufgebautes CGB-only-Image mit konkretem Grund abgewiesen.
+- [Erledigt] Alle unterstützten Mapper wählen für minimale, maximale und verbotene Bankwerte exakt die erwarteten ROM-/RAM-Fenster; MBC2-Nibbles, MBC1-Modi, MBC3-Registerwahl und MBC5-Bankbit sind automatisiert belegt.
+- [Erledigt] Jeder CPU-seitige Zugriff bleibt innerhalb des privaten 64-KiB-Gastbusses; Echo-, unbenutzte und noch gesperrte Gerätebereiche liefern das definierte DMG-Verhalten ohne Out-of-bounds- oder Hostzugriff.
+- [Erledigt] Abgeschnittene, inkonsistente, unbekannte und zusatzhardwareabhängige Cartridges enden deterministisch mit einer verständlichen Klassifikation und hinterlassen weder teilweise initialisierten Mapperzustand noch veränderte ROM-Daten.
+
+### Notizen
+Persistente Schreibvorgänge und Echtzeitnachholung folgen erst in 0.72.7; RAM- und RTC-Register werden hier bereits korrekt als Cartridge-Hardware modelliert. Erweiterte Peripherie wie Kamera, Sensorik oder Rumble-Ausgabe bleibt außerhalb des Produktumfangs.
+Umgesetzt als R4GB-Modul 0.2.0: vollständiger 8-MiB-begrenzter Cartridge-Parser mit Logo, Header-/Globalprüfsumme, Größen-, CGB-/SGB- und Capability-Prüfung; ROM-only, MBC1/MBC1M, MBC2, MBC3/MBC30 und MBC5; private 64-KiB-Busgrenzen einschließlich Echo, unbenutztem Bereich, VRAM/OAM- und DMA-Gates. Nachweise: 13/13 Owner-Tests; 500000 SM83-Vektoren und 226 offene ROMs inventarisiert, davon 28/28 Mooneye-Mapper-ROMs vollständig geparst; lokale unveränderte Probes TETRIS=ROM-only, PokeRed=MBC5+Battery, PokeGold=MBC3+Battery+RTC; Workspace-Modulbuild und Full-Imageplan grün. RELEASE_VERSION=0.72.2.
+
+## 0.72.3 SM83-CPU und Instruktionsgenauigkeit
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Einen vollständigen, zyklusbeschreibenden SM83-Kern implementieren. Jede legale Basis- und CB-Instruktion, Flags, bedingte Abläufe und CPU-Sonderzustände werden unabhängig vom späteren Fensterhost deterministisch geprüft.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Registersatz, Flagregister mit festen unteren Bits, PC, SP, Opcode-Fetch, unmittelbare Operanden und explizite Buszyklen als vollständig instanzlokalen SM83-Zustand implementieren.
+- [Erledigt] #2 Alle legalen Basisopcodes einschließlich Laden, 8-/16-Bit-Arithmetik, DAA, Rotationen, Sprünge, Calls, Returns, RST, Stack und Flagsonderfälle implementieren.
+- [Erledigt] #3 Alle 256 CB-Präfixoperationen für Rotate/Shift/Swap, BIT, RES und SET mit korrekten Registern, (HL)-Zugriffen, Flags und Zykluszahlen implementieren.
+- [Erledigt] #4 Bedingte und nicht bedingte Instruktionszyklen, Busreihenfolge, Stackreihenfolge sowie Read-modify-write-Abläufe so modellieren, dass Geräte den korrekten Zwischenzeitpunkt beobachten können.
+- [Erledigt] #5 IME, verzögertes EI, DI, RETI, HALT-Bug, STOP-Grundzustand und die dokumentierten illegalen Opcodes als explizite CPU-Zustände integrieren.
+  - Notizen: Interruptquellen, Timer und DMA werden in 0.72.4 vollständig angeschlossen; die CPU-Schnittstelle und ihre Zeitpunkte werden hier festgelegt.
+- [Erledigt] #6 Die 500 Opcode-Dateien mit insgesamt 500000 SingleStep-Fällen ausführen, Fehler bis auf Opcode, Ausgangszustand, Buszyklus und erste Abweichung diagnostizieren und mit geeigneten Mooneye-CPU-Tests gegenprüfen.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Alle 500000 SM83-SingleStep-Fälle stimmen in Endregistern, Flags, PC, SP und verändertem RAM; für zyklusgeprüfte Fälle stimmt zusätzlich die M-Zyklus-Busfolge.
+- [Erledigt] Jede legale Basis- und CB-Instruktion besitzt genau einen getesteten Decodepfad; unbekannte oder illegale Opcodes führen zum definierten CPU-Zustand statt zu Hostfehler, Endlosschleife außerhalb des Gastbudgets oder Speicherverletzung.
+- [Erledigt] DAA, signed SP-Offsets, bedingte Zyklusvarianten, HALT-Bug, EI-Verzögerung, Interruptannahme und Stackbytefolge sind durch gezielte Grenzfälle und passende Mooneye-Proben belegt.
+- [Erledigt] Zwei identische CPU-Instanzen mit demselben Zustand erzeugen dieselben Busereignisse, während getrennte Instanzen keinerlei Register-, Speicher- oder Decodezustand teilen.
+
+### Notizen
+Der Kern arbeitet in M-/T-Zyklen über den Gastbus und besitzt keine anwendungsspezifischen Sonderpfade. Die SingleStep-Vektoren sind eine breite Implementierungsprobe, aber keine alleinige Hardwarewahrheit; Mooneye und spätere Systemtests bleiben verbindliche Gegenproben.
+Umgesetzt als R4GB-Modul 0.3.0: vollständiger SM83-Kern mit 244 legalen Basis-, 256 CB-Pfaden und elf deterministischen Illegal-Locks; Registerpaare, feste F-Unterbits, ALU/DAA, signed SP, Bedingungen, Stack, exakte Read/Write/Idle-M-Zyklen, verzögertes EI, DI, RETI, HALT-Bug, STOP und fünfzyklige Interruptannahme sind instanzlokal. Nachweise: 18/18 Owner-Tests; alle 500 Dateien/500000 SingleStep-Fälle stimmen in Registern, Flags, PC/SP, IME, RAM und Busfolge; Mooneye daa, bits/reg_f und boot_regs-dmgABC laufen über Produktions-CPU/-Bus bis zur Erfolgssignatur; Workspace-Modulbuild und Full-Imageplan grün. RELEASE_VERSION=0.72.3.
+
+## 0.72.4 Taktwerk, Timer, Interrupts, DMA und Joypad
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+CPU und virtuelle Geräte auf eine gemeinsame DMG-Zeitachse setzen. Timer, Interruptcontroller, OAM-DMA, Joypad und serielle Basishardware erhalten ihre vollständigen zeit- und busabhängigen Verhaltensmodelle.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Einen zentralen 4,194304-MHz-Gasttakt mit begrenzten Ausführungsschritten, deterministischer Geräteordnung und sauberer Übersetzung auf die monotone pausenbereinigte subsystem_runtime-Zeit implementieren.
+- [Erledigt] #2 DIV, TIMA, TMA und TAC einschließlich fallender Flanke, Frequenzumschaltung, DIV-Schreibeffekt, verzögertem Reload, Reload-Schreibfenstern und Timerinterrupt implementieren.
+- [Erledigt] #3 IF/IE-Priorität, Interruptannahme, IME-Übergänge, HALT-Aufwecken, HALT-Bug und STOP-Fortsetzung mit exakten CPU-/Buszeitpunkten verbinden.
+- [Erledigt] #4 OAM-DMA mit Startverzögerung, 160 Bytes, Busblockierung, Neustart, Quellenbereichen und revisionsbezogenen OAM-/Zugriffsbesonderheiten implementieren.
+  - Notizen: CGB-HDMA/GDMA gehört nicht zum DMG-Ziel.
+- [Erledigt] #5 Das P1-Joypad als echte Matrix implementieren und die vereinbarte physische Tastaturbelegung anschließen: Pfeile, Eingabe, rechtes Strg, linkes Alt und Leertaste.
+  - Notizen: Gehalten/losgelassen, Gegenrichtungen, Key-Repeat, Fokusverlust und Joypadinterrupt müssen unabhängig von Zeichenwerten korrekt sein.
+- [Erledigt] #6 SB/SC, internen seriellen Takt, Bitfortschritt und Serialinterrupt als DMG-Basishardware implementieren; ohne externen Partner bleibt der Eingang definiert und der Host blockiert niemals.
+- [Erledigt] #7 Die passenden Mooneye-Gruppen für Timer, Interrupts, HALT, DMA, Busbits, Instruktionstiming und serielle Grundzustände automatisiert nach DMG-Revision auswerten.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Alle für das gewählte DMG-Modell verbindlichen Mooneye-Timer-, Interrupt-, HALT-, DMA- und CPU-Timingtests enden mit ihrem dokumentierten Erfolgsprotokoll; revisionsfremde Varianten sind explizit klassifiziert.
+- [Erledigt] Timerflanken, Reloadfenster, IF/IE-Priorität, HALT-Aufwecken und DMA-Busblockierung bleiben bei verschiedenen Gastscheibengrößen und Hostwartezeiten bit- und zyklusgleich.
+- [Erledigt] Jede vereinbarte Taste setzt und löscht genau die erwartete P1-Leitung; Fokusverlust löst alle gehaltenen Tasten, und nur eine echte ausgewählte High-nach-Low-Flanke fordert den Joypadinterrupt an.
+- [Erledigt] Eine serielle Übertragung ohne Gegenstelle läuft begrenzt und deterministisch ab, erzeugt den korrekten Interruptzustand und enthält keinerlei Netzwerk-, Link- oder Hostgerätezugriff.
+
+### Notizen
+Eine spätere Link-Verbindung über TCP/IP bleibt ausdrücklich unberührt. Die serielle Basishardware endet ohne Gegenstelle definiert und enthält weder Transport noch vorbereitendes Netzwerkprotokoll.
+Abschlussnachweis 0.72.4: R4GB 0.4.0 besitzt einen gemeinsamen 4,194304-MHz-DMG-Takt mit begrenzten, pausenbereinigten Hostscheiben sowie deterministischer Geräteordnung. Implementiert und miteinander verdrahtet sind DIV/TIMA/TMA/TAC einschließlich Flanken- und Reloadfenstern, IF/IE/IME einschließlich Interrupt-Retargeting, HALT/HALT-Bug/STOP, OAM-DMA mit Startverzögerung, Blockierung und Neustart, P1-Matrix samt vereinbarter physischer HID-Tasten und Fokusbereinigung sowie SB/SC mit internem 8192-Hz-Takt und definiertem partnerlosem Eingang. Der serielle Pfad enthält keinen Link-, Netzwerk- oder Hostgerätezugriff.
+
+Automatisierung: Eigentümertests und vollständiger Referenzharness grün. Der Harness verarbeitet 11 Suites, 790 Dateien und 500064 Vektoren, darunter 500000 SM83-Einzelschritte. Für DMG-C laufen 33 verbindliche Mooneye-Machine-ROMs erfolgreich (Digest 9d87478697af231761092faf82841388b70f2108bd8923c2f477171f3b651dbb); 20 PPU-abhängige Fälle sind explizit nach 0.72.5 vertagt und 9 DMG-0/MGB/SGB-Fälle als revisionsfremd klassifiziert. Zusätzliche Tests belegen Scheibenpartitionierungsinvarianz, DMA-/Timer-/Serial-Gleichlauf, Interruptabbruch/-retargeting, alle acht P1-Leitungen, Repeat, Fokusverlust, Gegenrichtungen sowie STOP-/DMA-Freeze.
+
+Integration: zentraler R4GB-Modulbuild, Full-Imageplan, Testimage mit 293 Einträgen und NTFSVERIFY (386 Records, 297 Dateien, 84 Verzeichnisse) grün. Headless-Standard- und 4-CPU-SMP-Gastabnahme booten, erfüllen sämtliche Marker und fahren fehlerfrei herunter. Eine lokale, bytegleiche zweite ROM-Overlaykopie mit abweichender Großschreibung wurde aus Artifacts/Distribution/Injection nach Temp/R4GB-DuplicateInjection-20260830 rückgesichert; die kanonischen privaten ROMs bleiben in Artifacts/Distribution/PrivateInjection/Temp und landen weiterhin unter C:\Temp. Releaseversion ist 0.72.4.
+
+## 0.72.5 DMG-PPU und pixelgenaue Videoausgabe
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die monochrome PPU als zeitgenaue Pixelpipeline implementieren und ihr natives 160x144-Bild über r4os.subsystem_host präsentieren. Hintergrund, Fenster, Sprites, Prioritäten und Registeränderungen während einer Scanline werden automatisiert gegen offene Referenzbilder geprüft.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 LCD-Modi 2, 3, 0 und 1, LY/LYC, STAT-Quellen, VBlank, VRAM-/OAM-Zugriffssperren und den 154-Zeilen-Frameablauf auf dem gemeinsamen Gasttakt implementieren.
+- [Erledigt] #2 Tile-Fetcher, Pixel-FIFO, SCX/SCY, LCDC-Tile-/Map-Auswahl, Window-Aktivierung, WX/WY und den internen Window-Line-Counter mit mid-scanline Änderungen implementieren.
+- [Erledigt] #3 OAM-Suche, Zehn-Sprites-pro-Zeile-Grenze, 8x8/8x16, X/Y-Flip, Palette, transparente Farbe und DMG-X-/OAM-Priorität implementieren.
+- [Erledigt] #4 LCD Ein/Aus, STAT-Schreib-/Blockierbesonderheiten, LY-Verhalten, OAM-Corruption und andere belegte revisionsabhängige PPU-Grenzfälle modellieren.
+- [Erledigt] #5 Eine private 160x144-Indexed8-Surface mit vier DMG-Stufen an subsystem_host binden, Full-/Damage-Frames korrekt markieren und unveränderte Bilder vollständig unterdrücken.
+  - Notizen: Skalierung und Letterboxing bleiben Hostaufgabe; der Emulator vergrößert das Gastbild nicht vorab.
+- [Erledigt] #6 Automatische Screenshot- und Breakpoint-Auswertung für DMG Acid2, die DMG-relevanten Mealybug-Tearoom-ROMs und geeignete Mooneye-PPU-Tests integrieren.
+- [Erledigt] #7 Reset, Pause/Fortsetzen, LCD-Abschaltung, Resize und Close so absichern, dass keine stale Surface, halbe Scanline oder ungebundene Damage-Generation veröffentlicht wird.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] DMG Acid2 entspricht pixelgenau dem mitgelieferten DMG-Sollbild in den Stufen 0x00, 0x55, 0xAA und 0xFF.
+- [Erledigt] Alle für das definierte DMG-Profil verbindlichen Mealybug-Mode-3-Tests stimmen pixelgenau mit ihren Sollbildern; abweichende Revisionsbilder werden nicht als austauschbar behandelt.
+- [Erledigt] Mooneye-PPU-, STAT-, LY/LYC-, OAM- und Zugriffstests erfüllen die dokumentierten DMG-Erwartungen einschließlich LCD-Aus/Ein und DMA-Interaktion.
+- [Erledigt] subsystem_host erhält ausschließlich begrenzte 160x144-Indexed8-Flächen und höchstens 128x128 große Rasterblöcke; unveränderte Frames erzeugen keinen Present und Letterboxbereiche beeinflussen den Gast nicht.
+
+### Notizen
+Ziel sind DMG-Verhalten und dokumentierte DMG-Revisionsprofile, nicht CGB-Farbregister oder SGB-Rahmen. Sichtprüfungen durch den Nutzer erfolgen erst in 0.72.11; bis dahin sind Pixelvergleiche automatisiert.
+Automatisch abgeschlossen am 31.08.2026 als R4GB 0.5.0. Owner-Suite: 26/26 Tests. Referenzharness: 500000/500000 SM83-Vektoren, 33/33 DMG-C-Takt-/I/O-ROMs, 32/32 DMG-C-PPU-ROMs und 25/25 pixelgenaue DMG-Acid2-/Mealybug-Bilder. Generationstreue private 160x144-Indexed8-Surface mit vier Graustufen, Full-/Damage-/No-frame, Resize/Letterbox, Pause, LCD-Aus, Reset und idempotentem Close ist über subsystem_host getestet; Rasterblöcke bleiben höchstens 128x128. Workspace-Modulbuild und Full-Imageplan sind grün, MODULES.JSON weist R4GB 0.5.0 aus. Sammelpush: R4GB d471a18, Distribution 947ced1, Docs 800f51c. RELEASE_VERSION=0.72.5.
+
+## 0.72.6 DMG-APU und driftfreie Audioausgabe
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die vier DMG-Audiokanäle, den Frame-Sequencer und den Mixer mit den relevanten digitalen Hardwarebesonderheiten implementieren. Das Ergebnis wird deterministisch auf gepuffertes 48-kHz-Stereo-S16LE für App-Audio abgebildet, ohne die Gastzeit an den Audiopfad zu koppeln.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 NR52-Power, Registerlesemasken, Frame-Sequencer, DIV-Kopplung, Länge, Trigger und DAC-Ein/Aus als gemeinsamen APU-Zustand implementieren.
+- [Erledigt] #2 Kanal 1 und 2 mit Duty, Frequenz, Length, Envelope sowie Kanal 1 mit Sweep, Negate-/Overflow- und Triggerbesonderheiten implementieren.
+- [Erledigt] #3 Kanal 3 mit Wave-RAM, Sampleposition, Volume-Shift, Trigger-/Restart-Verhalten und den belegten DMG-Zugriffseinschränkungen implementieren.
+- [Erledigt] #4 Kanal 4 mit 15-/7-Bit-LFSR, Divisor, Shift, Width-Umschaltung, Envelope, Length und Frequenzgrenzfällen implementieren.
+- [Erledigt] #5 NR50/NR51-Routing, digitale Mischung, DAC-Zentrierung, dokumentierten Hochpass und eine driftarme, deterministische 48-kHz-Stereo-S16LE-Abtastung mit caller-eigenen Puffern implementieren.
+- [Erledigt] #6 Die PCM-Ausgabe ausschließlich über subsystem_runtime/App-Audio/AUDSVC führen und Prefill, Unterlauf, Mute, Backendfehler, Resync und Close ohne Beschleunigung oder Blockade der Gastzeit behandeln.
+- [Erledigt] #7 Die DMG-relevanten SameSuite-APU-Tests, gezielte Register-/Wellenformmodelle und einen automatisierten QEMU-WAV-Kontinuitätspfad integrieren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Alle für das definierte DMG-Profil verbindlichen SameSuite-APU-ROMs erreichen ihr dokumentiertes Erfolgsprotokoll; CGB-/SGB-spezifische Tests sind explizit ausgeschlossen.
+- [Erledigt] Pulse, Sweep, Envelope, Wave-RAM und Noise-LFSR stimmen in gezielten Grenzfällen auf Register-, Trigger-, Sequencer- und Sampleebene mit den offenen Referenzen.
+- [Erledigt] Ein automatisierter QEMU-WAV-Lauf liefert kontinuierliches, nicht stummes Stereo-S16LE ohne systematische Drop-/Doppelblöcke und ohne wachsenden Drift gegen die Gastzeit.
+- [Erledigt] Fehlendes oder fehlerhaftes Audio degradiert ausschließlich den Audioteilpfad; CPU, Timer, PPU, Eingabe, Close und monotone Gastzeit laufen mit begrenzter Arbeit weiter.
+
+### Notizen
+Analoge Gerätevariation wird als dokumentierter Filter-/Pegelentscheid behandelt; digitale Register- und Timingkorrektheit bleibt prüfbar. Hörtests durch den Nutzer finden ausschließlich in 0.72.11 statt.
+Automatisch abgeschlossen am 31.08.2026 als R4GB 0.6.0. Owner-Suite: 34/34 Tests. Referenzharness: 14/14 Suites, 849 Dateien und 500123 Datensätze; beide DMG-relevanten SameSuite-APU-ROMs bestehen, CGB/SGB bleiben explizit ausgeschlossen. NR52/DIV-APU, Pulse 1/2 mit Sweep und Envelope, Wave-RAM/Restart, Noise-LFSR, NR50/NR51, DAC-Zentrierung, Hochpass und driftfreie 48-kHz-Stereo-S16LE-Ausgabe sind implementiert. Der subsystem_runtime/App-Audio/AUDSVC-Pfad überträgt im Gast 6000/6000 Frames beziehungsweise 24000 Byte ohne Suppression, Discard oder APU-Drop. Die unabhängige QEMU-WAV-Abnahme erkennt bei 44,1 kHz 5513/5512 erwartete resampelte Frames als einen zusammenhängenden, nicht stummen Block mit maximal einer Nullprobe, 2:1-Stereo und 435,96 Hz. Erzwungener Backendfehler degradiert nur Audio; CPU, Timer, PPU, Eingabe und idempotenter Close bleiben funktionsfähig. Ein- und Vier-CPU-Headlessläufe sind vollständig grün. Sammelpush: AudioDiag d9fdcf1, R4GB 1cee3af, Distribution c32a300, Docs b17365f, Project 8a8d6d6. RELEASE_VERSION=0.72.6.
+
+## 0.72.7 Cartridge-Persistenz, RTC und Kompatibilitätsreife
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Batteriegestütztes Cartridge-RAM und MBC3-RTC dauerhaft, atomar und mehrinstanzsicher machen. Gleichzeitig wird die Cartridge-Kompatibilitätsmatrix über die häufigen Mapper hinaus abgeschlossen und jede nicht verfügbare Zusatzhardware eindeutig behandelt.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Den vollständigen ROM-SHA-256 als stabile Identität verwenden, batteriegestütztes RAM in HASH.SAV roh und größengetreu laden/speichern und nicht batteriegestütztes RAM niemals unbeabsichtigt persistieren.
+  - Notizen: Umgesetzt in R4GB 0.7.0: SHA-256 über die vollständige unveränderliche ROM ist die pfadunabhängige Identität; HASH.SAV enthält exakt die deklarierte rohe SRAM-Länge. Nicht batteriegestützte Cartridges berühren das Backend nicht.
+- [Erledigt] #2 Dirty-State verzögert, atomar und absturzrobust schreiben sowie bei sauberem Close zwingend leeren; Teilwrite, voller Datenträger, fehlendes Verzeichnis, beschädigte Datei und erneuter Start erhalten definierte Ergebnisse.
+  - Notizen: Dirty-Flush nach zwei Gastsekunden, zwingender Flush bei sauberem Close und R4SYS-gestützter same-directory atomic replace ohne Fallback umgesetzt. Fehlende Verzeichnisse werden angelegt; falsche Größen und beschädigte RTC-Dateien sind explizite Fehler; Full/Write-Fehler bewahren den alten veröffentlichten Stand.
+- [Erledigt] #3 Einen pro ROM-Hash exklusiven Schreibbesitz über mehrere R4X-Instanzen implementieren und zusätzliche Instanzen sichtbar read-only starten oder kontrolliert ablehnen.
+  - Notizen: Kein Last-Writer-Wins. Close, Fehler, Gastende und Prozessbereinigung geben Besitz idempotent frei; stale Besitz wird nur mit belegbarer Generation aufgelöst.
+Pro ROM existiert eine create-only HASH.LCK-Lease mit Prozessgeneration. Zweite Writer werden als Busy abgewiesen; Close ist idempotent, stale Generationen können keinen neuen Besitzer lösen und Kernel-Prozessbereinigung übernimmt Crashreste.
+- [Erledigt] #4 HASH.RTC als versionierten MBC3-Zustand mit Subsekundenrest, Sekunden/Minuten/Stunden, 9-Bit-Tageszähler, Carry, Halt, Latchzustand und letzter monotonic/wall-clock Verankerung definieren.
+  - Notizen: HASH.RTC ist ein fester 80-Byte-Datensatz R4GBRTC1, Version 1, mit SHA-256-Prüfsumme, Subsekunden-T-Cycles, RTC-Registern, Wall-/Monotonic-Ankern und Besitzer-Generation.
+- [Erledigt] #5 RTC-Ticks, Registermasken, Latch-0-zu-1, Halt/Fortsetzen, 511-Tage-Überlauf, ungültige Registerwerte und tatsächlich verstrichene Zeit zwischen Starts implementieren.
+  - Notizen: Rückwärts springende oder unplausible Hostzeit darf keine negative oder unbeschränkte Fortschreibung erzeugen.
+MBC3-RTC läuft unabhängig von CPU HALT/STOP auf der T-Cycle-Achse; Masken, Latch 0→1, Halt/Fortsetzen, ungültige Werte, Tag-511-Überlauf und sticky Carry sind umgesetzt. Rückwärtssprünge werden ignoriert, Vorwärtssprünge auf 512 Tage begrenzt.
+- [Erledigt] #6 MBC1M, MBC30, MMM01 und den belegbaren digitalen HuC1-Kern vervollständigen; MBC6, MBC7, HuC3, TAMA5 und Kamera anhand dokumentierter Fähigkeiten einzeln unterstützen oder mit präzisem Grund abweisen.
+  - Notizen: Sensor, Kamera, Infrarot und Rumble-Ausgabe bleiben Nichtziele. Falls ein sauber testbarer Mapperblock eigenständig groß wird, darf eine zusätzliche Unterversion eingefügt werden.
+MBC1M und MBC30 vollständig erhalten, MMM01 mit End-Header und One-way-Lock sowie digitaler HuC1-Kern ergänzt. MBC6, HuC3 und TAMA5 sowie MBC7/Kamera werden mapper- beziehungsweise zubehörspezifisch vor CPU-Start abgewiesen; physische IR-/Sensor-/Kamera-/Rumble-Ausgabe bleibt Nichtziel.
+- [Erledigt] #7 SRAM-, Atomizitäts-, Mehrinstanz- und Zeitsprungmodelle sowie RTC3Test, Mealybug mbc3_rtc und geeignete Mappertests automatisiert auswerten.
+  - Notizen: 43 R4GB-Komponententests, 15 Referenzsuiten mit 850 Dateien und 500127 Ergebnissen, alle drei RTC3Test-v004-Gruppen und Mealybug mbc3_rtc bestanden. Der reale R4SYS-Persistenzpfad ist zusätzlich im vollständigen QEMU-Test mit 1 und 4 CPUs markergeprüft.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Eine synthetische batteriegestützte Cartridge behält jeden RAM-Bytewert über Dirty-Flush, Close und Neustart; Umbenennen oder Verschieben der ROM ändert die Save-Identität nicht, eine inhaltlich andere ROM erhält einen anderen Zustand.
+  - Notizen: Bestanden: synthetische 8192-Byte-Batteriecartridge über Flush, Close und zwei Neustarts; Hashidentität ist umbenennungsfest und inhaltsabhängig.
+- [Erledigt] RTC3Test und der offene Mealybug-MBC3-RTC-Test bestehen Latch, Halt, Registermasken, Tick, Rollover und Carry; simulierte Offline-Zeit wird nach Neustart exakt einmal und begrenzt nachgeholt.
+  - Notizen: Bestanden: RTC3Test v004 (3/3), Mealybug MBC3-RTC sowie deterministische Offline-/Rückwärts-/512-Tage-Grenzfälle.
+- [Erledigt] Zwei Instanzen derselben ROM besitzen niemals gleichzeitig Schreibrecht; read-only/abgelehnt, Besitzerende, wiederholter Close und Fehlerpfade erzeugen keine verlorenen oder vermischten Saves.
+  - Notizen: Bestanden: konkurrierender Writer wird abgewiesen; Release, wiederholter Close, stale Generation, Schreibfehler und Neustart erhalten einen eindeutigen Save-Stand.
+- [Erledigt] Jeder bekannte Cartridge-Typ ist in der Capability-Matrix entweder testbelegt ausführbar oder wird vor CPU-Start mit einem spezifischen Mapper-/Peripheriegrund abgewiesen; kein Typ fällt still auf ROM-only zurück.
+  - Notizen: Bestanden: Capability-Matrix deckt alle bekannten Headertypen durch konkrete Implementierung oder typbezogene Ablehnung ab; kein unbekannter Mapper fällt auf ROM-only zurück.
+
+### Notizen
+Produktiver Speicherort ist C:\R4OS\APPDATA\SUBSYSTEMS\r4os.gb\SAVE\. Öffentliche Tests verwenden synthetische oder offene ROMs; Pokémon Rot und Gold werden erst in der letzten Unterversion manuell end-to-end geprüft.
+Abgeschlossen und veröffentlicht. R4GB 6f92f16, Distribution 529388c, Docs 9d7a87c. Gates: R4GB-Komponententests, vollständiger Referenzlauf (15/850/500127), vollständiges Test-Image, QEMU TCG 1 CPU und SMP 4 CPUs einschließlich R4SYS-SRAM/RTC/Lock/Atomic-Marker, jeweils sauberer Poweroff.
+
+## 0.72.8 Produktiver R4SUBSYS1-Fensterhost
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die fertigen Hardwarekomponenten in einen responsiven, vollständig isolierten GUI-R4X-Host integrieren. R4SUBSYS1, subsystem_runtime, subsystem_host, App-Audio und der gemeinsame Lebenszyklus bilden den einzigen produktiven Ausführungspfad.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 R4SUBSYS1-Datensätze und den absoluten Gastpfad begrenzt einlesen, die ROM unverändert öffnen, vollständig validieren und Lade-/Mapper-/CGB-Fehler im eigenen Fenster verständlich anzeigen.
+- [Erledigt] #2 Für jeden Start eine private Maschine aus Cartridge, Bus, SM83, Taktwerk, PPU, APU, Eingabe und Persistenz erzeugen und genau eine begrenzte Gastscheibe pro Hostzyklus ausführen.
+- [Erledigt] #3 Die native 160x144-Surface generationstreu an subsystem_host binden und Resize, Maximize/Restore, Letterboxing, Full-/Damage-/No-frame sowie Palette ohne stale Surface behandeln.
+- [Erledigt] #4 Geordnete physische Eingabe, Fokusgewinn/-verlust sowie dokumentierte Hostaktionen für Pause, Fortsetzen und Reset zwischen Gastscheiben umsetzen, ohne Gasttasten zu verschlucken oder Toggle-Heuristiken zu verwenden.
+- [Erledigt] #5 PCM über subsystem_runtime und App-Audio öffnen, schreiben, muten, degradieren und schließen; ein Audiofehler bleibt sichtbar, aber nicht terminal für Video und Eingabe.
+- [Erledigt] #6 Gastende, Fenster-Close, Ladefehler, Runtimefehler, Reset und wiederholten Close auf denselben idempotenten Abbau von Audio, Surface, Savebesitz, ROM und Maschinenzustand führen.
+- [Erledigt] #7 Zwei parallele Instanzen verschiedener ROMs sowie erlaubte Zweitinstanzen derselben ROM automatisiert auf Fokus, Isolation, Pacing, Close und Ressourcenbilanz prüfen.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Zwei offene Test-ROMs laufen gleichzeitig in getrennten Fenstern mit unabhängigen CPU-, Speicher-, Video-, Audio-, Eingabe- und Persistenzzuständen; Schließen oder Reset einer Instanz verändert die andere nicht.
+- [Erledigt] Pause/Fortsetzen entfernt die Pausenzeit aus der Gastzeit, Fokusverlust löst alle Tasten, Reset bindet eine neue Generation ohne stale Frame/PCM und Close endet innerhalb einer festen begrenzten Zeit.
+- [Erledigt] Ungültige, reine CGB- und nicht unterstützte Zusatzhardware-Cartridges zeigen einen konkreten Fehler und lassen sich normal schließen; kein Fehlerpfad hinterlässt Fenster, Audio, Savebesitz oder ROMressourcen.
+- [Erledigt] Dauerhafte CPU-Last bleibt durch begrenzte Gastscheiben responsiv; Video und Audio halten ihre Gasttermine ein, ohne Busy-Polling oder Kopplung an die Host-Framerate.
+
+### Notizen
+Diese Unterversion prüft Fenster und Lebenszyklus automatisiert über Hostmodelle und Headless-Desktopsteuerung. Eine visuelle Nutzerabnahme findet noch nicht statt.
+Abschluss 0.72.8: Der produktive R4SUBSYS1-GUI-Pfad besitzt pro Start ROM, Machine, Persistenz, Runtime, Eingabe, generationstreues 160x144-Video und App-Audio. Pause/Resume/Reset/Mute/Close und alle Fehlerpfade laufen über begrenzte Zyklen und idempotenten Abbau. Automatisiert belegt sind verschiedene ROMs, eine erlaubte identische Nicht-Batterie-Zweitinstanz, Fokus-/Speicher-/Pacing-Isolation sowie Cleanup bei ungültiger, CGB-only- und Zubehör-Cartridge. Gates: native Modul-/Komponententests, Referenzharness 15 Suites/850 Dateien/500127 Vektoren, vollständiger Standard- und SMP4-QEMU-Test. Versionen: Release 0.72.8, R4GB 0.8.0, R4DESK 0.1.27. Push: R4GB e6bd0b2, Desktop f107001, Distribution dc4f176, Docs 8a0f753.
+
+## 0.72.9 Explorer-Integration, Dateizuordnung und Imagepfad
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+r4os.gb als installiertes Produkt in Katalog, Explorer, Distribution und Testimage integrieren. Doppelklick auf .gb und DMG-kompatible .gbc wird der normale Startweg, während offene ROMs einen automatisierten End-to-End-Pfad durch Resolver, R4SUBSYS1 und Fensterhost belegen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Manifest und Imageplan so integrieren, dass MODULES.JSON den einzigen installierten r4os.gb-Katalogeintrag mit stabiler Gastformat-ID, Anzeigename, Probe, .gb/.gbc-Endungen und kanonischem Zielpfad enthält.
+  - Notizen: Full/Test-Katalog erzeugt genau einen installierten R4GB-Eintrag: Version 0.9.0, Ziel /R4OS/SUBSYSTEMS/r4os.gb/R4GB.R4X, SUBSYSTEM_ID r4os.gb, Format gameboy.dmg-cartridge, Endungen .gb/.gbc und begrenzte Headerprobe.
+- [Erledigt] #2 Produktive ASSOC.R4S-Standards für *.gb und *.gbc auf SUBSYSTEM_ID und Gastformat-ID einrichten; Explorer/Open With darf keinen Hostpfad duplizieren und startet pro Öffnen eine neue R4X-Instanz.
+  - Notizen: Produkt- und Test-ASSOC enthalten fuer GB/GBC ausschliesslich stabile Subsystem-/Format-IDs. Explorer-Selbsttest belegt Metadatenaufloesung ohne Inhaltsread, getrennte Probe sowie Open With; jede Oeffnung startet einen eigenen Handle.
+- [Erledigt] #3 TETRIS.GB, POKERED.GB und POKEGOLD.GBC nur über den bereits ignorierten lokalen Artifacts-Injection-Baum nach C:\TEMP\ übernehmen und ihre Hashes/Herkunft außerhalb öffentlicher Artefakte dokumentiert halten.
+  - Notizen: Tetris.gb, PokeRed.gb und PokeGold.gbc liegen nur unter dem ignorierten Artifacts/Distribution/PrivateInjection/Temp-Baum; PROVENANCE und SHA-256 bleiben ebenfalls lokal. git check-ignore bestaetigt alle vier Pfade. Keine kommerzielle ROM wurde automatisiert ausgefuehrt.
+- [Erledigt] #4 Modulziel, Save-Verzeichnis, Full-/Slim-/Test-Imageumfang, lokale Injection und öffentliches Releasepaket so trennen, dass ROM, R4X und Nutzdaten niemals vermischt werden.
+  - Notizen: R4X, Save-Daten und private ROM-Injection sind getrennt. R4OS_PUBLIC_IMAGE=1 unterdrueckt PrivateInjection; Release.ps1 baut Profile neu und weist private Planquellen ab. Oeffentliches Full-Image und NTFS-Struktur wurden ohne private ROM-Namen verifiziert.
+- [Erledigt] #5 Den vorhandenen Headless-Subsystempfad mit offenen ROMs durch Katalog, Probe, Dateizuordnung, R4SUBSYS1, zwei Fenster, Eingabe, Video, Audio, Persistenz, Fehleranzeige und Close erweitern.
+  - Notizen: Vorhandene Owner-/Imagepfade erweitern statt ein weiteres globales Gate anzulegen.
+Drei originale, quellgenerierte Cartridge-Fixtures pruefen den echten Katalog-/ASSOC-/R4SUBSYS1-Pfad: zwei parallele Fenster, physische Eingabe, Frames, App-Audio, SRAM+RTC, getrenntes Close und sichtbare CGB-only-Ablehnung. Volltest war auf 1 und 4 CPUs gruen.
+- [Erledigt] #6 AllModules-, Docs- und Testinventare, Subsystem-/Desktop-/Explorer-Dokumentation, Modulversion und Releasemarker entsprechend den tatsächlich geänderten Artefakten aktualisieren.
+  - Notizen: Aktualisiert: R4GB 0.9.0, Desktop 0.1.28, Explorer 0.1.9, Release 0.72.9, Kernel 0.1.65 sowie AllModules-, Docs- und Testinventare und Besitzer-Dokumentation. Dokumentinventar-Gate: 76 Dokumente.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Ein Explorer-Doppelklick auf eine gültige .gb sowie auf eine DMG-kompatible Dual-Mode-.gbc startet jeweils eine neue r4os.gb-Instanz; eine CGB-only-.gbc öffnet denselben Host, wird dort aber verständlich abgewiesen.
+  - Notizen: Der automatisierte Explorer-Produktpfad startet .gb und dual-mode .gbc als getrennte Instanzen und fuehrt CGB-only bis zur sichtbaren R4GB-Fehleransicht. Der manuelle Sichtgegencheck bleibt gebuendelt fuer 0.72.11.
+- [Erledigt] Resolver, Open With und Startvertrag verwenden ausschließlich die installierte stabile Subsystem- und Format-ID aus MODULES.JSON/ASSOC.R4S; kein fest codierter R4X-Pfad oder vorzeitiger Explorer-Vollparse entscheidet über Ausführung.
+  - Notizen: MODULES.JSON und ID-only ASSOC sind alleinige Aufloesungsquelle; Explorer liest bei eindeutiger Zuordnung null Inhaltsbytes und die unabhaengige Probe bleibt auf 32 KiB je Fixture begrenzt.
+- [Erledigt] Der automatisierte Testimage-Lauf führt mindestens zwei offene ROMs gleichzeitig durch Video, Eingabe, Gastzeit, Audio und getrennten Close und erzeugt die festgelegten Erfolgsmarker ohne verbotenen Fehlerindikator.
+  - Notizen: Tools/Build.sh -test erfolgreich: vollstaendiger Workspace, strukturelles Testimage, Headless standard und smp4. Alle R4GB-E2E-Marker, Audio, SRAM/RTC, separate Close- und Fehlerpfade vorhanden; keine verbotenen Marker.
+- [Erledigt] Öffentliche Repositories, Paket- und Releaseartefakte enthalten keine kommerzielle ROM, kein proprietäres Boot-ROM und keine fremden Markenassets; lokale Full-Images und Saves bleiben klar als nicht weiterzugeben erkennbar.
+  - Notizen: Oeffentliches Full-Image mit R4OS_PUBLIC_IMAGE=1 neu gebaut und verifiziert; image-adds.txt enthaelt weder PrivateInjection noch Tetris/PokeRed/PokeGold. Die offenen Test-ROMs werden aus Originalquellcode generiert und enthalten kein Boot-ROM oder Markenasset.
+
+### Notizen
+Kommerzielle Referenz-ROMs bleiben ausschließlich im ignorierten lokalen Injection-Baum und werden nicht in öffentliche Repositories oder weiterzugebende Images aufgenommen. Testprofile verwenden offene, lizenzierte ROMs.
+Abgeschlossen und veroeffentlicht am 31.08.2026. Commits: Kernel 1197241, Desktop 6923fce, Explorer c59b94d, R4GB 3d2b632, Distribution e19b833, Docs 717700c. Vollstaendiger Workspace-Test inklusive standard/smp4 sowie oeffentlicher Full-Build und Verify waren gruen. Ein beim erweiterten Prozesspfad sichtbar gewordener verlorener Stack-Release-Acknowledgement wurde im Kernel generationstreu und idempotent behoben; drei frische Gegenlaeufe plus Gesamtgate liefen danach bis Poweroff.
+
+## 0.72.10 Automatisierte DMG-Reife und Release Candidate
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Den gesamten definierten DMG-Umfang gegen die offene Referenzbasis, Fehlerfälle, Langlauf und Mehrinstanzbetrieb härten. Am Ende steht ein vollständig automatisiert grüner Release Candidate, der nur noch auf die gebündelte manuelle Sicht- und Laptopabnahme wartet.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Eine maschinenlesbare Testmatrix für alle verwendeten SM83-, Mooneye-, DMG-Acid2-, Mealybug-, SameSuite- und RTC3Test-Fälle mit Quelle, Lizenz, Hash, DMG-Revision, Erfolgsprotokoll, Timeout und Zielkomponente erstellen.
+  - Notizen: Erfüllt: Tests/dmg_test_matrix.json bildet sechs offene Quellen, 15 ausgeführte Case-Sets und zehn begründete Zielausschlüsse ab. Für jede Quelle beziehungsweise Suite sind Upstream, Lizenz, Revision, Hash, DMG-Revision, Zielkomponente, Erfolgsprotokoll und Timeout maschinenlesbar; Manifest und Matrix werden gegeneinander validiert.
+- [Erledigt] #2 Alle für den definierten DMG-Umfang verbindlichen Fälle ausführen und jede Abweichung an CPU, Taktwerk, Mapper, PPU, APU, RTC oder Hostgrenze beheben; nur nachweislich CGB/SGB/AGB- oder peripheriespezifische Fälle dürfen ausgeschlossen bleiben.
+  - Notizen: Erfüllt: Der Referenzlauf ist vollständig grün mit 15 Suites, 852 Dateien und 500129 Ergebnisdatensätzen: 500000 SM83-Vektoren, 28 Mapper-, 34 Clock/I/O-, 32 PPU-, drei SameSuite-, 25 Pixelvergleichs- sowie RTC3Test- und Mealybug-RTC-Fälle. Behoben wurden insbesondere DMG-unused-MMIO und EI-delay-HALT; alle Suite-Digests sind Pflicht.
+- [Erledigt] #3 Cartridge-Parser, Bus, Save/RTC und Hostlebenszyklus mit abgeschnittenen/falschen ROMs, Grenzgrößen, unbekannten Typen, beschädigten Saves, Writefehlern, Zeitsprüngen, Audiofehlern und wiederholtem Teardown fehlerinjizieren.
+  - Notizen: Erfüllt: Parser-Grenzen, ungültige Größen/Mapper, Bus/MMIO, beschädigte SRAM/RTC-Daten, Zeitrücksprung und Clamping, Voll-/I/O-/Atomic-Fehler, Audiodegradation, Completion-Witness, Reset sowie wiederholtes Close werden injiziert. Savefehler bleiben atomar und Teardown idempotent; der produktive Snapshot-Worker wird vor Lease-Freigabe zwingend geleert und gejoint.
+- [Erledigt] #4 Einen eigenen offen lizenzierten End-to-End-Fixture-ROM für Joypad, Timer, Interrupts, PPU, APU, batteriegestütztes RAM und definiertes Ende pflegen, damit der öffentliche Headless-Pfad keine kommerzielle ROM benötigt.
+  - Notizen: Erfüllt: Der vollständig originale Repository-Fixture-ROM prüft Joypad-Richtungs- und Aktionstasten, Timerinterrupt-Witness, PPU-Tilebild, dauerhaften APU-Ton, Batterie-RAM, MBC3-RTC und ein definiertes Start+Select-Ende. Er enthält weder Boot-ROM noch Spiel- oder Markenmaterial und läuft im öffentlichen Headless-Pfad.
+- [Erledigt] #5 Standard- und SMP-QEMU mit mehreren Instanzen, 60-Sekunden-Langlauf, Pause/Resume/Reset, Fokuswechsel, Audio-WAV, Savezyklen und Close auf Drift, Deadlinefehler, Frameverlust, Leaks und stale Zustände prüfen.
+  - Notizen: Erfüllt: Frischer Workspace-Test mit Standard- und 4-vCPU-QEMU ist grün. Beide Instanzen liefen mindestens 60 Gastsekunden; maximale Schrittlücke 29 ms, Drift höchstens 8 T-Zyklen, keine Present-/APU-Verluste oder Audiofehler. Save-Worker: Standard 31/31, SMP 26/26 mit vier Coalescings. Separate 1-/4-vCPU-WAV-Gates: 439,99/440,81 Hz, Stereo 2,0/1,9998, durchgehend; SMP-Skalierung 3,223x.
+- [Erledigt] #6 CPU-, PPU- und Audiohotspots messen und nur belegte Engpässe optimieren; Ergebnis muss bei unterschiedlichen Hostgeschwindigkeiten bit-/pixelgleich und der Desktop responsiv bleiben.
+  - Notizen: Erfüllt: Das Maturity-Harness profiliert SM83, PPU und APU getrennt und weist für 1-ms- sowie 17-ms-Hostpacing denselben vollständigen Maschinenzustand, PCM und SHA-256-Digest nach. Als realer Engpass wurde die synchrone Savepublikation belegt und in einen seriellen Snapshot-Worker mit Coalescing verlagert; dadurch sanken vorherige 0,8-1,25-s-Lücken auf höchstens 29 ms. Keine titelbezogene Optimierung.
+- [Erledigt] #7 Owner-, Contract-, SDK-, Modul-, Workspace-, Image-, NTFS- und Headless-Abnahmen, Dokumentation, Inventare, Lizenzen und Versionsmarker zum Release Candidate abschließen.
+  - Notizen: Erfüllt: Owner-Gates für R4GB, Desktop, Kernel, SDK, Distribution und AudioDiag, 500129-Referenzlauf, Docs-Inventar, Testimage, NTFS-Verify, Standard/SMP-Headless und beide Lang-WAV-Gates sind grün. Versionen: Release 0.72.10, Kernel 0.1.66, R4GB 0.10.0, Desktop 0.1.29. Acht Repositories veröffentlicht; zentrale Commits R4GB d15b0a1, Distribution 7e4466f, Kernel a86fa92, Desktop fef676c, SDK 6d32a26, AudioDiag 2405fc4, Docs 820102d, Project 456d998.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Die veröffentlichte Testmatrix ist für alle im DMG-Ziel verbindlichen Fälle grün; jeder Skip nennt fremdes Hardwaremodell, ausgeschlossene Peripherie oder belegte Referenzgrenze und kein Spieltitel erhält einen Sonderpfad.
+  - Notizen: Abgenommen: Matrix-Gate grün mit sechs Quellen, 15 Case-Sets und zehn vollständig klassifizierten CGB/SGB/AGB/Peripherie- oder manuellen Ausschlüssen. Keine Titelabfrage und kein kommerzielles ROM im automatischen Pfad.
+- [Erledigt] 500000 SM83-Vektoren sowie die ausgewählten offenen CPU-, Timer-, DMA-, PPU-, APU-, Mapper- und RTC-ROMs laufen reproduzierbar mit ihren dokumentierten Ergebnissen.
+  - Notizen: Abgenommen: Reproduzierbarer Referenzlauf grün, exakt 15 Suites, 852 Dateien und 500129 Records einschließlich aller 500000 SM83-Vektoren; jeder erwartete Digest stimmt.
+- [Erledigt] Standard- und SMP-QEMU bestehen den 60-Sekunden-Mehrinstanzlauf ohne Gastzeitdrift, Audio-Deadlinefehler, unerklärte Frameausfälle, Savevermischung, Ressourcenleck oder unresponsiven Desktop.
+  - Notizen: Abgenommen: Frisch gebautes Testimage besteht Standard und vier CPUs mit mindestens 60 Gastsekunden je Instanz, maximal 29 ms Schrittlücke, höchstens 8 T-Zyklen Drift, null APU-Drops, null Audio-Deadline-/Writefehler, getrennten Saves und vollständigem Ressourcenabbau. WAV-Gates für 1/4 CPUs sind grün.
+- [Erledigt] Alle Negativ- und Fehlerinjektionsfälle enden begrenzt und idempotent; der erzeugte Release Candidate enthält vollständige offene Nachweise und ist ohne weitere Entwicklungsabhängigkeit für 0.72.11 bereit.
+  - Notizen: Abgenommen: Sämtliche Negativ- und Fehlerinjektionspfade sind begrenzt und idempotent; Save-Worker werden vollständig gejoint. Dokumentation, Inventare, Lizenznachweise und Versionsmarker sind aktuell, der RC ist veröffentlicht. Private Tetris-/Pokémon-ROMs wurden nicht ausgeführt und bleiben zusammen mit Sicht- und Laptopprüfung ausschließlich 0.72.11.
+
+### Notizen
+Keine manuelle Nutzer- oder Laptopprüfung in diesem Schritt. Abweichungen werden nach Hardwaremodell, Testlizenz und Zielumfang klassifiziert; unbegründete Skips oder titelbezogene Workarounds sind unzulässig.
+Automatischer Release Candidate abgeschlossen und veröffentlicht. Qualifikationsmatrix: 6 Quellen, 15 Case-Sets, 10 begründete Ausschlüsse. Referenz: 15 Suites, 852 Dateien, 500129 Records. Frischer Gesamtbuild inklusive NTFS-Verify sowie Standard-/4-vCPU-60-s-Headless grün; maximale Schrittlücke 29 ms, keine APU-Verluste, Save-Worker vollständig geleert, SMP-Skalierung 3,223x. Separate 1-/4-vCPU-WAV-Abnahmen grün bei 439,99 beziehungsweise 440,81 Hz. Die privaten ROMs und alle manuellen Sicht-/Laptopprüfungen bleiben ausdrücklich 0.72.11 vorbehalten.
+
+## 0.72.11 Manuelle Spiel- und Laptopabnahme
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Als einzige nutzerabhängige Unterversion den fertigen Release Candidate sichtbar und auf dem realen Laptop abnehmen. Tetris, Pokémon Rot und Pokémon Gold prüfen den normalen Explorerstart, Spielbarkeit, Audio, Save und RTC; nur tatsächlich beobachtete Abweichungen dürfen noch eng behoben werden.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Ein finales lokales Testimage und eine kurze, eindeutige Prüffolge für QEMU und den Lenovo-Laptop bereitstellen; erwartete Versionen, ROM-Hashes, Savepfade, Diagnosebefehle und Rückmeldedaten vorab festhalten.
+  - Notizen: Erfüllt: Frisches Full-Image gebaut und per NTFSVERIFY geprüft. Systemimage 672137216 Bytes, SHA-256 F098A5E8BD9CE71E961A1608FA3B60F87ED491FBE393F1AD0EA06D0376240E88; eine bytegleiche unveränderte Lenovo-Flashbasis liegt unter Artifacts/Distribution/ManualAcceptance/0.72.11/lenovo-pristine-disk.img. Privatinjection nach C:\TEMP ist für Tetris, PokeRed und PokeGold gegen die Anhang-Hashes geprüft. Ein frisches 128-MB-QEMU-Datenimage wurde erzeugt, das frühere sicher als data.pre-07211.img erhalten. Versionen, ROM-/Save-/RTC-Hashes und -Größen, Diagnosebefehle, QEMU-/Lenovo-Folgen sowie Rückmeldedaten stehen in Docs/Tests/GameBoyManualAcceptance07211.txt.
+Nach der Abnahmekorrektur neu gebunden: Artifacts/Distribution/ManualAcceptance/0.72.11/lenovo-update-candidate-20260831.img, 672137216 Bytes, SHA-256 348284D6B5EFC9BA7CA9EE883D6CEEB0C461643E21A7FB0109D82D40448B0B1D. Das auf dem Laptop installierte Paket R4GBFIX-0.1.1-0.72.10.R4U hat 35110724 Bytes und SHA-256 586681D180C56B61288117D6FB64EA5EADB4471722D8862D153985A42EA4D296.
+- [Erledigt] #2 Der Nutzer prüft im sichtbaren R4OS-Desktop TETRIS.GB per Explorer-Doppelklick auf korrekte DMG-Grafik, gehaltene/gelöste Tasten, Pause/Reset/Fokus/Resize/Close, flüssige Geschwindigkeit und hörbares Audio.
+  - Notizen: Nutzerabnahme gemeldet: Tetris startet per Explorer-Doppelklick, läuft sichtbar korrekt und die vereinbarte Tastatursteuerung funktioniert.
+- [Erledigt] #3 Der Nutzer prüft POKERED.GB auf Spielstart, Grafik/Audio/Eingabe, Ingame-Speichern, sauberen Close und Wiederladen desselben Spielstands nach erneutem Öffnen beziehungsweise Neustart.
+  - Notizen: Nutzerabnahme gemeldet: Pokémon Rot funktioniert. Der Ingame-Spielstand blieb nach Close und erneutem Öffnen erhalten; die per SSH bestätigte SAV-Datei hat 32768 Bytes.
+- [Erledigt] #4 Der Nutzer prüft POKEGOLD.GBC als Dual-Mode-Cartridge im monochromen DMG-Modus auf MBC3-SRAM und RTC, einschließlich sichtbarer Zeitfortschreibung nach geschlossenem Subsystem und real verstrichener Wartezeit.
+  - Notizen: Teilnachweis per SSH: Gold-SAV mit 32768 Bytes und RTC mit 80 Bytes vorhanden; RTC-Kennung und Prüfsumme sind gültig. Aufgabe bleibt bis zur sichtbaren RTC-Zeitfortschreibung sowie der Audio-/Fenster-Wiederholungsprobe offen.
+Nach dem ersten Korrekturupdate konnte Gold nicht starten: Der alte APPDATA-Unterordner r4os.gb war im Elternverzeichnis sichtbar, aber weder per Shell noch SFTP auflösbar; andere Kontrollverzeichnisse waren beschreibbar. Die gesicherten SAV-/RTC-Dateien wurden bytegleich unter C:\R4OS\SUBSYSTEMS\r4os.gb\SAVE restauriert. R4GB 0.10.2 ist per SYSUPD installiert und wartet auf den physischen Neustart; danach bleiben Start, Audio/Fenster und sichtbare RTC-Fortschreibung zu prüfen.
+Post-Boot-Abschluss: SYSUPD RESUME-BATCH meldete Installed fuer Batch 3; das installierte MODULES.JSON bestaetigt R4GB 0.10.3. Rot-SAV, Gold-SAV und Gold-RTC liegen am kanonischen Ziel und wurden nach allen Diagnosearbeiten erneut heruntergeladen; Groesse und SHA-256 sind bytegleich zu den Backups. Offen ist jetzt nur noch der sichtbare Gold-Start mit Audio-/Fensterstabilitaet und RTC-Fortschreibung.
+Neue Gold-Beobachtung: Ton gut; Abbruch im neuen Spiel etwa beim Prof.-Eich-Intro mit Exitcode 77. Dass bereits ohne manuellen Menue-Speicherstand SAV/RTC-Schreibdaten vorliegen, ist hardwaregerecht: Gold beschreibt Cartridge-SRAM und RTC waehrend Initialisierung und Spielablauf. Gesichert wurden Gold-SAV sowie gueltige RTC-Stage AGNIENS6.T6B und letzter gueltiger Backupstand AGNIENS6.R6B. Der sichtbare lange RTC-Name war dabei nicht normal aufloesbar. Aufgabe bleibt bis zur Aktivierung von R4GB 0.10.4, automatischer Wiederaufnahme und sichtbarer RTC-/Stabilitaetsprobe offen.
+Finaler lokaler Nachweis: Der echte R4OS-/NTFS-Persistenztest uebernimmt den am Lenovo beobachteten gueltigen RTC-Stage/Backup-Zustand und stellt ein validiertes kanonisches 80-Byte-Ziel her. Eine synthetische 40-Byte-RTC-Stage wird fail-closed abgelehnt und zusammen mit dem letzten gueltigen Backup erhalten. Die sichtbare Gold-/RTC-Pruefung bleibt offen, bis das finale 0.10.4-Paket nach Rueckkehr des offline genommenen Laptops aktiviert ist.
+Abschluss 01.09.2026: R4GB 0.10.6 wurde bytegleich per SYSUPD aktiviert und durch MODULES.JSON bestaetigt. Pokemon Gold startete per Explorer-Doppelklick im DMG-Pfad, durchlief das Intro, lief draussen bei Bewegung mindestens zehn Minuten absturzfrei mit gutem Ton und schloss normal. SAV (32768 Bytes) und RTC (80 Bytes) wurden aktualisiert. Die dekodierte RTC lief um 1286,057 Sekunden weiter, der Wanduhranker um 1287 Sekunden; kein Rueckwaerts- oder Doppelsprung. Danach blieben keine Lease-, Stage- oder Backupobjekte zurueck.
+- [Erledigt] #5 Der Nutzer wiederholt die maßgeblichen Spiel-, Fenster-, Tastatur-, Speaker-/Kopfhörer-, Save- und RTC-Prüfungen auf dem Lenovo-Laptop und liefert die vorbereiteten Diagnosewerte sowie konkrete Beobachtungen zurück.
+  - Notizen: Laptopbasis geprüft: SYSINFO, SERVMAN DIAG, SSHD und AUDSVC sind unauffällig; installierte Komponenten wurden aus MODULES.JSON zurückgelesen. Nach dem Update bleiben nur Gold und Fortress gezielt sichtbar nachzuprüfen.
+Fortress-Nachprüfung: Scrollen ist sichtbar besser, aber weiterhin langsamer als ein stehendes Bild. Der Nutzer möchte diesen Rest in 0.72.X nicht weiter verfolgen; er wird als mögliches allgemeines Performance-Thema akzeptiert. Gold bleibt nach Savepfad-Reparatur offen.
+Laptop-Nachpruefung: Gold-Audio ist laut Nutzer sauber; der erneute Fensterabbruch mit Exitcode 77 ist als Persistenzfehler belegt. R4GBFIX 0.1.4 liegt bereits in der Update-Inbox. Der Laptop ist planmaessig offline; Installation, MODULES.JSON-Kontrolle und Gold-Wiederholung werden nach seiner Rueckkehr fortgesetzt.
+Der Laptop ist planmaessig offline. Lokal sind finales Paket und Neuinstallationsimage fertig und geprueft. Vor der naechsten Gold-Ausfuehrung muss die veraltete, nie aktivierte Inbox-Datei durch R4GBFIX 0.1.4 mit 307890 Bytes und SHA-256 A9F52D330B3DF679F4079E0987190CBADB5B5DB7EC50887A128C3B3F78075A65 ersetzt, zurueckgelesen und erst dann ueber SYSUPD aktiviert werden.
+Finale Lenovo-Abnahme: Installiertes R4GB 0.10.6, Dienste und AUDSVC gesund; Gold mindestens zehn Minuten stabil, Ton gut, normaler Close und sauberer Savebaum. Ein sicher begrenzter Writer-Lease-Test bestand 128 Zyklen ohne Fehler oder Retry. Die bereits gruenen Tetris-, Rot-, Fenster-, Eingabe- und Hardwarebasispruefungen bleiben gueltig. Die verbesserte, aber noch langsamere Fortress-Scrollleistung ist fuer 0.72.X ausdruecklich akzeptiert.
+- [Erledigt] #6 Nur belegte Fehler aus der Sicht-/Hardwareabnahme eng beheben, alle betroffenen automatisierten Nachweise erneut ausführen und ausschließlich die betroffenen manuellen Schritte wiederholen.
+  - Notizen: Belegte Fehler eng behoben: (1) R4GB interpretiert APU-Envelope-Pace 0 korrekt als deaktivierte Hülle und verhindert den bei Gold anwachsenden Noise-Pegel. (2) R4DESK schreibt Indexed8-Frames direkt palettexpandiert in den Szenenpuffer; Fortress-Scrollframes erzeugen nicht länger massenhaft 1-Pixel-Operationen. (3) Unveränderte HPET-Werte fluten beim Idle-Resume nicht mehr das Bootlog. Gold und Fortress liefen mit den privaten ROMs jeweils 180 emulierte Sekunden ohne illegalen Opcode, ROM-Mutation oder Core-Abbruch; die vollständige R4GB-Matrix bestand 15 Suiten, 852 Dateien und 500129 Datensätze. Beim ersten Updateversuch deckte der fail-closed Journalcheck eine fehlende Subsystem-R4X-Freigabe im Recoverypfad auf; Recovery und ABORT-BATCH wurden korrigiert und getestet. Das finale Paket wurde bytegleich übertragen, verifiziert, gestaged, committed, nach Neustart resumed und die Versionen remote bestätigt. Aufgabe bleibt bis zu den zwei betroffenen Sichtwiederholungen offen.
+Weitere enge Korrektur: R4GB 0.10.2 stellt den ursprünglich festgelegten Savepfad C:\R4OS\SUBSYSTEMS\r4os.gb\SAVE her. Ein intakter 0.10.1-Altbestand wird nur bei fehlender kanonischer Datei gelesen, unter gehaltener Writer-Lease durch den bestehenden atomaren Publisher kopiert und an der Quelle nicht gelöscht. Owner-Test grün. Neu erzeugtes Testimage bestand den vollständigen Headless-Lauf einschließlich R4GB persistence runtime, SRAM/RTC, Writer-Lease, mehrfacher atomarer Ersetzung, Explorer-E2E und zwei 60-Sekunden-Instanzen. Full-Image bestand NTFSVERIFY; SHA-256 D97F0F9586501ACB02B88C5ED10D0840B481C44AF7DDCA1AC9DC43B4D56CA408. Livepaket R4GBFIX 0.1.2, 290995 Bytes, SHA-256 A418EE0E2A19EEA64EE77506AE965C40B6402064EB5F1E226FA64BA25DDD30B3 wurde bytegleich übertragen, verifiziert und committed; wegen einer noch laufenden alten R4GB-Diagnose steht der Batch sicher auf pending-restart.
+R4GB 0.10.3 ersetzt die automatische Altpfad-Migration: Der fehlerhafte APPDATA-Verzeichniseintrag konnte bereits bei einer reinen Existenzabfrage blockieren, daher greift der Produktpfad ausschließlich auf C:\R4OS\SUBSYSTEMS\r4os.gb\SAVE zu. Rot-SAV sowie Gold-SAV/RTC waren zuvor bytegleich restauriert. Owner-Test und ein neu gebauter vollständiger Headless-Test sind grün, einschließlich SRAM/RTC, Writer-Lease, atomarer Ersetzung, Explorer-E2E, zwei Instanzen, Audio, 60-Sekunden-Langlauf, Boot und Poweroff. Finales Full-Image 672137216 Bytes, SHA-256 6F6C3B583795F78713A3898E782A9383356EDCB4383E4B1E525B09FF0C1AB157, NTFSVERIFY grün. Livepaket R4GBFIX 0.1.3, 291076 Bytes, SHA-256 DC6226234DFA1B5CE235DB251A599303A6770496CA3D1281342C8BAB234CFD1F, wurde bytegleich übertragen und verifiziert. Batch 3 ist vollständig committed und wartet wegen der noch laufenden alten Diagnose sicher auf den physischen Neustart.
+Lenovo-Nachweis nach Neustart: Batch 3 erfolgreich resumed, R4GB 0.10.3 aktiv. Der isolierte /PERSISTTEST blieb vor dem Anlegen einer Testdatei im hardwarespezifischen Diagnosepfad stehen; eine temporaere generationstreue Inventar-R4X identifizierte ausschließlich R4GB-Instanz 22 und beendete exakt diesen Handle mit Status 0. Helfer und Kontrollverzeichnisse wurden entfernt. Der produktive Cartridgepfad blieb unberuehrt; Rot-SAV SHA-256 6D47987759C4A38FD305CB8A6309027A8425154CD748F613BDD30C404E854A21, Gold-SAV C87AC4D72B7A2535091099C62A3E650B06C5FDFACFAD7AA07C0C8CD69BDBA313 und Gold-RTC 38ECD064537064775492147D5832CEE237E9DAC258157B83C0D5C5BA42FFC934 sind nach Rueckdownload bytegleich zu den Backups.
+Enge Persistenzkorrektur R4GB 0.10.4: atomare SAV-/RTC-Ersetzung wird bei transientem NTFS-I/O begrenzt wiederholt; erhaltene Stages werden beim naechsten Acquire idempotent wiederaufgenommen; Backup-Loeschung erfolgt erst nach unabhaengig aufloesbarem Ziel; ein verwaister letzter gueltiger Backupstand bleibt fail-closed erhalten. Speicherfehler zeigen kuenftig Stufe und Dateisystemcode in einem dauerhaften Fenster. Owner-Test, git diff check, frisches Testimage, NTFSVERIFY sowie Standard-/Vier-CPU-Headless inklusive Persistenz, Explorer-E2E, zwei Instanzen und 60-Sekunden-Langlauf sind gruen. Das reine Live-R4X-Paket R4GBFIX 0.1.4 wurde gebaut und mit erwarteter Groesse in die Inbox uebertragen; Aktivierung steht wegen offline genommenem Laptop aus.
+R4GB-0.10.4-Neuinstallationsbasis gebaut und per NTFSVERIFY abgenommen: Full-Image 672137216 Bytes, SHA-256 9D8EF4818B7163D800B5D9D3650BFF0BBFDD7BFA41C5CC93800A7D5E79A7D83C. Eine bytegleiche unveraenderliche Kopie liegt unter Artifacts/Distribution/ManualAcceptance/0.72.11/lenovo-persistence-recovery-20260901.img. Das bestehende Laptopmedium wird nach Rueckkehr weiterhin bevorzugt ueber das bereits hochgeladene Livepaket aktualisiert.
+0.10.4 abschliessend gehaertet: Recovery beginnt erst im readExact-Pfad mit bekannter Sollgroesse, validiert RTC-Stage und publiziertes Ziel vollstaendig, wiederholt transiente Replace-/Sichtbarkeitsfehler begrenzt und loescht den Backupstand erst nach unabhaengiger Zielvalidierung. Der In-Image-Test beweist gueltige Wiederaufnahme sowie Teilstage-Ablehnung und Backuperhalt. Owner-Test, Formatierung, Diff-Gates, Docs-Inventar, Standard-/SMP4-Headless, Full-Build und NTFSVERIFY sind gruen. Finales R4GB.R4X: 306686 Bytes, SHA-256 196F5047F5567BA31F2C63E3D873C6FE28C33C74B691554DCDE8E160A3707BE5. Finales Full-Image: SHA-256 3118689CC469C3C0E41949119C12F7CA799388A2C37D9BD58E70372DB2915FC3. Finales Paket: 307890 Bytes, SHA-256 A9F52D330B3DF679F4079E0987190CBADB5B5DB7EC50887A128C3B3F78075A65. Aufgabe bleibt nur wegen der ausstehenden Laptop-Aktivierung und Gold-Sichtwiederholung offen.
+Letzte enge Korrektur R4GB 0.10.6: Die auf Hardware beobachteten transienten Codes -3/-5 werden begrenzt ueber Stage- und private Transaktions-Lease-Begin/Write/Finish behandelt; Abort/Release sind eigentumsgebunden wiederholbar und die regulaere Freigabe wird geprueft. Owner-Build/-Tests, Host-Speed-Paritaet, 128 Hardware-Leasezyklen sowie der zehnminuetige Gold-Lauf mit sauberem Close sind gruen. Finales R4GB.R4X: 306686 Bytes, SHA-256 017CF8C144C37D07A09EE7D55B2CD05115C941D6385B5463BDEF717A10CC08D1.
+- [Erledigt] #7 Nach vollständig grüner Abnahme Dokumentation, Inventare, Modul-/Releaseversionen und Changelog finalisieren und den vorgeschriebenen Sammelpush der geänderten Repositories ausführen.
+  - Notizen: Abschluss vollstaendig: RELEASE_VERSION=0.72.11, Kernel 0.1.68 und R4GB 0.10.6. Dokumentation und Inventare wurden aktualisiert; Docs-Inventar-Gate meldet 77 Dokumente. Finales Testimage: 672137216 Bytes, SHA-256 DBE029174CED464674E3023DE314A4B83C385A7B5E733D1E7EBD1C1D009F6CE4. Finales Full-Image: 672137216 Bytes, SHA-256 FB126D1FA543A4DD19D67FDEAC2CDC85B9A02C49A55D977FF83CFD598E6DED6C, NTFSVERIFY OK. Der vorgeschriebene Sammelpush war fuer alle acht Ziele erfolgreich: SDK 6ab7bca, Kernel 8aac0c8, Desktop 951ad8a, SysUpdate f69409f, R4GB db20dd9, Distribution de066f1, Docs a4f7003 und Project dc7262d. Danach sind alle verwalteten Arbeitsbaeume sauber.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Tetris ist im sichtbaren Desktop und auf dem Laptop ohne Grafikfehler, festhängende Eingabe, falsche Geschwindigkeit oder Audiostörung vollständig spielbar; Fenster-, Fokus-, Pause-, Reset- und Close-Verhalten sind sauber.
+  - Notizen: Manuell bestaetigt: Explorer-Doppelklick, korrekte Darstellung und vereinbarte Tastatursteuerung funktionieren. Die automatisierte Produktabnahme bestaetigt Fokus-, Pause/Resume-, Reset-, Audio-, Mehrinstanz- und Close-Lebenszyklus im finalen Standard- und SMP4-Lauf.
+- [Erledigt] Pokémon Rot speichert im Spiel dauerhaft: Nach Close und erneutem Start ist exakt derselbe Spielstand vorhanden, während eine zweite Instanz keinen konkurrierenden Schreibzustand erzeugt.
+  - Notizen: Manuell bestaetigt: Pokemon Rot startet und der im Spiel erzeugte Stand bleibt nach Close und erneutem Oeffnen erhalten; die SAV hat exakt 32768 Bytes. Die finale Produktabnahme belegt zusaetzlich die exklusive Writer-Lease und getrennte Instanzen.
+- [Erledigt] Pokémon Gold startet trotz .gbc-Endung im DMG-Modus, speichert SRAM und zeigt nach einer dokumentierten Offline-Zeit die korrekt fortgeschriebene MBC3-RTC ohne doppelten oder negativen Zeitsprung.
+  - Notizen: Gold lief als DMG-kompatible Dual-Mode-Cartridge mindestens zehn Minuten stabil und schloss sauber. SAV/RTC haben exakt 32768/80 Bytes und wurden aktualisiert. Der technische Vorher-/Nachher-Nachweis der checksummierten RTC ergibt 1286,057 Sekunden Emulationsfortschritt bei 1287 Sekunden Wanduhrfortschritt; damit sind Nachholung sowie das Ausbleiben eines negativen oder doppelten Sprungs belegt.
+- [Erledigt] Auf dem Lenovo-Laptop funktionieren Explorer-Doppelklick, physische Links-/Rechts-Modifikatoren, Speaker und Kopfhörer, mehrere Fenster, Persistenz und RTC ohne neue hardwarespezifische Regression.
+  - Notizen: Die vorbereitete Lenovo-Hardwarebasis mit Explorerstart, physischer Tastatur, Fensterbetrieb, Speaker/Kopfhoerer und Persistenz war gruen; danach blieben nur Gold und Fortress offen. Mit R4GB 0.10.6 lief Gold mindestens zehn Minuten mit gutem Ton stabil, schloss normal und veroeffentlichte SAV/RTC ohne Scratchreste. Fortress ist sichtbar verbessert; der akzeptierte Performance-Rest ist keine neue Funktionsregression.
+- [Erledigt] Nach eventuellen engen Korrekturen bleiben die vollständige automatisierte 0.72.10-Matrix sowie die betroffenen Sicht- und Laptopprüfungen grün; 0.72.X kann anschließend aufgeräumt und abgeschlossen werden.
+  - Notizen: Final gruen: R4GB-Owner-Build/-Tests und Host-Speed-Paritaet; vollstaendiger Workspace-Test; neu erzeugtes 0.72.11-Testimage; Ein-CPU- und SMP4-Headless mit Boot/Poweroff, APU, SRAM/RTC, Writer-Lease, atomarer Veroeffentlichung, Explorer-E2E, zwei Instanzen und 60-Sekunden-Langlauf; Full-Image-Build und NTFSVERIFY. Betroffene manuelle Hardwareprobe: Gold mindestens zehn Minuten stabil, guter Ton, normaler Close und saubere SAV/RTC-Veroeffentlichung. Sammelpush aller acht geaenderten Repositories ohne Fehler abgeschlossen.
+
+### Notizen
+Alle manuellen Sichttests durch den Nutzer und alle Tests auf dem Lenovo-Laptop liegen ausschließlich hier. 0.72.1 bis 0.72.10 dürfen von dieser Abnahme nicht blockiert werden. Vor Nutzerbeginn werden Image, Prüfschritte und erwartete Diagnoseausgaben vollständig vorbereitet.
+Vorbereitung abgeschlossen: Full-QEMU-Arbeitsimage und getrennte pristine Lenovo-Flashbasis sind hashgebunden; die manuelle Prozedur liegt unter Docs/Tests/GameBoyManualAcceptance07211.txt. Offen sind nun ausschließlich die tatsächlichen Nutzer-Sichttests und die reale Laptopabnahme.
+Korrekturstand 2026-08-31: Das enge R4GB-/Desktop-/Kernel-Update wurde nach einem sicher abgefangenen Vorbereitungsfehler über SYSUPD erfolgreich auf dem Lenovo installiert. Aktiv sind Release 0.72.10, Kernel 0.1.68, R4GB 0.10.1, R4DESK 0.1.30 und SYSUPD 0.1.14. Ein korrigiertes Full-Image sowie eine unveränderliche Abnahmekopie sind mit SHA-256 348284D6B5EFC9BA7CA9EE883D6CEEB0C461643E21A7FB0109D82D40448B0B1D gebunden. Offen sind nur die gezielten Wiederholungen für Gold-Audio/Fensterstabilität und Fortress-Scrolling.
+Nachtrag 2026-09-01: Fortress ist nach der Indexed8-Korrektur sichtbar besser. Die verbleibende Scroll-Verlangsamung wird für 0.72.X akzeptiert und kann später als allgemeines Performance-Thema untersucht werden. Gold deckte dagegen einen defekten, zur Laufzeit angelegten alten APPDATA-Verzeichniseintrag auf. R4GB 0.10.2 verwendet nun den ursprünglich vereinbarten Pfad C:\R4OS\SUBSYSTEMS\r4os.gb\SAVE, übernimmt intakte Altdateien atomar ohne Quelllöschung und die zuvor gesicherten Rot-/Gold-Daten wurden bytegleich dorthin zurückgespielt.
+Korrekturstand R4GB 0.10.3: Ausschließlich der vereinbarte Savepfad unter C:\R4OS\SUBSYSTEMS\r4os.gb\SAVE wird zur Laufzeit verwendet; der defekte APPDATA-Altpfad wird nicht mehr abgefragt. Finales Image und vollständiger Headless-Lauf sind grün. Das bytegleich geprüfte Liveupdate ist auf dem Lenovo committed und wartet nur auf den physischen Neustart; danach bleiben Gold-Audio/Fenster/RTC als letzte Sichtprüfung offen.
+Nachtrag 2026-09-01: Gold-Audio ist nach der APU-Korrektur gut, das Fenster endete jedoch im neuen Spiel beim Prof.-Eich-Intro mit Exitcode 77. Exit 77 wurde als fehlgeschlagener verpflichtender Persistenzabschluss identifiziert. Erhaltene 80-Byte-RTC-Stage/Backup-Dateien belegen einen unterbrochenen bzw. nur teilweise bestaetigten atomaren NTFS-Ersetzungsschritt. R4GB 0.10.4 nimmt solche Stages unter der Cartridge-Lease wieder auf und bewahrt den letzten gueltigen Backupstand, bis das kanonische Ziel aufloesbar ist. Owner-Test sowie Standard- und Vier-CPU-Headless sind gruen. Livepaket R4GBFIX 0.1.4 (295302 Bytes, SHA-256 A8FF3D41C53122667C021B2402933AFF9A59119AA0FFBEAB0389F23C53B5E56B) wurde in die Laptop-Inbox hochgeladen, aber wegen des planmaessig offline genommenen Laptops noch nicht aktiviert. Gold bis dahin nicht erneut starten.
+Nachtrag 2026-09-01 (finaler lokaler 0.10.4-Stand): Die Wiederaufnahme akzeptiert nur Stages mit exakt erwarteter SRAM-/RTC-Groesse; RTC-Version, Register und Pruefsumme werden vor und nach der Publikation validiert. Ein produktiver R4OS-/NTFS-QEMU-Test stellt den Lenovo-Zustand mit 80-Byte-Stage, 80-Byte-Backup und fehlendem Ziel nach und beweist die Wiederaufnahme; eine 40-Byte-Stage wird mit atomic_recover abgelehnt, wobei Stage und Backup erhalten bleiben. Standard- und Vier-CPU-Headless, Full-Build und NTFSVERIFY sind gruen. Finales Full-Image: 672137216 Bytes, SHA-256 3118689CC469C3C0E41949119C12F7CA799388A2C37D9BD58E70372DB2915FC3; Archiv lenovo-persistence-recovery-final-20260901.img. Finales Livepaket R4GBFIX 0.1.4: 307890 Bytes, SHA-256 A9F52D330B3DF679F4079E0987190CBADB5B5DB7EC50887A128C3B3F78075A65. Die noch in der Laptop-Inbox liegende Vorabfassung (295302 Bytes, A8FF3D41...) wurde nie aktiviert und muss vor SYSUPD durch das finale Paket ersetzt und per Rueckdownload geprueft werden. Der Laptop ist bis zur Rueckkehr des Nutzers offline; Gold bleibt bis dahin ungeoeffnet.
+Abschluss 01.09.2026: 0.72.11 ist mit R4GB 0.10.6 manuell, auf Lenovo-Hardware und automatisiert abgenommen. Gold lief mindestens zehn Minuten stabil und schloss sauber; SAV/RTC und Echtzeitfortschreibung sind hash-, groessen- und inhaltsgebunden belegt. Standard/SMP4/Full-Image-Gates sind gruen, alle Dokumente und Inventare aktuell und alle acht geaenderten Repositories veroeffentlicht. Die Hauptversion 0.72.X bleibt gemaess Arbeitsregel offen, bis der Nutzer ihr Aufraeumen ausdruecklich verlangt.

@@ -38,6 +38,15 @@ The current filesystem adapters still require a partition start within the
 beyond that start limit remain registered at the block boundary but are not
 mounted through this scanner.
 
+Every boot scan retains a bounded result record until the shell admission
+boundary. If no system volume became `C:`, the fatal screen reports detected
+AHCI/NVMe controllers, registered block devices, backend ownership, sector
+geometry, partition-table result, mount candidates, filesystem and R4OS
+marker counts, block-read statistics and the R4D backend's last recovery
+state. Marker lookup distinguishes a genuinely absent entry from a metadata
+I/O failure. A volume with an uncertain marker result is therefore not
+silently exposed as an ordinary data drive.
+
 Block devices use stable tombstone slots. Unregister first stops new
 admission and fails while mounts, operation pins, callbacks, queue entries,
 locks or waiters still refer to the device. A successful unregister leaves no
@@ -98,6 +107,11 @@ new head. Timeout and cancellation use Abort first; controller reset changes
 all ownership generations, completes accepted requests exactly once, rebuilds
 the queues and requires an unchanged namespace inventory before reopening.
 The bounded polling/deferred-work path remains the fallback without MSI-X.
+After a successfully completed transport recovery, the synchronous early-boot
+callback may replay the failed idempotent read exactly once. Command, media,
+validation and DMA-preparation failures do not qualify, and writes are never
+replayed automatically. A rejected completion also preserves its original
+NVMe status plus PRP alignment facts in the backend diagnostic state.
 
 AHCI.R4D implements the same version-2 ownership boundary for SATA. It scans
 all supported AHCI functions and suitable SATA ports, performs IDENTIFY DEVICE
@@ -106,6 +120,14 @@ sectors, LBA range, cache/flush support, NCQ and drive queue depth. The usable
 depth is the HBA/drive intersection clamped to 16 tags; a drive or HBA without
 NCQ uses the same backend at depth one. Inventory beyond the fixed eight-port
 platform capacity fails explicitly.
+
+Initial discovery does not discard an implemented port from its immediate
+post-reset PxSSTS value. The driver first stops command processing, installs
+the command-list and received-FIS DMA bases, enables FIS reception and raises
+POD/SUD while ST remains clear. It then waits for link presence, SATA
+signature and a ready task file before starting the command engine and issuing
+IDENTIFY. This ordering supports staggered-spin-up ports on real controllers
+while still leaving empty ports unregistered.
 
 Each AHCI request pins an owner-bound streaming mapping and converts it into
 at most 64 PRDT entries, with a 2-MB request limit. NCQ uses the command slot

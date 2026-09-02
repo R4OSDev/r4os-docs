@@ -60,3 +60,14 @@ cartridges run concurrently with separately focused physical keyboard input,
 video, App-Audio, battery SRAM/RTC persistence, and cooperative Close. A third
 CGB-only fixture must expose its concrete rejection in a valid hosted window
 before it closes. The test never opens a commercial ROM.
+
+The same acceptance now covers R4SNES through ID-only `.sfc`/`.smc`
+associations. Because those formats have no universal fixed-position magic,
+catalog selection performs one metadata lookup and zero content reads; the
+R4SNES process remains the sole full-image validator. Two original generated
+cartridges run concurrently for at least 60 seconds of guest time with all
+twelve physical port-1 keys, native XRGB32 generations, SPC700/S-DSP
+App-Audio, SRAM/Epson-RTC persistence, pause/resume/reset/mute and independent
+witness/close endings. Invalid-header and missing-DSP-firmware fixtures remain
+visible in hosted error windows before cooperative teardown. Private SMW data
+is never opened by this automatic path.

@@ -1,0 +1,109 @@
+# 0.74.X SSD
+
+**Status:** Abgeschlossen
+
+## Leitbild
+—
+
+## Notizen
+—
+
+## 0.74.1 GPT-Systemvolume auf internen NVMe-Datenträgern
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Behebt STOP 0x00020001 beim Start von einem internen GPT-Datenträger: NVME.R4D registrierte das Blockgerät, der bisherige Partitionsscan übersprang jedoch den GPT-Schutz-MBR und konnte deshalb kein Systemlaufwerk C: einbinden.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Validierten GPT-Parser mit CRC-Prüfung und Backup-Fallback implementieren
+  - Notizen: Prüft Signatur, Revision, Headergröße, reserviertes Feld, Header-CRC, LBA-Geometrie, nutzbaren Bereich, begrenztes Entry-Layout und die CRC des vollständigen Partition-Entry-Arrays.
+- [Erledigt] #2 GPT-Partitionen in die bestehende Laufwerks- und Systemvolume-Erkennung integrieren
+  - Notizen: Unterstützt EFI-System- und Microsoft-Basic-Data-GUIDs, erkennt NTFS/FAT32, hält reine Limine-Bootvolumes buchstabenlos und weist dem ersten R4OS-Systemkandidaten C: zu.
+- [Erledigt] #3 Regressionen, Dokumentation, Inventar und Versionsstände abschließen
+  - Notizen: Kernel 0.1.70 und Release 0.74.1; Storage-/Hardwaredokumentation sowie Testinventar aktualisiert.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] GPT-NVMe-Systemvolume wird als C: eingebunden und besteht die vollständige Headless-Markersuite
+  - Notizen: QEMU q35 mit reinem AHCI-Bootvolume, GPT/NTFS auf NVMe als C: und separatem NVMe-Testvolume als D:; API diagnostic marker contract OK, reguläres POWEROFF.
+- [Erledigt] Beschädigter primärer GPT-Header fällt auf die gültige Backup-Tabelle zurück und erreicht die Shell
+  - Notizen: Gezielte Signaturkorruption ergab bad-signature, danach header=backup, Mount als C: und Launcher START ohne Kernel-Fatal.
+- [Erledigt] Der bisherige MBR-Bootpfad bleibt vollständig funktionsfähig
+  - Notizen: ./Tools/Build.sh -testonly: vollständiger Marker-Vertrag OK, Boot und Poweroff OK, keine Fehler.
+
+### Notizen
+Der Fix bleibt im technisch zwingenden Kernel-Storagepfad. GPT wird vor dem Mounten vollständig validiert; vorhandene MBR-Installationen bleiben unverändert unterstützt.
+
+## 0.74.2 Interner SATA-Boot und belastbare Storagediagnose
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Behebt STOP 0x00020001 auf dem Lenovo beim Start vom internen SATA-Systemdatenträger. AHCI.R4D hatte implementierte Ports unmittelbar nach dem HBA-Reset anhand des noch nicht bereiten Links verworfen, sodass nur die separate Windows-NVMe registriert und kein R4OS-Systemvolume als C: gefunden wurde.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 AHCI-Porterkennung nach HBA-Reset für reale SATA-Geräte korrigieren
+  - Notizen: Die verfrühte PxSSTS-Filterung wurde entfernt. Leere Ports bleiben unbelegt; ein erkanntes SATA-Gerät wird erst nach aktiviertem FIS-Empfang und Spin-up, bereitem Link und Taskfile an IDENTIFY übergeben.
+- [Erledigt] #2 Frühe NVMe-/GPT-Lesepfade härten und fehlendes C: diagnostizierbar machen
+  - Notizen: Idempotente NVMe-Bootreads dürfen nach nachweislich erfolgreicher Transport-Recovery genau einmal wiederholt werden. GPT nutzt einen stabilen DMA-Zielpuffer. Der Kernel hält pro Blockgerät Tabellen-, Marker-, I/O- und Backendstatus bis zum Fatal-Screen vor und verwechselt Marker-I/O nicht mit Abwesenheit.
+- [Erledigt] #3 Dokumentation, Inventare, Testprofil und Versionsstände abschließen
+  - Notizen: Zentrale Storage-, Bootscreen- und Hardwaredokumentation sowie Modul-, Dokument- und Testinventare aktualisiert. Das seit 0.73.21 ungültige Test-AUTOEXEC-Warteintervall wurde auf ein gültiges 90-Sekunden-Nachlaufpolster korrigiert.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Lenovo startet vom internen Kingston-SATA-Datenträger und bindet das R4OS-NTFS-Systemvolume als C: ein
+  - Notizen: Live per SSH auf 192.168.178.104 bestätigt: storage=2, block=2; ahci0 source=preload status=mounted-C; nvme0 source=preload; DEVMGR /STORAGE meldet blocks=2 preload=2 mounted_c=1 builtin=0 und result ok.
+- [Erledigt] Betroffene Tests, Testimage und vollständige Headless-Markerabnahme bestehen
+  - Notizen: AHCI-, NVME- und Kerneltests, Distributionstests, Slim-/Test-Imagepläne und NTFSVERIFY bestanden. Der finale Standard-QEMU-Lauf meldete sämtliche API-/GB-/SNES-Marker OK, kontrolliertes Poweroff und Errors: none.
+
+### Notizen
+Die Lösung ordnet die AHCI-Initialisierung korrekt: DMA-Basen und FIS-Empfang einrichten, POD/SUD bei gestoppter Command Engine setzen, Link/Signatur/Taskfile abwarten und erst dann IDENTIFY starten. Ergänzt wurden frühe NVMe/GPT-Härtung sowie eine bildschirmlesbare C:-Mountdiagnose. Workspace-Release 0.74.2, Kernel 0.1.71, AHCI 0.2.1, NVME 0.1.5.
+
+## 0.74.3 Verlässlicher FTP-Abschluss und parallele Control-Sitzungen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Behebt die beiden auf dem Lenovo mit FileZilla sichtbaren FTP-Probleme: Datenkanäle endeten trotz erfolgreicher 226-Antwort mit ECONNABORTED, und eine offene Browser-Sitzung blockierte die zweite Control-Verbindung eines Transfers.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Nicht blockierenden TCP-Close bis zum letzten Daten-ACK und regulären FIN führen
+  - Notizen: Der Verbindungszustand bleibt nach Freigabe des Aufruferhandles kernelbesessen, sperrt weitere Writes, sendet FIN erst nach leerer Sendewarteschlange und wird bei ausbleibender Bestätigung begrenzt retransmittiert beziehungsweise aufgeräumt.
+- [Erledigt] #2 TCPSVC auf regulären Close mit eng begrenztem Abort-Fallback umstellen
+  - Notizen: Frontend- und Backend-Handle werden nach erfolgreicher Close-Anforderung sofort freigegeben; ein Reset bleibt ausschließlich dem fehlgeschlagenen Close-Start vorbehalten.
+- [Erledigt] #3 FTPSVC für terminale Poll-Befunde und bis zu vier parallele Control-Sitzungen korrigieren
+  - Notizen: Geschlossene Handles beenden die Sitzung sofort. Vier kooperativ bediente Slots erlauben FileZillas getrennte Browser- und Transferanmeldung; STOR-Cleanup-Besitz verhindert die vorzeitige Wiederverwendung eines Slots.
+- [Erledigt] #4 Lenovo per SYSUPD aktualisieren und den fehlenden R4SNES-Eintrag des Mischimages wiederherstellen
+  - Notizen: Beide FTP-Pakete wurden verifiziert, installiert und durch Neustart abgeschlossen. R4SNES 0.22.0, die ID-only-Zuordnungen sowie ausschließlich dessen fehlende Schema-4-Gastmetadaten wurden ergänzt; Explorer startet SMW.sfc anschließend korrekt.
+- [Erledigt] #5 Dokumentation, Inventare und Versionsstände abschließen
+  - Notizen: Kernel-, TCPSVC-, FTPSVC-, Netzwerk-, Update- und SNES-Dokumentation sowie Dokument- und Testinventar auf 0.74.3 fortgeschrieben.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] FileZilla empfängt Verzeichnislisten vollständig ohne abgebrochenen Datenkanal
+  - Notizen: Der ursprüngliche Befund war 226 Directory send OK gefolgt von ECONNABORTED. Nach dem TCP-/TCPSVC-Update konnte der Nutzer Verzeichnisse auflisten und durchforsten.
+- [Erledigt] Eine offene FileZilla-Browser-Sitzung blockiert keine zweite Transferanmeldung
+  - Notizen: FTPSVC 0.1.4 wurde als R4FTPFIX-0.1.1 installiert und der Laptop neu gestartet. Der Nutzer bestätigte abschließend die vollständige Funktion; auf ausdrücklichen Wunsch erfolgte keine weitere agentenseitige FTP-Testserie.
+- [Erledigt] SMW.sfc wird auf dem Mischimage über Explorer mit R4SNES geöffnet
+  - Notizen: Nach Ergänzung von R4SNES, ASSOC und dem exakt kanonischen r4os.snes-Katalogeintrag sowie Neustart bestätigte der Nutzer die vollständige Funktion.
+- [Erledigt] Vorhandene Owner-Selbsttests und der Standard-Headless-Lauf bestehen
+  - Notizen: Die fokussierten Kernel-, TCPSVC- und FTPSVC-Verträge sowie der Standardlauf waren grün. Der anschließend begonnene SMP4-Lauf wurde auf ausdrücklichen Nutzerwunsch beendet; es wurden keine weiteren großen oder QEMU-basierten FTP-Tests verlangt.
+
+### Notizen
+Der Kernel hält beim nicht blockierenden TCP-Close das letzte unbestätigte Datensegment bis zum ACK, sendet danach FIN und übernimmt Retransmit sowie begrenztes Reaping. TCPSVC 0.1.4 nutzt wieder den regulären Close mit Abort nur als Fehlerfallback. FTPSVC 0.1.4 verwaltet vier kooperative Control-Sitzungen; Transfers und der feste passive Port 2020 bleiben serialisiert. Workspace-Release 0.74.3, Kernel 0.1.72. Auf dem weiterhin als 0.72.10 ausgewiesenen komponentenweise aktualisierten Lenovo wurden die Pakete R4FTPFIX 0.1.0 und 0.1.1 regulär über SYSUPD installiert. Zusätzlich wurde der auf diesem Mischimage vollständig fehlende R4SNES-Katalogeintrag einmalig aus dem kanonischen 0.22.0-Manifest wiederhergestellt.

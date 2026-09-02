@@ -7,6 +7,26 @@ and file facades. RDPSVC consumes R4DESK frames and input and implements the
 RDP/TLS/CredSSP protocol path in userland. None of these protocols has a
 kernel or host-side production fallback.
 
+FTPSVC multiplexes up to four control sessions cooperatively so GUI clients
+can keep a directory-browsing session open while a second authenticated
+session performs a transfer. Transfers themselves remain serialized, and the
+single passive listener uses port 2020.
+
+TCP service closes are nonblocking but graceful: the kernel retains an
+unacknowledged final payload, sends FIN only after its ACK, and owns FIN
+retransmission and bounded cleanup. An abort/reset is reserved for an explicit
+abort or a failed close initiation. This is required for FTP clients that
+reject a reset data channel even after the control channel reports success.
+
+The 0.74.3 hardware acceptance used FileZilla in the same LAN as the Lenovo.
+Before the correction, LIST ended with `226 Directory send OK` but FileZilla
+reported `ECONNABORTED`; after the graceful-close update, browsing completed.
+FileZilla then exposed the former single-control-session limit by keeping its
+browsing connection open while opening a second connection for a transfer.
+FTPSVC 0.1.4 was installed through SYSUPD, the laptop was restarted, and the
+user confirmed the resulting browsing and transfer behavior. No additional
+agent-side FTP stress run was performed at the user's explicit request.
+
 RDPSVC advertises only its productive NSCodec bitmap path. It requires the
 matching Fast-Path and Set Surface Bits client capabilities and keeps
 RLE16/Raw as the fallback when encoding fails or does not reduce the wire

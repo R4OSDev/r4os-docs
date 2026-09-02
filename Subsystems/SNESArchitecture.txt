@@ -1,6 +1,6 @@
 ﻿# R4SNES-Architektur und Umsetzungsplan 0.73.X
 
-Stand: 0.73.12, 02.09.2026
+Stand: 0.73.13, 02.09.2026
 
 ## Ziel und verbindliche Entscheidungen
 
@@ -142,6 +142,12 @@ Seit 0.73.12 sind OBC-1 und S-RTC im Modul 0.11.0 ausführbare Boardfähigkeiten
 
 S-RTC besitzt auf dem ExHiROM-Profil ausschließlich die Ports `$2800/$2801`. Marker, Lese-, Kommando-, transaktionaler Schreib- und Resetpfad sind getrennt; ein Lesezyklus hält einen stabilen 13-Nibble-Snapshot, während die Live-Uhr weiterlaufen darf. Sekunden, Minuten, Stunden, Tag, Monat, dreistelliges Jahr und Wochentag werden gegen dokumentierte Bereiche und gregorianische Schaltjahre geprüft. Der Resetzustand ist die einzige halt-äquivalente All-Null-Darstellung. Vorwärts gerichtete Offlinezeit wird vor dem nächsten Snapshot in den Kalender eingerechnet, rückwärts laufende Hostzeit nicht. Checksumgültige, aber semantisch ungültige Kalender-, Wochentag-, Latch-, Halt- oder Reserved-Zustände sowie unbekannte Chiprevisionen und widersprüchliche Boardheader schlagen mit eigener Diagnose geschlossen fehl.
 
+Seit 0.73.13 sind S-DD1 und SPC7110 samt optionaler Epson RTC-4513 im Modul 0.12.0 ausführbare Boardfähigkeiten. S-DD1 spiegelt die acht DMA-Quell- und Längenregister, ohne sie dem S-CPU-DMA-Besitzer zu entziehen. `$4800/$4801` schalten Hardware und Kanalmaske, `$4804-$4807` wählen die vier 1-MiB-ROM-Fenster. Ein passender fester DMA-Quellzugriff aktiviert genau einen streamingfähigen Golomb-/Kontextdecoder; alle vier Bitplane- und Kontextmodi, beliebige Lesescheiben, Transferende, Reset, LoROM-Fenster und die 32-KiB-SRAM-Variante sind bytegenau geprüft.
+
+SPC7110 trennt je nach Gesamtgröße 1 oder 2 MiB Programm-ROM vom Daten-ROM. Der produktive Mapper bildet PROM/DROM-Bänke, SRAM-Freigabe und offene Bereiche ab. Die DCU implementiert die dokumentierten 1-/2-/4-bpp-Arithmetikmodelle, Verzeichnis- und Kontextwahl sowie Tileausgabe; Datenport, Offset, Adjust, Stride, Vorzeichen, Such-/Inkrementmodi, Multiplikation und Division einschließlich Nullteiler besitzen definierte Registerrückgaben. Typ F5 hat keine RTC-Ports, Typ F9 verbindet die Epson-Nibble-Schnittstelle `$4840-$4842`. Ihr BCD-Kalender umfasst 1990 bis 2089, Schaltjahre, Wochentag, Stop/Hold/Reset, Statusquittierung, ausschließlich vorwärts gerichtete Offlinezeit und denselben versionierten `HASH.RTC`-Vertrag. Ungültige Kalender-, Latch-, Kontroll- oder Haltzustände bleiben geschlossen.
+
+Sieben ausschließlich synthetische LCG-Streams bilden vier S-DD1-Modi und drei SPC7110-Modi ab. Die 64-Byte-Spuren aus den unveränderten Dekompressorquellen von Mesen2 und Snes9x sind untereinander byteidentisch (SHA-256 `1A68E3F6A5E92A506B6944F99E4E9999563536FCA595AABEB41D9CC75F547AD8`); Ares wurde als dritte unabhängige Zustandsmaschinenquelle gegengeprüft. Das Produkt reproduziert alle sieben Spuren über direkte und produktive Buspfade unabhängig von der Scheibenteilung. Weder kommerzielle ROM-Bytes noch titelspezifische Tabellen sind Bestandteil dieser Nachweise.
+
 ## Erweiterungschip-Fähigkeitsmatrix
 
 | Familie | Entscheidung für 0.73.X | Grundlage und Grenze |
@@ -164,7 +170,7 @@ S-RTC besitzt auf dem ExHiROM-Profil ausschließlich die Ports `$2800/$2801`. Ma
 
 ## Referenz- und Teststrategie
 
-Die maschinenlesbare Detailzuordnung steht in `Docs/Subsystems/SNESQualificationMatrix.json`. Der lokale gepinnte Bestand liegt unter `ExFiles/Reference/SNES` und wird durch `References.json` samt Revisionen, Lizenzen, Datei- und Baumdigests gebunden. Er enthält 147 eigentliche offene Test-ROMs; zwei zusätzliche `.sfc`-Dateien unter `Tools` sind Werkzeugfixtures und zählen ausdrücklich nicht zum Korpus. Außerdem sind 256000 SPC700-Einzelschrittvektoren und neun lokal erzeugte, revisionsgebundene S-DSP-Differentialfälle vorhanden.
+Die maschinenlesbare Detailzuordnung steht in `Docs/Subsystems/SNESQualificationMatrix.json`. Der lokale gepinnte Bestand liegt unter `ExFiles/Reference/SNES` und wird durch `References.json` samt Revisionen, Lizenzen, Datei- und Baumdigests gebunden. Er enthält 147 eigentliche offene Test-ROMs; zwei zusätzliche `.sfc`-Dateien unter `Tools` sind Werkzeugfixtures und zählen ausdrücklich nicht zum Korpus. Außerdem sind 256000 SPC700-Einzelschrittvektoren, neun lokal erzeugte revisionsgebundene S-DSP-Differentialfälle und sieben originale S-DD1-/SPC7110-Dekompressionsspuren vorhanden.
 
 Die Beweisreihenfolge lautet:
 
@@ -176,7 +182,7 @@ Die Beweisreihenfolge lautet:
 
 Eine fremde Implementierung allein ist nie Hardwarewahrheit. Ares, Mesen2, Snes9x und SNES-SPC dienen nur dem Vergleich; ihre Lizenzen werden nicht durch Abschreiben umgangen. R4SNES wird in Zig neu implementiert. Fremdcode darf nur nach expliziter Lizenzprüfung und mit erforderlichen Hinweisen übernommen werden. Kommerzielle ROMs, proprietäre IPL-/DSP-/ST-Firmware und lokale `ExFiles` werden nie committed oder zur öffentlichen Buildvoraussetzung.
 
-Gilyon deckt alle normalen 65C816- beziehungsweise SPC700-Instruktionen breit ab, aber nicht allein Interrupts, WAI/STP, PPU, DSP oder Systemtiming. Seit 0.73.9 vergleicht der Runner zu allen 256000 SPC700-Vektoren neben dem Endzustand auch jeden angegebenen Opcode-, Dummy-Read-, Write- und Wait-Zyklus; Timer, Ports und Systemkopplung bleiben bewusst zusätzliche Owner-Gates. Seit 0.73.10 bindet das Referenzmanifest zusätzlich die neun exakten S-DSP-Fälle und deren unabhängige Oracle-Revision. Undisbeliever enthält viele visuelle und revisionsabhängige Fälle; solche ROMs werden nur dann zum Gate, wenn ein belastbares Pixel-, Register- oder Abschlussprotokoll gebunden ist. Die 29 historischen ROMs sind ein Reproduktionssnapshot und keine unabhängige zweite Hardwarequelle. Von den sechs SA-1-ROMs sind zwei selbstwertende Tests; vier Utilities werden gegen mitgelieferte Hardwarebilder/-tabellen oder gezielte Speicherprotokolle geprüft. HDRV ist interaktiv und wird vor der Schlussabnahme nur über geskriptete Eingabe, Geometrie und Audio-/Frameinvarianten verwendet.
+Gilyon deckt alle normalen 65C816- beziehungsweise SPC700-Instruktionen breit ab, aber nicht allein Interrupts, WAI/STP, PPU, DSP oder Systemtiming. Seit 0.73.9 vergleicht der Runner zu allen 256000 SPC700-Vektoren neben dem Endzustand auch jeden angegebenen Opcode-, Dummy-Read-, Write- und Wait-Zyklus; Timer, Ports und Systemkopplung bleiben bewusst zusätzliche Owner-Gates. Seit 0.73.10 bindet das Referenzmanifest zusätzlich die neun exakten S-DSP-Fälle und deren unabhängige Oracle-Revision, seit 0.73.13 die sieben byteidentischen S-DD1-/SPC7110-Spuren samt drei Quellpfaden und zwei tatsächlich ausgeführten unabhängigen Orakeln. Undisbeliever enthält viele visuelle und revisionsabhängige Fälle; solche ROMs werden nur dann zum Gate, wenn ein belastbares Pixel-, Register- oder Abschlussprotokoll gebunden ist. Die 29 historischen ROMs sind ein Reproduktionssnapshot und keine unabhängige zweite Hardwarequelle. Von den sechs SA-1-ROMs sind zwei selbstwertende Tests; vier Utilities werden gegen mitgelieferte Hardwarebilder/-tabellen oder gezielte Speicherprotokolle geprüft. HDRV ist interaktiv und wird vor der Schlussabnahme nur über geskriptete Eingabe, Geometrie und Audio-/Frameinvarianten verwendet.
 
 ## Produktintegration und Fehlervertrag
 

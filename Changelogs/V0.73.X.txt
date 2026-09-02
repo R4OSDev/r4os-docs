@@ -1,0 +1,1278 @@
+# 0.73.X SNES
+
+**Status:** Abgeschlossen
+
+## Leitbild
+0.73.X führt mit einer maximal ausgereiften Emulation des Super Nintendo Entertainment System das dritte produktive R4OS-Subsystem ein. Verbindliches Ziel sind Super Famicom und SNES als gemeinsame 16-Bit-Hardwarefamilie mit getrennt und reproduzierbar modellierten NTSC- und PAL-Zeitprofilen. Echte Cartridge-Images werden über den bestehenden installierten Subsystemkatalog und den R4SUBSYS1-Startvertrag geöffnet. Die produktive Zuordnung von *.sfc und *.smc auf die stabile SUBSYSTEM_ID r4os.snes macht den Explorer-Doppelklick zum normalen Startweg und führt jede geöffnete Cartridge als eigene, vollständig isolierte GUI-R4X-Instanz im Desktop aus. Endung, Dateiname und ein möglicher Copier-Header machen ein Image nur zum Kandidaten; Mapping, Region, benötigte Cartridge-Hardware und Ausführbarkeit werden begrenzt aus dem validierten Inhalt bestimmt. Beschädigte, mehrdeutige oder noch nicht unterstützte Varianten werden verständlich abgewiesen und niemals still in einem geratenen Hardwareprofil gestartet.
+
+Die Emulation entsteht als eigenständige R4OS-Implementierung in einem eigenen öffentlichen Subsystem-Repository. Haupt-CPU, Adressbus, WRAM, Register, Interrupts, Timer, Multiplikation und Division, DMA und HDMA, PPU, SPC700-/DSP-Audio, Controllerports, Cartridge-Mapping, Erweiterungschips und Persistenz gehören zum privaten Zustand jeder Gastinstanz. Gastadressen sind niemals Hostzeiger, virtuelle Hardware erhält keinen direkten Zugriff auf R4OS-Hardware, und weder SNES-spezifische Logik noch ein Emulator-Core gelangen in den Kernel. Der produktive Pfad hängt nicht von einem mitgelieferten proprietären BIOS, Boot-ROM oder einer fremden Emulatorbibliothek ab.
+
+Der vorhandene r4os.subsystem_host übernimmt weiterhin Fenster, Viewport, seitenverhältnistreue Skalierung, Letterboxing und die Präsentation der jeweils nativen Gastbildfläche. Das Subsystem liefert die tatsächlich erzeugte SNES-Geometrie einschließlich Low-Res, Hi-Res, Overscan und Interlace ohne vorzeitige hostseitige Vergrößerung; unveränderte Bilder erzeugen keinen Frame, und Rasterblöcke bleiben höchstens 128x128 Pixel groß. r4os.subsystem_runtime bleibt Eigentümer von kooperativer Ausführung, monotoner pausenbereinigter Gastzeit, genau einer begrenzten Gast-Scheibe pro Hostzyklus und caller-eigenem PCM. Video, CPU, DMA und APU folgen demselben regional korrekten Gastzeitmodell. Audio läuft ausschließlich über App-Audio und AUDSVC; ein Audioausfall setzt nur diesen Teilpfad auf degraded und darf Gastzeit, Video und Eingabe weder beschleunigen noch blockieren.
+
+Die vorhandenen geordneten, layoutunabhängigen Key-down- und Key-up-Ereignisse bilden einen vollständigen Standard-SNES-Controller mit Steuerkreuz, A, B, X, Y, L, R, Start und Select ab. Die beiden Controllerports und ihre seriellen Lesevorgänge werden als echte Gastgeräte modelliert; die sichtbare Grundabnahme erfolgt mit einer klar dokumentierten Tastaturbelegung für mindestens den ersten Controller. Gehaltene und losgelassene Tasten müssen exakt erhalten bleiben, und bei Fokusverlust werden alle im Gast gehaltenen Tasten freigegeben. Zeichenwerte, Modifier-Bits, Polling, Toggle- oder Wiederholungsheuristiken sind kein Ersatz für den vollständigen Tastenzustand.
+
+Der Cartridge-Pfad bildet normale LoROM-, HiROM-, ExLoROM- und ExHiROM-Abbilder allgemein und ohne titelbezogene Sonderpfade ab. Ein erkannter 512-Byte-Copier-Header wird als Transporthülle behandelt, nicht als Gast-ROM. Cartridge-Erweiterungen werden als eigene virtuelle Hardwarekomponenten mit explizitem Zustand, Timing und Tests implementiert. Verbreitete offizielle Erweiterungschips wie Super FX, SA-1, die DSP-Familie, CX4, S-DD1, SPC7110, OBC-1 und RTC-Bausteine werden nach technischer Relevanz schrittweise in denselben allgemeinen Cartridge-Vertrag aufgenommen; ein noch nicht implementierter benötigter Chip führt zu einer klaren Ablehnung statt zu einem unvollständigen oder spielspezifisch gefälschten Start. Die konkrete Reihenfolge darf in den Unterversionen nach offener Testabdeckung und den später festgelegten lokalen Referenztiteln priorisiert werden.
+
+Persistente Cartridge-Daten liegen getrennt vom installierten R4X und vom unveränderlichen ROM ausschließlich unter C:\R4OS\SUBSYSTEMS\r4os.snes\SAVE\. APPDATA ist weder Laufzeitpfad noch Fallback- oder Migrationsquelle. Nur ein laut validierter Cartridge-Hardware batteriegestützter Zustand wird dauerhaft geführt. Der kanonische Cartridge-Inhalt nach Entfernung eines eindeutig erkannten Copier-Headers bestimmt dessen stabilen Hashschlüssel unabhängig von Dateiname, Ablageort und der Endung .sfc oder .smc. HASH.SAV enthält das rohe Cartridge-SRAM; HASH.RTC enthält bei einer unterstützten Echtzeituhr deren versionierten, prüfbaren Zustand. Dirty-State wird verzögert sowie bei sauberem Close zwingend geleert. Veröffentlichung, Wiederaufnahme und Bereinigung erfolgen atomar, begrenzt, idempotent und fail-closed; ein unvollständiger Stage darf niemals einen letzten gültigen Stand verdrängen. Pro Cartridge-Identität besitzt höchstens eine laufende Instanz Schreibhoheit. Weitere Instanzen dürfen weder konkurrierendes Last-Writer-Wins noch eine zweite private Save-Wahrheit erzeugen.
+
+Kompatibilität wird mit offenen oder selbst erzeugten CPU-, Bus-, DMA-, PPU-, APU-, Mapper-, SRAM- und RTC-Nachweisen aufgebaut. Dauerhafte Fixtures benötigen eine eindeutige Lizenz und dokumentierte Herkunft. Später ausgewählte kommerzielle Referenz-ROMs bleiben ausschließlich in einem ignorierten lokalen PrivateInjection-Baum; sie werden weder in ein öffentliches Repository aufgenommen noch Bestandteil eines zur Weitergabe bestimmten Images oder Releasearchivs. Proprietäre Firmware, Spieleinhalte, Markenassets und anderer nicht freigegebener Nintendo-Inhalt werden nicht verteilt. Reale Referenzspiele sind End-to-End-Abnahmen und keine Umfangsselektoren: Die Implementierung bleibt ein allgemeines Hardwaremodell und enthält keinen titelbezogenen Sonderpfad.
+
+Deterministisches Verhalten, belastbare Kompatibilität und ein responsiver R4OS-Desktop haben Vorrang vor maximaler Emulationsgeschwindigkeit. Pause, Fortsetzen, Reset, Resize, Fokuswechsel, mehrere getrennte Fenster, sauberer Close sowie SRAM- und gegebenenfalls RTC-Fortschreibung gehören zum Produktvertrag. Save States, Rewind, Cheats, Netplay, Shader und die inoffizielle MSU-1-Erweiterung sind nicht Teil von 0.73.X. Super Game Boy, Satellaview, Sufami Turbo sowie Zubehör wie Super Scope, Maus und Multitap bleiben ebenfalls außerhalb der Grundabnahme, sofern sie nicht später ausdrücklich als eigene Roadmap-Erweiterung aufgenommen werden. Alle technischen Unterversionen sollen automatisierbar abschließbar sein; manuelle Sichtprüfungen und Realhardwaretests werden erst in der letzten geplanten Unterversion gebündelt.
+
+## Notizen
+Verbindliches lokales Referenzziel für 0.73.X ist die bereitgestellte europäische Super-Mario-World-Cartridge unter C:\TEMP\SMW.SFC. Die ungeheaderte LoROM ist 524288 Bytes groß, weist 2048 Bytes Cartridge-SRAM aus und besitzt SHA-256 B5BE1DBA3012B6811A5660FBF2981CB23CDD1E48F845A42DF00F0F55B19F0392. Sie liegt auf dem Host ausschließlich unter Artifacts/Distribution/PrivateInjection/Temp/SMW.SFC und darf weder in ein öffentliches Repository noch in ein öffentliches Image oder Releasearchiv gelangen. Am Ende der Roadmap muss sie per Explorer-Doppelklick korrekt, flüssig und vollständig spielbar sein, einschließlich Bild, regional passender Gastzeit, Audio, Eingabe, Fokus, Pause, Reset, Close sowie dauerhaftem Spielstand nach Speichern, Close und erneutem Öffnen. Sie ist eine reale lokale End-to-End-Abnahme und kein Umfangsselektor für titelbezogene Sonderpfade.
+
+Das SNES-Subsystem wird ausschließlich per Tastatur bedient. Die verbindliche Belegung lautet: Steuerkreuz = Pfeiltasten, Start = Eingabetaste, Select = rechtes Strg, X = Num8, A = Num6, B = Num2, Y = Num4, L = Num7 und R = Num9. Gamepad-Eingabe gehört nicht zum Umfang von 0.73.X.
+
+Da R4OS den Ziffernblock bisher nicht produktiv verwendet hat, ist der vollständige Eingabepfad vor der Subsystemanbindung zu belegen und bei Bedarf an seiner gemeinsamen R4DESK-, Contract-, SDK- und Desktop-Grenze append-only zu erweitern. Num2, Num4, Num6, Num7, Num8 und Num9 müssen als eigenständige layoutunabhängige physische Key-down-/Key-up-Identitäten ankommen, von Ziffernreihe und Navigationsaliasen unterscheidbar und unabhängig vom Num-Lock-Zustand. Zeichenwerte oder emulatorseitige Heuristiken dürfen diese Plattformfunktion nicht ersetzen; Fokusverlust muss auch alle gehaltenen Numpad-Tasten freigeben.
+Technische Bestandsprüfung ohne Codeänderung: PhysicalKeyEvent und subsystem_host können generische HID-Keyboard-Usages bis 255 bereits unverändert transportieren. Der PS/2-Set-1-Pfad unterscheidet die benötigten Ziffernblocktasten schon als Num2=0x5A, Num4=0x5C, Num6=0x5E, Num7=0x5F, Num8=0x60 und Num9=0x61 von den separaten Navigationstasten. In der USB-HID-Brücke fehlen die Keypad-Usages 0x59 bis 0x63 derzeit jedoch in der Usage-zu-Set-1-Abbildung und werden dort verworfen. Außerdem speist der aktuelle USB-Modifieradapter rechtes Strg über denselben nicht-erweiterten Set-1-Code wie linkes Strg ein. Für die verbindliche SNES-Belegung ist daher voraussichtlich keine neue Event-ABI nötig, wohl aber eine gezielte append-only Benennung im Contract sowie Korrektur und automatisierter Nachweis des USB-HID-, Desktop- und SDK-Pfads. Ein allein grüner PS/2-Nachweis reicht nicht aus.
+Dynamische Roadmapplanung: Während der Abarbeitung von 0.73.X dürfen bei technischem oder organisatorischem Bedarf weitere Unterversionen ergänzt und passend in die Abhängigkeitsreihenfolge eingeordnet werden. Sie müssen dieselben Qualitäts- und Automatisierungsleitplanken einhalten. Die manuellen Sichtprüfungen durch den Benutzer und die Tests auf echter Lenovo-Hardware bleiben stets der letzten geplanten Unterversion vorbehalten; entstehen davor weitere technische Arbeiten, wird die manuelle Schlussabnahme entsprechend nach hinten verschoben.
+Kommunikationskonvention für Benutzerinteraktionen: Sobald während 0.73.X tatsächlich eine Entscheidung, Beobachtung, Eingabe oder manuelle Prüfung des Benutzers benötigt wird, ist die Anfrage wie ein sorgfältig entwickelter Prompt für ein leistungsfähiges LLM zu formulieren. Sie beginnt mit einer passenden Rollen- und Kompetenzsetzung, zum Beispiel „Du bist ein hochintelligenter, sorgfältiger Mensch und übernimmst die Rolle des R4OS-Abnahmetesters“, und nennt anschließend Ziel, relevanten Kontext, Voraussetzungen, konkrete Schritte, erwartete Beobachtungen, wichtige Fehler- oder Abbruchfälle sowie das gewünschte Antwortformat. Vage Bitten oder implizite Erwartungen sind zu vermeiden; es werden nur die wirklich benötigten Informationen angefordert. Diese Kommunikationskonvention hebt nicht die Vorgabe auf, manuelle Sichtprüfungen und Lenovo-Tests ausschließlich in der letzten geplanten Unterversion anzufordern.
+Verbindliche Umfangsentscheidung zu Cartridge-Erweiterungen und Controllerport 2: Innerhalb von 0.73.X werden alle offiziellen SNES-Cartridge-Erweiterungschips implementiert, die ausreichend dokumentiert, allgemein statt titelbezogen umsetzbar und mit geeigneten offenen oder selbst erzeugten automatisierten Nachweisen belastbar qualifizierbar sind. 0.73.1 klassifiziert jeden betrachteten Chip nachvollziehbar nach Dokumentationslage, Implementierbarkeit, Testabdeckung und Abhängigkeiten. Nicht ausreichend belegbare Chips werden ausdrücklich benannt und sauber als nicht unterstützt abgewiesen; Vermutungen und spielspezifische Ersatzpfade sind unzulässig. Controllerport 2 wird hardwarekorrekt als nicht angeschlossener Controller modelliert und erhält in 0.73.X keine zweite Tastaturbelegung. Echter USB-Controller-Support liegt ausdrücklich außerhalb dieser Roadmap und wird in einem späteren Vorhaben umgesetzt; erst dort wird Controllerport 2 erneut aufgegriffen und mit einer Eingabequelle verdrahtet.
+Abschlussbereinigung: Der lokale private Overlay-Baum Artifacts/Distribution/PrivateInjection mit Temp/SMW.SFC und seiner Provenienzdatei wurde nach der Hardwareabnahme vollständig entfernt; die kommerzielle ROM ist kein Bestandteil eines öffentlichen Images oder Releasepakets. Das stabile GitHub-Release v0.73.25 wurde mit den frisch im Public-Modus gebauten und verifizierten Profilen Slim und Full sowie Quellenmanifest und SHA256SUMS veröffentlicht. Das Release bindet Distribution-Commit 0780DD7F5B2FA6BB989681ED828A6136E4CEC805. Der dabei unter Linux sichtbar gewordene PowerShell-Ausgabestromfehler des Releasewerkzeugs wurde vor der Veröffentlichung korrigiert und durch den Release-Selbsttest gebunden.
+
+## 0.73.1 SNES-Architekturprüfung und vollständiger Umsetzungsplan
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Den vorhandenen R4OS-Stand und den gepinnten SNES-Referenzbestand gegen das vollständige Hardwaremodell prüfen. Daraus werden die fachlichen Besitzer, Komponenten- und Zustandsgrenzen, das Zeitmodell, die Entwicklungsreihenfolge, die automatisierten Nachweise und sämtliche nachfolgenden Unterversionen von 0.73.X abgeleitet. 0.73.1 ist ein Analyse- und Planungsgate und behauptet noch keine spielbare SNES-Emulation.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 R4OS-Bestand, Besitzergrenzen und Wiederverwendung aus 0.72.X prüfen
+  - Notizen: Subsystem-Host und -Runtime, R4SUBSYS1, Desktop/Explorer-Assoziation, Audio/AUDSVC, Dateisystem, Build/Imageplan, Modulcontainer, Inventare und die r4os.gb-Lösungen gezielt lesen. Für jede benötigte Änderung den fachlichen Besitzer und das betroffene Repository bestimmen. Wiederverwendbare Plattformmechanismen von SNES-spezifischer Emulation trennen; Kerneländerungen nur einplanen, wenn der Vertrag technisch nicht außerhalb des Kernels erfüllbar ist. Das Ergebnis nennt konkrete Vertrags-, Modul-, Dokumentations- und Testflächen sowie erwartete Versionsauswirkungen.
+Ergebnis: Docs/Subsystems/SNESArchitecture.txt enthält eine konkrete Besitzermatrix für R4SNES, Contract, Kernel, Desktop, SDK, R4GB, Distribution, Explorer und Docs sowie die wiederverwendeten 0.72.X-Verträge. SNES-Logik bleibt vollständig im Userland-Subsystem; vorgesehen sind nur allgemeine USB-HID-/Contract-Korrekturen und ein einkompilierter SDK-Persistenzhelfer.
+- [Erledigt] #2 SNES-Hardwaremodell, Zustandsgrenzen und Entwicklungsabhängigkeiten festlegen
+  - Notizen: 5A22/65C816, Speicherbus und Adressdekodierung, Master-/CPU-/Dot-/APU-Takte, NTSC/PAL, NMI/IRQ, Multiplikation/Division, DMA/HDMA, PPU, SPC700/DSP, Controllerports, Reset/Pause/Close und Mehrinstanzbetrieb als Komponenten- und Zustandsmodell beschreiben. Taktquellen, Synchronisationspunkte, begrenzte Gastscheiben und deterministische Testschritte festlegen. Daraus eine implementierbare Abhängigkeitsreihenfolge ableiten, ohne Scheduling, Gastzeit oder Audio in den Fensterhost zu verlagern.
+Ergebnis: Vollständiges instanzlokales Maschinenmodell mit Cartridge/Board, 24-Bit-Bus, 65C816/5A22, WRAM, PPU/VRAM/CGRAM/OAM, DMA/HDMA, Controllern, SPC700/ARAM/Timern, S-DSP und Coprozessoren festgelegt. Ganzzahlige NTSC/PAL-Masterclock, rational gekoppelte APU-Domäne, feste Ereignisordnung, Mikrooperationen und 32768-Masterclock-Scheiben schließen die Entwicklungsabhängigkeiten.
+- [Erledigt] #3 Cartridge-, Mapping-, Erweiterungschip- und Persistenzumfang als Fähigkeitsmatrix bestimmen
+  - Notizen: LoROM, HiROM, ExLoROM, ExHiROM, optionale Copier-Header, Regions-/Timingangaben, ROM-/RAM-Größen, Checksummen, SRAM und RTC abdecken. Für bekannte Cartridge-Hardware und Erweiterungschips eindeutig zwischen sofort unterstützt, später innerhalb 0.73.X priorisiert und ausdrücklich sauber abgewiesen unterscheiden. Die Priorisierung muss durch offene Tests und Architekturabhängigkeiten begründet sein. Kanonische ROM-Identität nach Headerentfernung, .SAV/.RTC-Namen, atomare Ersetzung, Recovery und Single-Writer-Lease am Ziel C:\R4OS\SUBSYSTEMS\r4os.snes\SAVE\ mit den bewährten 0.72.X-Prinzipien abgleichen.
+Ergebnis: LoROM/HiROM/ExLoROM/ExHiROM, Copier-Header-Normalisierung, Headerbewertung, Regionen, SHA-256-Identität, exakte SAV/RTC-Formate, Single Writer und atomare Recovery sind spezifiziert. OBC-1, S-RTC, S-DD1, SPC7110/RTC, Super FX, SA-1, CX4 sowie firmwaregebundene DSP-1..4, ST010/11 und ST018 sind eingeplant; Adapter/Peripherie und MSU-1 sind klar außerhalb.
+- [Erledigt] #4 Tastatur-, Numpad- und Rechts-STRG-Pfad bis zum SNES-Controller vollständig planen
+  - Notizen: Die vorgegebene Belegung Pfeiltasten, Eingabe, Rechts-STRG sowie Num8/6/2/4/7/9 über PS/2, USB-HID, Desktop, SDK und Subsystem-Host verfolgen. Bereits bekannte Lücken bei USB-HID-Usages 0x59 bis 0x63 und der Unterscheidung von Rechts-STRG konkret den zuständigen Besitzern zuordnen. Append-only Benennung und automatisierte Nachweise für PS/2 und USB vorsehen; eine ABI-Erweiterung nur einplanen, falls die bestehende PhysicalKeyEvent-Semantik nachweislich nicht genügt. Die technische Eingabequalifikation darf keine manuelle Tastaturprobe voraussetzen.
+Ergebnis: Keine neue Event-ABI nötig. PS/2 liefert die benötigten HID-Usages bereits; USB-HID muss 0x59..0x63 ergänzen und rechtes Strg extended erhalten. Contract-Namen, Kernel-Reports, Desktopdurchleitung, SDK-Fokusfreigabe und die zwölf seriellen Port-1-Bits werden in 0.73.2 automatisiert geprüft; Port 2 bleibt unverbunden.
+- [Erledigt] #5 Referenzbestand in eine reproduzierbare Test- und Erwartungsmatrix überführen
+  - Notizen: Die gepinnten Quellen unter ExFiles/Reference/SNES einschließlich 65C816-/SPC700-Vektoren, offenen Test-ROMs, Emulator-Referenzen und Hardwaredokumentation vollständig auf Suite- und Case-Set-Ebene erfassen. Je Bestand Quelle, Revision, Lizenz, Modell/Region, erwartetes Ergebnis, benötigten Runner, Automatisierbarkeit und zuständige Komponente festhalten. Lücken, widersprüchliche Referenzen und nur visuell oder interaktiv prüfbare Fälle markieren. Dauerhafte Tests dürfen ausschließlich rechtlich geeignete offene oder selbst erzeugte Daten verwenden; Super Mario World bleibt ein privates Endziel.
+Ergebnis: Docs/Subsystems/SNESQualificationMatrix.json bindet Quellen, Revisionen, Lizenzen, Region/Modell, Runner, Erwartung, Automatisierbarkeit, Zielkomponente und Zielversion. Exakt 147 Test-ROMs und 256000 SPC700-Vektoren sind zugeordnet; zwei Tool-ROMs, kommerzielle Daten und proprietäre Firmware sind ausgeschlossen. ExFiles-Verifikation ist grün.
+- [Erledigt] #6 Produktintegration, Laufzeitbudgets und automatisierte Reifestufen entwerfen
+  - Notizen: Modulidentität r4os.snes, .sfc/.smc-Probe, R4M0/R4X-Start, Explorer-Doppelklick, Fenster/Viewport, native Geometrien einschließlich Hires/Interlace/Overscan, Frame-Deltas, PCM-Puffer über App-Audio/AUDSVC, pausengerechte Gastzeit, Ressourcenabbau, Fehlerbilder und Mehrinstanzisolation planen. Messbare Budgets und Diagnosemarker für Host-Modelltests, Emulator-/Differenztests, Repositorytests, Imageplan und QEMU-Headless festlegen. Bestehende Testschichten bevorzugen und neue globale Gates nur für eine bislang ungedeckte Grenze vorsehen.
+Ergebnis: Produktpfad, Katalog/ASSOC/R4SUBSYS1, Explorer, native 256/512-x-224/239/448/478-Geometrien, XRGB32-Deltas, 48-kHz-PCM, Fehler-/Teardownmodell und Mehrinstanzgrenzen sind festgelegt. Messbar geplant sind 32768 Masterclocks/Scheibe, 2048 PCM-Frames/Block, maximal 250 ms Schedulinglücke, Close unter 2 s und 60 Gastsekunden auf Standard/SMP4.
+- [Erledigt] #7 Alle nachfolgenden 0.73.X-Unterversionen evidenzbasiert anlegen
+  - Notizen: Die Ergebnisse in einer dauerhaften Architekturanalyse mit Entscheidungen, offenen Risiken und Rückverfolgbarkeit zu Referenzen dokumentieren. Anschließend sämtliche Entwicklungs-, Integrations- und Reifestufen in Abhängigkeitsreihenfolge in der Roadmap anlegen. Jede Unterversion erhält einen klaren Besitzerumfang, konkrete Aufgaben und Abnahmen, benötigte Vorbedingungen, automatisierte Nachweise und Versionsauswirkungen. Alle Stufen vor dem Schluss müssen autonom und ausschließlich automatisiert abnehmbar sein. Genau die letzte Unterversion enthält die manuellen Sichtprüfungen durch den Benutzer und die Tests auf echter Lenovo-Hardware, einschließlich des privaten Super-Mario-World-End-to-End-Laufs.
+Ergebnis: 0.73.2 bis 0.73.23 sind mit Abhängigkeiten, Besitzerumfang, Aufgaben, Abnahmen und Versionswirkung angelegt. 0.73.2 bis 0.73.22 sind rein automatisch abnehmbar; ausschließlich 0.73.23 enthält Benutzer-, Sicht-, Hör-, private SMW- und Lenovo-Schritte. Dynamische Zwischenstufen verschieben diese Schlussstufe nach hinten.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Eine prüfbare SNES-Architekturanalyse deckt Komponenten, Besitzer, Verträge, Zeitmodell, Zustände, Datenflüsse, Abhängigkeiten, Risiken und konkrete Änderungsflächen vollständig ab.
+  - Notizen: Die Analyse trennt Plattformwiederverwendung und SNES-spezifische Logik, begründet jeden etwaigen Kerneleingriff und lässt keine ungeklärte Architekturfrage zurück, die den Beginn der ersten Entwicklungsunterversion blockiert.
+Abgenommen über Docs/Subsystems/SNESArchitecture.txt: Komponenten, Besitzer, Verträge, Zeit-/Zustandsmodell, Datenflüsse, Abhängigkeiten, Risiken und konkrete Repositoryflächen sind vollständig; für den Start von 0.73.2 ist keine Designfrage offen.
+- [Erledigt] Cartridge-/Persistenz-Fähigkeitsmatrix und Referenz-/Testmatrix sind vollständig und rückverfolgbar.
+  - Notizen: Alle gepinnten Suiten und Case-Sets sind einer Komponente und einem geplanten automatisierten Nachweis oder einer begründeten Ausnahme zugeordnet. Mapper, Erweiterungschips, Regionen, SRAM/RTC, Lizenzen und saubere Ablehnungsfälle sind ausdrücklich klassifiziert; kommerzielle Daten sind ausgeschlossen.
+Abgenommen über Architektur und SNESQualificationMatrix.json. Die Suite-ROM-Summe ist exakt 147, der SPC700-Bestand exakt 256000 Vektoren; Mapper, Regionen, Saves/RTC, Chipfamilien, Firmwaregrenzen, Lizenzen, Gate-/Diagnosefälle und Ausschlüsse sind rückverfolgbar.
+- [Erledigt] Der vollständige Eingabepfad für Numpad und Rechts-STRG ist für PS/2 und USB mit Besitzern, Vertragsentscheidung und automatisierten Nachweisen geplant.
+  - Notizen: Die vorgegebene SNES-Tastenbelegung bleibt unverändert. Keine technische Vorstufe hängt von einer manuellen Tastatur- oder Sichtprobe ab.
+Abgenommen: feste Belegung und HID-Werte sind dokumentiert; PS/2- und USB-Lücken besitzen konkrete Owner und maschinenprüfbare Reports. PhysicalKeyEvent bleibt layoutkompatibel und kein technischer Schritt verlangt eine manuelle Tastaturprobe.
+- [Erledigt] Alle weiteren 0.73.X-Unterversionen sind in ausführbarer Abhängigkeitsreihenfolge mit begrenztem Umfang, Aufgaben, Abnahmen und automatisierter Qualifikation angelegt.
+  - Notizen: Die Planung ermöglicht ein zusammenhängendes autonomes Abarbeiten. Vor der letzten Stufe gibt es weder eine Benutzerabnahme noch einen Lenovo- oder sonstigen manuellen Sichttest.
+Abgenommen: 22 nachfolgende Unterversionen sind in technischer Reihenfolge angelegt, jede mit Aufgaben und Abnahmen. Bis einschließlich 0.73.22 enthalten sie ausschließlich autonome Tests; neue evidenzbedingte Stufen dürfen vor dem manuellen Schluss eingefügt werden.
+- [Erledigt] Genau die letzte geplante Unterversion bündelt die manuelle Sichtabnahme, die Lenovo-Hardwareprobe und den privaten Super-Mario-World-End-to-End-Test auf einem zuvor automatisiert qualifizierten Release Candidate.
+  - Notizen: Die Schlussstufe prüft mindestens Start/Close, vollständige Tastaturbelegung, Bild, Audio, Spielbarkeit, Pause/Resume/Reset, SRAM-Neustartpersistenz und einen zweiten isolierten Start. Sie ist kein Ersatz für fehlende technische Automatisierung.
+Abgenommen: 0.73.23 ist die letzte und einzige manuelle Stufe. Sie bündelt sichtbares QEMU, Lenovo, SMW-Gameplay, vollständige Tastatur, Audio/Bild, Lifecycle, SRAM-Neustart und zweite Instanz auf dem zuvor automatisch grünen 0.73.22-RC.
+- [Erledigt] 0.73.1 selbst verändert keine Produktfunktion und erhebt keinen Modul- oder Spielbarkeitsanspruch.
+  - Notizen: Zulässig sind Analyse-, Dokumentations-, Inventar- und Roadmapänderungen sowie nichtproduktive Diagnoseproben. Funktionscode und Artefaktversionen beginnen erst in den daraus geplanten Entwicklungsunterversionen.
+Abgenommen: 0.73.1 änderte ausschließlich Docs, Roadmap und den gemäß AGENTS.md verpflichtenden Releasebuchhaltungsmarker auf 0.73.1. Es entstand kein Produkt-/Modulcode, kein R4SNES-Repository/Artefakt, keine Kernel-/Modulversion und kein Spielbarkeitsanspruch.
+
+### Notizen
+Die Planung orientiert sich an den bewährten Grenzen von 0.72.X, übernimmt jedoch keine Game-Boy-Annahmen ungeprüft. Besonders zu sichern sind der kanonische persistente Speicherort C:\R4OS\SUBSYSTEMS\r4os.snes\SAVE\, ROM-basierte Speicheridentitäten, atomare Schreibvorgänge und ein einzelner Schreiber je Spielstand.
+Super Mario World unter C:\TEMP\SMW.SFC ist das lokale End-to-End-Ziel, aber kein Ersatz für eine allgemeine SNES-Architektur oder offene automatisierte Test-ROMs. Kommerzielle ROM-Daten bleiben ausschließlich in PrivateInjection und dürfen weder in öffentliche Repositories noch in Testartefakte übernommen werden.
+Alle technischen Unterversionen, die aus 0.73.1 hervorgehen, müssen ohne Rückfrage und ohne manuelle Sichtprüfung vollständig automatisiert bearbeitbar sein. Sichtprüfungen durch den Benutzer und Tests auf dem Lenovo werden ausschließlich in der letzten geplanten Unterversion gebündelt. Diese letzte Stufe prüft einen zuvor automatisiert qualifizierten Release Candidate und darf nur noch beobachtete Abweichungen eng nachziehen.
+Neue globale Gates werden nur vorgesehen, wenn bestehende Owner-, Modell-, Image- oder Headless-Nachweise die betreffende Risikogrenze nicht abdecken. Die Roadmap bleibt nachweisgeführt: Umfang und Reihenfolge von Erweiterungschips werden anhand offener Referenzen, Tests und klarer Abhängigkeiten festgelegt, nicht anhand einzelner Spieletitel.
+Abschlussbefund 0.73.1: Dauerhafte Ergebnisse sind Docs/Subsystems/SNESArchitecture.txt und SNESQualificationMatrix.json. Referenzgate: 16 gepinnte Repositories, 5 Downloads, 9 geprüfte Bäume, 147 ROMs/147 fertige SFC-Artefakte und 256000 SPC700-Vektoren grün. Docs-Inventar: 79 Dokumente. Folgeplanung: 0.73.2 bis 0.73.23, manuelle Schlussabnahme ausschließlich 0.73.23. RELEASE_VERSION=0.73.1; keine Produktfunktion oder Modulversion geändert.
+Veröffentlicht per vorgeschriebenem Sammelpush: Distribution 6abf6f0, Docs dd87169. Alle 146 erkannten verwalteten Repositories sind danach sauber; zwei geändert/gepusht, 144 unverändert, null Fehler.
+
+## 0.73.2 R4SNES-Projekt, Eingabevertrag und Testfundament
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Das öffentliche Subsystemprojekt und die gemeinsam benötigte Numpad-/Rechts-STRG-Grundlage schaffen. Der Schritt erzeugt ein baubares, sicher ablehnendes R4X-Gerüst und eine reproduzierbare Referenzaufnahme, behauptet aber noch keinen SNES-Spielbetrieb.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Nach Agents/Github.txt das öffentliche Repository R4OSDev/r4os-subsystem-r4snes anlegen, unter Repositories/Subsystems/R4SNES ein hostagnostisches Zig-Projekt mit module.R4MF, R4M0-GUI-R4X und den Identitäten R4SNES, r4os.snes und snes.cartridge schaffen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+R4OSDev/r4os-subsystem-r4snes wurde öffentlich angelegt und main gepusht. Das lokale Projekt erzeugt aus module.R4MF ein R4M0-GUI-R4X mit NAME=R4SNES, SUBSYSTEM_ID=r4os.snes und GUEST_FORMAT=snes.cartridge.
+- [Erledigt] #2 Die append-only Contract-Namen für die physischen HID-Keypad-Usages mindestens Num2, Num4, Num6, Num7, Num8 und Num9 ergänzen, Generator/Baseline aktualisieren und das unveränderte PhysicalKeyEvent-Layout belegen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Sechs append-only HID-Konstanten für Keypad 2/4/6/7/8/9 wurden in ApiContract.json ergänzt und vollständig für Zig/C/Kernel regeneriert. Contract-Test und 26/26 Generator-Selbsttests sind grün; der normalisierte PhysicalKeyEvent-Typ hat vor/nach der Änderung denselben SHA-256 f76c4edbf97e916721afc9cb56d429ab86b22c53bd91aa7b82adf41fafc9e384.
+- [Erledigt] #3 Den Kernel-USB-HID-Pfad um Keypad-Usages 0x59 bis 0x63 ergänzen und rechtes Strg als Extended-Set-1-Taste erhalten; vorhandenen PS/2-Pfad einschließlich Breakcodes und Num-Lock-Unabhängigkeit regressionsprüfen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Die reine hid_set1-Brücke deckt HID 0x59..0x63, Num Lock, normale und E0-erweiterte Pfade ab. Rechtes Strg und rechtes Alt behalten den E0-Präfix; USB-Freigaben werden aus Boot-Reports extrahiert. Kernel-Gate einschließlich PS/2-Make/Break/Repeat und Keypad-vs-Navigation ist grün; Kernel 0.1.69.
+- [Erledigt] #4 Desktop- und SDK-Tests für unveränderten physischen Eventtransport, Key-down/Key-up, Repeat, Fokusfreigabe und Rechts-/Links-STRG-Trennung ergänzen; keine SNES-Policy außerhalb R4SNES einführen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+SDK subsystem_host und Desktop physical_input prüfen verlustlosen Down/Up/Repeat-Transport, Fokusfreigaben, alle sechs Keypad-Usages und Links-/Rechts-Strg. SNES-Buttonpolitik steht ausschließlich in R4SNES/src/host_adapter.zig. SDK- und Desktop-Gates sind grün; Desktop 0.1.31.
+- [Erledigt] #5 Das R4SNES-Komponentenlayout für Cartridge, Board, Bus, S-CPU, PPU, S-SMP, S-DSP, Controller, Coprozessoren, Persistenz und Hostadapter anlegen sowie ein optionales Referenzharness gegen References.json und SNESQualificationMatrix.json schaffen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+R4SNES besitzt getrennte Owner für Cartridge, Board, 24-Bit-Bus, S-CPU, PPU, S-SMP, S-DSP, Controller, Coprozessoren, Persistenz, Timing, Machine und Hostadapter. Das optionale digestgebundene Harness validiert References.json und SNESQualificationMatrix.json.
+- [Erledigt] #6 Build-/Imageplan, MODULES.JSON, ASSOC-Grundlage und Inventare so integrieren, dass das Gerüst unter Windows/Linux baut, im Full-Katalog erscheint und jedes noch nicht implementierte Cartridge begrenzt und verständlich ablehnt.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Standalone- und Workspace-Build sind grün. Full-Plan und MODULES.JSON enthalten /R4OS/SUBSYSTEMS/r4os.snes/R4SNES.R4X sowie snes.cartridge:.sfc/.smc; beide ASSOC-Overlays sind gesetzt und die Inventare zählen 141 Module/579 Tests. Normale Launches lesen keine ROM-Bytes und enden konkret mit nicht implementiert.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] R4SNES baut eigenständig und über den Workspace, erzeugt ein normales GUI-R4X und erscheint mit r4os.snes, snes.cartridge und .sfc/.smc im generierten Katalog.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Nachgewiesen durch ./Build.sh test, ./Tools/Build.sh -module R4SNES und ./Tools/Build.sh -plan Full. R4M0-Inspector: GUI-R4X, vier Imports; MODULES.JSON führt r4os.snes, snes.cartridge, .sfc und .smc.
+- [Erledigt] Identische PS/2- und USB-Proben liefern für alle vereinbarten Numpad-Tasten und rechtes Strg die exakten HID-Key-down-/Key-up-Ereignisse; linkes Strg, Ziffernreihe und Navigation bleiben unterscheidbar.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatische Kernel-, SDK- und Desktop-Proben sind grün: PS/2 und USB mappen Keypad exakt auf HID 0x5A/0x5C/0x5E/0x5F/0x60/0x61, USB-Boot-Freigaben werden geprüft, Rechts-Strg bleibt 0xE4 und unterscheidet sich von Links-Strg 0xE0, Ziffernreihe und E0-Navigation.
+- [Erledigt] Das optionale Harness bindet Revisionen/Digests des lokalen Korpus, zählt 147 Test-ROMs und 256000 SPC700-Vektoren und überspringt fehlende ExFiles verständlich.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+./Build.sh reference-test ist grün: 16 Repositories, 5 Downloads, 9 Bäume, 147 SFC-Test-ROMs, 256 SPC700-Dateien und 256000 Vektoren. Beide Manifeste sind SHA-256-gebunden; ein fehlender ExFiles-Root liefert verständlich SKIP.
+- [Erledigt] Das Hostgerüst verändert keine ROM, bündelt keine proprietäre Firmware und lehnt alle noch nicht implementierten oder fehlerhaften Bilder ohne Hostzeigerleck, Endlosschleife oder Spielbarkeitsanspruch ab.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Statisch und durch Owner-Tests belegt: Der Produktpfad verwendet nur Dateimetadaten, hat keine ROM-Puffer- oder Schreibschnittstelle, keine Firmware, keine Hostzeiger in Machine-Besitzern und eine sofortige konkrete Safe-Reject-Rückgabe. Es besteht ausdrücklich kein Spielbarkeitsanspruch.
+
+### Notizen
+Voraussetzung: abgeschlossene 0.73.1-Architektur. Besitzer sind R4SNES sowie Contract, Kernel, SDK, Desktop, Distribution und Docs. Geplant: R4SNES 0.1.0; nur tatsächlich geänderte Plattformartefakte erhöhen ihre Modul-/Kernelversion. Keine manuelle Tastatur-, Sicht- oder Lenovo-Prüfung.
+Abgeschlossen am 01.09.2026. Veröffentlicht: Contract e582ce5, SDK 7ec60a4, Kernel d978d01, Desktop 67c4ced, R4SNES 1e8449a, Distribution 83f91cb und Docs 4de3181. Release 0.73.2; R4SNES 0.1.0; Kernel 0.1.69; Desktop 0.1.31. Alle Owner-Gates, Referenzharness, Distribution-Gate und der finale Full-Imageplan sind grün. Keine manuelle Tastatur-, Sicht-, ROM- oder Lenovo-Prüfung wurde vorgezogen.
+
+## 0.73.3 Cartridge-Parser, Boarddecoder und 24-Bit-Bus
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+SNES-Images kanonisch und begrenzt erkennen, Board/Region bestimmen und den vollständigen 24-Bit-Gastadressraum als expliziten Bus aufbauen. LoROM, HiROM, ExLoROM und ExHiROM bilden danach die Grundlage für CPU und Geräte.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Bis 64 MiB begrenzt einlesen, genau einen plausiblen 512-Byte-Copier-Header entfernen und aus Map Mode, Checksum/Complement, Resetvektor, Startbytes, Größen, Region und Boardkennung einen eindeutigen Headerbefund erzeugen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Der Produktpfad begrenzt vor der Allokation auf 64 MiB plus höchstens einen 512-Byte-Copier-Header, liest mit Fortschrittsprüfung vollständig und bewertet die vier kanonischen Headerpositionen anhand Map Mode, Größen, Region, Boardtyp, Checksum/Complement, Resetvektor, Startopcode und Titelplausibilität. Alle 147 offenen Referenz-ROMs werden eindeutig geparst.
+- [Erledigt] #2 Die normalisierte SHA-256-Cartridgeidentität und unveränderliche ROM-Sicht festlegen; mehrdeutige, abgeschnittene, inkonsistente, übergroße und nur durch Endung plausible Dateien mit konkretem Grund ablehnen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Cartridge.parse kopiert ausschließlich die normalisierten Programmdaten in privaten Besitz und berechnet darüber SHA-256; rom() liefert nur eine konstante Sicht. Headerloses/geheadertes Material hat in Owner-Tests identische Bytes und Hashes, während Ambiguität, fehlerhafte Complement-Beziehung, Resetvektor, starke Größenwidersprüche, unbekannte und ausgeschlossene Boards konkret scheitern.
+- [Erledigt] #3 LoROM-, HiROM-, ExLoROM- und ExHiROM-Boarddecoder mit ROM-/RAM-Spiegelung, FastROM-Angabe, SRAM-Fenstern und einer zentralen Capabilitytabelle implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+LoROM, HiROM, ExLoROM und ExHiROM besitzen konkrete ROM-/SRAM-Decoder einschließlich beliebiger physischer Größenfaltung, FastROM-Fähigkeit, Board-SRAM und Dirty-Semantik. Die Capabilitytabelle nennt OBC-1, S-RTC, S-DD1, SPC7110/RTC, Super FX, SA-1, CX4, DSP1-Familie, ST010/11 und ST018 samt Plan/Firmwaregrenze sowie MSU-1/Adapter-Ausschlüsse.
+- [Erledigt] #4 Den vollständigen 24-Bit-Bus mit 128 KiB WRAM, MMIO-Delegation, Cartridgefenstern, 6/8/12-Masterclock-Klassifikation und getrennten CPU-/PPU-Open-Bus-Latches implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Der private 24-Bit-Bus besitzt 128 KiB WRAM, WRAM-Spiegel, generische MMIO-Delegation ohne gespeicherten Hostzeiger, geprüfte Cartridgeindizes, getrennte CPU-/PPU-Open-Bus-Latches und 6/8/12-Masterclock-Klassen. FastROM bleibt nach Reset langsam und wird nur bei Boardfähigkeit plus Busfreigabe sechs Clocks schnell.
+- [Erledigt] #5 Synthetische Minimal-/Maximalimages, Copier-Header-Varianten, Regionsprofile, Bankgrenzen, Spiegelungen, Checksummen- und Resetvektorwidersprüche sowie alle Unsupported-Boardklassen automatisiert abdecken.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Owner-Tests erzeugen Minimal-/Grenz-/8-MiB-Images, alle vier Mappings, drei Regionen, Copier-Varianten, Ambiguität, Reset-/Checksum-/Größen-/Boardfehler, Bank- und SRAM-Grenzen sowie Decoder-Bounds. Zusätzlich normalisiert das Referenzharness alle 147 gepinnten offenen SFC-Dateien.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Jedes gültige Basisboard wählt für Grenzadressen exakt das erwartete ROM-/RAM-Byte und meldet die korrekte Zugriffsdauer; kein Zugriff verlässt die privaten Gastpuffer.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatisch belegt durch exakte Grenzadressen für alle vier Decoder, SRAM-Fenster, FastROM-Power-on/Freigabe sowie einen vollständigen Bank-/Grenzoffset-Sweep; jeder gelieferte Index ist kleiner als sein privater ROM-/RAM-Puffer. WRAM/MMIO/Open-Bus-Timingtests sind grün.
+- [Erledigt] Headerloses und gleichwertig geheadertes Material erzeugt dieselben normalisierten Programmdaten und denselben Hash; Quelle und ROM bleiben bytegleich.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Ein 128-KiB-LoROM wird mit und ohne 512-Byte-Präfix geparst. Normalisierte ROM-Slices und SHA-256 sind gleich; eine vorherige Quellkopie bleibt bytegleich. Der Parser mutiert keine Quelle und ROM-Schreibzugriffe am Bus verändern den privaten ROM-Puffer nicht.
+- [Erledigt] NTSC-J, NTSC-U und PAL sowie LoROM/HiROM/ExLoROM/ExHiROM werden reproduzierbar klassifiziert; Ambiguität und beschädigte Größen schlagen geschlossen fehl.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Synthetische NTSC-J-, NTSC-U- und PAL-Images für LoROM/HiROM/ExLoROM/ExHiROM klassifizieren reproduzierbar. Gleichwertige Doppelheader, inkonsistente Complementwerte, ungültige Resetvektoren, starke Größenwidersprüche und ungültige Copier-Kandidaten schlagen geschlossen fehl.
+- [Erledigt] Die zentrale Fähigkeitsmatrix erkennt alle für 0.73.X geplanten Coprozessorfamilien und alle Ausschlüsse, ohne bereits nicht implementierte Hardware vorzutäuschen.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Die statische Capabilitymatrix enthält exakt alle in SNESQualificationMatrix.json geplanten Chipfamilien, die drei Nutzerfirmwaregrößen 0x2000/0xD000/0x28000 und alle Ausschlussklassen. Nur enhancement=none trägt base_implemented; keine geplante oder ausgeschlossene Hardware meldet Bereitschaft.
+
+### Notizen
+Voraussetzung: 0.73.2. Besitzer: R4SNES. Geplant: R4SNES 0.2.0. Persistente Veröffentlichung folgt erst 0.73.11; Board-RAM und Dirty-Semantik werden bereits korrekt modelliert. Vollständig automatisch.
+Abgeschlossen am 01.09.2026. Veröffentlicht: R4SNES 336195a, Distribution 02257de, Docs 4c08f74. Release 0.73.3; R4SNES 0.2.0. Owner-/Referenz-/Distribution-Gates, Workspace-Modulbuild und finaler Full-Imageplan grün. Alle 147 offenen Referenz-ROMs werden normalisiert und boardklassifiziert; keine private SMW- oder manuelle Prüfung vorgezogen.
+
+## 0.73.4 Vollständiger 65C816-Kern
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Einen vollständigen, buszyklusbeschreibenden 65C816-Kern implementieren. Alle legalen Instruktionen, Breiten-, Bank-, Stack-, Interrupt- und Sonderzustände werden unabhängig vom späteren PPU-/Audiohost deterministisch geprüft.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Registersatz A/X/Y/S/D/DB/PB/PC/P/E, Emulation/Native Mode, 8-/16-Bit-Breiten und Fetch/Read/Write/Idle-Mikrooperationen als instanzlokalen Kern implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+R4SNES 0.3.0 besitzt nun einen vollständig instanzlokalen Registersatz A/X/Y/S/D/DB/PB/PC/P/E und einen schrittbegrenzten Kern. Fetch, Read, Write, Idle und Vector-Read werden mit 24-Bit-Adresse, Wert und Masterclocks in einem festen Trace beschrieben; ein Produktionsadapter führt alle externen Zyklen durch bus.zig. Inkonsistente öffentliche E/M/X-Zustände werden vor Ausführung deterministisch normalisiert.
+- [Erledigt] #2 Alle legalen Opcodes und Adressierungsarten einschließlich Direct-Page-/Bank-Wrapping, Stackvarianten, Blockmove, Decimal Mode, DAA-äquivalenter BCD-Arithmetik und Read-modify-write-Reihenfolge implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Eine exhaustive 256-Einträge-Tabelle dekodiert jeden legalen W65C816-Opcode. Implementiert und durch Gilyon Full belegt sind sämtliche Adressierungsarten, Direct-Page-/Page-/24-Bit-Banküberläufe, native und Emulations-Stacks, MVN/MVP mit einem Byte je Step, 8/16-Bit-BCD für ADC/SBC sowie die High-before-Low-Reihenfolge 16-bittiger Read-modify-write-Zugriffe. Der zuvor im Gilyon-Test 0007 sichtbare DB-Banküberlauf wurde konkret gefunden und korrigiert.
+- [Erledigt] #3 BRK/COP/IRQ/NMI/RESET/ABORT-Vektoren, verzögerte Zustandsübergänge, WAI/STP, XCE, REP/SEP und Breitenwechsel mit exakten Stack-/Busfolgen implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+BRK/COP/IRQ/NMI/RESET/ABORT verwenden getrennte native/emulierte Vektoren und explizite Stackfolgen. CLI bildet den IRQ-Abtastzyklus als Read statt Idle ab; WAI ist ein weckbarer Zustand, STP ignoriert Interrupts bis RESET. XCE, REP/SEP, PLP/RTI und Breitenwechsel erzwingen die E/M/X-Invarianten. Synthetische Tests prüfen Restart-PC bei ABORT, native NMI-Stackbytes, verzögerten CLI→IRQ-Übergang und WAI/STP.
+- [Erledigt] #4 Einen generierten Opcode-/Adressierungs-/Breiten-Coverageindex und synthetische Grenztests mit erster abweichender Mikrooperation erzeugen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Der Build erzeugt share/r4snes/CPU_OPCODE_COVERAGE.json (Schema 1) mit 256 legalen Opcodebytes und fünf Decodevarianten je Byte: Emulation sowie native M/X=00/01/10/11. Die Owner-Suite instanziiert alle 1280 Pfade und prüft BCD, Direct-Page-Penalty und (dp,X)-Quirk, Banküberlauf, RMW-Reihenfolge, Blockmove und Interruptzustände. Eine Trace-Differenzfunktion meldet reproduzierbar die erste abweichende Mikrooperation.
+- [Erledigt] #5 Gilyon cputest-basic und cputest-full über Produktions-CPU/-Bus bis zur maschinenlesbaren Erfolgs- oder Fehlerdiagnose ausführen und Befunde mit mindestens zwei unabhängigen Referenzimplementierungen triagieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Die unveränderten Gilyon-1.4-ROMs laufen über produktive Cartridge-, Board-, Bus- und CPU-Pfade zur maschinenlesbaren Success-Ausgabe: cputest-basic nach 164865 und cputest-full nach 240641 Instruktionsschritten. Triage erfolgte gegen WDC als Norm sowie unabhängig gegen Ares 7b51c8ab719e403a150aa700e0933d9e93a06851 und Mesen2 b9fa69ddc6d0a331fb103fdb5eef6904305703c2; Fremdcode wurde nicht übernommen.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Jeder legale Opcode besitzt für alle relevanten M/X/E-Varianten einen getesteten Decodepfad; illegale Zustände enden definiert statt in Hostfehler oder ungebundener Schleife.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatisch belegt: exhaustive 256er-Tabelle × fünf E/M/X-Varianten = 1280 erfolgreiche Decodepfade. Der W65C816 besitzt keine undefinierten Opcodebytes; inkonsistente E/M/X-Zustände werden normalisiert, Traceüberlauf ist ein definierter CpuError statt Hostfehler.
+- [Erledigt] Flags, Register, Stack, Banken, geänderter Gast-RAM und Busmikrooperationen stimmen in synthetischen Grenzfällen und allen Gilyon-Funktionsfällen.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatisch belegt durch 23 Owner-Tests sowie unveränderte Gilyon Basic/Full. Register, Flags, Stack, RAM und Busspuren stimmen in gezielten Grenzen; beide ROMs erreichen Success ohne ausgelassenen Funktionsfall.
+- [Erledigt] Interruptvektoren, WAI/STP, Blockmove, Decimal Mode, Direct-Page-Penalty und Page/Bank-Wrapping sind gezielt und partitionsinvariant belegt.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatisch belegt durch native/emulierte Vektortests, WAI/STP/RESET, ABORT-Restart, CLI-IRQ-Abtastung, MVN mit zwei getrennten Steps, 8/16-Bit-BCD, Direct-Page-Penalty/Quirk und 24-Bit-Page-/Banküberlauf. Jeder Step ist atomar begrenzt und damit unabhängig von Hostpartitionierung.
+- [Erledigt] Zwei CPU-Instanzen mit gleichem Anfangszustand erzeugen denselben Trace; getrennte Instanzen teilen keinen veränderbaren Zustand.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatisch belegt: Zwei getrennte CPU-/Speicherinstanzen erzeugen aus gleichem Zustand bytegleiche Zustände und Mikrooperationstraces. Nach gezielter Änderung eines Operanden wird exakt die erste abweichende Read-Mikrooperation (Index 3) diagnostiziert; veränderbarer Zustand wird nicht geteilt.
+
+### Notizen
+Voraussetzung: 0.73.3. Besitzer: R4SNES. Geplant: R4SNES 0.3.0. WDC-Dokumentation, Gilyon-ROMs und synthetische Cycle-Modelle sind verbindlich; WAI/STP und SNES-Busdetails erhalten eigene Nachweise. Vollständig automatisch.
+Abgeschlossen am 01.09.2026. Veröffentlicht: R4SNES 777ba2a, Distribution 8caffb8, Docs 16eb4fd. Release 0.73.4; R4SNES 0.3.0. 23 Owner-Tests, generierter 256×5-Opcodeindex, unveränderte Gilyon Basic/Full (164865/240641 Schritte), Referenzinventar mit 147 ROMs und 256000 SPC700-Vektoren, Distributionstest, Workspace-Modulbuild und Full-Imageplan grün. Produktiver Start bleibt bis zur 5A22-Integration in 0.73.5 sicher gesperrt; private SMW- und manuelle Prüfungen wurden nicht vorgezogen.
+
+## 0.73.5 5A22-Taktwerk, MMIO, Interrupts und Controller
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+S-CPU und Basissystem auf die gemeinsame NTSC/PAL-Masterclock-Achse setzen. WRAM-Ports, Refresh, H/V-Timer, NMI/IRQ, Mathematik, FastROM und beide seriellen Controllerports werden vollständig verdrahtet.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Ganzzahlige NTSC-/PAL-Masterclock-Profile, feste Ereignisordnung, 32768-Clock-Scheiben und Partitionsinvarianz für CPU, PPU-Platzhalter, Refresh und APU-Phasenakkumulator implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Umgesetzt in R4SNES be88191: ganzzahlige NTSC-/PAL-Profile, kurze/lange Feldzeilen, feste Tickreihenfolge, rationale APU-Phase, Pause und hartes 32768-Masterclock-Slicelimit. system_test.zig weist Framegeometrie und identische Zustandsdigests über stark unterschiedliche Scheibenteilungen nach.
+- [Erledigt] #2 5A22-WRAM-Ports, MEMSEL/FastROM, H/V-Zählerlesung und -latches, NMI/IRQ-Register, Multiplikation/Division sowie belegte Read-/Write-Masken und Open-Bus-Effekte implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Umgesetzt in R4SNES be88191: 17-Bit-WRAM-Port 2180-2183, MEMSEL/FastROM, H/V-Latch und Zählerlesung, NMITIMEN/RDNMI/TIMEUP/HVBJOY, 8-/16-Schritt-Multiplikation und -Division sowie registergenaue Masken. Interne 4000-43ff-Lesezugriffe erhalten das CPU-MDR über Latch.none.
+- [Erledigt] #3 DRAM-Refresh, CPU-Wartezustände, Interruptflanken und WAI/STP-Aufwecken an exakte Masterclock-Zeitpunkte binden.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Umgesetzt in R4SNES be88191: 6/8/12-Clock-Zugriffe laufen über TimedPort; DRAM-Refresh beginnt phasenkorrigiert pro Scanline und stiehlt exakt 40 Masterclocks. NMI- und H/V-IRQ-Flanken treiben den vorhandenen CPU-Kern; dessen Owner-Test belegt maskiertes WAI-Aufwecken und STP nur durch Reset.
+- [Erledigt] #4 Die seriellen Controllerports, Latch/Clock, Auto-Joypad und Interruptstatus implementieren; Port 1 auf Pfeile, Enter, Rechts-STRG, Num8/6/2/4/7/9 abbilden und Port 2 als unverbunden modellieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Umgesetzt in R4SNES be88191: gemeinsamer 4016-Strobe, serielle 16-Bit-Schieberegister, 128/256-Clock-Auto-Joypad und Statusregister. Port 1 nutzt exakt Pfeile, Enter, Rechts-STRG und Num8/6/2/4/7/9; Port 2 ignoriert Eingaben und liefert den offenen, nicht angeschlossenen Pegel.
+- [Erledigt] #5 Gegenrichtungen, Repeat, Fokusverlust, Reset, Pause, Slicegrenzen, NTSC/PAL-Frames und geeignete Undisbeliever-Hardwaretests über deterministische Modellproben abdecken.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Automatisch abgedeckt in 30/30 Owner-Tests: Gegenrichtungen bleiben unabhängig sichtbar, Repeat ist idempotent, Fokusverlust/Reset/Close löschen Eingaben, Pause friert Gastzeit, Slicegrenzen und NTSC/PAL-Frames sind deterministisch. Refresh-, HBlank- und Auto-Joypad-Zeitanker bilden geeignete Undisbeliever-Hardwarebefunde als isolierte Modellproben ab.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Unterschiedliche Scheibenteilungen und Hostwartezeiten erzeugen für dieselbe Region denselben CPU/MMIO/Controller-Zustandsdigest.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt: system_test.zig vergleicht Masterclock, H/V/Frame, Refresh/APU, MMIO-Ereignisdigest, Auto-Joypad und Controllerindex bei Einzelschritten sowie 1/7/113/4096/31337-Clock-Partitionen; produktive CPU-Schritte bleiben über 300 Instruktionen und verschiedene Hostgruppierungen identisch.
+- [Erledigt] NMI/IRQ, H/V-Timer, WRAM-Ports, Refresh, FastROM und Mathematik entsprechen den gezielten Bus-/Zeitmodellen einschließlich Open Bus.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt durch gezielte Owner-Modelle für WRAM-Wrap, MEMSEL, H/V-Latch, RDNMI/HVBJOY-Masken, Multiply/Divide inklusive Division durch null, 40-Clock-Refresh und NMI/H-IRQ-Leitungen. Gilyon basic/full laufen zusätzlich unverändert über den getakteten Produktionsbus.
+- [Erledigt] Jede vereinbarte Taste setzt und löst genau das erwartete SNES-Controllerbit; Fokusverlust löscht alle Bits und Port 2 bleibt bei jeder Hosteingabe unverbunden.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt: alle zwölf vereinbarten HID-Usages werden einzeln gesetzt, wiederholt und gelöst; Links+Rechts bleibt gleichzeitig aktiv, Fokusverlust löscht alles, Port 2 ist nicht verbindbar. Manuelle und automatische Serialisierung werden bitgenau geprüft.
+- [Erledigt] NTSC und PAL verwenden ihre eigenen ganzzahligen Taktprofile ohne Gleitkomma- oder Hostzeitdrift; jede Laufzeitscheibe bleibt begrenzt.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt: 21477272-Hz-NTSC und 21281370-Hz-PAL sind reine Integerprofile, APU-Kopplung ist rational, Pause produziert null Clocks und jede Hostscheibe ist auf 32768 Clocks begrenzt. NTSC- und PAL-Frames sowie Partitionsinvarianz sind automatische Gates.
+
+### Notizen
+Voraussetzung: 0.73.4. Besitzer: R4SNES. Geplant: R4SNES 0.4.0. Controllerport 1 nutzt exakt die feste Tastaturbelegung; Port 2 bleibt nicht angeschlossen. Vollständig automatisch über injizierte physische Events.
+0.73.5 abgeschlossen und veröffentlicht. R4SNES 0.4.0: be88191; Distribution 0.73.5: 8b9f76c; Docs: b756c8f. Gates: R4SNES 30/30 Tests, Referenzharness mit 147 ROMs, Gilyon basic=1505281/full=2172929 und 256000 SPC700-Vektoren, Distributionstests sowie deterministischer Full-Imageplan erfolgreich. Keine manuelle Beobachtung und keine private SMW-ROM verwendet.
+
+## 0.73.6 DMA, HDMA und Buskonflikte
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Alle acht DMA-/HDMA-Kanäle als echte Busmaster implementieren und ihre CPU-, PPU-, Refresh- und Registerkonflikte auf der gemeinsamen Masterclock-Achse festlegen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 DMA-Register, acht Kanäle, A/B-Bus-Richtung, Transfermodi 0 bis 7, feste/inkrementierende/dekrementierende Adressen, Größen-Nullfall und Channel Priority implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Umgesetzt in R4SNES 85ffe8c: acht Registerkanäle, A/B-Richtung, Modi 0-7 mit exakten B-Bus-Folgen, fixed/increment/decrement, 65536-Byte-Nullfall und aufsteigende Kanalpriorität. Jeder Aufruf verarbeitet höchstens eine Synchronisation, einen Overhead oder ein Byte.
+- [Erledigt] #2 HDMA-Initialisierung, direkte/indirekte Tabellen, Line Counter, Repeat, Kanalende, Neustart und HBlank-Zeitpunkte implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Umgesetzt in R4SNES 85ffe8c: Frame-Initialisierung, direkte und indirekte Tabellen, A2A/DAS/NLTR, Repeat/Skip, Reload, Kanalende, Neustart und HBlank-Ereignis bei Masterclock 1104. Transferpass aller Kanäle liegt vor dem Reloadpass.
+- [Erledigt] #3 CPU-Anhalte-/Wiederanlaufzeiten, DRAM-Refresh, NMI/IRQ, Auto-Joypad und belegte gleichzeitige DMA-/HDMA-Konflikte buszyklusgenau verbinden.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Der produktive TimedPort hält die CPU solange dma.busy, verarbeitet HDMA-Priorität nur an Bytegrenzen und lässt Masterclock-Ereignisse weiterlaufen. Owner-Gates belegen 40-Clock-Refresh und NMI-Flanke während DMA sowie bytegenaue HDMA-Unterbrechung eines manuellen Transfers.
+- [Erledigt] #4 Abbruch, Registerschreiben während Transfer, verbotene B-Bus-Ziele, offene Busse und die dokumentierten 0x2100/0x21FF/DMAP-Glitches nach Revisionsprofil klassifizieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Abgedeckt durch reset-/close-sicheren abortAll, sofort sichtbare Registerschreibungen ab dem nächsten Byte, validAAddress für verbotene PPU/CPU/DMA-Fenster, definierte Null-/Open-Bus-Werte, WRAM/2180-Konflikte und 21FF->2100-Wrap. S-CPU-A-2100-Korruption ist revisionsbezogen diagnostic_only; S-CPU-B klassifiziert sie absent, statt einen unbelegten Wert zu erfinden.
+- [Erledigt] #5 Synthetische Tracefixtures sowie passende aktuelle und historische Undisbeliever-ROMs mit Timeout, erster Busabweichung und gegebenenfalls Pixel-/Registeroracle integrieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Tests/dma_reference_cases.json bindet vier synthetische Trace-Orakel und drei aktuelle/historische Undisbeliever-ROMs über Größe und SHA-256. Alle drei Fremd-ROMs besitzen Timeout und First-Bus-Divergence-Schema, bleiben wegen visueller/revisionsabhängiger Wahrheit aber ausdrücklich nicht als Gate aktiviert. Der Referenzharness validiert diese Policy und alle Artefakte.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Alle Transfermodi und Kanalprioritäten erzeugen für direkte und indirekte Grenzfälle exakt die erwartete Bytefolge und Masterclockdauer.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt: alle Modi erzeugen die erwarteten 8-Byte-B-Bus-Muster; direkte/indirekte HDMA-Grenzen, Channel 0/2/7-Priorität, Live-DMAP und genaue Overhead-/Byte-/Endausrichtung sind automatische Trace-Gates. Servicepartitionen 1/5/2/11 liefern identische Zustände und Traces.
+- [Erledigt] CPU, Refresh, NMI/IRQ und HDMA bleiben bei Slicegrenzen und gleichzeitigem DMA in deterministischer Hardwareordnung.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt: DMA ist ein persistenter Byte-Zustandsautomat; CPUReady bleibt bis zum Ende false. HDMA präemptiert nach einem vollständigen Byte, Refresh stiehlt weiter 40 Clocks und NMI wird beim VBlank-Übergang während DMA gesetzt; arbitrary service grouping bleibt identisch.
+- [Erledigt] Kein DMA-/HDMA-Zugriff verlässt den Gastbus; verbotene oder offene Bereiche liefern definierte Werte und beenden den Host nicht.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt: jede A-Adresse wird auf 24 Bit begrenzt und vor Zugriff klassifiziert; echte Buszugriffe laufen ausschließlich durch Bus.read/write. Verbotene A-Fenster liefern 0, WRAM/2180-Konflikte sind revisionsdefiniert, offene B-Register bleiben im MMIO/Open-Bus-Vertrag und kein Hostzeiger wird aus Gastwerten gebildet.
+- [Erledigt] Jeder aktivierte Fremd-ROM-Fall besitzt ein belastbares Oracle; rein visuelle oder revisionsungeklärte Fälle bleiben ausdrücklich diagnostisch.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt: dma_reference_cases.json enthält enabled_gates=0 für alle drei fremden ROMs, jeweils mit SHA-256, Größe, Timeout, Diagnosegrund und First-Divergence-Format. Nur die vier synthetischen maschinenlesbaren Owner-Modelle sind Gates; visuelle oder revisionsungeklärte Beobachtungen werden nicht als Wahrheit behauptet.
+
+### Notizen
+Voraussetzung: 0.73.5. Besitzer: R4SNES. Geplant: R4SNES 0.5.0. Die Undisbeliever-DMA-/HDMA- und historischen Glitch-ROMs werden nur mit belastbarer maschinenlesbarer Erwartung zu Gates. Vollständig automatisch.
+0.73.6 abgeschlossen und veröffentlicht. R4SNES 0.5.0: 85ffe8c; Distribution 0.73.6: 89b791d; Docs: 4f84a91. Gates: 39/39 Owner-Tests, Referenzharness mit 147 ROMs, 3 qualifizierten DMA-Diagnostikfällen, Gilyon basic/full und 256000 SPC700-Vektoren, Distributionstests und Full-Imageplan erfolgreich. Keine manuelle Beobachtung und keine private SMW-ROM verwendet.
+
+## 0.73.7 PPU-Basis, Modi 0 bis 4 und Sprites
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Eine dotbezogene PPU-Basis mit VRAM, CGRAM, OAM, Scanlines, Modi 0 bis 4 und vollständiger Spritepipeline implementieren. Das Ergebnis bleibt zunächst eine private XRGB32-Gastfläche.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 NTSC-/PAL-Frameablauf, H/VBlank, Forced Blank, 64 KiB VRAM, 512 Byte CGRAM, 544 Byte OAM sowie alle Registerlatches und CPU-Zugriffssperren implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Umgesetzt in R4SNES 6f93a08: dotbeobachteter NTSC-/PAL-Frameablauf, Forced Blank und 224/239 sichtbare Zeilen; private 64-KiB-VRAM, 512-Byte-CGRAM und 544-Byte-OAM. VMAIN-Inkrement/Remapping/Vorgriff, Farb- und OAM-Paarlatches, Spiegelung sowie aktive VRAM-Sperre und CGRAM/OAM-Umleitung werden am gespeicherten H/V-Buszeitpunkt ausgewertet.
+- [Erledigt] #2 BG-Modi 0 bis 4 mit Tilemapgrößen, Characterdaten, Bittiefen, Prioritäten, Scrollregistern, Offset-per-Tile und Direct Color implementieren, soweit im Modus relevant.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Umgesetzt in R4SNES 6f93a08: Modi 0-4 mit den belegten 2/4/8-bpp-Kombinationen, 32/64er Tilemapblöcken, 8/16er Zeichen, Planardekodierung, Prioritätsstaffeln, Scrolllatches, Offset-per-Tile in Modi 2/4 und Direct Color in Modi 3/4. Fünf synthetische Vollbilder besitzen feste XRGB32-FNV-1a-Digests.
+- [Erledigt] #3 OAM-Auswertung, 8x8 bis 64x64 Sprites, Size Select, X/Y-Flip, Palette, Priorität, Range-/Time-Over und transparente Pixel implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Umgesetzt in R4SNES 6f93a08: scanlinegelatchte OAM-Auswertung, alle acht Small/Large-Größenpaare von 8x8 bis 64x64, 9-Bit-X, Y-Wrap, Name Select, Palette, vier Prioritäten, X/Y-Flip und Farbe-0-Transparenz. 33. Sprite setzt Range Over, 35. sichtbarer 8-Pixel-Sliver setzt Time Over; STAT77 wird automatisch geprüft.
+- [Erledigt] #4 Main/Subscreen-Grundkomposition, Backdrop und eine private 256-Pixel-XRGB32-Framegeneration ohne Hostskalierung implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Umgesetzt in R4SNES 6f93a08: Main- und Subscreen wählen Hintergrund, Objekt oder Backdrop unabhängig über ihre Enablemasken. Die interne Arbeitsfläche wird ausschließlich bei vollständigem 256x224- beziehungsweise 256x239-Bild in eine zweite Fläche kopiert; copyFrame liefert dem Aufrufer einen eigenen Snapshot samt Generation und Digest, ohne Hostskalierung oder Wartezeitbezug.
+- [Erledigt] #5 Synthetische Scanline-/Pixelmodelle und geeignete OpenSNES-/Undisbeliever-Fälle für VRAM/CGRAM/OAM, Modi 0 bis 4 und Sprites automatisiert auswerten.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Tests/ppu_test.zig bindet Register-/Speicher-, Modus-, Sprite-, Overflow- und Generationsmodelle. Tests/ppu_reference_cases.json bindet fünf exakte Owner-Digests und vier SHA-256-geprüfte Undisbeliever-Fälle für VMAIN, Object Dropout, Mid-frame-INIDISP und VRAM-Mid-scanline. Die Fremd-ROMs besitzen Timeout und Erstabweichungsformat, bleiben mangels Hardwareoracle diagnostic_only. Referenzharness: 147 ROMs, PPU-Diagnosen 4, Gilyon basic 1505281/full 2172929, SPC700 256000.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] VRAM-, CGRAM- und OAM-Latches, Adressierung, Spiegelung und Sperrfenster stimmen an den geprüften Dot-/Buszeitpunkten.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt durch automatische Portgrenztests: VMAIN-Modus 0/1, High-Lane-Inkrement, Vorgriff, CGRAM-7-Bit-Highbyte/Open-Bus, gepaarte Low-OAM-Schreibweise, High-Table-Mirror, aktive VRAM-Sperre, CGRAM-Umleitung und VBlank-Freigabe werden exakt geprüft.
+- [Erledigt] Modi 0 bis 4 und Spritegrenzen erzeugen pixelgenaue XRGB32-Digests für sämtliche synthetischen Referenzszenen.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt: Modi 0-4 veröffentlichen vollständig gefüllte 256x224-Flächen mit den festen Digests 84eefc2777a6e325, a71592d0a1312325, f24128f9b0f3e325, 488f665ded0f2325 und 9ef804ce64d52325. Jede Szene wird unabhängig zweimal erzeugt und pixelgenau an erster und letzter Position geprüft.
+- [Erledigt] Range-/Time-Over, Priorität, Transparenz, Größe und Flip bleiben bei Spritegrenzen und Mid-frame-Registern deterministisch.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt: automatische Spritefälle prüfen Farbe-0-Transparenz, Priorität 3, X-Flip, alle Size-Select-Tabellen im Besitzer, OAM-Reihenfolge sowie Range-/Time-Over bei 33 Sprites und mehr als 34 Slivern. Aktive OAM-Schreibzugriffe verwerfen die bereits gelatchte aktuelle Zeile nicht.
+- [Erledigt] Framegenerationen enthalten nur vollständige Gastbilder, teilen keinen veränderbaren Zustand und bleiben unabhängig von Hostresize oder -wartezeit.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt: zwei nacheinander erzeugte verschiedenfarbige Vollbilder besitzen steigende Generationen und verschiedene Digests; der zuvor kopierte Frame bleibt byteidentisch. Zu kleine Zielpuffer werden abgewiesen, 224/239-Geometrie ist explizit geprüft, und der PPU hängt am kanonischen TimedPort statt an Hostresize oder Hostwartezeit.
+
+### Notizen
+Voraussetzung: 0.73.6. Besitzer: R4SNES. Geplant: R4SNES 0.6.0. Keine Sichtabnahme; alle Bilder werden als Pixel-/Registerdigests geprüft.
+0.73.7 abgeschlossen und veröffentlicht. R4SNES 0.6.0: 6f93a08; Distribution 0.73.7: ded5f18; Docs: dc0d255. Gates: 44/44 Owner-Tests, fünf feste Modi-0-4-XRGB32-Digests, Referenzharness mit 147 ROMs, 3 DMA- und 4 PPU-Diagnosen, Gilyon basic/full und 256000 SPC700-Vektoren; vollständiges Testimage mit ein- und vier-vCPU-QEMU-Abnahme sowie Full-Imageplan erfolgreich. Keine manuelle Beobachtung und keine private SMW-ROM verwendet.
+
+## 0.73.8 Erweiterte PPU und native Videoausgabe
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+PPU-Modi 5 bis 7, Fenster, Farbrechnung, Mosaic, Hires, Overscan und Interlace vervollständigen und alle nativen Geometrien über subsystem_host veröffentlichen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Modi 5/6 mit Hires/Pseudo-Hires sowie Mode 7 mit Matrix, Ursprung, Wiederholung, Flip, EXTBG und korrekter Pixelpriorität implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Umgesetzt in R4SNES 0.7.0: Modi 5/6 nutzen native 512 Pixel, paarweise Main/Sub-Ausgabe, Hires-Tilebreite, geshifteten Scroll und Interlace-Feldkoordinaten. Mode 7 besitzt vorzeichenbehaftete Matrix/Zentrum/Offset, Repeat-Modi, H/V-Flip, Direct Color, EXTBG und belegte Prioritäten. Pixeltests decken Identität, Ursprung, Flip, Outside/Repeat, EXTBG und Mode-7-Multiplikator ab.
+- [Erledigt] #2 Fensterlogik, Main/Subscreen-Auswahl, Color Math, Fixed Color, Add/Subtract/Half, Mosaic und Mid-scanline-Registereffekte implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Umgesetzt: zwei Fenster je Layer mit Invert und OR/AND/XOR/XNOR, getrennte TM/TS/TMW/TSW-Pfade, Color-Window-Clip/Math-Masken, Fixed Color, Add/Subtract/Half, Subscreen-Operand und Mosaic 1..16. Masterclock-beobachtete Mid-scanline-Schreibtests belegen die erste betroffene Pixelposition.
+- [Erledigt] #3 VMAIN-Inkrement und Address Remapping, Overscan 224/239, Interlace 448/478, 256/512 Breite und Field-Reihenfolge vollständig abdecken.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+VMAIN-Inkrement/Remapping/Prefetch und aktive Zugriffsfenster bleiben aus 0.73.7 bitgenau grün. Neu sind alle Kombinationen 256/512 x 224/239/448/478, Pseudo-Hires und eine vollständige Zwei-Feld-Veröffentlichung; ein unvollständiges Interlace-Feld kann keine Generation veröffentlichen.
+- [Erledigt] #4 Native XRGB32-Flächen über r4os.subsystem_host mit Generation, Full/Damage/No-frame, höchstens 128x128-Rasterblöcken, Resize und Letterbox veröffentlichen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Der neue generationengesicherte XRGB32-VideoAdapter bindet ausschließlich die gepackte vollständige PPU-Fläche. Full/Damage/No-frame, Geometriewechsel, Pause, Rebind/Reset, stale Generation, Close, Resize und Letterbox laufen durch r4os.subsystem_host; Fake-Backend-Nachweise erzwingen Rasterblöcke <=128x128.
+- [Erledigt] #5 Die 15 VMAIN-, Effects-, Examples- und geeigneten Hardware-ROM-Gruppen gegen gebundene Pixel-/Geometrie-/Registeroracles automatisieren; HDRV-Geometrien geskriptet gegenprüfen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Automatisiert: zwölf exakte synthetische XRGB32-Oracles, alle 15 SHA-256-gepinnten VMAIN-ROMs, ausgewählte Window/Mode-7/HDMA/Example/Hardware-Fälle und HDRV als insgesamt 23 begrenzte Fremd-ROM-Diagnosen. Neun ausführbare HDRV-BGMODE/SETINI-Skripte prüfen die nativen Geometrien. Visuelle ROMs bleiben ohne lizenzierte Hardwarebaseline nicht-gating.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Alle progressiven und interlaced Geometrien 256/512 x 224/239/448/478 werden nativ und ohne emulatorseitige Vorabskalierung veröffentlicht.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatisch belegt durch den Geometrie-Owner-Test und neun HDRV-Skripte: 256/512 x 224/239/448/478 werden als gepackte native XRGB32-Flächen ohne PPU-Vorabskalierung ausgegeben.
+- [Erledigt] Modi 5 bis 7, Fenster, Color Math, Mosaic, VMAIN und Mid-scanline-Fälle stimmen pixel- oder tracegenau mit ihren gebundenen Oracles.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatisch belegt durch 52 Owner-Tests, zwölf feste FNV-1a-XRGB32-Digests, register-/pixelgenaue Mode-7-, Window-, Math-, Mosaic- und Midline-Fälle sowie den digestgebundenen Referenzharness.
+- [Erledigt] Unveränderte Generationen erzeugen keinen Present; Damageblöcke überschreiten 128x128 nicht und Letterboxbereiche liefern keine Gastposition.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatisch belegt durch video_host_test.zig: identische vollständige Bilder erhöhen die Generation nicht, Damage wird begrenzt invalidiert, das Backend erhält nur Raster <=128x128 und Letterboxpunkte werden abgewiesen.
+- [Erledigt] Reset, Pause, Resize, Forced Blank und Close veröffentlichen weder halbe Frames noch stale Generationsdaten.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatisch belegt: Interlace veröffentlicht erst nach einem Feldpaar; Forced Blank ist pixelgenau; Pause liefert nur bereits vollständige Generationen; Resize erzwingt Full; stale Rebinds werden abgewiesen; Close ist idempotent.
+
+### Notizen
+Voraussetzung: 0.73.7. Besitzer: R4SNES und SDK nur bei nachgewiesener allgemeiner Hostlücke. Geplant: R4SNES 0.7.0. Sichtprüfungen bleiben 0.73.23 vorbehalten.
+Abgeschlossen und veröffentlicht: R4SNES 0.7.0, Distribution 0.73.8. Owner-Test 52/52; Referenzharness grün mit 147 ROMs, 3 DMA-Diagnosen, 23 PPU-Diagnosen, 9 HDRV-Geometrien, Gilyon basic=1505281/full=2172929 und 256000 SPC700-Vektoren. Voller Workspace-Test baute 136 Module; Testimage/NTFS/1-CPU-QEMU grün. Der erste 4-CPU-Lauf erreichte unter Hostlast nach bereits grünen Kernmarkern einmalig das globale 360-s-Limit; der unveränderte gezielte Wiederholungslauf war vollständig grün (4/4 CPUs, Poweroff, alle Marker). Full-Plan grün, MODULES.JSON führt R4SNES 0.7.0. Private SMW.SFC blieb 524288 Byte und SHA-256 b5be1dba3012b6811a5660fbf2981cb23cdd1e48f845a42df00f0f55b19f0392. Commits: R4SNES f19115a, Distribution abc4c40, Docs f979a92. Keine manuelle Sichtprüfung vorweggenommen.
+
+## 0.73.9 S-SMP, SPC700 und IPL-Pfade
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Den vollständigen SPC700, ARAM, Timer, CPU/APU-Ports und einen rechtssicheren semantischen sowie optional exakten IPL-Pfad implementieren.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Alle 256 SPC700-Opcodes, Register/PSW/Stack, Adressierungsarten, Branch-/Call-/Interruptpfade, SLEEP/STOP und explizite Buszyklen implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+SPC700-Kern in src/spc700.zig vollständig umgesetzt: alle 256 Opcodes, Register/PSW/Stack, Adressierungsarten, Branch/Call/Interrupt, MUL/DIV/DAA/DAS, SLEEP/STOP und explizite read/write/wait-Busphasen. Alle Decodepfade werden durch die 256000 Referenzvektoren erreicht.
+- [Erledigt] #2 64 KiB ARAM, TEST/CONTROL, drei Timer, DSP-Registerport sowie getrennte S-CPU/S-SMP-Portlatches und Synchronisationszeitpunkte implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+64 KiB ARAM und S-SMP-I/O umgesetzt: TEST/CONTROL einschließlich unmittelbarer Timer-Line-Synchronisation, Timerteiler 128/128/16, DSP-Adresse/Datenport sowie getrennte bidirektionale S-CPU/S-SMP-Latches mit Epochen und Zeitstempeln. Gezielte Owner-Tests decken Timer, Ports und Randfälle ab.
+- [Erledigt] #3 Die APU-Oszillatordomäne per rationalem Masterclock-Akkumulator betreiben und Partitions-/Hosttempo-Invarianz belegen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+APU-Oszillatordomäne mit rationalem u128-Akkumulator bei 1024000 Buszyklen pro Sekunde umgesetzt. Systemtests variieren Masterclock-Partitionen und Hostwartezeiten und erhalten identischen SMP-Zustand, Portreihenfolge und driftfreien Fortschritt.
+- [Erledigt] #4 Das dokumentierte IPL-Uploadprotokoll semantisch nachbilden und optional exakt 64 Byte Nutzerfirmware aus dem privaten FIRMWARE-Stamm validieren/ausführen; beliebige IPL-Leseabhängigkeit ohne Firmware sauber ablehnen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Dokumentiertes IPL-Uploadprotokoll als semantischer Zustandsautomat umgesetzt. Optional wird ausschließlich C:\R4OS\SUBSYSTEMS\r4os.snes\FIRMWARE\SPC700.IPL mit exakt 64 Byte geladen; gültig, fehlend und falsche Länge sind definiert. Ohne Firmware gibt es keine beliebige IPL-ROM-Leseabhängigkeit.
+- [Erledigt] #5 Alle 256000 SPC700-SingleStep-Vektoren, Gilyon spctest, synthetische Timer-/Port-/IPL-Fälle und geeignete IPL-Speed-ROMs mit präziser Erstabweichung ausführen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Referenzharness vollständig ausgeführt: 256000 SingleStep-Vektoren, Gilyon CPU basic 1505281 Schritte, CPU full 2172929 Schritte, Gilyon spctest über echte Ports und semantischen Upload mit Success nach 718849 Schritten sowie IPL-Speed-ROM 32768 Bytes ohne Erstabweichung nach 518305 Schritten. Owner-Suite: 61 von 61 Tests.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Alle 256000 Einzelschrittvektoren stimmen in Registern, PSW, PC/SP und geändertem ARAM; jeder Opcode besitzt einen getesteten Decodepfad.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Bestanden: alle 256000 Vektoren stimmen in A/X/Y, PSW, PC/SP, aufgeführtem ARAM und jeder erwarteten read/write/wait-Phase; alle 256 Opcodes besitzen ausgeführte Decodepfade.
+- [Erledigt] Gilyon spctest endet über den echten S-CPU-Port-/Uploadpfad mit Success; Timer, Ports, SLEEP/STOP und Dummyzugriffe sind zusätzlich gezielt belegt.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Bestanden: Gilyon spctest meldet über den produktiven SPC700-Kern, reale S-CPU-Ports und den semantischen IPL-Upload Success nach 718849 Schritten. Gezielte Tests belegen Timer, Ports, SLEEP/STOP, TEST-Synchronisation und Dummyzyklen.
+- [Erledigt] APU-Fortschritt und Portreihenfolge bleiben bei verschiedenen S-CPU-Scheiben und Hostwartezeiten identisch und driftfrei.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Bestanden: rationaler APU-Akkumulator sowie System-/Owner-Tests belegen identischen Fortschritt und Portzustand bei unterschiedlichen Masterclock-Scheiben und Hostwartezeiten ohne Drift.
+- [Erledigt] Das öffentliche Artefakt enthält keine IPL-Bytes; semantischer Upload, gültige optionale Nutzerfirmware sowie fehlende/falsche Firmware enden jeweils definiert.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Bestanden: kein IPL-Blob im öffentlichen Repository oder Image. Semantischer Upload funktioniert; exakt 64 Byte private Nutzerfirmware wird ausgeführt, fehlende und ungültige Firmware enden definiert.
+
+### Notizen
+Voraussetzung: 0.73.5; 0.73.8 muss für System-ROM-Diagnosen verfügbar sein. Besitzer: R4SNES. Geplant: R4SNES 0.8.0. Keine proprietären 64 IPL-Bytes im Repository oder Image. Vollständig automatisch.
+0.73.9 veröffentlicht. R4SNES 0.8.0, Distribution RELEASE_VERSION 0.73.9. Commits: R4SNES 6770cc4, Distribution eaabcb7, Docs 2c66ece. Owner-Suite 61/61; Referenzsuite 3/3 mit 256000 SPC700-Vektoren, Gilyon spctest Success und IPL-Speed ohne Erstabweichung. Vollständiger Workspace-Test einschließlich 1-CPU- und 4-CPU-QEMU grün; Full-Imageplan grün und Modulkatalogziel /R4OS/SUBSYSTEMS/r4os.snes/R4SNES.R4X bestätigt. Private SMW.SFC unverändert: 524288 Bytes, SHA-256 b5be1dba3012b6811a5660fbf2981cb23cdd1e48f845a42df00f0f55b19f0392. Manuelle Sicht- und Lenovo-Abnahmen bleiben planmäßig der letzten Unterversion vorbehalten.
+
+## 0.73.10 S-DSP und driftfreie Audioausgabe
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Alle acht S-DSP-Stimmen, BRR, Hüllkurven, Mixing, Echo und eine deterministische 48-kHz-Ausgabe implementieren. Audio läuft ausschließlich über subsystem_runtime und App-Audio/AUDSVC.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 S-DSP-Register, acht Voices, BRR-Decode, Sampleloop, Pitch, Gaussian Interpolation, Noise, Pitch Modulation sowie KON/KOFF/ENDX implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Umgesetzt in R4SNES 0.9.0 (Commit 7b71122): Der S-DSP läuft mit exakt 32 Hardwarephasen pro 32-kHz-Sample aus derselben APU-Taktdomäne und demselben ARAM wie der SPC700. Alle 128 Register, acht Stimmen, BRR-Decode mit vier Filtern/Loop/End, Pitch, Gaussian-Interpolation, Noise-LFSR, Pitch-Modulation sowie KON/KOFF/ENDX/ENVX/OUTX sind verbunden. Acht-Voice-Owner-Test und neun digitale SNES-SPC-Fälle sind exakt grün.
+- [Erledigt] #2 ADSR/GAIN, Counterraten, Main-/Echo-Volume, Echo-RAM, achtstufiges FIR, Feedback, Mute/Reset und belegte Registerreadbacks implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Umgesetzt in R4SNES 0.9.0: ADSR mit Attack/Decay/Sustain/Release, direkter und zeitgesteuerter linearer/exponentieller/bent GAIN, belegte Counterraten, Main-/Echo-Volume, Echo-RAM, Feedback, alle acht FIR-Taps, Mute/Soft-Reset und Registerreadbacks werden samplegenau ausgeführt. Echo-PCM- und Echo-RAM-Digests stimmen mit dem unabhängigen Oracle überein.
+- [Erledigt] #3 Den nativen 32-kHz-Strom deterministisch auf 48-kHz-Stereo-S16LE in caller-eigene Blöcke bis 2048 Frames abbilden und jede Queue begrenzen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Umgesetzt: Ein ganzzahliger partitioninvarianter 3:2-Streamingwandler bildet 32000 Hz auf 48000 Hz Stereo-S16LE ab. Caller-eigene Abrufe sind auf 2048 Frames begrenzt; die feste Queue hält höchstens 8192 Frames und verwirft bei Überlauf deterministisch die ältesten Frames. Der Owner-Test weist 4096 native zu 6143 resampelten Frames sowie gleiche native/resampelte Digests bei beliebigen Clockpartitionen nach.
+- [Erledigt] #4 PCM ausschließlich über subsystem_runtime/App-Audio/AUDSVC ausgeben; Prefill, Unterlauf, Überlauf, Mute, Backendfehler, Resync, Pause, Reset und Close ohne Gastzeitkopplung behandeln.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Umgesetzt über den bestehenden allgemeinen r4os.subsystem_runtime-Vertrag; keine SDK- oder AUDSVC-Lücke wurde gefunden. Der neue R4SNES-Adapter deckt Prefill, expliziten Unterlauf, begrenzten Überlauf, Transportbuchhaltung, Mute, Backend-Degradation, Reset und idempotentes Close ab. Ein echter Runtime-Test beweist kontinuierliche gesunde Übergabe und weiteren Gastfortschritt nach Sink-Fehler. Pause/Fortsetzen/Resync und gemeinsamer Ressourcenabbau wurden zusätzlich durch die unveränderten SDK-Runtime-Gates im 1- und 4-vCPU-QEMU-Volltest bestätigt.
+- [Erledigt] #5 Synthetische Impuls-/BRR-/Envelope-/Echo-Oracles, SNES-SPC-Differenzproben und automatische WAV-Frequenz-/Kontinuitäts-/Kanalanalysen integrieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Integriert: Tests/sdsp_reference_cases.json bindet neun Impuls-, BRR-Filter/Loop-, ADSR/GAIN-, Noise-, Pitch-Modulations-, Echo/FIR- und Key-Off-Fälle an SNES-SPC Revision ec8ee2bbe30451614c1d02a83f7af1c97d497d45. PCM-, ENDX-, ENVX-, OUTX- und Echo-RAM-Digests stimmen exakt. Analyze-SdspWav.ps1 prüft automatisch 48 kHz, Frequenz, Kontinuität, Polarität und Kanalverhältnis und verwirft ein fehlendes 10-ms-Quantum, falsche Frequenz sowie falsche Kanalbalance.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] BRR, Interpolation, Envelope/GAIN, Noise/Modulation, KON/KOFF und Echo/FIR stimmen samplegenau mit den gebundenen digitalen Oracles.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt: Alle neun gebundenen digitalen Fälle stimmen byte- und samplegenau mit dem gepinnten SNES-SPC-Oracle; der vollständige Referenzlauf meldet S-DSP-oracles=9. Abgedeckt sind Impuls und alle BRR-Filter, Gaussian, ADSR/GAIN, Noise/Modulation, KON/KOFF/readbacks und Echo/FIR.
+- [Erledigt] Gleiche Gastdaten erzeugen unabhängig von Slicegröße und Hosttempo denselben nativen und resampelten PCM-Digest ohne Langzeitdrift.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt: Der Clockpartitions-Test vergleicht denselben 4096-Frame-Gaststrom als Monolith und in wechselnden Teilungen bis hinunter zu einem Clock. Native Digest, resampelter Digest, Phase und Queuefüllung sind identisch; ausschließlich ganzzahlige rationale Zustände werden verwendet, ohne Hostzeit oder Gleitkomma-Laufzeitkopplung.
+- [Erledigt] Gesunder App-Audio-Pfad liefert kontinuierliches begrenztes Stereo-S16LE; Degradation beschleunigt, blockiert oder beendet CPU/PPU nicht.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt: Der Test mit dem echten subsystem_runtime-Audiopfad liefert 48-kHz-Stereo-S16LE in begrenzten Quanten, nichtleere nichtstumme Daten und maximal eine Audio-Serviceoperation pro Zyklus. Ein absichtlich fehlschlagendes Backend setzt Audio auf degraded und leert Capture/Queue, während der native S-DSP-Samplezähler weiterläuft und die Runtime im Zustand running bleibt. Die Workspace-QEMU-Gates waren mit 1 und 4 vCPU grün.
+- [Erledigt] Pause, Reset, Mute, Backendverlust und wiederholtes Close hinterlassen weder alte Samples noch fremde Instanzdaten oder undrainierte Ressourcen.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt: Owner-Tests prüfen Prefill ohne vorzeitige Samples, Unter-/Überlauf, Queueverwerfung bei Mute/Degradation, vollständigen Reset und wiederholtes Adapter- sowie Machine-Close. Der bestehende SDK-Runtime-Gasttest bestätigt Pause ohne Gastschritt, Fortsetzung, Resync/Reset, Mute und geschlossene Ressourcen im 1- und 4-vCPU-QEMU-Lauf. Alle Zustände sind instanzlokal; es gibt keine globale PCM-Queue.
+
+### Notizen
+Voraussetzung: 0.73.9. Besitzer: R4SNES, SDK/AUDSVC nur bei nachgewiesener allgemeiner Lücke. Geplant: R4SNES 0.9.0. Hörprüfung bleibt 0.73.23 vorbehalten.
+0.73.10 abgeschlossen und veröffentlicht. R4SNES 0.9.0: 7b71122; Distribution RELEASE_VERSION 0.73.10: 69b97ba; Docs/Inventare: b1748a5. Nachweise: Owner-Build 13/13 und 68/68 Tests, WAV-Analyzer-Selftest grün, Referenzharness mit 147 ROMs, 256000 SPC700-Vektoren und neun S-DSP-Oracles grün, vollständiger Workspace-Test samt 1- und 4-vCPU-QEMU grün, Full-Imageplan grün und MODULES.JSON führt r4os.snes als 0.9.0. Die private SMW.SFC blieb ausschließlich im PrivateInjection-Overlay, 524288 Byte, SHA-256 b5be1dba3012b6811a5660fbf2981cb23cdd1e48f845a42df00f0f55b19f0392. Keine Hör-, Spiel- oder Lenovo-Abnahme wurde vorgezogen; sie bleibt 0.73.23.
+
+## 0.73.11 Gemeinsame Persistenz, SRAM, BW-RAM und RTC
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die bewährte atomare 0.72.X-Persistenz als allgemeinen SDK-Quellhelfer extrahieren, R4GB ohne Verhaltensänderung migrieren und R4SNES-SRAM/BW-RAM/RTC am kanonischen Stamm produktiv anschließen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Den generischen Lease-, Snapshot-, Worker-, Stage-/Backup-, Retry-, Recovery- und Drain/Join-Mechanismus als einkompilierten SDK-Quellhelfer ohne Cartridgepolicy extrahieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Umgesetzt in SDK 3e6f1ea: konfigurierbarer Quellhelfer r4os.subsystem_persistence mit exklusiver Create-only-Lease, unveränderlichen Snapshots, einem seriellen joinbaren Worker, Coalescing, Stage/Target/Backup-Publikation, begrenzten Retries, Recovery sowie Drain/Join. Kein R4L und keine ABI-Erweiterung.
+- [Erledigt] #2 R4GB auf den Helfer umstellen und seine vollständigen SRAM-/RTC-/NTFS-/Fehlerinjektionsnachweise unverändert grün halten; keine Altpfadprobe wieder einführen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+R4GB 0.10.7 (193c430) auf den gemeinsamen Helfer migriert. Owner-Gate: 23/23 Buildschritte und 53/53 Tests; Referenzgate: 15 Suiten, 852 Dateien und 500129 Ergebnisse. Kanonischer Pfad und Verhalten blieben unverändert.
+- [Erledigt] #3 R4SNES-Hashidentität nach Copier-Header-Normalisierung, exakt boardgroße HASH.SAV-Dateien und den alleinigen Stamm C:\R4OS\SUBSYSTEMS\r4os.snes\SAVE\ implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+R4SNES 0.10.0 (e689379): SHA-256 nach Copier-Header-Normalisierung, alleiniger Stamm C:\R4OS\SUBSYSTEMS\r4os.snes\SAVE\, exakt boardgroße HASH.SAV-Dateien und SA-1-BW-RAM-Klassifikation. Batteriearme Boards öffnen das Backend nicht.
+- [Erledigt] #4 Ein versioniertes checksumgeprüftes HASH.RTC-Format mit Chiptyp, Register/Latch/Halt/Overflow und begrenzter nicht rückwärts laufender Echtzeitnachholung implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+R4SNRTC1 v1 als 128-Byte-Container implementiert: Chiptyp, Live-/Latchregister, Halt, Overflow, Anker, Generation, Pending-Catchup und SHA-256-Prüfsumme. Vorwärtsnachholung ist auf 512 Tage begrenzt; Zeitrücksprünge laufen nie rückwärts.
+- [Erledigt] #5 Nicht-Batterie, Single Writer, zweite Instanz, Dirty-Coalescing, Close-Drain, I/O-Fehler, verlorene Bestätigung, Stage-Replay, korruptes Ziel/Stage/Backup und Zeitrücksprung automatisiert injizieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Sieben deterministische Persistenztests plus echter R4OS-/PERSISTTEST decken Pfad, Nicht-Batterie, exakte Größe, zweite Instanz, Dirty/ACK, Close-Drain, RTC-Roundtrip/Korruption, Zeitgrenzen, Stage-Recovery und fail-closed Halbzustände ab. Testimage-Integration wurde ergänzt; 1-CPU- und 4-CPU-QEMU-Gates sind grün.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] R4GB besteht nach der Extraktion seine komplette bestehende Persistenzmatrix byte- und verhaltenskompatibel; der Helfer erzeugt keine neue Runtime-Abhängigkeit.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatisch erfüllt: R4GB-Owner- und vollständiges Referenzgate grün; Helfer bleibt einkompilierter SDK-Quellcode ohne neue Runtime-Abhängigkeit.
+- [Erledigt] R4SNES schreibt ausschließlich exakte rohe SRAM/BW-RAM-Daten und gültige RTC-Container unter C:\R4OS\SUBSYSTEMS\r4os.snes\SAVE\; Nicht-Batterie berührt das Backend nie.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatisch erfüllt durch Owner-Tests und R4OS-/PERSISTTEST: exakte Rohdaten beziehungsweise gültige RTC-Container ausschließlich am kanonischen Stamm; Nicht-Batterie ohne Backendzugriff.
+- [Erledigt] Pro kanonischem Hash existiert höchstens ein Schreiber; Stage-/Backup-Recovery ist atomar, begrenzt und fail-closed und bewahrt den letzten gültigen Stand.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatisch erfüllt: zweite Instanz wird abgewiesen; Recovery wählt nur vollständige gültige Zustände und bewahrt den letzten gültigen Stand.
+- [Erledigt] Clean Close und jeder Fehlerpfad drainen/joinen den Worker vor Lease-Freigabe; Audio, Video und Gastzeit blockieren nie auf einem regulären Dirty-Flush.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatisch erfüllt: Close- und Fehlerpfade drainen und joinen vor der Lease-Freigabe; reguläre Flushes laufen über den seriellen Worker außerhalb der Gastschleife.
+
+### Notizen
+Voraussetzung: 0.73.3 und 0.73.10. Besitzer: SDK, R4GB und R4SNES. Geplant: R4SNES 0.10.0; R4GB/SDK nur bei geänderten Artefakten erhöhen. Kein neues R4L und keine neue Kernel-ABI. Vollständig automatisch.
+Abschluss 2026-09-02: SDK 3e6f1ea, R4GB 193c430, R4SNES e689379, Distribution a567e18, Docs 6ee43bb und Project 5937a01 veröffentlicht. SDK 67/67 und 62/62, R4GB 23/23 und 53/53, R4SNES 13/13 und 75/75 sowie alle umfangreichen GB-/SNES-Referenzsuiten grün. Gesamttest ./Tools/Build.sh -test bestand auf 1 und 4 CPUs einschließlich produktnahem /PERSISTTEST; Full-Imageplan mit 98 Einträgen grün. Die zuerst fehlende R4SNES-Aufnahme ins Testimage wurde in der hostagnostischen BuildWorkspace-Orchestrierung korrigiert und vollständig erneut geprüft. RELEASE_VERSION=0.73.11. Die private SMW-ROM blieb unverändert (SHA-256 b5be1dba3012b6811a5660fbf2981cb23cdd1e48f845a42df00f0f55b19f0392). Keine manuelle Abnahme vorweggenommen.
+
+## 0.73.12 OBC-1 und S-RTC
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die beiden ausreichend dokumentierten kleineren Cartridge-Chips OBC-1 und S-RTC allgemein implementieren und in Boarderkennung, Zeitmodell und Persistenz integrieren.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 OBC-1-RAMfenster, Objektindex, Adressbit- und Attributzugriffe, Spiegelung, Reset und batteriegestützte Dirty-Grenzen implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Umgesetzt und veröffentlicht in R4SNES 8d607a2: OBC-1 besitzt exakt 8192 Byte batteriegestütztes RAM, die dokumentierten 6000-7FFF- und E000-FFFF-Spiegel, Objektindex/Adressbit über 7FF5/7FF6 sowie indirekte Objekt- und gepackte Attributzugriffe 7FF0-7FF4. Reset löscht den Speicher nicht; Dirty-Bereiche melden ausschließlich tatsächlich geänderte physische Bytes.
+- [Erledigt] #2 S-RTC-Kommandoprotokoll, BCD-Kalender, Wochentag, Latch/Reset, Halt-äquivalente Zustände und dokumentierte Wertebereiche implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Umgesetzt und veröffentlicht in R4SNES 8d607a2: S-RTC an 2800/2801 mit Ready-, Command-, Read- und Write-Zuständen, stabiler expliziter Latch-Sicht, transaktionalen 12-BCD-Nibble-Schreibfolgen, geprüftem gregorianischem Kalender/Wochentag, Jahrhundert-Schaltregeln, Reset-/Haltzustand sowie 1000-Jahre-Wrap. Zeitfortschritt ist partitionsinvariant.
+- [Erledigt] #3 Beide Chips in Header-/Board-Capabilities, Buszeiten, Fehlerdiagnosen und Hash.SAV/Hash.RTC-Codec integrieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Board-, Cartridge-, Bus- und Persistenzintegration abgeschlossen: OBC-1 wird nur als LoROM/Battery/8192-Profil akzeptiert, S-RTC nur als dokumentiertes ExHiROM/Battery-Profil. Beide laufen über die allgemeine Cartridge-Chip-Route mit 8 beziehungsweise 6 Masterzyklen. OBC-SRAM nutzt Hash.SAV; S-RTC-Zustand, Latch und Halt laufen über den versionierten Hash.RTC-Codec und den atomaren Persistenzworker.
+- [Erledigt] #4 Synthetische Read/Write-/Wrap-/Reset-/Kalender-/Schaltjahr-/Zeitsprung-/Restart- und atomare Persistenztests erzeugen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Automatische Nachweise ergänzt: Tests/enhancement_test.zig sowie erweiterte Persistenz-, Board-, Bus- und Referenztests decken Read/Write, Spiegel, Grenzen, Wrap, Reset, BCD-Kalender, Jahrhundert-Schaltjahr, Zeitsprung, Rücksprung, Close/Restart, semantisch beschädigte RTC-Daten und atomare Übergabe ab. R4SNES: 85/85 Tests grün. Referenzgate: 16 Repositories, 147 ROMs, 3 DMA-, 23 PPU-, 9 HDRV-, 9 S-DSP-Fälle und 256000 SPC700-Vektoren.
+- [Erledigt] #5 Unbekannte Revisionen, ungültige RTC-Zustände und widersprüchliche Boardheader ohne Approximation sichtbar ablehnen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Fail-closed umgesetzt: UnsupportedOBC1Revision, UnsupportedSrtcRevision, ContradictoryOBC1Board und ContradictorySrtcBoard liefern konkrete Cartridge-Diagnosen. Der RTC-Decoder erhält konkrete Kalender-, Wochentag-, Latch-, Halt- und Reserved-Klassifikationen auch bei gültiger Prüfsumme; ungültige Zustände ersetzen keinen letzten gültigen Stand.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] OBC-1 liefert für alle Objekt-/Attribut-/Indexgrenzen exakt die erwarteten RAM-Bytes und persistiert nur deklarierte batteriegestützte Daten.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatisch erfüllt durch OBC-1-Ownerfälle für sämtliche Objekt-/Attribut-/Indexgrenzen, beide Spiegelgruppen, Reset sowie bytegenaue Dirty-Bereiche und SAV-Restart.
+- [Erledigt] S-RTC zählt Kalendergrenzen, Schaltjahre und Offlinezeit korrekt, läuft bei Hostzeitrücksprung nicht rückwärts und übersteht Close/Restart.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatisch erfüllt durch Kalendergrenz-, Jahrhundert-/Schaltjahr-, partitionsinvariante Fortschritts-, begrenzte Offline-Catchup-, Hostzeitrücksprung- und Persistenz-Restartfälle.
+- [Erledigt] Beide Boardtypen laufen durch Produktionsbus und Persistenzworker partitionsinvariant und ohne titelbezogene Sonderlogik.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatisch erfüllt: Beide Chips werden ausschließlich anhand allgemeiner Header-/Boardmerkmale erzeugt, durchlaufen die Produktions-Cartridge-/Busroute und den gemeinsamen Persistenzworker; es existiert keine Titel- oder ROM-Hash-Sonderlogik.
+- [Erledigt] Beschädigte RTC-Daten und unbekannte Chipvarianten schlagen mit konkreter Klassifikation geschlossen fehl und erhalten den letzten gültigen Stand.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatisch erfüllt durch klassifizierte unbekannte Revisions-/widersprüchliche Headerfälle sowie RTC-Codec-Fälle mit gültiger Prüfsumme und ungültiger Semantik. Enqueue-/Codecfehler löschen weder Dirty-Zustand noch den letzten gültigen Persistenzstand.
+
+### Notizen
+Voraussetzung: 0.73.11. Besitzer: R4SNES. Geplant: R4SNES 0.11.0. Offene synthetische Cartridgefixtures sind öffentlich und deterministisch; vollständig automatisch.
+Abschlussnachweis: RELEASE_VERSION=0.73.12, R4SNES-Modul=0.11.0. Owner-Suite 85/85, Referenzgate, vollständiger Workspace-Test auf 1 und 4 CPUs sowie Full-Imageplan sind grün. Veröffentlicht: R4SNES 8d607a2, Distribution 28b6742, Docs bd66970. Private SMW-Test-ROM unverändert: 524288 Byte, SHA-256 b5be1dba3012b6811a5660fbf2981cb23cdd1e48f845a42df00f0f55b19f0392.
+
+## 0.73.13 S-DD1 und SPC7110 mit Epson-RTC
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die dokumentierten Datenkompressions-/Mapperchips S-DD1 und SPC7110 einschließlich dessen Epson-RTC implementieren und mit synthetischen Vektoren sowie unabhängigen Oracles qualifizieren.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 S-DD1-Bankmapping, MMIO, DMA-Channel-Aktivierung, Bitstreamzustand und vollständigen Dekompressionsalgorithmus implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Umgesetzt und veröffentlicht in R4SNES f67e575: S-DD1 besitzt dokumentiertes 6-MiB-Bankmapping, MMIO 4800-4807, DMA-Channel-Schatten, kanalweise Aktivierung und vollständige streamingfähige Golomb-/Kontextdekompression für alle vier Headermodi. Quelle, Restlänge und Decoderzustand bleiben über begrenzte DMA-Teilstücke erhalten; Reset und fehlerhafte DMA-Konfiguration sind geschlossen definiert.
+- [Erledigt] #2 SPC7110-ROM-/Datenmapping, Dekompressionskontexte, Datenport, Seek/Increment, Mathematik und Registerreadbacks implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Umgesetzt und veröffentlicht in R4SNES f67e575: SPC7110 besitzt dokumentiertes Programm-/Daten-ROM-Mapping bis 6 MiB, DCU-Modi 0-2 mit vollständigem arithmetischem Kontextdecoder, Datenport mit direktem und indirektem Seek/Increment, Registerreadbacks, SRAM-Steuerung sowie vorzeichenbehaftete und vorzeichenlose Multiplikation/Division einschließlich Division durch null. Ungültige DCU-Modi 3/4 bleiben diagnostisch und unbegrenzt lesbare Ports liefern Open Bus.
+- [Erledigt] #3 Die Epson-RTC mit Zugriffsmodus, BCD-Registern, Status, Offline-Nachholung und versionierter RTC-Persistenz integrieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Epson-RTC vollständig integriert: explizite Lese-/Schreibzugriffsmodi, BCD-Kalender in 12- und 24-Stunden-Darstellung, Status-/Kontrollbits, Hold/Pause/Stop/Round, Wochentag, Jahrpivot und gregorianische Grenzfälle. Der gemeinsame versionierte Hash.RTC-Codec und Persistenzworker übernehmen monotone Offline-Nachholung, Hostzeitrücksprungschutz, Close/Restart und semantische Recovery.
+- [Erledigt] #4 Originale synthetische komprimierte Streams und Registerprogramme generieren und Bytefolge, Kontextwechsel, Reset, DMA, Random Access und Fehlerfälle prüfen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Sieben originale LCG-generierte, lizenzfreie Fälle in Tests/enhancement_reference_cases.json ergänzt: vier S-DD1-Modi und drei SPC7110-Modi. Produktive Board-/Bus-/DMA-/DCU-Tests prüfen Bytefolgen, Kontextfortsetzung über Slicegrenzen, Reset, Kanalumschaltung, Direkt-/Random-Access, Datenporttrigger, Min-/Max-ROMprofile, Mathematik, Open Bus und ungültige Modi. R4SNES-Owner-Suite und Referenzgate sind grün.
+- [Erledigt] #5 Ergebnisse gegen mindestens zwei unabhängige offene Implementierungen vergleichen und jede Diskrepanz über Algorithmus-/Registertrace statt Spielbild klären.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Zwei unabhängige offene Implementierungen wurden tatsächlich als unveränderte Decoderquellen ausgeführt: Mesen2 und Snes9x erzeugen für alle sieben synthetischen Fälle denselben Trace SHA-256 1a68e3f6a5e92a506b6944f99e4e9999563536fca595aabeb41d9cc75f547ad8. Der R4SNES-Referenzharness reproduziert alle Bytes; ares wurde zusätzlich register- und algorithmusbezogen quergelesen. Es blieb keine ungeklärte Diskrepanz.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Alle S-DD1- und SPC7110-Teststreams dekomprimieren bytegenau über den produktiven Board-/DMA-Pfad und bleiben bei Slicegrenzen deterministisch.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatisch erfüllt: alle vier S-DD1- und drei SPC7110-Streams werden über produktive Cartridge-/Bus-/DMA- beziehungsweise DCU-Pfade bytegenau reproduziert. Fortsetzung mit unterschiedlichen Teilstückgrößen liefert denselben Endstrom; beide ausgeführten Oracles bestätigen die sieben Vektoren.
+- [Erledigt] Mapping, Datenport, Kontextwechsel, Mathematik, Reset und Open-Bus-Verhalten stimmen für minimale, maximale und ungültige Zugriffe.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatisch erfüllt durch 2- und 6-MiB-Boardprofile, untere/obere Bankgrenzen, Programm-/Datenmapping, direkten und indirekten Datenport, Seek/Stride, sämtliche Decoderkontexte, signed/unsigned ALU samt Nullteiler, Reset, SRAM-Steuerung, Open Bus sowie klassifizierte ungültige Revisionen und Modi.
+- [Erledigt] Epson-RTC besteht Kalender-, Offline-, Rücksprung-, Persistenz- und Recoveryfälle ohne negative oder doppelte Zeit.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatisch erfüllt durch Epson-Kalendergrenzen, Schaltjahr-/Jahrhundertfälle, 12/24-Stunden-BCD, Hold/Pause/Stop/Round, partitionsinvarianten Fortschritt, begrenzte Offline-Nachholung, Hostzeitrücksprung, persistierten Neustart und Recovery semantisch ungültiger Zustände. Zeit wird weder negativ noch doppelt angerechnet.
+- [Erledigt] Die Implementierung enthält weder kommerzielle Daten noch titelbezogene Tabellen; unbekannte Modi und defekte Streams enden begrenzt und diagnostisch.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatisch erfüllt: Decoder und Vektoren enthalten ausschließlich allgemeine Algorithmen und synthetische LCG-Daten, keine kommerziellen Bytes, Hash- oder Titeltabellen. Unbekannte Revisionen, widersprüchliche Header, ungültige DCU-Modi und begrenzte Quell-/DMA-Zustände enden mit konkreter Diagnose oder definiertem Open Bus; private SMW-Daten bleiben außerhalb aller öffentlichen Gates.
+
+### Notizen
+Voraussetzung: 0.73.11. Besitzer: R4SNES. Geplant: R4SNES 0.12.0. Keine vorentpackten Spieldaten, Lookup-Auszüge oder titelbezogenen Patches. Vollständig automatisch.
+Abschlussnachweis: RELEASE_VERSION=0.73.13, R4SNES-Modul=0.12.0. Owner-Suite, Referenzgate mit 16 Repositories, 147 ROMs, 2 tatsächlich ausgeführten Enhancement-Oracles, 7 Enhancement-Fällen und 256000 SPC700-Vektoren, vollständiger Workspace-Test auf 1 und 4 CPUs sowie Full-Imageplan sind grün. Veröffentlicht: R4SNES f67e575, Distribution 13c44a2, Docs 0cadcd1. Private SMW-Test-ROM unverändert: 524288 Byte, SHA-256 b5be1dba3012b6811a5660fbf2981cb23cdd1e48f845a42df00f0f55b19f0392.
+
+## 0.73.14 Super FX GSU-1 und GSU-2
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Einen allgemeinen Super-FX-Kern mit ISA, Cache, Pixelpipeline und Cartridgebus für GSU-1/GSU-2 implementieren und über offene Programme qualifizieren.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 GSU-Register, Status/Flags, Pipeline, vollständige ISA, Prefixe, Branch/Delay-Verhalten, STOP und dokumentierte Timingklassen implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+[0.73.14 Umsetzung] Besitzer R4SNES: `src/superfx.zig` implementiert 16 GSU-Register, SRC/DST-Selektoren, SFR-Flags, Pipeline und Branch-Delay, STOP/GO, dokumentierte Timingklassen sowie alle 256 Opcodewerte in ALT0 bis ALT3. Die exhaustive Matrix umfasst GSU-1 und GSU-2 mit insgesamt 2048 Opcode-/Prefixfällen; Zustandsdigest FNV-1a `D6E74E65B12A54A5`.
+- [Erledigt] #2 ROM-/RAM-Banking, Cache, Cacheflush, CPU/GSU-Busbesitz, IRQ, Clock Select sowie GSU-1-/GSU-2-Capabilities implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+[0.73.14 Umsetzung] Besitzer R4SNES: Super-FX-LoROM-Banking, 512-Byte-Instruktionscache mit 32 Lines und Flush, ROM-/RAM-Pufferwartezeiten, CPU/GSU-Busbesitz, IRQ-Acknowledge, Clock Select sowie GSU-1-/GSU-2-Geometrien sind in Cartridge und Bus integriert. GSU-1 akzeptiert bis 1 MiB ROM und 32/64 KiB RAM, GSU-2 bis 2 MiB und 32/64/128 KiB.
+- [Erledigt] #3 Plot/RPIX, Screen Mode, Color/Height, Pixelcache und RAM-Schreibreihenfolge ohne PPU-Sonderpfad implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+[0.73.14 Umsetzung] Besitzer R4SNES: PLOT/RPIX, POR/SCMR/SCBR, 2/4/8-bpp, 128/160/192/256 Zeilen, transparente und Dither-Pixelpfade sowie der zweistufige Pixelcache schreiben ausschließlich über Super-FX-Work-RAM. Tests prüfen Planarreihenfolge, Cacheflush und Read-after-write pixel- und bytegenau.
+- [Erledigt] #4 Offene OpenSNES-SuperFX-Beispiele und eigene synthetische Opcode-/Cache-/Pixel-/Busprogramme reproduzierbar bauen und über Abschlusszellen, RAM- und Frameoracles ausführen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+[0.73.14 Umsetzung] Reproduzierbarer Host-Build `Tests/Build-SuperFxPrograms.ps1` verwendet gepinntes WLA-DX 10.7 unter Linux und Windows. Er baut zwei unveränderte OpenSNES-Beispiele und vier eigene Opcode-/Cache-/Pixel-/Busprogramme. Der Harness führt sie in 257-Instruktionsscheiben aus, prüft Abschlusszellen/RAM und alle 16384 Pixel des OpenSNES-Wireframes; Programmdigest `5EF2895FA45D5025`.
+- [Erledigt] #5 Parallelität, Reset, Stop/Resume, ungültige Opcodes/Boards, Persistenz und Slice-/Regionvarianten automatisiert prüfen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+[0.73.14 Umsetzung] Automatische Tests decken zwei unabhängige Instanzen, Reset, STOP/Resume, IRQ, Buswartezeiten, verschieden geteilte Slices, NTSC/PAL, alle Boardgeometrien, widersprüchliche Boards und Persistenz ab. Batteriegestütztes GSU-Work-RAM nutzt ausschließlich `C:\\R4OS\\SUBSYSTEMS\\r4os.snes\\SAVE\\<ROMHASH>.SAV`; batteriearmes RAM erzeugt keinen Backendzustand.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Jeder dokumentierte GSU-Opcode/Prefix besitzt getestete Register-, Flag-, Pipeline- und Timingpfade; synthetische Programme enden mit exaktem Zustandsdigest.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+[0.73.14 Umsetzung] Nachgewiesen durch die exhaustive GSU-1-/GSU-2-Matrix mit 2048 Opcode-/ALT-Fällen und exaktem Zustandsdigest `D6E74E65B12A54A5`; zusätzlich enden die sechs gebauten Programme mit dem exakten Aggregat `5EF2895FA45D5025`.
+- [Erledigt] Cache, Banking, Busbesitz und IRQ bleiben bei S-CPU-Konkurrenz und Scheibenteilung in deterministischer Reihenfolge.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+[0.73.14 Umsetzung] Nachgewiesen durch Busbesitz-, Cache-, IRQ-, Wait/Resume-, Branch-Delay-, Slice- und Zwei-Instanzen-Tests. Gleiche Programme ergeben bei NTSC/PAL und unterschiedlicher Scheibenteilung denselben Endzustand.
+- [Erledigt] Plot/RPIX und alle unterstützten Screen Modes erzeugen byte- und pixelgenaue RAM-/Frameergebnisse.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+[0.73.14 Umsetzung] Nachgewiesen für 2/4/8 bpp und 128/160/192/256 Zeilen einschließlich Transparenz, Dither, Pixelcache-Reihenfolge und OpenSNES-3D-Wireframe mit 16384 unabhängig berechneten Pixeloracles.
+- [Erledigt] GSU-1/GSU-2 werden korrekt erkannt; ungültige Boardkombinationen und fehlende Voraussetzungen enden sichtbar ohne Host- oder Fremdinstanzschaden.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+[0.73.14 Umsetzung] Nachgewiesen für explizite GSU-1-/GSU-2-Metadaten und ihre ROM-/RAM-Capabilities. Der SNES-Header kodiert keine GSU-Revision; daher gilt ohne externe Boardmetadaten kompatibel GSU-2. Widersprüchliche LoROM-/Größenkombinationen werden sichtbar abgewiesen, andere Instanzen und der Host bleiben unberührt.
+
+### Notizen
+Voraussetzung: 0.73.8 und 0.73.11. Besitzer: R4SNES. Geplant: R4SNES 0.13.0. OpenSNES-Beispiele und selbst erzeugte Programme werden aus Quellen gebaut; vollständig automatisch.
+[0.73.14 Umsetzung] Besitzerstand R4SNES 0.13.0, Distribution 0.73.14. Automatische Nachweise: `./Build.sh test` (101 Tests), `./Build.sh superfx-reference-test`, vollständiges `./Build.sh reference-test` (147 ROMs, 256000 SPC700-Vektoren und alle Enhancement-Oracles), Distribution-Testvertrag sowie frischer Headless-QEMU-Lauf mit Boot, allen Diagnosemarkern und regulärem Poweroff. Dokumentation und Inventare sind auf 0.73.14 aktualisiert. Das private SMW-Test-ROM blieb unverändert (SHA-256 `b5be1dba3012b6811a5660fbf2981cb23cdd1e48f845a42df00f0f55b19f0392`) und wurde nicht manuell gestartet; Sicht- und Lenovo-Abnahmen bleiben für die letzte Unterversion reserviert. Designentscheidung: Map-Mode 0x20/0x30 beschreibt Slow-/FastROM, nicht GSU-1/GSU-2; die Revision kommt aus expliziten Boardmetadaten, andernfalls wird GSU-2-kompatibel gearbeitet.
+
+## 0.73.15 SA-1
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Den SA-1 als zweiten 65C816-basierten Busmaster mit eigener Zeit, I-/BW-RAM, Mapping, DMA, Mathematik, IRQ und Schutzregistern implementieren.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Den vorhandenen 65C816-Kern als private SA-1-Instanz mit eigenem Takt, Reset/WAI/STP, Vektoren und S-CPU/SA-1-Interruptkommunikation verwenden.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Umgesetzt in R4SNES 0.14.0 (Commit 5d1a262): src/sa1.zig kapselt eine private Instanz des vollständigen W65C816 mit eigenem Mastertakt, Reset-/Ready-Hold, WAI/STP, umschaltbaren Vektoren sowie bidirektionaler IRQ/NMI-Kommunikation. Beliebig partitionierte Zeitscheiben und Instanzisolation sind in Tests/sa1_test.zig abgedeckt.
+- [Erledigt] #2 SA-1-ROM-Mapping, I-RAM, BW-RAM, Bitmapformate, Schutzregister, CPU-/SA-1-Busbesitz und batteriegestützte Bereiche implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Super MMC, ROM-Bankmodi, 2 KiB I-RAM, 0/32/64/128/256 KiB BW-RAM, 2-/4-bpp-Bitmapansichten, Schreibfreigaben/Schutzbereiche und deterministische CPU-/SA-1-Busarbitration sind implementiert. Nur batteriegestütztes BW-RAM nutzt den kanonischen HASH.SAV-Pfad unter C:\R4OS\SUBSYSTEMS\r4os.snes\SAVE; I-RAM und flüchtige Register werden nie persistiert.
+- [Erledigt] #3 SA-1-DMA/CCDMA, Character Conversion, Variable-Length Bit Processing, Arithmetik, Timer und Statusregister implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Normale DMA, CCDMA Typ 1 und Typ 2 einschließlich Character Conversion, variable Bitlängenleser, Multiplikation/Division/Akkumulation samt Overflow, H/V- und linearer Timer, Status-/Quittierungsregister und Dirty-Range-Erfassung sind implementiert und synthetisch getestet.
+- [Erledigt] #4 SA1RamProtectionTest und SA1RebootTest über 0x000000-Protokoll vollständig ausführen; indeterminierte Felder nach Hardwaredokumentation maskieren und Tilemapdiagnosen sichern.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+SA1RamProtectionTest und SA1RebootTest laufen als SHA-256-gepinnte Original-ROMs durch den produktiven Dual-CPU-/PPU-Pfad, beenden innerhalb fester Instruktions-/Masterclock-Budgets mit WRAM[0x000000]=0x01 und erzeugen reproduzierbare Tilemap-/PPM-Evidenz. Bei 0xFE/0xFF meldet der Harness die erste Test-ID, Ist-/Sollwerte, CPU-/SA-1-PC und Buszustand; elektrisch unbestimmte Registerbits sind ausgeschlossen.
+- [Erledigt] #5 Vier SA-1-Utilities gegen Abschlusszellen, Register-/Tilemapdumps, Hardwaretabellen/-bilder und einen Zwei-Start-BW-RAM-Persistenzablauf automatisieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+PpuMultiplierUtility, SA1BackupUtility, SA1OpenbusUtility und SA1ReadRegisterDumpUtility erreichen ihre definierten Abschlusszellen. Der Harness bindet deterministische Tilemap-, WRAM-, SA-1- und maskierte Registerdigests, schreibt pro Phase 2048-Byte-Tilemaps und 256x224-PPM-Bilder und prüft SA1BackupUtility kalt/warm mit exakt 128 KiB fortgeschriebenem BW-RAM.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Beide selbstwertenden SA-1-ROMs enden innerhalb des Budgets mit 0x01; 0xFE/0xFF liefern eine präzise erste Register-/Busabweichung.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt: SA1RamProtectionTest und SA1RebootTest enden mit Status 0x01 im festen Budget. Der Fehlerpfad für 0xFE/0xFF liefert eine präzise erste Abweichung samt Test-ID, Ist/Soll, Tilemap, S-CPU-/SA-1-Position und Zustand.
+- [Erledigt] Zweiter 65C816, Mapping, IRQ, RAM-Schutz, DMA/CCDMA, Mathematik und Bitstreamfunktionen stimmen in synthetischen und offenen Fällen.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt durch die vollständige synthetische SA-1-Owner-Suite und sechs offene, gepinnte Hardware-ROMs über die Produktionspfade. Abgedeckt sind zweiter W65C816, Mapping, Interrupts, Schutz, Busbesitz, DMA/CCDMA, Arithmetik, Timer und Variable-Bit-Lesen.
+- [Erledigt] Alle vier Utilities erreichen ihren Abschluss und stimmen auf jedem dokumentiert deterministischen Feld; elektrische Unbestimmtheit wird explizit maskiert.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt: alle vier Utilities schließen reproduzierbar ab. Deterministische Felder sind exakt gebunden; dokumentiert elektrisch indeterminierte Open-Bus-/Registerbits werden explizit maskiert und gehen nicht in den Oracle-Digest ein.
+- [Erledigt] BW-RAM persistiert atomar und korrekt, während I-RAM und flüchtige Zustände bei Reset/Close nicht fälschlich erhalten bleiben.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt: der Zwei-Start-Test lädt/sichert exakt 128 KiB BW-RAM atomar über HASH.SAV. Die Warmphase bestätigt die Fortsetzung; I-RAM, Register, Takt und sonstiger flüchtiger Zustand starten neu und gelangen nicht in die Save-Datei.
+
+### Notizen
+Voraussetzung: 0.73.6, 0.73.8 und 0.73.11. Besitzer: R4SNES. Geplant: R4SNES 0.14.0. Die sechs gepinnten SA-1-ROMs bilden den offenen Hardwaregegencheck. Vollständig automatisch.
+Abschluss 0.73.15: R4SNES 0.14.0 implementiert SA-1 vollständig im geplanten Owner-Scope. Referenzbestand: 16 Repositories, 5 Downloads, 9 Trees und 147 ROMs, davon sechs SA-1-ROMs; SA-1-Aggregatdigest 62d2b8acd2c164b6. ./Build.sh test und reference-test sind grün. Das Testimage wurde neu gebaut; vollständige QEMU-Abnahmen mit 1 und 4 CPUs sind grün und enthalten den SA-1-Gastmarker sowie kontrollierten POWEROFF. Ein dabei reproduzierter, fachfremder Explorer-SMP-Hänger wurde durch minimale /SELFTEST-Kontextaufnahme behoben und als Explorer 0.1.10 in b801257 veröffentlicht. Veröffentlichte Commits: R4SNES 5d1a262, Distribution bfbf078, Docs 6dd8711, Explorer b801257. Die private SMW-ROM bleibt ignoriert und wurde nicht veröffentlicht.
+
+## 0.73.16 CX4
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Den CX4 als allgemeine Cartridge-Hardware mit dokumentierter Kommandoschnittstelle, DMA, mathematischen Operationen und Buszuständen implementieren.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 CX4-RAM, Registerfenster, DMA, ROMzugriff, Busy/IRQ/Reset und dokumentierte Start-/Abschlusszeitpunkte implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Umgesetzt in R4SNES src/cx4.zig: programmierbarer HG51B169-Kern mit zwei 512-Byte-Caches, 3 KB Daten-RAM, Register-/Vektorfenstern, asynchronem Cachetransfer und DMA, Busy/Running/IRQ, Suspend und Reset. Der Owner-Test belegt unter anderem den 2.048-Zyklen-Cachefill und den 15-Zyklen-ROM-zu-DRAM-DMA.
+- [Erledigt] #2 Die allgemeinen Vektor-, Matrix-, Trigonometrie-, Transfer-, Wireframe- und Spritetransformationskommandos aus öffentlicher Verhaltensdokumentation implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Die mathematische Daten-ROM wird vollständig algorithmisch erzeugt (1.024 Wörter/3.072 Bytes, SHA-256 ae8d4d1961b93421ff00b3caa1d0f0ce7783e749772a3369c36b3dbf0d37ef18). Das originale WLA-DX-Geometrieprogramm prüft Vektor-/Matrixpfade, vorzeichenbehaftete Multiplikation, Trigonometrie, Transfer/Wireframe sowie 64 exakte 2-bpp-Pixeloracles; es gibt keine titelbezogene HLE.
+- [Erledigt] #3 Checked Arithmetik, Rundung, Überlauf, Vorzeichen, Adresswrap und ungültige Befehle explizit festlegen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Alle 65.536 Instruktionswörter werden deterministisch klassifiziert: 55.808 definierte Dekodierungen und 9.728 reservierte, begrenzte NOPs. Tests binden 24-Bit-Adresswrap, Vorzeichenerweiterung, Shift-/Flagverhalten, Rundung, Sättigung sowie ungültige Deklarationen.
+- [Erledigt] #4 Originale synthetische Kommando-/DMA-/Geometriefixtures mit exakten RAM-/Register-/Pixeloracles erzeugen und gegen mindestens zwei unabhängige Implementierungen vergleichen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Tests/Build-Cx4Programs.ps1 baut mit WLA-DX 10.7 vier Programme (zwei öffentliche Upstream-Fixtures und zwei originale R4SNES-Fixtures). Das Manifest bindet Quell- und Binärhashes, Ares 7b51c8… sowie Mesen2 b9fa69…; Register-, RAM-, Geometrie- und Pixeloracles ergeben reproduzierbar Digest 43efb66369fe7449.
+- [Erledigt] #5 S-CPU-Konkurrenz, Reset während Busy, Slicegrenzen, unbekannte Revisionen und fehlerhafte Boarddeklarationen automatisiert prüfen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Automatisch geprüft: S-CPU-ROMzugriffe liefern während CX4-Belegung Open Bus, Vektorzugriffe bleiben korrekt, Reset mitten im DMA ist definiert, beliebige Sliceteilungen ergeben denselben vollständigen Zustandsdigest, F4 und widersprüchliche SRAM-/Größenangaben werden abgewiesen, zwei Instanzen bleiben isoliert.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Jedes unterstützte CX4-Kommando liefert für Grenz-, Vorzeichen-, Überlauf- und Geometriefälle die gebundene exakte Ausgabe.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt durch den Owner-Test und vier WLA-DX-Programme mit exakten Registern, RAM-, Geometrie- und Pixeloracles; vollständiger Referenzharness grün.
+- [Erledigt] DMA, Busy/IRQ, ROM-/RAM-Fenster und Reset folgen dem dokumentierten Bus-/Zeitprotokoll und bleiben partitionsinvariant.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt: DMA-, Cache-, Busy/IRQ-, ROM-/RAM-Fenster-, Reset- und Slicepartitionsprüfungen laufen reproduzierbar im R4SNES-Test.
+- [Erledigt] Das Produkt enthält keine titelbezogenen Daten oder HLE-Patches; Testdaten sind original und öffentlich reproduzierbar.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt: CX4 enthält weder kommerzielle Daten noch Titelkorrekturen/HLE. Daten-ROM und R4SNES-Fixtures sind algorithmisch beziehungsweise aus versioniertem Quelltext reproduzierbar.
+- [Erledigt] Ungültige Befehle und Boardbilder enden begrenzt mit Diagnose und verändern weder Hostspeicher noch andere Instanzen.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt: reservierte Instruktionen laufen begrenzt, ungültige Boards werden diagnostisch abgewiesen und Instanzisolation sowie vollständiger Zustandsdigest sind getestet.
+
+### Notizen
+Voraussetzung: 0.73.6 und 0.73.8. Besitzer: R4SNES. Geplant: R4SNES 0.15.0. Keine aus kommerziellen Titeln extrahierten Daten oder titelbezogenen Korrekturtabellen. Vollständig automatisch.
+Abgeschlossen und gepusht: R4SNES 0.15.0 (dfae207), Distribution 0.73.16 (68827a0), Docs (6a7a3cd). Owner-, Inventar- und vollständiger SNES-Referenzharness sind grün; der Workspace-Test bestand das erzeugte NTFS-Testimage sowie QEMU headless mit 1 und 4 CPUs. Referenzharness: 16 Repositories, 147 ROMs, CX4 vier WLA-DX-Programme und zwei unabhängige Oracles. Artefakt-SHA-256: 2d16d3fce3eac171e86afd93ca6f70260ddf05090e3319617116fab50f08acdc. Keine manuelle Abnahme vorgezogen; die private SMW-ROM blieb ignoriert und unverändert.
+
+## 0.73.17 NEC-DSP-Familie DSP-1 bis DSP-4
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Einen allgemeinen NEC-uPD77C25-Kern und die Boardvarianten DSP-1/1A/1B/2/3/4 implementieren. Geschützte Chipprogramme werden nicht verteilt; der Produktpfad verlangt nutzerbereitgestellte, exakt validierte Firmware.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 NEC-uPD77C25-Register, ALU, Flags, Multiplikator, Stack, Data/Program ROM/RAM, vollständige ISA und Zyklusfortschritt implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Umgesetzt in R4SNES 0.16.0 (Commit 232b601): gemeinsamer uPD7725/uPD77C25-Kern mit 2048x24-Bit Programm-ROM, 1024x16-Bit Daten-ROM, 256x16-Bit RAM, Viererstack, OP/RT/JP/LD, 16 ALUs, vollständigen Quellen/Zielen, DP/RP, Flags, signiertem Multiplikator und 7,6-MHz-Zyklusfortschritt.
+- [Erledigt] #2 DSP-1/1A/1B/2/3/4-Boardmapping, Hostdaten-/Statusprotokoll, Reset, Busy, ROMgrößen und Revisionsidentität implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+DSP-1/1A/1B/2/3/4 sind über sieben konkrete LoROM-/HiROM-Hostmaps, exaktes RQM/DRS/DRC-Daten-/Statusprotokoll, Busy-Warten, Reset und Revisionsprüfung am produktiven Cartridgebus verbunden. Owner-Tests prüfen Spiegel, Geometrien, Reset und begrenzte Scheiben.
+- [Erledigt] #3 Den privaten Firmwarestamm mit festen Dateinamen, exakten Größen, optionalen bekannten Digests und klaren Missing/Invalid-Diagnosen integrieren; keine automatische Beschaffung oder HLE-Fallbacks.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Produktpfad verwendet ausschließlich C:\R4OS\SUBSYSTEMS\r4os.snes\FIRMWARE\DSP1.ROM, DSP1A.ROM, DSP1B.ROM, DSP2.ROM, DSP3.ROM oder DSP4.ROM. Exakt 8192 Byte und bekannte SHA-256-Revision sind zwingend; Diagnose nennt Chip, Datei, Pfad und Größe. Kein Download und kein HLE-Fallback.
+- [Erledigt] #4 Eigene offene Testfirmware für jeden Opcode, Hosthandshake, Arithmetik, Branch/Stack, Timing, Reset und parallele S-CPU-Zugriffe erzeugen und reproduzierbar bauen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Build-NecDspFirmware.ps1 erzeugt sechs originale offene 8192-Byte-Fixtures mit 122 Matrixwörtern. Der Harness deckt 4 Instruktionsklassen, 16 ALUs, 16 Quellen, 16 Ziele sowie 39+1 Sprünge ab, bindet exakte Ares-/Mesen2-Revisionen und ergibt FNV-1a B281EE2EAAA5F878.
+- [Erledigt] #5 Parserfälle für angehängte versus getrennte Firmware eindeutig behandeln, die Cartridge-Hashidentität von externer Firmware trennen und mehrere Instanzen automatisiert prüfen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Parser trennt angehängte und separate Firmware eindeutig, weist Doppelquellen und Revisionskonflikte ab und entfernt angehängte Firmware vor der normalisierten SHA-256-Cartridge-ID. Tests belegen identische IDs, Copier-Header-Fälle, Reset, beliebige Slices, parallele Instanzen und idempotentes Wipen beim Close.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der NEC-Kern besteht die vollständige synthetische Opcode-/Timing-/Hostinterface-Matrix für alle Boardrevisionen.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt: Owner-Suite 122 Tests grün; offene Firmware-Vollmatrix für alle sechs Revisionen grün, Aggregate B281EE2EAAA5F878. Der vollständige gepinnte Referenzlauf mit 147 ROMs und 256000 SPC700-Vektoren ist ebenfalls grün.
+- [Erledigt] Gültige Nutzerfirmware läuft über denselben generischen Kern; fehlende, falsche oder revisionsfremde Firmware endet sichtbar mit Name, Chip und erwarteter Größe.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt: Optionales privates Gate validiert und startet sechs bekannte Firmware-Revisionspfade über denselben Kern und prüft DSP-1B-Befehl 00 als Q15-Multiplikation 4000*4000=2000. Missing/Size/Digest/Revision/Ambiguity sind eigene begrenzte Fehlerpfade mit konkreter Produktdiagnose.
+- [Erledigt] Kein öffentliches Repository, Image oder Testartefakt enthält geschützte DSP-Firmware oder aus Spielen abgeleitete Kommandotabellen.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt: Öffentliche Änderungen enthalten nur bekannte Digests, Dateinamen, originale Generatorfirmware und Quellenbindungen. SMW und private Firmware bleiben ignoriert beziehungsweise werden ausschließlich in-place gelesen und anschließend im Testpuffer gelöscht; es existiert keine Kommando-HLE-Tabelle.
+- [Erledigt] Firmwarewahl verändert nicht die normalisierte Spielstandidentität; Reset, Parallelzugriff, Slicegrenzen und Close bleiben begrenzt und instanzisoliert.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt: Separate und angehängte Firmware ergeben dieselbe normalisierte Cartridge-ID. Owner-Gates prüfen Reset, Hostparallelität, Slice-Partitionen, Multiinstanz und doppeltes Close. Vollbuild sowie Headless-QEMU mit 1 und 4 vCPUs sind ohne Fehler grün.
+
+### Notizen
+Voraussetzung: 0.73.6 und 0.73.11. Besitzer: R4SNES. Geplant: R4SNES 0.16.0. Synthetische offene Firmware qualifiziert CPU und Hostinterface vollständig; reale Firmware ist keine öffentliche Buildvoraussetzung. Vollständig automatisch.
+Abgeschlossen mit R4SNES 0.16.0. Veröffentlicht: R4SNES 232b601, Distribution 6a0e65a, Docs 50d7ae5. Nachweise: Owner-Build/Test, reproduzierbare NEC-DSP-Matrix (6 Varianten, 122 Wörter, B281EE2EAAA5F878), optionales privates Sechs-Revisions-Gate samt DSP-1B-Q15-Orakel, vollständiger Referenzlauf (147 ROMs/256000 SPC700-Vektoren), Docs-Inventar sowie kompletter Workspace-Testbuild und Headless-QEMU auf 1/4 vCPUs. Private ROM-/Firmwarebytes wurden weder committed noch veröffentlicht.
+
+## 0.73.18 ST010 und ST011
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Setz-Coprozessoren ST010/ST011 auf dem allgemeinen NEC-DSP-Kern mit ihren Board-, Speicher- und Hostprotokollen implementieren. Firmware bleibt nutzerbereitgestellt.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 ST010-/ST011-Program-/Data-ROM- und RAM-Geometrien, Boardmapping, Hostregister, Busy/Reset und S-CPU-Zugriffszeiten implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Umgesetzt in R4SNES 0.17.0: uPD96050 mit 0xC000 Byte Program-ROM, 0x1000 Byte Data-ROM und 4096 Byte batteriegestütztem Daten-RAM; Setz-Fenster $60-$67/$E0-$E7:0000-3FFF für DR/SR sowie $68-$6F/$E8-$EF:0000-7FFF mit 4-KiB-Spiegelung. Reset, Busy/Status und 11-/15-MHz-Domänen sind im produktiven Cartridgebus geprüft.
+- [Erledigt] #2 Den NEC-Kern um jede belegte ST010/ST011-Pipeline-, Speicher- oder Instruktionsvariante ergänzen, ohne DSP-1-Verhalten zu regressieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Der bestehende NEC-DSP-Kern trägt nun beide uPD96050-Profile: 14-Bit-PC, bankierte JP/CALL-Ziele, 11-Bit-DP/RP, 16-stufiger Stack und vollständiges Pointer-Wrapping. DSP-1/1A/1B/2/3/4 bleiben im selben Decoder und in der vollständigen Referenzmatrix grün.
+- [Erledigt] #3 Firmwaredateien nach Chip und Revision exakt validieren und fehlende/falsche Bilder im Cartridgefenster diagnostizierbar machen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+ST010.ROM und ST011.ROM werden am kanonischen Firmwarepfad exakt auf 0xD000 Byte und bekannte SHA-256-Revision geprüft. Fehlend, falsche Länge, falscher Digest und Chipverwechslung liefern begrenzte, revisionsgenaue Fehler; keine Firmwarebytes wurden verteilt.
+- [Erledigt] #4 Offene synthetische ST-Firmware und Hostprogramme für Speicherfenster, Handshake, Rechenpfade, Timing, Reset und Konkurrenz erzeugen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Offene synthetische Profile prüfen Decoder, bankierte Sprünge, DP/RP/Stack, DR/SR-Handshake, Host- und RAM-Spiegel, Rechenpfade, Reset, Scheibengrenzen und zwei parallele Instanzen. Das optionale private Gate startete zusätzlich beide bekannten Originalrevisionen.
+- [Erledigt] #5 DSP-1-bis-4-Regression, Mehrinstanz, Slicegrenzen, ungültige Boards und sauberen Ressourcenabbau automatisiert prüfen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Owner-Test, private 8-Revisions-Firmwareprobe, kompletter Referenzlauf mit 147 ROMs und 256000 SPC700-Vektoren sowie der frische Workspace-Test in Standard- und SMP4-QEMU sind grün. Dynamische private Puffer, Reset-Erhalt, atomare 4096-Byte-HASH.SAV-Persistenz und idempotentes Close sind abgedeckt.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] ST010 und ST011 bestehen ihre synthetische CPU-/Speicher-/Hostprotokollmatrix über den produktiven Boardpfad.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatisch grün über die produktive Boarderkennung und den Cartridgebus; sämtliche uPD96050-Geometrie-, Mapping-, Host- und Ausführungsfälle bestanden.
+- [Erledigt] Die Erweiterungen verändern keine zuvor grünen DSP-1-bis-4-Ergebnisse und teilen keinen veränderbaren Firmware- oder CPU-Zustand.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Vollständige DSP-1-bis-4-Regression und getrennte Heapzustände zweier ST-Instanzen bestanden; Referenzharness ohne Abweichung.
+- [Erledigt] Fehlende/ungültige 0xD000-Byte-Firmware wird präzise und begrenzt abgewiesen; geschützte Bytes sind in keinem öffentlichen Artefakt enthalten.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Längen-, Digest-, Revisions- und Fehlendfälle bestanden. Öffentliche Git-Artefakte enthalten weder ST-Firmware noch die private SMW-ROM.
+- [Erledigt] Reset, Busy, S-CPU-Konkurrenz, Slicegrenzen und Close enden deterministisch und ohne Zugriff außerhalb privater Gastpuffer.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Reset, Status/Handshake, Konkurrenz, variierende Slices, Persistenz über zwei Starts und wiederholtes Close enden deterministisch und speicherbegrenzt.
+
+### Notizen
+Voraussetzung: 0.73.17. Besitzer: R4SNES. Geplant: R4SNES 0.17.0. Exakt 0xD000 Byte private Firmware pro Chip, keine Distribution oder Approximation. Vollständig automatisch.
+0.73.18 abgeschlossen und veröffentlicht. R4SNES 0.17.0 Commit 699567d, Distribution 0.73.18 Commit 3133458, Docs Commit ee07ac0. Grüne Nachweise: ./Build.sh test; privates NEC-DSP-Gate mit 8 Revisionen; Referenzharness (147 ROMs, 256000 SPC700-Vektoren und alle bisherigen Coprozessororakel); Docs-Inventar; vollständiger ./Tools/Build.sh -test einschließlich NTFSVERIFY sowie Standard-/SMP4-Headless-QEMU. Die proprietären ST010/ST011-Firmwarebilder und SMW wurden nicht veröffentlicht.
+
+## 0.73.19 ST018 und ARMv3-Coprozessor
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Den ST018 mit ARMv3-Kern, Program-/Data-ROM, Work-RAM und S-CPU-Hostinterface implementieren. Das geschützte 0x28000-Byte-Firmwareabbild bleibt nutzerbereitgestellt.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 ARMv3-Register, Modi, Pipeline, Condition Codes, ALU/Shift/Multiply, Load/Store, Branch, Exceptions und belegte Cycle-/Prefetchfolgen implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Umgesetzt in R4SNES 0.18.0: eigener ARMv3/ARM60-Kern in src/armv3.zig mit sieben Modi, bankierten Registern/SPSRs, dreistufiger Pipeline, 16 Conditions, allen 16 ALU-Operationen, Barrel-Shifter-Grenzen, MUL/MLA sowie UMULL/UMLAL/SMULL/SMLAL, Einzel-/Blocktransfer, SWP, Branch/Link, PSR-Transfers und Reset/Undefined/SWI/Prefetch-Abort/Data-Abort/IRQ/FIQ. Explizite Prefetch-, Daten- und Idle-Zyklen werden durch Tests/st018_test.zig geprüft.
+- [Erledigt] #2 ST018-128-KiB-Program-ROM, 32-KiB-Data-ROM, 16-KiB-Work-RAM, Mapping, Hoststatus/-daten, Reset, IRQ und S-CPU-Konkurrenz implementieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Umgesetzt in src/st018.zig und dem produktiven Cartridgebus: 128 KiB Program-ROM, 32 KiB Data-ROM, 16 KiB Work-RAM, 21,44-MHz-Profil, ARM-Memorymap, S-CPU-Spiegel 00-3F/80-BF:3800-38FF, bidirektionale Ready-/Signal-Datenbrücke, Timer, IRQ/FIQ-Leitungen, Konkurrenzdiagnose, RAM-erhaltender Reset und feste 65536-Zyklen-Ready-Phase.
+- [Erledigt] #3 Das private 0x28000-Byte-Firmwareformat exakt segmentieren/validieren und fehlende, falsche oder revisionsfremde Daten ohne Download/HLE sichtbar ablehnen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Produktpfad verlangt C:\R4OS\SUBSYSTEMS\r4os.snes\FIRMWARE\ST018.ROM mit exakt 163840 Byte und SHA-256 6DF209AB5D2524D1839C038BE400AE5EB20DAFC14A3771A3239CD9E8ACD53806. Fehlende, falsche oder revisionsfremde Daten sowie widersprüchliche Header/Subtypen schlagen vor Ausführung konkret fehl. Kein Download, kein HLE; Open-Test-Policy ist nur für Owner-Fixtures erreichbar.
+- [Erledigt] #4 Eigene offene ARMv3-/ST018-Firmwarefixtures für Opcodeklassen, Pipeline, Exceptions, Speichergrößen, Hosthandshake, Timing und Reset reproduzierbar bauen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Tests/Build-St018Firmware.ps1 erzeugt reproduzierbar ein originales offenes 0x28000-Byte-Abbild samt Manifest. Tests/st018_firmware_harness.zig bindet Generator/Binary, sechs Ares- und sechs Mesen2-Quelldigests, prüft Reset/Bridge/RAM und den exakten Produktzustandsdigest DE7069060A5E262D.
+- [Erledigt] #5 Partitionsinvarianz, Mehrinstanz, Persistenzgrenze, ungültige Zugriffe und Fehler-/Close-Abbau automatisiert prüfen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Automatisch geprüft: beliebige Slice-Partitionen, zwei vollständig getrennte Geräte, Header-/Mappingfehler, ungültige Firmware/RAM-Größen, Dirty-Grenzen, RAM-Erhalt über Reset, exakter 16384-Byte-HASH.SAV-Neustart vor ARM-Ausführung sowie doppeltes idempotentes Close mit gelöschten privaten Puffern.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der ARMv3-Kern besteht die vollständige synthetische Instruktions-, Pipeline-, Exception- und Speicherzugriffsmatrix.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt durch 135 R4SNES-Owner-Tests einschließlich 4096 Decoderkeys, aller Conditions/ALUs/Shifterfamilien, Multiplyvarianten, Modi, Pipeline, Transfers, Exceptions und Abortpfade; ./Build.sh test grün.
+- [Erledigt] ST018-Mapping und Hostkommunikation liefern mit offener Testfirmware exakte Register-/RAM-/Timingdigests über den produktiven Cartridgebus.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt: offene Firmware läuft über Device, Cartridge und Bus; Hosthandshake, Status, Timer, Work-RAM und Reset sind exakt geprüft und an FNV-1a64 DE7069060A5E262D gebunden.
+- [Erledigt] Private Firmware wird nur bei exakter 0x28000-Byte-Struktur akzeptiert; kein öffentliches Artefakt enthält sie und fehlende Firmware ist klar diagnostiziert.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt: privates Ares-Abbild am Nutzerort mit exakt 0x28000 Byte und bekanntem SHA-256 validiert und 250000 ARM-Schritte gebootet. Öffentlicher Generator meldet proprietary_firmware_images=0; Git ignoriert ExFiles/Artifacts, keine privaten Bytes wurden committed.
+- [Erledigt] Alle CPU-, Firmware-, RAM- und Hostzustände sind instanzlokal; Fehler, Reset und Close bleiben begrenzt und idempotent.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfüllt: CPU-, Pipeline-, Firmware-, Bridge-, RAM- und Zählerzustände sind instanzlokal. Reset/Fehler/Slices bleiben begrenzt; Close ist doppelt aufrufbar und löscht/freigibt jeden privaten Puffer genau einmal.
+
+### Notizen
+Voraussetzung: 0.73.6 und 0.73.11; folgt 0.73.18 in der Roadmap. Besitzer: R4SNES. Geplant: R4SNES 0.18.0. Offene synthetische ARM-Firmware qualifiziert den generischen Pfad. Vollständig automatisch.
+Abgeschlossen und veröffentlicht: R4SNES eea9792, Distribution e7e30bd, Docs 1cfb2e5. Owner-Test, kompletter Referenzlauf (147 ROMs, 256000 SPC700-Vektoren und alle Chip-Harnesses), private ST018-Firmwareprobe, Dokumentinventar sowie vollständiger Workspace-Test mit Standard- und SMP4-QEMU sind grün. Release 0.73.19, Modul 0.18.0.
+
+## 0.73.20 Produktiver R4SUBSYS1-Host und Mehrinstanzbetrieb
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Alle qualifizierten Komponenten in den produktiven GUI-Subsystempfad überführen: ein privates Maschinenobjekt je Start, begrenzte Runtime, Tastatur, native Videoausgabe, App-Audio, Persistenz und einheitlicher Lebenszyklus.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Den R4SUBSYS1-Einstieg, Datei-/Formatprüfung, private Cartridge/Machine/Runtime/Persistenz/Host-Instanz und sichtbare Fehleransicht produktiv verdrahten.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Umgesetzt in src/main.zig und src/product_host.zig: R4SUBSYS1 validiert Format und Endung, lädt immutable Quellen sowie benötigte Nutzerfirmware, öffnet private Cartridge/Machine/Save/Runtime/Video-Besitzer und zeigt konkrete Lade-, Firmware-, Persistenz- und Laufzeitfehler im eigenen Fenster. Freestanding R4X wurde im Gesamtbuild erzeugt und in beiden QEMU-Profilen geladen.
+- [Erledigt] #2 Genau eine 32768-Masterclock-begrenzte Gastscheibe je Hostzyklus ausführen und Pause/Resume/Reset/Mute/Unmute über F5/F6/F8/F9/F10 generationstreu behandeln.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Umgesetzt in src/timing.zig, src/machine.zig und product_host.zig: monotone pausebereinigte Hostzeit wird regionsgenau in Masterclockschuld umgerechnet; genau ein Grant je Hostzyklus, maximal 32768. Fertige CPU-/DMA-Operationen werden nur mit begrenztem Rest abgeschlossen und der Überschuss der Folgescheibe gutgeschrieben. F5/F6/F8/F9/F10 führen Pause/Resume/Reset/Mute/Unmute generationstreu aus.
+- [Erledigt] #3 Die feste Tastaturbelegung an Controllerport 1, Fokusfreigabe, native XRGB32-Frames und 48-kHz-PCM ausschließlich über die SDK-Adapter anschließen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Produktpfad verwendet ausschließlich die SDK-Adapter: fokussierte physische Pfeile, Enter, Rechts-Strg und Keypad 2/4/6/7/8/9 an Port 1; Fokusverlust löst alle Tasten, Port 2 bleibt getrennt. Native XRGB32-Generationen und caller-eigene 48-kHz-S16LE-Blöcke laufen über subsystem_host beziehungsweise subsystem_runtime/App-Audio.
+- [Erledigt] #4 Normalen Close, Fensterclose, Lade-/Laufzeit-/Audio-/Persistenzfehler und wiederholtes Close in einen idempotenten umgekehrt geordneten Ressourcenabbau führen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Ein gemeinsamer reverse-order Close-Pfad schließt Runtime/Audio, Video, Persistenzworker/Lease, Machine, Cartridge und private Quellen. Owner-Tests belegen ungültige Quelle vor Save-Open, injizierten finalen Save-I/O-Fehler, Leasefreigabe, unabhängige Peer-Instanz und wiederholtes idempotentes Close.
+- [Erledigt] #5 Zwei verschiedene offene Cartridges sowie erlaubte/abgelehnte gleiche Batterieidentität parallel mit isolierter CPU, Bus, PPU, APU, Eingabe, Video, Audio und Persistenz testen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+product_host_test.zig startet zwei verschiedene originale synthetische offene Cartridges als private produktive Gäste und interleaved CPU/Bus/PPU/S-SMP, Eingabe, Video, Audio, Reset und getrenntes Close. Gleiche Batterieidentität wird exklusiv mit Busy abgewiesen; Reset veröffentlicht und lädt SAV erneut. Der 60-Sekunden-Nachweis ist in exakte partitioninvariante NTSC-Schulddrainage plus aktive Zweiinstanz-Isolationsausführung zerlegt; der echte Standard-/SMP4-Fensterlanglauf folgt zusätzlich in 0.73.21.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Jeder gültige Start erzeugt genau ein privates Fenster und eine private Maschine; Fehler bleiben in der betroffenen Instanz sichtbar.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatisch belegt durch getrennte Guest.openOwned-Instanzen, native Presenter-Bindung, sichtbare Produktfehleransicht im freestanding Pfad und unabhängigen Ressourcenstatus; 140/140 Owner-Tests sowie Standard/SMP4-QEMU grün.
+- [Erledigt] Runtime, Pause, Reset, Fokus, Mute und Close erfüllen Slice-, Generation-, Audio- und Persistenzverträge ohne Scheduling im Fensterhost.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatisch belegt: 32768-Grantgrenze, pausenbereinigte Zeit, Pause/Resume, frische Reset-/Save-/Video-/PCM-Generationen, Fokusfreigabe, Mute/Degradation und schedulerfreier WindowHost sind grün.
+- [Erledigt] Zwei offene Cartridges laufen mindestens 60 Gastsekunden parallel und bleiben in allen Zustandsdomänen isoliert; getrenntes Close verändert die andere nicht.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatisch als zusammengesetzter Owner-Nachweis belegt: zwei tatsächlich ausgeführte Gäste bleiben in CPU/Bus/PPU/S-SMP/Eingabe/Video/Audio und Close getrennt; das 60-Sekunden-NTSC-Zeitvolumen wird verlustlos und partitionsinvariant ausschließlich in <=32768-Clockscheiben drainiert. Der zusätzliche reale Fenster-/QEMU-Langlauf ist bewusst Bestandteil von 0.73.21.
+- [Erledigt] Alle Fehlerpfade und wiederholtes Close drainen Audio/Persistenz, geben Lease und Ressourcen genau einmal frei und enden innerhalb des Budgets.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatisch belegt: ungültige Quellen öffnen keine Persistenz; Save-I/O-Fehler gibt Lease und alle Besitzer frei; Reset drainiert/reöffnet generationstreu; wiederholtes Close verändert Zähler und Peer nicht. Gesamtbuild Standard/SMP4 endet jeweils sauber mit Poweroff.
+
+### Notizen
+Voraussetzung: 0.73.3 bis 0.73.19. Besitzer: R4SNES, SDK nur bei nachgewiesener allgemeiner Lücke. Geplant: R4SNES 0.19.0. Noch keine manuelle Sichtprüfung.
+Abgeschlossen und veröffentlicht am 2026-09-02. R4SNES 0.19.0 verbindet den produktiven R4SUBSYS1-Pfad mit privater Cartridge/Machine/Persistenz/Runtime/Video-Instanz, pausebereinigter NTSC/PAL-Masterclockschuld, maximal 32768 gemeldeten Clocks pro Hostzyklus, vollständigem Port-1-Fokusvertrag, App-Audio und umgekehrt-idempotentem Abbau. Nachweise: 140/140 Owner-Tests; Referenzlauf mit 147 ROMs und 256000 SPC700-Vektoren samt allen Enhancement-Harnesses; vollständiges Testimage, NTFSVERIFY sowie Standard- und SMP4-QEMU fehlerfrei. Veröffentlichte Commits: R4SNES a5812bb, Distribution 6667e6a, Docs 007a72a. Keine SMW-Ausführung oder manuelle Sichtprüfung.
+
+## 0.73.21 Explorer-, Katalog- und Distribution-Integration
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Den installierten Produktpfad von MODULES.JSON und ASSOC über Explorer-Doppelklick bis zum R4SUBSYS1-Fenster sowie Full/Test-Image vollständig automatisiert integrieren.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 R4SNES in Buildorchestrator, Full/Test-Image, Modulmanifest, AllModules.json und den generierten Schema-4-Subsystemkatalog integrieren; keine zweite Hostliste erzeugen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Erledigt: R4SNES 0.20.0 wird vom gemeinsamen Orchestrator gebaut und in Full/Test installiert. Der erzeugte Schema-4-Katalog enthält genau den Host /R4OS/SUBSYSTEMS/r4os.snes/R4SNES.R4X, Subsystem-ID r4os.snes, Format-ID snes.cartridge, .sfc/.smc und binary.rom. AllModules.json und Testinventar sind synchron; keine zweite Hostliste wurde eingeführt.
+- [Erledigt] #2 ASSOC.R4S ausschließlich mit r4os.snes und snes.cartridge verdrahten und Explorer-Doppelklick/Open-With für .sfc/.smc über Katalogprobe und neue R4X-Instanz nachweisen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Erledigt: ASSOC.R4S speichert ausschließlich SUBSYSTEM=r4os.snes und FORMAT=snes.cartridge plus UI-Metadaten, keinen Hostpfad und keine Probe. Explorer 0.1.11 löst .sfc/.smc über MODULES.JSON auf, begrenzt die Probe und startet pro Öffnung eine neue R4X-Instanz.
+- [Erledigt] #3 Originale öffentliche E2E-Cartridges aus R4SNES-Quellen generieren und Katalog, Probe, Fenster, Eingabe, Video, Audio, Persistenz, zweite Instanz, Fehleransicht und Close abdecken.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Erledigt: Zwei originale, im R4SNES-Repository erzeugte E2E-Cartridges decken Katalog/Probe, zwei Fenster, getrennte Tastatureingabe, Video, App-Audio, SRAM/RTC, Pause/Resume/Reset, getrenntes Close sowie NoValidHeader- und Missing-Firmware-Fehleransichten ab. Der 60-Gastsekunden-Lauf meldet completion=1 und resources=closed.
+- [Erledigt] #4 Die lokale PrivateInjection-Regel für SMW.SFC nach C:\TEMP auf Pfad, 524288 Bytes und SHA-256 prüfen, ohne ROM auszuführen, zu kopieren oder in öffentliche Artefakte aufzunehmen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Erledigt: Nur die lokale ignorierte Quelle Artifacts/Distribution/PrivateInjection/Temp/SMW.SFC wurde gelesen: 524288 Bytes, SHA-256 b5be1dba3012b6811a5660fbf2981cb23cdd1e48f845a42df00f0f55b19f0392, Ziel C:\\TEMP\\SMW.SFC. Die ROM wurde nicht gestartet und nicht zusätzlich kopiert. Öffentliche Full-/Test-Imagepläne wurden mit R4OS_PUBLIC_IMAGE=1 erzeugt und enthalten weder PrivateInjection noch SMW.SFC.
+- [Erledigt] #5 Owner-Builds, Full-/Test-Imageplan, NTFSVERIFY und Standard-/SMP4-Headless mit eindeutigen Pflicht-/Verbotsmarkern sowie sauberem Poweroff ausführen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Erledigt: R4SNES (141 Unit-Tests, Performance- und vollständiger Referenz-Harness), R4GB, Desktop, Explorer und Distribution bestanden ihre Owner-Gates. ./Tools/Build.sh -test bestand Build, Full/Test-Imageplan, NTFSVERIFY, Standard- und SMP4-QEMU samt sauberem Poweroff. Beide R4SNES-Instanzen erreichten exakt 60000000000 Gast-ns bei pending_cycles=0, max_slice_grant=32768 und max_step_gap_ns <=59000000.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] MODULES.JSON ist die einzige installierte Quelle und enthält R4SNES mit korrektem R4X-Pfad, IDs, Kandidatenendungen und begrenzter Probe; ASSOC enthält nur stabile IDs.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatisch erfüllt: MODULES.JSON Schema 4 wurde aus dem Image gelesen und enthält R4SNES 0.20.0 mit korrektem R4X-Pfad, IDs, .sfc/.smc und bounded binary.rom-Probe. Beide ASSOC-Varianten enthalten nur stabile IDs und UI-Metadaten.
+- [Erledigt] Explorer startet zwei originale offene Cartridges als getrennte Fenster und führt ungültige sowie firmwarefehlende Bilder jeweils in eine sichtbare begrenzte Fehleransicht.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatisch erfüllt: Standard und SMP4 starteten zwei getrennte Original-Cartridges. NoValidHeader und fehlende Zusatzchip-Firmware erschienen jeweils begrenzt als sichtbarer Fehler und schlossen ihre Ressourcen.
+- [Erledigt] Standard- und SMP4-QEMU bestehen Eingabe, Frames, App-Audio, SRAM/RTC, Mehrinstanz, getrenntes Close, 60-Gastsekunden-Langlauf und Poweroff.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatisch erfüllt: Standard und SMP4 bestanden 60 Gastsekunden pro Instanz, Tastatur/Controller-Latches, Frames, App-Audio ohne Fehler oder Drops, SRAM/RTC, Mehrinstanz, Lifecycle, getrenntes Close und Poweroff. Direkte NTFS-Leseprüfung fand 8192-Byte-SAV und 128-Byte-RTC ohne Stage-/Backup-Reste.
+- [Erledigt] Öffentliche Images enthalten weder SMW noch proprietäre Firmware; lokales PrivateInjection würde ausschließlich die hashgebundene SMW-Datei nach C:\TEMP legen.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Automatisch erfüllt: neu erzeugte öffentliche Full-/Test-Imagepläne enthalten keinen PrivateInjection-/SMW-/Firmware-Eintrag. Die einzige lokale private Regel ist an Pfad, Größe und den SHA-256 b5be1dba3012b6811a5660fbf2981cb23cdd1e48f845a42df00f0f55b19f0392 gebunden; die Datei blieb unverändert und ungestartet.
+
+### Notizen
+Voraussetzung: 0.73.20. Besitzer: R4SNES, Explorer, Distribution und Docs. Geplant: R4SNES 0.20.0; weitere Artefakte nur bei Änderung. Private SMW wird nur auf Ablage/Hash geprüft und noch nicht gestartet. Keine manuelle Prüfung.
+Abgeschlossen und veröffentlicht. Sammelpush: Desktop faf89ba, Explorer 569fe76, R4GB ee70bbd, R4SNES 9ba5f99, Distribution 6b6e74a, Docs f00c665, Project 32139ee. Voller Standard-/SMP4-Test, NTFS-Leseprüfung, Referenzmatrix und öffentliche Imagegrenze waren grün; SMW blieb ungestartet.
+
+## 0.73.22 Automatisierte SNES-Reife und Release Candidate
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die gesamte offene Referenz-, Negativ-, Determinismus-, Performance- und Produktmatrix schließen und einen vollständig automatisiert qualifizierten Release Candidate für die letzte manuelle Abnahme erzeugen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Die Qualifikationsmatrix auf tatsächlich ausgeführte Suites, Case-Sets, ROMs, Vektoren, erwartete Digests, Timeouts, Revisionen, Lizenzen und begründete Nicht-Gates aktualisieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Abgeschlossen: Docs/Subsystems/SNESQualificationMatrix.json steht auf 0.73.22 und bindet reale Gateklassen, 141 Ownerfaelle, elf Reifelaeufe, 147 offene ROMs, 256000 SPC700-Vektoren, exakte Basis-/Chiporakel, Zeit- und Slicebudgets, Revisionen/Lizenzgrenzen, Negativinjektionen und begruendete Nicht-Gates. Matrix-SHA-256 B2408E072A4D7AC1411E405D2B1B34CA6DCBC8E9B036DEF709849CED5B526D49 ist im Referenzmanifest gebunden.
+- [Erledigt] #2 Alle synthetischen Komponenten-, 147-ROM-Korpus-, 256000-SPC700-, Gilyon-, Undisbeliever-, SA-1-, HDRV- und Coprozessorfälle nach ihrer festgelegten Gate-/Diagnoseklassifikation ausführen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Abgeschlossen: normaler Owner-Lauf mit 141 Unit-/Komponententests, WAV-Selbsttest und Reifegate gruen. Voller Referenzlauf gruen: 16 Repositories, 5 Downloads, 9 Baeume, 147 ROMs, 3 DMA-Diagnosen, 23 PPU-Diagnosen, 9 HDRV-Geometrien, 9 S-DSP-Orakel, 7 Enhancementfaelle, Gilyon basic/full/SPC, 32768 IPL-Speed-Bytes ohne Abweichung und alle 256000 SPC700-Vektoren. SA-1 6 ROMs, Super FX 6 Programme/16384 Pixel, CX4 4 Programme/64 Pixel, NEC-DSP 6 Varianten und ST018 liefen erfolgreich.
+- [Erledigt] #3 Parser-/Board-/Firmwarefehler, Busgrenzen, ungültige Opcodes/Streams, PPU/APU-Degradation, Persistenzkorruption/I-O-Fehler, Zeitrücksprung, Leasekonflikt und wiederholten Teardown injizieren.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Abgeschlossen: Parser-/Geometrie-/Header-/Revisionsfehler, Busgrenzen, fehlende/falsche/vertauchte Firmware, reservierte Instruktionen, ungueltige oder haengende Streams, PPU/APU-Degradation, I/O- und verlorene Bestaetigungen, checksumgueltige Persistenzkorruption, Hostzeitruecklauf, Writer-Lease-Konflikt sowie wiederholtes Close werden in den Besitzer-Suites begrenzt und idempotent abgewiesen. Die installierten Negativfixtures NoValidHeader und MissingFirmware blieben in Standard und SMP4 sichtbar und schlossen sauber.
+- [Erledigt] #4 Partitions-, Hosttempo-, NTSC/PAL-, Mehrinstanz- und Restart-Determinismus sowie 60-Gastsekunden-Standard/SMP4, PCM/WAV, Framefortschritt, Schedulinglücke, Slice- und Closebudgets messen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Abgeschlossen: elf ReleaseSafe-Laeufe ueber NTSC-U/PAL, 1/17/unregelmaessige Hostschritte bis 43 ms, 4096/32768-Clocks, 3-ms-Zeitruecklauf, Kaltstart und zweite Instanz ergaben je Region exakte Maschinen-/PCM-Digests, null Schuld/Drift/Drop/Underflow und idempotentes Close. NTSC: 42954544 Clocks/120 Frames; PAL: 42562740/100; je 95999 PCM-Frames. ReleaseFast-Probe: 5 Gastsekunden in 1451551982 ns. Frische Standard-/SMP4-Laeufe: je zwei Instanzen exakt 60 Gastsekunden/1288636320 Clocks/3605 PPU-Frames, max. Grant 32768, Ausfuehrung 32820, Schedulingluecke 65 ms, gesunder Audiofluss ohne Fehler und resources=closed; Desktop erzwingt spaetestens nach 2 s. Logs SHA-256 BD8F817988D3BF71FCBC4518C89BC7A655ED55C60D54C843BB055B819075E00A und 7DFC4F19FBD81CDC91DFD77964642A490A68BB6ED74EECAC55F2A63A37CD5BD3.
+- [Erledigt] #5 Alle Owner-Gates, Contract-/SDK-/Kernel-/Desktop-Regressionen, Docs-/Test-/Modulinventare, Lizenznachweise, Full-/Test-Build, NTFSVERIFY und Headless-Pfade frisch ausführen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Abgeschlossen: R4SNES Owner/Reference/Performance, Contract, SDK, Kernel, Desktop, Explorer, R4GB und Distribution regressionsgeprueft; frischer oeffentlicher Testlauf in Standard und SMP4 gruen. Full-RC mit R4OS_PUBLIC_IMAGE=1 gebaut und NTFSVERIFY gruen (353 Records, 265 Dateien, 83 Verzeichnisse, 349 Eintraege). Inventare validiert: 80 Docs, 141 Module, 614 Tests. Oeffentlicher Plan und Image enthalten weder PrivateInjection/SMW noch proprietaere SPC700-/DSP-/ST-Firmware.
+- [Erledigt] #6 Den gebauten RC, Imagehash, Modul-/Kernel-/Releaseversionen, Referenzergebnis, Budgets, bekannte begründete Grenzen und die vorbereitete 0.73.23-Prüfanleitung dokumentieren und veröffentlichen.
+  - Notizen: Owner-Nachweise und konkrete Befunde werden bei der Umsetzung hier ergänzt.
+Abgeschlossen und veroeffentlicht: R4OS 0.73.22, Kernel unveraendert 0.1.69, R4SNES 0.21.0. R4SNES.R4X 2981531 Bytes, SHA-256 3080069BB3164B42ADC436F830DDB37312A67FF3E41C6BC86710D003E44419B7. Oeffentlicher Full-RC 672137216 Bytes, SHA-256 2A509F23C590669BABCD731F13CFEDF4B02345FB01F1C8ED910FA1F2692A4A67. Grenzen und Nachweise stehen in SNESArchitecture/QualificationMatrix; die hashgebundene, prompt-engineerte Schlussanleitung in Docs/Tests/SNESManualAcceptance07323.txt. Pushes: R4SNES DFE840B, Distribution C63E713, Docs B396BCF.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Jeder unterstützte Basispfad und Erweiterungschip besitzt grüne offene automatische Nachweise; jede ausgeschlossene oder firmwarefehlende Variante wird explizit und sicher abgewiesen.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfuellt: alle implementierten Basispfade und OBC-1, S-RTC, S-DD1, SPC7110/Epson-RTC, Super FX, SA-1, CX4, DSP-1/1A/1B/2/3/4, ST010/ST011 und ST018 besitzen gruene offene automatische Besitzer-/Referenznachweise. Nicht unterstuetzte Peripherie und fehlende oder falsche Nutzerfirmware werden konkret, begrenzt und ohne HLE-Fallback abgewiesen.
+- [Erledigt] Alle Negativ- und Fehlerinjektionsfälle enden begrenzt/idempotent; gleiche Eingaben ergeben über Slicegrößen, Hosttempo, Neustart und Instanzen die erwarteten Digests.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfuellt: Negativpfade enden sichtbar, begrenzt und wiederholt abbaufest. Das elfteilige Reifegate bindet identischen kanonischen Maschinenzustand und jedes PCM-Byte ueber Hosttempo, 4096/32768-Partition, Zeitruecklauf, Kaltneustart und verschiedene Instanz-ID; Port 2 bleibt unverbunden.
+- [Erledigt] Frische Standard-/SMP4-QEMU-Langläufe erfüllen 32768-Clock-Slice, maximal 250-ms-Schedulinglücke, verlustfreien gesunden Audiopfad, fortschreitende Frames und Close unter 2 Sekunden.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfuellt: frische Standard- und SMP4-Pfade liefen je 60 Gastsekunden bei 32768 maximalem Grant, 65 ms maximaler beobachteter Schedulingluecke und ohne Drift/Schuld. Framefortschritt und verlustfreier gesunder PCM-Pfad sind maschinenlesbar; alle vier produktiven Instanzen meldeten resources=closed innerhalb des durch Desktop auf 2 s begrenzten Closepfads. SMP4 startete 4/4 CPUs und produktive AP-Arbeit.
+- [Erledigt] Der veröffentlichte RC enthält vollständige Dokumentation/Inventare/Lizenznachweise, aber weder SMW noch proprietäre Firmware, und benötigt vor 0.73.23 keine technische Entwicklung oder Benutzerentscheidung.
+  - Notizen: Automatisch und reproduzierbar nachzuweisen, sofern diese Unterversion nicht ausdrücklich die manuelle Schlussabnahme ist.
+Erfuellt: Architektur, Qualifikationsmatrix, Test-/Modulinventare und manuelle Anleitung sind auf 0.73.22; Lizenz- und Referenzbindungen sind gruen. Der oeffentliche Full-RC ist nachweislich SMW-/PrivateInjection-/Firmware-frei. Die private SMW-Quelle wurde nur nach Pfad/Groesse/Hash in ein getrenntes, ignoriertes und noch nie gestartetes 0.73.23-Abnahmeimage gelegt. Vor der Schlussabnahme ist keine weitere technische Entscheidung offen.
+
+### Notizen
+Voraussetzung: 0.73.21. Besitzer: alle tatsächlich berührten Owner. Geplant: R4SNES 0.21.0. Keine SMW-Ausführung, keine Benutzerbeobachtung und kein Lenovo-Test. Nur der grüne RC geht an 0.73.23.
+0.73.22 abgeschlossen. Im ersten SMP-Qualifikationslauf zeigte AUDSVC bis zu 182 ms gesunde Bearbeitungslatenz; R4SNES verwendet deshalb einen weiterhin unter dem 250-ms-Schedulingbudget liegenden 200-ms-Schreibtimeout statt 50 ms und wiederholt unklar abgeschlossene Requests nicht. Der danach frisch gebaute Standard-/SMP4-RC ist vollstaendig gruen. Oeffentliches Full-Image SHA-256 2A509F23C590669BABCD731F13CFEDF4B02345FB01F1C8ED910FA1F2692A4A67. Private Schlussquelle vorbereitet, aber nicht gestartet: R4OS-0.73.22-SMW-Lenovo.img SHA-256 187B40428D23D9CD4DC5FD005D331979EA0BDCA84CC5709494864F30B117E4A1. Alle automatischen Arbeiten sind veroeffentlicht; nur 0.73.23 bleibt offen.
+
+## 0.73.23 Erste manuelle Produktprobe und Fehlerbefund
+
+**Status:** Verworfen
+
+### Beschreibung
+Den automatisch qualifizierten 0.73.22-RC erstmals als echtes Produkt starten. Der sichtbare QEMU-Versuch wurde auf ausdrücklichen Wunsch des Users ohne Wertung beendet; der Lenovo reproduzierte beim Explorerstart von SMW den blockierenden Schwarzbild-/Stillefehler. Die technische Korrektur wird in 0.73.24 durchgeführt, die verbindliche manuelle Abnahme in der danach letzten Unterversion 0.73.25.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Ein frisches Full-Image mit lokaler PrivateInjection bauen, NTFSVERIFY ausführen und Image-, R4SNES-, SMW- und Firmwarefreiheitshashes sowie eine wiederholbare QEMU-/Lenovo-Prüfanleitung binden.
+  - Notizen: Manueller Schritt ausschließlich in dieser Schlussunterversion; Rückmeldung im vorgegebenen strukturierten Format dokumentieren.
+
+Technische Vorbereitung abgeschlossen, ohne die ROM zu starten: privates Full-Image 672137216 Bytes, SHA-256 187B40428D23D9CD4DC5FD005D331979EA0BDCA84CC5709494864F30B117E4A1; Imageplan SHA-256 7DFC2AF9BF7DFBF39DCFF4DC4DF09EFEC10676FE619355A3F46DD6B67A322837; R4SNES.R4X 2981531 Bytes, SHA-256 3080069BB3164B42ADC436F830DDB37312A67FF3E41C6BC86710D003E44419B7; SMW.SFC 524288 Bytes, SHA-256 B5BE1DBA3012B6811A5660FBF2981CB23CDD1E48F845A42DF00F0F55B19F0392. Der Plan enthaelt als private Nutzlast nur PROVENANCE und SMW nach C:\TEMP; keine SPC700-, DSP- oder ST-Firmware. Frisches schreibgeschuetztes Verify: NTFSVERIFY OK mit 355 Records, 267 Dateien, 83 Verzeichnissen und 351 Eintraegen. Die reproduzierbare QEMU-/Lenovo-Anleitung ist in Docs/Tests/SNESManualAcceptance07323.txt gebunden.
+
+### Verworfene Aufgaben
+- [Verworfen] #2 Den Benutzer als hochintelligenten sorgfältigen R4OS-Abnahmetester prompten und im sichtbaren QEMU den Explorer-Doppelklick, Fenster/Resize/Close, alle Tasten, Fokus, Bildmodi, Audio, Pause/Resume/Reset/Mute und zwei Instanzen prüfen lassen.
+  - Notizen: Manueller Schritt ausschließlich in dieser Schlussunterversion; Rückmeldung im vorgegebenen strukturierten Format dokumentieren.
+Der Nutzer zieht die unveraenderte hashgebundene Abnahmekopie manuell auf seinen Heimrechner und fuehrt die sichtbare QEMU-Pruefung dort mit echter Host-Audioausgabe aus. Die lokal kurz gestartete Profilkopie wurde sauber per POWEROFF beendet und ist wegen des Bootvorgangs nicht mehr die gebundene Quelle; die archivierte Abnahmekopie blieb unveraendert bei SHA-256 187B40428D23D9CD4DC5FD005D331979EA0BDCA84CC5709494864F30B117E4A1. Aufgabe bleibt bis zur strukturierten QEMU-Rueckmeldung offen.
+Der Benutzer hat den sichtbaren QEMU-Versuch ausdrücklich beendet: Das R4SNES-Fenster öffnete sich, blieb aber schwarz und ohne hörbaren Ton. Der QEMU-Sichttest wird geskippt und nicht als bestanden gewertet. QEMU bleibt nur für automatisierte Headless-Gates relevant; die spätere manuelle Produktabnahme erfolgt ausschließlich auf dem Lenovo.
+- [Verworfen] #3 Super Mario World über C:\TEMP\SMW.SFC mindestens bis in steuerbares Gameplay prüfen: korrektes PAL-Tempo, flüssiges Bild, Musik/Effekte und jede Taste einschließlich Numpad und rechtem Strg.
+  - Notizen: Manueller Schritt ausschließlich in dieser Schlussunterversion; Rückmeldung im vorgegebenen strukturierten Format dokumentieren.
+Wegen des unmittelbar blockierenden Schwarzbild-/Stillefehlers war steuerbares Gameplay nicht erreichbar. Diese Prüfung wird in der neuen letzten Unterversion 0.73.25 auf dem korrigierten Lenovo-System neu angelegt.
+- [Verworfen] #4 In SMW einen reproduzierbaren batteriegestützten Fortschritt erzeugen, normal schließen, erneut per Explorer öffnen und den sichtbaren Spielstand sowie saubere HASH.SAV-Veröffentlichung ohne Scratchreste prüfen.
+  - Notizen: Manueller Schritt ausschließlich in dieser Schlussunterversion; Rückmeldung im vorgegebenen strukturierten Format dokumentieren.
+Ohne erreichbares Gameplay konnte kein sichtbarer batteriegestützter Fortschritt erzeugt werden. Die Persistenzabnahme wird in 0.73.25 neu angelegt.
+- [Verworfen] #5 Dasselbe unveränderte RC-Image auf dem Lenovo prüfen: Boot, Explorerstart, physische Tastatur/Numpad/Rechts-STRG, Speaker/Kopfhörer, Fensterbetrieb, Performance, Persistenz, zweiter Start und normaler Close.
+  - Notizen: Manueller Schritt ausschließlich in dieser Schlussunterversion; Rückmeldung im vorgegebenen strukturierten Format dokumentieren.
+Der Lenovo-Test reproduzierte erfolgreich den Defekt, konnte die geforderte Produktabnahme aber nicht erfüllen: R4SNES öffnete, blieb schwarz und stumm. Die korrigierte Hardwareabnahme wird in 0.73.25 neu angelegt.
+- [Verworfen] #6 Beobachtete Fehler eng diagnostizieren und korrigieren, alle betroffenen Owner-/Referenz-/Image-/Headless-Gates wiederholen und nur die konkret betroffenen Sicht-/Lenovo-Schritte erneut anfordern.
+  - Notizen: Manueller Schritt ausschließlich in dieser Schlussunterversion; Rückmeldung im vorgegebenen strukturierten Format dokumentieren.
+Die Ursache wurde bis zur semantischen SPC700-IPL-Portauswertung eingegrenzt. Korrektur, Regression, Paketbau und Remote-Einspielung werden als eigenständige technische Unterversion 0.73.24 ausgeführt, damit die manuelle Abnahme letzte Stufe bleibt.
+- [Verworfen] #7 Finale Versionen, Image-/Modulhashes, manuelle Ergebnisse, bekannte akzeptierte Grenzen, Inventare und Sammelpush dokumentieren und 0.73.X zur späteren Roadmapbereinigung freigeben.
+  - Notizen: Manueller Schritt ausschließlich in dieser Schlussunterversion; Rückmeldung im vorgegebenen strukturierten Format dokumentieren.
+Eine finale Freigabe ist nach diesem fehlgeschlagenen Kandidaten nicht möglich. Abschlussdokumentation und Freigabe werden in 0.73.25 neu angelegt.
+
+### Abnahmen
+- [Verworfen] SMW.SFC startet per Explorer-Doppelklick und ist auf QEMU und Lenovo mit korrektem PAL-Tempo, stabilem Bild, sauberem Audio und vollständiger vereinbarter Tastaturbelegung spielbar.
+  - Notizen: Manuell auf dem zuvor automatisch qualifizierten RC, mit automatischer Regression nach jeder Korrektur.
+Diese Abnahme gehört zum nachgewiesen fehlerhaften 0.73.22-Kandidaten und wird nicht umgedeutet: schwarz/stumm auf QEMU und Lenovo. Sie wird durch die Lenovo-only-Abnahme in 0.73.25 ersetzt; der QEMU-Sichttest entfällt ausdrücklich.
+- [Verworfen] Pause/Resume/Reset/Mute, Fokuswechsel, Resize, normaler/repetierter Close und zwei isolierte Starts verhalten sich sichtbar korrekt; Controllerport 2 bleibt ohne Eingabequelle.
+  - Notizen: Manuell auf dem zuvor automatisch qualifizierten RC, mit automatischer Regression nach jeder Korrektur.
+Diese Abnahme gehört zum nachgewiesen fehlerhaften 0.73.22-Kandidaten und wird nicht umgedeutet: schwarz/stumm auf QEMU und Lenovo. Sie wird durch die Lenovo-only-Abnahme in 0.73.25 ersetzt; der QEMU-Sichttest entfällt ausdrücklich.
+- [Verworfen] Ein sichtbarer SMW-Spielstand bleibt nach normalem Close und erneutem Öffnen erhalten; genau eine kanonische 2048-Byte-SAV wird atomar ohne verbleibende Stage-/Backupfehler veröffentlicht.
+  - Notizen: Manuell auf dem zuvor automatisch qualifizierten RC, mit automatischer Regression nach jeder Korrektur.
+Diese Abnahme gehört zum nachgewiesen fehlerhaften 0.73.22-Kandidaten und wird nicht umgedeutet: schwarz/stumm auf QEMU und Lenovo. Sie wird durch die Lenovo-only-Abnahme in 0.73.25 ersetzt; der QEMU-Sichttest entfällt ausdrücklich.
+- [Verworfen] Lenovo-Tastatur einschließlich Numpad und rechtem Strg, Speaker/Kopfhörer, Desktop/Explorer, Mehrfenster, Performance und Persistenz zeigen keine hardwarespezifische Regression.
+  - Notizen: Manuell auf dem zuvor automatisch qualifizierten RC, mit automatischer Regression nach jeder Korrektur.
+Diese Abnahme gehört zum nachgewiesen fehlerhaften 0.73.22-Kandidaten und wird nicht umgedeutet: schwarz/stumm auf QEMU und Lenovo. Sie wird durch die Lenovo-only-Abnahme in 0.73.25 ersetzt; der QEMU-Sichttest entfällt ausdrücklich.
+- [Verworfen] Nach eventuellen engen Korrekturen sind die vollständige betroffene automatische 0.73.22-Matrix und alle betroffenen manuellen Wiederholungen grün; Dokumentation, Versionen und Repositories sind abgeschlossen.
+  - Notizen: Manuell auf dem zuvor automatisch qualifizierten RC, mit automatischer Regression nach jeder Korrektur.
+Diese Abnahme gehört zum nachgewiesen fehlerhaften 0.73.22-Kandidaten und wird nicht umgedeutet: schwarz/stumm auf QEMU und Lenovo. Sie wird durch die Lenovo-only-Abnahme in 0.73.25 ersetzt; der QEMU-Sichttest entfällt ausdrücklich.
+
+### Notizen
+Der RC und die private ROM-Injection waren korrekt gebunden. QEMU öffnete ein Fenster, blieb jedoch schwarz und stumm; dieser Sichttest ist ausdrücklich geskippt und weder bestanden noch eine Freigabegrundlage. Auf dem online erreichbaren Lenovo mit R4OS 0.73.22 öffnete R4SNES ebenfalls, blieb schwarz und stumm. SSH-Diagnose bestätigte laufenden AUDSVC, eine geöffnete Audioinstanz, C:\TEMP\SMW.SFC und die erzeugte kanonische SRAM-Sperrdatei; damit waren Dateiauflösung, Cartridge-Parsing, Persistenzpfad und Audioöffnung erreicht. Eine lokale generische Cartridge-Probe führte den Fehler auf die semantische SPC700-IPL-Übertragung zurück: 16-Bit-STA auf $2140 schreibt Port 0 vor Port 1, während die bisherige Emulation Port 0 zu früh mit dem alten Port-1-Wert auswertete. Weitere Arbeiten und Abnahmen werden in den dynamisch ergänzten Unterversionen fortgeführt.
+
+## 0.73.24 SPC700-IPL-Korrektur und Lenovo-Remote-Update
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Den auf QEMU und Lenovo beobachteten Schwarzbild-/Stillefehler technisch korrigieren, mit öffentlichen Regressionen und der privaten generischen SMW-Probe absichern, R4SNES neu versionieren und als überprüfbares R4U-Paket ohne erneutes Flashen auf dem Lenovo installieren. Diese Stufe enthält keine Benutzer-Sichtabnahme.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Den Schwarzbild-/Stillefehler mit einer generischen lokalen Cartridge-Probe reproduzieren und den betroffenen CPU-, PPU-, SMP-, DSP-, Audio- und Persistenzpfad ohne ROM-spezifische Produktlogik eindeutig eingrenzen.
+  - Notizen: Die Probe darf keine privaten ROM-Daten, Firmwarebytes oder titelspezifischen Sonderfälle in das Repository übernehmen.
+Erledigt: Die neue generische cartridge-probe reproduzierte den Stillstand als SPC700-Uploadproblem und grenzte ihn auf die Reihenfolge eines W65C816-16-Bit-STA $2140 ein: Port 0 wurde vor dem neuen Port-1-Payload ausgewertet. Der Diagnoseweg enthält keinerlei Titelsonderfall, gibt keinen ROM-Titel und keine Cartridge-/Firmwarebytes aus und arbeitet nur mit explizitem lokalem Pfad und technischer Telemetrie.
+- [Erledigt] #2 Die semantische SPC700-IPL-Übertragung für dokumentierte nichtsequenzielle Block-/Startkommandos und atomare 16-Bit-S-CPU-Portschreibvorgänge korrigieren; fokussierte öffentliche Unit-Regressionen ergänzen.
+  - Notizen: Port 0 darf bei STA $2140 im 16-Bit-Akkumulatormodus erst an der abgeschlossenen CPU-/DMA-Operationsgrenze ausgewertet werden, damit der neue Port-1-Payload sichtbar ist.
+Erledigt: R4SNES stellt semantische Port-0-Ereignisse bis zum Abschluss der vollständigen S-CPU-/DMA-Operation zurück, akzeptiert kollisionsfreie nichtsequenzielle Block- und Startkommandos und lässt das physische IPL-Overlay bis zur Gastabschaltung aktiv. Zwei öffentliche Regressionen binden freie Kommandowerte und beide Hälften des 16-Bit-Portwrites.
+- [Erledigt] #3 Owner-, Maturity-, vollständige Referenz- und relevante Distributions-/Headless-Gates wiederholen; die private SMW-Probe mindestens 15 Gastsekunden bis zu sichtbaren PPU-Pixeln und nichtstillem PCM ohne Maschinenfehler ausführen.
+  - Notizen: Private Eingaben und daraus abgeleitete Bytes bleiben außerhalb veröffentlichter Artefakte und Logs.
+Erledigt: 143/143 Owner-Tests, S-DSP-WAV-Selbsttest, elfteilige NTSC/PAL-Reifeprüfung und der vollständige Referenzlauf mit 16 Repositories, 147 ROMs sowie 256000 SPC700-Vektoren sind grün. Frische öffentliche Standard- und SMP4-Headless-Läufe bestanden je zwei 60-Gastsekunden-Instanzen. Die private 15-s-Probe erreichte 392 PPU-Frames, 53438 sichtbare Pixel und 1426620 Nichtnull-PCM-Bytes bei null Drops und ohne Maschinenfehler.
+- [Erledigt] #4 R4SNES und Distribution passend versionieren sowie Architektur-, Test-, Inventar- und Problemdokumentation mit Ursache, Schutzregression und Ergebnissen aktualisieren.
+  - Notizen: Kernelversion nur ändern, falls tatsächlich ein Kernelartefakt geändert wird.
+Erledigt: R4SNES wurde auf 0.22.0 und RELEASE_VERSION auf 0.73.24 erhöht; Kernel 0.1.69 blieb mangels Kerneländerung unverändert. Architektur, Kompatibilität, README, Qualifikationsmatrix, manuelle Abnahmedokumente sowie Modul-, Test- und Dokumentinventare sind aktualisiert und validiert. Der Linux-Buildstarter leitet freie Zig-Buildargumente nun korrekt über PowerShell 7 weiter.
+- [Erledigt] #5 Ein R4U-Komponentenupdate für das korrigierte R4SNES erzeugen, Hosthash und Rücktransferhash prüfen, nach C:\R4OS\UPDATE\INBOX übertragen und über SYSUPD verifizieren sowie nach geschlossener Altinstanz aktivieren.
+  - Notizen: Kein direktes Überschreiben und kein erneutes Image-Flashen. Vor der Aktivierung wird der User als LLM-artiger Operatorprompt zum Schließen der laufenden Instanz aufgefordert.
+Erledigt: R4SNESFIX-0.1.0-0.73.22.R4U umfasst 2982653 Bytes, SHA-256 DA999F24244964E9AF054E0820C34FC1979FCB81518DD887383F13DE3A834223. SFTP-Upload und Vollrückdownload waren bytegleich. SYSUPD VERIFY/APPLY installierten ein Live-Payload plus Inventar ohne Reboot; RESUME bestätigte state=cleanup. Das zurückgelesene Modul ist exakt 2981531 Bytes mit SHA-256 CD14B2AC1E4A16FF343BC92CFB4AEEDE0E7BE836EFFB2BDB4A0C27617C363B2B. Kein Reflash.
+- [Erledigt] #6 Die technische Lenovo-Nachkontrolle per SSH durchführen: installierte Modulversion, SYSUPD-Zustand, Services, Dateipfade und fehlerfreier Startpfad prüfen; anschließend einen unveränderten Kandidaten für die letzte manuelle Abnahme binden und Sammelpush ausführen.
+  - Notizen: Keine subjektive Bild-, Audio- oder Gameplaywertung in dieser technischen Stufe.
+Erledigt: Lenovo-Nachkontrolle: Release 0.73.22, Kernel 0.1.69, SYSUPD cleanup mit applied=2/2, AUDSVC und SSHD running, Audio open=0, leerer SNES-Saveordner; MODULES.JSON weist R4SNES 0.22.0 unter r4os.snes aus und ist bytegleich zum öffentlichen Katalog. Öffentlicher Full-RC: 672137216 Bytes, SHA-256 91FF18BA3E2F3789BC249571414797AFB1EAF35836EAC4AE84BE7C436876A684, NTFSVERIFY grün; PrivateInjection/SMW fehlen. Sammelpush: R4SNES 0ad7c5b, Distribution 5ca28e5, Docs 85dea8a.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Die dokumentierte SPC700-IPL-Kommandofolge einschließlich eines 16-Bit-STA auf $2140 ist öffentlich regressionsgetestet; alle vollständigen R4SNES-Owner-, Maturity- und Referenzgates sind grün.
+  - Notizen: Keine privaten ROM- oder Firmwarebytes sind Bestandteil der Tests oder veröffentlichten Artefakte.
+Erfüllt: Beide semantischen IPL-Regressionen sowie 143/143 Owner-Tests, Reifedeterministik und vollständige Referenzmatrix sind grün. Öffentliche Artefakte und Gates enthalten keine private ROM oder proprietäre Firmware.
+- [Erledigt] Die generische private SMW-Probe erreicht ohne Maschinenfehler aktive, nichtleere PPU-Ausgabe und nichtstilles PCM bei stabiler Gastzeit.
+  - Notizen: Diese technische Probe ersetzt keine spätere manuelle Sicht- und Hörabnahme.
+Erfüllt: Die generische private Probe lief 15 Gastsekunden ohne Maschinenfehler bis 319220558 Masterclocks, 12222707 CPU-Instruktionen, 392 PPU-Frames, 53438 sichtbare Pixel und 1426620 Nichtnull-PCM-Bytes bei null Drops. Die menschliche Bewertung bleibt ausdrücklich 0.73.25 vorbehalten.
+- [Erledigt] Das hashgebundene R4U-Paket ist über SYSUPD atomar auf dem Lenovo installiert und technisch verifiziert; ein erneutes Flashen war nicht erforderlich.
+  - Notizen: Die alte laufende R4SNES-Instanz muss vor Aktivierung beendet werden.
+Erfüllt: Das hashgebundene Ein-Payload-R4U wurde nach bytegleichem Rücktransfer durch SYSUPD atomar live installiert. Installiertes Modul und Katalog wurden vollständig zurückgelesen und gegen den Host gebunden; kein Reflash und kein Reboot waren nötig.
+- [Erledigt] 0.73.25 ist als letzte, ausschließlich manuelle Lenovo-Abnahme vorbereitet; der QEMU-Sichttest ist ausdrücklich verworfen und bleibt außerhalb der Freigabekriterien.
+  - Notizen: Automatisierte QEMU-Headless-Gates bleiben davon unberührt.
+Erfüllt: 0.73.25 enthält den verbindlichen prompt-engineerten Lenovo-only-Ablauf für Sicht, Spiel, gesamte Tastatur, Audio, Fenster/Fokus, Writer-Lease und 2048-Byte-SRAM. Der QEMU-Sichttest bleibt ausdrücklich verworfen; nur automatische QEMU-Headless-Gates gelten.
+
+### Notizen
+Der private Titel dient ausschließlich als lokal bereitgestellte Eingabe einer generischen Cartridge-Probe und wird weder eingebettet noch veröffentlicht. Die Korrektur muss die bestehende vollständige R4SNES-Referenzmatrix bestehen. Das Lenovo-Update erfolgt nur über C:\R4OS\UPDATE\INBOX und SYSUPD; vor Live-Aktivierung muss die alte R4SNES-Instanz geschlossen sein. Automatisierte QEMU-Headless-Gates bleiben zulässig, der ausdrücklich geskipte QEMU-Sichttest wird nicht erneut verlangt.
+Technischer Abschluss: SPC700-IPL-Ursache behoben, R4SNES 0.22.0 öffentlich regressions-, referenz- und headless-qualifiziert, privater SMW-Telemetrielauf produktiv, öffentlicher Full-RC gebunden und R4U auf dem Lenovo ohne Reflash installiert. 0.73.25 bleibt als letzte und einzige manuelle Lenovo-Sicht-, Spiel-, Audio- und SRAM-Abnahme offen.
+
+## 0.73.25 Finale manuelle Lenovo-Spiel-, Sicht- und Audioabnahme
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Den nach 0.73.24 technisch korrigierten und per R4U aktualisierten R4SNES-Kandidaten ausschließlich auf echter Lenovo-Hardware manuell prüfen. Diese letzte Unterversion enthält die verbindliche Benutzerbeobachtung, Hörprüfung, vollständige Tastaturprüfung, SMW-Spielbarkeit und SRAM-Persistenz. Der sichtbare QEMU-Test ist ausdrücklich kein Freigabekriterium.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Den Benutzer als hochintelligenten, sorgfältigen R4OS-Hardware-Abnahmetester prompten und den per SYSUPD korrigierten R4SNES-Stand sowie alle gebundenen Hashes auf dem Lenovo bestätigen lassen.
+  - Notizen: Kein QEMU-Sichttest. Der Prompt enthält Rolle, Ziel, Voraussetzungen, Schritte, Sollbeobachtungen, Abbruchfälle und Antwortformat.
+Erledigt: Der Nutzer wurde nach dem vollständig bestätigten R4SNES-0.22.0-R4U-Stand als Hardwaretester prompt-engineered angeleitet. Der neue Start von C:\\TEMP\\SMW.SFC wurde auf dem Lenovo bestätigt: START PASS, Bild perfekt, Audio scheinbar perfekt, Fenstertitel R4SNES - SUPER MARIOWORLD.
+- [Erledigt] #2 Super Mario World über C:\TEMP\SMW.SFC mindestens bis in steuerbares Gameplay prüfen: korrektes PAL-Tempo, flüssiges Bild, Musik/Effekte und jede vereinbarte Taste einschließlich Numpad und rechtem Strg.
+  - Notizen: Steuerkreuz=Pfeiltasten, Start=Eingabe, Select=Strg rechts, X=Num8, A=Num6, B=Num2, Y=Num4, L=Num7, R=Num9; Controllerport 2 bleibt unbeschaltet.
+Zwischenstand: Titelbild und Audio sind korrekt. Die Darstellung läuft auf dem Lenovo nur mit grob 5 FPS. Der Nutzer akzeptiert dies ausdrücklich als nicht blockierende Grenze für 0.73.X und vermutet einen Flaschenhals außerhalb von R4SNES; sie wird als bekannte Einschränkung für eine spätere Version dokumentiert, nicht als flüssiges PASS umgedeutet.
+Erledigt nach Nutzerrückmeldung „Funktioniert alles“: steuerbares SMW-Gameplay, Pfeiltasten, Eingabe/Start, rechtes Strg/Select, Num8/X, Num6/A, Num2/B, Num4/Y, Num7/L, Num9/R und Num-Lock-unabhängige Numpad-Eingabe funktionieren; Bild sowie Musik/Effekte wurden als korrekt bestätigt. Die bereits dokumentierten etwa 5 FPS bleiben eine ausdrücklich akzeptierte, nicht blockierende spätere Systemoptimierung.
+- [Erledigt] #7 Finale Versionen, Paket-/Image-/Modulhashes, manuelle Ergebnisse, bekannte akzeptierte Grenzen, Inventare und Sammelpush dokumentieren und 0.73.X zur späteren Roadmapbereinigung freigeben.
+  - Notizen: Erst nach vollständiger strukturierter Nutzerrückmeldung abschließen.
+Abgeschlossen: RELEASE_VERSION=0.73.25; öffentlicher Full-Stand 672137216 Bytes, SHA-256 C87376BB45A36A2E246694994220E85719E68910D9A956B80175F5D81106F2EA; Imageplan SHA-256 34862B92A3102031CD136468E82483371527EFB45FB0F133395C435C55643F45; NTFS-Verify 353 Records, 265 Dateien, 83 Verzeichnisse und 349 Einträge; private Grenze sauber. Owner-Gate 143/143 und Referenzlauf 17/17 mit 147 ROMs und 256000 SPC700-Vektoren bestanden. Matrix, Architektur, manuelle Ergebnisakte und Inventare wurden aktualisiert. Sammelpush erfolgreich: R4SNES 14A7F61, Distribution 5017393, Docs 99F8659. 0.73.X ist damit zur späteren expliziten Roadmapbereinigung freigegeben.
+
+### Verworfene Aufgaben
+- [Verworfen] #3 Fenster, Fokus, Resize, Pause/Resume, Reset, Mute, normaler und wiederholter Close sowie zwei voneinander isolierte Starts auf dem Lenovo prüfen.
+  - Notizen: Bei einem blockierenden Fehler sofort abbrechen und exakt den letzten erfolgreichen Schritt sowie sichtbare/hörbare Symptome melden.
+Zwischenstand nach Nutzerrückmeldung „alles OK“: Fokusverlust samt Key-up, F5/F6 Pause/Fortsetzen ohne beanstandeten Zeitsprung, F9/F10 Stumm/Ton, Verschieben/Skalieren/Minimieren/Wiederherstellen mit korrektem Bild sowie F8-Reset funktionieren. Writer-Lease, normaler Close und Neustart nach Lease-Freigabe folgen getrennt.
+Abschluss auf ausdrücklichen Nutzerwunsch: Fokusverlust samt Key-up, F5/F6 Pause/Fortsetzen, F9/F10 Stumm/Ton, F8 Reset, Verschieben, Resize, Minimieren/Wiederherstellen sowie der normale Close wurden beobachtet und bestanden. Die technische Nachkontrolle nach Close zeigte AUDSVC running mit open=0 und keine verbleibende .LCK. Der sichtbare Zweitstart mit Writer-Lease, der Neustart nach Lease-Freigabe und ein wiederholter Close wurden nicht ausgeführt. Diese Teilprüfungen bleiben Verworfen und werden nicht als PASS ausgegeben; deshalb wird die Gesamtaufgabe ebenfalls Verworfen statt vollständig Erledigt.
+- [Verworfen] #4 In SMW einen reproduzierbaren batteriegestützten Fortschritt erzeugen, normal schließen, erneut per Explorer öffnen und den sichtbaren Spielstand sowie die kanonische 2048-Byte-HASH.SAV ohne Scratchreste prüfen.
+  - Notizen: Die technische Dateisystem-Nachkontrolle erfolgt ergänzend per SSH, die Spielstandbeobachtung durch den User.
+Technische Nachkontrolle nach normalem Close: genau eine kanonische SAV mit 2048 Bytes, SHA-256 1E9F9FDFA49397B0CAA099AD1E7810965E04C4FC3417203CAA70B72408E25D68, keine .LCK. Sichtbarer Spielfortschritt nach erneutem Öffnen, Kaltstart und SAV-Digestvergleich wurden auf ausdrücklichen Abschlusswunsch nicht ausgeführt. Die Aufgabe bleibt daher Verworfen und nicht PASS.
+- [Verworfen] #5 Speaker und Kopfhörer, physische Lenovo-Tastatur einschließlich Numpad und rechtem Strg, Desktop/Explorer, Performance und Persistenz auf hardwarespezifische Regressionen prüfen.
+  - Notizen: Nur echte Hardware ist für diese manuelle Abnahme maßgeblich.
+Zwischenstand: physische Lenovo-Tastatur einschließlich Numpad/rechtem Strg sowie Audio über Lautsprecher und Kopfhörer wurden ohne Auffälligkeit bestätigt; Desktop-/Fensterinteraktion und Reset sind ebenfalls korrekt. Die akzeptierte ~5-FPS-Grenze bleibt dokumentiert. Persistenz und Kaltstart stehen noch aus.
+Bestätigt wurden physische Lenovo-Tastatur einschließlich Numpad und rechtem Strg, Lautsprecher und Kopfhörer, Desktop-/Explorer- und Fensterverhalten. Die sichtbare Rate von ungefähr 5 FPS ist für 0.73.X ausdrücklich akzeptiert und für eine spätere systemweite Performanceuntersuchung dokumentiert. Sichtbare Persistenz nach Reopen/Kaltstart wurde nicht geprüft; der vollständige Aufgabenumfang wird deshalb Verworfen statt Erledigt.
+- [Verworfen] #6 Beobachtete Fehler eng diagnostizieren und korrigieren, alle betroffenen automatischen Gates wiederholen und ausschließlich die konkret betroffenen Lenovo-Schritte erneut prompten; bei Bedarf weitere technische Unterversionen dynamisch vor der Schlussabnahme einplanen.
+  - Notizen: Die manuelle Abnahme bleibt stets letzte Stufe.
+Der funktionale Lenovo-Befund erforderte keine weitere 0.73.X-Korrektur. Die ungefähr 5 FPS wurden vom Nutzer ausdrücklich akzeptiert und aus dieser Roadmap verschoben. Der bedingte Korrektur- und Neuplanungszweig wurde damit nicht ausgeführt und als Verworfen geschlossen.
+
+### Abnahmen
+- [Erledigt] SMW.SFC startet per Explorer-Doppelklick und ist auf dem Lenovo mit korrektem PAL-Tempo, stabilem Bild, sauberem Audio und vollständiger vereinbarter Tastaturbelegung spielbar.
+  - Notizen: Manuelle Sicht-, Hör- und Eingabeabnahme ausschließlich auf echter Lenovo-Hardware.
+Erfüllt mit ausdrücklich dokumentierter Performance-Ausnahme: SMW startet per Explorer, Bild und Audio sind korrekt, steuerbares Gameplay und sämtliche vereinbarten Tasten funktionieren. Die Lenovo-Darstellung erreicht nur grob 5 FPS; der Nutzer akzeptiert dies ausdrücklich für 0.73.X als mutmaßlich außerhalb von R4SNES liegenden Flaschenhals. Dieser Punkt wird nicht als flüssiges PASS dargestellt, blockiert die Funktionsfreigabe aber auf Nutzerentscheidung nicht.
+- [Verworfen] Pause/Resume/Reset/Mute, Fokuswechsel, Resize, normaler/repetierter Close und zwei isolierte Starts verhalten sich sichtbar korrekt; Controllerport 2 bleibt ohne Eingabequelle.
+  - Notizen: Manuelle Lenovo-Abnahme.
+Teilweise beobachtet und bestanden: Pause/Resume/Reset/Mute, Fokuswechsel, Resize und normaler Close; Controllerport 2 blieb unbeschaltet. Sichtbarer Zweitstart/Writer-Lease, Neustart nach Lease-Freigabe und wiederholter Close wurden auf Nutzerwunsch nicht ausgeführt. Die Abnahme wird deshalb Verworfen und nicht als vollständiges PASS dargestellt.
+- [Verworfen] Ein sichtbarer SMW-Spielstand bleibt nach normalem Close und erneutem Öffnen erhalten; genau eine kanonische 2048-Byte-SAV wird atomar ohne verbleibende Stage-/Backupfehler veröffentlicht.
+  - Notizen: Manuelle Spielstandbeobachtung plus technische SSH-Dateisystemkontrolle.
+Die technische SSH-Kontrolle bestätigte atomare Veröffentlichung genau einer kanonischen 2048-Byte-SAV ohne verbleibende .LCK; SHA-256 1E9F9FDFA49397B0CAA099AD1E7810965E04C4FC3417203CAA70B72408E25D68. Der sichtbare Spielstand nach Reopen und Kaltstart wurde nicht beobachtet. Die vollständige Abnahme ist daher Verworfen, nicht PASS.
+- [Verworfen] Lenovo-Tastatur einschließlich Numpad und rechtem Strg, Speaker/Kopfhörer, Desktop/Explorer, Mehrfenster, Performance und Persistenz zeigen keine hardwarespezifische Regression.
+  - Notizen: Manuelle Lenovo-Abnahme.
+Tastatur einschließlich Numpad/rechtem Strg, Speaker/Kopfhörer sowie Desktop/Explorer wurden bestanden. Ungefähr 5 FPS sind eine ausdrücklich akzeptierte Grenze, kein flüssiges Performance-PASS; Mehrfenster-/Writer-Lease und sichtbare Persistenz wurden nicht abgeschlossen. Die Gesamt-Abnahme wird transparent Verworfen.
+- [Verworfen] Nach eventuellen engen Korrekturen sind die vollständige betroffene automatische Matrix und alle betroffenen Lenovo-Wiederholungen grün; Dokumentation, Versionen und Repositories sind abgeschlossen.
+  - Notizen: Der QEMU-Sichttest bleibt ausdrücklich geskippt und ist kein Freigabekriterium.
+Automatische Owner- und Referenzmatrix, finaler öffentlicher Build, Dokumentation, Versionen und Sammelpush sind grün. Da der Nutzer die noch offenen Lenovo-Wiederholungen bewusst beendet hat, ist der volle Wortlaut dieser Abnahme nicht erfüllt; sie wird Verworfen statt künstlich auf PASS gesetzt. Der QEMU-Sichttest bleibt ausdrücklich geskippt.
+
+### Notizen
+Diese Unterversion bleibt die letzte Stufe. Werden weitere technische Korrekturen nötig, werden neue technische Unterversionen vor eine erneut nach hinten verschobene manuelle Schlussabnahme eingeplant. Jede Benutzeranfrage wird als präziser LLM-artiger Prompt mit Rolle, Ziel, Kontext, Voraussetzungen, nummerierten Schritten, Sollbeobachtungen, Abbruchfällen und eindeutigem Antwortformat formuliert. Die Abnahme beginnt erst nach grüner 0.73.24-Matrix und gebundenem Lenovo-Paket-/Modulhash.
+Manueller Startbefund: SMW startet nach dem R4U-Fix mit perfektem Bild und scheinbar perfektem Audio. Etwa 5 FPS werden vom Nutzer ausdrücklich als bekannte, für diese Roadmap akzeptierte systemweite Darstellungs-/Performancegrenze eingestuft; kein dynamischer 0.73.X-Korrekturschritt. Weitere Gameplay-, Eingabe-, Lebenszyklus- und SRAM-Prüfungen bleiben offen.
+Finalabschluss auf ausdrücklichen Nutzerwunsch am 2. September 2026: SMW-Start, Bild, Audio, Gameplay, vollständige Tastatur, Fokus, Fensterfunktionen, Pause/Resume, Mute, Reset, Lautsprecher/Kopfhörer und normaler Close wurden bestanden. Die sichtbare Lenovo-Darstellung von ungefähr 5 FPS ist für 0.73.X ausdrücklich akzeptiert und einer späteren Performance-Roadmap zugeordnet. Writer-Lease/Zweitstart, wiederholter Close, sichtbarer Spielstand nach Reopen und Kaltstart sowie SAV-Digestvergleich wurden bewusst nicht ausgeführt und als Verworfen statt PASS dokumentiert. Die technische Nachkontrolle fand AUDSVC running/open=0, keine .LCK und genau eine 2048-Byte-SAV mit SHA-256 1E9F9FDFA49397B0CAA099AD1E7810965E04C4FC3417203CAA70B72408E25D68. Der öffentliche 0.73.25-Full-Stand, alle automatischen Gates, Dokumentation, Inventare und Sammelpush sind abgeschlossen.

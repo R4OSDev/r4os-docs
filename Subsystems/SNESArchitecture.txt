@@ -1,6 +1,6 @@
 ﻿# R4SNES-Architektur und Umsetzungsplan 0.73.X
 
-Stand: 0.73.13, 02.09.2026
+Stand: 0.73.14, 02.09.2026
 
 ## Ziel und verbindliche Entscheidungen
 
@@ -148,6 +148,14 @@ SPC7110 trennt je nach Gesamtgröße 1 oder 2 MiB Programm-ROM vom Daten-ROM. De
 
 Sieben ausschließlich synthetische LCG-Streams bilden vier S-DD1-Modi und drei SPC7110-Modi ab. Die 64-Byte-Spuren aus den unveränderten Dekompressorquellen von Mesen2 und Snes9x sind untereinander byteidentisch (SHA-256 `1A68E3F6A5E92A506B6944F99E4E9999563536FCA595AABEB41D9CC75F547AD8`); Ares wurde als dritte unabhängige Zustandsmaschinenquelle gegengeprüft. Das Produkt reproduziert alle sieben Spuren über direkte und produktive Buspfade unabhängig von der Scheibenteilung. Weder kommerzielle ROM-Bytes noch titelspezifische Tabellen sind Bestandteil dieser Nachweise.
 
+Seit 0.73.14 ist Super FX im Modul 0.13.0 eine ausführbare Boardfähigkeit. Der GSU-Kern implementiert alle 256 Opcodebytes, TO/FROM/WITH und ALT1/ALT2/ALT3, Pipeline und Branch-Delay-Slot, ROM-/RAM-Puffer, 512-Byte-Cache, GSU-/S-CPU-Busübergabe, IRQ/STOP, beide Taktwahlen sowie langsame und schnelle Multiplikation. PLOT/RPIX decken 2/4/8 bpp, alle vier Höhenlayouts, SCBR, Transparenz, Dither, Color-High/Freeze, Objektmodus, zwei Pixelcaches und die belegte Schreibreihenfolge ab. Ausführung bleibt über beliebige Hostscheiben zustands- und taktidentisch; Reset verändert das externe Cartridge-RAM nicht.
+
+Der Standardheader kennzeichnet nur die GSU-Familie und unterscheidet GSU-1 und GSU-2 nicht. R4SNES deutet SlowROM `$20` und FastROM `$30` deshalb ausdrücklich nicht als Chiprevision: ohne zusätzliche Boardmetadaten wird der kompatible GSU-2 mit VCR `$04` gewählt; bekannte Boardmetadaten können GSU-1 mit VCR `$03` festlegen. GSU-1 ist auf höchstens 1 MiB ROM und 32/64 KiB Arbeits-RAM begrenzt, GSU-2 auf höchstens 2 MiB und 32/64/128 KiB. Unbekannte Revisionen und widersprüchliche Kombinationen schlagen geschlossen fehl.
+
+Das GSU-Arbeits-RAM ist bei batteriegestütztem Board exakt der persistente `HASH.SAV` unter `C:\R4OS\SUBSYSTEMS\r4os.snes\SAVE`; 32, 64 und 128 KiB werden ohne Umformatierung gespeichert. Interne GSU-Schreibpuffer und CPU-Schreibpfade melden dieselben physischen Dirty-Grenzen. Ein nicht batteriegestütztes Super-FX-Board greift trotz veränderbarem Arbeits-RAM nie auf den Persistenzdienst zu.
+
+Die Vollmatrix führt beide Revisionen durch 256 Opcodes mal vier ALT-Zustände und bindet Register, Flags, Pipeline, Cache, Pixelcache, Takte und RAM an FNV-1a `D6E74E65B12A54A5`. WLA-DX 10.7 baut reproduzierbar zwei unveränderte OpenSNES-Programme sowie vier eigene Opcode-, Cache-, Pixel- und Busprogramme; der gemeinsame Zustands-/RAM-Digest lautet `5EF2895FA45D5025`. Das OpenSNES-Wireframe wird an allen 16384 Pixeln gegen einen getrennt berechneten Bresenham-Sollrahmen geprüft. Diese Nachweise enthalten weder die private SMW-Cartridge noch kommerzielle Bytes oder Titelsonderfälle.
+
 ## Erweiterungschip-Fähigkeitsmatrix
 
 | Familie | Entscheidung für 0.73.X | Grundlage und Grenze |
@@ -170,7 +178,7 @@ Sieben ausschließlich synthetische LCG-Streams bilden vier S-DD1-Modi und drei 
 
 ## Referenz- und Teststrategie
 
-Die maschinenlesbare Detailzuordnung steht in `Docs/Subsystems/SNESQualificationMatrix.json`. Der lokale gepinnte Bestand liegt unter `ExFiles/Reference/SNES` und wird durch `References.json` samt Revisionen, Lizenzen, Datei- und Baumdigests gebunden. Er enthält 147 eigentliche offene Test-ROMs; zwei zusätzliche `.sfc`-Dateien unter `Tools` sind Werkzeugfixtures und zählen ausdrücklich nicht zum Korpus. Außerdem sind 256000 SPC700-Einzelschrittvektoren, neun lokal erzeugte revisionsgebundene S-DSP-Differentialfälle und sieben originale S-DD1-/SPC7110-Dekompressionsspuren vorhanden.
+Die maschinenlesbare Detailzuordnung steht in `Docs/Subsystems/SNESQualificationMatrix.json`. Der lokale gepinnte Bestand liegt unter `ExFiles/Reference/SNES` und wird durch `References.json` samt Revisionen, Lizenzen, Datei- und Baumdigests gebunden. Er enthält 147 eigentliche offene Test-ROMs; zwei zusätzliche `.sfc`-Dateien unter `Tools` sind Werkzeugfixtures und zählen ausdrücklich nicht zum Korpus. Außerdem sind 256000 SPC700-Einzelschrittvektoren, neun lokal erzeugte revisionsgebundene S-DSP-Differentialfälle, sieben originale S-DD1-/SPC7110-Dekompressionsspuren und die gepinnten OpenSNES-/WLA-DX-Super-FX-Quellen vorhanden.
 
 Die Beweisreihenfolge lautet:
 
@@ -182,7 +190,7 @@ Die Beweisreihenfolge lautet:
 
 Eine fremde Implementierung allein ist nie Hardwarewahrheit. Ares, Mesen2, Snes9x und SNES-SPC dienen nur dem Vergleich; ihre Lizenzen werden nicht durch Abschreiben umgangen. R4SNES wird in Zig neu implementiert. Fremdcode darf nur nach expliziter Lizenzprüfung und mit erforderlichen Hinweisen übernommen werden. Kommerzielle ROMs, proprietäre IPL-/DSP-/ST-Firmware und lokale `ExFiles` werden nie committed oder zur öffentlichen Buildvoraussetzung.
 
-Gilyon deckt alle normalen 65C816- beziehungsweise SPC700-Instruktionen breit ab, aber nicht allein Interrupts, WAI/STP, PPU, DSP oder Systemtiming. Seit 0.73.9 vergleicht der Runner zu allen 256000 SPC700-Vektoren neben dem Endzustand auch jeden angegebenen Opcode-, Dummy-Read-, Write- und Wait-Zyklus; Timer, Ports und Systemkopplung bleiben bewusst zusätzliche Owner-Gates. Seit 0.73.10 bindet das Referenzmanifest zusätzlich die neun exakten S-DSP-Fälle und deren unabhängige Oracle-Revision, seit 0.73.13 die sieben byteidentischen S-DD1-/SPC7110-Spuren samt drei Quellpfaden und zwei tatsächlich ausgeführten unabhängigen Orakeln. Undisbeliever enthält viele visuelle und revisionsabhängige Fälle; solche ROMs werden nur dann zum Gate, wenn ein belastbares Pixel-, Register- oder Abschlussprotokoll gebunden ist. Die 29 historischen ROMs sind ein Reproduktionssnapshot und keine unabhängige zweite Hardwarequelle. Von den sechs SA-1-ROMs sind zwei selbstwertende Tests; vier Utilities werden gegen mitgelieferte Hardwarebilder/-tabellen oder gezielte Speicherprotokolle geprüft. HDRV ist interaktiv und wird vor der Schlussabnahme nur über geskriptete Eingabe, Geometrie und Audio-/Frameinvarianten verwendet.
+Gilyon deckt alle normalen 65C816- beziehungsweise SPC700-Instruktionen breit ab, aber nicht allein Interrupts, WAI/STP, PPU, DSP oder Systemtiming. Seit 0.73.9 vergleicht der Runner zu allen 256000 SPC700-Vektoren neben dem Endzustand auch jeden angegebenen Opcode-, Dummy-Read-, Write- und Wait-Zyklus; Timer, Ports und Systemkopplung bleiben bewusst zusätzliche Owner-Gates. Seit 0.73.10 bindet das Referenzmanifest zusätzlich die neun exakten S-DSP-Fälle und deren unabhängige Oracle-Revision, seit 0.73.13 die sieben byteidentischen S-DD1-/SPC7110-Spuren samt drei Quellpfaden und zwei tatsächlich ausgeführten unabhängigen Orakeln und seit 0.73.14 die sechs reproduzierbaren GSU-Programme samt Vollmatrix und exaktem Pixelrahmen. Undisbeliever enthält viele visuelle und revisionsabhängige Fälle; solche ROMs werden nur dann zum Gate, wenn ein belastbares Pixel-, Register- oder Abschlussprotokoll gebunden ist. Die 29 historischen ROMs sind ein Reproduktionssnapshot und keine unabhängige zweite Hardwarequelle. Von den sechs SA-1-ROMs sind zwei selbstwertende Tests; vier Utilities werden gegen mitgelieferte Hardwarebilder/-tabellen oder gezielte Speicherprotokolle geprüft. HDRV ist interaktiv und wird vor der Schlussabnahme nur über geskriptete Eingabe, Geometrie und Audio-/Frameinvarianten verwendet.
 
 ## Produktintegration und Fehlervertrag
 

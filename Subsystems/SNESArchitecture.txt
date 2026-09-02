@@ -1,6 +1,6 @@
 ﻿# R4SNES-Architektur und Umsetzungsplan 0.73.X
 
-Stand: 0.73.9, 02.09.2026
+Stand: 0.73.10, 02.09.2026
 
 ## Ziel und verbindliche Entscheidungen
 
@@ -96,6 +96,10 @@ Seit 0.73.9 ist dieser S-SMP-Abschnitt im Modul 0.8.0 umgesetzt. Der eigenständ
 
 Die S-DSP-Implementierung umfasst acht Stimmen, BRR, Pitch, Noise, Pitch Modulation, KON/KOFF, ADSR/GAIN, Gaussian Interpolation, Main/Echo Volume, FIR und Echo-RAM. Der native 32-kHz-Strom wird mit deterministischem ganzzahligen Phasenakkumulator auf 48-kHz-Stereo-S16LE gebracht. Pro Runtimezyklus werden höchstens 2048 Frames in caller-eigenen Puffern erzeugt; Warteschlangen sind begrenzt und melden Unter-/Überlauf. Audiofehler verändern weder CPU-/PPU-Takt noch Framefolge.
 
+Seit 0.73.10 ist dieser S-DSP-Abschnitt im Modul 0.9.0 umgesetzt. Jede S-SMP-Busphase treibt dieselbe instanzlokale S-DSP-Zustandsmaschine mit exakt 32 Hardwarephasen pro nativem Sample an; DSPADDR/DSPDATA greifen damit nicht mehr auf einen Schattenregistersatz zu. Alle 128 Register, acht Stimmen, vier BRR-Filter samt Loop/End, Pitch und Modulation, Gaussian-Interpolation, Noise-LFSR, KON/KOFF/ENDX, ENVX/OUTX, ADSR und alle GAIN-Modi, Main-/Echo-Lautstärken, Echo-RAM, Feedback sowie acht FIR-Taps liegen im Besitzerkern. Der partitioninvariante 3:2-Streamingwandler erzeugt 48-kHz-Stereo-S16LE ohne Hostzeit und hält höchstens 8192 Frames; ein Abruf umfasst höchstens 2048 Frames in einem caller-eigenen Puffer.
+
+Der dünne `runtime_adapter` ist die einzige Verbindung zu `r4os.subsystem_runtime`. Er setzt Prefill und Transportbuchhaltung um, verwirft die Queue bei Mute oder Backend-Degradation und lässt CPU-, PPU-, S-SMP-, Gastzeit- und Videofortschritt davon unberührt. Reset, Fehler und wiederholtes Close räumen Queue, Resampler und Capture idempotent ab; allgemeine Pause-, Resync- und AUDSVC-Policy bleibt beim bestehenden SDK-Laufzeitbesitzer. Neun synthetische Impuls-, BRR-, Hüllkurven-, Noise-, Modulations-, Echo- und Key-Off-Fälle stimmen in Stereo-PCM-, Register- und Echo-RAM-Digests exakt mit SNES-SPC Revision `ec8ee2bbe30451614c1d02a83f7af1c97d497d45` überein. Ein automatischer WAV-Analysator prüft 48 kHz, Frequenz, Kontinuität, Polarität und Kanalverhältnis und verwirft fehlende Quanten. Subjektives Hören bleibt ausdrücklich der letzten Unterversion vorbehalten.
+
 ## Tastatur und Controller
 
 | SNES-Signal | Physische Taste | HID-Usage |
@@ -154,7 +158,7 @@ Die Echtzeitnachholung ist chipbezogen und darf bei rückwärts gehender Hostzei
 
 ## Referenz- und Teststrategie
 
-Die maschinenlesbare Detailzuordnung steht in `Docs/Subsystems/SNESQualificationMatrix.json`. Der lokale gepinnte Bestand liegt unter `ExFiles/Reference/SNES` und wird durch `References.json` samt Revisionen, Lizenzen, Datei- und Baumdigests gebunden. Er enthält 147 eigentliche offene Test-ROMs; zwei zusätzliche `.sfc`-Dateien unter `Tools` sind Werkzeugfixtures und zählen ausdrücklich nicht zum Korpus. Außerdem sind 256000 SPC700-Einzelschrittvektoren vorhanden.
+Die maschinenlesbare Detailzuordnung steht in `Docs/Subsystems/SNESQualificationMatrix.json`. Der lokale gepinnte Bestand liegt unter `ExFiles/Reference/SNES` und wird durch `References.json` samt Revisionen, Lizenzen, Datei- und Baumdigests gebunden. Er enthält 147 eigentliche offene Test-ROMs; zwei zusätzliche `.sfc`-Dateien unter `Tools` sind Werkzeugfixtures und zählen ausdrücklich nicht zum Korpus. Außerdem sind 256000 SPC700-Einzelschrittvektoren und neun lokal erzeugte, revisionsgebundene S-DSP-Differentialfälle vorhanden.
 
 Die Beweisreihenfolge lautet:
 
@@ -166,7 +170,7 @@ Die Beweisreihenfolge lautet:
 
 Eine fremde Implementierung allein ist nie Hardwarewahrheit. Ares, Mesen2, Snes9x und SNES-SPC dienen nur dem Vergleich; ihre Lizenzen werden nicht durch Abschreiben umgangen. R4SNES wird in Zig neu implementiert. Fremdcode darf nur nach expliziter Lizenzprüfung und mit erforderlichen Hinweisen übernommen werden. Kommerzielle ROMs, proprietäre IPL-/DSP-/ST-Firmware und lokale `ExFiles` werden nie committed oder zur öffentlichen Buildvoraussetzung.
 
-Gilyon deckt alle normalen 65C816- beziehungsweise SPC700-Instruktionen breit ab, aber nicht allein Interrupts, WAI/STP, PPU, DSP oder Systemtiming. Seit 0.73.9 vergleicht der Runner zu allen 256000 SPC700-Vektoren neben dem Endzustand auch jeden angegebenen Opcode-, Dummy-Read-, Write- und Wait-Zyklus; Timer, Ports und Systemkopplung bleiben bewusst zusätzliche Owner-Gates. Undisbeliever enthält viele visuelle und revisionsabhängige Fälle; solche ROMs werden nur dann zum Gate, wenn ein belastbares Pixel-, Register- oder Abschlussprotokoll gebunden ist. Die 29 historischen ROMs sind ein Reproduktionssnapshot und keine unabhängige zweite Hardwarequelle. Von den sechs SA-1-ROMs sind zwei selbstwertende Tests; vier Utilities werden gegen mitgelieferte Hardwarebilder/-tabellen oder gezielte Speicherprotokolle geprüft. HDRV ist interaktiv und wird vor der Schlussabnahme nur über geskriptete Eingabe, Geometrie und Audio-/Frameinvarianten verwendet.
+Gilyon deckt alle normalen 65C816- beziehungsweise SPC700-Instruktionen breit ab, aber nicht allein Interrupts, WAI/STP, PPU, DSP oder Systemtiming. Seit 0.73.9 vergleicht der Runner zu allen 256000 SPC700-Vektoren neben dem Endzustand auch jeden angegebenen Opcode-, Dummy-Read-, Write- und Wait-Zyklus; Timer, Ports und Systemkopplung bleiben bewusst zusätzliche Owner-Gates. Seit 0.73.10 bindet das Referenzmanifest zusätzlich die neun exakten S-DSP-Fälle und deren unabhängige Oracle-Revision. Undisbeliever enthält viele visuelle und revisionsabhängige Fälle; solche ROMs werden nur dann zum Gate, wenn ein belastbares Pixel-, Register- oder Abschlussprotokoll gebunden ist. Die 29 historischen ROMs sind ein Reproduktionssnapshot und keine unabhängige zweite Hardwarequelle. Von den sechs SA-1-ROMs sind zwei selbstwertende Tests; vier Utilities werden gegen mitgelieferte Hardwarebilder/-tabellen oder gezielte Speicherprotokolle geprüft. HDRV ist interaktiv und wird vor der Schlussabnahme nur über geskriptete Eingabe, Geometrie und Audio-/Frameinvarianten verwendet.
 
 ## Produktintegration und Fehlervertrag
 

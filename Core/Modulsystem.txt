@@ -32,10 +32,20 @@ memory pressure. A failed or incomplete load is not visible as a partial
 module. Runtime driver unload does not imply that the mapped R4M0 image is
 immediately unmapped.
 
-File-backed relocation tables are read in record-aligned windows of 170
-entries (4,080 bytes). Records are decoded and applied in their unchanged file
-order, so validation and failure ordering stay deterministic while synchronous
-I/O scales with contiguous windows instead of individual 24-byte records.
+Each coherent file load owns one allocation-free metadata reader with two
+4-KiB windows. Header, table records, names, metadata and relocation records
+share those windows; normal containers therefore retain one window for the
+front tables and one for the trailing string block. Requests larger than one
+window and all section payloads bypass the cache and are read directly into
+their final destination. The per-reader cache is consequently fixed at 8 KiB
+regardless of container size.
+
+Import and export records and their names are validated once and retained in
+the bounded load plan. Resolution, loaded-export validation and publication
+reuse that plan instead of reading the file again. File bounds are checked
+before I/O, short-read diagnostics include the exact offset, and all records
+and relocations retain file order. A failed read, validation, relocation or
+allocation still rolls back before registry publication.
 
 `module.R4MF` controls build inputs, imports, target and image scope. The
 Distribution image planner discovers manifests instead of maintaining a

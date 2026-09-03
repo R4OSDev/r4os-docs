@@ -51,6 +51,11 @@ Zaehler fuer behaltene Payload- und cache-unabhaengige Systemwrites, Record-,
 Attribut- und Verzeichnisidentitaeten, globale beziehungsweise Recovery-
 Invalidierungen sowie die tatsaechlich entfernten Record-, Attribut-, INDX-
 und Pfadeintraege. Nur unbekannte und Recovery-Mutationen bleiben global.
+Version 15 ergaenzt den gebufferten R4M0-Metadatenpfad: physisch gelesene
+Range-Bytes, Readerinstanzen, logische Zugriffe und Bytes, Fenstertreffer,
+Fensterfuellungen und deren Bytes sowie bewusst direkte Grosszugriffe. Die feste
+Kapazitaet von zwei 4-KiB-Fenstern wird explizit gemeldet; Section-Nutzdaten
+bleiben direkte Zielreads und werden nicht in diesem Cache gehalten.
 Der Aufrufer setzt Version und Puffergroesse; der Provider schreibt nur den
 ausgehandelten Prefix. Zeitfelder liefern aufgeloeste Nanosekunden,
 Quellenmetadaten und explizite Nichtverfuegbarkeit statt stiller Scheinwerte.

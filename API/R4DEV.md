@@ -35,6 +35,17 @@ Version 6 ergaenzt den deterministischen Timing-Abstand und die echte Anzahl
 gemessener Lockhaltezeiten. Version 7 fuegt die lineare Service-
 Registryenumeration hinzu: externe Indexabfragen, angeforderte Refreshes,
 tatsaechlich besuchte Eintraege, Programminstanzlookups und Endemarkierungen.
+Version 8 ergaenzt indizierte physische und virtuelle Memory-Hotpaths,
+Version 9 laufwerks- und controllerlokale Storage-Dispatchwerte, Version 10
+Mehrsektorwrite und selektive Pagecache-Durability, Version 11 die begrenzte
+Hintergrund-/Read-ahead-Policy und Version 12 den generationsgebundenen
+NTFS-Metadatencache. Version 13 fuegt RAM-/Druckkapazitaet,
+zusammenhaengende Mehrseiten-Fills sowie rohe Backend-/Seiten-/Sektor-/Byte-/
+Fehler-/Retry-/Kopier-/Lockzaehler an. Die ebenfalls angehaengten Read-ahead-
+Felder weisen in 0.75.6 Fenster und Aktivitaet mit null aus: Spekulative I/O
+wurde nach reproduzierbaren Subsystemhaengern verworfen, waehrend die durch
+FSDIAG abgedeckten Zwei-Seiten-Demand-Fills aktiv bleiben. Groessere Runs sind
+bis zur geklaerten Ursache ebenfalls gesperrt.
 Der Aufrufer setzt Version und Puffergroesse; der Provider schreibt nur den
 ausgehandelten Prefix. Zeitfelder liefern aufgeloeste Nanosekunden,
 Quellenmetadaten und explizite Nichtverfuegbarkeit statt stiller Scheinwerte.

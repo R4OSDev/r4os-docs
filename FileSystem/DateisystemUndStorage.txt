@@ -175,12 +175,41 @@ durability points. Flush, atomic replacement and shutdown propagate backend
 errors instead of reporting false success.
 
 Page-cache identities remain hash-addressed, while free slots and clean LRU
-and dirty FIFO candidates use intrusive bounded queues. Clean and dirty
-selection probes at most the eight block-device shards and prefers eviction
-from the requesting device. Normal hit, slot, eviction, reclaim and dirty
-selection therefore do not scan all 512 cache entries. A full entry scan is
-reserved for device invalidation or an instrumented index-consistency
+and dirty FIFO candidates use intrusive bounded queues. The 512 resident
+metadata slots are a hard upper bound, but payload admission is adaptive. At
+boot, one 4-KB cache page is admitted per 128 free physical frames, clamped
+from 64 pages (256 KB) through 512 pages (2048 KB, or 2 MB). Current free-frame
+pressure can reduce that RAM limit to 256 pages at 32 MB, 128 pages at 16 MB
+and the 64-page floor at 4 MB; clean pages above the active limit are reclaimed
+incrementally and dirty pages enter the existing writeback path. Clean and
+dirty selection probes at most the eight block-device shards and prefers
+eviction from the requesting device. Normal hit, slot, eviction, reclaim and
+dirty selection therefore do not scan all 512 cache entries. A full entry scan
+is reserved for device invalidation or an instrumented index-consistency
 diagnostic; the latter is exported as a performance error counter.
+
+A bulk read spanning contiguous absent or partially valid cache pages reserves
+and `io_busy`-pins those exact identities while holding the cache lock. It then
+releases the lock once, issues one direct read through resident heap staging,
+and reacquires the lock for an all-or-nothing publication. In 0.75.6 the run
+length has a conservative two-page ceiling in addition to caller demand,
+active cache capacity, available staging and the backend request limit. This is
+the shape covered by FSDIAG and halves backend requests for aligned cold reads;
+larger demand runs remain disabled after intermittent failures in the long
+subsystem/AUTOEXEC workload. Only sectors absent at reservation time are
+scattered into the pages, so valid or dirty bytes cannot be replaced by stale
+media contents. A failed request publishes nothing, drops empty reservations
+and wakes waiters through the established pin transition. USBMSC owns its exact
+transport retry; other backends retain at most one cache-level retry.
+
+Reads into program memory deliberately retain two measured copies. Cached
+bytes first enter resident per-read staging while the cache identity is
+protected; the cache lock is then released before staging is copied into the
+potentially pageable caller buffer. Removing that second copy would require a
+proven caller-page pinning contract. Without it, writing the caller directly
+under the cache lock could fault back into storage and deadlock. Fill-run,
+backend-request, page, sector, byte, failure, retry, scatter/caller-copy and
+lock-release counters make this cost and the request reduction observable.
 
 Each device activates dirty-pressure writeback at 64 pages (256 KB) and keeps
 the pressure state until at most 32 pages (128 KB) remain. The batch-role
@@ -199,13 +228,15 @@ background I/O, so the temporary queue detachment cannot create a false clean
 result. Reclaim never discards dirty data, and device invalidation cancels
 speculative work before draining and removing the device identities.
 
-Read-ahead is limited to a successful bulk read of at least 16 contiguous
-sectors. It requests only the following page, uses a replaceable generation
-that demand I/O or device invalidation can cancel, never evicts a page, and
-stops when only 32 free cache slots remain. At most two speculative resident
-pages are charged to each device; demand reads consume that charge, while
-writes and eviction remove it without reporting a speculative hit. Dirty
-progress always has priority over read-ahead in the worker.
+Speculative read-ahead is deliberately disabled in 0.75.6. Adaptive and
+single-page variants were exercised against the subsystem/AUTOEXEC workload
+after contiguous demand fills were introduced; every variant reproducibly
+stalled that workload, while two-page demand-only fills completed it and
+combined 256 cold pages into 128 backend requests. R4DEV therefore reports both read-ahead
+window values and all activity counters as zero. The bounded sequential model
+remains unit-tested but is not allowed to issue I/O until a future change can
+explain and eliminate the interaction. Dirty progress and capacity contraction
+remain the only page-cache worker jobs.
 
 Regular FAT32 mutations tag every cached dirty sector with an operation-local
 write batch. Their commit writes only that batch, including selected sectors

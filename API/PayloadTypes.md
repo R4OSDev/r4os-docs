@@ -37,7 +37,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `ProgramMemoryPagerGateProbe` | extensible | extern_struct | 248/8 | 248/8 | 248/8 | 248/8 |
 | `ProgramMemoryPageIoProbe` | extensible | extern_struct | 304/8 | 304/8 | 304/8 | 304/8 |
 | `ProgramMemoryVmPageStateProbe` | extensible | extern_struct | 288/8 | 288/8 | 288/8 | 288/8 |
-| `ProgramPerformanceSummary` | extensible | extern_struct | 6000/8 | 6000/8 | 6000/8 | 6000/8 |
+| `ProgramPerformanceSummary` | extensible | extern_struct | 6176/8 | 6176/8 | 6176/8 | 6176/8 |
 | `ProgramTaskPerformanceInfo` | fixed_layout | extern_struct | 304/8 | 304/8 | 304/8 | 304/8 |
 | `ProgramStoragePerformanceInfo` | fixed_layout | extern_struct | 440/8 | 440/8 | 440/8 | 440/8 |
 | `ProgramBootPhasePerformanceInfo` | fixed_layout | extern_struct | 72/8 | 72/8 | 72/8 | 72/8 |
@@ -659,7 +659,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 - Quelle: `API/ApiContract.json`
 - Klasse: `extensible`
 - Repräsentation: `extern_struct`
-- Version/Größe/Alignment: 12 / 6000 / 8
+- Version/Größe/Alignment: 13 / 6176 / 8
 
 | Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
 |---|---:|---:|---:|---|---|
@@ -1483,6 +1483,32 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `ntfs_metadata_reclaim_requests` | 5976 | 8 | 8 | `u64` | - |
 | `ntfs_metadata_reclaim_scans` | 5984 | 8 | 8 | `u64` | - |
 | `ntfs_metadata_reclaimed_entries` | 5992 | 8 | 8 | `u64` | - |
+| `fs_cache_capacity_min_pages` | 6000 | 4 | 4 | `u32` | - |
+| `fs_cache_capacity_max_pages` | 6004 | 4 | 4 | `u32` | - |
+| `fs_cache_capacity_ram_limit_pages` | 6008 | 4 | 4 | `u32` | - |
+| `fs_cache_capacity_active_limit_pages` | 6012 | 4 | 4 | `u32` | - |
+| `fs_cache_capacity_pressure_level` | 6016 | 4 | 4 | `u32` | - |
+| `fs_cache_read_ahead_window_pages` | 6020 | 4 | 4 | `u32` | - |
+| `fs_cache_read_ahead_window_max_pages` | 6024 | 4 | 4 | `u32` | - |
+| `fs_cache_capacity_reserved0` | 6028 | 4 | 4 | `u32` | - |
+| `fs_cache_fill_run_requests` | 6032 | 8 | 8 | `u64` | - |
+| `fs_cache_fill_run_backend_requests` | 6040 | 8 | 8 | `u64` | - |
+| `fs_cache_fill_run_pages` | 6048 | 8 | 8 | `u64` | - |
+| `fs_cache_fill_run_sectors` | 6056 | 8 | 8 | `u64` | - |
+| `fs_cache_fill_run_bytes` | 6064 | 8 | 8 | `u64` | - |
+| `fs_cache_fill_run_failures` | 6072 | 8 | 8 | `u64` | - |
+| `fs_cache_fill_run_retries` | 6080 | 8 | 8 | `u64` | - |
+| `fs_cache_fill_run_max_pages` | 6088 | 8 | 8 | `u64` | - |
+| `fs_cache_fill_scatter_copy_bytes` | 6096 | 8 | 8 | `u64` | - |
+| `fs_cache_read_staging_copy_bytes` | 6104 | 8 | 8 | `u64` | - |
+| `fs_cache_read_caller_copy_bytes` | 6112 | 8 | 8 | `u64` | - |
+| `fs_cache_read_publish_lock_drops` | 6120 | 8 | 8 | `u64` | - |
+| `fs_cache_fill_lock_drops` | 6128 | 8 | 8 | `u64` | - |
+| `fs_cache_capacity_reductions` | 6136 | 8 | 8 | `u64` | - |
+| `fs_cache_capacity_trimmed_pages` | 6144 | 8 | 8 | `u64` | - |
+| `fs_cache_read_ahead_pages_scheduled` | 6152 | 8 | 8 | `u64` | - |
+| `fs_cache_read_ahead_pages_issued` | 6160 | 8 | 8 | `u64` | - |
+| `fs_cache_read_ahead_random_resets` | 6168 | 8 | 8 | `u64` | - |
 
 ### `ProgramTaskPerformanceInfo`
 
@@ -6221,7 +6247,7 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `performance_simd_abi_avx2` | `3` | `u32` | value | number | `performance_simd` | fixed_contract |
 | `performance_simd_abi_none` | `0` | `u32` | value | number | `performance_simd` | fixed_contract |
 | `performance_simd_abi_sse2` | `1` | `u32` | value | number | `performance_simd` | fixed_contract |
-| `performance_snapshot_version` | `12` | `u32` | version | number | `performance_snapshot` | fixed_contract |
+| `performance_snapshot_version` | `13` | `u32` | version | number | `performance_snapshot` | fixed_contract |
 | `physical_key_flag_repeat` | `1` | `u32` | flag | bitmask | `physical_key` | fixed_contract |
 | `physical_key_kind_down` | `1` | `u32` | value | enumeration | `physical_key` | fixed_contract |
 | `physical_key_kind_reset` | `3` | `u32` | value | enumeration | `physical_key` | fixed_contract |

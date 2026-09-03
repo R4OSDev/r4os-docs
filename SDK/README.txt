@@ -24,6 +24,12 @@ single call. The SDK keeps older tables compatible through `font_glyph_row`;
 that fallback preserves pixels but can only report face-wide width and maximum
 advance for proportional fonts.
 
+R4DRAW v7 appends `font_revision`. The nonzero catalog generation advances
+after every completed font reload, allowing layout and monochrome-coverage
+caches to key font id, revision and codepoint without retaining reused stale
+ids. The SDK returns the stable compatibility generation 1 when an older
+table has no revision slot.
+
 `ctx.allocator()` is the normal Zig `std.mem.Allocator` backed by the R4SYS VM
 calls. Small blocks use twenty bounded geometric free-size classes inside a
 64-MiB reserved region, checked header/footer boundary tags and constant-time

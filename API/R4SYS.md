@@ -37,7 +37,7 @@ die bisherigen Einzeloperationen bleiben binaer kompatibel.
 <!-- R4OS-APIREF:BEGIN R4SYS (generiert von ApiContractGen aus ApiContract.json - NICHT von Hand editieren) -->
 ## Tabellen-Referenz R4SYS (generiert)
 
-Kernel-Gruppentabelle `R4XStartR4Sys` v14, 1000 Bytes, 120 Funktionsfelder und 123 Slots insgesamt.
+Kernel-Gruppentabelle `R4XStartR4Sys` v15, 1024 Bytes, 123 Funktionsfelder und 126 Slots insgesamt.
 Signatur-Wahrheit: `abi.R4SysFns` (Feldname == Tabellenfeld).
 Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 
@@ -166,4 +166,7 @@ Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 | 120 | 976 | function | `registry_snapshot_begin` | `*const fn ([*:0]const u8, u32, *RegistrySnapshotCursor) callconv(.c) i32` |
 | 121 | 984 | function | `registry_snapshot_page` | `*const fn (*RegistrySnapshotCursor, [*]RegistrySnapshotEntry, u32, [*]u8, u32, *RegistrySnapshotPageInfo) callconv(.c) i32` |
 | 122 | 992 | function | `registry_batch_mutate` | `*const fn ([*]const RegistryBatchOperation, u32, [*]const u8, u32, *RegistryBatchResult) callconv(.c) i32` |
+| 123 | 1000 | function | `io_file_write_at` | `*const fn ([*:0]const u8, u64, [*]const u8, u64, u32, *u32) callconv(.c) i32` |
+| 124 | 1008 | function | `io_file_info` | `*const fn ([*:0]const u8, u32, *u32) callconv(.c) i32` |
+| 125 | 1016 | function | `io_file_lock` | `*const fn ([*:0]const u8, u64, u64, u32, *u32) callconv(.c) i32` |
 <!-- R4OS-APIREF:END R4SYS -->

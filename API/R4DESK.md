@@ -3,7 +3,7 @@
 <!-- R4OS-APIREF:BEGIN R4DESK (generiert von ApiContractGen aus ApiContract.json - NICHT von Hand editieren) -->
 ## Tabellen-Referenz R4DESK (generiert)
 
-Kernel-Gruppentabelle `R4XStartR4Desk` v11, 480 Bytes, 57 Funktionsfelder und 58 Slots insgesamt.
+Kernel-Gruppentabelle `R4XStartR4Desk` v12, 488 Bytes, 58 Funktionsfelder und 59 Slots insgesamt.
 Signatur-Wahrheit: `abi.R4DeskFns` (Feldname == Tabellenfeld).
 Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 
@@ -67,4 +67,5 @@ Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 | 55 | 456 | function | `remote_frame_consumers` | `*const fn () callconv(.c) u32` |
 | 56 | 464 | function | `remote_frame_publish_regions` | `*const fn (*const RemoteFrameInfo, [*]const u32, u32, [*]const DisplayDamageRect, u32) callconv(.c) i32` |
 | 57 | 472 | function | `console_input_wait` | `*const fn (u64, u64, *u64) callconv(.c) i32` |
+| 58 | 480 | function | `physical_key_poll` | `*const fn (*PhysicalKeyEvent) callconv(.c) i32` |
 <!-- R4OS-APIREF:END R4DESK -->

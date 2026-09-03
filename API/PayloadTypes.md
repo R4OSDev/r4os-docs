@@ -5,9 +5,9 @@ Diese Datei wird deterministisch aus `API/ApiContract.json` erzeugt. Manuelle Ä
 Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenzen und Conformance-Fixtures werden produktiv aus diesem Schema erzeugt; handgeschriebene Dateien bleiben nur Fassaden oder erklaerende Texte.
 
 - Schema: v11, Baseline `standalone-contract-0.64.11`
-- Reachability: 135 von 135 Typen aufgelöst oder explizit klassifiziert
+- Reachability: 137 von 137 Typen aufgelöst oder explizit klassifiziert
 - Zentrale SDK-only-Wurzeln: 0; Runtime-R4Ls besitzen libraryeigene Vertraege
-- Operationen: 0; Fehlerdomänen: 62; Konstanten: 1338; Limits: 109
+- Operationen: 0; Fehlerdomänen: 62; Konstanten: 1372; Limits: 109
 
 ## App-Profile
 
@@ -57,6 +57,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `GuiWindowInfo` | fixed_layout | extern_struct | 40/4 | 40/4 | 40/4 | 40/4 |
 | `GuiSize` | fixed_layout | extern_struct | 8/4 | 8/4 | 8/4 | 8/4 |
 | `GuiEvent` | fixed_layout | extern_struct | 40/8 | 40/8 | 40/8 | 40/8 |
+| `PhysicalKeyEvent` | fixed_layout | extern_struct | 40/8 | 40/8 | 40/8 | 40/8 |
 | `GuiCommand` | fixed_layout | extern_struct | 120/4 | 120/4 | 120/4 | 120/4 |
 | `GuiFrameCommand` | fixed_layout | extern_struct | 96/8 | 96/8 | 96/8 | 96/8 |
 | `GuiPathSegment` | fixed_layout | extern_struct | 32/4 | 32/4 | 32/4 | 32/4 |
@@ -156,6 +157,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `TrayEvent` | fixed_layout | extern_struct | 80/8 | 80/8 | 80/8 | 80/8 |
 | `TrayServiceResponse` | fixed_layout | extern_struct | 192/8 | 192/8 | 192/8 | 192/8 |
 | `TrayDesktopExchange` | fixed_layout | extern_struct | 1344/8 | 1344/8 | 1344/8 | 1344/8 |
+| `GuiGlyphBitmap` | fixed_layout | extern_struct | 344/8 | 344/8 | 344/8 | 344/8 |
 
 ## Typdetails
 
@@ -1999,6 +2001,25 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `key` | 16 | 4 | 4 | `u32` | - |
 | `buttons` | 20 | 4 | 4 | `u32` | - |
 | `modifiers` | 24 | 4 | 4 | `u32` | - |
+| `tick` | 32 | 8 | 8 | `u64` | - |
+
+### `PhysicalKeyEvent`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 40 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `magic` | 0 | 4 | 4 | `u32` | - |
+| `version` | 4 | 2 | 2 | `u16` | - |
+| `size` | 6 | 2 | 2 | `u16` | - |
+| `kind` | 8 | 4 | 4 | `u32` | - |
+| `key` | 12 | 4 | 4 | `u32` | - |
+| `modifiers` | 16 | 4 | 4 | `u32` | - |
+| `flags` | 20 | 4 | 4 | `u32` | - |
+| `sequence` | 24 | 8 | 8 | `u64` | - |
 | `tick` | 32 | 8 | 8 | `u64` | - |
 
 ### `GuiCommand`
@@ -4526,6 +4547,23 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `item` | 144 | 1184 | 8 | `r4os.abi.TrayServiceRequest` | - |
 | `reserved0` | 1328 | 16 | 1 | `[16]u8` | - |
 
+### `GuiGlyphBitmap`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 344 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `width` | 0 | 4 | 4 | `u32` | - |
+| `height` | 4 | 4 | 4 | `u32` | - |
+| `advance` | 8 | 4 | 4 | `u32` | - |
+| `line_height` | 12 | 4 | 4 | `u32` | - |
+| `baseline` | 16 | 4 | 4 | `i32` | - |
+| `reserved0` | 20 | 4 | 4 | `u32` | - |
+| `rows` | 24 | 320 | 8 | `[40]u64` | - |
+
 ## Fehlerdomänen
 
 ### `arp`
@@ -6184,6 +6222,40 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `performance_simd_abi_none` | `0` | `u32` | value | number | `performance_simd` | fixed_contract |
 | `performance_simd_abi_sse2` | `1` | `u32` | value | number | `performance_simd` | fixed_contract |
 | `performance_snapshot_version` | `12` | `u32` | version | number | `performance_snapshot` | fixed_contract |
+| `physical_key_flag_repeat` | `1` | `u32` | flag | bitmask | `physical_key` | fixed_contract |
+| `physical_key_kind_down` | `1` | `u32` | value | enumeration | `physical_key` | fixed_contract |
+| `physical_key_kind_reset` | `3` | `u32` | value | enumeration | `physical_key` | fixed_contract |
+| `physical_key_kind_up` | `2` | `u32` | value | enumeration | `physical_key` | fixed_contract |
+| `physical_key_magic` | `1263547474` | `u32` | magic | magic | `physical_key` | fixed_contract |
+| `physical_key_modifier_left_alt` | `4` | `u32` | flag | bitmask | `physical_key` | fixed_contract |
+| `physical_key_modifier_left_control` | `1` | `u32` | flag | bitmask | `physical_key` | fixed_contract |
+| `physical_key_modifier_left_gui` | `64` | `u32` | flag | bitmask | `physical_key` | fixed_contract |
+| `physical_key_modifier_left_shift` | `16` | `u32` | flag | bitmask | `physical_key` | fixed_contract |
+| `physical_key_modifier_right_alt` | `8` | `u32` | flag | bitmask | `physical_key` | fixed_contract |
+| `physical_key_modifier_right_control` | `2` | `u32` | flag | bitmask | `physical_key` | fixed_contract |
+| `physical_key_modifier_right_gui` | `128` | `u32` | flag | bitmask | `physical_key` | fixed_contract |
+| `physical_key_modifier_right_shift` | `32` | `u32` | flag | bitmask | `physical_key` | fixed_contract |
+| `physical_key_poll_empty` | `0` | `i32` | value | result | `physical_key` | fixed_contract |
+| `physical_key_poll_error_invalid` | `-1` | `i32` | value | result | `physical_key` | fixed_contract |
+| `physical_key_poll_error_unsupported` | `-2` | `i32` | value | result | `physical_key` | fixed_contract |
+| `physical_key_poll_ready` | `1` | `i32` | value | result | `physical_key` | fixed_contract |
+| `physical_key_usage_down` | `81` | `u32` | identity | hid_usage | `physical_key` | fixed_contract |
+| `physical_key_usage_enter` | `40` | `u32` | identity | hid_usage | `physical_key` | fixed_contract |
+| `physical_key_usage_keypad_2` | `90` | `u32` | identity | hid_usage | `physical_key` | fixed_contract |
+| `physical_key_usage_keypad_4` | `92` | `u32` | identity | hid_usage | `physical_key` | fixed_contract |
+| `physical_key_usage_keypad_6` | `94` | `u32` | identity | hid_usage | `physical_key` | fixed_contract |
+| `physical_key_usage_keypad_7` | `95` | `u32` | identity | hid_usage | `physical_key` | fixed_contract |
+| `physical_key_usage_keypad_8` | `96` | `u32` | identity | hid_usage | `physical_key` | fixed_contract |
+| `physical_key_usage_keypad_9` | `97` | `u32` | identity | hid_usage | `physical_key` | fixed_contract |
+| `physical_key_usage_left` | `80` | `u32` | identity | hid_usage | `physical_key` | fixed_contract |
+| `physical_key_usage_left_alt` | `226` | `u32` | identity | hid_usage | `physical_key` | fixed_contract |
+| `physical_key_usage_left_control` | `224` | `u32` | identity | hid_usage | `physical_key` | fixed_contract |
+| `physical_key_usage_right` | `79` | `u32` | identity | hid_usage | `physical_key` | fixed_contract |
+| `physical_key_usage_right_alt` | `230` | `u32` | identity | hid_usage | `physical_key` | fixed_contract |
+| `physical_key_usage_right_control` | `228` | `u32` | identity | hid_usage | `physical_key` | fixed_contract |
+| `physical_key_usage_space` | `44` | `u32` | identity | hid_usage | `physical_key` | fixed_contract |
+| `physical_key_usage_up` | `82` | `u32` | identity | hid_usage | `physical_key` | fixed_contract |
+| `physical_key_version` | `1` | `u16` | version | number | `physical_key` | fixed_contract |
 | `program_completion_flag_display_used` | `4` | `u32` | flag | bitmask | `program_completion` | fixed_contract |
 | `program_completion_flag_output` | `2` | `u32` | flag | bitmask | `program_completion` | fixed_contract |
 | `program_completion_flag_owner` | `8` | `u32` | flag | bitmask | `program_completion` | fixed_contract |

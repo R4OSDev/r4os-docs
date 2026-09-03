@@ -18,6 +18,12 @@ handles or second subsystem implementations. The six Platform APIs are
 implemented by the Kernel; the SDK neither builds provider R4Ls nor owns an
 independent copy of their implementation.
 
+R4DRAW v6 exposes a fixed-capacity whole-glyph snapshot. Current kernels
+resolve the bounded font index once and return metrics plus all row masks in a
+single call. The SDK keeps older tables compatible through `font_glyph_row`;
+that fallback preserves pixels but can only report face-wide width and maximum
+advance for proportional fonts.
+
 `ctx.allocator()` is the normal Zig `std.mem.Allocator` backed by the R4SYS VM
 calls. Small blocks use twenty bounded geometric free-size classes inside a
 64-MiB reserved region, checked header/footer boundary tags and constant-time

@@ -18,6 +18,18 @@ handles or second subsystem implementations. The six Platform APIs are
 implemented by the Kernel; the SDK neither builds provider R4Ls nor owns an
 independent copy of their implementation.
 
+`ctx.allocator()` is the normal Zig `std.mem.Allocator` backed by the R4SYS VM
+calls. Small blocks use twenty bounded geometric free-size classes inside a
+64-MiB reserved region, checked header/footer boundary tags and constant-time
+neighbor coalescing. Allocations of at least 1 MiB, or alignments above 4 KiB,
+use a direct VM region. Zero-size behavior, alignment and caller ownership stay
+unchanged. Metadata damage fails closed and is counted; failed VM mutations
+leave the prior index state retryable. An allocator-local atomic lock protects
+metadata and VM mutations across R4X threads, yielding through R4SYS only when
+contended. `ctx.allocatorStats()` includes the existing allocation/byte totals
+plus free-candidate and class searches, boundary probes, splits, coalesces,
+corruptions and reserve/commit/decommit/release call counts.
+
 Independent Runtime-R4Ls keep contract, baseline, implementation, bindings
 and tests in their own library unit. The core SDK provides only the generic
 named-table resolver and module-build mechanism.
@@ -36,5 +48,5 @@ choosing key-plus-text or single-text delivery and mapped or prefiltered
 pointers. Passive filter/drop counters remain available without hot logs;
 ignored deliveries never wake an event-only guest.
 
-Build the SDK with `Repositories\SDK\Build.bat test` or as part of
-`Tools\Build.bat -central`.
+Build the SDK with `Repositories\SDK\Build.bat test` or
+`Repositories/SDK/Build.sh test`, or as part of the matching central build.

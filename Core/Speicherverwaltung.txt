@@ -167,11 +167,20 @@ gain without weakening fault safety.
 SMP ownership
 -------------
 
-Heap and resident virtual-range metadata use the transitional cross-CPU
-no-sleep owner boundary. Statistics and invariants take the same coherent
-snapshot boundary. If physical pressure would require a reclaim operation
-while that boundary is held, allocation fails as controlled OOM instead of
-yielding with a global owner lock.
+Virtual-range metadata, active page tables and physical PMM/MemoryBlock state
+use distinct reentrant no-sleep owner locks. Their mandatory order is VM,
+page tables, then physical memory. Statistics and invariants take the matching
+coherent owner boundary. Heap metadata remains on the measured transitional
+legacy boundary until its later migration. If pressure would require a
+reclaim operation while the VM boundary is held, allocation fails as
+controlled OOM instead of yielding with an owner lock.
+
+Unmap, decommit and address-space teardown publish a generation-bound TLB
+shootdown to every other online CPU. A physical frame is freed only after all
+targets acknowledged that generation. Missing acknowledgements are bounded:
+the old PTE is restored, a recovery invalidation is attempted and the caller
+receives a failure while the frame remains claimed. Contiguous extents use one
+range request of at most 64 pages instead of one IPI round per page.
 
 Pagefile I/O and VM eviction intentionally span filesystem/block waits and
 therefore remain BSP-owned. A slot-backed page fault releases the no-sleep

@@ -50,9 +50,13 @@ The ownership matrix is deliberately conservative:
 
 - Per CPU: GDT/TSS/fault stacks, FPU register initialization, LAPIC timer,
   current and idle task, Ready queue, reschedule state and IRQ-dispatch depth.
-- Cross-CPU serialized: Task identity, timed waits, deferred reap, heap and
-  resident VM metadata, boot log, IRQ registration/statistics and existing
-  owners that historically used disabled interrupts as their boundary.
+- Explicit owner locks: virtual-range metadata, active page-table mutations,
+  and the shared PMM/MemoryBlock physical metadata. Their fixed nesting order
+  is VM (10), page tables (20), physical memory (30). A lower rank may never
+  be acquired while a higher rank is held.
+- Legacy cross-CPU serialized: Task identity, timed waits, deferred reap,
+  heap metadata, boot log, IRQ registration/statistics and remaining owners
+  that historically used disabled interrupts as their boundary.
 - BSP-only until separately audited: pageable-VM I/O/reclaim, foreground and
   shell/console programs, services, GUI owners, R4D callbacks and ordinary
   legacy kernel workers.
@@ -67,6 +71,47 @@ outer token only after the outgoing RSP is durable, and a remotely woken task
 is queued only after its old CPU has physically switched out. This closes the
 lost-wake, duplicate-stack and premature-reap windows without inventing a
 public lock or affinity contract.
+
+Every remaining `saveAndDisableFor` call belongs to one of eleven explicit
+source classes; the default unclassified entrypoint has no caller. The source
+inventory is:
+
+- interrupt: `idt.zig`, `irq_router.zig`, `timer.zig`
+- scheduler: `scheduler.zig`
+- synchronization: `sync.zig`
+- task: `task.zig`
+- logging: `bootlog.zig`
+- driver: `com.zig`, `usb_boot_wait.zig`, `driver_work.zig`
+- memory: `heap.zig`
+- storage: `storage/block.zig`
+- network: `net/core.zig`, `net/serial_link.zig`
+- program: `program/r4sys.zig`, `program/r4x.zig`
+- test: `task_registry_selftest.zig`
+
+Telemetry counts acquisitions, nesting, CPU collisions, total/maximum wait
+spins and hold cycles without logging recursively from the lock path. Owner
+locks additionally count order violations. Waiting task-context callers
+briefly re-enable their original interrupt state between failed legacy-lock
+attempts so the higher-priority TLB IPI remains serviceable.
+
+Cross-CPU TLB coherence
+-----------------------
+
+R4OS currently uses one shared active kernel address space. Removing a PTE,
+clearing hardware-dirty state or changing cache attributes therefore
+publishes one generation and address/page-count request, sends vector F2 to
+every other online CPU, and waits for a per-CPU acknowledgement of that exact
+generation. Small ranges use `invlpg`; ranges of 64 pages or more reload CR3.
+CPUs which become offline after the snapshot are excluded explicitly.
+
+An invalidation has a bounded wait. On a missing acknowledgement the paging
+owner restores the old PTE values and performs a recovery invalidation; the
+caller receives failure and must not release or reuse the physical frame.
+VM uncommit holds locks in VM -> page-table -> physical order and frees PMM
+state only after a successful acknowledgement set. The short SMP4 acceptance
+loads the old translation on all four CPUs, remaps to a distinct frame,
+checks the new value everywhere, then drops one acknowledgement deliberately
+and proves that unmap fails while the frame and mapping remain owned.
 
 AP task switches currently occur at explicit cooperative scheduler points;
 interrupt-frame preemption remains on the BSP. Each AP still owns a periodic

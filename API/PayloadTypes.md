@@ -37,7 +37,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `ProgramMemoryPagerGateProbe` | extensible | extern_struct | 248/8 | 248/8 | 248/8 | 248/8 |
 | `ProgramMemoryPageIoProbe` | extensible | extern_struct | 304/8 | 304/8 | 304/8 | 304/8 |
 | `ProgramMemoryVmPageStateProbe` | extensible | extern_struct | 288/8 | 288/8 | 288/8 | 288/8 |
-| `ProgramPerformanceSummary` | extensible | extern_struct | 6176/8 | 6176/8 | 6176/8 | 6176/8 |
+| `ProgramPerformanceSummary` | extensible | extern_struct | 6272/8 | 6272/8 | 6272/8 | 6272/8 |
 | `ProgramTaskPerformanceInfo` | fixed_layout | extern_struct | 304/8 | 304/8 | 304/8 | 304/8 |
 | `ProgramStoragePerformanceInfo` | fixed_layout | extern_struct | 440/8 | 440/8 | 440/8 | 440/8 |
 | `ProgramBootPhasePerformanceInfo` | fixed_layout | extern_struct | 72/8 | 72/8 | 72/8 | 72/8 |
@@ -659,7 +659,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 - Quelle: `API/ApiContract.json`
 - Klasse: `extensible`
 - Repräsentation: `extern_struct`
-- Version/Größe/Alignment: 13 / 6176 / 8
+- Version/Größe/Alignment: 14 / 6272 / 8
 
 | Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
 |---|---:|---:|---:|---|---|
@@ -1509,6 +1509,18 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `fs_cache_read_ahead_pages_scheduled` | 6152 | 8 | 8 | `u64` | - |
 | `fs_cache_read_ahead_pages_issued` | 6160 | 8 | 8 | `u64` | - |
 | `fs_cache_read_ahead_random_resets` | 6168 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_payload_write_retentions` | 6176 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_system_write_retentions` | 6184 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_targeted_invalidations` | 6192 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_targeted_record_invalidations` | 6200 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_targeted_attribute_invalidations` | 6208 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_targeted_directory_invalidations` | 6216 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_global_mutation_invalidations` | 6224 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_recovery_invalidations` | 6232 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_mutation_invalidated_record_entries` | 6240 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_mutation_invalidated_attribute_entries` | 6248 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_mutation_invalidated_index_entries` | 6256 | 8 | 8 | `u64` | - |
+| `ntfs_metadata_mutation_invalidated_path_entries` | 6264 | 8 | 8 | `u64` | - |
 
 ### `ProgramTaskPerformanceInfo`
 
@@ -6247,7 +6259,7 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `performance_simd_abi_avx2` | `3` | `u32` | value | number | `performance_simd` | fixed_contract |
 | `performance_simd_abi_none` | `0` | `u32` | value | number | `performance_simd` | fixed_contract |
 | `performance_simd_abi_sse2` | `1` | `u32` | value | number | `performance_simd` | fixed_contract |
-| `performance_snapshot_version` | `13` | `u32` | version | number | `performance_snapshot` | fixed_contract |
+| `performance_snapshot_version` | `14` | `u32` | version | number | `performance_snapshot` | fixed_contract |
 | `physical_key_flag_repeat` | `1` | `u32` | flag | bitmask | `physical_key` | fixed_contract |
 | `physical_key_kind_down` | `1` | `u32` | value | enumeration | `physical_key` | fixed_contract |
 | `physical_key_kind_reset` | `3` | `u32` | value | enumeration | `physical_key` | fixed_contract |

@@ -46,6 +46,11 @@ Felder weisen in 0.75.6 Fenster und Aktivitaet mit null aus: Spekulative I/O
 wurde nach reproduzierbaren Subsystemhaengern verworfen, waehrend die durch
 FSDIAG abgedeckten Zwei-Seiten-Demand-Fills aktiv bleiben. Groessere Runs sind
 bis zur geklaerten Ursache ebenfalls gesperrt.
+Version 14 ergaenzt die gezielte NTFS-Metadatencache-Invalidierung: getrennte
+Zaehler fuer behaltene Payload- und cache-unabhaengige Systemwrites, Record-,
+Attribut- und Verzeichnisidentitaeten, globale beziehungsweise Recovery-
+Invalidierungen sowie die tatsaechlich entfernten Record-, Attribut-, INDX-
+und Pfadeintraege. Nur unbekannte und Recovery-Mutationen bleiben global.
 Der Aufrufer setzt Version und Puffergroesse; der Provider schreibt nur den
 ausgehandelten Prefix. Zeitfelder liefern aufgeloeste Nanosekunden,
 Quellenmetadaten und explizite Nichtverfuegbarkeit statt stiller Scheinwerte.

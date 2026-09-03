@@ -253,18 +253,34 @@ only the backend-confirmed prefix on partial failure. The shared NTFS volume
 core still owns write ordering and calls the unchanged flush seam at each
 durability boundary.
 
-Decoded NTFS metadata is cached separately from sector payloads. Each mounted
-NTFS volume owns exactly eight fixed MFT-record slots, four decoded
+Decoded NTFS metadata is cached separately from sector payloads. In cache
+version 2, each mounted NTFS volume owns exactly eight fixed MFT-record slots, four decoded
 attribute/runlist slots, two decoded INDX-block slots and eight positive or
 negative path-component slots. Entries are tied to the mount and content
 generation; negative entries expire after one second. The normal path cache
 uses the volume `$UpCase` collation, while recovery-only transient lookups
 bypass it.
 
-Any NTFS write invalidates decoded metadata before the first physical sector
-can become visible. This single boundary covers create, rename, delete,
-write, truncate, recovery and partial failures; mount and explicit media
-generation changes have their own invalidations. Global reclaim drops at most
+Every NTFS write is classified before its first physical sector can become
+visible. Pure file payload writes retain all decoded metadata. Primary MFT
+record writes remove only that record, its decoded attributes, any directory
+index owned by it, and positive or negative paths derived from the record or
+directory. Non-resident attribute writes carry their record and attribute
+type; directory-index writes carry their directory record and remove only its
+decoded INDX blocks and paths. The fully classified MFT mirror is not a source
+for live decoded entries and therefore also retains the cache. Unknown and
+recovery/ambiguous rollback mutations remain conservative whole-cache
+invalidations; mount and explicit media-generation changes keep their own
+global invalidations. Targeted invalidation does not advance the global
+content generation, so unrelated entries remain reusable while stale
+positive and negative results are removed by identity.
+
+R4DEV PerformanceSummary v14 reports retained payload and system writes,
+targeted record/attribute/directory requests, global and recovery requests,
+and the exact number of removed record, attribute, index and path entries.
+The shared host hardening model covers unchanged in-place payload writes,
+Append/Resize, Rename, Delete and recovery after partial failure; FSDIAG
+repeats the namespace transitions in the running guest. Global reclaim drops at most
 eight decoded entries per request and examines at most 22 slots in each of
 the four fixed mount slots. The fixed cache control storage remains resident
 and never owns page-cache sectors or a second file payload.

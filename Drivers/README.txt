@@ -26,9 +26,11 @@ buffer. The block core owns waiting slots and ordered flush barriers, while
 backends remain synchronous at depth one.
 
 MSI allocations are owner-tracked by the kernel and are disabled before IRQ,
-work and DMA owner cleanup; drivers still stop their hardware and explicitly
-release MSI on normal shutdown. A failed hardware stop, active storage request
-or work join vetoes resource release and leaves the owner quarantined.
+work and DMA owner cleanup; the same existing operation prefers conventional
+MSI and accepts one bounded MSI-X table entry when needed. Drivers still stop
+their hardware and explicitly release message interrupts on normal shutdown.
+A failed hardware stop, active storage request or work join vetoes resource
+release and leaves the owner quarantined.
 
 Boot-critical memory, interrupt, early display and storage paths remain in
 the kernel until a proven preload or early-load path exists. Once a loadable

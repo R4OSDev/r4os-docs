@@ -8,6 +8,39 @@ The physical-frame allocator owns usable frames after Limine handoff. Page
 tables, kernel mappings, MMIO and the higher-half direct map remain kernel
 responsibilities. Frame zero is never returned by normal allocation.
 
+Kernel heap and eager VM extents
+--------------------------------
+
+The kernel heap commits at least 16 pages when it must grow and doubles its
+next step up to 256 pages. A request larger than that bounded step still
+commits its exact page requirement. If a speculative extension cannot be
+satisfied, the heap retries only the exact requirement. This replaces the
+former exact grow after almost every medium allocation.
+
+A free heap tail is retained between allocations. Its low watermark is at
+least 16 pages and is bounded by roughly 1/1024 of the heap's RAM-derived cap,
+up to 256 pages. Normal release starts only above twice that watermark. When
+free PMM frames fall to 1/32 of installed frames or 512 frames, whichever is
+larger, retention becomes zero and the heap returns every releasable trailing
+page except its one-page structural floor. Full 0xDD payload poisoning remains
+mandatory. Commit, uncommit, suppressed-release, pressure-release and poison
+byte counters make the time/memory tradeoff observable.
+
+Eager non-pageable VM commits acquire naturally adjacent PMM frames in
+batches of at most 64 pages. They never invoke the allocator's whole-memory
+contiguous search. Each natural extent uses one physical-block claim and one
+bounded mapping transaction; a mapping failure removes every PTE installed by
+that transaction before returning. The complete virtual extent is zeroed
+before publication. Uncommit first verifies the exact contiguous PTE/frame
+run, then removes it and releases its physical-block ownership as one prepared
+transaction. Demand-paged R4X faults and Page-State transitions remain
+page-granular.
+
+The short SMP4 acceptance profile performs 16 sequential 192-KiB heap churn
+iterations and publishes `HEAPPROBE`. It requires bounded commit/uncommit
+calls, restored live-byte/block counts, bounded retained pages and the full
+poison-byte delta; it is not a subsystem long-run test.
+
 Program memory
 --------------
 

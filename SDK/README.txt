@@ -30,6 +30,17 @@ contended. `ctx.allocatorStats()` includes the existing allocation/byte totals
 plus free-candidate and class searches, boundary probes, splits, coalesces,
 corruptions and reserve/commit/decommit/release call counts.
 
+Small-region commit starts at 64 KiB and grows geometrically to at most 1 MiB
+per normal step. A 256-KiB floor plus a 512-KiB decommit hysteresis prevents a
+short-lived block from repeatedly committing and decommitting the same tail;
+explicit pressure trimming can still reduce each free tail to one page.
+Large allocations may reuse one exact-sized mapping in each of the bounded
+2-/4-/8-MiB buckets, with a 14-MiB aggregate ceiling. Alignment-only direct
+regions and mappings above 8 MiB are not cached. `ctx.allocatorTrim()` drops
+all reclaimable cache state, and allocation failures do so before a single
+retry. Stats report cache use, current/peak commit and reclaimed bytes so the
+space/time tradeoff stays measurable.
+
 Independent Runtime-R4Ls keep contract, baseline, implementation, bindings
 and tests in their own library unit. The core SDK provides only the generic
 named-table resolver and module-build mechanism.

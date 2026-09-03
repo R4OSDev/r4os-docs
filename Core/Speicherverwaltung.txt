@@ -38,6 +38,30 @@ splits, coalesces, corruptions and VM-call counts alongside the existing byte
 and allocation totals. The additional per-block footer/link metadata is the
 intentional space tradeoff for removing the former linear paths.
 
+Small regions initially commit 64 KiB. Successful extensions grow
+geometrically up to a 1-MiB step, while a single larger request may still ask
+for exactly its bounded need. Normal free keeps at least 256 KiB per used
+region and decommits a free tail only when at least 512 KiB can be returned;
+the 32-region ceiling therefore bounds this ordinary retained floor to 8 MiB
+per process. Explicit or allocation-failure reclaim reduces free tails to the
+single metadata page and resets their growth step.
+
+Direct allocations of at least 1 MiB can retain one exact-sized region in
+each of three bounded buckets up to 2, 4 and 8 MiB. Regions caused only by a
+large alignment, regions above 8 MiB and a second free region in an occupied
+bucket are released directly. The combined cache is capped at 14 MiB and
+never changes caller alignment or zero-size behavior. A reuse hit needs no
+reserve, commit, decommit or release operation. `allocatorTrim()` releases
+all cached direct regions and the reclaimable small-region tails; VM
+allocation failures perform that same bounded cleanup before at most one
+retry. Failed releases remain represented and retryable, while kernel owner
+cleanup remains the final process-exit boundary.
+
+Allocator statistics additionally expose cached entries/bytes, cache hits,
+misses and evictions, current and peak commit, requested decommit bytes, trim
+count and successfully reclaimed bytes. These counters distinguish reduced
+VM churn from the deliberately bounded retained-memory tradeoff.
+
 The system is resource-limited, not compiled around fixed program, task or
 thread capacities. Chunked registries may grow and shrink while keeping live
 objects and embedded synchronization primitives at stable addresses.

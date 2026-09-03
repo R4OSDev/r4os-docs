@@ -34,7 +34,7 @@ prevent the BSP from continuing; one CPU is a permanent supported mode.
 
 CPU-local state is one cache-line-sized `CpuLocal` record addressed through
 GS. It owns the CPU index and APIC ID, lifecycle state, scheduler readiness,
-legacy-critical depth and productive-work state. Current/idle task, Ready
+runtime-critical depth and productive-work state. Current/idle task, Ready
 queue and reschedule request are also per CPU. Initial placement chooses the
 least-loaded online CPU, but a suspended stack stays bound to that CPU; this
 foundation does not migrate live continuations.
@@ -50,49 +50,58 @@ The ownership matrix is deliberately conservative:
 
 - Per CPU: GDT/TSS/fault stacks, FPU register initialization, LAPIC timer,
   current and idle task, Ready queue, reschedule state and IRQ-dispatch depth.
-- Explicit owner locks: virtual-range metadata, active page-table mutations,
-  and the shared PMM/MemoryBlock physical metadata. Their fixed nesting order
-  is VM (10), page tables (20), physical memory (30). A lower rank may never
-  be acquired while a higher rank is held.
-- Legacy cross-CPU serialized: Task identity, timed waits, deferred reap,
-  heap metadata, boot log, IRQ registration/statistics and remaining owners
-  that historically used disabled interrupts as their boundary.
+- Runtime owner: task identity, per-CPU Ready projections, timed waits,
+  deferred reap, wait queues and IRQ-side preemption share the one reentrant
+  boundary released by the assembly context-switch publication point.
+- Explicit no-sleep owner locks: program-thread state (1), independent
+  storage/network/driver-work entry owners (2), heap (5), VM (10), page
+  tables (20), physical PMM/MemoryBlock state (30), boot log (70) and serial
+  output (80). A lower rank may never be acquired while a higher rank is
+  held; equal-rank I/O owners do not nest into one another.
+- Service registry, endpoints and channel IPC retain their existing
+  sleepable, ranked mutexes. Only their scheduler-facing waiter transitions
+  briefly enter the runtime owner.
 - BSP-only until separately audited: pageable-VM I/O/reclaim, foreground and
-  shell/console programs, services, GUI owners, R4D callbacks and ordinary
-  legacy kernel workers.
+  shell/console programs, services, GUI owners and unaudited R4D callbacks.
 - Parallel-enabled: explicitly marked CPU-only kernel work and the internal
   LoaderDiag `LSTRX.R4X` background fixture. Child threads inherit the exact
   audited owner class.
 
-The transitional cross-CPU owner boundary is reentrant and uses
-acquire/release publication. It is a no-sleep boundary: no I/O, wait, yield or
-callback may occur while nested inside it. A context switch releases its
+The scheduler runtime owner is reentrant and uses
+acquire/release publication. It is a no-sleep boundary: outside bounded IRQ
+dispatch, no blocking I/O, wait, yield or external callback may occur while
+nested inside it. The responsible IRQ path may acknowledge its device and
+perform bounded MMIO or port-register access. A context switch releases its
 outer token only after the outgoing RSP is durable, and a remotely woken task
 is queued only after its old CPU has physically switched out. This closes the
 lost-wake, duplicate-stack and premature-reap windows without inventing a
 public lock or affinity contract.
 
-Every remaining `saveAndDisableFor` call belongs to one of eleven explicit
-source classes; the default unclassified entrypoint has no caller. The source
-inventory is:
+The old class-dispatched `saveAndDisableFor` entrypoint and its global BKL no
+longer exist. Runtime users call the runtime owner explicitly; independent
+mutable domains call their exact owner, and the USB deadline sampler uses a
+purely CPU-local IRQ guard. Telemetry counts acquisitions, nesting, CPU
+collisions, total/maximum wait spins and hold cycles without logging
+recursively from a lock path. Owner locks additionally count rank violations.
+Waiting task-context callers briefly restore interrupt delivery between
+failed attempts so the higher-priority TLB IPI remains serviceable.
 
-- interrupt: `idt.zig`, `irq_router.zig`, `timer.zig`
-- scheduler: `scheduler.zig`
-- synchronization: `sync.zig`
-- task: `task.zig`
-- logging: `bootlog.zig`
-- driver: `com.zig`, `usb_boot_wait.zig`, `driver_work.zig`
-- memory: `heap.zig`
-- storage: `storage/block.zig`
-- network: `net/core.zig`, `net/serial_link.zig`
-- program: `program/r4sys.zig`, `program/r4x.zig`
-- test: `task_registry_selftest.zig`
+The short SMP4 acceptance performs 64 allocate/write/free cycles per online
+CPU through the real heap owner, requires every CPU witness and rejects any
+owner-order, cleanup or content failure. Its lock marker also requires the
+retired global-BKL counter to remain zero.
 
-Telemetry counts acquisitions, nesting, CPU collisions, total/maximum wait
-spins and hold cycles without logging recursively from the lock path. Owner
-locks additionally count order violations. Waiting task-context callers
-briefly re-enable their original interrupt state between failed legacy-lock
-attempts so the higher-priority TLB IPI remains serviceable.
+Serial span output
+------------------
+
+Kernel `puts` forwards one complete span to the optional COM1 bulk sink.
+The serial owner is acquired once, the bytes are appended in order to the
+fixed TX ring and at most one nonblocking FIFO drain is attempted. Hooks that
+intercept serial output and true single-character writes keep their byte
+semantics. Poweroff and crash paths retain bounded synchronous draining.
+Counters expose span calls, bulk calls, owner acquisitions, UART status
+reads, maximum span and dropped bytes; the short SMP4 contract requires zero
+drops and fewer status reads than emitted ring bytes.
 
 Cross-CPU TLB coherence
 -----------------------

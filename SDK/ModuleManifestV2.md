@@ -25,6 +25,10 @@ exports, metadata, resources, target and image scope. R4D and R4P add their
 driver/protocol metadata; independent R4L projects declare their exported
 library tables.
 
+`OPTIMIZE=size|speed` is optional for R4X, R4L, R4D and R4P. Omission means
+`size`/ReleaseSmall. A measured module-local hot path may select
+`speed`/ReleaseFast; the choice does not alter ABI, imports or image scope.
+
 `IMAGE_SCOPE` is `slim`, `full`, `test` or `none`. Distribution derives the
 profile plan from discovered manifests and rejects missing artifacts,
 duplicate targets, unknown scopes and unresolved required providers.

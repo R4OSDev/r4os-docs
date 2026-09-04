@@ -37,6 +37,13 @@ UDPSVC through R4NET. Connect, accept, read, write, close, timeout,
 would-block and stale-handle states remain distinct. One absolute deadline is
 shared across all phases of a bounded operation.
 
+The paced TCP writer first submits the largest service-safe chunk (up to
+4,068 bytes). Kernel TCP performs MSS segmentation and reports exact partial
+progress. A service poll is requested only after a write returns no progress;
+the SDK does not pre-poll every chunk. The optional R4NET
+`tcp_performance` snapshot provides diagnostic counters without changing the
+service message size or queue depth.
+
 ## Web and update services
 
 The web facade composes the existing DNS/TCP, HTTP and TLS owners. The update

@@ -5,7 +5,7 @@ Diese Datei wird deterministisch aus `API/ApiContract.json` erzeugt. Manuelle Ä
 Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenzen und Conformance-Fixtures werden produktiv aus diesem Schema erzeugt; handgeschriebene Dateien bleiben nur Fassaden oder erklaerende Texte.
 
 - Schema: v11, Baseline `standalone-contract-0.64.11`
-- Reachability: 145 von 145 Typen aufgelöst oder explizit klassifiziert
+- Reachability: 146 von 146 Typen aufgelöst oder explizit klassifiziert
 - Zentrale SDK-only-Wurzeln: 0; Runtime-R4Ls besitzen libraryeigene Vertraege
 - Operationen: 0; Fehlerdomänen: 62; Konstanten: 1398; Limits: 109
 
@@ -166,6 +166,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `GuiSharedRasterLease` | fixed_layout | extern_struct | 48/8 | 48/8 | 48/8 | 48/8 |
 | `GuiSharedRasterMap` | fixed_layout | extern_struct | 120/8 | 120/8 | 120/8 | 120/8 |
 | `GuiSharedRasterResource` | fixed_layout | extern_struct | 80/8 | 80/8 | 80/8 | 80/8 |
+| `TcpPerformanceInfo` | extensible | extern_struct | 208/8 | 208/8 | 208/8 | 208/8 |
 
 ## Typdetails
 
@@ -4793,6 +4794,47 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `viewport_w` | 68 | 4 | 4 | `u32` | - |
 | `viewport_h` | 72 | 4 | 4 | `u32` | - |
 | `flags` | 76 | 4 | 4 | `u32` | - |
+
+### `TcpPerformanceInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `extensible`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 208 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `local_mss` | 8 | 4 | 4 | `u32` | - |
+| `catalog_capacity` | 12 | 4 | 4 | `u32` | - |
+| `delayed_ack_ms` | 16 | 4 | 4 | `u32` | - |
+| `local_window_scale` | 20 | 4 | 4 | `u32` | - |
+| `outstanding_segments` | 24 | 4 | 4 | `u32` | - |
+| `outstanding_bytes` | 28 | 4 | 4 | `u32` | - |
+| `outstanding_segments_peak` | 32 | 4 | 4 | `u32` | - |
+| `outstanding_bytes_peak` | 36 | 4 | 4 | `u32` | - |
+| `write_calls` | 40 | 8 | 8 | `u64` | - |
+| `write_requested_bytes` | 48 | 8 | 8 | `u64` | - |
+| `write_completed_bytes` | 56 | 8 | 8 | `u64` | - |
+| `write_segments` | 64 | 8 | 8 | `u64` | - |
+| `write_partial` | 72 | 8 | 8 | `u64` | - |
+| `remote_window_stalls` | 80 | 8 | 8 | `u64` | - |
+| `catalog_stalls` | 88 | 8 | 8 | `u64` | - |
+| `backend_busy_stalls` | 96 | 8 | 8 | `u64` | - |
+| `pure_ack_tx` | 104 | 8 | 8 | `u64` | - |
+| `delayed_ack_requests` | 112 | 8 | 8 | `u64` | - |
+| `delayed_ack_tx` | 120 | 8 | 8 | `u64` | - |
+| `immediate_ack_tx` | 128 | 8 | 8 | `u64` | - |
+| `ack_coalesced` | 136 | 8 | 8 | `u64` | - |
+| `ack_piggybacked` | 144 | 8 | 8 | `u64` | - |
+| `window_update_tx` | 152 | 8 | 8 | `u64` | - |
+| `adapter_poll_rounds` | 160 | 8 | 8 | `u64` | - |
+| `service_poll_requests` | 168 | 8 | 8 | `u64` | - |
+| `service_poll_skips` | 176 | 8 | 8 | `u64` | - |
+| `retransmits` | 184 | 8 | 8 | `u64` | - |
+| `mss_negotiated` | 192 | 8 | 8 | `u64` | - |
+| `window_scale_negotiated` | 200 | 8 | 8 | `u64` | - |
 
 ## Fehlerdomänen
 

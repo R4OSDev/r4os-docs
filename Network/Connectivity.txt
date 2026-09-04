@@ -54,3 +54,46 @@ the unacknowledged suffix for retransmission. Retransmit state is bound to the
 connection ID, physical slot and slot generation, and all RTO and TIME_WAIT
 deadlines use the monotonic kernel tick domain. Waiting for incoming data does
 not arm or retransmit outgoing payload.
+
+TCP burst and ACK policy
+------------------------
+
+A TCPSVC write carries at most 4,068 payload bytes inside the unchanged
+4,096-byte IPC message. The kernel treats that request as one measurable
+write and emits as many wire segments as the negotiated peer MSS permits.
+R4OS advertises an Ethernet MSS of 1,460 bytes; when the peer sends no MSS
+option, the conservative IPv4 fallback is 536 bytes. A burst stops exactly
+at the first remote-window, retransmit-catalog or backend limit and reports
+confirmed partial progress. Each connection owns 48 retransmittable slots,
+covering 70,080 payload bytes at the local MSS and therefore a complete
+unscaled TCP receive window without the former eight-segment ceiling.
+
+Window scaling is optional and bilateral. R4OS offers scale 2, accepts at
+most the RFC limit 14 and never scales the window field in SYN or SYN-ACK.
+Peers without the option continue with the unscaled window contract.
+
+In-order receive data may defer its ACK for at most 40 ms. A second segment,
+FIN, duplicate/out-of-order data, missing sequence progress or a full receive
+buffer requests an immediate ACK. Outgoing payload may satisfy a pending ACK
+by piggybacking it. Reads emit a separate ACK only when they expose a material
+receive-window update. The event-driven net-rx task flushes deadlines; its
+10-ms wake remains a safety watchdog. Explicit service/SDK adapter polling is
+skipped while that task owns IRQ and watchdog progress and is retained only
+as the pre-task fallback.
+
+R4NET's optional `tcp_performance` snapshot and the existing TCPSVC/NETIOD
+status paths expose write calls and bytes, wire segments, current and peak
+outstanding ownership, window/catalog/backend stalls, pure/delayed/immediate/
+coalesced/piggybacked ACKs, polls, retransmits and negotiated options. Hot
+writes update O(1) counters; full snapshots are read only by diagnostics or a
+status request.
+
+The source-derived 0.75.17 baseline had three separate kernel writes for a
+4,068-byte service request (1,460 + 1,460 + 1,148), eight retransmit slots or
+11,680 service-payload bytes before an ACK, an immediate ACK for every data
+segment plus a possible read-side ACK, and readiness polling before normal
+service/SDK writes. In 0.75.18 the same request is one kernel burst with three
+segments at MSS 1,460, 48 slots, delayed/coalesced ACKs and optimistic writes
+that poll only after actual backpressure. No historical runtime-throughput
+number is claimed because the old path had no equivalent counters and this
+roadmap permits only the short SMP4 smoke, not a separate long network run.

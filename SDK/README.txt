@@ -45,6 +45,10 @@ its snapshot is replaced; a busy triple buffer or missing v9 slot falls back
 for that frame to the existing copied representation. Presenter statistics
 separate shared frames, descriptors, published bytes, backpressure and
 fallbacks. Guest scheduling, time and audio remain outside this video path.
+Source callers that construct `subsystem_host.Backend` themselves may omit the
+optional v8/v9 replacement, XRGB32 and shared-raster callbacks. Their defaults
+return `err_no_fn`, and the corresponding capability flags remain false, so a
+legacy backend keeps the copied full/damage fallback without source stubs.
 
 `ctx.allocator()` is the normal Zig `std.mem.Allocator` backed by the R4SYS VM
 calls. Small blocks use twenty bounded geometric free-size classes inside a

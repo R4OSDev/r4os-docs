@@ -1,0 +1,818 @@
+﻿# 0.75.X Performance (Fable 5.1)
+
+**Status:** Abgeschlossen
+
+## Leitbild
+0.75.X prüft die von Fable 5.1 gemeldeten Performance-Schwachstellen systematisch anhand reproduzierbarer Messungen. Bestätigte und sinnvoll behebbare Engpässe werden an den zuständigen Komponenten beseitigt; unbelegte, überzeichnete oder unverhältnismäßige Vorschläge werden nachvollziehbar verworfen. Ziel sind messbar bessere Reaktionszeit, Durchsatz und Ressourceneffizienz ohne Einbußen bei Stabilität, Kompatibilität oder Architekturqualität.
+
+## Notizen
+Prüfstand 2026-09-03: RoadmapF.txt wurde zuerst vollständig gegen den aktuellen Quellstand geprüft, anschließend Fable5_1.txt; in RoadmapF bereits behandelte Befunde wurden beim zweiten Durchgang nicht doppelt geplant. Aufgenommen wurden nur belegte und voraussichtlich wirksame Arbeiten. Die vorgeschlagenen Lösungen wurden angepasst, wo der aktuelle Stand weiter ist oder die Rohidee eine Sicherheitsgrenze verletzen würde.
+
+Aufgenommen: hostbeschleunigtes interaktives QEMU mit sauberem Fallback; SDK-Allokator mit Größenklassen, O(1)-Koaleszenz und Commit-Hysterese; Fontindex, Bulk-Glyph-Abfrage, Desktop-Glyphcache und inkrementelles Terminal; Mehrseiten-Fills und adaptives Read-Ahead; gezielte NTFS-Cacheinvalidierung; gebufferter R4M0-Metadatenleser; TSC-basierte logische Zeit; Heap-/Seiten-Batching; Cross-CPU-TLB-Shootdown und schrittweise Auflösung des Legacy-BKL; gebündelte serielle Ausgabe; R4L-/AP-Präemption; NVMe-Interrupt-Completions; SDK-GUI-Batching, ersetzende Streaming-Rastergenerationen, direkte XRGB32-Skalierung und geteilte Rasterressourcen; TCP-Segment-/ACK-Bündelung; evidenzbasierte Geschwindigkeitsprofile für externe Module.
+
+Nicht aufgenommen beziehungsweise bewusst begrenzt: Der Produktkernel bleibt ReleaseSafe, ohne Kernel-SIMD und mit der bestehenden FPU-Grenze; u128-Ganzzahldivision ist keine Folge von soft_float. cache=none bleibt die kohärente QEMU-Plattenvorgabe. Metriken und COM1 bleiben für Headless-Diagnose aktiv; nur ihre Ausgabe wird gebündelt. -fno-builtin bleibt eine Freestanding-Korrektheitsgrenze. Mutex.wakeAll ist wegen möglicher hart beendeter ausgewählter Besitzer bewusst, held_locks ist klein und begrenzt. 1-ms-Waits, 30-ms-Quantum und 250-ms-TCP-Wartescheiben werden nicht pauschal geändert; die TCP-Wartescheiben sind bereits ereignisgetrieben und nur ein Fallback. Der lineare Contiguous-Frame-Scan hat ohne belegte Häufigkeit keinen ausreichenden Nutzen. Ein NTFS-Runlistcache existiert bereits; geplant wird nur die noch echte globale Mutationsinvalidierung. Der Loader erhält keinen unbeschränkten Ganzdateipuffer. Der Pagecache kopiert nicht ungeschützt aus einem entsperrten, pageable Ziel; Batching muss Pin-/Bounce-Sicherheit erhalten. 2-MB-Hugepages werden ohne gesonderten Nachweis nicht eingeführt. Der skalare Present-Fallback bleibt, weil DisplayBlit den Produktpfad abdeckt. IPC bleibt bei 4096 Byte und Tiefe 8; TCP besitzt bereits 4068 Byte Nutzlast pro Serviceaufruf und wird innerhalb dieser Grenze segmentiert. Der 10-ms-RX-Poll bleibt reiner IRQ-Sicherheitsfallback. Native GPU-, Modesetting-, Pageflip- und Grafikkartentreiberarbeit ist ausdrücklich nicht Teil von 0.75.X; Limine-Bootframebuffer und DisplayBlit bleiben der Produktpfad.
+
+Testregel: Bis einschließlich 0.75.20 ausschließlich automatisierte Host-, Owner-, Image- und Headless-Nachweise. Es gibt vorher keinen manuellen Sichttest und zu keinem Zeitpunkt einen manuellen Sichttest in QEMU. Ausschließlich die jeweils ausdrücklich genannte kanonische Benchmark-Suite wird einmal regulär ausgeführt. 0.75.21 bleibt stets die letzte Unterversion und enthält als einzige manuelle Stufe den Sichttest durch den Benutzer auf der realen Lenovo-Laptop-Hardware. Werden davor weitere technische Stufen nötig, sind sie vor 0.75.21 einzusortieren. Die beiden vollständig geprüften Rohreports wurden nach Übernahme dieses Entscheidungsprotokolls entfernt.
+Planungsregel: Bei Bedarf dürfen weitere technische Unterversionen zu 0.75.X hinzugefügt werden. Sie sind stets vor dem manuellen Lenovo-Hardware-Sichttest einzuordnen; dieser bleibt unverändert die letzte Unterversion.
+0.75.6: Spekulatives Read-Ahead und Demand-Fills über zwei Seiten wurden nach realen Langlaufproblemen nicht freigegeben. Ausgeliefert werden adaptive Cachekapazität und diagnostisch abgesicherte Zwei-Seiten-Fills; Standard lief dreimal vollständig grün, der kanonische Gesamt-Test einschließlich SMP4 ebenfalls.
+Ab 0.75.9 gilt auf Benutzerwunsch: automatisierte Gastabnahmen ausschließlich mit vier vCPUs. Der normale Headless-Lauf ist SMP4; Browser-Headless kombiniert Browser- und SMP4-Marker. Single-Core-Gastläufe entfallen. Die fest definierte Single-vCPU-TCG-Umgebung regulärer Benchmarks bleibt davon unberührt, weil sie eine Messumgebung und keine Gastabnahme ist.
+Testregel-Ergänzung 2026-09-03: Während der gesamten Roadmap 0.75.X werden auf Benutzerwunsch weder Browser-Repositorytests noch Browser-Headless-Läufe ausgeführt oder als Abnahme verlangt. Reguläre Gastabnahmen laufen ausschließlich als SMP4; die fest definierte Single-vCPU-Benchmarkumgebung bleibt davon unberührt.
+Testvorgabe fuer 0.75.X: Es werden nur kurze, auf die jeweilige Unterversion zugeschnittene SMP4-Smoke-Tests ausgefuehrt. Die vorhandenen 60-Gastsekunden-Langlaeufe von R4GB und R4SNES sowie Browser-Tests werden waehrend dieser Roadmap nicht gestartet. Fuer den Clock-/SMP-Nachweis dient der kurze -testquick-Lauf; die vollstaendigen Testwerkzeuge bleiben fuer spaetere Roadmaps erhalten.
+Inhaltlicher Abschluss 04.09.2026: Alle 21 Unterversionen von 0.75.X sind abgearbeitet. Die abschliessende reale Lenovo-Abnahme 0.75.21 ist vom Benutzer vollstaendig mit OK bestaetigt; GUI-Start und Maximierung wurden nach Hardwarebefunden korrigiert und verifiziert aktualisiert. R4SNES laeuft korrekt, zeigte aber keinen spuerbaren Geschwindigkeitsgewinn; der Benutzer akzeptiert dies. Keine neue FPS-Messung oder Hardwarebeschleunigung wird behauptet. Dokumentation und alle 13 beim Abschluss geaenderten Repositories sind gepusht. Der Klickifax-Befund einer app-eigenen 1600x1000-Grenze bleibt gemaess Browserausschluss fuer spaetere Browserarbeit dokumentiert. Archivierung und Wechsel zur naechsten Hauptversion wurden nicht vorgenommen.
+
+## 0.75.1 Beschleunigtes QEMU-Entwicklungsprofil
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Den interaktiven GUI-/SSH-Start auf dieselbe hostabhängige Beschleunigungs- und CPU-Auswahl wie den Headless-Pfad stellen und VirtioNet als schnellen Standard verwenden, ohne die kanonische TCG-Benchmarkumgebung oder kohärente Plattensemantik zu verändern.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Gemeinsame hostagnostische QEMU-Auswahl für interaktiven und Headless-Start herstellen: KVM mit host-CPU unter Linux, verfügbare WHPX-/HVF-Pfade auf den jeweiligen Hosts und deterministischer TCG-/Haswell-Fallback
+  - Notizen: Keine fest codierten Hostpfade; PowerShell-7 bleibt die gemeinsame Logik.
+Umgesetzt mit Tools/Qemu-HostProfile.ps1 und gemeinsamer Nutzung in GUI/SSH sowie Invoke-QemuHeadless.ps1. Reine Auswahlmatrix deckt KVM, fehlenden KVM-Zugriff, WHPX, fehlendes WHPX-Runtime, Intel-HVF, Arm64-Fallback und zwingendes TCG ab; reale Linux-Erkennung: KVM, cpu=host.
+- [Erledigt] #2 Interaktives Netzwerk auf VirtioNet umstellen und dessen Treiber im betreffenden Imageprofil konfigurieren; einen ausdrücklich wählbaren RTL8139-Kompatibilitätsfallback erhalten
+  - Notizen: Treiber- und Imageplan müssen dieselbe Wahrheit verwenden.
+Interaktive Basis-Injection lädt VIRTNET und behält RTL8139. Workspace- und Distributionsstarter akzeptieren VirtioNet oder RTL8139; Standard ist VirtioNet. Reale unsichtbare Full-Boots bestätigten jeweils Treiber [OK], DHCP bound, SSH und reguläres POWEROFF.
+- [Erledigt] #3 Distributionstests für Argumentbildung, Beschleunigungsfallback, NIC-Auswahl und Linux-/Windows-Starter erweitern und einen automatisierten Bootmarker-Lauf ausführen
+  - Notizen: Kein manueller QEMU-Sichttest.
+Distribution-Owner-Test und VirtioNet-Owner-Test grün; Argument-, Hostprofil-, Shell-, JSON- und PowerShell-Prüfungen grün. Testimage und NTFSVERIFY grün. Kanonische Ein- und Vier-vCPU-Headless-Marker einschließlich Poweroff vollständig grün; kein Sichttest.
+- [Erledigt] #4 Dokumentation, Tests-Inventar und RELEASE_VERSION für 0.75.1 abschließen
+  - Notizen: Die Benchmark-Environment-ID r4os-q35-haswell-1vcpu-1g-tcg-v1 bleibt bytegenau unverändert.
+Agents/Build.txt, Agents/Test.txt, Distribution README/DOCUMENTATION/PROVENANCE und Tests.json gepflegt. RELEASE_VERSION=0.75.1. SHA-256 von QEMU/benchmark.conf und Invoke-QemuBenchmark.ps1 vor/nach der Änderung unverändert: 90407bbd4d4f8b26aa6042a55313ba6f9a55f4d34367ab7f5e73ec83dd7e915f beziehungsweise 60fb7a3d9219180181c344976ce44e3b75a3f696da4e8ab33bf44a9036c8e554.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Interaktive Starts nutzen verfügbare Hostbeschleunigung und VirtioNet, während jeder nicht unterstützte Host automatisch mit dem dokumentierten TCG-Fallback startet
+  - Notizen: Durch automatisierte Argument- und Bootnachweise, nicht durch Sichtprüfung.
+Automatische Argumentmatrix und reale unsichtbare Full-/SSH-Boots belegen KVM/host plus VirtioNet-Standard und den funktionsfähigen RTL8139-Fallback; DHCP und SSH waren mit beiden NICs aktiv.
+- [Erledigt] Benchmarkprofil und bestehende Headless-Marker bleiben unverändert reproduzierbar
+  - Notizen: Kein Vergleich beschleunigter und kanonischer TCG-Ergebnisse.
+Feste Benchmarkdateien sind bytegleich. Standard- und SMP4-Headless-Abnahmen endeten mit vollständigem Markervertrag und regulärem Gast-Poweroff.
+
+### Notizen
+Behebt Fable A1 in der Distribution. Hardwarebeschleunigung ist ein Entwicklungswerkzeug und kein Ersatz für Gastmessungen. cache=none bleibt bestehen.
+Abschluss 2026-09-03: Gemeinsame Hostprofilauswahl für GUI, SSH und Headless eingeführt; Linux nutzt bei zugänglichem /dev/kvm KVM/host, Windows beziehungsweise Intel-macOS wählen verfügbares WHPX/HVF, sonst TCG/Haswell. VirtioNet ist interaktiver Standard, RTL8139 expliziter Fallback. Ein erster 1200-s-Gastlauf ohne Panic erreichte den Poweroff nicht; der vorgeschriebene 1500-s-Gegenlauf deckte eine überfüllte Test-Treiberliste auf. VIRTNET blieb daraufhin korrekt im interaktiven Basisprofil, das netzlose Testoverlay bei acht Einträgen. Finale Standard- und SMP4-Headless-Läufe, Full-Imageprüfung sowie reale unsichtbare Full-/SSH-Boots mit VirtioNet und RTL8139 bestanden. Benchmarkkonfiguration und -runner blieben bytegleich. Sammelpush: Distribution a7999db, Docs 5543690, Project 32ce72b.
+
+## 0.75.2 SDK-Allokator mit konstanten Freipfaden
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Den linearen First-Fit- und Rückwärtsscan des von R4X-Anwendungen verwendeten vm_allocator durch messbare Größenklassen und Boundary-Tags ersetzen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Ein einziges deterministisches Host-Testbett mit Fake-R4SYS-VM und internen Zählern für Suchschritte, Split, Koaleszenz und VM-Aufrufe in den bestehenden SDK-Testschritt integrieren
+  - Notizen: Gemischte Größen, Fragmentierung, Alignment, Fehlerrollback und wiederholte Freigabe abdecken; kein neues globales Gate.
+Umgesetzt im vorhandenen SDK-Testschritt: eine Fake-R4SYS-VM mit Aufrufzählern sowie vier deterministische Fälle für gemischte Größen, Fragmentierung, Alignment, Datenhalt, Commit-/Decommit-/Release-Rollback, Resize, direkte Regionen, beschädigte Boundary-Tags, wiederholtes Free und vier parallele Hostthreads mit je 4096 Operationen. Kein neues globales Gate.
+- [Erledigt] #2 Freie Blöcke in begrenzten Größenklassen verwalten und Split-/Merge-Operationen mit konsistenter Ein-/Austragung implementieren
+  - Notizen: Good-Fit darf größere Klassen durchsuchen, aber nicht mehr die gesamte Region.
+20 geometrische Größenklassen von 128 Byte bis 64 MiB und doppelt verkettete Freilisten implementiert. Split und Merge tragen Blöcke konsistent aus und ein. Der erste Gesamtlauf deckte zusätzlich eine echte Race-Condition bei parallelen R4X-Threads auf; ein allokatorlokaler atomarer Lock mit R4SYS-Yield bei Konkurrenz behebt sie, ohne Payloadzugriffe oder Remap-Kopien einzuschließen.
+- [Erledigt] #3 Boundary-Tags oder eine gleichwertige O(1)-Nachbarschaftsstruktur für Koaleszenz und Regionsende einführen und Header-/Footer-Korruption fail-closed zählen
+  - Notizen: Alignment, Mindestblockgröße und bestehende Zero-/Ownership-Semantik erhalten.
+RMA3-Header und RMF3-Footer liefern O(1)-Vorgänger-, Nachfolger- und Regionsendezugriff. Ungültige Header, Footer oder Listenlinks stoppen die Mutation und erhöhen den Korruptionszähler. Alignment, Nullgrößen- und Ownership-Semantik bleiben erhalten; fehlgeschlagene VM-Mutationen lassen den vorherigen Zustand erneut versuchbar.
+- [Erledigt] #4 SDK-Dokumentation, vorhandene Tests und RELEASE_VERSION für 0.75.2 aktualisieren und Vorher-/Nachherwerte im Roadmapabschluss festhalten
+  - Notizen: SDK ist kein eigenes R4M-Artefakt; keine erfundene SDK-Modulversion.
+Core-/SDK-Dokumentation und Docs-/Tests-Inventare gepflegt; Tests.json zählt konsistent 618 Einträge. RELEASE_VERSION ist 0.75.2, ohne SDK-Modulversion und ohne Kerneländerung. SDK-Test sowie kompletter Linux-Workspace mit Imageverify, Standard- und SMP4-Headless bestanden.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Allokations- und Freigabesuchaufwand wächst im Referenzmuster nicht mehr linear mit der Zahl belegter Blöcke
+  - Notizen: Belegt durch dieselbe Hostarbeitslast vor und nach der Änderung.
+Exakt dieselbe 512-Block-Arbeitslast: Legacy First-Fit benötigte 197746 Blockbesuche, 63213 Rückwärtsschritte und 131152 Regionsendbesuche. Neu: 768 freie Kandidaten, 3688 Klassenproben, 255 Vorgänger- und 264 Endproben. Das entspricht 99,61 %, 99,60 % beziehungsweise 99,80 % weniger linearen Besuchen; die Arbeit hängt nun an Klassen und freien Kandidaten.
+- [Erledigt] SDK-Tests und automatisierter Standard-Headless-Lauf bestehen ohne VM-, Alignment- oder Speicherintegritätsregression
+  - Notizen: Keine manuelle Abnahme.
+Vier gezielte SDK-Allokatortests und der volle SDK-Test sind grün. Der erste Systemlauf machte eine parallele Metadatenrace sichtbar; der neue Vier-Thread-Reproduktionstest schlug ohne Lock deterministisch fehl und besteht nach der Synchronisierung. Danach bestanden der vollständige Workspace-Build, NTFSVERIFY sowie Standard- und SMP4-Headless mit allen R4GB-/R4SNES-Markern und regulärem Poweroff.
+
+### Notizen
+RoadmapF A1 bis A3 und Fable C1. Die genaue Klassenanzahl wird aus Messung und Layout bestimmt, nicht aus dem ungeprüften Vorschlagswert übernommen.
+Abschluss 2026-09-03: Lineare Freipfade durch Größenklassen und Boundary-Tags ersetzt. Referenzlast reduziert Kandidaten-/Rückwärts-/Endbesuche von 197746/63213/131152 auf 768/255/264; zusätzlich 3688 begrenzte Klassenproben. Ein im ersten Headless-Lauf entdeckter Parallelitätsfehler wurde als deterministischer Vier-Thread-Hosttest reproduziert und mit einem lokalen Lock behoben. SDK, Gesamtbuild, Imageprüfung, Standard- und SMP4-Headless vollständig grün; keine manuelle Sichtprüfung.
+Sammelpush: SDK 442e7f6, Distribution 025d52e, Docs 32f694d.
+
+## 0.75.3 SDK-Allokator ohne Commit-Thrash
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Wiederholtes Commit/Decommit am Regionsende und Reserve/Release großer temporärer Puffer durch adaptive Wachstums-, Hysterese- und begrenzte Wiederverwendungsregeln reduzieren.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Commit-Schritte geometrisch und bedarfsbegrenzt wachsen lassen sowie einen begründeten, RAM-bewussten Mindestbestand und eine Decommit-Hysterese pro Region einführen
+  - Notizen: Speicherdruck muss zurückgewinnbaren Bestand weiterhin freigeben können.
+Umgesetzt: Small-Regionen starten mit 64 KiB Commit, wachsen geometrisch bis 1 MiB, behalten im Normalbetrieb 256 KiB und decommitten erst ab 512 KiB freiem Top-Tail; expliziter beziehungsweise druckbedingter Trim reduziert freie Regionen auf eine Metadatenseite.
+- [Erledigt] #2 Große direkte Regionen nach Größenklasse begrenzt wiederverwenden und mit klaren Obergrenzen, Zero-Semantik, Druckabbau und vollständigem Cleanup absichern
+  - Notizen: Kein unbeschränkter Prozesscache.
+Umgesetzt: Pro Prozess existiert je eine exakte Wiederverwendungsregion der Klassen bis 2/4/8 MiB, insgesamt höchstens 14 MiB. Alignment-only- und >8-MiB-Zuweisungen bleiben ungecached; Reserve-/Commit-Fehler trimmen begrenzt und versuchen genau einmal erneut.
+- [Erledigt] #3 APPHEAPD und das Host-Testbett für Churn, Peak-Commit, VM-Aufrufzahl, Fehlerpfade und Prozessende erweitern; Klickifax über den bestehenden Browserlauf qualifizieren
+  - Notizen: Bestehende Marker erweitern statt neue globale Tests anzulegen.
+APPHEAPD 0.1.2 prüft 64×192 KiB Small-Churn, 32×1152 KiB Direct-Churn, Inhalte, Alignment, VM-Deltas, Cachegrenze und expliziten Trim. SDK-Hosttests decken Fragmentierung, Fehlerpfade, Beschädigung, Parallelität und exakte Churn-Zähler ab.
+- [Erledigt] #4 Allokator-Dokumentation und RELEASE_VERSION für 0.75.3 abschließen
+  - Notizen: Nur tatsächlich geänderte Modulartefakte erhalten eigene Versionsänderungen.
+Dokumentation und Inventare aktualisiert, Release auf 0.75.3 gesetzt. Standard- und SMP4-Headless waren grün. Die veraltete Browser-AUTOEXEC wurde an die Standarddiagnosen angeglichen; ein frisch gebauter Browser-Headless-Lauf bestand danach alle Standard-, APPHEAPD-, RDP-, Emulator- und Klickifax-Marker.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Die gleiche Churn-Arbeitslast erzeugt reproduzierbar deutlich weniger Reserve-, Commit-, Decommit- und Release-Aufrufe bei begrenztem Mehrverbrauch
+  - Notizen: Rohwerte und Interpretation in den Abschlussnotizen.
+Identische Host-Workloads: Small 1/129/128/0 Reserve/Commit/Decommit/Release → 1/2/0/0; Peak 200 KiB → 260 KiB (+60 KiB, +30 %), expliziter Trim lässt 4 KiB. Direct 64/64/0/64 → 1/1/0/0 mit 63 Cachetreffern; Peak bleibt 1160 KiB, Trim gibt den Cache frei. Zusammen 450 → 7 VM-Aufrufe, also 98,44 % weniger, bei strikt begrenzter Retention.
+- [Erledigt] Hosttests, APPHEAPD, Standard-Headless und Browser-Headless bleiben vollständig grün
+  - Notizen: Kein sichtbarer QEMU-Lauf.
+Grün: vollständige SDK-Hosttests, APPHEAPD-Build, Distribution-Selbsttests, Standard-Headless, SMP4-Headless und frisch neu gebauter Browser-Headless. APPHEAPD meldete in beiden Standardvarianten und im Browserlauf churn=bounded sowie cleanup=trimmed; keine Gastfehler und kontrolliertes Poweroff.
+
+### Notizen
+RoadmapF A4/A5 und restlicher Fable-C1-Umfang; baut auf 0.75.2 auf.
+Abschluss 0.75.3: Adaptive Small-Commit-Hysterese und begrenzter Direct-Cache reduzieren den geprüften VM-Verkehr um 98,44 %. Beim Browser-Gate wurde eine ältere, die Standard-AUTOEXEC überschreibende Overlaydatei entdeckt und synchronisiert; Klickifax bleibt deren einziger zusätzlicher Aufruf. Keine manuellen Sichttests durchgeführt.
+
+## 0.75.4 Schriftindex und Bulk-Glyph-API
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Den Codepoint-zu-Glyph-Pfad im Kernel auf einen kleinen begrenzten Index umstellen und ein vollständiges Glyphbitmap mit einem einzigen append-only R4DRAW-Aufruf bereitstellen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Beim Laden jeder Fontinstanz einen begrenzten Hash- oder sortierten Index aufbauen und alle Mess-/Rasterpfade den Glyphindex je Zeichen nur einmal auflösen lassen
+  - Notizen: Fallback, Unicode außerhalb BMP, Cacheabbau und ungültige Schriften abdecken.
+Umgesetzt: pro geladener Schrift wird einmalig ein auf 256 Einträge begrenzter, sortierter Codepoint-Index aufgebaut. Binärsuche benötigt höchstens 9 Vergleiche; Duplikate behalten den bisherigen niedrigsten Glyphindex. Mess-, Zeilen-, Pixel- und Bulkpfad lösen je Zeichen nur einmal auf. Tests decken Fallback, U+1F642, ungültige/all-sentinel Fonts und Cache-Reset ab.
+- [Erledigt] #2 GuiGlyphBitmap und font_glyph_bitmap append-only in Contract, Generatoren, Kernel-R4DRAW und SDK ergänzen; font_glyph_row kompatibel erhalten
+  - Notizen: hasFn-Fallback und Tabellenrevision gemäß API-/ABI-Regeln.
+Umgesetzt als R4DRAW ABI v6: GuiGlyphBitmap (344 Byte) und append-only Slot 39 bei Offset 328. Der bestehende Zeilenslot bleibt unverändert. Kernel und Zig-SDK liefern den Bulk-Snapshot; bei älteren Tabellen baut das SDK ihn über font_info/font_glyph_row auf. Generierte Zig- und C-Verträge sind synchron.
+- [Erledigt] #3 Bestehende Font- und Contracttests um Indexgleichheit, Bitmapgleichheit, Grenzwerte und fehlende optionale Funktion erweitern
+  - Notizen: Kein neuer eigenständiger Testlauf.
+Bestehende Contract- und Kernel-Testschritte erweitert, kein eigenständiger Testlauf ergänzt. Geprüft werden vollständige Indexgleichheit zur linearen Referenz, Suchgrenze, Bitmap-/Zeilen-/Pixelgleichheit, Unicode/Fallback sowie SDK-Dispatch und fehlender optionaler Bulk-Slot.
+- [Erledigt] #4 API-Dokumentation, Inventare, Kernel-VERSION nur wegen des geänderten Kernelartefakts und RELEASE_VERSION für 0.75.4 pflegen
+  - Notizen: Generierte Artefakte vollständig synchronisieren.
+Contract-Generator und sämtliche generierten Artefakte, API-/SDK-Dokumentation und Inventare aktualisiert. Kernel 0.1.73; Distribution RELEASE_VERSION 0.75.4. BOM der R4S-Dateien erhalten.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Glyphen und Textmetriken sind pixel- beziehungsweise wertgleich, während eine Glyphabfrage unabhängig von der Fontgröße ohne linearen Pro-Pixel-Scan auskommt
+  - Notizen: Automatisierter Vergleich gegen die bisherige Referenzlogik.
+Automatisierter Exhaustivvergleich des sortierten Index gegen die frühere lineare Suche ist grün; synthetische externe Schrift bestätigt identische Metriken und Zeilenmasken in Bulk-, Zeilen- und Pixelpfad. Die Suche bleibt auf höchstens 9 Indexvergleiche begrenzt und findet nicht mehr innerhalb der Pixelabfrage statt.
+- [Erledigt] Alter Zeilenvertrag und neuer Bulk-Vertrag bestehen Contract-, Kernel- und SDK-Tests
+  - Notizen: Kompatibilität bleibt append-only.
+Contract-Tests (6 Gruppen/322 Slots/137 Payloads, 26 Mutationsprüfungen), Kerneltests (258), SDK-Tests, Standard- und SMP4-Headless-Profil sowie Browserprofil einschließlich Klickifax/KlickifaxLive und Langläufen sind grün. Keine sichtbare oder manuelle QEMU-Prüfung durchgeführt.
+
+### Notizen
+RoadmapF B1/B2 und Fable E1. Eine pauschale 128-KB-Direkttabelle je kleiner Schrift wird wegen des Speicherverhältnisses nicht übernommen.
+Abschlussnachweis: vollständiger Workspace-Test (Standard und SMP4) sowie Browserprofil erfolgreich. R4DRAW-Erweiterung ist append-only; alte Anbieter werden über hasFn erkannt und kompatibel über den Zeilenvertrag bedient. Keine manuellen Sichttests vorweggenommen.
+
+## 0.75.5 Desktop-Glyphcache und inkrementelles Terminal
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Glyphabdeckungen im Desktop wiederverwenden und Terminalrevisionen nur für tatsächlich geänderte Zeilen neu parsen beziehungsweise zeichnen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Einen festen Glyph-Coverage- und Fontlayout-Cache nach Font-ID, Fontrevision und Codepoint einführen und bei Fontwechsel vollständig generationensicher invalidieren
+  - Notizen: Farben erst beim Blit anwenden, damit nicht jede FG-/BG-Kombination eine Bitmap dupliziert.
+Desktop besitzt feste direkte Caches für 16 Fontlayouts und 256 Glyphabdeckungen, geschlüsselt nach Font-ID, nichtnulliger R4DRAW-Fontrevision und Codepoint. Abdeckungen bleiben farbneutral; FG/BG werden erst beim Blit angewandt. R4DRAW v7 ergänzt font_revision, Kernel 0.1.74 erhöht die Generation nach erfolgreichem Reload; SDK-Fallback für ältere Tabellen ist Revision 1.
+- [Erledigt] #2 Terminal-Snapshots mit dem vorherigen sichtbaren Zustand vergleichen, append-only Suffixe inkrementell verarbeiten und nur geänderte Zeilen plus Cursorbereich als Damage melden
+  - Notizen: Vollaufbau bei Ringüberlauf, Scrollsprung, Größe, Font oder Codepage.
+Der Desktop hält begrenzte Roh- und sichtbare Snapshots sowie bis zu 256 Zeilenbeschreibungen. Bei exaktem Präfix wird nur das Suffix geparst; geändert werden ausschließlich abweichende Zeilen sowie alter/neuer Cursor. Vollaufbau erfolgt bei Ringverlust, Präfixänderung, Scroll-/Geometrie-, Farb-, Font- oder Codepagewechsel.
+- [Erledigt] #3 Vorhandene Desktop-Pixelhash-, Damage-, Terminal- und Browser-Headless-Nachweise um Cachetreffer, übersprungene Zeilen und korrekten Vollfallback erweitern
+  - Notizen: Keine neue globale Markersuite und keine manuelle Prüfung.
+Bestehende Paint-/Draw-Tests prüfen Cachetreffer, identische und umgefärbte Pixel, Revisionsinvalidierung, Suffixparser, geänderte/übersprungene Zeilen und sämtliche Vollfallbacks. Der vorhandene Desktop-Headless-Nachweis protokolliert Pixelhash und Zähler. Standard- und Browserlauf meldeten HEADLESS TEST OK.
+- [Erledigt] #4 GUI-/Desktop-Dokumentation, Desktop-Modulversion und RELEASE_VERSION für 0.75.5 aktualisieren
+  - Notizen: Nur geänderte Artefakte erhöhen.
+Desktop-, SDK-, zentrale R4DRAW- und Displayarchitektur-Dokumentation sowie Docs-/Testinventare aktualisiert. Zusätzlich erkannte veraltete Leserfassungen von R4SYS, R4DESK und ZigCParity mit der generierten Wahrheit synchronisiert. Versionen: R4DESK 0.1.33, Kernel 0.1.74, Release 0.75.5.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Wiederholter Text nutzt überwiegend Cachetreffer und eine typische Terminalausgabe zeichnet nur die geänderten Zeilen, bei identischem automatisiertem Pixelresultat
+  - Notizen: Zähler und Pixelhash im Abschluss dokumentieren.
+Erfüllt. Standard: 141581 Glyphtreffer bei 69 Misses/Loads und 6925 Layouttreffern; Browser: 143431/69/69 und 7017. Beide liefern pixel_hash=861952850052885893. Terminal jeweils incremental/full=4/2, Parse 101/71 verarbeitet/übersprungen, Zeilen 7/4 geändert/übersprungen.
+- [Erledigt] Standard- und Browser-Headless-Läufe bestehen ohne manuellen QEMU-Sichttest
+  - Notizen: Die reale Sichtprüfung bleibt 0.75.21 vorbehalten.
+Erfüllt durch ./Tools/Build.sh -test und ./Tools/Build.sh -testbrowser, jeweils mit vollständiger Markerprüfung, R4GB-/R4SNES-Dauerberichten, Poweroff und Errors: none. Keine manuelle oder sichtbare QEMU-Prüfung durchgeführt.
+
+### Notizen
+RoadmapF B3 bis B5 und Fable E3; baut auf 0.75.4 auf. Der im Rohreport verlangte manuelle QEMU-Sichttest ist ausdrücklich gestrichen.
+Umgesetzt: generationensicherer farbneutraler Desktop-Glyphcache, inkrementelle Terminal-Suffixauswertung mit zeilengenaurem Damage und dokumentierte Vollfallbacks. R4DRAW v7 stellt die Fontkataloggeneration bereit. Standard und Browser headless bestanden; kein manueller oder sichtbarer QEMU-Test. Standard: glyph_hits=141581, misses/loads=69/69, layout_hits=6925, pixel_hash=861952850052885893, terminal incremental/full=4/2, parse verarbeitet/übersprungen=101/71, Zeilen geändert/übersprungen=7/4. Browser: glyph_hits=143431, misses/loads=69/69, layout_hits=7017 bei identischem Hash und identischen Terminalzählern.
+
+## 0.75.6 Adaptive Pagecache-Kapazität und sichere Zwei-Seiten-Fills
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Zusammenhängende Cache-Misses konservativ in diagnostisch abgesicherten Zwei-Seiten-Runs füllen, die Cachekapazität an RAM und Speicherdruck anpassen und spekulatives Read-Ahead nur bei nachgewiesener Stabilität zulassen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Zusammenhängende fehlende Seiten sicher gemeinsam reservieren und in diagnostisch abgesicherten Zwei-Seiten-Runs über einen Blockrequest füllen
+  - Notizen: Identitäten bleiben io_busy-gepinnt; Dirty-Kohärenz, Fehlerrollback, Backend-Retry-Besitz und wartende Leser bleiben erhalten. Größere Runs sind bis zur geklärten Ursache gesperrt.
+- [Erledigt] #2 Kopier- und Lockkosten messen und nur mit nachgewiesener Frame-/Aufrufer-Pinnung reduzieren; niemals unter Cachelock in einen möglicherweise faultenden Zielpuffer schreiben
+  - Notizen: Der ungesicherte Direktkopievorschlag aus RoadmapF wird nicht übernommen.
+- [Erledigt] #3 Cachekapazität RAM- und druckabhängig begrenzen sowie spekulatives Read-Ahead experimentell prüfen und bei fehlender Stabilität deaktiviert lassen
+  - Notizen: Aktive Kapazität 64 bis 512 Seiten mit Druckstufen; 1 MB entspricht 1024 KB. Das begrenzte Read-Ahead-Modell ist unit-getestet, darf nach den Subsystem-/AUTOEXEC-Befunden aber keine I/O ausgeben.
+- [Erledigt] #4 Bestehende Pagecache-/Block-/Reclaimtests, FSDIAG und Storage-Telemetrie erweitern sowie Dokumentation, Kernel-VERSION und RELEASE_VERSION 0.75.6 abschließen
+  - Notizen: Keine neue globale Suite, sofern die bestehenden Nachweise die Grenze abdecken.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Ein zusammenhängender Mehrseiten-Miss benötigt reproduzierbar weniger Backendanforderungen und Lockwechsel als zuvor, ohne zusätzliche Kopie unsicher zu entfernen
+  - Notizen: Requests, Seiten pro Fill, Bytes und Fehlerpfade als Rohzähler festhalten.
+- [Erledigt] Pagecache-Kohärenz, Writeback, Reclaim und Standard-Headless bleiben grün
+  - Notizen: Große Dateien dürfen den Cache begrenzt beanspruchen, aber keine Dirty-Daten umgehen.
+
+### Notizen
+RoadmapF C1/C2 und Fable D1 geprüft. Zwei-Seiten-Demand-Fills halbieren beim FSDIAG-Kaltlauf die Backendanforderungen (256 Seiten/128 Requests). Größere Runs und alle getesteten spekulativen Read-Ahead-Varianten wurden wegen intermittierender beziehungsweise reproduzierbarer Fehler im langen Subsystem-/AUTOEXEC-Ablauf nicht freigegeben. Die zweite Kopie bleibt als Schutz pageable Aufrufer erhalten.
+
+## 0.75.7 Gezielte NTFS-Metadatencache-Invalidierung
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die heute bei jedem Sektorwrite globale Löschung des bereits vorhandenen Record-, Attribut-, Index- und Pfadcaches durch mutationsbezogene, korrektheitsbewusste Invalidierung ersetzen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 NTFS-Schreiboperationen als reine Nutzdaten-, Record-, Attribut-, Verzeichnisindex-, Systemmetadaten- oder unbekannte Mutation klassifizieren und betroffene Record-/Directory-Identitäten durchreichen
+  - Notizen: Unbekannte, externe und Recovery-Mutationen bleiben konservativ global.
+- [Erledigt] #2 Gezielte Invalidierungs- und Updateoperationen für Record, Attribut, Index und abhängige positive/negative Pfade implementieren; reine Payloadwrites dürfen unveränderte Metadaten behalten
+  - Notizen: Publikations- und Crashreihenfolge des bestehenden Writers bleibt maßgeblich.
+- [Erledigt] #3 Vorhandene NTFS-Hosttests und FSDIAG um Wiederholungsreads, Append/Resize/Rename/Delete, Teilausfall und Recovery mit Treffer-/Invalidierungszählern erweitern
+  - Notizen: Stale-Metadata-Fälle explizit negativ prüfen.
+- [Erledigt] #4 Dateisystemdokumentation, Testinventar, Kernel-VERSION und RELEASE_VERSION 0.75.7 aktualisieren
+  - Notizen: Keine zweite Metadatenwahrheit einführen.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Reine Dateidatenwrites leeren nicht mehr den gesamten NTFS-Metadatencache; bekannte Metadatenmutationen entfernen exakt ihre abhängigen Einträge
+  - Notizen: Durch Zähler und Hosttests belegt.
+- [Erledigt] Alle Namespace-, Registry-/Settings-, Recovery- und FSDIAG-Pfade bleiben korrekt und vollständig automatisiert grün
+  - Notizen: Korrektheit hat Vorrang vor Trefferquote.
+
+### Notizen
+RoadmapF C3 und Fable D4 in korrigierter Form: Attribut-/Runlistcaching existiert bereits; neu ist nur die präzise Mutationsgrenze.
+Abschluss 2026-09-03: Alle NTFS-Schreibpfade sind als Payload-, Record-, Attribute-, Directory-, cacheunabhängige System-, unbekannte oder Recovery-Mutation klassifiziert. Bekannte Metadatenmutationen invalidieren nur abhängige Record-/Attribut-/Index-/Pfadslots; reine Payload- und $MFTMirr-Schreibvorgänge behalten den Cache. Unbekannte, externe und Recovery-Grenzen bleiben global. Hostnachweis: 1000 Churn-Operationen und 98 Crashläufe über sieben Fehlerarten grün; Cachezähler payload=4, system=10, targeted=16/6/6, global=1, recovery=1. Der erste Gastlauf deckte einen alten v13-Default im auf v14 erweiterten Performance-Payload auf; kanonischer Contract und Baseline wurden auf Version 14/6272 korrigiert und neu generiert. Danach waren Contract-Selbsttest sowie Standard- und SMP4-Headless vollständig grün. Beide Gastläufe melden targeted=22, payloadKeep=6, systemKeep=8, global=0 und content generation 2->2. Keine manuelle Sichtprüfung.
+
+## 0.75.8 Gebufferter R4M0-Metadatenleser
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Header, Tabellen, Namen und Relocationdaten aller R4M0-Modularten aus wenigen begrenzten sequentiellen Fenstern lesen, während große Sections weiter direkt ins Ziel gelangen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Mit vorhandenen LoaderDiag-Großfixtures range_reads, Bytes, Fenster und wiederholte Tabellen-/Namenszugriffe für R4X, R4L, R4D und R4P als Baseline erfassen
+  - Notizen: Bestehende Statistiken verwenden und nur fehlende Felder ergänzen.
+Gemessen auf denselben LoaderDiag-/Produktfixtures: LSTRX 25 auf 7 Reads je Start (vier Starts: 100 auf 28), LSTRL 16 auf 6, LSTRD 31 auf 6, LSTRP 94 auf 6, R4TLS-Demand 108 auf 15, R4GB 55 auf 22 und R4SNES 77 auf 44.
+- [Erledigt] #2 Einen gemeinsamen bounded memory reader für zusammenhängende Metadatenfenster einführen und Section-, Export-, Import-, Z-String- und Relocationreader darauf umstellen
+  - Notizen: Harte Obergrenze mit sicherem Range-Fallback; keine unbeschränkte Dateikopie.
+Umgesetzt in kernel/module_file.zig: zwei 4096-Byte-Fenster mit begrenztem LRU, exakten Datei-/Offsetbounds, nur bei vollständig vorhandenem angefordertem Bereich gültigen Teilfills und Direktreads oberhalb der Fenstergröße. Kapazität bleibt fest bei 8192 Byte; Reads, physische Bytes, logische Reads, Hits, Fills und Direktreads werden gezählt.
+- [Erledigt] #3 Doppelte Import-/Export- und Namenslesevorgänge beseitigen, direkte Section-Reads sowie genaue Fehleroffsets, Bounds, Relocationen und Rollback erhalten
+  - Notizen: Alle vier Modularten nutzen denselben Contract, soweit fachlich gemeinsam.
+R4X, R4L, R4D und R4P verwenden den gemeinsamen Reader für Header, Tabellen, Namen und Relocationen. Doppelte Lesevorgänge wurden entfernt; große Sections gehen weiterhin direkt ins Ziel. Bestehende Bounds-, Fehleroffset-, Relocation-, Rollback- und Fail-closed-Semantik blieb durch Owner- und Fixturetests erhalten.
+- [Erledigt] #4 Loader-/Moduldokumentation, vorhandene Tests, Kernel-VERSION und RELEASE_VERSION 0.75.8 abschließen; SMP4-Headless ausführen
+  - Notizen: Keine Browser- oder manuellen Sichttests in 0.75.X.
+ProgramPerformanceSummary v15 append-only erweitert; kanonischer Contract-SHA-256 783f877d1ae757f150fd11170ff028a8f8f3d6450faae2b6b11b7db071276c3. Contract-Generierung/Check/Selftest, Kerneltest, LoaderDiag- und PerformanceDiag-Build, Distribution-Hosttest, Imageprüfung und SMP4-Gastabnahme bestanden. SMP4: 4/4 CPUs online, produktiver AP, Kernel-Skalierung 2978 milli und reguläres Poweroff. Ein einmaliger R4SNES-Audio-Discard-Wert von 1920 war in zwei unveränderten SMP4-Wiederholungen nicht reproduzierbar; R4SNES blieb unverändert. Kein Browser- oder manueller Sichttest.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Große valide Module benötigen deutlich weniger VFS-Range-Reads bei begrenztem Peakpuffer und identischem geladenem Image
+  - Notizen: Vorher-/Nachherwerte je Modulart dokumentieren.
+Physische Reads sanken je nach geprüfter Last um 43 % bis 86 %: LSTRX -72 %, R4TLS -86 %, R4GB -60 %, R4SNES -43 %; R4L/R4D/R4P liegen bei 6 Reads. Peakpuffer exakt 8192 Byte, große Sections unverändert direkt, geladene Inhalte und Marker identisch.
+- [Erledigt] Valide, beschädigte, veraltete und künstlich große R4M0-Fixtures behalten exakt ihre Erfolgs- oder Ablehnungssemantik
+  - Notizen: Loadertests und SMP4-Headless grün; Browserläufe sind in 0.75.X nicht Teil der Abnahme.
+Alle Contract-/Kernel-/LoaderDiag-Fixtures und der finale SMP4-Systemlauf bestanden. Gültige Module laden, absichtlich beschädigte/veraltete Varianten werden weiterhin an denselben Sicherheitsgrenzen verworfen; 4/4 CPUs, Produktlasten und sauberes Poweroff bestätigt. Browserläufe sind ausdrücklich nicht Teil von 0.75.X.
+
+### Notizen
+RoadmapF C4/C5 und Fable D3. Sections und Relocations sind bereits teilweise gebündelt; geplant wird nur der verbleibende Range-Read-Overhead, kein pauschaler Ganzdateipuffer.
+Abschluss 2026-09-03: Gemeinsamer begrenzter Metadatenleser für R4X/R4L/R4D/R4P mit zwei 4-KiB-LRU-Fenstern (feste Gesamtkapazität 8 KiB), sicherem Direktpfad für größere Reads und vollständiger Telemetrie. Große Modulstarts benötigen deutlich weniger physische Range-Reads bei unveränderter Lade-/Ablehnungssemantik. Contract v15, Kernel 0.1.77, LoaderDiag 0.1.9, PerformanceDiag 0.3.19 und RELEASE_VERSION 0.75.8. Owner-, Contract-, Image- und finale SMP4-Nachweise grün; Browserläufe wurden nach der neuen Roadmapregel nicht ausgeführt. Sammelpush: Contract 4d0bb14, Kernel 2e17741, LoaderDiag fa1a5c1, PerformanceDiag 15536a3, Distribution 0254aab, Docs 2c0a3ec, Project e330de2.
+
+## 0.75.9 TSC-basierte logische Zeit
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die häufige logische tickCount-Abfrage von HPET-MMIO plus u128-Division auf einen kalibrierten invariant-TSC-Fastpath mit Multiply/Shift umstellen; HPET/LAPIC bleiben Ereignisquellen und Fallback.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Eine gemeinsame kalibrierte Clocksource für logische Ticks mit fester Multiply-/Shift-Konvertierung entwerfen und HPET-basierte Referenz/Fallback erhalten
+  - Notizen: Keine u128-Division im normalen tickCount-Fastpath.
+- [Erledigt] #2 Invariant-TSC-Fähigkeit, CPU-übergreifenden Offset/Skew, Wrap, Suspend-/Idle-Verhalten und monotones Clamp fail-safe behandeln
+  - Notizen: Bei ungeeigneter Hardware automatisch auf den bisherigen Pfad zurückfallen.
+- [Erledigt] #3 Clock-, Scheduler-, IRQ- und Deadline-Selbsttests auf vier CPUs erweitern und genau einen regulären warmen perfdiag-clock-Lauf mit fünf Samples importieren/vergleichen
+  - Notizen: Kanonische Environment-ID und Benchmarkablauf aus Agents/Benchmark.txt.
+Der erste und einzige regulaer angesetzte Lauf wurde nicht importiert: Der explizite Request verlangte PerformanceDiag 0.3.19, waehrend der Maschinenblock wegen einer veralteten Quellkonstante faelschlich 0.3.18 meldete. Request, Seriallog und Datenimage wurden unter Temp/0.75.9-invalid-benchmark-module-version gesichert. Dies ist eine konkret belegte technische Notwendigkeit fuer genau einen Ersatzlauf nach Korrektur der Versionsidentitaet; es werden keine Messwerte des ungueltigen Laufs uebernommen.
+- [Erledigt] #4 Zeit-/Kernel-Dokumentation, Kernel-VERSION und RELEASE_VERSION 0.75.9 aktualisieren
+  - Notizen: Eventtimer und logische Clocksource klar trennen.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Logische Zeit bleibt auf allen CPUs monoton und deadlinekompatibel, mit nachweislich geringerem clock-Aufwand auf der kanonischen Benchmarkumgebung
+  - Notizen: Rohsamples, p50/p95 und Fallbackstatus im Abschluss.
+- [Erledigt] HPET-Fallback, IRQ-Timing und SMP4-Headless bestehen
+  - Notizen: Keine manuelle Zeit- oder GUI-Prüfung.
+
+### Notizen
+Fable B3. Die bereits vorhandene monotone TSC-Infrastruktur wird wiederverwendet statt eine zweite Uhr zu schaffen.
+Abschlussnachweis 0.75.9: Der SMP4-Kurzlauf -testquick endete nach dem CLOCKPROBE-Marker, bevor R4GB/R4SNES gestartet wurden: 4/4 CPUs aktiv, SMPPROBE speedup_milli=3486, Clocksource=TSC, registered_mask=0xF, regressions=0, irq_delta=26, generation=2, max_skew_ns=33 und fallback=none. Der gueltige kanonische Ersatz-Benchmark (der erste Lauf war wegen der dokumentierten 0.3.18/0.3.19-Metadatenabweichung ungueltig und wurde nicht importiert) lieferte mit PerformanceDiag 0.3.19 warm die Rohsamples [507,506,494,559,489] ns/call, min=489, p50=506, p95=559, p99=559, max=559, mean=511; clock_source=tsc und alle Samples ohne Regression. Import und Historienvalidierung sind gruen. Der automatische Vergleich hat keinen Vorgaenger in der zuvor nicht vorhandenen kanonischen JSONL-Historie; 0.75.9 ist daher deren neue formale Basis. Gegen das vor Arbeitsbeginn vorhandene, nicht importierte 0.69.67-Artefakt [1005,981,992,977,992], p50=992, p95=1005, mean=989 sinkt der Mittelwert um 478 ns/call beziehungsweise 48,3 Prozent.
+
+## 0.75.10 Kernel-Heap und gebündelte Seitenverwaltung
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Commit/Uncommit-Churn des Kernel-Heaps reduzieren und zusammenhängende VM-Bereiche mit gebündelter Frame-, Block- und Mappingbuchführung bearbeiten.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Heap-Churn, Commit/Release und Poisonbytes mit dem vorhandenen Heapcheck messen; Commit geometrisch wachsen und trailing release mit RAM-/Druck-Hysterese begrenzen
+  - Notizen: Poisoning nicht pauschal deaktivieren. Eine Änderung daran verlangt einen gleichwertigen UAF-Nachweis und einen isolierten Messbefund.
+Umgesetzt: Der Kernel-Heap waechst ab 16 Seiten geometrisch bis zu einem 256-Seiten-Schritt; groessere Einzelbedarfe bleiben exakt. Der freie Endbereich besitzt einen RAM-abhaengigen Low-Watermark (mindestens 16, hoechstens 256 Seiten), Freigabe erst oberhalb des doppelten Bestands und sofortige Rueckgabe unter PMM-Druck (max(total/32, 512 Frames)). 0xDD-Poisoning blieb vollstaendig aktiv und ist bytegenau zaehlbar. Kurzer SMP4-Nachweis: 16 x 192 KiB, commit_calls=1, commit_pages=256, uncommit_calls=1, release_suppressed=15, poison_bytes=3145856, retained_pages=59.
+- [Erledigt] #2 PMM-/Physical-Block- und Paging-Schnittstellen für zusammenhängende Frame-Extents beziehungsweise Batches ergänzen und Commit/Uncommit ganzer Bereiche darauf umstellen
+  - Notizen: Zero-Garantie, Eigentum, Teilerfolg und vollständiger Rückrollpfad bleiben erhalten.
+Umgesetzt: Eager VM-Commit nutzt natuerlich benachbarte PMM-Extents bis 64 Seiten ohne Contiguous-Gesamtsuche. Free-/Claimed-Praefixe werden am Physical-Block-Baum vorgeprueft; ein Extent erhaelt einen Claim. Paging mappt bounded batches mit vollstaendigem PTE-Rollback bei Fehler, Unmap mutiert erst nach kompletter Frame/PTE-Vorpruefung. Nullung erfolgt ueber das gesamte Extent; PhysicalReleasePlan und PMM-Freigabe bleiben eine Transaktion. Im Kurzlauf wurden 256 Seiten als 4 Extents, 4 Blockclaims, 4 Map- und 4 Unmap-Batches verarbeitet.
+- [Erledigt] #3 Heap-, VM-, Reclaim-, Page-State- und SMP-Tests erweitern und genau einen warmen perfdiag-memory-metadata-Lauf mit fünf Samples importieren/vergleichen
+  - Notizen: Alle vier katalogisierten Memory-Metadata-Phasen auswerten.
+Gruen: Kernel-Build 103/103 Schritte und 303/303 Tests; Distribution-Owner-/Marker-/Benchmark-Gates; Testimage; ausschliesslich kurzer SMP4-Gastlauf bis CLOCKPROBE (4/4 CPUs, HEAPPROBE OK, keine R4GB-/R4SNES- oder Browsertests). Genau ein regulaerer Lauf: r4os-0.75.10-perfdiag-memory-metadata-warm-20260903t201450996z-2f828933, warm, n=5, feste 1-vCPU-TCG-Umgebung. Mittelwerte: Reserve/Commit 24561 ns/page, Fault 40385 ns/page, Page-State 60058 ns/page, Reclaim 5152087 ns/frame. Alle Checks, Reclaim- und Rollbackzaehler gruen; vier Metriken importiert, Historie mit 5 Records valide. Fuer jede Identitaet existiert erst ein Record, daher ist 0.75.10 die neue formale Basis und ein Vorgaengervergleich methodisch nicht moeglich.
+- [Erledigt] #4 Speicherverwaltungsdokumentation, Kernel-VERSION und RELEASE_VERSION 0.75.10 abschließen
+  - Notizen: 1 MB = 1024 KB.
+Dokumentiert in Docs/Core/Speicherverwaltung.txt und Docs-Inventar auf 0.75.10 aktualisiert. Versionen: Kernel 0.1.79, Release 0.75.10. Veroeffentlicht: Kernel 37cd887, Distribution ebd33a0, Docs ce27ff5.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Repräsentativer Heap-/VM-Churn verursacht weniger Commit-, Uncommit- und Blockbaumoperationen bei weiterhin begrenztem reklamierbarem Bestand
+  - Notizen: Telemetrie und Speicherobergrenzen dokumentieren.
+Abgenommen: Der repraesentative 16-fache 192-KiB-Churn benoetigt einen Commit und einen Uncommit statt je eines pro Durchlauf. 256 Seiten wurden in vier begrenzten natuerlichen Extents/Claims bearbeitet. 15 Releases blieben durch Hysterese unterdrueckt; 59 freie Seiten sind RAM-begrenzt reklamierbar und Druck setzt das Ziel auf null.
+- [Erledigt] Memory-Metadata-Benchmark und alle Fehlerrollback-/Reclaim-Nachweise sind grün und zeigen keine relevante Gegenregression
+  - Notizen: Poison- und Zero-Semantik bleiben nachweisbar.
+Abgenommen: Der einzige 5-Sample-Memory-Metadata-Lauf bestand alle vier Phasen; jeder Sample reclaimte mindestens die acht Ziel-VM-Frames, vm_failures=0 und block_claim_rollbacks=0. Mapping-Batches hatten im SMP4-Nachweis keinen Fehler, Zeroing bleibt vor Publikation ueber das gesamte Extent erhalten und Poisoning lieferte den erwarteten Vollbyte-Delta. Mangels identischem Historienvorgaenger liegt keine belastbare Gegenregression vor; der Lauf ist die neue Basis.
+
+### Notizen
+Fable C2/C3. Vollständiges Poisoning bleibt zunächst Sicherheitsvorgabe; 2-MB-Hugepages und der seltene Contiguous-Scan werden nicht ohne neue Evidenz aufgenommen.
+Abschluss 0.75.10: Kernel-Heap-Churn ist durch geometrisches Wachstum und druckadaptive Hysterese begrenzt; eager VM-Bereiche verwenden natuerliche 64-Seiten-Extents mit gebuendelter Physical-Block-/Paging-Buchfuehrung. Poison- und Zero-Semantik bleiben erhalten. Geprueft wurden Hosttests, der kurze SMP4-Lauf und genau ein katalogisierter Benchmark; keine Single-CPU-, R4GB-/R4SNES-Langlauf- oder Browsertests. Commits: Kernel 37cd887, Distribution ebd33a0, Docs ce27ff5.
+
+## 0.75.11 SMP-TLB-Kohärenz und Sperrgrundlage
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Vor dem Auflösen des globalen Legacy-Locks einen bestätigten Cross-CPU-TLB-Shootdown und eine vollständige, messbare Besitzer- und Lockordnung für mutable Kernelzustände schaffen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Adressraum- und Mappingmutationen inventarisieren und einen generationen-/adressbereichsgebundenen TLB-Shootdown per IPI mit Bestätigung, Timeout und sicherer Fehlerreaktion implementieren
+  - Notizen: Lokales invlpg allein genügt auf SMP nicht; keine Freigabe vor Bestätigung betroffener CPUs.
+F2-Shootdown mit Generation, Bereich und CPU-genauer Bestätigung umgesetzt. Online-Snapshot, explizite Offline-Ausnahme und begrenzter Timeout sind enthalten. Bei fehlendem Ack werden PTEs wiederhergestellt und Frames nicht freigegeben.
+- [Erledigt] #2 Alle saveAndDisable-Nutzer fachlichen Besitzern und Lockklassen zuordnen sowie Legacy-Lock-Wartezeit, Haltedauer, Aufruferklasse und CPU-Kollision begrenzt instrumentieren
+  - Notizen: Diagnose darf selbst keinen rekursiven Logging-/Lockpfad erzeugen.
+Alle 164 verbliebenen Aufrufe in 17 Dateien sind elf expliziten Klassen zugeordnet; der unklassifizierte Einstieg wurde entfernt. Erfasst werden Erwerbe, Verschachtelung, CPU-Kollisionen, Warte-Spins sowie maximale Warte- und Haltedauer ohne Logging im Lockpfad.
+- [Erledigt] #3 Explizite lokale IRQ-Guards und Owner-Locks für Page Tables/VM als erste Migration einführen und Lockreihenfolge samt IRQ-Kontext dokumentieren
+  - Notizen: Keine pauschale Ersetzung ohne Besitzervertrag.
+Reentrante IRQ-off-Owner-Locks für VM (Rang 10), Seitentabellen (20) und physischen PMM-/MemoryBlock-Zustand (30) eingeführt. Uncommit folgt VM -> Page Tables -> Physical und gibt Frames erst nach erfolgreichem Shootdown frei.
+- [Erledigt] #4 TLB-, Unmap-/Reclaim- und Prozessende-Nachweise abschließen; anschließend nur den kurzen markerbegrenzten SMP4-Smoke ausführen sowie Kernel-VERSION und RELEASE_VERSION 0.75.11 pflegen
+  - Notizen: Stale-TLB- und fehlende-Ack-Fälle automatisiert erzwingen. Der Gastlauf endet an den Diagnosemarkern vor Userland, R4GB und R4SNES.
+Kernel 0.1.80 und Release 0.75.11. Native Kerneltests, Distribution-Marker-Selbsttests, Testimage/NTFS-Verify und kurzer SMP4-Smoke bestanden. Log: Artifacts/Distribution/Logs/qemu-test-clock4.log, SHA-256 95290d178e8786750b9412c5a3034c50240224da2b97b2056b701ffcb5677c04. Der Lauf endete bei CLOCKPROBE vor Userland/R4GB/R4SNES; keine Browser- oder Sichttests.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Unmap, Decommit und Adressraumabbau können auf SMP erst nach bestätigter Invalidierung aller betroffenen CPUs Speicher wiederverwenden
+  - Notizen: Positive und Timeout-/Offline-CPU-Fälle sind maschinenprüfbar.
+SMP4-Nachweis: ready_mask=updated_mask=0x0000000F, stale_failures=0. Der absichtlich verlorene Remote-Ack wurde als Timeout abgelehnt; Mapping und physischer Frame blieben erhalten. timeouts=expected_timeouts=1, cleanup=yes.
+- [Erledigt] Für die nachfolgende BKL-Migration liegt eine vollständige Besitzer-, Reihenfolge- und Contention-Baseline vor
+  - Notizen: Keine ungeklärte Lockklasse in einem normalen Lauf.
+Normaler SMP4-Lauf: unclassified=0, classified_classes=11, owner_classes=3, order_violations=0. Contention-, Warte- und Haltedauerwerte werden als Baseline ausgegeben; Besitzer und Reihenfolge sind in Core/Parallelitaet.txt und Agents/Konventionen.txt dokumentiert.
+
+### Notizen
+Erster Teil von Fable B1; zwingende Korrektheitsvorbedingung für feinere SMP-Synchronisation.
+Abschluss: Die erste Ausführung deckte zusätzliche Shootdown-Timeouts beim Ausscheiden der Probe-Worker auf. Worker bleiben nun bis zum Abschluss der Speicherproben aktiv; wartende Task-Kontext-Nutzer des Legacy-Locks können das höher priorisierte TLB-IPI bedienen. Der abschließende Test war ausschließlich der kurze SMP4-Smoke (ca. 13 s) bis CLOCKPROBE; kein R4SNES-Langlauf.
+
+## 0.75.12 Legacy-BKL auflösen und Logausgabe bündeln
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Den globalen Spinlock aus normalen SMP-Hotpaths entfernen, indem Scheduler, Speicher, IPC, Timer und Treiberarbeit ihre eigenen geordneten Synchronisationsgrenzen verwenden; serielle Strings werden als Spannen statt byteweise geschützt ausgegeben.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Scheduler/Runqueues, Heap/PMM, Service-/IPC-Kern, Timer/Idle und Driver-Work schrittweise vom Legacy-Serialisierungslock auf lokale IRQ-Guards und Owner-Locks migrieren
+  - Notizen: Umgesetzt in Kernel 42707a1: Der alte klassenbasierte Globalpfad wurde in den gemeinsamen Scheduler-Runtime-Owner und zehn geordnete No-Sleep-Owner fuer Programmzustand, Storage, Netzwerk, Driver-Work, Heap, VM, Seitentabellen, PMM, Bootlog und Serialausgabe zerlegt. Service-Registry und IPC behalten ihre vorhandenen gerankten Mutex-Owner; USB-Deadline-Sampling nutzt nur einen lokalen IRQ-Guard. Owner-Rangtests verbieten Rueckwaerts- und gleichrangige I/O-Verschachtelung. Der kurze SMP4-Lauf absolvierte 256 Heap-Owner-Zyklen auf Maske 0xF mit 0 Fehlern und 0 Ordnungsverletzungen.
+- [Erledigt] #2 Kernel-Logging um einen internen Bulk-Sink ergänzen, der Strings mit einer begrenzten UART-Drainoperation und ohne saveAndDisable/inb je Zeichen ausgibt
+  - Notizen: Umgesetzt in Kernel 42707a1: Kernel-puts reicht komplette Spannen an einen optionalen COM1-Bulk-Sink. Pro Spanne wird der Serial-Owner einmal genommen und hoechstens eine nichtblockierende FIFO-Drainentscheidung ausgefuehrt. Einzelzeichen, Interception-Hooks sowie begrenzte Panic-/Poweroff-Synchronausgabe bleiben erhalten. Der Hosttest com_tx_policy prueft Reihenfolge, Ringueberlauf und FIFO-Grenze.
+- [Erledigt] #3 Globalen Lock im normalen saveAndDisable-Pfad erst entfernen, wenn Instrumentierung keine unbesessene gemeinsame Mutation mehr zeigt; einen ausdrücklich begrenzten Frühboot-/Crashpfad dokumentieren
+  - Notizen: Umgesetzt und dokumentiert: CallerClass, saveAndDisableFor und der globale Legacy-BKL wurden entfernt. Nur Scheduler, Taskzustand, Waitqueues und IRQ-Praeemption teilen noch den fuer den Kontextwechsel notwendigen Runtime-Owner; alle unabhaengigen Mutationen besitzen explizite Owner. Fruehe lokale IRQ-Samples sowie der serielle Crashpfad sind begrenzt. Der SMP4-Nachweis meldet legacy_global=0 und order_violations=0.
+- [Erledigt] #4 SMP-Stresstests auf Host-/Owner-Ebene und den kurzen markerbegrenzten SMP4-Smoke ausführen sowie genau einen warmen perfdiag-kernel-ipc-Lauf mit fünf Samples vergleichen; Kernel-VERSION und RELEASE_VERSION 0.75.12 pflegen
+  - Notizen: Abgeschlossen: Kernel 0.1.81, Release 0.75.12; Kernel- und Distribution-Hosttests sowie Docs-Inventar gruen; Testimage strukturell OK (387 Records, 296 Dateien). Der ausschliesslich kurze SMP4-Lauf endete am CLOCKPROBE, Log-SHA256 6e593f0391a96c85eb7a40fe4dbde9933cd160989e511a3c69a33cde3899e3af. Genau ein warmer perfdiag-kernel-ipc-Lauf mit 5 Samples: r4os-0.75.12-perfdiag-kernel-ipc-warm-20260903t211116002z-9e1351f6; Caller mean/p95 75272/79208 ns, Queue 17129/17308 ns, Run 8623/11372 ns, E2E 25752/28583 ns. Fuer diese exakte Identitaet existierte kein Vorgaenger, daher ist dies die neue Basislinie. Kein Userland-, R4SNES-, Browser- oder manueller Lauf.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Normale Laufzeitpfade nehmen keinen globalen Legacy-BKL mehr und Vier-CPU-Last zeigt keine Lockordnungs-, IRQ- oder Lebenszyklusfehler
+  - Notizen: Erfuellt: Der kurze Vier-CPU-Smoke zeigt runtime_acquisitions=98700 bei legacy_global=0, zehn getrennte Owner, 256 erfolgreiche Heap-Stresszyklen, Maske 0xF, stress_failures=0 und order_violations=0. SMP, Heap, TLB und Clock blieben fehlerfrei; der genau eine erwartete TLB-Ack-Timeout wurde sicher zurueckgerollt. Keine normale globale BKL-Verwendung verbleibt.
+- [Erledigt] Serielle Diagnose ist bytegleich vollständig, benötigt aber deutlich weniger Lock-/UART-Statusoperationen pro String
+  - Notizen: Erfuellt: Das COM-Ringmodell beweist geordnete, begrenzte Spannenaufnahme. Der reale kurze SMP4-Lauf meldet 4858 Schreibaufrufe, 1728 Bulkspannen, genau 4858 Schreib-Locknahmen, 4876 UART-Statuslesungen fuer 17645 Ringbytes, Maximalspanne 104 und dropped=0. Damit bleibt der serielle Bytefluss vollstaendig bei deutlich weniger Lock-/Statusoperationen als zuvor je Byte.
+
+### Notizen
+Zweiter Teil von Fable B1 und der berechtigte Teil von A4; baut auf 0.75.11 auf. COM1 und Metriken bleiben aktiviert.
+Abgeschlossen mit Kernel 42707a1, Distribution 8adf836, Docs 51e171c und Project c76188b. Abnahme ausschliesslich per kurzem SMP4-Test mit -testquick bis CLOCKPROBE; Userland und R4SNES wurden nicht gestartet.
+
+## 0.75.13 Präemption in R4L- und AP-Pfaden
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+CPU-intensive Bibliotheksarbeit und Tasks auf sekundären Prozessoren präemptierbar machen und lange Kernel-API-Pfade an sichere begrenzte Reschedulepunkte binden.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Ausführbare Bereiche geladener R4L-Instanzen generationensicher dem jeweiligen Programm zuordnen und in der IRQ-Präemptionsentscheidung neben dem R4X-Codeabbild berücksichtigen
+  - Notizen: Unmap/Unload darf keine veraltete Range präemptierbar lassen.
+Umgesetzt: Aufgelöste Runtime-R4L-Imports werden pro Programmgeneration dedupliziert als Modulslot plus Generation gebunden. Die IRQ-Prüfung akzeptiert ausschließlich geladene R4L-Exec-Sektionen; Daten, BSS, andere Modultypen, veraltete Generationen und überlaufende Bereiche scheitern geschlossen. Der Hosttest deckt diese Grenzen ab.
+- [Erledigt] #2 AP-Timerpräemption und Reschedule-IPI auf jeder online CPU aktivieren und per-CPU laufenden Task, Idle und Runqueuebesitz korrekt behandeln
+  - Notizen: BSP-Sonderpfade entfernen, soweit technisch nicht nötig.
+Umgesetzt: AP-Timer verwenden dieselbe Interrupt-Frame-Präemptionsentscheidung wie der BSP; Reschedule-IPIs dürfen auf jeder online CPU umschalten. Per-CPU-Zähler und der kurze LSTRX/EXTMATH-Nachweis auf CPU 1 bestätigten je mindestens einen Timer- und IPI-Wechsel.
+- [Erledigt] #3 Lange Blit-, Decode-, FS- und GUI-API-Schleifen auditieren und nur an lockfreien beziehungsweise explizit sicheren Punkten bounded_resched/yield ergänzen
+  - Notizen: Kein Schlafen unter no_sleep-Lock oder IRQ-Kontext.
+Audit abgeschlossen: FAT32 besitzt bereits begrenzte Arbeitsabschnitte, Runtime-R4L-Decoder sind durch Codepräemption abgedeckt. GUI-Snapshots und unveröffentlichte Klone schalten nur zwischen Command-Blöcken, 128x128-Rasterkacheln oder 64-KiB-Kopierblöcken um. Keine Umschaltung unter Frame-Lock, in unvollständigen Splices oder während der Display-Publikation; weitere Blit-/FS-Eingriffe waren nicht gerechtfertigt.
+- [Erledigt] #4 Fairness-, Latenz-, Hard-Kill- und SMP4-Nachweise erweitern und genau einen warmen perfdiag-driver-work-Lauf mit fünf Samples vergleichen; Kernel-VERSION und RELEASE_VERSION 0.75.13 pflegen
+  - Notizen: Eine kurze, deterministisch begrenzte R4L-CPU-Last und AP-lokale Praeemption ausdruecklich abdecken; kein Langlauf.
+Nachweise bestanden: Kernel-Hosttests, LoaderDiag-Build, Marker-Selbsttest, Benchmark-Imageprüfung und kurzer SMP4-testquick. R4LPREEMPT meldete cpu=1, timer_switches=1, ipi_switches=1; CLOCKPROBE und SMPPROBE waren OK. Der Lauf endete vor Userland; R4GB, R4SNES und Browser wurden nicht gestartet. Der erste Driver-Work-Versuch war wegen Timeout ohne Maschinenblock ungültig, blieb unter Temp/0.75.13-driver-work-timeout-20260904 erhalten und wurde nicht importiert. Nach sauberem Neuaufbau, Strukturprüfung und begrenzter Diagnose lief der begründete Ersatz regulär: fünf fehlerfreie Samples; neue Basis queue/run/e2e mean=72070/30835/102906 ns pro Work. Kernel 0.1.82, Release 0.75.13.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Eine CPU-intensive R4L-Schleife blockiert Desktop-/Eingabearbeit nicht bis zu ihrem kooperativen Ende, und AP-Tasks werden lokal per Timer/Reschedule präemptiert
+  - Notizen: Deterministischer automatisierter Konkurrenznachweis.
+Automatisch auf SMP4 erfüllt: Zwei intrinsisch begrenzte R4L-Aufrufe auf AP CPU 1 beweisen getrennt periodische Timerpräemption und Wakeup per Reschedule-IPI; beide Programme endeten mit Exit 0 und korrekter Modul-Generation.
+- [Erledigt] Kernel-API-Pfade bleiben lock- und lebenszyklussicher; Host-/Komponententests, kurzer SMP4-Smoke und Driver-Work-Benchmark bestehen
+  - Notizen: Keine Single-CPU-Gastabnahme und keine manuelle Responsivitaetsbewertung.
+Erfüllt: Host-/Komponententests, kurzer SMP4-Smoke und gültiger Driver-Work-Benchmark bestanden. Lock-/Lebenszyklusgrenzen blieben sauber. Keine Single-Core-Gastabnahme, kein R4SNES-/R4GB-Langlauf, keine Browserprüfung und kein manueller QEMU-Sichttest.
+
+### Notizen
+Fable B2; baut auf den feingranularen SMP-Grenzen aus 0.75.11/0.75.12 auf. Willkürliche Kernelpräemption wird nicht eingeführt.
+Abschluss 0.75.13: veröffentlicht als Kernel 75fcf5a, LoaderDiag cc08aac, Distribution 33d4394 und Docs 459edf9. Der gültige Driver-Work-Lauf ist mangels identischer Vorgängermessung die neue Vergleichsbasis. Der verworfene Timeout-Erstlauf wurde gemäß Benchmark-Regel separat dokumentiert und nicht in die Historie übernommen.
+
+## 0.75.14 NVMe-Interrupt-Completions
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+I/O-Completionqueues nach der Preloadphase per MSI und IRQ-getriggerter Driver-Work abarbeiten; Polling bleibt nur als begrenzter Initialisierungs-, Fallback- und Recoverypfad.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Nach der weiterhin gepollten Admin-/Preloadinitialisierung MSI registrieren, I/O-Completionqueues mit IEN und gültigem Vektor neu beziehungsweise korrekt anlegen und IRQ-Zustand diagnostizierbar machen
+  - Notizen: Sauberer Fallback, falls MSI/IRQ auf einer Plattform nicht verfügbar ist.
+Umgesetzt mit NVME 0.1.6: Admin- und Preload-I/O bleiben gepollt; I/O-CQs werden mit IEN/IV0 angelegt. Die erste asynchrone Anfrage richtet lazy klassisches MSI oder den neuen ownergebundenen Single-Vector-MSI-X-Fallback ein. IRQ-Registrierung, Armierung, Eingang, Work, Completion und Fallback sind über Statusbits diagnostizierbar.
+- [Erledigt] #2 Einen minimalen IRQ-Handler implementieren, der Completionarbeit mit driver_work_flag_from_irq plant; CQ-Drain, Doorbells, Timeout und Recovery bleiben im Taskkontext
+  - Notizen: IRQ maskieren/acknowledgen und Reentranz begrenzen.
+Der minimale Handler maskiert NVMe INTMS und bei MSI-X zusätzlich den realen Tabelleneintrag, zählt die IRQ-Generation und plant Driver Work mit driver_work_flag_from_irq. CQ-Drain, Head-Doorbells, Completion-Publikation und erneutes Freigeben erfolgen ausschließlich im Taskkontext.
+- [Erledigt] #3 Dauerndes Selbst-Reposting durch ereignisgetriebene Arbeit plus seltenen Health-/Timeout-Fallback ersetzen und Shutdown/Reset/Cancel gegen späte IRQs absichern
+  - Notizen: Kein Handle oder DMA-Puffer darf nach Unregister erreichbar bleiben.
+Aktive Message-Interrupts beenden Work nach einem endlichen Durchlauf; nur eine währenddessen beobachtete IRQ-Generation erhält einen Nachfolger. Polling bleibt auf Preload, fehlende IRQ-/Work-Kapazität, Timeout und Recovery begrenzt. Reset/Shutdown maskieren zuerst; Shutdown wartet Work vollständig ab, meldet den IRQ ab und deaktiviert MSI/MSI-X vor Bus-Mastering und DMA-Freigabe.
+- [Erledigt] #4 NVMe-Hostmodell, Driver-Work-/StorageDiag-Zähler und automatisierten QEMU-NVMe-Pfad erweitern; NVME-Modulversion und RELEASE_VERSION 0.75.14 pflegen
+  - Notizen: Bestehende Tests nutzen, kein manueller QEMU-Lauf.
+NVMe-Zustandsmodell und Hosttests erweitert, StorageDiag 0.1.2 aggregiert den timeoutfreien NVMe-Workerpfad, und QUICKPROBE führt genau einen read-only Sektorread aus. Versionen: Kernel 0.1.83, NVME 0.1.6, STORDIAG 0.1.2, RELEASE_VERSION 0.75.14.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Normale NVMe-I/O-Completionen werden per registriertem IRQ sichtbar und benötigen weder Workqueue-Dauerschleife noch 1-ms-Inlinepoll pro Anfrage
+  - Notizen: IRQ-, Completion-, Pollfallback- und Work-Zähler belegen den Pfad.
+Kurzer SMP4-QUICKPROBE grün: [NVMEIRQ] result=OK mode=msix irq=nonzero work=nonzero completions=nonzero poll_fallback=0 sowie worker_requests=1, worker_completions=1, async_submissions=1 und async_completions=1.
+- [Erledigt] MSI-Ausfall, Timeout, Reset, Cancel, Shutdown und Preload funktionieren weiterhin begrenzt und ohne verlorene Completion
+  - Notizen: Hostmodell und automatisierter NVMe-Gastlauf grün.
+NVMe-Hostmodell prüft IEN/Vektor, ereignisgetriebene Workentscheidung, Pollfallback und maskierte Preload-/Recovery-/Shutdown-Zustände; vorhandene Deadline-, Replay-, Generation-, PRP- und Queue-Tests bleiben grün. Der finale SMP4-Gastlauf war grün. Es liefen weder R4SNES/R4GB noch Browser- oder manuelle QEMU-Tests.
+
+### Notizen
+Fable D2. Der aktuelle Treiber erstellt I/O-CQs ausdrücklich mit IEN=0 und postet Work bis zum Abschluss erneut.
+Abschluss 0.75.14: NVME 0.1.6 verarbeitet Runtime-CQs ereignisgetrieben über klassisches MSI oder ownergebundenes Single-Vector-MSI-X; Preload und klar begrenzte Fehler-/Recoverypfade bleiben gepollt. Der IRQ maskiert die Quelle und delegiert per IRQ-Driver-Work, Reset/Shutdown halten die Quelle bis zum sicheren Neuaufbau beziehungsweise vollständigen Abbau maskiert. StorageDiag 0.1.2 und der read-only QUICKPROBE-Zählerpfad ergänzen die Diagnose. Beim kurzen Test wurde außerdem ein verzögerter BSP-Idle-One-Shot-Handoff sichtbar: R4X-Tasks waren beendet, aber Reaper-Timeouts blieben ohne periodische Ereignisquelle. Der Scheduler stellt den periodischen Takt nun bei produktivem Taskwechsel, No-op-Yield und letztem One-Shot-IRQ wieder her; neu publizierte R4X-Tasks wecken ihren Zielprozessor explizit. Abschlussgates grün: Kernel-Build/Hosttests, NVMe-Hosttests, StorageDiag-Build, Marker-Parser-Selbsttest, Testimage und finaler 18,6-s-SMP4-QUICKPROBE mit NVMEIRQ mode=msix, poll_fallback=0 und R4LPREEMPT OK. Keine R4SNES-/R4GB-, Browser- oder manuellen QEMU-Tests.
+
+## 0.75.15 Gebündelte SDK-GUI-Befehle
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Den bereits vorhandenen gui_frame_append-Batchvertrag im normalen SDK-Canvas nutzen, damit Rect-, Text-, Shape- und Rasterfolgen nicht je einen Kernelübergang und Frame-Lock benötigen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Einen begrenzten FrameCanvas-/Paint-Builder mit caller-eigenem Command- und Ressourcenpuffer ergänzen, der sichere Chunks über gui_frame_append sendet und bei fehlender Funktion auf den bisherigen Pfad fällt
+  - Notizen: Fehler, Abbruch, Damageframe und Ressourcenoffsets bleiben transaktional.
+Umgesetzt: begrenzter caller-eigener FrameCanvas mit Command-/Ressourcenpuffern, sicheren gui_frame_append-Chunks, korrekter Offset-Umbasierung, XRGB-Normalisierung, Alpha8-Kompaktierung und geordnetem Direktpfad für übergroße Ressourcen. Fehler werden verriegelt; PaintContext bricht die Transaktion ab. Alte R4DRAW-Tabellen fallen auf die bisherigen Einzelaufrufe zurück.
+- [Erledigt] #2 Gemeinsame GUI-Widgets und repräsentative heiße Apps auf den Builder umstellen, ohne jedem Aufrufer eigene Batchlogik zu geben
+  - Notizen: Nur tatsächlich geänderte Module versionieren.
+Umgesetzt: gemeinsame Widgets können unverändert über den kompatiblen Canvas zeichnen. Explorer (0.1.12) und Notepad (0.1.3) verwenden den gepufferten Paint-Canvas; nur deren geänderte Modulartefakte wurden versioniert.
+- [Erledigt] #3 Kernelübergänge, Commands, Ressourcenbytes und Flushes pro Frame zählen sowie bestehende SDK-, App- und Desktop-Pixelhash-/Framegenerationstests erweitern
+  - Notizen: Kein neues globales Gate.
+Umgesetzt: FrameCanvasStats zählt logische Commands, Ressourcenbytes, Flushes, Append-Aufrufe, direkte Chunks, Legacy-Aufrufe und Fehler. Der vorhandene SDK-GUI-Konformitätstest prüft Pixelhash, Ressourcenoffsets, Widgets, Shapes, Teilflush, Direktchunk, Legacy und OOM/Cancel; der vorhandene Desktop-Snapshot-Test prüft gebündelte Generationen und unveränderte Frames.
+- [Erledigt] #4 SDK-/GUI-Dokumentation, Inventare und RELEASE_VERSION 0.75.15 abschließen; nur den kurzen markerbegrenzten SMP4-Smoke ausführen
+  - Notizen: Keine Browserprüfung, keine Subsystem-Langläufe und keine manuelle Sichtabnahme.
+Abgeschlossen: SDK-/GUI-Dokumentation sowie Docs-Inventare aktualisiert und RELEASE_VERSION auf 0.75.15 gesetzt. Nachweise: SDK-GUI-Konformität 6/6, Desktop- und Kerneltests grün, Explorer/Notepad/Desktop/SDK gebaut, Testimage erzeugt und verifiziert. Ausschließlich kurze SMP4-Quick-Läufe; keine R4SNES-/R4GB-Langläufe, Browsertests oder manuellen QEMU-Sichttests.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Repräsentative Fenster erzeugen pixelgleiche Frames mit deutlich weniger R4DRAW-Übergängen und Frame-Lock-Akquisitionen
+  - Notizen: Automatisierte Referenzframes und Zähler vor/nach.
+Erfüllt: dieselbe repräsentative Clear-/Rect-/Raster-/Alpha8-Ausgabe liefert den Referenz-Pixelhash; mehrere logische Zeichenbefehle werden in einem Append/Frame-Lock-Übergang übertragen. Gemeinsamer Button und repräsentative Apps nutzen denselben Pfad.
+- [Erledigt] Alte Tabellen, kleine Puffer, Teilflush, Cancel und OOM fallen korrekt und ohne halben Commit zurück
+  - Notizen: SDK-/Kerneltests und Headless grün.
+Erfüllt: bestehende SDK-Tests decken alte Funktionstabellen, kleine Puffer/Teilflush, übergroße Ressourcen, Cancel und OOM ohne Commit ab. Kernel- und Desktoptests sowie finaler kurzer SMP4-Test sind grün. Ein früher Quick-Lauf traf einmal eine bekannte zeitliche R4LPREEMPT-IPI-Probe-Schwankung; zwei anschließende identische kurze Läufe waren vollständig grün, der Befund ist lokal in Problems.txt festgehalten.
+
+### Notizen
+Berechtigter Rest von Fable E4: Der Batchvertrag existiert bereits, wird vom üblichen Canvas aber nicht verwendet.
+Abschluss 0.75.15: Commitstände SDK 5ace647, Desktop 26a5c8f, Explorer 846f77b, Notepad ab6ad0a, Distribution b76f2dc und Docs 66654a7. Finaler kurzer SMP4--testquick: R4LPREEMPT, SMPPROBE (4 CPUs), Heap, TLB, Locks, Serial, Clock und NVMe-IRQ vollständig OK; Image-Verifikation OK. Keine langen Subsystem- oder Browserläufe.
+
+## 0.75.16 Streaming-Rastergenerationen und direkter XRGB32-Scaler
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Ein generischer, ausdrücklich ersetzender Pfad für hochfrequente XRGB32-Rasterbilder beseitigt die Wiederholung überdeckter Altgenerationen und die Zerlegung in Farbläufe. Der Desktop übernimmt jeweils nur den neuesten vollständigen Frame und skaliert ihn direkt in den SceneBuffer; normale Retained-Mode-GUI-Deltas bleiben unverändert.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Den aktuellen Rasterpfad mit einer deterministischen vollbewegten XRGB32-Last vermessen: veröffentlichte und verworfene Generationen, Deltakettentiefe, erneut besuchte Befehle und Pixel, GUI-Übergänge, Snapshotbytes sowie Compose- und Presentzeit getrennt erfassen
+  - Notizen: Die deterministische 64-Frame-Baseline bestaetigte den Befund deutlich. 256x224: maximale Deltakette 32, 128 erneut besuchte Befehle, 1.835.008 erneut besuchte Pixel, 7.352.320 Snapshotbytes und 3.670.016 Farblaeufe; der reine Farblaufscan brauchte 9.208.785 ns gegen 628.009 ns fuer Zeilenkopien. 512x224: Kette 32, 256 Befehle, 3.670.016 Pixel, 14.704.640 Snapshotbytes und 7.340.032 Farblaeufe; 16.094.133 ns Scan gegen 1.157.046 ns Zeilenkopien. Der neue Pfad bleibt bei Kettentiefe und Livegeneration 1, 4 beziehungsweise 8 Befehlen, 57.344 beziehungsweise 114.688 Quellpixeln und 230.016 beziehungsweise 460.032 Snapshot-Nutzbytes. Die Farblaufzerlegung entfaellt. Compose- und Presentzeit bleiben getrennt instrumentiert; der finale Display-Presentpfad wurde nicht veraendert und fuer ihn wird aus der Hostsonde kein Gewinn behauptet.
+- [Erledigt] #2 Den GUI-Framevertrag um eine explizite ersetzende Rastergeneration erweitern: vollständig überdeckte Altgenerationen nach sicherem Besitzübergang freigeben, bei Rückstau obsoletes Material begrenzt koaleszieren und ausschließlich den neuesten vollständig veröffentlichten Zustand rendern
+  - Notizen: R4DRAW v8 wurde append-only um gui_frame_begin_replace und gui_frame_stream_info erweitert. Ein erfolgreicher Ersatzcommit ist ein eigenstaendiger vollstaendiger Zustand, koalesziert die alte aktuelle Kette, gibt sie ohne Leser sofort frei und pensioniert reader-gehaltene Wurzeln bis zum letzten Release. Fehler, Cancel und OOM bewahren die letzte vollstaendige Generation. Ownergebundene Zaehler decken Live-, Ersatz-, Supersede-, Koaleszenz-, Reader-Retire-, XRGB32- und Framebytewerte ab. Der Kernel-Selftest prueft 64 Generationen, Leserbesitz, ungueltiges XRGB und OOM-Rollback.
+- [Erledigt] #3 XRGB32-Kacheln ohne Farblauf- oder fillRect-Zerlegung direkt in den SceneBuffer übertragen: bei 1:1 zeilenweise kopieren, bei ganzzahliger Skalierung Zeilen expandieren und wiederholen und sonst einmalig nearest-neighbour unter Clip- und Damage-Grenzen abtasten
+  - Notizen: Der gemeinsame Subsystem-Presenter transportiert native XRGB32-Kacheln mit Gast- und Viewportgeometrie; Zielbloecke bleiben maximal 128x128. R4DESK rendert ohne Farblauf/fillRect-Zerlegung direkt in den SceneBuffer: 1:1 per Zeilenkopie, ganzzahlig per expandierter und wiederholter Zeile, sonst globales Nearest-Neighbour-Mapping. Tests belegen Clipping, unaligned Ressourcen, ganzzahlige und gebrochene Skalierung sowie nahtlose Kachelgrenzen. Indexed8, Alpha8, ARGB32 und der alte Rasterfallback bleiben erhalten.
+- [Erledigt] #4 Pixelidentität, Kachelgrenzen, Letterbox, Resize, Teil-Damage, Rückstau, OOM, Kill, Desktop-Neustart und Mehrinstanzbetrieb automatisiert auf Host-/Owner-Ebene prüfen; Contract, SDK, Desktop, betroffene Subsysteme und RELEASE_VERSION 0.75.16 pflegen
+  - Notizen: Contract-, Kernel-, SDK- und Desktoptests sind erfolgreich. Der einzige Gastlauf war ./Tools/Build.sh -testquick mit SMP4; 4/4 CPUs, QUICKPROBE DONE, keine Fehler. R4GB, R4SNES, Browser und manuelle QEMU-Sichttests wurden nicht gestartet. Kernel 0.1.84, R4DESK 0.1.34, R4SNES 0.22.1, R4GB 0.10.9, R4BASIC 1.2.33 und RELEASE_VERSION 0.75.16 sind gepflegt; Contract/SDK/Kernel/Desktop/Subsysteme/Distribution/Docs wurden erfolgreich gepusht.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Eine Folge aus mindestens 64 vollständig wechselnden XRGB32-Frames rendert pro sichtbarem Frame keine überdeckte historische Vollbildkette; veröffentlichte Livegenerationen und Arbeit je Frame bleiben konstant begrenzt
+  - Notizen: Erfuellt: SDK-Tests publizieren je 64 vollbewegte 256x224- und 512x224-XRGB32-Frames als eine Vollgeneration plus 63 Ersatzgenerationen. Kettentiefe bleibt 1; es entstehen konstant 4 beziehungsweise 8 direkte Befehle pro Frame. Der Kerneltest bestaetigt Livegeneration 1, 63 Supersedes/Koaleszenzen und sicheren readerbedingten Ruhestand.
+- [Erledigt] Der direkte XRGB32-Pfad erzeugt für 1:1-, ganzzahlige und gebrochene Skalierung pixelgleiche Referenzbilder einschließlich Kachelgrenzen und verwendet keine pro-Farblauf-fillRect-Zerlegung
+  - Notizen: Erfuellt: SceneBuffer-Golden-Tests sind fuer 1:1, ganzzahlige und gebrochene Skalierung einschließlich Paintclip, unaligned Quelle und Kachelnaht pixelgleich. Der native Pfad erzeugt in 64 Frames 256 beziehungsweise 512 direkte XRGB32-Bloecke und exakt null Legacy-Rasteraufrufe; hostedFrameRaster und damit seine Farblauf-fillRects werden nicht benutzt.
+- [Erledigt] Retained-Mode-GUI-Deltas, Indexed8, Alpha8 und ARGB32, Damage, Letterbox sowie App-, Desktop- und Ressourcenlebenszyklen bleiben in allen automatisierten Nachweisen kompatibel
+  - Notizen: Erfuellt durch die bestehenden und erweiterten Contract-/Kernel-/SDK-/Desktoptests: Retained-Mode-Deltas laufen weiter ueber den alten append-only Pfad, Indexed8 und Rasterfallback bleiben aktiv, Alpha8/ARGB32- und Damage-/Cliptests sind gruen. Ersatzsnapshot, OOM-Retention, Leserfreigabe, Letterbox/Resize sowie unabhaengige Presenter-/Ownerinstanzen bleiben begrenzt und generationstreu.
+
+### Notizen
+Auslöser ist der codebasierte R4SNES-Pfad: Bei großflächigen Änderungen können Basis plus bis zu 31 ältere Damage-Generationen erneut besucht werden; hostedFrameRaster kann bildreiche XRGB32-Zeilen zusätzlich in tausende Kleinstfüllungen zerlegen. Generisch für Raster- und Videoerzeuger lösen, ohne R4SNES-Sonderfall. Native GPU-, Modesetting-, Pageflip- oder Grafikkartentreiberarbeit ist nicht Bestandteil von 0.75.X; Limine-Bootframebuffer und der vorhandene DisplayBlit bleiben Produktpfad. Keine manuelle Sichtprüfung.
+Abgeschlossen und am 04.09.2026 veroeffentlicht. Der zuvor beobachtete Rasterflaschenhals war belastbar: Bei 64 synthetischen Vollbewegungsframes reduzierte der neue Pfad die maximale historische Wiedergabe von 32 auf 1 Generation und die pro sichtbarem Frame besuchten Befehle/Pixel um Faktor 32; die Farblaufzerlegung entfaellt vollstaendig. Der DisplayBlit selbst blieb absichtlich unveraendert. Erfolgreich: Contract-, Kernel-, SDK-, Desktoptests sowie ausschließlich der kurze SMP4-testquick mit 4/4 CPUs. Nicht ausgefuehrt: R4GB-/R4SNES-Langlaeufe, Browser, Single-Core und manuelle QEMU-Sichttests. Commits: Contract 6669da7, SDK 1130e29, Kernel 3cc1b2a, Desktop 9450527, R4Basic 1098639, R4GB dabd6db, R4SNES 49d1c7e, Distribution 35a5bb7, Docs a57d546.
+
+## 0.75.17 Geteilte Rasterressourcen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Große oder wiederholte Rasterkacheln zwischen R4X-Produzent und Desktop über generationengebundene, gemappte Ressourcen teilen, statt sie bei jeder Framegeneration vollständig durch Kernelheap und Desktop-Snapshot zu kopieren.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Copybytes und Lebenszyklen des aktuellen Producer-Kernel-Desktop-Scene-Pfads messen und den optionalen Shared-Raster-Vertrag mit Format, Größe, Stride, Generation, Damage und Capability festlegen
+  - Notizen: Die vorhandene Remote-Frame-Map-Ownership als Muster prüfen, aber keine Verträge vermischen.
+Gemessen und vertraglich festgelegt: 256x224 XRGB32 sinkt pro Frame von 230016 kopierten Ressourcenbytes auf 320 Descriptorbytes, 512x224 von 460032 auf 640; jeweils 99,860879 % weniger Kernel-Frame-zu-Desktop-Snapshot-Bytes nach genau einem Producer-Upload. R4DRAW v9 bleibt optional und unterstützt XRGB32, Indexed8 und Alpha8 mit Stride, Generation, Damage und Capability.
+- [Erledigt] #2 Create/Map/Publish/Acquire/Release mit unveränderlichem Producerinhalt während Desktopbesitz, referenzgezähltem Cleanup und Prozess-/Desktop-Abbruch implementieren
+  - Notizen: Append-only Contract/SDK; alte GUI-Frames bleiben vollständig nutzbar.
+R4DRAW v9 implementiert Create/Destroy/MapWrite/Publish/Acquire/Release mit drei begrenzten Puffern, unveränderlichen Generationen, prozessgebundenen Leases, Frame-Referenzen sowie idempotentem Producer-/Consumer-Cleanup. Der alte Kopierpfad bleibt kompatibler Fallback.
+- [Erledigt] #3 Desktop-Snapshot und Scene-Compositor so anbinden, dass unveränderte beziehungsweise nur beschädigte Kacheln keinen vollständigen Zwischenblob kopieren; XRGB32, Alpha8 und relevante Indexed8-Pfade begrenzt behandeln
+  - Notizen: Keine Gastzeit-, Scheduling- oder Audioverantwortung in den Host verschieben.
+subsystem_host lädt geänderte XRGB32-/Indexed8-Flächen einmal in die Shared-Ressource und sendet nur 80-Byte-Descriptoren. Desktop erwirbt jede Generation einmal vor dem atomaren Snapshottausch, gibt alte Leases danach frei und rendert XRGB32, Indexed8 sowie Alpha8 direkt aus der Map.
+- [Erledigt] #4 Ownership-, Generation-, OOM-, Kill-, Pixelhash-, Damage- und Mehrinstanztests auf Host-/Owner-Ebene ausführen; Contract, Kernel, betroffene Module und RELEASE_VERSION 0.75.17 pflegen
+  - Notizen: Nur notwendige bestehende Nachweise erweitern; anschließend höchstens der kurze markerbegrenzte SMP4-Smoke. Keine R4GB-, R4SNES- oder Browserläufe.
+Contract-Generator-/Parity-Test, Kernel-Test, SDK-Test und Desktop-Test erfolgreich. Lebenszyklusfälle decken Triple-Buffer-Rückstau, exakte Pixel, OOM-Ziele, Kill/Restart, Ersetzung und mehrere Besitzer ab. Danach ausschließlich ./Tools/Build.sh -testquick: QUICKPROBE erreicht, 4/4 CPUs aktiv, keine Fehler. Keine R4GB-, R4SNES-, Browser-, Single-Core- oder manuellen QEMU-Läufe. Versionen: Release 0.75.17, Kernel 0.1.85, Desktop 0.1.35, R4Basic 1.2.34, R4GB 0.10.10, R4SNES 0.22.2.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Eine unveränderte oder teilbeschädigte Rasterfläche vermeidet mindestens die vollständige Kernel-zu-Desktop-Ressourcenkopie und behält ein identisches Pixelresultat
+  - Notizen: Copybytes und Framegenerationen maschinenlesbar belegen.
+Automatisierter 64-Frame-Nachweis: eine Ressource, 64 Maps/Publikationen, 256 Descriptoren, keine kopierte XRGB-Ressource und byteidentische Pixel. Gemessene Einsparung der Kernel-zu-Desktop-Zwischenkopie: 99,860879 %.
+- [Erledigt] Produzenten-Kill, Desktop-Neustart, Frameersetzung, OOM und parallele Instanzen geben jede Mapping-/Frame-Ressource genau einmal frei
+  - Notizen: Automatisierter Lebenszyklusnachweis, keine Sichtprüfung.
+Kernel-Selftest weist genaue Referenzzählung und vollständige Heap-Rückkehr nach Producer-/Consumer-Ende, Desktop-Leasefreigabe, Ersetzung, jedem injizierten Allokationsfehler und mehreren Besitzern nach.
+
+### Notizen
+Fable E2 und der Rasteranteil von C2. Der bestehende kopierende Framevertrag bleibt Fallback; Subsystem-Rasterblöcke bleiben höchstens 128x128 Pixel groß.
+Abgeschlossen und als neun Repository-Commits veröffentlicht. Kurze Abnahme: SMP4 QUICKPROBE erfolgreich (4/4 CPUs); der Lauf endete vor Userland. Bewusst keine R4SNES-/R4GB-Langläufe, keine Browserprüfungen, kein Single-Core und keine manuelle Sichtprüfung.
+
+## 0.75.18 TCP-Segment- und ACK-Bündelung
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Servicewrites bis 4068 Byte intern in MSS-gerechte Segmente zerlegen, das verfügbare Sendefenster mit mehreren ausstehenden Segmenten nutzen und reine ACK-/Pollarbeit ohne Änderung der 4096-Byte-IPC-Grenze reduzieren.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 TCP-/TCPSVC-Telemetrie für Segmente je Write, ausstehende Bytes, Fensterstillstand, reine ACKs, Pollrunden, Retransmits und Durchsatz in bestehenden NetIoDiag-/FTP-/SSH-Arbeitslasten vervollständigen
+  - Notizen: Geprüft und umgesetzt. Quellbaseline: TCPSVC zerlegte 4068 Byte zuvor in drei getrennte Kernelwrites; der 8-Segment-Katalog begrenzte den retransmittierbaren Vorlauf auf etwa 11680 Byte, reine ACKs und Vorab-Polls waren nicht separat messbar. R4NET/TcpPerformanceInfo, TCPSVC STATUS und NETIOD liefern nun Write-/Wire-Segmente, Bytes, Outstanding/Peaks, Fenster-/Katalog-/Backend-Stalls, ACK-Arten, Pollrunden/-Auslassungen, Retransmits und Durchsatzproben. Historische Durchsatzwerte werden mangels alter Telemetrie nicht erfunden.
+- [Erledigt] #2 Einen Servicewrite in mehrere MSS-Segmente planen und bis zum kleinsten Wert aus Remote-Fenster, Sendekatalog und Backendkapazität senden; Katalogspeicher und Retransmitbesitz dafür begrenzt skalieren
+  - Notizen: Geprüft und umgesetzt. Ein Servicewrite erreicht den Kernel ungeteilt und wird dort MSS-gerecht bis zum Minimum aus Peer-MSS, skaliertem Remotefenster, freiem 48-Segment-Katalog und Backendfortschritt gesendet. 48 x 1460 Byte decken ein volles unskaliertes TCP-Fenster begrenzt ab. Cumulative/Partial ACK, Sequenz-Wrap, Verlust/Retransmit, Zero Window, Backend-Busy und Close-after-data sind durch Hosttests beziehungsweise den reinen TCP-Vertragsprobe abgedeckt.
+- [Erledigt] #3 Delayed ACK/ACK-Coalescing mit sofortigen ACK-Ausnahmen sowie optional ausgehandeltes Window Scaling implementieren und redundante Adapterpolls bei vorhandener IRQ-/Activity-Zustellung vermeiden
+  - Notizen: Geprüft und umgesetzt. Delayed ACK nutzt eine feste Obergrenze von 40 ms, koalesziert aufeinanderfolgende Empfangssegmente und behält sofortige ACKs für zweites Segment, Reorder/Lücken, FIN/SYN/RST, Fensterupdates und weitere Ausnahmen. MSS und Window Scale werden als optionale SYN-Optionen verhandelt; ohne Option gelten konservative Fallbacks. Explizite Adapterpolls entfallen, wenn der RX-Task die Zustellung übernimmt; bei fehlender Zustellung bleibt der sichere Pollfallback.
+- [Erledigt] #4 Vorhandene TCP-, TCPSVC-, NETIOD- und FTP-/SSH-Nachweise erweitern; anschließend nur den kurzen markerbegrenzten SMP4-Smoke ausführen sowie Kernel-/TCPSVC-Versionen und RELEASE_VERSION 0.75.18 pflegen
+  - Notizen: Erledigt. Contract-Generator/Mutationstests (26/26), SDK, Kernel (324/324 plus ReleaseSafe), NETTCP, TCPSVC, NETIOD, FTP- und SSH-Service sowie Distributionstests sind grün. Ausschließlich der kurze SMP4-Gastlauf `./Tools/Build.sh -testquick` wurde ausgeführt: 4/4 CPUs, TCPBURSTPROBE OK (4068 Byte, 3 Segmente, Katalog 48, Delayed ACK 40 ms), QUICKPROBE DONE, keine Fehler. Kein Single-Core-, Browser-, R4GB-/R4SNES-Lang- oder manueller QEMU-Test. Versionen: Kernel 0.1.86, NETTCP 0.1.3, TCPSVC 0.1.5, NETIOD 0.1.2, Release 0.75.18.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Ein 4068-Byte-Servicewrite wird verlustfrei in mehreren Segmenten fortgeschrieben und übersteigt nicht mehr künstlich ein Segment beziehungsweise etwa 8 MSS pro RTT
+  - Notizen: Erfüllt. Der kurze SMP4-Marker bestätigt `write_bytes=4068 segments=3 catalog=48 delayed_ack_ms=40`. Der künstliche 8-MSS-Katalogdeckel wurde auf einen begrenzten, ein volles 65535-Byte-Fenster abdeckenden 48-Segment-Katalog angehoben; ein Servicewrite wird als zusammenhängender Burst geplant. Neue Telemetrie macht Fenster-, Segment-, ACK-, Stall- und Durchsatzwerte für künftige reale Arbeitslasten sichtbar.
+- [Erledigt] Loss, Reorder, Partial ACK, Zero Window, Timeout und regulärer Close bleiben korrekt; FTP/SSH/NetIoDiag sind automatisiert grün
+  - Notizen: Erfüllt durch automatisierte Hostnachweise und den kurzen SMP4-Smoke: Loss-/Reorder-/Cumulative- und Partial-ACK-/Wrap-/Zero-Window-/Timeout-/Close-Semantik grün; NETTCP, TCPSVC, NETIOD, FTP und SSH bauen beziehungsweise testen grün. Die 4096-Byte-IPC-Nutzlast und Queue-Tiefe blieben unverändert. Ein durch eine unbeabsichtigte 70-KB-Katalogkopie entdeckter net-rx-Stacküberlauf wurde auf referenzielle Iteration korrigiert; der Wiederholungslauf blieb fehlerfrei.
+
+### Notizen
+Fable F1. F2 wird nicht als IPC-Vergrößerung übernommen; F3 bleibt IRQ-Sicherheitsfallback.
+Umsetzung abgeschlossen. Beim ersten kurzen SMP4-Lauf deckte die Stackwache eine 72-KB-Kopie des vergrößerten Sendekatalogs im 64-KB-net-rx-Stack auf. Große Arrays und Connection-Slots werden nun ausschließlich in-place zurückgesetzt beziehungsweise referenziell durchlaufen; der installierte Kernel enthält keinen entsprechenden übergroßen Netzwerk-Stackrahmen mehr. Der erneut erzeugte Testdatenträger bestand anschließend genau den vereinbarten kurzen SMP4-Smoke ohne Fehler.
+
+## 0.75.19 Evidenzbasierte Modul-Geschwindigkeitsprofile
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+OPTIMIZE=speed für R4L, R4D und R4P überhaupt ausdrückbar machen und nur jene endgültigen Hotpath-Module von size auf speed umstellen, deren reproduzierbarer Gewinn den Imagezuwachs rechtfertigt.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 R4MF-Parser, Buildplan und SDK-Buildhelfer append-only beziehungsweise schema-konform um OPTIMIZE=size|speed für R4L, R4D und R4P erweitern; size bleibt Default
+  - Notizen: Ungültige Werte und alte Manifeste deterministisch behandeln.
+Umgesetzt: R4MF-Parser, SDK-Buildpfade und Modulkatalog behandeln OPTIMIZE=size|speed nun einheitlich fuer R4X, R4L, R4D und R4P; fehlend bleibt size/ReleaseSmall. Ungueltige Werte bleiben deterministisch abgewiesen. SDK- und Contracttests sind gruen.
+- [Erledigt] #2 Finale Kandidaten aus Desktop-, Font-/Image-, Display-, Storage-, Netzwerk- und Service-Hotpaths jeweils als size/speed bauen und Laufzeit, Artefaktgröße und Gesamtimage vergleichbar erfassen
+  - Notizen: Nur reproduzierbar wirksame Kandidaten ändern; alle anderen bleiben size.
+Vergleich Artefaktbytes size/speed: R4DESK 1115856/1759966, R4FONT 729762/897698, R4IMG 135485/221533, DISPBLIT 12427/12427 (Code 1403/2880), NVME 2711275/2727659, NETTCP 12597/12597 (Code 4066/5468), WINSVC 131566/221654. Beibehalten wurden nur R4FONT und R4IMG. Der finale Image-Nutzinhalt waechst dadurch um 253984 Byte = 248,0312 KB; die fuenf unbelegten Kandidaten bleiben size.
+- [Erledigt] #3 Kandidaten ausschließlich mit vorhandenen oder eng fachnahen hostseitigen Owner-/Diagnosearbeitslasten als size/speed vergleichen; ohne belastbaren Hostnachweis keine Profilumschaltung vornehmen
+  - Notizen: Der frühere perfdiag-blit-Gastbenchmark entfällt gemäß aktueller Testvorgabe. Kein Single-vCPU- oder sonstiger Benchmark-QEMU-Lauf; keine erfundenen Kreuzsuite-Vergleiche.
+Zwei unabhaengige Laeufe mit je sieben Rohsamples und identischem Ergebnisdigest: R4IMG Full-HD-Bilinearskalierung, zwei Runden, kombinierter Median size 117052477 ns gegen speed 62440961 ns (-46,66 %, 1,875x). R4FONT 5000 Rasterungen eines 32-px-Glyphen, kombinierter Median size 10323874 ns gegen speed 6235675 ns (-39,60 %, 1,656x). Die opt-in Hostprofile bleiben reproduzierbar im jeweiligen Besitzerrepo; kein Gastbenchmark wurde verwendet.
+- [Erledigt] #4 Gewählte Manifeste, Builddokumentation, Modulversionen der tatsächlich neu gebauten Artefakte und RELEASE_VERSION 0.75.19 pflegen
+  - Notizen: Imagewachstum und verworfene Kandidaten im Abschluss begründen.
+Final: R4FONT 0.2.1 und R4IMG 0.3.2 mit OPTIMIZE=speed; alle anderen Kandidaten unveraendert. Manifest-, Container-, SDK- und Modulbuilddokumentation sowie Docs-/Testinventar gepflegt; RELEASE_VERSION=0.75.19, Kernel unveraendert.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Jedes auf speed umgestellte Modul besitzt einen reproduzierbaren fachnahen Gewinn und einen dokumentierten Größenpreis; es gibt keine pauschale Profilumschaltung
+  - Notizen: Kandidaten ohne klaren Nutzen bleiben unverändert.
+Erfuellt: Nur R4FONT und R4IMG wurden nach klaren, wiederholten Besitzerprofilgewinnen umgestellt. Groessenpreise +167936 bzw. +86048 Byte sind dokumentiert; Desktop, Display, NVMe, NETTCP und WINSVC wurden mangels belastbarer fachnaher Laufzeitevidenz verworfen.
+- [Erledigt] Buildmatrix, Contract-/Manifest- und fachnahe Hosttests, Imageerzeugung sowie ausschließlich der kurze SMP4-Smoke bestehen
+  - Notizen: Kernel bleibt bei seinem bewussten Produktprofil. Kein Single-Core-, Benchmark-, Browser- oder manueller QEMU-Lauf.
+Gruen: SDK, Contract 26/26, R4FONT/R4IMG-Ownertests, finale Einzelbuildmatrix, Distribution-Selbsttest, Docs-Inventar, Testimage-Erzeugung und ausschliesslich ./Tools/Build.sh -testquick. Kurzer Gastbeleg: 4/4 CPUs, QUICKPROBE DONE, SMPPROBE 3560 milli, keine Fehler. Keine Single-Core-, Browser-, Benchmark-, R4SNES-Langlauf- oder manuellen QEMU-Tests.
+
+### Notizen
+Fable A3 in begrenzter Form. Kein pauschales ReleaseFast, keine Kernelprofiländerung und keine Entfernung von -fno-builtin.
+Abschluss 04.09.2026: R4FONT/R4IMG sind als einzige belegte speed-Kandidaten aktiviert; finaler Mehrumfang 248,0312 KB. Alle Besitzer-, Manifest-, Image- und kurzen SMP4-Pruefungen gruen. Sammelpush erfolgreich: Contract e9f97a6, SDK dae53af, Libraries 5d376bc, Distribution b047fdd, Docs 5f8a666, Project 901085a.
+
+## 0.75.20 Automatisierte Reife und Performancebilanz
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Alle in 0.75.X geänderten Besitzer gemeinsam qualifizieren, Messwerte gegen ihre Baselines bilanzieren und einen vollständig automatisiert grünen Release Candidate für die einzige manuelle Schlussabnahme erzeugen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Alle geänderten Owner-Tests, Contract-/SDK-Generierung, Distributionstests und Slim-/Full-/Test-Imageverifikation auf Linux ausführen und Umstiegsprobleme beheben oder in Problems.txt festhalten
+  - Notizen: Windows-Kommandokonstruktion durch vorhandene portable Tests mit abdecken.
+Abgeschlossen auf Debian Linux. Gruen: Contract- und SDK-Generierung/-Tests, Libraries, Kernel, Desktop, NVME und PerformanceDiag; regulaere Builds fuer geaenderte Besitzer ohne eigenen Test-Step (Explorer, Notepad, Terminal, TcpService, NetTcp, FsDiag, StorageDiag, AppHeapDiag, NetIoDiag und LoaderDiag); R4Basic 150/150; R4GB und R4SNES ausschliesslich ueber die neuen begrenzten unit-test-Steps ohne Reife-/Performanceprofile. Distribution-Selbsttest, vollstaendiger Testimage-Artefaktbau sowie NTFS-Verifikation von Slim (294 Records), Full (353) und Test (387) sind gruen. Dabei wurden veraltete manuelle Backend-Initialisierer nach R4DRAW v8/v9 entdeckt und zentral quellkompatibel mit err_no_fn-Defaults repariert; R4Basic behandelt den neuen Replace-Modus nun explizit. Kein offenes Linux-Umstiegsproblem und daher kein neuer Problems.txt-Eintrag. Keine Browsertests.
+- [Erledigt] #2 Einen kurzen markerbegrenzten SMP4-Smoke für die in 0.75.X hinzugefügten Diagnoseverträge ausführen und ausschließlich maschinenlesbare Marker sowie den kontrollierten Testabbruch werten
+  - Notizen: Der Lauf endet vor Userland, R4GB und R4SNES. Keine Browserläufe und kein interaktiver oder manueller QEMU-Sichttest.
+Genau ein abschliessender Gastlauf: ./Tools/Build.sh -testquick, KVM, vier vCPUs, 18,5 s bis zum kontrollierten QUICKPROBE-Abbruch. Ergebnis: 4/4 CPUs aktiv, SMPPROBE speedup=3698 milli, TCPBURST-, HEAP-, TLB-, LOCK-, SERIAL-, NVMEIRQ-, R4LPREEMPT- und CLOCKPROBE gruen, Errors=none. Der Lauf endete vor Userland, R4GB und R4SNES; keine langen, sichtbaren oder Browser-QEMU-Laeufe.
+- [Erledigt] #3 Alle Featuremessungen und die in 0.75.9, 0.75.10, 0.75.12, 0.75.13 und 0.75.19 angeordneten Benchmarkresultate zu einer Vorher-/Nachherbilanz mit Streuung, Nutzen und verbliebenen Grenzen zusammenführen
+  - Notizen: Keine zusätzlichen Läufe ohne konkret dokumentierte methodische Notwendigkeit.
+Die neue Bilanz Docs/Diagnostics/PerformanceBalance075X.txt fuehrt die vorhandenen Nachweise 0.75.1 bis 0.75.19 mit Rohsamples, Min/p50/p95-Max/Mittel, Nutzen, Groessenpreis und Messgrenzen zusammen. ExFiles/Reports/Benchmarks.jsonl ist mit exakt 12 kanonischen Datensaetzen valide; fuer 0.75.20 wurde kein neuer Benchmark ausgefuehrt. Besonders ausgewiesen: R4IMG speed 1,875x, R4FONT speed 1,656x bei zusammen +248,0312 KB Image-Nutzinhalt; nicht identische Suites und neue Baselines werden nicht gegeneinander verrechnet.
+- [Erledigt] #4 Dokumentation und manuelle Inventare konsolidieren, Versionsstände prüfen und den Lenovo-tauglichen Release Candidate für 0.75.21 bereitstellen
+  - Notizen: 0.75.21 bleibt offen und letzte Unterversion.
+Releasekennung auf 0.75.20 gesetzt; Dokumentinventar gruen mit 82 Eintraegen und Testinventar unveraendert konsistent mit 623 Eintraegen. Imageinventar bestaetigt R4FONT 0.2.1, R4IMG 0.3.2, R4BASIC 1.2.34, R4GB 0.10.10 und R4SNES 0.22.2. Slim-, Full- und Test-Abbilder sind erzeugt/verifiziert; der Full-Release-Candidate liegt unter Artifacts/Distribution/Profiles/Full/disk.img. 0.75.21 bleibt offen und die letzte Unterversion.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der Release Candidate besteht sämtliche betroffenen Owner-, Image- und SMP4-Headless-Nachweise ohne offene Performance- oder Korrektheitsregression
+  - Notizen: Browserprüfungen gehören nicht zu 0.75.X; Linux-Probleme sind behoben oder konkret in Problems.txt dokumentiert.
+Erfuellt: alle betroffenen Owner-/Generierungs-/Distribution-/Image-Gates und der einzige kurze SMP4-Quick-Smoke sind gruen; keine offene automatisiert belegte Korrektheits- oder Performanceregression. Die reale Lenovo-Bildrate bleibt bewusst der Schlussabnahme 0.75.21 vorbehalten.
+- [Erledigt] Eine nachvollziehbare Bilanz trennt gemessene Gewinne, bewusst unveränderte Grenzen und verbleibende Risiken und enthält keine unpassenden Benchmarkvergleiche
+  - Notizen: Dies ist die technische Freigabe für den Lenovo-Test, nicht dessen Ersatz.
+Erfuellt durch Docs/Diagnostics/PerformanceBalance075X.txt: gemessene Gewinne, Baselines, verworfene Optimierungen, Artefaktpreise, fehlender GPU-Treiber sowie noch nicht auf Lenovo messbare Grenzen sind getrennt dokumentiert. Es wurden keine methodisch unzulaessigen Quervergleiche oder erfundenen Durchsatzgewinne verwendet.
+
+### Notizen
+Vorletzte Stufe. Sie fügt keine weitere manuelle oder sichtbare Prüfung hinzu und startet keinen zusätzlichen, nicht ausdrücklich angeordneten Benchmark.
+Automatisierter Release Candidate abgeschlossen und veroeffentlicht. Commits: SDK 6ed1e66, R4Basic 1b631bd, R4GB 3a75f5d, R4SNES 10c282b, Distribution bde6db4, Docs 57af410. Gastabnahme ausschliesslich kurzer SMP4-QUICKPROBE; keine R4SNES-/R4GB-Lang-, Browser- oder manuellen QEMU-Tests.
+
+## 0.75.21 Manueller Lenovo-Hardware-Sichttest
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Der Benutzer prüft den zuvor automatisiert qualifizierten Release Candidate ausschließlich auf der realen Lenovo-Laptop-Hardware auf sichtbare Korrektheit und wahrnehmbare Reaktionsfähigkeit.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Finales Lenovo-Image und eine kurze, reproduzierbare Prüffolge erst nach vollständig grüner 0.75.20-Abnahme bereitstellen
+  - Notizen: Keine vorgezogene Benutzeraktion.
+Bereitgestellt nach vollstaendig gruenem 0.75.20-Abschluss: unveraenderliche lokale Full-Abnahmekopie Artifacts/Distribution/ManualAcceptance/0.75.21/lenovo-rc-full.img, 672137216 Bytes, SHA-256 EA8455A4105B8E9E775AF7A6E236AFF471E5AD6A065D4E321D3D3FDEB6B990FB. Die wenige Minuten lange Folge steht in Docs/Tests/PerformanceManualAcceptance07521.txt (Docs-Commit 99ac151): Kaltboot, kurze Desktop/Fenster/Text-Pruefung, Terminalausgabe plus LAN-Ping, kleiner lokaler Schreib-/Leseschritt und nur 20-30 Sekunden R4SNES-Rasterbeobachtung. Keine private ROM im Image, kein Browser, kein QEMU-Sichttest und kein Subsystem-Langlauf.
+- [Erledigt] #2 Benutzer lässt den Lenovo real booten und prüft Desktopstart, Fensterbewegung, Schrift/Menu, fortlaufende Terminalausgabe, Rasterdarstellung sowie sichtbare Hänger oder Artefakte
+  - Notizen: Ausschließlich reale Lenovo-Hardware; keine Browserprüfung. Beobachtungen mit konkretem Schritt und Ergebnis melden.
+Bisherige Lenovo-Beobachtungen: anfangs erschien nur Hosted text surface waiting; nach GUIFRAME starteten Explorer und Notepad und committen Frames fehlerfrei. Beim Maximieren nutzte der Inhalt wegen einer 1600x1000-SDK-Grenze nur etwa 83 Prozent der 1920er Breite. GUIMAX2 beseitigt diese Grenze; erneute visuelle Bestaetigung steht aus.
+Benutzer meldete nach GUIMAX2 und Neustart weiterhin zu schmale Inhalte in Explorer und Notepad. Das war ein FAIL der Sichtwiederholung. Nach Entfernung der zusaetzlichen app-eigenen Obergrenzen ist GUIEXT jetzt installiert; erneutes Oeffnen und Maximieren durch den Benutzer steht aus.
+Sichtwiederholung nach GUIEXT durch den Benutzer erfolgreich bestaetigt: Explorer und Notepad nutzen beim Maximieren die volle Flaeche. Weitere manuelle Beobachtungen (Fensterbedienung, Menues/Text, fortlaufende Terminalausgabe, R4SNES) stehen noch aus.
+Abschluss 04.09.2026: Benutzer bestaetigt alle drei restlichen Lenovo-Schritte mit 1: OK, 2: OK, 3: OK. Fenster-/Text-/Menuebedienung, fortlaufende Terminalausgabe und R4SNES-Rasterdarstellung damit sichtbar bestanden; sonst keine Probleme gemeldet. R4SNES zeigt keinen spuerbaren Geschwindigkeitsgewinn, was der Benutzer ausdruecklich akzeptiert; keine neue FPS-Zahl behauptet.
+- [Erledigt] #3 Benutzer prüft repräsentative Datei-/Programmstarts sowie eine normale Netzwerk- und Speicherinteraktion auf sichtbare Vollständigkeit und Reaktionsfähigkeit
+  - Notizen: Kein synthetischer QEMU-Sichtvergleich.
+Per SSH bereits bestaetigt: VER meldet R4OS 0.75.21/Kernel 0.1.86, LAN-Ping zum Gateway erfolgreich, kleiner Schreib-/Leseschritt unter C:\\TEMP erfolgreich und installierte Explorer-/Notepad-Artefakte samt MODULES.JSON stimmen mit den Hostartefakten ueberein. Sichtbare Datei-/Programmsequenz durch den Benutzer bleibt offen.
+Abschluss 04.09.2026: Benutzer bestaetigt Explorer-/Notepad-Dateifolge einschliesslich Aendern, Speichern und erneutem Oeffnen sowie sichtbaren LAN-Ping und Terminalbedienung mit OK. Zusaetzlich per SSH Testdatei lesbar, DHCP bound und Gateway-Ping 3/3 Antworten ohne Verlust. Reale Datei-, Programm-, Netzwerk- und Speicherinteraktion bestanden.
+- [Erledigt] #4 Beobachtete Fehler eng im zuständigen Besitzer beheben, automatisierte 0.75.20-Grenzen erneut bestehen und nur die betroffene Lenovo-Sequenz wiederholen; danach Versions- und Releaseabschluss durchführen
+  - Notizen: Die Unterversion bleibt bis zur ausdrücklichen Benutzerbestätigung offen.
+Die auf echter Hardware reproduzierten GUI-Fehler wurden im SDK eng behoben und als Explorer 0.1.14/Notepad 0.1.5 live installiert. SDK-Tests, Test-Image-Build und kurzer SMP4-QUICKPROBE sind gruen. Offen bleibt nur die betroffene Lenovo-Sichtsequenz sowie danach der Versionsabschluss.
+Die SDK-Korrektur allein behob den Maximierungsfehler nicht. Zusaetzliche 1600x1000-Grenzen in Explorer, Notepad und acht weiteren regulaeren GUI-Apps entfernt; als GUIEXT live auf dem Lenovo installiert und geprueft. Vollstaendiger Testimage-Build und SMP4-QUICKPROBE erneut erfolgreich, keine Fehler. Benutzer muss die Maximierungsdarstellung noch bestaetigen; kein Versionsabschluss vorgenommen.
+Abgeschlossen 04.09.2026: GUI-Resource-Offset sowie SDK- und app-eigene 1600x1000-Grenzen korrigiert, ueber GUIFRAME/GUIMAX2/GUIEXT verifiziert eingespielt und die betroffenen Lenovo-Schritte vom Benutzer bestaetigt. Alle restlichen manuellen Schritte ebenfalls OK; R4SNES ohne spuerbaren Geschwindigkeitsgewinn ausdruecklich akzeptiert. RELEASE_VERSION=0.75.21, Kernel unveraendert 0.1.86. Dokumentation, Performancebilanz und Testinventar aktualisiert; SDK-/Modul-/Full-HD-/Testimage-/SMP4-Nachweise gruen. Sammelpush mit Exitcode 0: 13 Repositories veroeffentlicht, keine Fehler oder verbleibenden pushbaren Aenderungen.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der Benutzer bestätigt auf dem realen Lenovo-Laptop korrekte Darstellung und Bedienung ohne neue sichtbare Hänger, Flackern, Text-, Raster- oder Terminalfehler
+  - Notizen: Explizite manuelle Bestätigung erforderlich.
+Explizite Benutzerbestaetigung am 04.09.2026: alle drei abschliessenden Lenovo-Schritte OK, sonst keine Probleme. Maximierungsfehler bereits nach GUIEXT erfolgreich wiederholt. R4SNES funktional korrekt ohne spuerbaren Geschwindigkeitsboost; dies ist fuer den Benutzer akzeptabel und kein behaupteter Performancegewinn.
+- [Erledigt] Nach etwaigen Korrekturen sind die automatisierten Nachweise erneut grün und der Benutzer bestätigt die betroffenen Lenovo-Schritte
+  - Notizen: Es findet keine manuelle QEMU-Abnahme statt.
+Automatisierte Wiederholungsnachweise nach beiden GUI-Korrekturen: SDK-Test erfolgreich, Test-Image-Build erfolgreich, kurzer SMP4-Headless-Test mit 4/4 CPUs und QUICKPROBE DONE erfolgreich. Kein Single-Core-, Browser-, Sicht-QEMU- oder Langlauf. Lenovo-Sichtwiederholung noch offen.
+Nach GUIEXT bestanden die betroffenen Modulbuilds, SDK-Tests, direkte Full-HD-Metriktests sowie Testimage und SMP4-testquick. Der Benutzer bestaetigt die betroffene reale Lenovo-Maximierungssequenz nun ausdruecklich mit Jetzt funktionierts. Die allgemeine Hardwareabnahme 1 bleibt bis zu den weiteren Beobachtungen offen.
+
+### Notizen
+Einzige manuelle Unterversion von 0.75.X. Kein manueller Sichttest in QEMU. Werden vorher weitere technische Arbeiten nötig, werden sie vor dieser Unterversion einsortiert, sodass sie stets die letzte bleibt.
+Der hashgebundene Lenovo-RC und die kurze reale Hardwarefolge sind bereit. Offen sind ausschliesslich die ausdruecklichen Benutzerbeobachtungen der Aufgaben 2 und 3; Aufgabe 4 bleibt fuer Fehlerkorrektur beziehungsweise den anschliessenden Versionsabschluss offen.
+Lenovo-Hardwarelauf entdeckte zwei berechtigte SDK-GUI-Fehler: ressourcenlose gepufferte Kommandos erbten einen ungueltigen Resource-Offset, danach begrenzte Canvas die Clientflaeche auf 1600x1000 (bei 1920 Pixeln sichtbar etwa 83 Prozent Breite). Beide Fehler sind behoben. GUIFRAME und das korrigierte GUIMAX2 wurden ueber SYSUPD verifiziert und live angewendet; der fehlgeleitete erste GUIMAX-Versuch wurde von SYSUPD vollstaendig zurueckgerollt. Aktueller Lenovo-Stand: R4OS 0.75.21, Kernel 0.1.86, Explorer 0.1.14, Notepad 0.1.5. Test-Image-Build und ausschliesslich der kurze SMP4-Test sind gruen; QUICKPROBE erreichte DONE mit 4/4 CPUs und ohne Fehler. Die erneute ausdrueckliche Sichtbestaetigung bleibt offen.
+Korrektur zur bisherigen GUIMAX2-Einschaetzung: Der Benutzer meldete die unvollstaendige Fensterbreite auch nach einem Neustart. Das Update war dauerhaft installiert; Ursache waren zusaetzliche app-eigene 1600x1000-Obergrenzen. GUIEXT entfernt diese in zehn regulaeren GUI-Apps und wurde nach bestaetigtem Schliessen von Explorer/Notepad erfolgreich live installiert: Transaktion 4, 10/10 Payloads, Status cleanup 11/11 einschliesslich Inventar, reboot=no. Lenovo: Explorer 0.1.15, Notepad 0.1.6, Release 0.75.21, Kernel 0.1.86. Paket (1820611 Bytes) SHA-256 7846798c7680372f9cdc49e3569b911ba3a81763e5d435fe2c7b6c9195b35485; Rueckdownload sowie beide installierten Appartefakte bytegenau bestaetigt. Zehn Modulbuilds, SDK-Tests, zwei direkt ausgefuehrte Full-HD-Metriktests, Testimage und SMP4-testquick gruen. Die sichtbare Wiederholung nach GUIEXT bleibt offen. Derselbe Klickifax-Befund ist fuer spaetere Browserarbeit dokumentiert; Klickifax blieb unveraendert.
+Benutzer bestaetigt nach GUIEXT: Jetzt funktionierts. Die Maximierung von Explorer und Notepad ist damit auf dem realen Lenovo erfolgreich wiederholt. Offen bleiben die restliche sichtbare Bedienung, Terminalausgabe, Dateiinteraktion und die kurze R4SNES-Probe; die Unterversion bleibt bis dahin offen.
+Abschluss 04.09.2026: Benutzer bestaetigt Fenster/Datei, Terminal/Netzwerk und die kurze R4SNES-Probe mit jeweils OK; sonst keine Probleme. Der fehlende spuerbare R4SNES-Geschwindigkeitsboost ist akzeptiert und in der Performancebilanz als Beobachtung ohne behaupteten Gewinn festgehalten. R4OS 0.75.21/Kernel 0.1.86 ist damit auf dem Lenovo abgenommen. Sammelpush erfolgreich, 13 Repositories: SDK cfc6f47, AppDefaults 0e6b2b1, Example 09b82f7, Explorer d709ea2, LogCenter 998109e, MemView 578089e, NetConfig 5276c2a, Notepad 1eb21c8, Paint 0150a5c, RegEdit be0c285, Services f1defda, Distribution 4d05786, Docs 7afae53. Abschlusspruefung: 0 fehlgeschlagene und 0 verbleibende pushbare Repositories. Nachweise in Docs/Tests/PerformanceManualAcceptance07521.txt und Docs/Diagnostics/PerformanceBalance075X.txt.

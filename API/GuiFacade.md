@@ -11,6 +11,12 @@ the appropriate paint/frame phase and destroys the window before exit.
 Window IDs and event payloads are borrowed observations; application-owned
 state remains in the application.
 
+Hosted applications use the complete client width and height reported by the
+desktop for their window metrics, layout and Canvas. An application may enforce
+a functional minimum, but must not clamp the reported size to a fixed maximum
+such as 1600x1000. Resize and maximize events must update those metrics so the
+content can fill the client area at Full HD and larger desktop resolutions.
+
 Controls, menus, dialogs, clipboard and timers are optional capabilities.
 The application checks the corresponding field before use. Failure to create
 or draw remains a visible typed result.
@@ -53,6 +59,10 @@ are normalized and strided Alpha8 masks are compacted. A resource too large
 for the provided scratch buffer is submitted through one ordered direct
 chunk, or through the established single-operation path where conversion is
 required.
+
+Commands without resource bytes always use `resource_offset = 0`, even after
+text or raster commands have advanced the batch resource cursor. Inheriting
+that cursor would make the command invalid and discard the entire frame.
 
 All chunks remain private until the `PaintContext` commits. The first append,
 conversion or commit error is latched and cancels the complete transaction;

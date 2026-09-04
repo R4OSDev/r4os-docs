@@ -30,6 +30,13 @@ caches to key font id, revision and codepoint without retaining reused stale
 ids. The SDK returns the stable compatibility generation 1 when an older
 table has no revision slot.
 
+R4DRAW v8 adds standalone replacement frames, native XRGB32 nearest-neighbor
+tiles and per-owner stream telemetry. `r4os.subsystem_host` uses the path for
+current XRGB32 producers: every changed frame is a complete independently
+readable state with exact damage, while the Desktop no longer replays
+superseded frame history or decomposes pixels into color-run rectangles.
+Older tables retain the bounded raster and damage-chain fallback.
+
 `ctx.allocator()` is the normal Zig `std.mem.Allocator` backed by the R4SYS VM
 calls. Small blocks use twenty bounded geometric free-size classes inside a
 64-MiB reserved region, checked header/footer boundary tags and constant-time

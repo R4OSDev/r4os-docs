@@ -5,9 +5,9 @@ Diese Datei wird deterministisch aus `API/ApiContract.json` erzeugt. Manuelle Ä
 Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenzen und Conformance-Fixtures werden produktiv aus diesem Schema erzeugt; handgeschriebene Dateien bleiben nur Fassaden oder erklaerende Texte.
 
 - Schema: v11, Baseline `standalone-contract-0.64.11`
-- Reachability: 137 von 137 Typen aufgelöst oder explizit klassifiziert
+- Reachability: 139 von 139 Typen aufgelöst oder explizit klassifiziert
 - Zentrale SDK-only-Wurzeln: 0; Runtime-R4Ls besitzen libraryeigene Vertraege
-- Operationen: 0; Fehlerdomänen: 62; Konstanten: 1372; Limits: 109
+- Operationen: 0; Fehlerdomänen: 62; Konstanten: 1379; Limits: 109
 
 ## App-Profile
 
@@ -158,6 +158,8 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `TrayServiceResponse` | fixed_layout | extern_struct | 192/8 | 192/8 | 192/8 | 192/8 |
 | `TrayDesktopExchange` | fixed_layout | extern_struct | 1344/8 | 1344/8 | 1344/8 | 1344/8 |
 | `GuiGlyphBitmap` | fixed_layout | extern_struct | 344/8 | 344/8 | 344/8 | 344/8 |
+| `GuiXrgb32Resource` | fixed_layout | extern_struct | 64/4 | 64/4 | 64/4 | 64/4 |
+| `GuiFrameStreamInfo` | extensible | extern_struct | 112/8 | 112/8 | 112/8 | 112/8 |
 
 ## Typdetails
 
@@ -4612,6 +4614,57 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `reserved0` | 20 | 4 | 4 | `u32` | - |
 | `rows` | 24 | 320 | 8 | `[40]u64` | - |
 
+### `GuiXrgb32Resource`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 64 / 4
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `source_x` | 8 | 4 | 4 | `u32` | - |
+| `source_y` | 12 | 4 | 4 | `u32` | - |
+| `source_w` | 16 | 4 | 4 | `u32` | - |
+| `source_h` | 20 | 4 | 4 | `u32` | - |
+| `guest_w` | 24 | 4 | 4 | `u32` | - |
+| `guest_h` | 28 | 4 | 4 | `u32` | - |
+| `viewport_x` | 32 | 4 | 4 | `i32` | - |
+| `viewport_y` | 36 | 4 | 4 | `i32` | - |
+| `viewport_w` | 40 | 4 | 4 | `u32` | - |
+| `viewport_h` | 44 | 4 | 4 | `u32` | - |
+| `pixels_offset` | 48 | 4 | 4 | `u32` | - |
+| `pixel_stride` | 52 | 4 | 4 | `u32` | - |
+| `flags` | 56 | 4 | 4 | `u32` | - |
+| `reserved0` | 60 | 4 | 4 | `u32` | - |
+
+### `GuiFrameStreamInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `extensible`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 112 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `flags` | 8 | 4 | 4 | `u32` | - |
+| `live_generation_count` | 12 | 4 | 4 | `u32` | - |
+| `owner` | 16 | 16 | 8 | `r4os.abi.ProgramProcessHandle` | - |
+| `committed_generation` | 32 | 8 | 8 | `u64` | - |
+| `replacement_commit_count` | 40 | 8 | 8 | `u64` | - |
+| `superseded_generation_count` | 48 | 8 | 8 | `u64` | - |
+| `coalesced_generation_count` | 56 | 8 | 8 | `u64` | - |
+| `reader_retired_generation_count` | 64 | 8 | 8 | `u64` | - |
+| `xrgb32_nearest_command_count` | 72 | 8 | 8 | `u64` | - |
+| `xrgb32_nearest_resource_bytes` | 80 | 8 | 8 | `u64` | - |
+| `current_frame_bytes` | 88 | 8 | 8 | `u64` | - |
+| `peak_frame_bytes` | 96 | 8 | 8 | `u64` | - |
+| `reserved0` | 104 | 8 | 8 | `u64` | - |
+
 ## Fehlerdomänen
 
 ### `arp`
@@ -5531,6 +5584,7 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `gui_frame_command_kind_shadow` | `9` | `u32` | value | number | `gui_frame` | fixed_contract |
 | `gui_frame_command_kind_argb32` | `10` | `u32` | value | number | `gui_frame` | fixed_contract |
 | `gui_frame_command_kind_indexed8` | `11` | `u32` | value | number | `gui_frame` | fixed_contract |
+| `gui_frame_command_kind_xrgb32_nearest` | `12` | `u32` | value | number | `gui_frame` | fixed_contract |
 | `gui_path_segment_kind_close` | `5` | `u32` | value | number | `gui_path` | fixed_contract |
 | `gui_path_segment_kind_cubic` | `4` | `u32` | value | number | `gui_path` | fixed_contract |
 | `gui_path_segment_kind_line` | `2` | `u32` | value | number | `gui_path` | fixed_contract |
@@ -5565,8 +5619,11 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `gui_frame_generation_flag_delta` | `2` | `u32` | flag | bitmask | `gui_frame` | fixed_contract |
 | `gui_frame_generation_flag_full` | `1` | `u32` | flag | bitmask | `gui_frame` | fixed_contract |
 | `gui_frame_generation_flag_indexed8` | `4` | `u32` | flag | bitmask | `gui_frame` | fixed_contract |
+| `gui_frame_generation_flag_replacement` | `8` | `u32` | flag | bitmask | `gui_frame` | fixed_contract |
 | `gui_frame_generation_info_size` | `144` | `u32` | value | bytes | `gui_frame` | fixed_contract |
 | `gui_frame_generation_info_version` | `1` | `u32` | version | number | `gui_frame` | fixed_contract |
+| `gui_frame_stream_info_size` | `112` | `u32` | value | bytes | `gui_frame` | fixed_contract |
+| `gui_frame_stream_info_version` | `1` | `u32` | version | number | `gui_frame` | fixed_contract |
 | `gui_frame_max_damage_regions` | `8` | `u32` | value | records | `gui_frame` | fixed_contract |
 | `gui_frame_max_delta_chain` | `32` | `u32` | value | generations | `gui_frame` | fixed_contract |
 | `gui_indexed8_palette_entries` | `256` | `u32` | value | entries | `gui_indexed8` | fixed_contract |
@@ -5574,6 +5631,9 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `gui_indexed8_pixels_offset` | `1088` | `u32` | value | bytes | `gui_indexed8` | fixed_contract |
 | `gui_indexed8_resource_size` | `64` | `u32` | value | bytes | `gui_indexed8` | fixed_contract |
 | `gui_indexed8_resource_version` | `1` | `u32` | version | number | `gui_indexed8` | fixed_contract |
+| `gui_xrgb32_pixels_offset` | `64` | `u32` | value | bytes | `gui_xrgb32` | fixed_contract |
+| `gui_xrgb32_resource_size` | `64` | `u32` | value | bytes | `gui_xrgb32` | fixed_contract |
+| `gui_xrgb32_resource_version` | `1` | `u32` | version | number | `gui_xrgb32` | fixed_contract |
 | `gui_frame_state_building` | `1` | `u32` | value | number | `gui_frame` | fixed_contract |
 | `gui_frame_state_idle` | `0` | `u32` | value | number | `gui_frame` | fixed_contract |
 | `gui_font_builtin_id` | `0` | `u32` | value | number | `gui_font` | fixed_contract |

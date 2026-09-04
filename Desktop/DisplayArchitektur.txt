@@ -90,6 +90,34 @@ global guest/view coordinates so tile seams remain identical. A replacement
 snapshot is swapped atomically and its exact damage continues to bound
 composition and final presentation.
 
+R4DRAW-v9 appends six optional shared-raster slots. A producer owns a bounded
+XRGB32, Indexed8 or Alpha8 resource with three backing buffers. Map-write
+selects only a buffer without frame or reader references; publish freezes its
+new raster generation. A GUI frame then carries only an 80-byte descriptor
+per at-most-128x128 destination block. Desktop acquires each distinct
+generation once, swaps the complete snapshot atomically and releases the old
+lease afterwards, so the full image is neither copied into kernel frame
+storage nor copied again into the Desktop snapshot. Producer death closes
+new writes while existing frame/reader references keep exact bytes alive;
+Desktop restart, replacement, cancellation and OOM all converge on the same
+reference-counted cleanup. If all three buffers are busy or any optional slot
+is unavailable, the previous copying frame path remains the bounded fallback.
+`GuiFrameStreamInfo` v2 exposes publish/acquire/release, backpressure,
+published/acquired/live bytes and avoided frame-copy bytes while preserving
+the v1/112 prefix.
+
+The subsystem-host regression measurement keeps this gain explicit. At
+256 x 224 XRGB32 the former four copied tile resources occupied 230016 bytes
+per changed frame; the shared frame carries four descriptors totaling 320
+bytes after one 229376-byte producer upload. At 512 x 224 the corresponding
+figures are 460032 and 640 bytes after one 458752-byte upload. Thus the
+kernel-frame-to-Desktop-snapshot resource traffic falls by 99.860879 percent
+in both cases. A 64-frame 256 x 224 run verifies one resource creation, 64
+maps and publications, 256 descriptors, byte-identical pixels and no legacy
+XRGB resource. Kernel stream counters independently report published,
+acquired, live and avoided bytes; these are measurements of the software
+pipeline and make no graphics-driver or pageflip claim.
+
 Desktop text uses a fixed direct-mapped cache for 16 font layouts and 256
 monochrome glyph-coverage snapshots. The key contains font id, codepoint and
 the R4DRAW font-catalog revision; foreground and background colors are

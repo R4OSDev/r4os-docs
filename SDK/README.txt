@@ -37,6 +37,15 @@ readable state with exact damage, while the Desktop no longer replays
 superseded frame history or decomposes pixels into color-run rectangles.
 Older tables retain the bounded raster and damage-chain fallback.
 
+R4DRAW v9 adds generation-bound shared XRGB32, Indexed8 and Alpha8 raster
+resources. `r4os.subsystem_host` writes each changed guest surface once into
+one of three bounded buffers and emits only fixed 80-byte descriptors for the
+at-most-128x128 destination blocks. The Desktop holds an acquire lease until
+its snapshot is replaced; a busy triple buffer or missing v9 slot falls back
+for that frame to the existing copied representation. Presenter statistics
+separate shared frames, descriptors, published bytes, backpressure and
+fallbacks. Guest scheduling, time and audio remain outside this video path.
+
 `ctx.allocator()` is the normal Zig `std.mem.Allocator` backed by the R4SYS VM
 calls. Small blocks use twenty bounded geometric free-size classes inside a
 64-MiB reserved region, checked header/footer boundary tags and constant-time

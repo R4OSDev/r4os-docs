@@ -67,5 +67,22 @@ frame. `drawTransitions()` and `frameMutationEntries()` count the actual draw
 ABI entries, excluding begin, commit and present. These counters are passive
 and add no platform call.
 
+## Shared raster resources
+
+R4DRAW v9 optionally exposes generation-bound shared XRGB32, Indexed8 and
+Alpha8 resources. A producer creates one bounded resource, maps a currently
+free backing buffer, fills it and publishes an immutable generation. Frames
+refer to that generation through fixed descriptors instead of copying the
+pixel payload into frame storage. A consumer acquires every distinct
+generation before publishing its own snapshot and releases the exact lease
+after replacement.
+
+The SDK exposes the six operations without hiding ownership or capability
+checks. `r4os.subsystem_host` uses three backing buffers and falls back for
+the affected frame to the established copied representation when the v9
+slots are absent, allocation fails or all buffers remain referenced. Destroy
+closes future writes; process teardown, replacement and reader release retain
+immutable bytes until the final frame or lease reference disappears.
+
 The complete function tables are in `R4DESK.md` and `R4DRAW.md`; frame shape
 serialization is summarized in `GuiShapeContract.txt`.

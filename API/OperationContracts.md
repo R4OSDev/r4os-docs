@@ -2,8 +2,8 @@
 
 Diese Matrix wird vollständig aus `ApiContract.json` erzeugt. Sie ist die lesbare Sicht auf Reife, Anforderungen, Fehler, Besitz, Blocking, Threading, Lifecycle und Wiederholung. Manuelle Änderungen sind nicht zulässig.
 
-- Physische Gruppenslots: 325; Funktionen: 317; reserviert/Tombstone: 8
-- Sichtbarkeit: public=226, advanced=91, internal=8
+- Physische Gruppenslots: 331; Funktionen: 323; reserviert/Tombstone: 8
+- Sichtbarkeit: public=232, advanced=91, internal=8
 - Zentrale SDK-only-Operationen: 0
 - Statusdomänen: 16
 - Sprachparität: public/advanced verlangt Zig und C; internal bleibt intern
@@ -261,6 +261,12 @@ Diese Matrix wird vollständig aus `ApiContract.json` erzeugt. Sie ist die lesba
 | R4DRAW | 40 | `font_revision` | function | public | R4DRAW | ja | `draw` | none | none | nonblocking | owner_thread_only | none | none | none | idempotent | none | zig_and_c_required | none | not_cancellable | none | owner_thread_only | none | none | none |
 | R4DRAW | 41 | `gui_frame_begin_replace` | function | public | R4DRAW | ja | `draw` | borrowed | call | nonblocking | owner_thread_only | none | none | atomic_on_success | never_automatic | fixed_capacity | zig_and_c_required | none | not_cancellable | none | owner_thread_only | none | call | none |
 | R4DRAW | 42 | `gui_frame_stream_info` | function | public | R4DRAW | ja | `draw` | caller_buffer | call | nonblocking | thread_safe | none | success_only | none | idempotent | caller_capacity_without_required_size | zig_and_c_required | none | not_cancellable | none | reentrant | none | call | none |
+| R4DRAW | 43 | `gui_shared_raster_create` | function | public | R4DRAW | ja | `draw` | returns_owned_handle | call | nonblocking | owner_thread_only | explicit_close_required | success_only | atomic_on_success | never_automatic | none | zig_and_c_required | none | not_cancellable | none | owner_thread_only | none | call | none |
+| R4DRAW | 44 | `gui_shared_raster_destroy` | function | public | R4DRAW | ja | `draw` | consumes_owned_handle | call | nonblocking | owner_thread_only | invalidates_on_success | none | atomic_on_success | never_automatic | none | zig_and_c_required | none | not_cancellable | none | owner_thread_only | none | call | none |
+| R4DRAW | 45 | `gui_shared_raster_map_write` | function | public | R4DRAW | ja | `draw` | caller_buffer | call | nonblocking | owner_thread_only | none | success_only | atomic_on_success | never_automatic | none | zig_and_c_required | none | not_cancellable | none | owner_thread_only | none | call | none |
+| R4DRAW | 46 | `gui_shared_raster_publish` | function | public | R4DRAW | ja | `draw` | borrowed | call | nonblocking | owner_thread_only | none | success_only | atomic_on_success | never_automatic | none | zig_and_c_required | none | not_cancellable | none | owner_thread_only | none | call | none |
+| R4DRAW | 47 | `gui_shared_raster_acquire` | function | public | R4DRAW | ja | `draw` | returns_owned_handle | call | nonblocking | thread_safe | explicit_close_required | success_only | atomic_on_success | never_automatic | none | zig_and_c_required | none | not_cancellable | none | reentrant | none | call | none |
+| R4DRAW | 48 | `gui_shared_raster_release` | function | public | R4DRAW | ja | `draw` | consumes_owned_handle | call | nonblocking | thread_safe | invalidates_on_success | none | atomic_on_success | never_automatic | none | zig_and_c_required | none | not_cancellable | none | reentrant | none | call | none |
 | R4NET | 0 | `tcp_connect` | function | public | R4NET | ja | `network` | returns_owned_handle | none | may_block | thread_safe | explicit_close_required | none | may_have_occurred | never_automatic | none | zig_and_c_required | none | not_cancellable | none | reentrant | none | none | none |
 | R4NET | 1 | `tcp_write` | function | public | R4NET | ja | `network` | borrowed | call | may_block | thread_safe | none | progress_reported | confirmed_progress | retry_from_reported_progress | fixed_capacity | zig_and_c_required | none | not_cancellable | none | reentrant | none | call | none |
 | R4NET | 2 | `tcp_read` | function | public | R4NET | ja | `network` | caller_buffer | call | may_block | thread_safe | none | progress_reported | confirmed_progress | retry_from_reported_progress | caller_capacity_without_required_size | zig_and_c_required | none | not_cancellable | none | reentrant | none | call | none |

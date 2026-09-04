@@ -5,9 +5,9 @@ Diese Datei wird deterministisch aus `API/ApiContract.json` erzeugt. Manuelle Ä
 Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenzen und Conformance-Fixtures werden produktiv aus diesem Schema erzeugt; handgeschriebene Dateien bleiben nur Fassaden oder erklaerende Texte.
 
 - Schema: v11, Baseline `standalone-contract-0.64.11`
-- Reachability: 139 von 139 Typen aufgelöst oder explizit klassifiziert
+- Reachability: 145 von 145 Typen aufgelöst oder explizit klassifiziert
 - Zentrale SDK-only-Wurzeln: 0; Runtime-R4Ls besitzen libraryeigene Vertraege
-- Operationen: 0; Fehlerdomänen: 62; Konstanten: 1379; Limits: 109
+- Operationen: 0; Fehlerdomänen: 62; Konstanten: 1398; Limits: 109
 
 ## App-Profile
 
@@ -159,7 +159,13 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `TrayDesktopExchange` | fixed_layout | extern_struct | 1344/8 | 1344/8 | 1344/8 | 1344/8 |
 | `GuiGlyphBitmap` | fixed_layout | extern_struct | 344/8 | 344/8 | 344/8 | 344/8 |
 | `GuiXrgb32Resource` | fixed_layout | extern_struct | 64/4 | 64/4 | 64/4 | 64/4 |
-| `GuiFrameStreamInfo` | extensible | extern_struct | 112/8 | 112/8 | 112/8 | 112/8 |
+| `GuiFrameStreamInfo` | extensible | extern_struct | 176/8 | 176/8 | 176/8 | 176/8 |
+| `GuiSharedRasterHandle` | fixed_layout | extern_struct | 16/8 | 16/8 | 16/8 | 16/8 |
+| `GuiSharedRasterCreateInfo` | fixed_layout | extern_struct | 48/8 | 48/8 | 48/8 | 48/8 |
+| `GuiSharedRasterWriteMap` | fixed_layout | extern_struct | 56/8 | 56/8 | 56/8 | 56/8 |
+| `GuiSharedRasterLease` | fixed_layout | extern_struct | 48/8 | 48/8 | 48/8 | 48/8 |
+| `GuiSharedRasterMap` | fixed_layout | extern_struct | 120/8 | 120/8 | 120/8 | 120/8 |
+| `GuiSharedRasterResource` | fixed_layout | extern_struct | 80/8 | 80/8 | 80/8 | 80/8 |
 
 ## Typdetails
 
@@ -4645,7 +4651,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 - Quelle: `API/ApiContract.json`
 - Klasse: `extensible`
 - Repräsentation: `extern_struct`
-- Version/Größe/Alignment: 1 / 112 / 8
+- Version/Größe/Alignment: 2 / 176 / 8
 
 | Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
 |---|---:|---:|---:|---|---|
@@ -4664,6 +4670,129 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `current_frame_bytes` | 88 | 8 | 8 | `u64` | - |
 | `peak_frame_bytes` | 96 | 8 | 8 | `u64` | - |
 | `reserved0` | 104 | 8 | 8 | `u64` | - |
+| `shared_publish_count` | 112 | 8 | 8 | `u64` | - |
+| `shared_acquire_count` | 120 | 8 | 8 | `u64` | - |
+| `shared_release_count` | 128 | 8 | 8 | `u64` | - |
+| `shared_backpressure_count` | 136 | 8 | 8 | `u64` | - |
+| `shared_published_bytes` | 144 | 8 | 8 | `u64` | - |
+| `shared_frame_bytes_avoided` | 152 | 8 | 8 | `u64` | - |
+| `shared_acquired_bytes` | 160 | 8 | 8 | `u64` | - |
+| `shared_live_bytes` | 168 | 8 | 8 | `u64` | - |
+
+### `GuiSharedRasterHandle`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 16 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `id` | 0 | 8 | 8 | `u64` | - |
+| `generation` | 8 | 8 | 8 | `u64` | - |
+
+### `GuiSharedRasterCreateInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 48 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `format` | 8 | 4 | 4 | `u32` | - |
+| `width` | 12 | 4 | 4 | `u32` | - |
+| `height` | 16 | 4 | 4 | `u32` | - |
+| `stride_bytes` | 20 | 4 | 4 | `u32` | - |
+| `data_offset` | 24 | 4 | 4 | `u32` | - |
+| `flags` | 28 | 4 | 4 | `u32` | - |
+| `data_bytes` | 32 | 8 | 8 | `u64` | - |
+| `reserved0` | 40 | 8 | 8 | `u64` | - |
+
+### `GuiSharedRasterWriteMap`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 56 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `handle` | 8 | 16 | 8 | `r4os.abi.GuiSharedRasterHandle` | - |
+| `data_address` | 24 | 8 | 8 | `u64` | - |
+| `byte_length` | 32 | 8 | 8 | `u64` | - |
+| `write_token` | 40 | 8 | 8 | `u64` | - |
+| `buffer_index` | 48 | 4 | 4 | `u32` | - |
+| `reserved0` | 52 | 4 | 4 | `u32` | - |
+
+### `GuiSharedRasterLease`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 48 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `handle` | 8 | 16 | 8 | `r4os.abi.GuiSharedRasterHandle` | - |
+| `raster_generation` | 24 | 8 | 8 | `u64` | - |
+| `lease_token` | 32 | 8 | 8 | `u64` | - |
+| `reserved0` | 40 | 8 | 8 | `u64` | - |
+
+### `GuiSharedRasterMap`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 120 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `frame_owner` | 8 | 16 | 8 | `r4os.abi.ProgramProcessHandle` | - |
+| `frame_generation` | 24 | 8 | 8 | `u64` | - |
+| `lease` | 32 | 48 | 8 | `r4os.abi.GuiSharedRasterLease` | - |
+| `data_address` | 80 | 8 | 8 | `u64` | - |
+| `byte_length` | 88 | 8 | 8 | `u64` | - |
+| `format` | 96 | 4 | 4 | `u32` | - |
+| `width` | 100 | 4 | 4 | `u32` | - |
+| `height` | 104 | 4 | 4 | `u32` | - |
+| `stride_bytes` | 108 | 4 | 4 | `u32` | - |
+| `data_offset` | 112 | 4 | 4 | `u32` | - |
+| `flags` | 116 | 4 | 4 | `u32` | - |
+
+### `GuiSharedRasterResource`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 80 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `handle` | 8 | 16 | 8 | `r4os.abi.GuiSharedRasterHandle` | - |
+| `raster_generation` | 24 | 8 | 8 | `u64` | - |
+| `format` | 32 | 4 | 4 | `u32` | - |
+| `source_x` | 36 | 4 | 4 | `u32` | - |
+| `source_y` | 40 | 4 | 4 | `u32` | - |
+| `source_w` | 44 | 4 | 4 | `u32` | - |
+| `source_h` | 48 | 4 | 4 | `u32` | - |
+| `guest_w` | 52 | 4 | 4 | `u32` | - |
+| `guest_h` | 56 | 4 | 4 | `u32` | - |
+| `viewport_x` | 60 | 4 | 4 | `i32` | - |
+| `viewport_y` | 64 | 4 | 4 | `i32` | - |
+| `viewport_w` | 68 | 4 | 4 | `u32` | - |
+| `viewport_h` | 72 | 4 | 4 | `u32` | - |
+| `flags` | 76 | 4 | 4 | `u32` | - |
 
 ## Fehlerdomänen
 
@@ -6762,6 +6891,25 @@ Geltung: `window_service`, Einheit: `status_code`, Stabilität: `fixed_contract`
 | `tray_result_not_owner` | `-5` | `i32` | value | status_code | `tray_result` | fixed_contract |
 | `tray_result_busy` | `-6` | `i32` | value | status_code | `tray_result` | fixed_contract |
 | `tray_result_timeout` | `-7` | `i32` | value | status_code | `tray_result` | fixed_contract |
+| `gui_frame_command_kind_shared_raster` | `13` | `u32` | value | number | `gui_frame` | fixed_contract |
+| `gui_frame_generation_flag_shared_raster` | `16` | `u32` | flag | bitmask | `gui_frame` | fixed_contract |
+| `gui_shared_raster_buffer_count` | `3` | `u32` | value | buffers | `gui_shared_raster` | fixed_contract |
+| `gui_shared_raster_create_info_size` | `48` | `u32` | value | bytes | `gui_shared_raster` | fixed_contract |
+| `gui_shared_raster_create_info_version` | `1` | `u32` | version | number | `gui_shared_raster` | fixed_contract |
+| `gui_shared_raster_format_alpha8` | `3` | `u32` | value | number | `gui_shared_raster` | fixed_contract |
+| `gui_shared_raster_format_indexed8` | `2` | `u32` | value | number | `gui_shared_raster` | fixed_contract |
+| `gui_shared_raster_format_xrgb32` | `1` | `u32` | value | number | `gui_shared_raster` | fixed_contract |
+| `gui_shared_raster_handle_size` | `16` | `u32` | value | bytes | `gui_shared_raster` | fixed_contract |
+| `gui_shared_raster_lease_size` | `48` | `u32` | value | bytes | `gui_shared_raster` | fixed_contract |
+| `gui_shared_raster_lease_version` | `1` | `u32` | version | number | `gui_shared_raster` | fixed_contract |
+| `gui_shared_raster_map_size` | `120` | `u32` | value | bytes | `gui_shared_raster` | fixed_contract |
+| `gui_shared_raster_map_version` | `1` | `u32` | version | number | `gui_shared_raster` | fixed_contract |
+| `gui_shared_raster_max_bytes` | `1048576` | `u64` | value | bytes | `gui_shared_raster` | fixed_contract |
+| `gui_shared_raster_max_frame_resources` | `8` | `u32` | value | records | `gui_shared_raster` | fixed_contract |
+| `gui_shared_raster_resource_size` | `80` | `u32` | value | bytes | `gui_shared_raster` | fixed_contract |
+| `gui_shared_raster_resource_version` | `1` | `u32` | version | number | `gui_shared_raster` | fixed_contract |
+| `gui_shared_raster_write_map_size` | `56` | `u32` | value | bytes | `gui_shared_raster` | fixed_contract |
+| `gui_shared_raster_write_map_version` | `1` | `u32` | version | number | `gui_shared_raster` | fixed_contract |
 
 ## Limits
 

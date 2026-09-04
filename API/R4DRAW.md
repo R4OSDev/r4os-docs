@@ -42,10 +42,20 @@ Der native `GuiXrgb32Resource` transportiert Quellkachel, Stride, Gast- und
 Viewportgeometrie ohne Farblaufzerlegung. Die Telemetrie weist Freigabe,
 Koaleszenz, Leser-Retirement, XRGB32-Arbeit und Framebytes ownergebunden aus.
 
+R4DRAW v9 haengt einen optionalen generationengebundenen Shared-Raster-Pfad
+an. Produzenten erzeugen eine begrenzte XRGB32-, Indexed8- oder
+Alpha8-Ressource, schreiben in genau einen freien Puffer und veroeffentlichen
+ihn unveraenderlich. Der Desktop erwirbt die im konkreten Frame referenzierte
+Generation und gibt seine Lease nach dem Snapshottausch frei. Drei Puffer
+begrenzen den Bestand; bei Rueckstau bleibt der bestehende kopierende
+Framepfad der korrekte Fallback. `GuiFrameStreamInfo` v2 ergaenzt Publish-,
+Acquire-, Release-, Backpressure-, Copy-Vermeidungs- und Livebytezaehler; der
+v1/112-Prefix bleibt lesbar.
+
 <!-- R4OS-APIREF:BEGIN R4DRAW (generiert von ApiContractGen aus ApiContract.json - NICHT von Hand editieren) -->
 ## Tabellen-Referenz R4DRAW (generiert)
 
-Kernel-Gruppentabelle `R4XStartR4Draw` v8, 360 Bytes, 43 Funktionsfelder und 43 Slots insgesamt.
+Kernel-Gruppentabelle `R4XStartR4Draw` v9, 408 Bytes, 49 Funktionsfelder und 49 Slots insgesamt.
 Signatur-Wahrheit: `abi.R4DrawFns` (Feldname == Tabellenfeld).
 Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 
@@ -94,4 +104,10 @@ Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 | 40 | 336 | function | `font_revision` | `*const fn () callconv(.c) u32` |
 | 41 | 344 | function | `gui_frame_begin_replace` | `*const fn ([*]const DisplayDamageRect, u32) callconv(.c) i32` |
 | 42 | 352 | function | `gui_frame_stream_info` | `*const fn (*const ProgramProcessHandle, *GuiFrameStreamInfo) callconv(.c) i32` |
+| 43 | 360 | function | `gui_shared_raster_create` | `*const fn (*const GuiSharedRasterCreateInfo, *GuiSharedRasterHandle) callconv(.c) i32` |
+| 44 | 368 | function | `gui_shared_raster_destroy` | `*const fn (*const GuiSharedRasterHandle) callconv(.c) i32` |
+| 45 | 376 | function | `gui_shared_raster_map_write` | `*const fn (*const GuiSharedRasterHandle, *GuiSharedRasterWriteMap) callconv(.c) i32` |
+| 46 | 384 | function | `gui_shared_raster_publish` | `*const fn (*const GuiSharedRasterWriteMap, *u64) callconv(.c) i32` |
+| 47 | 392 | function | `gui_shared_raster_acquire` | `*const fn (*const ProgramProcessHandle, u64, *const GuiSharedRasterHandle, u64, *GuiSharedRasterMap) callconv(.c) i32` |
+| 48 | 400 | function | `gui_shared_raster_release` | `*const fn (*const GuiSharedRasterLease) callconv(.c) i32` |
 <!-- R4OS-APIREF:END R4DRAW -->

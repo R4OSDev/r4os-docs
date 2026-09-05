@@ -111,3 +111,13 @@ changed an unknown prefix; no automatic write retry or power-fail atomicity
 is implied. Backup/main ordering and metadata readback are followed by the
 normal checked claim close, rescan and fresh mount identities. See the SDK
 owner documentation for limits and the grouped component fixture.
+
+Partition identity changes (0.76.10)
+------------------------------------
+Claim completion restores only surviving disk GUID/MBR ID, partition number,
+bounds, unique GUID and type. Deleted or reidentified partitions do not inherit
+old letters or installation roles and are not remount failures. A matching
+identity with a damaged filesystem still reports a real remount failure.
+R4PART OFFLINE flushes/detaches affected mounts with KEEP_UNMOUNTED; this
+survives application EXIT. ONLINE explicitly mounts them again and does not
+change device power or prevent another explicit mount.

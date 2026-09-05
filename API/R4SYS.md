@@ -170,3 +170,8 @@ Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 | 124 | 1008 | function | `io_file_info` | `*const fn ([*:0]const u8, u32, *u32) callconv(.c) i32` |
 | 125 | 1016 | function | `io_file_lock` | `*const fn ([*:0]const u8, u64, u64, u32, *u32) callconv(.c) i32` |
 <!-- R4OS-APIREF:END R4SYS -->
+
+Physische Storageoperationen verwenden das generationierte Inventar und
+die exklusiven Regionsbelegungen aus `StorageFacade.md`. Raw-I/O, Flush,
+Mount/Unmount und Rescan laufen ueber additive optionale Slots; bestehende
+Tabellenfelder behalten ihre Offsets.

@@ -334,3 +334,33 @@ ihr Volume. 512-Byte-Sektoren, vorhandene u32-FS-Basis-LBAs, u32-FAT32-End-
 adressen und u32-NTFS-Clusterzahl bleiben ausdrueckliche Grenzen.
 Modelltexte bleiben leer, wenn der Backendvertrag keine echten Daten
 liefert; ein logischer Name wie usb0 ist keine Hardwaremodellbezeichnung.
+
+Exclusive maintenance and mounted uses (0.76.8)
+----------------------------------------------
+storage/access_state owns bounded, generation-bound device registrations,
+mount incarnations, call/transfer uses and region claims. access_runtime
+serializes only their metadata under the storage owner. No driver, VFS,
+cache wait or scheduler work runs while this short owner is held.
+
+storage/operations implements the public mechanism with a separate sleepable
+orchestration gate. Normal filesystem requests acquire their actual backing
+mount before waiting; copy/move bind both sides and write streams keep a use
+until finish/abort/retirement. Required C: and the internal boot volume reject
+maintenance. Recovery instead runs from RAM C: and mounts physical BOOT as
+an ordinary offline volume. Claims cover the complete disk or partition;
+new overlapping requests fail, while unrelated volumes keep working.
+
+The cache drains busy entries, writes only dirty sectors in the affected
+range, invalidates only that range and flushes the backend. This includes
+partitions sharing a cache page. Claim completion performs another flush,
+rescans the table and reprobes matching saved mount identities. FAT allocation
+caches and NTFS runtime volume state are forgotten only after detachment.
+A failed flush/remount is reported and leaves the target visible, unmounted
+when required. The cleanup worker performs final I/O after owner retirement,
+following existing asynchronous-call and stream drains.
+
+USB BOT now binds its internal device handle to the xHCI enumeration
+incarnation. Disconnect/reconnect or changed-medium SCSI sense permanently
+invalidates the old block registration before another write is dispatched.
+Transport reset alone cannot silently associate that registration with a
+replacement medium. Public USB module layouts stay unchanged.

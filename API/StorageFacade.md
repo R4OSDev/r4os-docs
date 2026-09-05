@@ -154,3 +154,18 @@ SHRINK DESIRED=MB removes exactly the requested amount, or without DESIRED the
 current maximum. The smaller filesystem and both boot copies become durable
 before the smaller GPT/MBR boundary; clean marking and remount require both to
 succeed. Failure leaves the affected target unmounted with its actual progress.
+
+GPT inspection/repair and R4PART scripts (0.76.13)
+------------------------------------------------
+SDK storage_tools.gpt_repair.Report independently checks both GPT headers and
+arrays, CRCs, geometry, partition identities and overlaps. R4PART CHECK GPT
+requires matching intact copies. REPAIR GPT restores only a damaged counterpart
+from a unique intact copy; conflicting/invalid sources or I/O ambiguity refuse.
+Under the whole-disk claim it revalidates the full observed SHA-256 fingerprint,
+then writes/flushes/verifies the bad array before its header. The good copy,
+protective MBR and partition payload remain untouched. Accepted geometry and
+counterpart placement are documented in SDK/DOCUMENTATION.de.txt.
+R4PART /S preloads at most 64 KB UTF-8, with 512-byte lines and optional BOM.
+It uses the same commands and explicit confirmation lines; first error/EOF at
+a required confirmation stops with code 1, success/EXIT returns 0. It retains
+no script file handle during mutation. Failed SELECT clears prior selection.

@@ -85,3 +85,29 @@ Explicit mount/unmount, rescan and letter assignment use the same admission
 mechanism. Unrelated volumes and Recovery's RAM runtime remain usable during
 a partition claim. Re-enumerate after completion: old mount and table
 references must not become valid again.
+
+## Shared partition and formatting tools
+
+`r4os.storage_tools` owns userland/host GPT/MBR editing and FAT32/NTFS
+formatting. `storage_tools_guest.Target` adapts a complete physical target
+and its live claim; `storage_tools.host_file.File` uses a locked positional
+host file. They share sector-relative I/O and a 128-KB transfer limit.
+
+Prepare every layout, metadata buffer and source before starting execution.
+The partition plan captures the actual parsed table bytes and rechecks their
+SHA-256 after exclusive admission. Unknown, hybrid, extended or inconsistent
+tables reject ordinary editing; explicit CLEAN and subsequent creation are
+separate destructive operations. New partition starts align to 1 MB.
+
+A formatter receives a complete target region and bounded caller-owned work
+buffer. Quick writes filesystem administration, Full also zeros free space.
+NTFS streams the cluster bitmap instead of allocating a volume-sized image;
+its metadata source and byte receipts are SDK-owned. Existing whole-image
+fixture builders retain an explicit RAM compatibility call.
+
+Progress distinguishes the first failure and LBA, attempted writes, fully
+acknowledged sectors, flush and verification. A failed backend call may have
+changed an unknown prefix; no automatic write retry or power-fail atomicity
+is implied. Backup/main ordering and metadata readback are followed by the
+normal checked claim close, rescan and fresh mount identities. See the SDK
+owner documentation for limits and the grouped component fixture.

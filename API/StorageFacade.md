@@ -86,6 +86,16 @@ mechanism. Unrelated volumes and Recovery's RAM runtime remain usable during
 a partition claim. Re-enumerate after completion: old mount and table
 references must not become valid again.
 
+Recovery can reserve `R:` during its verified initial boot for the exact
+physical source-device incarnation while `C:` is RAM. After replacing that
+same device, explicit mounting of its new FAT32 Recovery partition may reuse
+`R:`. The reservation never follows a copied GPT ID or a new device occupying
+the old slot. Normal R4OS boot does not establish it. The installer selects
+and checks the new partition; the kernel only enforces the device-bound
+reservation. An untouched failed claim closes with ordinary remount; after
+the first write attempt, the installer requests KEEP_UNMOUNTED and publishes
+only freshly verified volumes.
+
 ## Shared partition and formatting tools
 
 `r4os.storage_tools` owns userland/host GPT/MBR editing and FAT32/NTFS

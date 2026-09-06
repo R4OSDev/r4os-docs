@@ -22,7 +22,7 @@ The root build does not implement a second image builder. It builds component
 repositories, creates explicit workspace/common/profile plans and delegates
 image creation and QEMU to `Repositories/Distribution/`.
 
-The Distribution starter additionally accepts `headless Test smp2`,
+The Distribution starter additionally accepts `headless Test clock4`,
 `headless Test smp4` and the diagnostic partial-failure variant
 `headless Test smpfail4`. The last variant requires a kernel built with the
 private `-Dsmp-fail-ap-index=2` seam and is not a normal product build.
@@ -33,31 +33,45 @@ Outputs
 Module artifacts are placed below `Artifacts/Modules/`. Distribution plans,
 generated inventories, images and logs are placed below
 `Artifacts/Distribution/`. A profile's boot image is
-`Artifacts/Distribution/Profiles/<Profile>/disk.img`; `data.img` is the
-separate persistent data disk.
+`Artifacts/Distribution/Profiles/<Profile>/disk.img`, sealed by `image.json`.
+All four profiles (Slim, Full, Test, Benchmark) use BIOSBOOT/BOOT/SYSTEM/
+RECOVERY/DATA in this single image. GUI/SSH keep their state in
+`Interactive/<source-SHA256>/disk.img`; automated runners create a fresh copy
+under `Runs/<name>/disk.img`. They reject a modified canonical source.
 
 The detailed developer workflow is maintained in the workspace agent
 reference `Agents/Build.txt`. Individual tests are inventoried in
 `Docs/Inventory/Tests.json`.
 
-Technical installation image (0.76.17)
-------------------------------------
+Common installation image (0.76.22)
+----------------------------------
 
-After building the normal components and the separately paired Recovery
-kernel/runtime, `Tools/Build.sh -plan Slim` and
-`Repositories/Distribution/Build.sh recovery-image Slim` produce
-`Artifacts/Distribution/RecoveryImages/Slim-local/disk.img`. Windows uses
-the corresponding .bat starters; new orchestration is shared PowerShell 7.
+After building the normal components,
+`Repositories/Distribution/Build.sh image Slim` produces
+`Artifacts/Distribution/Profiles/Slim/disk.img`. Windows uses the .bat
+starter; all orchestration is shared PowerShell 7. `RecoveryPin.json` must
+select a published version, release ID and SHA256. A cached exact package
+works offline. An explicit `-RecoveryCandidate <ZIP>` selects a local
+technical input; no image build implicitly updates or rebuilds Recovery.
 `-Medium usb` selects Recovery as the five-second Limine menu default.
 
-This 2048-MB technical GPT image has BIOSBOOT 1 MB, BOOT 128 MB FAT32/ESP,
+This 2048-MB GPT image has BIOSBOOT 1 MB, BOOT 128 MB FAT32/ESP,
 SYSTEM 1024 MB NTFS, RECOVERY 512 MB FAT32 and DATA NTFS in the actual
 remaining usable sectors. Both GPT copies, new IDs, installation JSON and
 Limine references are checked independently, including the physical FAT
 allocation and the complete initial CURRENT/PREVIOUS package contents.
-`image.json` records source hashes and explicitly marks the image technical.
-The normal published profile layout is migrated later with the Recovery
-release pin; this command does not publish a release.
+`image.json` records source hashes and distinguishes technical candidates
+from the published pin. Release preparation reformats DATA in a private
+copy, includes the independent Recovery ZIP and standalone USB creators,
+and verifies image/manifest/BOOT/Recovery agreement. The source image has
+no original-ZIP cache: the USB creator adds that after writing the image.
+
+Recovery has independent `Release.sh` / `Release.bat` starters for Prepare,
+Publish and SelfTest. Prepare records the frozen component inputs and
+requires the named kernel/runtime pair to match. Technical local packages
+use `-Technical`; a normal R4OS preparation accepts them only through
+`Tools/Release.ps1 -TechnicalCandidate -RecoveryCandidate <ZIP>`.
+Neither publisher accepts technical mode.
 
 `pwsh -NoProfile -File Repositories/Distribution/Tests/Test-InstallationImage.ps1`
 performs the bounded SMP4 BIOS/UEFI acceptance, including multiple

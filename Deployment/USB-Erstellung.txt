@@ -1,0 +1,90 @@
+﻿R4OS-USB-Erstellung
+==================
+
+Stand: 0.76.21
+
+Der USB-Starter erzeugt ein Installations-/Recovery-Medium aus dem originalen
+R4OS-Release-ZIP im Format r4os-gpt-1. Das Ziel wird vollstaendig neu
+eingerichtet. Das ZIP, die Starter und der Arbeitsordner muessen auf einem
+anderen Medium liegen. Ein bereits mit Balena kopiertes Image enthaelt das
+Original-ZIP nicht automatisch; der R4OS-Starter erledigt diesen Zusatzschritt.
+
+Aufruf
+------
+
+PowerShell 7 ist auf beiden Hosts Voraussetzung. Unter Windows CreateUSB.bat
+aus einem Terminal mit Administratorrechten starten. Unter Linux lautet der
+Aufruf `sudo sh CreateUSB.sh`. Beide Starter verwenden CreateUSB.ps1.
+
+Der Starter zeigt geeignete USB-Datentraeger mit Pfad, Modell, Groesse und
+Identitaet an. Ein System-/Bootdatentraeger und schreibgeschuetzte Medien
+werden ausgeschlossen. Die Neueinrichtung erfordert die genaue Eingabe von
+`ERASE <angezeigter Zielpfad>`. Eine falsche Eingabe bricht ohne Zielschreiben ab.
+
+Ein Release-ZIP neben den Startern wird angeboten; ein abweichender Pfad kann
+angegeben werden. Fuer Aufrufe mit Argumenten dient beispielsweise:
+
+  pwsh -NoProfile -File CreateUSB.ps1 -ReleaseZip <Original-ZIP> -Target <USB>
+
+Der optionale WorkRoot muss genug freien Platz fuer das entpackte Release und
+das vorbereitete Image bieten. Arbeitsdateien liegen im Workspace unter Temp/Usb,
+beim eigenstaendigen Starter unter Temp/. Das vorbereitete Image ist sparse;
+freie DATA-Sektoren werden weder vollstaendig angelegt noch auf den Stick kopiert.
+
+Ergebnis und Ablauf
+-------------------
+
+BIOSBOOT 1 MB, BOOT 128 MB, SYSTEM 1024 MB und RECOVERY 512 MB behalten ihre
+gemeinsamen Groessen und Startsektoren. DATA fuellt den realen Rest bis vor die
+GPT-Sicherung und wird frisch mit DOCS, MEDIA und TEMP formatiert. Dateien eines
+vorherigen Dateisystems werden nicht uebernommen. Freie Sektoren werden nicht
+als sichere physische Datenloeschung behandelt.
+
+Der gemeinsame NTFS-Erzeuger braucht mindestens 4096 vollstaendige 4-KB-Cluster
+plus einen Sicherungsbootsektor: 32769 Sektoren beziehungsweise 16 MB + 512 B.
+Daraus folgen mindestens 3444770 Sektoren / 1763722240 Bytes fuer das Medium.
+Eine logische Sektorgroesse ungleich 512 Bytes wird abgewiesen. Ein nomineller
+2-GB-Stick darf kleiner als die 2048-MB-Quellimage-Datei sein: ihr DATA wird durch
+die neue Restpartition ersetzt, nur die festen Quellbereiche werden uebernommen.
+
+Vor dem ersten Zielschreiben prueft der Starter ZIP-Dateiliste und saemtliche
+SHA256-Hashes, die Quellinstallation, neue Kennungen, GPT-Ende, Bootverweise,
+FAT-Belegung und Platz fuer das ZIP. Der ImageCreator verwendet die gemeinsamen
+SDK-Bausteine; die Schreibfolge bleibt auf Windows/Linux dieselbe.
+
+Nach exklusiver Aufnahme werden Geometrie und der bei der Auswahl gelesene
+Inhaltsfingerabdruck erneut geprueft. Erst werden die Installation und das
+frische DATA geschrieben und zurueckgelesen, danach das Original-ZIP nach
+RECOVERY:/INSTALL/RELEASE.ZIP. Abschliessend werden Image-Struktur und ZIP-Hash
+ueber denselben noch gehaltenen Datentraegerhandle geprueft. Ein Fehler meldet
+keinen Erfolg; Arbeitsdateien bleiben zur Diagnose erhalten.
+
+Limine startet nach fuenf Sekunden standardmaessig R4OS Recovery. R4OS und
+R4OS Recovery Previous bleiben feste, manuell auswaehlbare Eintraege.
+
+Technische Hostgrenzen
+---------------------
+
+Linux verwendet nach Quellenpruefung und Unmount einen blockierenden
+Systemzugriff ausschliessenden O_EXCL-Handle und einen nicht wartenden flock.
+Windows sperrt und dismountet vorhandene Volumes und haelt den PhysicalDrive
+exklusiv. Belegte Volumes oder fehlende Hostrechte fuehren zum Abbruch.
+
+API-Quellen:
+https://man7.org/linux/man-pages/man2/open.2.html
+https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew
+https://learn.microsoft.com/en-us/windows/win32/api/winioctl/ni-winioctl-fsctl_lock_volume
+
+Die Linux-Abnahme verwendet entbehrliche regulaere Images und SMP4-QEMU;
+Windows-Quellzweige werden ueber Datentraeger-Fixtures und den kompilierten
+Windows-Werkzeugstand geprueft. Das ersetzt keinen realen Windows-USB-Schreibtest.
+Der einzige manuelle Lenovo-Test bleibt dem Roadmapabschluss vorbehalten.
+
+Abnahme 0.76.21: HostWriteAndGuards 25.432 s, Smp4UsbBoot 16.923 s. Ziel 3221232128 B; Mindestmedium
+1763722240 B mit 32769 DATA-Sektoren erfolgreich vorbereitet und geprueft.
+Die eigenstaendige Starterkopie lief aus einem Pfad mit Leerzeichen; verlorene
+Linux-Ausfuehrrechte am Werkzeug wurden automatisch wiederhergestellt.
+Quelle 0.76.18 / Kernel 0.1.98 / Recovery 0.1.14; SMP4 BIOS-USB-Boot mit 8192 MB.
+Der festgehaltene Recovery-Bestand wird in 0.76.23 ausdruecklich auf die
+korrigierte Mindestgrenze uebernommen. Seine bestehende NTFS-Vorabplanung
+weist die um einen Sektor zu kleine Kombination bereits vor Zielschreiben ab.

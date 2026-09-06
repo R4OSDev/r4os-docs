@@ -80,15 +80,25 @@ Events are drained even when no command or transfer is waiting, retained in a
 per-port pending set, then acknowledged only after targeted debounce, slot
 reclaim and optional re-enumeration. Repeated events for the same port are
 coalesced with counters instead of being reported as stale completions. USB-HID
-bindings are reconciled from the resulting USB device catalog.
+bindings are reconciled from the resulting USB device catalog. The current
+reconciler compares port and slot only; replacement generations and release of
+held input on detach still require correction (analysis 0.77.18).
 
 After scheduler start, the shared event ring is woken by the cached legacy
 INTx route and drained outside IRQ context. A bounded 10-ms poll remains the
 fallback for missing routing and deadlines. Up to 32 generation-safe transfer
 objects bind the exact slot, endpoint and TD pointers. HID may therefore keep
 one interrupt transfer pending while USB storage owns another endpoint.
+This does not provide independent completion consumption: the synchronous
+storage transaction, including retry delays and recovery, retains the shared
+controller guard and blocks the HID poller until it returns. Each device
+runtime also has only one interrupt ring; binding two interrupt interfaces of
+one composite device does not currently provide independent endpoint owners.
 Bulk transfers use page-bounded TRB chains up to 64 KiB; a chain crossing the
-producer wrap carries ownership through the Link TRB.
+producer wrap carries ownership through the Link TRB. Analysis 0.77.18 found
+incorrect TD Size packet accounting and short-transfer length accounting for
+multi-TRB transfers; the existing chain tests cover segmentation and wrapping,
+not complete hardware transfer semantics.
 
 USB keyboards publish only through the canonical input queue. The HID poller
 does not own a second character ring and pauses before accepting a report until

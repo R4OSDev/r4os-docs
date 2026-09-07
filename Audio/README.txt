@@ -20,6 +20,18 @@ Drivers advertise capabilities and own hardware-specific conversion,
 DMA, interrupts, stop and recovery. Applications must use the announced
 stream format and close every stream they open.
 
+For native 48 kHz stereo S16LE, the PCM adapters copy complete bounded
+blocks directly into their owned ring or DMA storage. A single stream at
+unity gain also bypasses sample accumulation in the kernel mixer, including
+ring wrap. Fractional resampler phase, foreign formats, non-unity gain and
+multiple active sources keep conversion/scaling/mixing. Partial acceptance,
+backend Busy and stream lifetime remain governed by the existing owners.
+
+AUDSVC binds each logical stream to both the client ID and its program
+generation. One bounded paged inventory traversal serves all open sessions
+in a cleanup round. An incomplete or changed inventory defers cleanup;
+a reused ID cannot keep a stream from the previous generation alive.
+
 Synth engines render productively into the common 48 kHz, stereo, signed
 16-bit little-endian PCM path. A render request contains 1 to 1024 frames;
 the audio core writes the complete block to the active R4D backend. Backend
@@ -61,6 +73,11 @@ scheduler demotes the worker after its four-tick/four-dispatch boost, so audio
 cannot form an unbounded priority lane. The current HDA and AC97 DMA geometry
 is intentionally unchanged: the available cursor, queue, underrun and
 deadline evidence did not justify a period or segment-DMA change.
+
+Both SDK audio writers keep packet lengths as usize before adding their
+request header. Zig's narrowed @min result alone cannot represent a complete
+1024-byte legacy or 4096-byte App-Audio message; explicit widening prevents
+those boundary requests from wrapping to zero length.
 
 PCM clients retain frame-aligned progress reported before Busy, timeout or a
 hard error. R4Synth sends matching stereo S16LE WAV data directly and paces

@@ -349,6 +349,53 @@ cleanup releases records and clusters in an ownership-safe order; a failed
 rollback or dirty clear is reported explicitly and leaves the volume dirty,
 so incomplete cleanup can never be certified as a clean filesystem.
 
+Datei-/NTFS-Arbeitsmengen ab 0.78.3
+---------------------------------
+FileMove verwendet bei gleichem tatsaechlichem Volume, gleichem Elternknoten
+und freiem Zielnamen den vorhandenen VFS-Rename-Vertrag. Die beiden Pfade
+bleiben dabei unter derselben Volume-Anforderung gebunden. NTFS behaelt die
+MFT-Identitaet und kopiert keine Nutzdaten. Vorhandene Ziele und andere
+Volumes/Elternverzeichnisse verwenden weiterhin den bisherigen Kopierpfad.
+FATs ausdrueckliche LFN-/not_atomic-Ablehnung vor dem ersten Namensschreibzugriff
+erlaubt diesen Rueckfall; nach einem I/O- oder teilweise ausgefuehrten
+Metadatenfehler wird keine zweite Kopie gestartet.
+
+Der caller-eigene Scratch-Zustand jedes NTFS-Mounts haelt die naechste Cluster-
+und MFT-Suchposition auch zwischen kurzlebigen Volume-Views. Die Suche laeuft
+einmal um, beruecksichtigt fruehere Freigaben und vertraut weiterhin nur den
+Bitmaps. Ein durch den Suchstart geteilter freier Bereich darf keinen falschen
+Run-Puffermangel verursachen. Erst ein vollstaendiger erfolgreicher
+Allokationsplan verschiebt den Hinweis; bestehende Rollback-Regeln gelten weiter.
+
+Zusammenhaengende I/O-Spannen sind auf 256 Sektoren bzw. 128 KB begrenzt.
+Das belegt auch bei nicht seitengleicher Ausrichtung hoechstens 33 Cache-Seiten
+und bleibt unter der 64-Seiten-Untergrenze. Device.max_transfer_sectors erlaubt
+kleinere Transportgrenzen; der Kompatibilitaetswert ist 64, null aktiviert die
+Besitzergrenze. Kernel und Recovery-Kernel waehlen null; Cache und Blocktreiber
+teilen weiterhin entsprechend ihren eigenen Grenzen. Run-Grenzen und
+Read/Modify/Write fuer Teilsektoren bleiben erhalten.
+
+readRunBytes nullt nur Sparse-Spannen. readAttrRange liest ausschliesslich den
+initialisierten Anteil und nullt danach den nicht initialisierten Dateischwanz.
+Bytes jenseits der zurueckgegebenen Laenge bleiben unberuehrt. Ein fehlender
+Run oder Geraetefehler bleibt ein Fehler, auch nach teilweise gefuelltem Puffer.
+
+Nachweis: CheckNtfsWriteModel0606 --work-count verwendet ein frisches 24-MB-
+Volume, 128 kleine Dateien und einen zusammenhaengenden 1-MB-Inhalt. Die
+MFT-Bitpruefungen sinken 8616 -> 131, Clusterpruefungen 5257 -> 754,
+Nutzdatenuebergaben je 1-MB-Read/Write 32 -> 8. Die bisherige Read-Vorloeschung
+von 1049600 Bytes einschliesslich MFT-Record entfaellt. Das sind Arbeitsmengen,
+keine gemessenen Laufzeitfaktoren. FSDIAG /NTFS prueft Metadatencache, FileMove-
+Identitaet/Inhalt, bestehende Ziele und volumenuebergreifende Kopien; im
+SMP4-Gast sank fs_cache_read_caller_copy_bytes beim selben 1-MB-Move von
+1678848 auf 40960 Bytes. Der alte Kernel kopiert den Inhalt und vergibt eine
+neue MFT-Identitaet; der neue behaelt sie bei. Die verbleibenden Reads gehoeren
+ausschliesslich zur Metadatenoperation. Beide Faelle erhalten den Inhalt.
+
+SDK, Kernel/Support sowie beide dokumentierten Recovery-Kopien teilen diese
+Logik; nur der bestehende SDK-Importadapter unterscheidet sich. Recovery haelt
+den expliziten Transfer mit Quellpatches und Hashes in owner-update-0.78.3.json.
+
 System paths are case-insensitive. Mixed case is preserved below
 `C:\R4OS\Media\`; the remaining system tree normally uses uppercase names.
 Applications use SDK file/path facades and do not call a filesystem backend

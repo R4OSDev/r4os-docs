@@ -33,6 +33,17 @@ so UI clients must not keep a second mixer truth.
 The active R4D backend owns hardware conversion, DMA, interrupts and recovery.
 An SDK facade never calls a kernel hardware path directly.
 
+R4AUDIO v2 additionally exposes `audioOutputInfo()` and `audioSelectOutput()`
+through the low-level facade for AUDSVC and targeted diagnostics. The bounded
+catalog includes disconnected connectors, their capability/availability state
+and a stable physical identity. Selection takes that identity in a 64-byte
+NUL-terminated buffer and preserves the application stream queues and master
+gain. Existing table slots and AudioBackend v2 descriptors retain their
+layouts; the new output callbacks occupy a version-3 driver descriptor tail.
+Normal desktop selection and persistent user preference remain AUDSVC's
+responsibility. A successful hardware selection or DMA write does not by
+itself prove sound at the connected receiver.
+
 `midiRender(handle, frames)` requests 1 to 1024 frames from the selected
 synth engine. The productive format is 48 kHz stereo signed 16-bit
 little-endian PCM. Explicit engine names are exact and must provide a PCM

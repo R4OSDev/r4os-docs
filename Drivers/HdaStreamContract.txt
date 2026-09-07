@@ -11,17 +11,22 @@ The required stream descriptor and converter format is 0x0011: 48-kHz base,
 16-bit field value 1 and stereo channels-minus-one value 1. Format 0x0021 is
 20-bit and must never describe these S16 DMA buffers. Since 0.71.7 HDA.R4D
 requires the codec PCM/stream capabilities and programs and verifies 0x0011
-on the selected analog converter before assigning stream 1/channel 0. The
+on the selected converter before assigning stream 1/channel 0. The
 stream descriptor receives the same format after its reset.
 
 Controller discovery and command transport
 ------------------------------------------
-HDA 0.3.11 enumerates every class-04/03 PCI function in the bounded canonical
-inventory. It resets and inventories each candidate, requires complete codec
-discovery plus an analog output pin, ranks analog evidence deterministically
-and then reinitializes only the selected controller. A digital-only function
-cannot hide a later analog controller. Rejected candidates stop command DMA,
-free both rings and restore the original PCI Command word.
+HDA 0.3.15 initializes up to four class-04/03 PCI functions as independent
+controller instances. Each owns its command transport, codec graph, PCM
+queue, DMA ring, interrupt context and work handles. Further controllers
+produce a visible capacity warning. A digital controller with no connected
+receiver remains enumerable when its converter and pin topology are usable;
+it does not prevent an analog controller from initializing. Failed instances
+quiesce their DMA and IRQ resources and restore their PCI Command word.
+Output switches reuse these bounded instances and stop the previous PCM
+stream; command transport and allocated ring storage remain available for
+presence queries and later activation. PCI discovery, mappings and MSI
+allocation occur during initialization, never during a user route switch.
 
 The controller is always quiesced and passed through CRST low/hold/high,
 including a firmware-initialized state. Command-DMA stop, both CRST edges and
@@ -49,11 +54,11 @@ eight-bit space and bounded edge-pool exhaustion invalidate the candidate.
 
 The per-codec directed graph follows sink-to-source HDA connections. A bounded
 cycle-safe breadth-first search accepts only present nodes in one audio
-function group and a complete pin -> mixer/selector -> analog stereo output
-converter route. Missing nodes, cross-AFG edges, cycles without a converter,
-digital converters and incomplete routes fail closed. Controller selection
-requires this proven and fully programmable route in addition to complete
-transport and inventory evidence.
+function group and a complete pin -> mixer/selector -> stereo output
+converter route. Analog routes accept analog converters, and HDMI routes
+accept digital converters. Missing nodes, cross-AFG edges, cycles without a
+converter and incomplete routes fail closed. Output admission requires the
+proven route and the advertised 48-kHz/S16 capabilities.
 
 Pin Config Default port connectivity and device select only speaker,
 headphone and line-out pins. SPDIF, HDMI and other digital devices never enter
@@ -83,6 +88,59 @@ absence selects speaker, then line-out. If the pin has no trustworthy sense
 evidence, the same speaker/line-out/headphone fallback stays fixed and is
 reported explicitly. Unsolicited jack responses remain disabled; any later
 activation must use the same hardened IRQ/Worker path.
+
+HDMI and output catalog (0.78.16)
+--------------------------------
+Each controller retains at most 32 physical output routes. Their identities
+combine PCI bus kind/BDF, PCI vendor/device, codec vendor/device/address and
+pin NID. They do not depend on enumeration order or the current monitor name.
+A firmware change that relocates PCI devices can change this identity; the
+service must then report and apply its normal fallback policy.
+
+HDMI requires a digital output pin with a display capability, Presence Detect
+and ELD Valid, a bounded ELD v2 baseline and an explicit stereo LPCM SAD for
+48 kHz and 16 bits. Invalid/truncated data, absent receivers and unsupported
+formats remain distinct states. DisplayPort is recognized but its packet
+format is not enabled by this HDMI implementation. Names are sanitized from
+the ELD monitor-name bytes. Queries and writes refresh digital presence at
+most once per 250 ms. A lost active sink stops PCM and disables its pin and
+digital converter; it is no longer reported as active.
+
+The HDMI verb plan adds digital PCM enable, a two-channel converter, FL/FR
+slot mapping with unused slots disabled, and the checksummed stereo Audio
+InfoFrame. Packet transmission is enabled before assigning the stream.
+Deactivate disables packet transmission and digital output and clears the
+converter stream/pin. A failed route switch attempts to restore the previous
+route and returns a failure instead of publishing a successful selection.
+
+AudioBackend v3 consists of the unchanged 72-byte v2 prefix plus the generated
+24-byte AudioOutputExtension. Kernel 0.1.104 accepts v2 unchanged and validates
+the v3 size before reading callbacks. Audio callback context retains the R4D
+owner across waits and completion operations. R4AUDIO v2 appends output-info
+and stable-ID selection after all older slots; AUDSVC owns normal user choice.
+Initial playback prefers an available HDMI sink, otherwise an available
+analog/default output. Persistent preference and desktop controls belong to
+0.78.17.
+
+Hardware boundary: the NVIDIA display engine must also enable HDMI audio and
+supply presence/ELD to HDA. Limine framebuffer output alone is not proof of
+that setup. No arbitrary GPU register programming or modeset is performed by
+HDA. On OssiPC after the 2026-09-08 update, both controllers initialized and
+eight outputs were enumerated. NVIDIA 09:00.1 (10DE:228E, codec 10DE009F)
+reported all four HDMI pins absent. Its graphics function 09:00.0 (10DE:2504)
+has no native display driver; bootfb remains active. The display handoff and
+HDMI stream evidence therefore remain open. No HDMI PCM was sent to an
+unavailable receiver. An external NVIDIA display owner must first establish
+the active connector/head and current receiver capabilities. The HDA packet
+format follows Intel HDA 1.0a; NVIDIA's description of the display/audio split:
+https://download.nvidia.com/XFree86/gpu-hdmi-audio-document/ (section 5).
+
+Focused validation: nine codec/HDMI owner cases, five topology cases, generated
+Zig/C contract conformance and one SMP4 guest with two HDA controllers passed.
+Both guest routes produced eight backend writes with zero new backend errors;
+an invalid output identity retained the preceding route, and AUDSVC Close
+succeeded. These are stream/ownership checks, not acoustic HDMI evidence.
+Evidence: Temp/roadmap-078-audio-execution/07816/ in the coordinating workspace.
 
 Write contract
 --------------

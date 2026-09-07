@@ -157,8 +157,12 @@ Write contract
   complete converted frame is appended exactly once to the software queue.
 - The queue contains 64 hardware periods. Capacity failure is reported and
   counted; old audio is never overwritten.
-- A short final packet is zero-filled only during Drain. Ordinary writes do
-  not add silence to reach a period boundary. Drain appends three explicitly
+- Ordinary writes do not add silence to reach a period boundary. Drain pads
+  the last partial period once. An exhausted, still-open stream may also emit
+  its remaining partial period once before parking. A partial write after
+  parking waits at least 10 ms without another accepted write; the existing
+  active-session status path then starts that tail with one period. No
+  permanent idle polling timer is added. Drain appends three explicitly
   counted zero periods after all requested frames so codec and host-backend
   queues can emit their buffered tail before RUN is cleared; these postroll
   periods are not underrun recovery.
@@ -178,8 +182,8 @@ DMA geometry and ownership
   a bidirectional fallback has its output-direction bit set. Missing route,
   format capability or descriptor capacity fails before RUN.
 - Playback starts with two ready periods (20 ms) and then admits PCM up to a
-  32-period running reserve (320 ms). Drain may start a tail with one
-  ready period. A validated DMA position entry and LPIB select the current
+  32-period running reserve (320 ms). Drain or a parked partial tail may start
+  with one ready period. A validated DMA position entry and LPIB select the current
   cyclic period; implausible positions cannot address outside the fixed ring.
 - A consumed period is cleared before reuse. Silence is therefore observable
   only when hardware reaches a period for which no PCM data was available.
@@ -222,10 +226,15 @@ are bounded. DMA position and LPIB must both lie within CBL and agree within a
 two-period read skew; unavailable, invalid or repeatedly divergent DMA data
 degrades visibly to LPIB.
 
-An underrun is counted only when the plausible position advances into a period
-without ready ownership while the stream is not draining. Each such period
-increments both underruns and silence_refills. Upstream drops, backend errors
-and service latency stay separate counters. Repeated observation of one value
+Since HDA 0.3.16, an underrun means a missing hardware period despite later
+prepared PCM or at least one complete software period waiting for DMA. Each
+such period increments underruns and silence_refills. An earlier gap remains
+counted even if the same delayed observation eventually reaches an empty ring.
+The backend contract carries no producer deadline: complete source exhaustion
+cannot establish whether a pause was intended. It is recorded as an idle
+transition instead of generating another error every 10 ms. Upstream drops,
+backend errors and service latency stay separate counters. Repeated
+observation of one value
 does not refresh the last-movement deadline. Wrap is accepted as progress;
 freeze, an elapsed-time-impossible jump, FIFOE and DESE request one controlled
 recovery. Recovery accounts and clears queued software and ready-ring frames,
@@ -233,6 +242,15 @@ so stale audio cannot replay. The first underrun may emit one warning, but the
 normal path remains silent. If hardware advances beyond the remembered
 producer, the next producer slot is realigned immediately after the current
 hardware period; newly accepted PCM is never written behind the consumer.
+
+After source exhaustion, the already-cleared ring emits three more periods
+of silence for the same codec/host tail protection used by Drain. Newly
+prepared PCM cancels this pending idle transition. After the postroll, the
+driver clears RUN and descriptor interrupts, resets the descriptor and ring
+ownership, and retains the logical stream, software queue and resampler phase.
+No periodic completion work continues on the parked ring. New full periods
+restart at descriptor zero with the normal prefill. An already parked, empty
+Close only resets the logical conversion state; it does not replay postroll.
 
 Lifecycle
 ---------
@@ -291,6 +309,9 @@ position/stream-recovery, timeout/drain, work-drop and live ownership values.
 The immutable core record is refreshed once on the first runtime Close so it
 cannot age out before the late Test-profile diagnostic. Close and shutdown
 may emit aggregate records; writes, verbs and individual interrupts do not.
+The bounded HDA.IDLE close record adds idle stops, resumes, partial tails,
+IRQ/work submission totals, padding frames and explicitly dropped frames.
+Its idle counts expose source exhaustion even when it is not a backend error.
 Driver Work performance snapshot v2 adds deadline queue/running/high-water,
 queue ticks, start misses, callback-budget overruns and admission rejections
 globally and for the HDA owner.
@@ -299,6 +320,34 @@ The 64x10-ms contiguous DMA geometry remains unchanged in 0.69.42. Existing
 cursor, queue, underrun and deadline observations did not demonstrate a cost
 that justifies changing periods or adopting segment DMA; the roadmap permits
 that change only after such evidence.
+
+Focused idle validation, 0.78.18 (8 September 2026)
+------------------------------------------------
+On OssiPC with HDA 0.3.15, an open stream after its last PCM block generated
+20 extra underruns, silence refills and deadline jobs in a controlled 200-ms
+empty interval, with no hardware errors. HDA 0.3.16 passes eight ring/queue
+owner cases and a short SMP4 playback/pause/restart/tail/Close probe. The same
+guest idle interval produces zero jobs and zero underruns. Its continuous
+200-ms refill interval, deadline checks and Close pass; the close log reports
+three idle stops/resumes, two partial tails and zero dropped frames.
+
+OssiPC now has HDA 0.3.16, AUDSVC 0.1.9 and R4DESK 0.1.39 installed through
+SYSUPD, followed by a verified reboot into release 0.78.18 / Kernel 0.1.104.
+The running output endpoint returns four available analog and four unavailable
+HDMI outputs. A controlled final idle probe is pending while another audio
+application is active. Observed live logs retain LPIB fallback after three
+DMA mismatches, with no position recovery, underrun or hardware error; they
+do not replace that isolated comparison. Historical position recoveries
+were not reproduced and are not claimed fixed.
+
+The supplementary QEMU WAV file verifies the first 40-ms PCM block and both
+partial tails, but ends inside the final signal: 12,243 of the expected
+12,348 resampled frames are captured there. A 200-ms guest wait after Close
+does not resolve this capture boundary. QEMU backend flushing versus the
+existing Drain/host tail remains unassigned; this is not a complete
+sample-accurate WAV acceptance or an acoustic hardware result. No ring-size
+increase was made to hide it. Evidence and the explicit open follow-up are
+in Temp/roadmap-078-audio-execution/07818/ and the roadmap notes.
 
 Verified baseline through 0.71.9, 28 August 2026
 ------------------------------------------------

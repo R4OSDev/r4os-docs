@@ -111,6 +111,13 @@ request header. Zig's narrowed @min result alone cannot represent a complete
 1024-byte legacy or 4096-byte App-Audio message; explicit widening prevents
 those boundary requests from wrapping to zero length.
 
+HDA 0.3.16 parks an exhausted hardware ring after a bounded three-period
+codec postroll. It preserves the open logical stream and conversion state;
+new PCM restarts the ring. Partial tails are emitted once without padding
+each normal write. Idle source exhaustion has its own close-log counters;
+missing periods despite already queued PCM remain backend underruns. The
+parked ring produces no periodic completion IRQs or audio worker jobs.
+
 PCM clients retain frame-aligned progress reported before Busy, timeout or a
 hard error. R4Synth sends matching stereo S16LE WAV data directly and paces
 only accepted frames after a 160-ms prefill. Beep uses 960-frame, 3840-byte

@@ -77,6 +77,31 @@ frame. `drawTransitions()` and `frameMutationEntries()` count the actual draw
 ABI entries, excluding begin, commit and present. These counters are passive
 and add no platform call.
 
+## Text layouts and truncation
+
+`textAreaLayout` traverses the current document once and returns at most 128
+visible row ranges, the caret position and both scroll extents. Drawing uses
+those ranges directly. Notepad shares the same result with its scrollbars;
+TextArea uses one traversal for cursor visibility and scroll clamping.
+The result belongs to that text, cursor, wrap width and viewport only. It is
+recomputed after edits or geometry changes, so no persistent line cache needs
+invalidation. R4Code delegates visibility updates to TextArea; clipboard cuts
+explicitly update it once.
+
+Ellipsizing measures complete UTF-8 candidates including the three periods.
+It uses a binary search within logical lines under R4DRAW's nonnegative
+rendered advances and treats newline boundaries separately. Proportional
+widths and spacing between the retained suffix and periods remain in the
+measurement. Even a partial ellipsis is measured, avoiding oversized periods
+when only one or two fit. UTF-8 boundary lookup examines at most four bytes.
+
+The bounded host fixtures compare row ranges, caret and scroll extents with
+the previous helpers, including wrapping, editing and malformed-byte fallback.
+A 65535-byte document requires one 65535-byte traversal for a rendered layout,
+plus one for edit visibility. The 256-character clipped-label fixture requires
+11 font measurements and measures 797 bytes, versus 258 calls previously.
+These are work counts, not frame-rate measurements.
+
 ## Shared raster resources
 
 R4DRAW v9 optionally exposes generation-bound shared XRGB32, Indexed8 and

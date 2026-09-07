@@ -6,6 +6,31 @@ window composition, focus, z-order, taskbar, desktop items and user-facing
 input dispatch. The kernel provides the privileged display and event
 mechanisms but does not own desktop policy.
 
+Since 0.78.8, Desktop keeps one WINSVC endpoint handle for window and tray
+operations. Drag/resize changes retain the latest geometry and publish it at
+bounded 50-ms intervals; release publishes the final pointer position
+immediately. Lifecycle operations supersede pending geometry, and removal
+cannot carry a pending record into a reused window slot. A failed endpoint
+call drops the handle and both mirrors; an idle retry opens the new service
+generation and registers all live windows before restoring tray state.
+
+Idle waiting follows the actual tray, clock, blink and retry deadlines.
+The normal tray interval remains 50 ms; a valid revision no longer forces
+10-ms sleeps. Clock reads are capped at once per second, with immediate
+refresh after a timezone/format change. AppDefaults, Appearance,
+DeviceManager, Explorer, LogCenter, NetConfig, Services, TimeSettings,
+MemView, R4Code, Notepad and Paint use the SDK EventLoop. Only MemView and
+LogCenter's enabled live view retain a one-second refresh timer. Shared
+desktop activity can still wake unrelated windows; no timer-free app adds
+its own periodic polling deadline.
+
+The focused 0.78.8 SMP4 check covers final drag/resize coordinates, the stale
+endpoint after WINSVC restart, re-registration and immediate Close of both
+AppDefaults and MemView. In its two-second idle interval, AppDefaults kept
+its frame revision while MemView advanced; Desktop recorded 46 activity
+timeouts. The host burst fixture publishes 100 positions with 17 geometry
+calls and one held connection instead of 100 open/call/close sequences.
+
 R4DESK is the public window and desktop group. R4DRAW is the drawing and
 raster group. Applications request only the groups they use and guard
 optional functions with `hasFn`.

@@ -18,6 +18,14 @@ handles or second subsystem implementations. The six Platform APIs are
 implemented by the Kernel; the SDK neither builds provider R4Ls nor owns an
 independent copy of their implementation.
 
+Hosted GUI applications wait through EventLoop/Window rather than sleeping
+between empty polls. Message.guiEvent() lets existing raw event handlers
+consume the same typed loop without losing Unicode keys, modifiers or mouse
+coordinates. Timer, clipboard and command messages remain explicit. A
+persistent lifecycle Close flag is delivered once until cleared, so an
+application can keep a Save dialog responsive without repeatedly receiving
+the same Close. New queued GUI Close events remain observable.
+
 R4DRAW v6 exposes a fixed-capacity whole-glyph snapshot. Current kernels
 resolve the bounded font index once and return metrics plus all row masks in a
 single call. The SDK keeps older tables compatible through `font_glyph_row`;

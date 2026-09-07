@@ -42,6 +42,20 @@ program icons, normally live in the application's R4M0 container.
 Notification area
 -----------------
 
+The system-volume popup also offers audio output selection (R4DESK 0.1.39 /
+AUDSVC 0.1.9). It shows the active output, saved preference, availability and
+fallback reason. Four device rows are visible at once; arrow buttons page
+through the list. Unavailable receivers remain visible. Automatic clears
+the preference and lets AUDSVC choose a connected supported HDMI receiver
+or an available analog output. Volume and mute remain independent controls.
+Saving and persistence failures are shown in the popup. Device state is
+refreshed only while the popup is open, using the existing volume poll.
+
+The bounded /SMOKE-AUDIO-OUTPUT path reuses the volume contract check and
+exercises real popup hit targets, selection through AUDSVC, automatic mode,
+and preservation of volume/mute before shutting down. It is intended for a
+private SMP4 image with two available HDA outputs.
+
 R4DESK owns the notification area's visual mirror, layout, rendering, damage
 tracking and input dispatch. Providers never draw into the taskbar and a tray
 item is neither a window nor a separate process. Providers use the versioned

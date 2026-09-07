@@ -32,6 +32,38 @@ generation. One bounded paged inventory traversal serves all open sessions
 in a cleanup round. An incomplete or changed inventory defers cleanup;
 a reused ID cannot keep a stream from the previous generation alive.
 
+Output selection (0.78.17)
+-------------------------
+
+AUDSVC owns the desired output independently from the actually active
+hardware route. The appended Outputs/SelectOutput endpoint operations expose
+eight hardware records per page from a bounded 256-output catalog, including
+disconnected endpoints, stable physical IDs, the service epoch, revision and
+fallback reason. Incomplete or duplicate inventories retain the previous
+snapshot. Existing stream and master-volume messages are unchanged.
+
+A usable saved ID wins over automatic policy. Otherwise a connected supported
+HDMI receiver is preferred, followed by an available analog output. Returning
+receivers restore the saved preference. Refresh is limited to 500 ms and is
+driven by active sessions, incoming PCM or an open Desktop volume popup;
+an idle service adds no permanent output-polling timer. A failed activation
+retains a usable previous route; when none exists, at most four candidates
+are attempted in one pass. Kernel stream identities, queued source PCM,
+stream gain, master gain and mute survive a successful output switch.
+
+C:\R4OS\CONFIG\AUDIO.R4S stores OUTPUT_ID beside the existing master state.
+An empty or absent key means automatic selection, so older configuration
+files remain valid. AUDSVC uses its existing atomic file replacement and
+coalesced persistence worker; an odd/even publication sequence keeps the
+gain, mute and 64-byte output identity in one consistent worker snapshot.
+Failed manual selection does not replace the saved ID. BDF-based HDA IDs
+survive enumeration changes but may change after hardware relocation.
+
+The output controls require the R4AUDIO output functions from Kernel 0.1.104;
+older providers report the feature unavailable. Selection cannot make an
+unavailable HDMI receiver ready: OssiPC's NVIDIA display handoff remains an
+open hardware prerequisite in 0.78.16.
+
 Synth engines render productively into the common 48 kHz, stereo, signed
 16-bit little-endian PCM path. A render request contains 1 to 1024 frames;
 the audio core writes the complete block to the active R4D backend. Backend

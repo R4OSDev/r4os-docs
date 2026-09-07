@@ -57,6 +57,15 @@ protocol, emulation and backend errors are observable through the facade.
 
 ## Devices and diagnostics
 
+`app.audio().outputs(request, timeout, out)` and `selectOutput(...)` use
+AUDSVC's appended output operations. Requests support optional service-epoch
+and revision checks; selection uses a fixed stable ID, with an empty ID for
+automatic policy. The response separates desired and active outputs,
+explains fallback, reports persistence state and returns up to eight physical
+records per page. All endpoint payloads belong to the generated Contract;
+old master/stream operations keep their layouts. Hardware activation remains
+in R4AUDIO/HDA, while user preference and persistence belong to AUDSVC.
+
 `app.devices()` exposes read-only device, driver, protocol, boot and
 performance views. Enumerations use explicit counts/cursors and report stale
 or incomplete snapshots. Diagnostic self-tests are bounded operations, not a

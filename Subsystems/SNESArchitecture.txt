@@ -417,3 +417,101 @@ korrigierter Gastarbeit verwendet. Das bestehende Feld apu_cpu_cycles zaehlt
 Quelltakte; apu_source_hz=2048000 benennt nun deren Einheit direkt im Bericht.
 Die 0.78.2-Werte bleiben historisch und werden nicht als Ausgangsmessung fuer
 die Taktkorrektur oder als gleichartige CPU-Arbeit ausgegeben.
+
+
+0.78.6: Gemeinsame Laufzeit und Persistenzuhren (R4SNES 0.22.5)
+--------------------------------------------------------------
+Das SDK haelt Null-PCM in derselben begrenzten Queue wie Signal. Erst ein
+faelliger Audio-Termin unterdrueckt den Block; folgende Signale bleiben
+liegen. Teilbloecke erhalten ihre auf Hostticks aufgerundete Sampledauer.
+Ohne neue Gast-Scheibe oder faelliges Audio wird nicht erneut gerendert.
+Eine kurzzeitig leere Quelle schliesst den Stream nicht; ein begrenzter
+Folgetermin ersetzt die Open-/Close-Folge. Pause, Mute, Reset, Resume,
+Unmute, begrenztes Catch-up, Degraded und Abschluss behalten ihre eigenen
+Uebergaenge. Jede Hostrunde fuehrt hoechstens eine Audio-Serviceoperation aus.
+
+R4SNES und R4GB pruefen session.enabled vor ihrem Persistenzzeitgeber.
+ROM-only-Scheiben fragen damit weder Wand- noch Monotoniezeit fuer Saves ab.
+Aktive Sessions bekommen beide Uhren und Backend-Polls auch im sauberen
+Zustand; SRAM/RTC, asynchrone Speicherung, Flush-Fristen und Close bleiben
+beim bisherigen Besitzer. R4GB 0.10.11, R4BASIC 1.2.35 und SDK-SUBSYSOK 0.66.7
+wurden als weitere Verbraucher der einkompilierten Laufzeit neu gebaut.
+Kernel und Plattformvertrag benoetigen dafuer keine neue Artefaktversion.
+
+Die gezielte Abnahme umfasst 14 SDK-Runtime-, zwei R4SNES-Produkt-, fuenf
+R4GB-Produkt-, fuenf R4SNES-Persistenz-, drei R4GB-Persistenz-, zwei SNES-
+und drei GB-Audiolaufzeitfaelle sowie fuenf vorhandene BASIC-Audio-/Wartefaelle:
+39 erfolgreiche Faelle, ohne Reife-, Referenz-ROM- oder Gesamttestlauf.
+Ein erster SDK-Lauf zeigte die fehlende Wiederbefuellung bei Resume eines
+weiter wartenden Gasts; der Resume-/Unmute-Termin ist korrigiert und die
+14 betroffenen Runtimefaelle sind anschliessend gruen. Ein Stillstand mit
+acht Hostzyklen bei Tick 0 fuehrt eine Gast-Scheibe, zwei begrenzte Prefill-
+Renderaufrufe und 1920 unterdrueckte Bytes aus, bei wait=10 in jeder Runde.
+Der historische Befund hatte acht Renderaufrufe, 15360 Bytes und wait=0.
+
+Messung: unveraenderte aktive Szene und ROM-SHA aus 0.78.2, jetzt auf der
+korrigierten 2,048-MHz-Grundlage aus 0.78.5. Genau eine Ausgangs- und eine
+Abschlussreihe je Profil; je fuenf Timing-an/aus-Paare, 250 ms Gast-Warmup
+und drei Gastsekunden. Native Ausfuehrung in ReleaseFast; integrierter Gast
+mit KVM/Host-CPU, q35, SMP4, 1 GB, ohne Netzwerk, HDA/AUDSVC 48 kHz Stereo
+S16LE und Hostausgabe none. Host: i7-6700, Linux 6.12.101, Zig 0.16.0.
+Waehrend der Messungen liefen keine parallelen Builds oder anderen Tests.
+Die zusaetzlichen Open-/Close-/Wartezaehler werden nur vor und nach dem
+Intervall aus vorhandenen Statistiken gelesen. Keine Rohsamples wurden
+weggelassen; p95/p99 nach Nearest Rank sind bei fuenf Samples das Maximum.
+
+Wallzeit in Sekunden fuer drei Gastsekunden:
+Profil / Zeitmessung    Ausgang min / p50 / max      Abschluss min / p50 / max
+Native / aus           1.735273 / 1.735775 / 1.736291  1.739555 / 1.741380 / 1.742676
+Native / an            1.735510 / 1.736138 / 1.746416  1.740149 / 1.740662 / 1.746068
+Integriert / aus       3.039079 / 10.202563 / 12.918730 3.034674 / 3.046356 / 3.052955
+Integriert / an        3.039001 / 9.147686 / 12.728084  3.035765 / 3.038878 / 3.046701
+
+Der native Kern ist innerhalb rund 0,3 Prozent praktisch unveraendert.
+Im integrierten Profil sinkt der Median ohne Zeitinstrumentierung um
+70,14 Prozent (Faktor 3,349 fuer dieses Zeitfenster). Die langen Ausreisser
+fallen in dieser Abschlussreihe weg; die schon zuvor schnellen Samples
+bleiben nahe den drei fachlich erforderlichen Gastsekunden. Die zugeteilte
+Programmlaufzeit sinkt im Median von 2429 auf 1586 1000-Hz-Ticks; diese
+Schedulerabrechnung ist keine gemessene Wallzeit einzelner Emulatorphasen.
+Die Host-Waits steigen von null bis sechs auf 542 bis 642 je Intervall;
+ihre instrumentierte Medianzeit betraegt jetzt 0.706457 s. Die Gesamtzahl
+der Runtimezyklen steigt dabei auf rund 3000: Sie umfasst nun diese echten
+Wartezyklen. Leere Rendereraufrufe schwanken weiterhin; ein pauschaler
+Rueckgang aller Polls oder Renderaufrufe wird daraus nicht abgeleitet.
+
+Pro Intervall entfallen vorher 1966 bis 2327 Persistenzzeitgeberaufrufe,
+jeweils mit zwei R4SYS-Uhrabfragen. Die instrumentierte verschachtelte Zeit
+sinkt im Median von 0.735003 s auf null. Die gesamte instrumentierte
+Gast-Scheibe sinkt von 2.774712 auf 2.109234 s; Persistenz darin nicht doppelt
+addieren. Audio-Servicezeit sinkt von 6.290761 auf 0.179099 s im Median.
+Nach dem Warmup gibt es in allen Abschlussproben null Oeffnungen und nur
+eine abschliessende Schliessung; vorher bis zu je 300. Die Zahl aller
+Sink-Operationen sinkt ohne Zeitinstrumentierung im Median von 739 auf 300.
+
+180 Beamframes und 131 erzeugte/uebergebene Frames bleiben in jedem Sample
+erhalten; Desktop bestaetigt 130 oder 131 tatsaechliche Ausgaben. Die native
+Probe liefert exakt 96000 DSP-Frames und 576000 PCM-Bytes. Im integrierten
+Profil liegen die Snapshotgrenzen auf Gast-Scheiben, sodass die native
+Framezahl an der Intervallkante leicht schwankt. Vorher wurden 576000 Bytes
+akzeptiert; im Abschluss 574080 oder 576000. Bei acht der zehn Abschluss-
+proben weist die vorhandene Statistik 1920 verworfene Bytes aus, bei zwei
+null; akzeptiert plus verworfen bleiben jeweils 576000, Audiofehler null.
+Der unveraenderte Probe.step erzwingt am Zeitende completed, bevor die
+normale Adapter-Drainbedingung greifen muss. Die Queue wird beim Abschluss
+verworfen. Das ist als offene Messprofilgrenze in den Roadmap-Notizen
+festgehalten; diese Reihe ist kein Nachweis einer vollstaendigen PCM-
+Uebergabe bis hinter das feste Messende. Der regulaere endliche Adapter-
+Drain wurde separat in den kurzen vorhandenen Besitzerfaellen geprueft.
+Die fehlende einzelne Uebergabe entspricht 10 ms beziehungsweise 0,33 Prozent
+des PCM-Intervalls; der gemessene Faktor wird nicht als Spiele-, Hardware-
+oder vollstaendiger Audio-Durchsatzfaktor ausgegeben. Hardware-Playback bleibt
+mangels Streamcursor unbekannt. CPU/PPU/APU/Coprozessor-Spans bleiben getrennte
+Stichproben und werden nicht zu einer vollstaendigen CPU-Zeit hochgerechnet.
+
+Evidenz: Temp/roadmap-078/runtime-{owner,integrated}-{baseline,final},
+runtime-comparison.json sowie runtime-{baseline,final}-metadata.json.
+Die Metadaten binden Quelle, Artefakte und frische Images per SHA-256.
+Beide SMP4-Gaeste und ihre vorherigen NTFS-Imagepruefungen sind erfolgreich;
+beide Gaeste fuhren regulaer herunter. Die Rohdaten sind bewusst separate
+Diagnoseprofile und kein Import in die anders definierte Benchmarks.jsonl.

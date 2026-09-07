@@ -371,3 +371,49 @@ Im integrierten Lauf sinkt der Median zugeteilter CPU-Ticks ohne Detailuhren von
 Alle integrierten Proben reichen 131 veränderte Bilder und 576000 PCM-Bytes ein, ohne Audiofehler oder verworfene PCM-Bytes. Desktop gibt vorher 131, nachher 128–131 verschiedene Generationen tatsächlich aus; bis zu drei eingereichte Generationen werden vor ihrer Ausgabe ersetzt. Die APU-Taktzähler an den kooperativen Aufwärm-/Endgrenzen unterscheiden sich leicht zwischen Proben. Der native feste Zeitlauf und die exakten Reifetests besitzen die strengeren Byte-/Zustandsvergleiche.
 
 Die Rohdaten und Quellbindung liegen lokal unter Temp/roadmap-078/: snes-owner-{baseline,final}.jsonl, snes-integrated-{baseline,final}/result.jsonl samt request.json, seriellen Logs und Presentation-Listen, snes-comparison.json sowie snes-baseline-sources.zip mit SHA-256 8340362924d4cd38315f76d43dce19eb93554da90395c09812c095acfcfd4fec. Die Szenen-/Phasenprofile gehören nicht zum kanonischen PERFDIAG-Benchmarkkatalog und wurden nicht in dessen Historie importiert. Die schwankenden Audio-Servicekosten sind als Folgearbeit für 0.78.4/0.78.6 in den allgemeinen Roadmapnotizen hinterlegt.
+
+
+0.78.5: S-SMP-Quelltakt und semantische Startzeit (R4SNES 0.22.4)
+---------------------------------------------------------------
+Oszillator, cycles und Clock.apu_ticks zaehlen jetzt denselben 2,048-MHz-
+Quelltakt. Eine normale SPC700-Busphase benoetigt zwei dieser Takte; auch
+jede S-DSP-Phase verbraucht zwei, bei 32 Phasen je nativem Sample. Damit
+laufen Musikprogramm und Timer nicht mehr halb so schnell wie die native
+PCM-Ausgabe. Die TEST-Tabellen 2/4/10/20 fuer CPU-Zeit und 2/4/8/16 fuer Timer
+bleiben getrennt. Einzelschrittopcodes und die digitale DSP-Samplelogik sind
+unveraendert. NTSC/PAL und ganze sowie angebrochene Teilerreste sind gebunden.
+
+Gezielt gemessene NOP-Arbeit pro Gastsekunde:
+- Wait 2: 512000 NOPs; Timer 8000/8000/64000; DSP 32000 native Frames.
+- Wait 4: 256000 NOPs; Timer 8000/8000/64000; DSP 32000 native Frames.
+- Wait 10: 102400 NOPs; Timer 6400/6400/51200; DSP 32000 native Frames.
+- Wait 20: 51200 NOPs; Timer 6400/6400/51200; DSP 32000 native Frames.
+Das fruehere Normalprofil konnte aus 1024000 Quelltakten bei vier Takten
+je NOP nur 256000 NOPs ausfuehren. Die Korrektur erhoeht die fachlich noetige
+SPC-Arbeit; sie ist kein gemessener Host-Beschleunigungsfaktor.
+
+Waehrend eines semantischen Uploads werden DSP und Timer im bestehenden
+internen Idle-/TEST-Profil fortgeschrieben, einschliesslich rationalem Rest.
+Es werden keine SPC-Instruktionen des erst zu ladenden Programms ausgefuehrt.
+Die reale $2140-Startbestaetigung synchronisiert noch den Teil der aktuellen
+S-CPU-Operation vor dem Read. Erst danach anfallende Takte gehoeren dem
+neuen Programm. Ein Sprung in das eingeschaltete IPL-Overlay aktiviert den
+semantischen Loader erneut; der produktive Machine-Pfad behandelt diesen
+Ruecksprung nun wie der vorhandene direkte semantische Instruktionshelfer.
+Der optionale exakte IPL-Pfad wird weiterhin normal ausgefuehrt. Ein Reset
+setzt Oszillator und neue DSP-/Timerreste zusammen mit den CPU-Clocks zurueck.
+
+Die Abnahme umfasst 14 SMP-, sieben bestehende DSP-Gruppen, die gezielte
+NTSC/PAL-Clockpruefung und den produktiven Upload-/Neustartfall mit 2 ms und
+200 ms Wartezeit sowie 4096/32768-Clock-Scheiben. Der kurze ReleaseFast-
+Check der unveraenderten aktiven Szene und der Modulbuild bestehen ebenfalls.
+Kein Voll-, Referenz-ROM-, Langzeit- oder QEMU-Lauf wurde dafuer wiederholt.
+Die historischen Reifedigestwerte oben gehoeren zum damaligen Taktmodell;
+sie wurden hier nicht neu abgenommen. Der Reifehasher erfasst nun auch die
+Oszillatorphase und die beiden neuen funktionalen Teilerreste.
+
+Fuer die folgende Laufzeitoptimierung wird dieselbe Leistungsszene mit
+korrigierter Gastarbeit verwendet. Das bestehende Feld apu_cpu_cycles zaehlt
+Quelltakte; apu_source_hz=2048000 benennt nun deren Einheit direkt im Bericht.
+Die 0.78.2-Werte bleiben historisch und werden nicht als Ausgangsmessung fuer
+die Taktkorrektur oder als gleichartige CPU-Arbeit ausgegeben.

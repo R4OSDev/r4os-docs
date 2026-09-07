@@ -25,14 +25,44 @@ state; they do not implement parallel installers.
 Install flow
 ------------
 
-1. Verify package structure, identities, requirements, targets and checksums.
-2. Stage every payload on the target volume.
+1. Validate package structure, identities, requirements and targets.
+2. Verify every payload while writing its private stage on the target volume.
 3. Persist a journal and revalidate the staged bytes.
 4. Commit live-safe applications or bind restart-required packages into one
    restart batch.
 5. On the next boot, recover or finish every pending transaction.
 6. Advance the release only after running and installed components match the
    release manifest for the local image profile.
+
+Since 0.78.10, a fresh download hashes confirmed sink bytes during transfer;
+a resumed download first hashes only its retained PART prefix. A bad transfer
+is discarded before publication. The service then verifies the published
+file's size and SHA-256 once before reporting download success. No pathname,
+size or timestamp cache substitutes for this final check.
+
+VERIFY and Update All's preflight remain complete, side-effect-free payload
+checks. Live STAGE/APPLY combines payload verification with private staging.
+Restart STAGE verifies before persisting its package binding; COMMIT plans
+from metadata, then verifies each package while staging the entire batch
+before the first active replacement. Each payload pass rechecks the exact
+header, manifest bytes and file length at its end. Journal binding, checksums,
+private-stage ownership, checked replacement and recovery remain authoritative.
+For a successful fresh Update All download, post-transfer full payload passes
+fall from six to three for live packages and seven to four for restart packages.
+Retained-prefix reads and bounded metadata reads are additional work; retries
+may add passes. SYSUPD reports actual payload stream attempts and bytes read.
+
+R4M0 strings and ELF section names use the shared 512-byte bounded artifact
+reader in all engine phases. UpdateCenter uses additive UPDSVC operations 10
+and 11: the complete offer plus its first component, then up to eight further
+components per response. Both fit the existing 4096-byte IPC limit. Old
+single-row operations remain available. Job and result-generation checks
+reject mixed snapshots, including changes to offer state or inventory.
+The GUI keeps one asynchronous request outstanding and publishes a completed
+private model only after all pages validate. Close releases the outstanding
+request without cancelling the service's independent update job. The maximum
+64-package/192-component fixture needs 128 calls instead of 256; package
+descriptions retain their full 2048-byte capacity.
 
 Interrupted uploads and downloads use explicit temporary ownership and
 compare-and-delete cleanup. A foreign file is never removed merely because it

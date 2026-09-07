@@ -10,7 +10,7 @@ Common modes
 
 - `-central`: Contract, SDK and Runtime-R4Ls.
 - `-kernel`: kernel only.
-- `-modules`: every App, Service, Diagnostic, Driver and Protocol.
+- `-modules`: every App, Service, Diagnostic, Driver, Protocol and Subsystem.
 - `-module <Role\Project>`: one module repository.
 - `-all [Slim|Full|Test]`: complete build and image.
 - `-gui`: complete Full build, image and visible QEMU.
@@ -21,6 +21,15 @@ Common modes
 The root build does not implement a second image builder. It builds component
 repositories, creates explicit workspace/common/profile plans and delegates
 image creation and QEMU to `Repositories/Distribution/`.
+
+Since 0.78.7, profile builds first select manifests using the same rules as
+the image plan, including explicit Test/Browser/Benchmark targets and
+dependency-closure validation. Selection works before artifacts exist.
+Only selected direct module owners are built; Contract, SDK, Libraries and
+Kernel retain their central build order. IMAGE_SCOPE=none remains opt-in.
+The current direct starter counts are Slim 42, Full 97, Test 99 and
+Benchmark 98, compared with 138 for each former regular profile build.
+An explicit browser test selects 105 owners; -modules still selects all 140.
 
 The Distribution starter additionally accepts `headless Test clock4`,
 `headless Test smp4` and the diagnostic partial-failure variant
@@ -65,6 +74,27 @@ from the published pin. Release preparation reformats DATA in a private
 copy, includes the independent Recovery ZIP and standalone USB creators,
 and verifies image/manifest/BOOT/Recovery agreement. The source image has
 no original-ZIP cache: the USB creator adds that after writing the image.
+
+ImageCreator's create-installation path now writes to a private file and
+atomically replaces the destination only after successful publication and
+read-back. FAT uses prepared metadata and borrowed file segments; NTFS uses
+its existing streamed plan. Input payloads remain resident per partition,
+but complete image/volume buffers are avoided. NtfsVerify reads bounded
+partition views through one shared-locked file handle; structural metadata
+still scales with filesystem complexity. Its MBR views now also respect the
+partition length. Legacy standalone ImageCreator compatibility modes retain
+their existing in-memory behavior.
+
+Release packaging combines the canonical-image copy with its SHA256 check,
+keeps one private fresh-DATA image, and holds that image open from structure
+validation through ZIP output. Compression computes manifest hashes from
+the bytes it writes; staging no longer contains a second disk.img. This
+reduces the package phase from five to two complete image reads and from two
+to one complete private image copy per profile, in addition to required
+region checks. Prepared publication continues to use the exact ZIP bytes.
+The 0.78.7 Linux Full-image check measured about 227 MB maximum RSS for
+ImageCreator and 11 MB for NtfsVerify (previous verifier: 2050 MB). These are
+host measurements, not hardware or guest performance claims.
 
 Recovery has independent `Release.sh` / `Release.bat` starters for Prepare,
 Publish and SelfTest. Prepare records the frozen component inputs and

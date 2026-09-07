@@ -349,6 +349,31 @@ cleanup releases records and clusters in an ownership-safe order; a failed
 rollback or dirty clear is reported explicitly and leaves the volume dirty,
 so incomplete cleanup can never be certified as a clean filesystem.
 
+NTFS free-space queries (Kernel 0.1.103)
+---------------------------------------
+DriveInfo keeps an exact free-cluster count in the existing mount-owned
+metadata cache. The initial scan reads $Bitmap in at most 64-KB blocks using
+the volume scratch and counts whole words, excluding padding beyond the last
+cluster. A short or uninitialized bitmap and an incomplete read do not publish
+a count. Repeated queries need no bitmap reads or recounting.
+
+Allocation and release update the count by the number of bits actually
+changed in each successfully written bitmap sector. The old count is
+invalidated before writing; an ambiguous failure never restores it. Remount,
+external changes, direct bitmap metadata changes and recovery invalidate the
+count. Unrelated file data, namespace changes and decoded-entry reclaim do
+not require a new scan. The existing filesystem request owner serializes all
+these operations; no second bitmap or disk-format change is introduced.
+
+OssiPC diagnosis on 2026-09-07, Release 0.78.14 / Kernel 0.1.102: D: and F:
+contain 976328145 and 976754175 NTFS clusters. Two read-only DriveInfo calls
+per volume took 6.85/6.79 seconds and 7.24/7.24 seconds respectively, each
+causing about 29800 device reads. Directory enumeration plus entry metadata
+took only 1-8 ms. Explorer queries DriveInfo on startup for every drive and
+again on each directory change. Evidence: Temp/ossipc-explorer-20260907/ in
+the coordinating workspace. These are diagnostic measurements, not a general
+storage benchmark or an acceptance of all OssiPC hardware.
+
 Datei-/NTFS-Arbeitsmengen ab 0.78.3
 ---------------------------------
 FileMove verwendet bei gleichem tatsaechlichem Volume, gleichem Elternknoten

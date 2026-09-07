@@ -59,8 +59,22 @@ within one scheduler-runtime owner boundary; a successful yield no longer scans 
 registry objects for deferred destruction. ProgramThread and asynchronous-I/O
 owners bind an immutable, generation-checked execution context before their
 blocked Task is published Ready. Current R4X ownership is therefore resolved
-directly and the owner storage remains alive until the exact Task generation
-has been released.
+directly. ProgramThread storage remains alive until the exact Task generation
+has been released. Asynchronous I/O binds a permanent pool-worker object;
+its current request retains the submitting ProgramThread identity, process
+generation and stream owner. The worker detaches this request before exposing
+completion, so Close can recycle it without retiring a Task or stack.
+
+The existing 64 asynchronous request slots are served by at most eight BSP
+workers, four for files/streams and four for service replies. Each lane scans
+pending slots round-robin and sleeps on events when empty. Queue residence
+counts against finite service timeouts. Normal completion retains the worker;
+hard cancellation stops only the exact worker handling that request and
+replaces it after retirement. The cancellation claim excludes pickup of a
+different request until that retirement is confirmed. Queued requests cancel
+without creating a Task. The resident worker-stack ceiling is 512 KB instead
+of 4 MB for 64 simultaneous request Tasks; the unchanged completion table
+also bounds completed requests whose callers have not yet closed them.
 
 Die Ready-Publikation eines neu aufgebauten R4X-Tasks erfolgt
 erst nach dem vollstaendigen Registry-Commit und weckt danach den ausgewaehlten

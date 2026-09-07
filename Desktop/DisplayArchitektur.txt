@@ -24,14 +24,19 @@ through the same contract; they are not a second display owner.
 Damage and presentation
 -----------------------
 
-The Desktop retains up to eight separated dirty regions. Overlapping regions
-are merged; a ninth separated region collapses the generation to its bounded
-union, and an explicitly invalidated complete scene remains the full-frame
-fallback. It composes each retained region only through scene owners whose
+The Desktop retains up to eight dirty regions. Overlapping regions are merged;
+when a ninth region arrives, only the pair with the least additional bounding
+area is merged. The persistent damage tracker and final presenter collector
+share this policy. An explicitly invalidated complete scene remains the
+full-frame fallback. It composes each retained region only through scene owners whose
 bounds intersect it. Background, wallpaper, grid, desktop items, windows,
 taskbar, menus, dialogs and cursor keep their existing z-order; complete
 non-intersecting layers and windows are rejected before their paint work,
 while desktop-item bounds are checked before icon loading and rendering.
+An inactive window is also skipped when its entire damaged frame intersection
+is covered by one opaque higher window. Partial coverage preserves normal
+painter order; active windows remain last. Move, hide, minimize and focus
+changes are evaluated against current window geometry on every composition.
 
 R4DRAW slots 33 through 35 are the canonical present contract. A request
 identifies one XRGB32 source generation, its dimensions and stride, up to
@@ -81,6 +86,33 @@ allocation failure retain the previous complete frame and use a bounded
 full-snapshot retry. Rendering rejects non-intersecting commands before
 touching their payload and resolves Indexed8 pixels only inside the active
 scene paint clip.
+
+Each complete Desktop snapshot owns an optional ordered spatial tree over
+blocks of sixteen commands. A small paint clip visits intersecting blocks
+instead of scanning every command for every region. Append generations update
+only the changed suffix and its ancestors; replacement and full reads build
+the index before publication. The tree stores local bounds and no resource
+pointers. Its lifetime follows the existing command/resource buffers and
+shared-raster leases; moves do not rebuild it. Allocation failure selects the
+complete ordered replay without discarding a frame.
+
+Text bounds are derived once from the UTF-8 resource, independent of optional
+producer metrics. Built-in cells use exact dimensions; imported fonts use
+the renderer's maximum cell dimensions so font revision changes remain safe.
+During clipped replay, whole hidden lines and right-hand suffixes skip UTF-8
+decoding and glyph lookup. Intersecting multibyte glyphs retain their cell
+positions. Shape masks are cropped to the scene/client intersection before
+rasterization and allocation, with a blur-radius halo for outer and inset
+shadows; coverage is still sampled in the original command coordinates.
+
+Owner tests compare indexed and complete painter output, occlusion changes,
+glyph edges, antialiased curves and clipped shadows. Deterministic work cases
+retain eight regions and ten total pixels for nine scattered single-pixel
+changes spanning 1920x1080, reduce command visits from 32768 to 240 for eight
+clips in a 4096-command frame (226 tree-node visits), and rasterize one mask
+pixel for a 2048x2048 shape with one damaged pixel using a two-byte scratch
+budget. Four coincident opaque windows require one window replay instead of
+four. These are software work counts, not a measured hardware FPS gain.
 
 `GuiXrgb32Resource` keeps native source pixels, stride, guest geometry and
 the complete viewport together in an at-most-128x128 tile. The Desktop never

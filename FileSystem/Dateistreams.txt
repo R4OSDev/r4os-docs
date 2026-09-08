@@ -47,3 +47,37 @@ directory locations remain distinct. Backend/VFS copy preflight repeats
 the identity guard before destination mutation. Generic native copies own
 one 32-KB heap buffer per operation, released before the paired request's
 unwind guard ends; disjoint volume pairs can still proceed independently.
+
+
+NTFS random-write failure progress (0.78.29)
+------------------------------------------
+ntfs_volume.writeFileAtProgress reports status, completed bytes and an
+uncertain flag. The byte count covers fully acknowledged device callbacks;
+a failing boolean callback may have changed additional bytes. The existing
+R4SYS random-write byte-count API preserves a positive short prefix. A final
+metadata error after every payload byte is never converted to full success.
+This count is neither a durability claim nor an automatic retry position.
+
+Ordinary successful nonresident overwrites retain lazy payload writeback.
+An ambiguous payload failure attempts a durable dirty marker and latches
+repair_required in the mounted volume. Later normal writes and deferred
+completion cannot clear that latch. If the device also rejects dirty-marker
+I/O, cleanup_failed reports the unconfirmed state. Resident data lives inside
+a FILE record: a durable dirty bracket protects the write, and an I/O failure
+restores and flushes the original complete record before declaring rollback.
+Failure of that restoration leaves the mount latched and the volume dirty
+when its marker can still be stored. Atomic payload replacement or power-loss
+recovery is not provided by this operation.
+
+MFT growth retains its allocated runs until publication is confirmed or
+rolled back. After possible record-0 publication, rollback must restore and
+flush both record and mirror before releasing the newly allocated clusters.
+A failed restoration retains potentially referenced clusters and returns
+cleanup_failed. Allocation, zeroing and record I/O errors remain I/O errors;
+no_space is reserved for actual capacity exhaustion. A lost record-bitmap
+write completion also rolls its possible allocation back before clean state.
+
+The repair latch belongs to one live mount; the on-disk dirty bit survives
+remount. A general repair/admission policy for already-dirty volumes remains
+outside this change. Such a remount is not proof that file contents have
+been repaired, and ordinary write progress cannot serve as a repair result.

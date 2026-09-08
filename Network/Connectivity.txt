@@ -97,3 +97,25 @@ segments at MSS 1,460, 48 slots, delayed/coalesced ACKs and optimistic writes
 that poll only after actual backpressure. No historical runtime-throughput
 number is claimed because the old path had no equivalent counters and this
 roadmap permits only the short SMP4 smoke, not a separate long network run.
+
+
+Adapter ownership and driver teardown (0.78.56)
+---------------------------------------------
+Netcore assigns each registration a positive reference that is not reused
+during the boot. External drivers return this unchanged for RX, work scheduling
+and capability queries; it is separate from compact enumeration indices.
+Removing an earlier adapter no longer changes a surviving driver's reference.
+The R4D bridge resolves references under callback admission, and registration/
+removal drains those lookups. Removed references are rejected even after reuse
+of the backend slot. RTL8168 needs no artifact or cold-bind change.
+
+VIRTNET 0.1.4 closes callback admission and waits for device-status zero after
+reset, with at most 1000 one-tick waits. A missing confirmation or failed IRQ
+removal retains DMA and makes shutdown fail; owner cleanup then preserves the
+existing module/resources. Failed initialization uses the same teardown.
+Reference: VIRTIO 1.2 sections 3.3.1 and 4.1.4.3.2:
+https://docs.oasis-open.org/virtio/virtio/v1.2/virtio-v1.2.html
+RTL8139 0.1.4 keeps timed-out TX slots and bytes until hardware completion or
+confirmed reset. Timeout is reported once per pending slot in tx_errors, while
+transmit returns busy without rotating or overwriting the live descriptor.
+This deliberately does not promise recovery of a permanently stalled device.

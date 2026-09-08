@@ -265,3 +265,48 @@ before growth. A direct cache entry becomes retiring before release; a failed
 release can be retried but can never become an allocation hit. Reclaimed-byte
 counts increase only after a complete confirmed request. The existing VM
 owner registry remains the final authority for residual process-exit cleanup.
+
+Pager identity and publication (0.78.32)
+--------------------------------------
+A slot reservation carries its own nonzero lifetime generation. Independent
+reserve, release, error and I/O operations leave that identity unchanged.
+Recovery/reset assigns a new incarnation; table-only inventory retains the
+global change counter. Multiple initialized pages within one reservation also
+keep their bindings when another page is written. Because validity is stored
+per reservation, its first page-out must initialize the entire reservation.
+
+Backing selection includes the path, cluster geometry and file size. Merely
+probing a file does not change the active pager path. Selecting another backing
+invalidates the former table; a stale I/O completion is rejected and cannot
+reactivate it. Pager operations keep an owned path across filesystem waits.
+The backend receives a VM-verified commit-coverage result for the exact offset
+and page count. committed_bytes is an accounting sum, never an address limit.
+Sparse high spans remain usable after lower committed spans are removed.
+
+Demand-zero and page-in initialize a new frame through the permanent RAM
+direct map before publishing its guest PTE. A second fault on the same busy
+page waits on the existing scheduler WaitQueue mechanism and rechecks the
+region ID and mapping after wake. Read failure never publishes partial bytes.
+The VM no-sleep owner covers admission and final publication; filesystem I/O
+and waits run outside it. A task unwind token protects each transaction, and
+the region keeps a pager-I/O count across those waits. Uncommit/release returns
+Busy internally (the existing VM_ERROR_MAP_FAILED ABI result) until it reaches
+zero; the existing reaper can retry. Diagnostic page-state mutations are also
+rejected while the region has a live pager transaction.
+
+Page-out establishes an acknowledged hardware dirty epoch under the VM owner.
+The original mappings stay alive during the write. At completion, hardware
+and recorded dirty state are checked again under that owner. A concurrent
+writer keeps the whole transfer resident and dirty, with its slot binding;
+only a later quiet complete write can evict it. Thus a mixed or old on-disk
+snapshot is never used as the authoritative image of a changed resident page.
+The automatic pager and VM-region diagnostic page-out use the same transaction.
+Failed writeback keeps resident ownership and dirty data. Pageable execution
+and final writeback publication retain the existing BSP ownership contract;
+DMA buffers must still follow their resident/pinned driver contract.
+
+Seven focused host cases cover reservation reuse, backing replacement, sparse
+coverage, controlled writes during I/O, incomplete reads, dirty-epoch failure
+and a second waiting fault. These use the actual backing module and actual VM
+function bodies with controlled scheduler/mapping/I/O edges. They are neither
+hardware failure reproductions nor memory-pressure throughput measurements.

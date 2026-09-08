@@ -19,26 +19,39 @@ ordinary data values are never guessed to be old link pointers.
 Loading
 -------
 
-1. Read and validate the R4M0 header and sections.
-2. Allocate mapped image storage and copy section bytes.
-3. Apply only declared relocations.
-4. Resolve required exports against built-in platform groups and named,
-   file-backed Runtime-R4L tables.
-5. Publish the module only after the complete image is valid.
+1. Reserve a unique common slot and nonzero generation before the first
+   waiting read. A task unwind token protects the complete preparation.
+2. Validate header/tables and resolve imports in a private load workspace.
+3. Allocate the image, copy sections and verify BSS before relocation and
+   loaded-export checks; require executable R4D/R4P lifecycle exports.
+4. Keep the image and exports private while the driver/protocol owner admits
+   its descriptor and registry entry.
+5. Publish the complete immutable entry with one release-store of its claim.
 6. Enter the module-specific lifecycle such as R4XStart or DriverInit.
 
-The loader streams file-backed inputs and keeps ownership explicit under
-memory pressure. A failed or incomplete load is not visible as a partial
-module. Runtime driver unload does not imply that the mapped R4M0 image is
-immediately unmapped.
+Since 0.78.51, R4D, R4P and boot Runtime-R4L dependency loading share the same
+packed slot/generation claim. Independent driver/protocol gates therefore
+cannot choose the same free common slot while one operation waits on I/O.
+Readers acquire the publication claim before reading an entry. A reserved
+entry is excluded from inventory, name resolution and public export lookup.
+Successful entries remain resident, including the existing pinned Runtime-
+R4Ls; abort only owns its exact unpublished generation. Repeated or stale
+abort/commit handles cannot release or publish a later occupant.
 
-Each coherent file load owns one allocation-free metadata reader with two
-4-KiB windows. Header, table records, names, metadata and relocation records
-share those windows; normal containers therefore retain one window for the
-front tables and one for the trailing string block. Requests larger than one
-window and all section payloads bypass the cache and are read directly into
-their final destination. The per-reader cache is consequently fixed at 8 KiB
-regardless of container size.
+Every failed read, allocation, BSS check, required export or owner admission
+releases its private image, scratch and reservation. An unexpected heap-free
+failure retains an inaccessible slot with its image reference for diagnosis;
+it never offers that storage to a new load. No no-sleep lock spans file I/O.
+Runtime driver unload still does not unmap an already admitted R4M0 image.
+
+The per-load heap workspace owns the validated tables, resolved imports,
+section offsets and one bounded metadata reader. Its two 4-KiB windows are
+initialized in place by resetting only their validity metadata. Header,
+tables, strings and relocations reuse that reader; requests larger than a
+window and all section payloads still stream into their final image.
+The fixed 8-KiB cache is independent of container size and no longer adds a
+second reader or a by-value reader setup to the common loader's worker stack.
+The normal IPC worker keeps its existing 64-KiB stack.
 
 Import and export records and their names are validated once and retained in
 the bounded load plan. Resolution, loaded-export validation and publication

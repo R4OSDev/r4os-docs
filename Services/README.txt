@@ -70,9 +70,34 @@ A service communicates through R4SYS service endpoints and uses R4NET,
 R4AUDIO, R4DESK or other public groups as required. It must not add a private
 kernel path or a second filesystem/network implementation.
 
-A service cannot stop or restart itself, directly or through one of its
-console descendants. The kernel rejects that request to avoid destroying the
-active caller tree.
+A service cannot stop, restart or disable itself, directly or through one of
+its console descendants. Each operation uses the same ancestry check and
+returns -19 before changing the mode or stopping the service.
+
+A start reserves one registry slot and a unique generation under the service
+owner, including the matching path and argument snapshot. Loader I/O runs
+without that owner lock. Publication binds the program only if the same
+reservation is still starting and enabled. Disable, cancellation and removal
+invalidate the reservation; a replacement registration cannot reuse it. A
+rejected publication terminates the exact spawned program handle through the
+existing lifecycle path and abandons its owned completion for reaping. A late
+load error only changes its own reservation. A mode change must not detach a
+program that has started between STOP and DISABLE.
+
+SERVMAN configuration, boot enumeration and both service-list frontends use
+private staging arrays. Only explicit EOF (zero) publishes a complete list;
+negative errors preserve the existing file or GUI view. BUSY permits at most
+three complete attempts. A full staging array requires a further EOF query;
+capacity overflow is an error. The current index API has no cross-call
+revision token, so this validates complete enumeration and does not promise a
+point-in-time snapshot across concurrent successful structural edits.
+
+SERVICES keeps START, STOP, mode and installation results after refreshing the
+list. Refresh failure adds its own error without replacing the action result;
+only an explicit refresh or initial successful load sets Ready.
+In a Terminal session without a desktop, use the existing console launch
+switch: C:\R4OS\SOFTWARE\DESKTOP\SERVICES.R4X /LIST /CONSOLE.
+The SELFTEST switch already selects the Terminal's console launch policy.
 
 Current services and image scopes are listed in
 `Docs/Inventory/AllModules.json`.

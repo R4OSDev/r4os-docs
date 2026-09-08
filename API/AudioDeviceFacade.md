@@ -28,6 +28,13 @@ Native 48-kHz stereo S16 writes retain their direct copy path.
 Volume, status, MIDI, SID and OPL3 operations are available only when their
 table fields exist.
 
+SDK and AUDSVC validate 1..192,000 Hz, one or two channels and S16LE before
+creating a logical stream. The SDK retains its frame width; both layers reject
+partial PCM frames before silence detection or backend materialization. Close
+describes the absence of this client's stream and succeeds again if a previous
+close removed it but its response was lost. Real backend close failures retain
+the session and remain visible.
+
 An AUDSVC open initially owns a logical client stream only. The first
 non-silent PCM write materializes the kernel/backend stream. A complete zero
 block is reported as consumed without a backend payload and closes an active
@@ -42,6 +49,12 @@ service epoch and persistence diagnostics. A positive explicit master volume
 unmutes; the legacy set-volume operation deliberately preserves mute. AUDSVC
 alone fans the effective master gain out to active streams and persists it,
 so UI clients must not keep a second mixer truth.
+
+Pending kernel mix data gets a coalesced observation after 2 ms. A successful
+backend write independently gets one progress observation after 10 ms, including
+before its first hardware interrupt. These deadlines wake the kernel's existing
+audio owner; with no pending work the progress task sleeps indefinitely.
+Backend registration/removal and progress callbacks share the stream owner.
 
 The active R4D backend owns hardware conversion, DMA, interrupts and recovery.
 An SDK facade never calls a kernel hardware path directly.

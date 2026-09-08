@@ -159,10 +159,12 @@ Write contract
   counted; old audio is never overwritten.
 - Ordinary writes do not add silence to reach a period boundary. Drain pads
   the last partial period once. An exhausted, still-open stream may also emit
-  its remaining partial period once before parking. A partial write after
-  parking waits at least 10 ms without another accepted write; the existing
-  active-session status path then starts that tail with one period. No
-  permanent idle polling timer is added. Drain appends three explicitly
+  its remaining partial period once before parking. Both the first short
+  block and a parked restart receive a 10-ms start deadline from the first
+  pending write. Adjacent writes may combine without postponing that deadline.
+  The kernel audio owner's delayed progress callback flushes a remaining
+  partial period and permits a one-period start; no subsequent application
+  write, close or status query is needed. No permanent idle polling is added. Drain appends three explicitly
   counted zero periods after all requested frames so codec and host-backend
   queues can emit their buffered tail before RUN is cleared; these postroll
   periods are not underrun recovery.
@@ -182,8 +184,8 @@ DMA geometry and ownership
   a bidirectional fallback has its output-direction bit set. Missing route,
   format capability or descriptor capacity fails before RUN.
 - Playback starts with two ready periods (20 ms) and then admits PCM up to a
-  32-period running reserve (320 ms). Drain or a parked partial tail may start
-  with one ready period. A validated DMA position entry and LPIB select the current
+  32-period running reserve (320 ms). Drain or an expired pending-start deadline
+  may start with one ready period. A validated DMA position entry and LPIB select the current
   cyclic period; implausible positions cannot address outside the fixed ring.
 - A consumed period is cleared before reuse. Silence is therefore observable
   only when hardware reaches a period for which no PCM data was available.
@@ -213,7 +215,11 @@ Interrupt and refill contract
 - A monotone IRQ generation closes the worker-completion race: work that
   arrived during a refill pass is represented by a freshly deadline-stamped
   successor or already belongs to the successor claimed by the racing IRQ.
-  Completion inspection/release is serialized between worker and task context
+  A pass that could not acquire the stream lock also retains a successor,
+  even without a new IRQ generation. HDA keeps its error latch until the lock
+  is acquired; AC97 likewise exchanges its pending status only inside the
+  acquired owner. A contended progress/status callback reports Busy for a
+  bounded follow-up. Completion inspection/release is serialized between worker and task context
   by an atomic gate. Shutdown claims the gate and must cancel or join every
   retained handle before DMA can be released.
 

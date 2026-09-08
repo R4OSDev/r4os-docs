@@ -135,6 +135,41 @@ The bounded fixture performs zero accessor comparisons for 64 ordinary
 property reads after collecting 512 discarded accessor owners, versus
 65,536 comparisons before this change. Pool capacity remains reusable.
 
+Bounded native JavaScript sorting since 0.78.43
+----------------------------------------------
+
+Array and TypedArray sort()/toSorted() use a stable bottom-up merge of
+original indices. Two u16 index arrays require at most 256 KB at the existing
+65,536-element sorting limit. An ordered-input check retains linear work for
+already sorted inputs. Otherwise comparison work is O(n log n), with stable
+left-first ties, including a comparator result of NaN. Array sort() gathers
+present values and writes undefined before holes; toSorted() reads holes as
+undefined. Undefined values never reach an Array comparator.
+
+TypedArray sorting captures exact element bytes in at most 512 KB instead
+of a full JavaScript Value array. Comparators cannot change this snapshot
+by modifying, resizing or detaching the receiver. Final writes recheck the
+view: detached/out-of-bounds indices are ignored, immutable storage fails.
+Default comparison preserves numeric ordering, signed zero, NaN placement,
+NaN payload stability and exact signed/unsigned 64-bit BigInt ordering.
+Only custom BigInt comparisons materialize the two compared values, with
+temporary roots across callbacks. A missing ordinary BigInt-versus-BigInt
+relational comparison branch found by that case was corrected as well.
+
+Gathering, index initialization, order checks, merging, permutation and final
+writes call the existing checkpoint. Native work therefore consumes the
+step budget and observes the configured stop interval; it is no longer an
+uninterruptible insertion-sort loop. Scratch is released on every exit and
+cycle values remain rooted across collection. String conversion retains
+references until both conversions finish before resolving arena pointers.
+
+The bounded 512-element reverse fixture drops from 130,816 comparisons to
+2,305 for both paths; sorted input remains at 511 comparisons. Default typed
+sorting creates no temporary JavaScript cells. A single targeted StepLimit
+case interrupts actual comparisons before receiver writeback and verifies
+that roots unwind and the same runtime subsequently evaluates 6*7 as 42.
+These are work counts and focused behavior checks, not elapsed-time claims.
+
 Navigation replaces the document generation. Timers, listeners, requests,
 promises and resources retain that generation so late completion cannot
 mutate a newer page. Parser, VM, DOM, layout, image and cache limits fail

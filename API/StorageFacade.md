@@ -179,3 +179,14 @@ R4PART /S preloads at most 64 KB UTF-8, with 512-byte lines and optional BOM.
 It uses the same commands and explicit confirmation lines; first error/EOF at
 a required confirmation stops with code 1, success/EXIT returns 0. It retains
 no script file handle during mutation. Failed SELECT clears prior selection.
+
+## Copying with bounded storage
+
+`Files.copy` and C `r4_files_copy` use the optional R4SYS
+`file_copy_buffered` operation. One paired filesystem request keeps the
+source identity stable through every read and destination append. The
+caller owns the nonempty scratch buffer until return; old providers report
+unavailable. Exact completed bytes, source size, chunk count and largest
+chunk remain available on failure. Success includes final flush; failed
+copy cleanup can itself fail, so progress is not a durable retry offset.
+Same-file aliases are rejected before any destination preparation.

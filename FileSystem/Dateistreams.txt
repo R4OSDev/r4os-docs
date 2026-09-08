@@ -20,3 +20,30 @@ claim. Boot recovery completes or rolls back the claim according to the last
 durable point. Cleanup is identity-checked: an unrelated file that later
 appears under the same path is never deleted as if it were the old partial
 upload.
+
+Copying (0.78.28)
+-----------------
+SDK file_stream.copy and Files.copy use file_copy_buffered, one paired
+filesystem request for source lookup, destination identity check and every
+chunk. The caller keeps exclusive ownership of its nonempty buffer until
+return. R4SYS revision 18 appends this optional slot; Query:1 is unchanged.
+An older provider returns unavailable without a truncate/read fallback.
+The C facade exposes the same operation through r4_files_copy.
+
+The 32-byte FileCopyProgress payload contains version/size, completed bytes,
+source size, append count and maximum completed chunk. File-stream result
+codes distinguish success, invalid/same-file input, missing source, size
+above 4 GB and I/O failure. A successful return includes the final flush.
+After failure the provider attempts to remove its incomplete destination
+under the same request; cleanup I/O can fail. Progress never implies that
+a partial target is durable or still present, and is not a retry offset.
+Replacing an unrelated destination retains the existing non-atomic copy
+contract. Atomic document publication continues to use replaceAtomic.
+
+Native copy and move reject aliases before stream invalidation. NTFS uses
+the record plus sequence, FAT uses the live short-entry sector/offset and
+also rejects shared nonempty cluster chains. Empty FAT files with different
+directory locations remain distinct. Backend/VFS copy preflight repeats
+the identity guard before destination mutation. Generic native copies own
+one 32-KB heap buffer per operation, released before the paired request's
+unwind guard ends; disjoint volume pairs can still proceed independently.

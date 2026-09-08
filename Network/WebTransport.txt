@@ -30,6 +30,56 @@ cookie value for an exact cache key. Later hops continue to use the caller's
 cookie provider. The bounded HTTP response cache belongs to Klickifax and is
 described in Browser.txt; other web transport users retain uncached fetch.
 
+Buffered transport since 0.78.47
+--------------------------------
+
+ResponseDecoder tracks headers, chunk sizes, partial payloads, CRLF and
+trailers across monotonically growing input in stable caller buffers. Each
+payload byte is copied into the body buffer once. Content-Length and close-
+delimited bodies use the same progress state; only EOF ends the latter.
+Informational responses are consumed before the final response, with a bound
+of eight; protocol upgrades remain unsupported. Trailer fields do not alter
+framing or the accepted response headers. The one-shot decoder remains a
+wrapper over this state machine. The separate streamed-download path keeps
+its existing Content-Length contract.
+
+FetchOptions.sessions opts into a caller-owned SessionPool. Each pool retains
+at most two connections and four accepted CORS preflight results. Connections
+are keyed by scheme, host, port, origin, network partition and credentials
+mode; HTTPS retains the actual TLS stream state. An HTTP/1.1 response is
+reusable only after its exact, self-delimited end. HTTP/1.0, close-delimited
+responses, Connection: close, upgrades, extra trailing bytes, errors and
+cancellation retire the connection. Idle connections expire after 30 seconds.
+GET/HEAD can retry a failed write to a reused connection once under the same
+absolute deadline. Explicit Connection/Upgrade request headers and requests
+without a pool keep the one-shot path.
+
+Preflight entries include partition, origin, full URL, credentials and the
+requested method/header names. Max-age is capped at 600 seconds, defaults to
+five seconds when absent or invalid, and zero disables retention. A wildcard
+does not authorize the Authorization header. Request variants never borrow
+another entry's result. TransportStats count actual resolver calls, connects,
+TLS handshakes, reused connections, preflights and decoded payload copies.
+
+app_web_jobs.Job owns one program thread, stop flag, session pool and response
+result. Callers bound their live job set to app_web_jobs.capacity (two).
+Cookie and target-authorization callbacks are handed back to the owner loop;
+workers do not call GUI, Runtime, DOM or cache code. The owner must service
+callbacks and collect the thread before freeing or reusing borrowed storage.
+Cancellation also drains published callbacks; cancelled responses are never
+reused. Progress/event pumping stays in the owner loop. Each job keeps its
+original absolute request deadline through redirects and retries.
+
+web_runtime_jobs.RequestJob freezes request headers/body, URL, origin and
+credentials into owned buffers and keeps independent response/TLS workspaces.
+Completion resolves the current Runtime by generation and checks every cohort
+consumer's request ID. Retired subdocuments therefore cannot leave a borrowed
+Runtime pointer in a worker. The browser prepares/finishes cache transactions
+on its owner thread and pins old cache entries across a network operation.
+
+References: https://www.rfc-editor.org/rfc/rfc9112.html#name-persistence
+            https://fetch.spec.whatwg.org/#cors-preflight-cache
+
 Recovery uses this same DNS/TCP/R4HTTP/R4TLS path for the two public GitHub
 release channels. It accepts the matching stable asset, follows only approved
 HTTPS hosts, streams at explicit offsets into the boot volume's PART file,

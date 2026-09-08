@@ -307,6 +307,52 @@ IPC worker is recorded separately in roadmap 0.78.51.
 References: https://fetch.spec.whatwg.org/#concept-request-cache-mode
             https://www.rfc-editor.org/info/rfc9111/
 
+Parallel resources since 0.78.47
+-------------------------------
+
+Klickifax uses two bounded transport jobs for independent document resources.
+Each job owns frozen request data and raw/body/TLS buffers; fonts keep their
+existing larger response limit. Cache lookup, cookie callbacks, cache updates,
+image/font/document consumption and JavaScript completion remain on the GUI
+owner. Cache hits publish immediately. An old cached response remains pinned
+while a worker validates it. The optional validator retry keeps the original
+deadline. Shared consumers borrow one job's stable response until all their
+separate completions finish. The former synchronous resource loop is removed.
+
+Each worker has a private pool of two reusable connections and four preflight
+entries. Navigation has its own synchronous pool of two connections. Thus the
+browser retains at most six connections across these three owners, and only
+two resource transports run at once. Slots are reused for later resources;
+connections are never pipelined. Document changes and exit cancel and join
+workers before freeing their buffers or document/cache state. Generation
+lookup also prevents delivery into a retired child document. Individual
+request cancellation keeps other cohort consumers alive when still needed.
+
+Initial document loading pumps actual resource completion with a 30-second
+aggregate limit and the existing per-request deadline. Child resources enter
+the same owner loop instead of recursively occupying a completed transport
+slot. The top-level load waits for its document and current child resources.
+Stop and GUI progress remain responsive while the transports wait.
+
+KlickifaxLive uses the same RequestJob path for external requests in its
+script/consent probe. /SCRIPT URL reports navigation produced by a page's
+scripts and can target a controlled local HTTP peer. Step counters report zero
+until the lazy JavaScript realm actually exists. DOMContentLoaded/load
+are dispatched after document resources settle; an empty JavaScript job queue
+alone is insufficient. Externally delivered scripts can register load
+handlers or navigate. Stylesheets are appended and images are probed through
+R4IMG on the diagnostic owner. Font activation and child-window consumers are
+reported as unsupported failures. They are not falsely marked loaded. The
+existing /PAGE mode remains the static document/layout probe.
+
+The focused owner tests cover incremental framing, connection eligibility,
+preflight variants/expiry and overlapping/cancelled cache transactions. The
+controlled SMP4 probe uses two simultaneous resources, repeated connections,
+fragmented chunks, one document replacement and an external diagnostic script.
+The 1 MB/256-arrival decoder fixture measures 1,048,576 payload bytes copied,
+compared with 134,742,016 before the incremental state was introduced. These
+are decoder-copy counts, not a whole-browser throughput measurement.
+
 Navigation replaces the document generation. Timers, listeners, requests,
 promises and resources retain that generation so late completion cannot
 mutate a newer page. Parser, VM, DOM, layout, image and cache limits fail

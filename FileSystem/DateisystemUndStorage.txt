@@ -185,12 +185,23 @@ runtime request. Flush remains exclusive against all other tags.
 Error-FIS, taskfile/link failure, timeout and cancellation close admission,
 stop and COMRESET the port, complete old generations exactly once and require
 an unchanged IDENTIFY result before reopening. Failed port quiescence
-enters controller recovery. The current HBA reset is conditional on successful
-port stops, so a stuck command engine prevents that escalation; uncertain DMA
-ownership keeps the backend closed. AHCI work still self-reposts while requests
-are owned, including when IRQs are armed. Both AHCI and NVMe synchronous boot
-callbacks can currently return an error after failed recovery while a retained
-DMA mapping still refers to the supplied buffer.
+enters controller recovery. Once software preparation has ended, a failed port
+stop still permits the HBA reset. All ports must then confirm quiescence before
+old mappings are released. Unfinished preparation, a failed reset or unconfirmed
+post-reset quiescence retain ownership and keep the backend closed.
+
+Since 0.78.54, AHCI and NVMe synchronous reads/writes use private transfer memory
+from admission onward. The SDK SharedDmaBuffer holds separate caller and device
+references; the metadata page is outside the DMA payload. Writes copy into it
+before submission, reads copy out only after an exact successful completion.
+Retiring the mapping drops the device reference; returning drops the caller
+reference. Failed recovery can therefore return an error without exposing reused
+caller or block-adapter bounce memory to later DMA. A retained device reference
+keeps its allocation until confirmed completion/quiescence, possibly permanently
+if the device cannot be stopped. Flush needs no payload. This extra allocation
+and copy apply only to synchronous callbacks, not normal asynchronous requests.
+Completion and detach atomically claim the same generation; a late callback
+cannot publish its result into a later synchronous call.
 
 An accepted asynchronous request owns its exact generation handle and buffer
 until one completion. The IRQ-facing callback only claims that handle; the

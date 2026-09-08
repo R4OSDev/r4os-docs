@@ -75,8 +75,9 @@ Every SDK block carries a checked header/footer boundary tag. Free-list
 removal, predecessor lookup, coalescing and region-end lookup are constant-time
 metadata operations; split, merge and top decommit update the size-class index
 as one transaction. Invalid headers, footers or list links stop the operation
-and increment the allocator corruption counter. Failed commit, decommit and
-owner-bound release calls keep the old allocation/index state retryable.
+and increment the allocator corruption counter. Failed decommit and owner-bound release calls may already have removed
+pages. Their exact retry identity stays outside the affected memory; those
+pages cannot return to allocation indices before teardown is confirmed.
 One allocator-local atomic lock serializes these metadata and VM mutations
 between threads of the same R4X instance; contended program threads yield
 through R4SYS, while payload access and remap copying remain outside the lock.
@@ -237,3 +238,30 @@ trusted driver must keep the virtual mapping and backing allocation intact
 until all child mappings are unmapped. Calls that can allocate, copy or tear
 down mappings run in task context; IRQ handlers complete hardware work and may
 defer synchronization through the owner-bound driver work queue.
+
+Partial release and sparse reservations (0.78.31)
+------------------------------------------------
+Demand-VM release walks the range's ordered commit spans and its existing
+partial-uncommit cursor. It skips wholly uncommitted reservation gaps and
+bounds each physical run to its current committed span. The unchanged
+acknowledged unmap transaction still releases frames only after TLB completion.
+The focused four-page model uses four mapping queries for both a 128-MB and
+a 4-GB reservation; one failed extent adds one query on exact retry. These
+are counted operations, not measured guest latency or throughput.
+
+Before a heap tail is decommitted, its whole requested interval is removed
+from the free bins and usable heap bound. The lower boundary tags remain
+mapped. A partial failure keeps the exact offset/length in heap control and
+blocks extension until that request succeeds. Existing lower free blocks
+remain usable. pending_uncommit_bytes describes the withheld virtual tail;
+it is not a count of still-resident frames. The normal heap capacity and
+committed-byte view describe its usable prefix; VM/physical statistics retain
+ownership of any unfinished suffix. Successful completion accounts the retired
+pages exactly once.
+
+The SDK applies the same rule to small-region tails: shrink the usable bound
+and footer before the call, retain the request outside its memory, and resume
+before growth. A direct cache entry becomes retiring before release; a failed
+release can be retried but can never become an allocation hit. Reclaimed-byte
+counts increase only after a complete confirmed request. The existing VM
+owner registry remains the final authority for residual process-exit cleanup.

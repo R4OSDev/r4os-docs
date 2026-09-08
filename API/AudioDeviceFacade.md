@@ -12,6 +12,19 @@ operation contract. `app_audio.WriteResult` reports bytes accepted before
 Busy, timeout, or failure; `app_audio.WriteCursor` validates that progress
 against the remaining frame-aligned client block without converting the
 terminal result into success. Retry timing remains the caller's decision.
+The integer `audioServiceWrite` facade returns the contiguous accepted input
+prefix on a short reply or a later error. Callers retry only its untouched
+suffix; an error before any acceptance remains negative. Unaccepted retry
+bytes do not increase `audio_stream_dropped_bytes`.
+
+Kernel and SDK streaming PCM retain the final decoded input frame and rational
+sample position across write boundaries. Downsampling can consume a complete
+input chunk without producing an output frame; that input is still accepted.
+Interpolation uses 64-bit intermediates for the full S16 domain. Only an
+explicit end of stream extends the last sample through its remaining duration;
+bounded `finishStreamingToStereoS16` calls must finish before a new chunk.
+Native 48-kHz stereo S16 writes retain their direct copy path.
+
 Volume, status, MIDI, SID and OPL3 operations are available only when their
 table fields exist.
 

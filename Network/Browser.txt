@@ -98,6 +98,43 @@ compute it implicitly. R4CSS layout summaries and selftests request the hash
 explicitly and preserve their protocol output. Klickifax and KlickifaxLive
 use ordinary reflow without paying for an unused diagnostic scan.
 
+JavaScript collection and accessor ownership since 0.78.42
+---------------------------------------------------------
+
+Map, Set, WeakMap and WeakSet lazily allocate hash buckets and entry metadata.
+Values and presence bits remain in the existing cell item storage for strong
+and weak GC tracing. Lookup follows only a key's live bucket chain; size is
+constant-time. Deletion unlinks the entry and reuses its physical slot, while
+a separate linked order preserves insertion order. Updating a key keeps its
+position; deleting and inserting it gives it a new position. clear() resets
+the live storage without resetting the monotonic insertion serial.
+
+Active iterators and forEach use an entry position plus insertion serial.
+The common path follows the next live entry. Deleting/reusing the last entry
+or clearing the collection recovers the cursor from the current live order.
+Exhausted iterators remain exhausted. SameValueZero hashing canonicalizes
+signed zero and NaN and respects string/BigInt values and object identity.
+Weak GC deletion updates the same index and free list. Metadata contains no
+additional JavaScript roots and is released with its owning collection.
+
+Collection limits apply to the actual live count. A full Map reports a
+catchable RangeError, and deleting an entry makes room for another key.
+Growth allocation failures preserve existing entries, values and order;
+successfully reserved capacity may remain available for a retry. Allocated
+capacity can retain a past peak, but repeated small-live-count churn reuses
+storage instead of growing with all past insertions. In a 512-cycle bounded
+fixture, Map search steps fell from 395,008 to 1,046 and the physical item
+high-water mark from 1,026 to 4. These are work counts, not timing claims.
+
+Accessors retain property markers for enumeration and use per-owner linked
+indices for lookup, integrity operations and GC marking. Owner collection
+releases its chain before a cell ID can be reused. Deleted or converted
+accessors return to a pool free list; pool relocation keeps indices valid.
+Normal properties do not scan other owners or historical pool capacity.
+The bounded fixture performs zero accessor comparisons for 64 ordinary
+property reads after collecting 512 discarded accessor owners, versus
+65,536 comparisons before this change. Pool capacity remains reusable.
+
 Navigation replaces the document generation. Timers, listeners, requests,
 promises and resources retain that generation so late completion cannot
 mutate a newer page. Parser, VM, DOM, layout, image and cache limits fail

@@ -257,6 +257,56 @@ The focused tests include one pull without readers, concurrent demand, an
 unused branch, cancellation, errors, buffer ownership and queue reclamation.
 Reference: https://streams.spec.whatwg.org/#rs-tee
 
+HTTP response cache since 0.78.46
+--------------------------------
+
+Klickifax owns a private in-memory HTTP response cache. The SDK supplies its
+bounded storage model and passes Request.cache through WebRuntime. Default
+uses a fresh response or revalidates it; no-cache requests validation;
+no-store bypasses reading and writing; reload bypasses reading and refreshes
+the stored response. Force-cache and only-if-cached can use stale responses;
+only-if-cached fails without networking when there is no eligible entry.
+Reloading the document also refreshes its subsequently requested resources.
+
+The cache keeps at most eight entries and 512 KB of retained data including
+keys and headers, with a 128 KB body limit per object. Least recently used
+unpinned entries are evicted. Borrowed entries survive invalidation until
+released. Failure to allocate the optional stored copy does not discard a
+successful network response. Keys include URL, method, the effective request
+header block, initial cookies, origin and request context. This deliberately
+partitions more narrowly than Vary; Vary:* and no-store responses are not
+stored. Direct GET 200 responses are eligible. Range, authorization, explicit
+conditional requests and redirected responses use the transport path.
+Successful unsafe methods invalidate matching initial and final URLs.
+
+Freshness uses explicit max-age or Expires, Date/Age and monotonic residence
+time. Unsupported dates, invalid age or no-cache require validation. There
+is no heuristic freshness. ETag and Last-Modified drive conditional requests;
+a usable 304 refreshes metadata and retains the original body identity.
+Cache-generated validators and cache directives are added after the author
+header CORS preflight decision. Cached responses copy into caller buffers,
+update Age and never replay Set-Cookie. Cookie and origin variants stay
+separate. The cache lasts for the browser process; it is not a disk cache.
+
+Already queued identical resource consumers share one fetch, keeping their
+own request IDs, DOM application, script executions and cancellation states.
+The group is captured before transport and excludes fetch/XHR, no-store and
+the separately owned webfont path. Each completion checks its generation and
+active state. A shared owned response snapshot survives nested document loads
+that reuse transport buffers. Equal raster response identities reuse decoded
+pixels within one document, copying them into independent image buffers.
+SVG retains its context-dependent decoding path. The controlled local HTTP
+probe counts four network requests for the cache-mode sequence and one image
+request for two image uses, with one actual decode and one reuse. Short owner
+cases separately cover variants, cancellation, script execution, generation,
+expiry, eviction, borrowed storage and allocation failure.
+The guest fixture activates net.tcp from an application context first. A
+cold first-use stack fault while loading that protocol from a 64 KB kernel
+IPC worker is recorded separately in roadmap 0.78.51.
+
+References: https://fetch.spec.whatwg.org/#concept-request-cache-mode
+            https://www.rfc-editor.org/info/rfc9111/
+
 Navigation replaces the document generation. Timers, listeners, requests,
 promises and resources retain that generation so late completion cannot
 mutate a newer page. Parser, VM, DOM, layout, image and cache limits fail

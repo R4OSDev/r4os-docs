@@ -170,6 +170,54 @@ case interrupts actual comparisons before receiver writeback and verifies
 that roots unwind and the same runtime subsequently evaluates 6*7 as 42.
 These are work counts and focused behavior checks, not elapsed-time claims.
 
+Web object ownership within a document since 0.78.44
+---------------------------------------------------
+
+The nine stream internal-slot registries use WeakMap. Reader, writer,
+controller, BYOB request and transform state follow their reachable owners
+through the runtime's ephemeron fixed point. Queued promise work retains its
+required state; completed objects retain their promised state while still
+referenced. The active pipeThrough operation set stays strong until completion.
+Document replacement remains a final boundary, not the only reclamation point.
+
+ExternalRootMarker now supports conditional marking in that same fixed point
+and a sweep callback before cell IDs become reusable. These callbacks only
+inspect, mark or clear metadata: no allocation, JavaScript call or nested GC.
+WebRuntime strongly retains requests while queued, in flight or processing a
+terminal response. A processing flag also prevents a callback from reusing
+the currently completing request slot. Terminal request references are
+cleared during collection; their response metadata remains available.
+
+XHR registry entries and their event listeners follow the XHR object instead
+of rooting every completed request. Registered MutationObservers remain
+anchored by their observation; otherwise state follows the reachable owner.
+Queued mutation deliveries carry the observer object, not a reusable slot
+number, and keep it alive even after disconnect clears the queued flag.
+Construction roots and reserves owners across fallible setup, with rollback;
+receiver lookup validates current object identity before using a slot.
+Full XHR, observer and signal-link registries attempt one collection before
+reporting a limit on the actual retained owners or pending work.
+
+AbortSignal hidden state caches only GC flags for completion and actual
+listener interest. A retained target keeps its sources; a reachable source
+keeps an interested dependent target. Unrooted cycles do not bootstrap their
+own roots. This preserves listener delivery required by DOM section 3.2.1:
+https://dom.spec.whatwg.org/#abortsignal-garbage-collection
+GC never invokes property getters to determine this interest. Pending abort
+delivery explicitly roots its targets; relation cleanup also runs on errors.
+Expiring deadlines root their signal before clearing the deadline and creating
+the timeout error, covering collection before abort delivery starts.
+
+Three focused owner cases supplement existing stream/observer/signal cases.
+Sixteen stream cycles finish 68 operations and return from a pending peak
+of 1,116 cells to the warmed baseline of 945. Sixty-four register cycles
+retain only one deliberately kept XHR, one observer reached through WeakMap
+and two signal links; after releasing them all three counts are zero.
+Collection inside response, observer and signal callbacks preserves delivery,
+a virtual timeout completes its unreferenced dependent, and a nested XHR uses
+a different request slot. Disconnected pending observer
+work drains without invoking the disconnected callback or reusing its owner.
+
 Navigation replaces the document generation. Timers, listeners, requests,
 promises and resources retain that generation so late completion cannot
 mutate a newer page. Parser, VM, DOM, layout, image and cache limits fail

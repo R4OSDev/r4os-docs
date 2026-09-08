@@ -16,7 +16,7 @@ version and activation behavior. Requirements identify a concrete component,
 minimum version and installed/active state.
 
 Versioned component kinds are Kernel, R4X, R4L, R4D and R4P. Configuration,
-data and fonts do not receive invented component identities. R4UPack reads
+SDK files and fonts do not receive invented component identities. R4UPack reads
 R4M0 or kernel metadata and rejects a manifest that disagrees with the
 payload, even if package checksums were recomputed.
 
@@ -24,6 +24,40 @@ R4L means an independent Runtime Library. R4SYS, R4DESK, R4DRAW, R4NET,
 R4AUDIO and R4DEV are built into the Kernel and cannot be packaged or required
 as separate R4L components. A Platform API implementation update is a Kernel
 component update whose ABI remains governed by the central Contract.
+
+Package creation since 0.78.38
+-----------------------------
+
+R4UPack uses one reusable 64-KB input buffer. It retains at most 32 open
+payload handles and their metadata, reads artifact identity by bounded
+positional reads, and computes each payload checksum during the first pass.
+The second pass streams payloads into an atomic output file and accumulates
+the combined payload/package checksums. It checks source length, timestamp
+and payload checksum before publishing the completed header and file.
+Changed/truncated input or output errors preserve any previous output file.
+Header, manifest, concatenation order and checksums remain byte compatible.
+
+The producer supports at most 32 payloads, 32 requirements, 32 MB per payload
+and a 32-KB manifest. The shared manifest contract exposes the journal owner's
+package capacity; the producer and update consumer read this same value.
+Manifest capacity is shared as well. Excess input is rejected before output
+replacement. A package containing unversioned payloads still requires at
+least one concrete installed/active component requirement.
+
+The former R4UPack data option is explicitly unsupported. It had no target
+accepted by the canonical inventory contract: foreign-drive paths are not
+inventory targets, and recognized C: paths belong to their specific kinds.
+Explicit data and foreign-drive payload requests return UnsupportedDataPayload.
+Supported config/font/sdk targets keep their existing semantics; arbitrary
+data is not silently reclassified as system configuration.
+
+Three focused owner cases cover streaming, bounded reads, read/write errors
+and preservation of an old output after a same-length source change. Small
+mixed component/config packages and an 8-MB SDK payload are byte-identical to
+the previous generator. On the local Linux host the 8-MB case used 33,476 KB
+peak RSS before and 924 KB after; this is one bounded measurement, not a
+whole-release benchmark. The Windows target is cross-compiled, without a
+Windows runtime test. No guest installation is part of this host-tool check.
 
 Activation
 ----------

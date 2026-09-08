@@ -135,3 +135,35 @@ reset old double-click targets and replace the item array together. Failed
 loads preserve it and show an error once; another change can retry. The
 existing 32-icon display limit remains; enumeration still reaches the true
 end so an error beyond those icons cannot publish a partial view.
+
+
+APPDEF: Bestand und Speicherergebnis ab 0.78.63
+---------------------------------------------
+ASSOC.R4S wird vor dem Einlesen ueber R4STD CONFIG_V1 wiederhergestellt.
+Fehlende und leere Dateien aktivieren Defaults; ein Lese-, Groessen-, Format-
+oder Wiederherstellungsfehler sperrt Speichern bis zum erfolgreichen neuen
+Laden. Die App importiert CONFIG_V1 jetzt ausdruecklich. OK verwendet
+saveDocument statt direktem Ueberschreiben und ungeprueftem Rueckbau.
+Bei Fehler bleiben Fenster und Aenderungen offen. Eine ausstehende
+Wiederherstellung wird als solche angezeigt, nicht als abgeschlossen.
+
+Appearance: Konfiguration ab 0.78.63
+---------------------------------
+Vor einer Aenderung von DESKTOP.R4S wird R4STD-Recovery abgeschlossen und
+der wiederhergestellte Inhalt gelesen. Lese-/Groessenfehler verhindern das
+Speichern. Die vier Appearance-Werte werden gemeinsam komponiert; andere
+Schluessel wie TASKBAR_CLOCK und UI_FONT bleiben erhalten. Publikation
+verwendet weiterhin R4STD CONFIG_V1 saveDocument.
+
+Desktop-Defaults ab 0.78.63
+-------------------------
+Desktop- und Zeitkonfiguration werden beim Start zuerst wiederhergestellt.
+Nur ausdruecklich fehlende Dateien erhalten neue Defaultdateien. Leere,
+nicht lesbare, zu grosse oder ungueltige vorhandene Dateien werden dabei
+nicht ueberschrieben; der Desktop behaelt seine Arbeitseinstellungen und
+meldet Fehler. Neue Defaultdateien verwenden R4STD CONFIG_V1 saveDocument.
+
+APPDEFs vorhandener /SELFTEST verwendet nur vorher abwesende private Dateien
+C:\TEMP\APPDEF.R4S/.TMP/.BAK und meldet OK erst nach erfolgreicher
+Bereinigung. Die kanonische ASSOC.R4S bleibt auch bei Lesefehlern unberuehrt.
+Der bereits vorhandene BAS-Default wird im Test wiederverwendet.

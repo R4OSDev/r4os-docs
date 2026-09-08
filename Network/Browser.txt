@@ -218,6 +218,45 @@ a virtual timeout completes its unreferenced dependent, and a nested XHR uses
 a different request slot. Disconnected pending observer
 work drains without invoking the disconnected callback or reusing its owner.
 
+Stream queue and byte transport since 0.78.45
+-------------------------------------------
+
+Readable chunks, pending reads and capacity waiters use a geometrically grown
+ring. Consumption clears its slot and does not move remaining entries. Empty
+slots are reused; clearing releases the backing array. The existing runtime
+array capacity remains the live queue limit. In a bounded measurement, draining
+512 queued chunks or pending reads previously moved 130,816 entries. The ring
+moves 504 entries while growing and none while removing them; at 256 entries
+the corresponding counts are 32,640 versus 248.
+
+Byte enqueue, BYOB read and producer responses use the existing ArrayBuffer
+transfer operation. It detaches the previous buffer and currently copies its
+storage natively; this is not a zero-copy claim. Internal view descriptors
+preserve the intrinsic typed-array/DataView kind, byte offset and element size.
+Partial reads commit aligned elements and retain remaining bytes for the next
+read. Producer views are invalidated on response; replacement buffers must
+match the pending span. Pending BYOB close is completed by respond(0), whereas
+reading an already closed stream returns a transferred empty view directly.
+A queued body that cannot satisfy the requested minimum rejects the read.
+
+BYOB copies use Uint8Array.set. Identical-element TypedArray.set uses native
+blocks of at most 4096 bytes, handles whole-span overlap in the proper direction,
+and revalidates both buffers after offset conversion. It preserves raw float
+and BigInt bits without allocating an intermediate Value array. Other element
+kinds and generic array-like inputs retain their conversion path. A 128 KB copy
+previously failed at the 65,536-item Value-array limit; it now uses 32 blocks
+and zero temporary Value cells. The existing budget/stop checks remain active.
+
+tee shares one pending source read between branch pull requests. Normal branch
+demand determines subsequent reads; one fast reader may still accumulate data
+in the other branch, as required. Byte branches have independent buffers.
+Both cancellations join their reasons and cancel the source once. Source errors
+reach both branches even without a new pull. A byte branch ending with an
+incomplete element errors without preventing the other branch from completing.
+The focused tests include one pull without readers, concurrent demand, an
+unused branch, cancellation, errors, buffer ownership and queue reclamation.
+Reference: https://streams.spec.whatwg.org/#rs-tee
+
 Navigation replaces the document generation. Timers, listeners, requests,
 promises and resources retain that generation so late completion cannot
 mutate a newer page. Parser, VM, DOM, layout, image and cache limits fail

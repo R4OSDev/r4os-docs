@@ -110,3 +110,28 @@ App-Audio, SRAM/Epson-RTC persistence, pause/resume/reset/mute and independent
 witness/close endings. Invalid-header and missing-DSP-firmware fixtures remain
 visible in hosted error windows before cooperative teardown. Private SMW data
 is never opened by this automatic path.
+
+Directory views (0.78.26)
+-------------------------
+Explorer selects each globally ordered page from the entire typed directory
+enumeration, with at most 64 retained entries. Next/previous use the boundary
+entry in the selected name/type/size/date order; full paths break equal-title
+ties. Name/type scans load full file information only for the visible page.
+A new sort starts at the first page. Refresh retains the selected path when
+present. Failed enumeration or required sort metadata keeps the old view.
+
+Appearance, Notepad, Paint and R4Code use the shared SDK dialog page, keeping
+93 files/directories plus parent and navigation rows. Each row owns its path
+and kind; selection performs no second enumeration. Appearance filters BMPs
+through the full directory. A failed page leaves directory and selection
+unchanged. Terminal DIR and HELP /S visibly report incomplete enumeration and
+return failure instead of treating an I/O error as normal end.
+
+Desktop captures directory changes before its first folder load. The normal
+activity wait wakes on mutations; a RAM-only cursor check coalesces changes.
+The folder is reloaded only after a change, outside active pointer/drag and
+modal actions. Complete loads retain selected paths and in-session positions,
+reset old double-click targets and replace the item array together. Failed
+loads preserve it and show an error once; another change can retry. The
+existing 32-icon display limit remains; enumeration still reaches the true
+end so an error beyond those icons cannot publish a partial view.

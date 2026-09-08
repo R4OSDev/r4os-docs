@@ -101,3 +101,19 @@ ignored deliveries never wake an event-only guest.
 
 Build the SDK with `Repositories\SDK\Build.bat test` or
 `Repositories/SDK/Build.sh test`, or as part of the matching central build.
+
+Directory pages and change hints (0.78.26)
+-----------------------------------------
+`r4os.directory_page.DialogPage` owns a bounded page of typed paths, kinds
+and labels, including parent/previous/next rows. Loading is transactional
+and scans to the real end; a failure leaves the previous page intact.
+`OrderedPage` is a caller-owned best-N set used for global Explorer sorting.
+Neither helper allocates an unbounded directory snapshot.
+
+Files.beginDirectoryChanges captures an optional DirectoryChangeCursor before
+the initial enumeration. Files.pollDirectoryChanges consumes only RAM and
+returns 1 when the direct directory needs reloading, 0 if unchanged and a
+negative error if the cursor/mount is invalid. A copied cursor owns no kernel
+resource and needs no close. Consume it before reloading to retain changes
+that arrive during enumeration. An old provider without the two optional
+R4SYS tail slots reports the normal missing-function result.

@@ -10,6 +10,19 @@ register, wait, receive, reply and unregister. Successful close/unregister
 invalidates the wrapper. Payload and response buffers remain caller-owned for
 the documented call duration.
 
+Endpoint requests are delivered in admission order, independently of reused
+payload slots and request-ID wrap. Cancellation removes only that request
+from the order; a receive buffer that is too small leaves the head pending.
+
+A caller can cancel after its request was delivered. The raw reply API then
+returns `service_api_result_not_found`, while an invalid endpoint remains a
+separate error. Service handlers can use `app_services.replyIfPending` or the
+owning `ServiceEndpoint.replyIfPending` / `replyTypedIfPending` methods to
+finish this expected late reply without terminating their loop. Their zero
+result means processing may continue; it does not claim delivery to the
+cancelled caller. Other reply errors still propagate, and `ServiceLoop.drain`
+continues to propagate arbitrary handler/provider failures unchanged.
+
 ### Desktop notification area
 
 `app.tray()` in Zig and `r4_app_tray()` in C bind a client to its exact

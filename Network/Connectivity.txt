@@ -119,3 +119,36 @@ RTL8139 0.1.4 keeps timed-out TX slots and bytes until hardware completion or
 confirmed reset. Timeout is reported once per pending slot in tx_errors, while
 transmit returns busy without rotating or overwriting the live descriptor.
 This deliberately does not promise recovery of a permanently stalled device.
+
+
+DHCP lease and request states (0.78.57)
+-------------------------------------
+NETDHCP 0.1.2 and Kernel 0.1.126 use the existing DhcpOp.client_ip to distinguish
+SELECTING from requests for a bound lease. SELECTING uses ciaddr=0 and options
+50/54. Renew sends from the current address to the original server, with the
+matching Ethernet next hop; rebind sends to broadcast. Both put the current
+address into ciaddr and omit options 50/54. The existing route/ARP resolver now
+also accepts the selected DHCP adapter. A renew wait ends by T2, a rebind wait
+by expiry; the earlier caller deadline is retained.
+
+0xffffffff explicitly means an infinite lease: expiry and automatic renew/
+rebind are disabled and remaining values retain the sentinel. A manual renew
+remains possible. Finite T2 uses u64 multiplication. Invalid T1/T2 ordering
+falls back to half and seven-eighths of the lease. One-/two-second leases keep
+their exact expiry with automatic T1/T2 disabled, because two positive whole-
+second deadlines cannot fit; a zero-duration or addressless ACK is rejected.
+
+A successful ACK replaces router/DNS with its supplied values. Missing
+options mean no gateway and no configured resolver; the server ID is never a
+substitute. A failed renewal retains the last confirmed complete lease unless
+a NAK invalidates it. There is no implicit carryover from an offer or old ACK.
+
+DHCPSVC 0.1.5 obtains the kernel-computed elapsed/remaining values through the
+existing structured kernel IPC response. Its restart changes neither the
+lease age nor its remaining time. No raw status or service ABI grows.
+Lease age currently starts at the kernel's ACK/bind point; it is no longer
+derived from service observation time.
+
+References: RFC 2131 sections 3.3/4.4.5 and table 5, RFC 2132 sections 3.5/3.8:
+https://www.rfc-editor.org/rfc/rfc2131.html
+https://www.rfc-editor.org/rfc/rfc2132.html

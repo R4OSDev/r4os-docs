@@ -143,3 +143,64 @@ R4SEND2 framing and the existing checksum. No wire format or API layout changes.
 
 RECV opens its own listener before Accept and closes it on every return.
 The waiting message is emitted after successful listener admission.
+
+
+Sitzungszufall 0.78.61
+--------------------
+Sitzungszufall ab 0.78.61
+-----------------------
+X25519-Server-Secret und server_random werden fuer jeden Handshake getrennt
+mit SDK secure_random.fill erzeugt. Keine Uhren-/Kennungsableitung und kein
+konstanter Produktwert. Fehlende Entropie liefert -11 bei Ausgabelaenge 0.
+R4LB enthaelt nun den privaten R4L2-Zustand: Magic4, Transcriptlaenge4,
+client_random32, server_random32, server_secret32, Transcript (max.8192).
+R4LS wird abgewiesen. Der Aufrufer behaelt den Zustand bis LiveFinish und
+uebertraegt ausschliesslich die getrennte Server-Flight an den Peer. Finish
+leitet die Schluessel aus genau diesem Secret ab. Lokale Secret-Kopien werden
+nach Verwendung geloescht; keine vollstaendige Speicherbereinigung behauptet.
+Konstante ECDH-Werte bleiben ausschliesslich in isolierten Prueffaellen.
+TLS-Zertifikat und RSA-Schluessel sind weiterhin gesondertes Systemmaterial.
+
+Sitzungszufall und Hostidentitaet ab 0.78.61
+-----------------------------------------
+Ein frischer Hardware-Seed initialisiert pro SSH-Verbindung den ChaCha-CSPRNG
+aus der mitgelieferten Zig-Standardbibliothek. Cookie, Padding und temporaerer
+X25519-Wert werden daraus versorgt. Keine Host-ID-/Zeit-Ersatzquelle.
+Fehlt die Quelle, endet der Handshake mit session-entropy-unavailable.
+Lokale Seed-, RNG- und temporaere ECDH-Puffer werden nach Verwendung geleert.
+
+Neue Ed25519-Hostschluessel erhalten einen eigenen Hardware-Seed. Seed,
+Public-Key und HostKeyRngVersion (Binaerwert 01 00 00 00) werden gemeinsam
+mit einer Registry-Batchaenderung publiziert. Ein vollstaendiges gueltiges
+altes Paar ohne Markierung wird einmal ersetzt; PreviousHostKeyPublic
+bewahrt ausschliesslich seine bisherige oeffentliche Identitaet. SSH-Clients
+muessen diese geaenderte Hostidentitaet anschliessend bestaetigen. Markierte
+Schluessel bleiben beim Neustart stabil. Lesefehler, beschaedigte Paare,
+unbekannte Markierungen oder Entropie-/Batchfehler ersetzen keinen Bestand.
+
+Sitzungs-Challenge ab 0.78.61
+---------------------------
+Op21 erzeugt acht frische Challengebytes aus SDK secure_random.fill. Der
+Aufrufer besitzt sie genau fuer eine Verbindung, uebernimmt sie nie vom Peer
+und verwendet sie nicht erneut fuer einen neuen Anmeldeversuch. Fehlende
+Entropie liefert -27 mit Ausgabelaenge 0. Op12 verlangt exakt diese acht Bytes
+als Eingabe und baut daraus den Type2-TSRequest. Op12 ist keine feste Fixture.
+
+Die privaten Zustandshuellen enthalten dieselbe Challenge: R4S2 (16-Byte-
+Header; Challenge ab8), R4W2 (48-Byte-Header; Challenge ab40) und R4C2
+(20-Byte-Header; Challenge ab12, danach R4LK und TSRequest). Alte Kennungen
+werden abgewiesen. Type3 wird in allen drei Pfaden gegen die Challenge im
+zugehoerigen Zustand geprueft. Festwerte gehoeren nur zu ausdruecklichen
+Diagnose-Fixtures. SPNEGO-Huellen bleiben als solche klassifiziert; nur am
+Byte0 beginnendes NTLMSSP gilt als roher Token.
+Die vollstaendige CredSSP-Nachweis-/Phasenpruefung und konfigurierbare
+Anmeldegrundlage sind gesonderte Folgearbeit 0.78.62.
+
+Gemeinsame Quelle: SDK secure_random prueft CPUID.RDRAND, verlangt den Carry-
+Erfolg jeder Instruktion und versucht pro Wort hoechstens zehnmal. Ein Fehler
+leert den gesamten Ausgabepuffer. web_crypto bleibt kompatibler Alias dieses
+Pfades. Unterschiedliche Testbytes allein gelten nicht als Qualitaetsbeweis.
+Die lokalen Proben verwenden nur eigenes temporaeres TLS-Material, da im
+Workspace die konfigurierte R4TLSDEV.KEY fehlt. Eine automatisch eingerichtete
+System-Serveridentitaet oder ein funktionierender produktiver TLS-Server ohne
+diese Datei wird hier nicht behauptet.

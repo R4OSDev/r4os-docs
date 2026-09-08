@@ -7,6 +7,19 @@ and file facades. RDPSVC consumes R4DESK frames and input and implements the
 RDP/TLS/CredSSP protocol path in userland. None of these protocols has a
 kernel or host-side production fallback.
 
+SSHD keeps connection IDs, packet buffers, sequence numbers and response
+storage with the session worker until Join. Independent workers submit
+TCPSVC operations without a process-wide network lock; each asynchronous
+SDK request owns its response and is drained before its stack storage ends.
+The main loop owns Accept and may ask TCPSVC to abort a stalled connection;
+it never becomes a second writer of that session's payload. Existing polling
+budgets, consume-safe reads and write-sequence reconciliation remain active.
+
+The SSH key-exchange preparation returns a session-owned reply and derived
+intermediate values. Its computation lock is released on every return,
+before sending the reply or a disconnect. Packet computation retains its
+short lock scope; no TCP service wait occurs under that lock.
+
 Kernel service IPC uses five fixed BSP workers. Echo, DHCP, DNS, TCP and UDP
 have separate lanes; additional channels share these lanes round-robin.
 Each channel retains serial handler execution and each worker has its own

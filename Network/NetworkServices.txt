@@ -112,3 +112,34 @@ The decimal bytes field counts the exact raw data bytes following data=;
 embedded zero bytes are retained. The response header length includes all
 metadata and data. Text consumers must use the explicit lengths rather than
 NUL termination when receiving binary data. Structured operations are unchanged.
+
+
+SEND/RECV transfer ownership (0.78.60)
+------------------------------------
+SEND 0.1.2 reads its maximum 512-KB source once into a heap-owned snapshot.
+The advertised length/checksum and all normal/resumed/retried sends use that
+same snapshot. Changes to the source after capture cannot change sent bytes;
+a size change observed while capturing rejects the snapshot. At the maximum,
+source data reads drop from 1048576 to 524288 bytes on the first attempt.
+
+RECV 0.1.2 creates a private sibling 8.3 stage without truncating or deleting
+an existing file. Backend name collation excludes target aliases. It writes
+through the existing stream owner, checks the complete checksum, confirms
+finish/flush and uses Files.replaceAtomic. Failed receive/write/checksum/
+finish paths abort only that exact stream and keep the original destination.
+Confirmed replacement may remove its own backup; ambiguous publication
+failures preserve recovery paths and report their names. No stronger
+power-loss guarantee than the existing filesystem publisher is introduced.
+
+Resume copies the existing prefix into the private stage, advertises its
+length and requests only the suffix. Failure keeps that confirmed prefix;
+new uncommitted bytes are discarded. NOOVERWRITE also rejects normal packets
+when the receiver enables RESUME. Explicit resume may complete an existing
+partial file. A missing NOOVERWRITE target uses the existing create-only,
+retained-stream ownership path. Missing zero-length resume targets are created.
+
+Both apps check decimal range before multiply/add, preserving R4SEND1 and
+R4SEND2 framing and the existing checksum. No wire format or API layout changes.
+
+RECV opens its own listener before Accept and closes it on every return.
+The waiting message is emitted after successful listener admission.

@@ -18,3 +18,33 @@ module: host font tools must not import kernel code.
 R4DRAW exposes installed font enumeration, measurement and drawing. Runtime
 applications should not parse R4F directly unless they are a dedicated font
 tool or diagnostic.
+
+Runtime catalogue publication (0.78.49)
+--------------------------------------
+Kernel font enumeration and glyph data belong to one immutable catalogue
+snapshot with its own nonzero revision. R4DRAW retains that snapshot for a
+complete metadata, measure or bitmap operation. Two resident banks bound
+preparation and retirement; readers retain the old bank after publication,
+and a competing reload or attempted reuse of a still-borrowed bank reports
+unavailable. Each bank reserves 3,604,248 bytes including glyph payload.
+The large glyph payload is uninitialized resident BSS, populated only for
+registered slots; it is not duplicated as initialized kernel-file data.
+The small empty state contains no glyph payload allocation.
+
+Reload prepares a complete replacement while file I/O remains outside any
+no-sleep lock. A task unwind token protects the writer reservation and read
+leases from hard retirement. Directory I/O errors are distinguished from end
+of enumeration. Read/admission/capacity failures discard the unpublished
+candidate and retain all former IDs, pixels and revision; invalid font files
+remain explicitly rejected entries under the existing format policy.
+Successful publication switches data and revision together, then R4DRAW
+notifies consumers. Old storage is reused only after its final reader exits.
+The early builtin font remains available without filesystem initialization.
+
+The focused owner probe retains an old reader across a successful two-font
+reload, verifies its old face, and defers reuse of that bank. A subsequent
+injected directory-admission failure after one staged font preserves the
+entire published catalogue, revision and notification count. Existing UTF-8
+measurement and bulk/row/pixel equivalence cases continue to pass. The host
+font-test wrapper keeps kernel-local lifetime imports inside their owner
+module root; the underlying tests remain in kernel/font.zig.

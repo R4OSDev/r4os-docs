@@ -77,10 +77,17 @@ ECAM-/Legacy-Inventur, Found/Stored/Dropped/Truncated, Config- und Mappingarbeit
 sowie Such-, Detail- und Zeitzaehler. Beide Slots sind append-only und fuer
 aeltere Kernel optional.
 
+`display_state` liefert seit 0.79.4 einen koharenten DisplayStateInfo-Snapshot:
+aktiver und vorbereiteter Besitzer, bestehende PCI-Identitaet, Generation,
+Softwarepolicy, Fallbackgrund und bestaetigte Capabilities. Keine GPU-Probe,
+kein neuer Inventarkatalog. Details: `Docs/Drivers/GrafikFallback07904.txt`.
+Der Slot ist optional; die Mindestprefix-Konstanten ersetzen keine hasFn-
+Pruefung der tatsaechlich gelieferten Tabelle.
+
 <!-- R4OS-APIREF:BEGIN R4DEV (generiert von ApiContractGen aus ApiContract.json - NICHT von Hand editieren) -->
 ## Tabellen-Referenz R4DEV (generiert)
 
-Kernel-Gruppentabelle `R4XStartR4Dev` v10, 352 Bytes, 40 Funktionsfelder und 42 Slots insgesamt.
+Kernel-Gruppentabelle `R4XStartR4Dev` v11, 360 Bytes, 41 Funktionsfelder und 43 Slots insgesamt.
 Signatur-Wahrheit: `abi.R4DevFns` (Feldname == Tabellenfeld).
 Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 
@@ -128,4 +135,5 @@ Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 | 39 | 328 | function | `performance_driver_work` | `*const fn (u32, *ProgramDriverWorkPerformanceInfo) callconv(.c) i32` |
 | 40 | 336 | function | `performance_pci_inventory` | `*const fn (*ProgramPciInventoryPerformanceInfo) callconv(.c) i32` |
 | 41 | 344 | function | `performance_input` | `*const fn (*ProgramInputPerformanceInfo) callconv(.c) i32` |
+| 42 | 352 | function | `display_state` | `*const fn (*DisplayStateInfo) callconv(.c) i32` |
 <!-- R4OS-APIREF:END R4DEV -->

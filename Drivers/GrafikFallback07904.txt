@@ -1,0 +1,168 @@
+﻿Displaybesitz, Uebergabe und Softwarestart in 0.79.4
+=================================================
+
+Der gemeinsame DisplayManager besitzt jetzt den aktiven Ausgabepfad, einen
+gesicherten Bootzustand und den Lebenszyklus einer nativen Uebernahme. Der
+erste Adaptervertrag ist kernelintern und nimmt CPU-adressierbaren nativen
+Scanout an. Das ist noch kein NVIDIA-Treiber und kein GPU-Rendering.
+R4D-Anbindung, GPU-Puffer, IRQ-/Queue-Fences und dynamische Ausgaenge folgen
+in 0.79.5 bis 0.79.10 beim jeweils zustaendigen Besitzer. Die Roadmap-API
+enthaelt den verbindlichen Abschlussstatus dieser Unterversion.
+
+Besitzer und Zustandsmaschine
+----------------------------
+
+Kernel/display/backend_state.zig verwaltet genau eine Ausgabegeneration.
+Kernel/display/display.zig serialisiert ihre Uebergaenge und alle normalen
+Present-Aufrufe mit dem bestehenden preemptiblen UnwindGuard. Kurz gehaltene
+veroeffentlichte Snapshots verwenden den bestehenden Programmzustands-Owner.
+Kein Treibercallback laeuft unter diesem No-Sleep-Lock.
+
+Zustaende:
+- bootfb: Firmwareausgabe ist der bestaetigte Besitzer.
+- preparing: Kandidat und eigene Generation sind gebunden; bootfb bleibt
+  bis zum Beginn des Commits gueltig. Vorbereitung aendert keine Hardware.
+- software_native: Bestaetigter nativer Scanout mit CPU-Presentation.
+- native: Fuer ein spaeteres voll natives Backend reservierter Zustand;
+  die jetzige CPU-Schnittstelle meldet immer software_native.
+- recovering: Keine normale Ausgabe, waehrend der Besitzer wiederherstellt.
+- unavailable: Keine bestaetigte nutzbare Ausgabe. Ein bei Hardwareverlust
+  noch gebundener Besitzer bleibt trotzdem erhalten.
+
+prepareNative prueft Identitaet, Name, 32-Bit-Scanoutgeometrie, identische
+Farbmasken, Alignment, Pitch, Mappinggrenzen und CPU-Presentfaehigkeit vor
+der Bindung. Geometrie und Pixelbelegung muessen in dieser ersten Stufe
+dem Bootmodus entsprechen; geaenderter Pitch ist erlaubt. Die spaetere
+atomare Ausgabekonfiguration muss Surface-Pipeline und Desktop-Verbraucher
+gemeinsam umstellen, bevor native Moduswechsel zugelassen werden.
+Der Adapterbezug ist die vorhandene PCI-device_id, kein neuer
+Hardwarekatalog. NativeBackend und seine referenzierten Daten muessen bis
+Abort oder bestaetigter Wiederherstellung leben. Der spaetere R4D-Adapter
+muss diese kernelinterne Grenze unter seinem echten DriverApi-Owner binden;
+es wird noch kein unvollstaendiger C-Hardwarecallback exportiert.
+
+commitNative verlangt exakt Besitzer und Kandidatgeneration. Der Callback
+meldet eines von drei Ergebnissen:
+- confirmed: native Ausgabe ist nachgewiesen, Primary wechselt atomar.
+- old_preserved: Hardware hat den alten Zustand erhalten; Kandidat wird
+  geloest und der alte Framebuffer wieder fuer Firmwarewriter geoeffnet.
+- output_lost: Hardwarezustand ist unklar. Primary wird entfernt, Kandidat
+  bleibt als aktiver Besitzer gebunden; kein optimistischer bootfb-Rueckfall.
+
+restoreBootBackend invalidiert die Geraetegeneration vor dem Callback. Nur
+ein bestaetigter Hardwarestillstand UND die bestaetigte Wiederherstellung
+des gesicherten Scanouts erlauben bootfb. Ein Fehlschlag behaelt Ressourcen
+und Besitzer, meldet unavailable/restore-failed und erlaubt einen spaeteren
+Versuch mit der jetzt aktuellen Generation. prepareOwnerCleanup verweigert
+den Abbau eines aktiven oder vorbereiteten Displaybesitzers.
+
+Geraetegenerationen werden nie wiederverwendet; Erschoepfung ist ein Fehler.
+reset_generation ist innerhalb eines nativen Besitzers mindestens 1 und
+steigt bei Wiederherstellungsversuchen; im Firmwarezustand ist sie 0.
+Sie ist nur zusammen mit device_generation eine Identitaet. Die fuer
+CPU-Presents bereits vorhandenen Source-/Presentgenerationen und Fences
+bleiben davon getrennt. Echte GPU-Auftraege/IRQs werden erst mit ihren
+folgenden Vertraegen an dieselbe Geraete-/Resetidentitaet gebunden.
+
+Keine alten Framebuffer-Schreibzugriffe
+-------------------------------------
+
+BootSnapshot speichert Bootmodus, Mapping/Cachezustand und Framebuffer-
+Metadaten. Eine erfolgreiche PAT-WC-Aktivierung wird auch dort festgehalten.
+Es werden keine GPU-Register oder neuen EDID-Daten behauptet.
+
+firmware_access.zig schliesst die alte Firmwareausgabe vor dem Commit.
+Alle zugelassenen Konsolen-, Diagnoseoverlay- und Crashscreen-Writer muessen
+vorher fertig sein; bei Konkurrenz liefert der Commit Busy. Eine atomare,
+nicht wartende Aufnahme und ein Task-Unwind-Token verhindern ein Ueberholen
+oder einen Kill mit haengender Writer-Lease. Freigabe ordnet WC-Stores mit
+SFENCE, bevor ein anderer Prozessor die Uebernahme fortsetzt.
+
+Nach Uebernahme wird der alte Speicher auch bei einem nativen Fehler nicht
+blind beschrieben. Crash/Diagnose behalten ihre Text-/Serialausgabe; ohne
+sicheren Framebuffer bleibt die Bildausgabe dieses Notfallpfads aus. Ein
+neuer nativer Notfallrenderer ist nicht Teil dieser Unterversion.
+
+Der normale CPU-Fallback kopiert immer in den gerade bestaetigten Besitzer:
+bootfb-cpu vor der Uebernahme, native-cpu auf nativem CPU-Scanout. DISPBLIT
+ist eine optionale Kopieroptimierung mit demselben Ziel, kein Displaybesitzer.
+Ohne nutzbaren Primary werden keine Present-Capabilities versprochen.
+Completed-Fences dieses Pfads bedeuten CPU-Store-Abschluss, nicht VBlank.
+
+Softwarestart und bestehende Installationen
+-------------------------------------------
+
+CONFIG.R4S versteht GRAPHICS=AUTO (Standard) und GRAPHICS=SOFTWARE. SOFTWARE
+sperrt native Vorbereitung; DISPBLIT darf die CPU-Ausgabe weiter optimieren.
+Ein ungueltiger GRAPHICS-Wert warnt und waehlt SOFTWARE. Die Entscheidung
+faellt vor dem dynamischen Treiber-Policy-Lauf.
+
+Die Limine-Kernelkommandozeile r4os.graphics=software ueberschreibt die
+persistente Einstellung fuer genau diesen Start. BootInfo kopiert nur die
+gepruefte Entscheidung vor Rueckgabe des Bootloaderspeichers. Das Token muss
+exakt sein; Praefix-/Suffixaehnlichkeiten aktivieren es nicht.
+
+Neue GUID-basierte Installationsimages erhalten nach R4OS, R4OS Recovery
+und R4OS Recovery Previous einen vierten Eintrag R4OS Software Graphics.
+Er verwendet denselben normalen Kernel und alle fuenf Preloadmodule. Lokale
+Images starten weiterhin den ersten, USB-Medien den zweiten Eintrag. Die
+Quell-/Direktbootvorlage des Kernels besitzt entsprechend einen dritten
+Eintrag nach R4OS und Previous Kernel.
+
+Bestehende limine.conf bleibt bei Updates gemaess BOOT-/Recovery-Vertrag
+erhalten. Ein alter Dreiermenuebestand bleibt mit PreservedMenu pruefbar.
+Er bekommt keinen stillen Menueumbau: dort ist GRAPHICS=SOFTWARE sofort
+nutzbar; die einmalige Kommandozeile laesst sich im vorhandenen Limine-
+Editor setzen. Ein spaeterer Installation-/Updateausbau folgt in 0.79.42.
+Die Auswahl aendert weder den normalen Kernelpfad noch Recovery-Artefakte.
+
+Oeffentliche Diagnose und binaere Kompatibilitaet
+------------------------------------------------
+
+R4DEV v11 haengt display_state an Slot 42/Offset 352 an, Tabellengroesse
+360 Bytes. DisplayStateInfo v1 ist ein extensible-Payload mit 176 Bytes,
+u32 version/size und 8-Byte-Alignment. Es enthaelt aktive/pending Besitzer,
+Adapter, Zustand, Grund, Policy, Generationen, wirkliche Capabilities sowie
+aktive und gesicherte Bootgeometrie. Keine Pointer oder Hardwarecallbacks.
+
+R4DRAW und saemtliche bisherigen Slots/Payloadlayouts bleiben unveraendert.
+Die Contract-Baseline war vor diesem Schritt bei bereits vorhandenen
+R4SYS-Erweiterungen zurueck; ihr alter Prefix wurde vor dem gemeinsamen
+Fortschreiben gegen den Quellstand geprueft. Die damaligen alten Konstanten
+bleiben stabil. R4XSTART_*_SIZE-Konstanten sind Mindestprefixe fuer den
+Import, keine aktuelle Provider-Tabellengroesse. Neue Slots werden anhand
+der tatsaechlichen size und hasFn geprueft; aeltere Kernel bleiben nutzbar.
+
+SDK: devices().display(), r4dev.Context.displayState() bzw.
+r4_devices_display()/r4dev_display_state(). Normale Fassaden initialisieren
+den Payloadheader. Ein fehlender Slot ergibt optional null bzw. err_no_fn.
+DISPLAYD 0.1.4 /STATE gibt den koharenten Snapshot ohne Frame oder Hardware-
+Probe aus; der normale Smoke bleibt auch ohne den neuen Slot nutzbar.
+
+Nachweise und Grenzen
+--------------------
+
+Die zugehoerigen finalen Build-/SMP4-Logs und die ABI-Prefixpruefung stehen
+mit Hashmanifest unter ExFiles/Reference/GFX/Fallback/0.79.4. Der Nachweis
+trennt den normalen Kernel von der privaten Ablehnungsprobe mit
+-Ddisplay-reject-test=true. Diese Probe programmiert keine Hardware und
+meldet [GFX] rejected-takeover=OK nur nach einer echten vorbereiteten und
+abgelehnten Transaktion durch den produktiven DisplayManager.
+
+Besitzerpruefungen: Kernel Build.sh display-test (27 Tests einschliesslich
+der bereits vorhandenen Framebuffer-/Blit-/Scrolltests), SDK storage-tools-
+test, bestehende AudioDeviceFacadePrototype05827 in Zig und C, Contract-
+Conformance/Generator. C ist mit -Wall -Wextra -Werror geprueft; die dabei
+aufgefallene bestehende char/uint8_t-Pfadkonvertierung wurde korrigiert.
+
+Gastvarianten sind kurze SMP4-Laeufe: automatisch mit DISPBLIT, ohne
+DISPBLIT, persistente Softwarepolicy, einmaliger vierter Limine-Eintrag
+bei persistenter AUTO-Policy und abgelehnte native Vorbereitung/Commit.
+Jeder Lauf verlangt konsistente /STATE-Ausgaben vor/nach der normalen
+DISPLAYD-Praesentation, eine kleine CPU-Baseline und regulaeren Poweroff.
+AUTOEXEC wird bytegenau wiederhergestellt; Produktivmedien bleiben getrennt.
+
+Kein NVIDIA-, HDMI-, VBlank-, Scanout- oder Sichtnachweis. OssiPC benoetigt
+hier weder Update noch Neustart; der ausgeschaltete, stromversorgte Hisense
+bleibt entsprechend der User-Vorgabe unberuehrt. Windows-Starter wurden
+bereitgestellt, aber in dieser Debian-Umgebung nicht ausgefuehrt.

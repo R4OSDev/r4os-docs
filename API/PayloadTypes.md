@@ -5,9 +5,9 @@ Diese Datei wird deterministisch aus `API/ApiContract.json` erzeugt. Manuelle Ä
 Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenzen und Conformance-Fixtures werden produktiv aus diesem Schema erzeugt; handgeschriebene Dateien bleiben nur Fassaden oder erklaerende Texte.
 
 - Schema: v11, Baseline `standalone-contract-0.64.11`
-- Reachability: 153 von 153 Typen aufgelöst oder explizit klassifiziert
+- Reachability: 163 von 163 Typen aufgelöst oder explizit klassifiziert
 - Zentrale SDK-only-Wurzeln: 0; Runtime-R4Ls besitzen libraryeigene Vertraege
-- Operationen: 0; Fehlerdomänen: 63; Konstanten: 1435; Limits: 109
+- Operationen: 0; Fehlerdomänen: 63; Konstanten: 1487; Limits: 109
 
 ## App-Profile
 
@@ -174,6 +174,16 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `StorageDeviceInfo` | fixed_layout | extern_struct | 288/8 | 288/8 | 288/8 | 288/8 |
 | `StoragePartitionInfo` | fixed_layout | extern_struct | 192/8 | 192/8 | 192/8 | 192/8 |
 | `StorageVolumeInfo` | fixed_layout | extern_struct | 112/8 | 112/8 | 112/8 | 112/8 |
+| `AudioOutputInfo` | fixed_layout | extern_struct | 160/4 | 160/4 | 160/4 | 160/4 |
+| `AudioOutputQueryFn` | callback | c_callback | 8/8 | 8/8 | 8/8 | 8/8 |
+| `AudioOutputSelectFn` | callback | c_callback | 8/8 | 8/8 | 8/8 | 8/8 |
+| `AudioOutputActiveFn` | callback | c_callback | 8/8 | 8/8 | 8/8 | 8/8 |
+| `AudioOutputExtension` | fixed_layout | extern_struct | 24/8 | 24/8 | 24/8 | 24/8 |
+| `AudioServiceOutputRequest` | fixed_layout | extern_struct | 96/8 | 96/8 | 96/8 | 96/8 |
+| `AudioServiceOutputState` | fixed_layout | extern_struct | 1520/8 | 1520/8 | 1520/8 | 1520/8 |
+| `DirectoryChangeCursor` | extensible | extern_struct | 40/8 | 40/8 | 40/8 | 40/8 |
+| `FileCopyProgress` | extensible | extern_struct | 32/8 | 32/8 | 32/8 | 32/8 |
+| `DisplayStateInfo` | extensible | extern_struct | 176/8 | 176/8 | 176/8 | 176/8 |
 
 ## Typdetails
 
@@ -4971,6 +4981,177 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `role` | 104 | 4 | 4 | `u32` | - |
 | `flags` | 108 | 4 | 4 | `u32` | - |
 
+### `AudioOutputInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 160 / 4
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `id` | 8 | 64 | 1 | `[64]u8` | - |
+| `name` | 72 | 64 | 1 | `[64]u8` | - |
+| `kind` | 136 | 4 | 4 | `u32` | - |
+| `availability` | 140 | 4 | 4 | `u32` | - |
+| `flags` | 144 | 4 | 4 | `u32` | - |
+| `preferred_rate` | 148 | 4 | 4 | `u32` | - |
+| `channels` | 152 | 2 | 2 | `u16` | - |
+| `format` | 154 | 2 | 2 | `u16` | - |
+| `reserved` | 156 | 4 | 4 | `u32` | - |
+
+### `AudioOutputQueryFn`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `callback`
+- Repräsentation: `c_callback`
+- Version/Größe/Alignment: 1 / 8 / 8
+
+### `AudioOutputSelectFn`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `callback`
+- Repräsentation: `c_callback`
+- Version/Größe/Alignment: 1 / 8 / 8
+
+### `AudioOutputActiveFn`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `callback`
+- Repräsentation: `c_callback`
+- Version/Größe/Alignment: 1 / 8 / 8
+
+### `AudioOutputExtension`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 24 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `query` | 0 | 8 | 8 | `AudioOutputQueryFn` | - |
+| `select` | 8 | 8 | 8 | `AudioOutputSelectFn` | - |
+| `active` | 16 | 8 | 8 | `AudioOutputActiveFn` | - |
+
+### `AudioServiceOutputRequest`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 96 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `magic` | 0 | 4 | 4 | `u32` | - |
+| `version` | 4 | 2 | 2 | `u16` | - |
+| `size` | 6 | 2 | 2 | `u16` | - |
+| `service_epoch` | 8 | 8 | 8 | `u64` | - |
+| `revision` | 16 | 8 | 8 | `u64` | - |
+| `index` | 24 | 4 | 4 | `u32` | - |
+| `reserved` | 28 | 4 | 4 | `u32` | - |
+| `id` | 32 | 64 | 1 | `[64]u8` | - |
+
+### `AudioServiceOutputState`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 1520 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `magic` | 0 | 4 | 4 | `u32` | - |
+| `version` | 4 | 2 | 2 | `u16` | - |
+| `size` | 6 | 2 | 2 | `u16` | - |
+| `service_epoch` | 8 | 8 | 8 | `u64` | - |
+| `revision` | 16 | 8 | 8 | `u64` | - |
+| `count` | 24 | 4 | 4 | `u32` | - |
+| `total` | 28 | 4 | 4 | `u32` | - |
+| `index` | 32 | 4 | 4 | `u32` | - |
+| `reason` | 36 | 4 | 4 | `u32` | - |
+| `flags` | 40 | 4 | 4 | `u32` | - |
+| `reserved` | 44 | 4 | 4 | `u32` | - |
+| `desired_id` | 48 | 64 | 1 | `[64]u8` | - |
+| `active_id` | 112 | 64 | 1 | `[64]u8` | - |
+| `active_name` | 176 | 64 | 1 | `[64]u8` | - |
+| `outputs` | 240 | 1280 | 4 | `[8]AudioOutputInfo` | - |
+
+### `DirectoryChangeCursor`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `extensible`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 40 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `sequence` | 8 | 8 | 8 | `u64` | - |
+| `node` | 16 | 8 | 8 | `u64` | - |
+| `mount_generation` | 24 | 8 | 8 | `u64` | - |
+| `mount_slot` | 32 | 4 | 4 | `u32` | - |
+| `reserved` | 36 | 4 | 4 | `u32` | - |
+
+### `FileCopyProgress`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `extensible`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 32 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `bytes` | 8 | 8 | 8 | `u64` | - |
+| `source_size` | 16 | 8 | 8 | `u64` | - |
+| `chunks` | 24 | 4 | 4 | `u32` | - |
+| `max_chunk` | 28 | 4 | 4 | `u32` | - |
+
+### `DisplayStateInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `extensible`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 176 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `state` | 8 | 4 | 4 | `u32` | - |
+| `policy` | 12 | 4 | 4 | `u32` | - |
+| `reason` | 16 | 4 | 4 | `u32` | - |
+| `revision` | 24 | 8 | 8 | `u64` | - |
+| `device_generation` | 32 | 8 | 8 | `u64` | - |
+| `reset_generation` | 40 | 8 | 8 | `u64` | - |
+| `pending_generation` | 48 | 8 | 8 | `u64` | - |
+| `adapter_id` | 56 | 4 | 4 | `u32` | - |
+| `pending_adapter_id` | 60 | 4 | 4 | `u32` | - |
+| `driver_owner` | 64 | 4 | 4 | `u32` | - |
+| `pending_driver_owner` | 68 | 4 | 4 | `u32` | - |
+| `backend_kind` | 72 | 4 | 4 | `u32` | - |
+| `capabilities` | 76 | 4 | 4 | `u32` | - |
+| `width` | 80 | 4 | 4 | `u32` | - |
+| `height` | 84 | 4 | 4 | `u32` | - |
+| `pitch` | 88 | 4 | 4 | `u32` | - |
+| `bpp` | 92 | 2 | 2 | `u16` | - |
+| `cache_policy` | 94 | 1 | 1 | `u8` | - |
+| `mapping_kind` | 95 | 1 | 1 | `u8` | - |
+| `boot_width` | 96 | 4 | 4 | `u32` | - |
+| `boot_height` | 100 | 4 | 4 | `u32` | - |
+| `boot_pitch` | 104 | 4 | 4 | `u32` | - |
+| `boot_bpp` | 108 | 2 | 2 | `u16` | - |
+| `reserved0` | 110 | 2 | 2 | `u16` | - |
+| `boot_byte_length` | 112 | 8 | 8 | `u64` | - |
+| `byte_length` | 120 | 8 | 8 | `u64` | - |
+| `backend_name` | 128 | 24 | 1 | `[24]u8` | - |
+| `fallback_name` | 152 | 24 | 1 | `[24]u8` | - |
+
 ## Fehlerdomänen
 
 ### `arp`
@@ -6766,7 +6947,7 @@ Geltung: `storage`, Einheit: `status_code`, Stabilität: `fixed_contract`.
 | `r4xstart_import_flag_group_interface` | `1` | `u32` | flag | bitmask | `r4xstart_import` | fixed_contract |
 | `r4xstart_magic` | `1398289490` | `u32` | magic | number | `r4xstart` | fixed_contract |
 | `r4xstart_r4audio_magic` | `827670866` | `u32` | magic | number | `r4xstart_r4audio` | fixed_contract |
-| `r4xstart_r4audio_version` | `1` | `u32` | version | number | `r4xstart_r4audio` | fixed_contract |
+| `r4xstart_r4audio_version` | `2` | `u32` | version | number | `r4xstart_r4audio` | fixed_contract |
 | `r4xstart_r4desk_magic` | `826623058` | `u32` | magic | number | `r4xstart_r4desk` | fixed_contract |
 | `r4xstart_r4desk_version` | `7` | `u32` | version | number | `r4xstart_r4desk` | fixed_contract |
 | `r4xstart_r4dev_magic` | `827737170` | `u32` | magic | number | `r4xstart_r4dev` | fixed_contract |
@@ -7145,6 +7326,58 @@ Geltung: `storage`, Einheit: `status_code`, Stabilität: `fixed_contract`.
 | `vm_commit_flag_resident` | `1` | `u64` | flag | bitmask | `vm_commit` | fixed_contract |
 | `file_update_atomic_checked_flag_long_stage` | `16` | `u32` | flag | bitmask | `file_update_atomic_checked` | fixed_contract |
 | `vm_commit_resident_max_bytes` | `262144` | `u64` | value | bytes | `vm_commit` | fixed_contract |
+| `audio_backend_outputs_version` | `3` | `u32` | version | number | `audio_outputs` | fixed_contract |
+| `audio_output_kind_line_out` | `0` | `u32` | version | number | `audio_outputs` | fixed_contract |
+| `audio_output_kind_speaker` | `1` | `u32` | version | number | `audio_outputs` | fixed_contract |
+| `audio_output_kind_headphone` | `2` | `u32` | version | number | `audio_outputs` | fixed_contract |
+| `audio_output_kind_hdmi` | `3` | `u32` | version | number | `audio_outputs` | fixed_contract |
+| `audio_output_kind_display_port` | `4` | `u32` | version | number | `audio_outputs` | fixed_contract |
+| `audio_output_unavailable` | `0` | `u32` | version | number | `audio_outputs` | fixed_contract |
+| `audio_output_available` | `1` | `u32` | version | number | `audio_outputs` | fixed_contract |
+| `audio_output_waiting_for_eld` | `2` | `u32` | version | number | `audio_outputs` | fixed_contract |
+| `audio_output_invalid_eld` | `3` | `u32` | version | number | `audio_outputs` | fixed_contract |
+| `audio_output_unsupported` | `4` | `u32` | version | number | `audio_outputs` | fixed_contract |
+| `audio_output_failed` | `5` | `u32` | version | number | `audio_outputs` | fixed_contract |
+| `audio_output_flag_active` | `1` | `u32` | version | number | `audio_outputs` | fixed_contract |
+| `audio_service_op_outputs` | `9` | `u16` | identity | number | `audio_service_outputs` | fixed_contract |
+| `audio_service_op_select_output` | `10` | `u16` | identity | number | `audio_service_outputs` | fixed_contract |
+| `audio_output_control_magic` | `1329673298` | `u32` | identity | number | `audio_service_outputs` | fixed_contract |
+| `audio_output_reason_preferred` | `0` | `u32` | identity | number | `audio_service_outputs` | fixed_contract |
+| `audio_output_reason_auto_hdmi` | `1` | `u32` | identity | number | `audio_service_outputs` | fixed_contract |
+| `audio_output_reason_auto_analog` | `2` | `u32` | identity | number | `audio_service_outputs` | fixed_contract |
+| `audio_output_reason_preferred_unavailable` | `3` | `u32` | identity | number | `audio_service_outputs` | fixed_contract |
+| `audio_output_reason_none_available` | `4` | `u32` | identity | number | `audio_service_outputs` | fixed_contract |
+| `audio_output_reason_activation_failed` | `5` | `u32` | identity | number | `audio_service_outputs` | fixed_contract |
+| `audio_output_reason_api_unavailable` | `6` | `u32` | identity | number | `audio_service_outputs` | fixed_contract |
+| `audio_output_reason_catalog_busy` | `7` | `u32` | identity | number | `audio_service_outputs` | fixed_contract |
+| `audio_output_state_flag_persist_pending` | `1` | `u32` | identity | number | `audio_service_outputs` | fixed_contract |
+| `audio_output_state_flag_config_error` | `2` | `u32` | identity | number | `audio_service_outputs` | fixed_contract |
+| `display_state_unavailable` | `0` | `u32` | value | number | `display_state` | fixed_contract |
+| `display_state_bootfb` | `1` | `u32` | value | number | `display_state` | fixed_contract |
+| `display_state_preparing` | `2` | `u32` | value | number | `display_state` | fixed_contract |
+| `display_state_native` | `3` | `u32` | value | number | `display_state` | fixed_contract |
+| `display_state_software_native` | `4` | `u32` | value | number | `display_state` | fixed_contract |
+| `display_state_recovering` | `5` | `u32` | value | number | `display_state` | fixed_contract |
+| `display_policy_automatic` | `0` | `u32` | value | number | `display_state` | fixed_contract |
+| `display_policy_software` | `1` | `u32` | value | number | `display_state` | fixed_contract |
+| `display_policy_software_once` | `2` | `u32` | value | number | `display_state` | fixed_contract |
+| `display_fallback_none` | `0` | `u32` | value | number | `display_state` | fixed_contract |
+| `display_fallback_no_native_backend` | `1` | `u32` | value | number | `display_state` | fixed_contract |
+| `display_fallback_policy_disabled` | `2` | `u32` | value | number | `display_state` | fixed_contract |
+| `display_fallback_backend_rejected` | `3` | `u32` | value | number | `display_state` | fixed_contract |
+| `display_fallback_prepare_failed` | `4` | `u32` | value | number | `display_state` | fixed_contract |
+| `display_fallback_commit_failed` | `5` | `u32` | value | number | `display_state` | fixed_contract |
+| `display_fallback_device_lost` | `6` | `u32` | value | number | `display_state` | fixed_contract |
+| `display_fallback_restore_failed` | `7` | `u32` | value | number | `display_state` | fixed_contract |
+| `display_state_cap_cpu_present` | `1` | `u32` | value | number | `display_state` | fixed_contract |
+| `display_state_cap_native_scanout` | `2` | `u32` | value | number | `display_state` | fixed_contract |
+| `display_state_cap_firmware_writable` | `4` | `u32` | value | number | `display_state` | fixed_contract |
+| `display_state_cap_software_fallback` | `8` | `u32` | value | number | `display_state` | fixed_contract |
+| `display_state_cap_gpu_render` | `16` | `u32` | value | number | `display_state` | fixed_contract |
+| `display_state_cap_async_present` | `32` | `u32` | value | number | `display_state` | fixed_contract |
+| `display_summary_backend_native` | `2` | `u8` | value | number | `display_state` | fixed_contract |
+| `display_mapping_native_scanout` | `2` | `u8` | value | number | `display_state` | fixed_contract |
+| `display_present_backend_native_cpu` | `3` | `u32` | value | number | `display_state` | fixed_contract |
 
 ## Limits
 
@@ -7221,7 +7454,7 @@ Geltung: `storage`, Einheit: `status_code`, Stabilität: `fixed_contract`.
 | `r4sl_op_parse_bytes` | `2` | `u32` | bytes | `r4sl_op` | fixed_contract |
 | `r4xstart_context_size` | `128` | `u32` | bytes | `r4xstart_context` | fixed_contract |
 | `r4xstart_import_size` | `40` | `u32` | bytes | `r4xstart_import` | fixed_contract |
-| `r4xstart_r4audio_size` | `184` | `u32` | bytes | `r4xstart_r4audio` | fixed_contract |
+| `r4xstart_r4audio_size` | `200` | `u32` | bytes | `r4xstart_r4audio` | fixed_contract |
 | `r4xstart_r4desk_size` | `432` | `u32` | bytes | `r4xstart_r4desk` | fixed_contract |
 | `r4xstart_r4dev_size` | `344` | `u32` | bytes | `r4xstart_r4dev` | fixed_contract |
 | `r4xstart_r4draw_size` | `272` | `u32` | bytes | `r4xstart_r4draw` | fixed_contract |

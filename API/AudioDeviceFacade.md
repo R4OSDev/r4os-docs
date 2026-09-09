@@ -105,3 +105,10 @@ overruns and admission rejections globally or for one selected R4D owner.
 Zig and C use the same generated layouts, result domains and buffer rules.
 The SDK repository tests validate both facades and their negative lifecycle
 states.
+
+Displaybesitz seit 0.79.4: Zig devices().display() und C
+r4_devices_display() lesen den gemeinsamen DisplayStateInfo-Snapshot.
+Die optionalen R4DEV-Funktionen werden ueber echte Tabellengroesse/hasFn
+geprueft. Unverfuegbare Erweiterung: null bzw. err_no_fn; keine PCI-Probe
+und kein GPU-Rendering aus dieser Fassade. Vertrag und Softwarestart:
+Docs/Drivers/GrafikFallback07904.txt.

@@ -37,7 +37,7 @@ die bisherigen Einzeloperationen bleiben binaer kompatibel.
 <!-- R4OS-APIREF:BEGIN R4SYS (generiert von ApiContractGen aus ApiContract.json - NICHT von Hand editieren) -->
 ## Tabellen-Referenz R4SYS (generiert)
 
-Kernel-Gruppentabelle `R4XStartR4Sys` v15, 1024 Bytes, 123 Funktionsfelder und 126 Slots insgesamt.
+Kernel-Gruppentabelle `R4XStartR4Sys` v18, 1168 Bytes, 141 Funktionsfelder und 144 Slots insgesamt.
 Signatur-Wahrheit: `abi.R4SysFns` (Feldname == Tabellenfeld).
 Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 
@@ -169,6 +169,24 @@ Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 | 123 | 1000 | function | `io_file_write_at` | `*const fn ([*:0]const u8, u64, [*]const u8, u64, u32, *u32) callconv(.c) i32` |
 | 124 | 1008 | function | `io_file_info` | `*const fn ([*:0]const u8, u32, *u32) callconv(.c) i32` |
 | 125 | 1016 | function | `io_file_lock` | `*const fn ([*:0]const u8, u64, u64, u32, *u32) callconv(.c) i32` |
+| 126 | 1024 | function | `storage_inventory` | `*const fn (*StorageInventory) callconv(.c) i32` |
+| 127 | 1032 | function | `storage_device` | `*const fn (u64, u32, *StorageDeviceInfo) callconv(.c) i32` |
+| 128 | 1040 | function | `storage_partition` | `*const fn (u64, *const StorageDeviceRef, u32, *StoragePartitionInfo) callconv(.c) i32` |
+| 129 | 1048 | function | `storage_volume` | `*const fn (u64, u32, *StorageVolumeInfo) callconv(.c) i32` |
+| 130 | 1056 | function | `storage_claim_begin` | `*const fn (*const StorageTarget, *u64) callconv(.c) i32` |
+| 131 | 1064 | function | `storage_claim_end` | `*const fn (u64, u32) callconv(.c) i32` |
+| 132 | 1072 | function | `storage_read` | `*const fn (*const StorageTarget, u64, u32, [*]u8, u32) callconv(.c) i32` |
+| 133 | 1080 | function | `storage_claim_read` | `*const fn (u64, u64, u32, [*]u8, u32) callconv(.c) i32` |
+| 134 | 1088 | function | `storage_claim_write` | `*const fn (u64, u64, u32, [*]const u8, u32) callconv(.c) i32` |
+| 135 | 1096 | function | `storage_claim_flush` | `*const fn (u64) callconv(.c) i32` |
+| 136 | 1104 | function | `storage_rescan` | `*const fn (*const StorageDeviceRef) callconv(.c) i32` |
+| 137 | 1112 | function | `storage_mount` | `*const fn (*const StorageTarget, u32, *StorageVolumeRef) callconv(.c) i32` |
+| 138 | 1120 | function | `storage_unmount` | `*const fn (*const StorageVolumeRef) callconv(.c) i32` |
+| 139 | 1128 | function | `storage_use_begin` | `*const fn ([*:0]const u8, *u64) callconv(.c) i32` |
+| 140 | 1136 | function | `storage_use_end` | `*const fn (u64) callconv(.c) i32` |
+| 141 | 1144 | function | `directory_change_begin` | `*const fn ([*:0]const u8, *DirectoryChangeCursor) callconv(.c) i32` |
+| 142 | 1152 | function | `directory_change_poll` | `*const fn (*DirectoryChangeCursor) callconv(.c) i32` |
+| 143 | 1160 | function | `file_copy_buffered` | `*const fn ([*:0]const u8, [*:0]const u8, [*]u8, u32, *FileCopyProgress) callconv(.c) i32` |
 <!-- R4OS-APIREF:END R4SYS -->
 
 Physische Storageoperationen verwenden das generationierte Inventar und

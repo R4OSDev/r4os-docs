@@ -69,3 +69,34 @@ Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 | 57 | 472 | function | `console_input_wait` | `*const fn (u64, u64, *u64) callconv(.c) i32` |
 | 58 | 480 | function | `physical_key_poll` | `*const fn (*PhysicalKeyEvent) callconv(.c) i32` |
 <!-- R4OS-APIREF:END R4DESK -->
+
+
+Remote-Frame-Besitz ab 0.78.75
+-----------------------------
+R4DESK fuehrt Live-Puffer, Snapshots, Dirty-Historie und Kopien unter einem
+UnwindGuard mit ausschliesslichem tryEnter. Alle nichtblockierenden APIs
+bleiben nichtblockierend. Ein kurzer SMP-Programmzustands-Owner ordnet
+Konsumentenzahl, Lebensdauergeneration und Veroeffentlichung der Revision.
+
+Der letzte Release entwertet die Generation und sichtbare Revision sofort.
+Er wartet nicht auf einen Publisher oder Leser und gibt dessen Speicher
+nicht frei. Der noch aktive Zugriff verwirft seinen veralteten Abschluss
+und leert den Puffer vor seinem Ownerende. Der abschliessende Retirement-
+Check und die Ownerfreigabe sind gemeinsam mit weiteren Releases geordnet;
+es bleibt keine Freigabe zwischen Pruefung und Ownerende liegen. Eine neue
+Anmeldung kann den alten Frame weder wiederbeleben noch dessen Abschluss
+als eigenen Stand erhalten. Heapfreigabe erfolgt ausserhalb des kurzen
+Programmzustands-Owners, aber unter dem Kopier-/Lebensdauerbesitzer.
+
+Info, Read, Map und Publikation melden eine Besitzerkollision als
+unavailable. Leser erhalten nur abgeschlossene Pixel samt passender
+Revision. Map liefert seine zwei getrennten Snapshots nur bei genau einem
+registrierten Konsumenten; mehrere Konsumenten verwenden die kopierende
+Read-API. RDPSVC hat diesen Ausweichpfad bereits. Der gehaltene Bezug und
+der bestehende owner-thread-only-Vertrag gelten bis nach Ende der Nutzung.
+Kein Netzwerk-I/O und keine lange IRQ-/Praeemptionssperre im Kopierbesitzer.
+
+Remote-Eingabequeue und Status verwenden fuer ihre kurzen Aenderungen den
+SMP-Programmzustands-Owner. Ein voller Puffer erhoeht dropped genau einmal;
+pushed, polled und pending folgen der tatsaechlichen Aufnahme/Abholung.
+Der Desktop-Wakeup erfolgt erst nach Veroeffentlichung und Ownerfreigabe.

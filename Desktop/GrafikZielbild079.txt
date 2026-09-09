@@ -1,0 +1,323 @@
+﻿R4OS Grafikzielbild fuer 0.79.X
+================================
+
+Stand: 09.09.2026. Architektur- und Entwicklungsplanung.
+Nur die Referenzbeschaffung und Gesamtplanung gehoeren zum Abschluss von
+0.79.1. Die hier beschriebenen nativen Grafikfunktionen sind Ausbauziele.
+Die aktuelle Produktarchitektur steht weiterhin in DisplayArchitektur.txt.
+
+Ziel und Massstab
+-----------------
+R4OS bekommt eine herstellerneutrale Grafikarchitektur mit einem nativen
+NVIDIA-Pfad. Alltaegliche Desktoparbeit, normale GUI-Anwendungen, Bilder,
+Text, Animationen, Medien und spaetere Standard-3D-Anwendungen bestimmen den
+Umfang. Ein einzelner Emulator ist weder Architekturvorlage noch
+Leistungsabnahme. Engpaesse werden pro Stufe gemessen und bearbeitet.
+
+Als Referenz dienen die Trennung von Anzeigesteuerung und Rendering,
+gemeinsam genutzte Grafikpuffer sowie asynchrone, synchronisierte
+Praesentation, wie sie Linux DRM/KMS und der Windows-Flip-Pfad beschreiben:
+https://docs.kernel.org/gpu/drm-kms.html
+https://learn.microsoft.com/en-us/windows/win32/direct3ddxgi/for-best-performance--use-dxgi-flip-model
+
+Der Vergleich mit Windows/Linux beschreibt das Betriebsmodell. R4OS
+entwickelt eigene passende Vertraege und native Module. Eine uebernommene
+Windows-/Linux-Treiberbinaer-ABI ist keine Voraussetzung. Der bewusst
+vertrauenswuerdige Single-User-Charakter bleibt bestehen; Ressourcenbesitz
+und Validierung sichern korrekte Lebensdauer und Systemstabilitaet.
+
+Ausgangspunkt
+-------------
+- Boot via Limine; aktives bootfb mit PAT Write Combining auf dem OssiPC.
+- 1920x1080, 32 Bit, Pitch 7680 beim letzten Diagnosezeitpunkt.
+- DISPBLIT.R4D fuehrt CPU/SIMD-Regionskopien aus. Seine Fence bestaetigt
+  CPU-Store-Abschluss; sie ist kein VBlank- oder GPU-Nachweis.
+- R4DRAW, R4DESK, immutable Framegenerationen, Damage, gemeinsame Raster
+  und bedarfsabhaengiger Remote-Shadow sind vorhandene Grundlagen.
+- Native Controlleruebernahme, eigene Scanout-Puffer, GPU-Queues,
+  GPU-MMU und GPU-Komposition fehlen im produktiven Pfad.
+- OssiPC: 09:00.0, 10DE:2504. Die NVIDIA-Referenz 610.57.04 fuehrt diese
+  ID als RTX 3060. Genaue Chiprevision, Board/VBIOS und zusaetzliche
+  Adapterdetails muessen vor dem Bringup direkt gelesen werden.
+- HDA 09:00.1, 10DE:228E, Codec 10DE009F: vier HDMI-Pins ohne Empfaenger.
+- Hisense 65U8QF direkt per HDMI; gueltige HISENSE/HEC-Basis-EDID mit
+  angekuendigter Erweiterung, aber nur 128 uebergebenen Bytes.
+- Die Diagnose belegt keine hoerbare HDMI-Wiedergabe und keine native
+  Beschleunigung. R4SNES-Langsamkeit ist kein Beweis fuer bootfb als
+  alleinige oder hauptsaechliche Ursache.
+
+Dauerhafte Aufgabenverteilung
+-----------------------------
+Contract
+  Plattform-ABI fuer Adapter-/Ausgabeobjekte, Ressourcen, Submit-/Present-
+  Ereignisse und Abfragen. Bestehende R4DRAW/R4DESK/R4DEV-Slots bleiben
+  binaer stabil; Erweiterungen folgen Query-/Size-/Version-Konventionen.
+
+Kernel
+  Bootausgabe, generischer Displaybesitz, physischer Speicher/MMIO/DMA,
+  IRQ/Wait, gebundene Ressourcenlebensdauer und minimale Plattformbruecken.
+  Kein NVIDIA-Registerwissen, Shadercompiler oder zweiter Kompositor.
+  Keine neue globale Grafiksperre ueber Kopien, Waits oder Treibercallbacks.
+
+Drivers/NVIDIA -> NVIDIA.R4D
+  PCI-/Board-/Generationserkennung, gebundenes MMIO, GSP/Firmware, GPU-MMU,
+  VRAM, Channels/Engines, Interrupts, Takt-/Thermalsteuerung, Anschluesse,
+  Modi, Scanout, Audiohandoff und Fehlerwiederherstellung.
+  Neues oeffentliches Repo bei Implementierungsbeginn:
+  R4OSDev/r4os-driver-nvidia.
+
+Drivers/VirtioGpu -> VIRTGPU.R4D
+  Kleiner nativer virtueller 2D-Backend fuer reproduzierbare Tests des
+  gemeinsamen Vertrags. Virtio-Completion besitzt keine erfundene
+  physische VBlank-Garantie. Neues Repo bei Implementierungsbeginn:
+  R4OSDev/r4os-driver-virtiogpu.
+
+Drivers/DisplayBlit und bootfb
+  Boot-/Softwareanzeige und optionale schnelle CPU-Kopie. Ein
+  dauerhaftes, gepflegtes Backend fuer fehlende oder unpassende Hardware.
+
+Libraries/R4GFX
+  Gemeinsame Ressourcen-/Render-/Swapchainlogik im Userland,
+  GPU-Komposition, Bild-/Masken-/Texturpfade und Softwareumsetzung.
+  Eigenstaendiger R4L-Vertrag im vorhandenen Libraries-Repository.
+  R4DRAW bleibt die normale Appfassade und erhaelt keine zweite
+  konkurrierende Presentwahrheit.
+
+Libraries/R4NV
+  Userland-Backend fuer NVIDIA-Commandcodierung, Renderzustaende,
+  Shader-/Compileranbindung und GPU-Layoutdetails. Direkte privilegierte
+  Geraetezugriffe bleiben bei NVIDIA.R4D.
+  Die genaue Upstream-/Firmwarestrategie wird in 0.79.3 entschieden.
+
+Libraries/R4VK, Libraries/R4GL
+  Spaetere native Vulkan-/EGL-/OpenGL-Provider mit eigenem Vertrag.
+  Sie verwenden dieselben Ressourcen, Geraete und Praesentationsbesitzer.
+
+Apps/Desktop
+  Komposition, Fenster-/Ausgabepolicy, Z-Order, Damage, Fullscreen,
+  Anzeigeeinstellungen, Auswahl/Fallback und sichtbare Rueckmeldung.
+
+Drivers/HDA und Services/AudioService
+  Codec-/Audiostreambesitz bleibt bestehen. NVIDIA uebergibt
+  validierte Connector-/Presence-/ELD-Daten und programmiert seinen
+  eigenen Transportteil. Es entsteht kein zweiter Audiomixer.
+
+SDK, Diagnostics/DisplayDiag, DeviceManager, RdpService, Distribution
+  Gemeinsame Verbraucherfassaden, nachvollziehbare Diagnose,
+  bedarfsabhaengige Capturepfade und zusammenpassende Modul-/Firmwarepakete.
+
+Neue Video-Libraries werden beim jeweiligen Ausbau einer externen
+Libraryrolle zugeordnet. Manifeste und Inventare werden beim Anlegen
+echter Module gepflegt. In 0.79.1 werden keine leeren Modulprojekte
+angelegt und keine nur geplanten Module als installiert inventarisiert.
+
+Puffer- und Ausfuehrungsmodell
+----------------------------
+Ein Buffer Object beschreibt seine Bytes, Dimensionen, Pitch, Format,
+Ebenen, Modifier, Nutzungen und Adapterbindung. CPU-Adresse, physische
+Seiten, DMA-Adresse, GPU-VA, VRAM und BAR-Fenster sind verschiedene Dinge.
+Grossen-/Offsetrechnungen sind ueberlaufgeprueft; alte 32-Bit- oder
+Segmentgrenzen werden vor dem ersten grossen GPU-Objekt geklaert.
+
+Eine Ressource kann CPU-RAM, Staging, Renderziel oder Scanout bedienen.
+Import/Export teilen denselben Besitzer, wenn Format/Layout und Geraet
+das erlauben. Sonst ist eine konkrete Konvertierung oder Kopie mit
+sichtbarem Byte-/Zeitkonto erforderlich. CPU-/GPU-Cacheuebergaenge und
+Barriers gehoeren zum Vertrag und sind keine implizite Frame-Nebenwirkung.
+
+Der vorgesehene Weg lautet:
+  App-/Desktopressource
+    -> erforderlicher Upload
+    -> GPU-Zeichen-/Kompositionsauftrag
+    -> fertiger Scanout-Puffer
+    -> Pageflip / passende Hardwareplane
+    -> bestaetigter sichtbarer Zustand
+    -> Freigabe des vorherigen Scanout-Lease.
+
+Submit-Annahme, Renderfertigstellung, sichtbarer Present und
+Wiederverwendbarkeit haben getrennte Bedeutungen. Jede Completion ist
+an Objekt-, Adapter- und Resetgeneration gebunden. Eine alte IRQ-Meldung
+darf keine neue Ressource freigeben. Doppelte Completion ist wirkungslos.
+Alle Waits besitzen Fehler-/Cancelpfad; DMA-Speicher wird bei unbewiesenem
+Stillstand gehalten beziehungsweise quarantiniert.
+
+Die Zahl der Puffer und ausstehenden Auftraege bleibt begrenzt. Zwei
+oder drei Puffer sind ein Ausgangspunkt, keine globale starre
+Kapazitaetsvorgabe und keine Garantie fuer niedrige Latenz. FIFO, neuester
+Frame und gegebenenfalls Immediate besitzen ausdrueckliche Semantik.
+Unerreichbare Features liefern unsupported, belastete Ressourcen Busy
+oder definierten Rueckstau. Das System sammelt nicht unbegrenzt Frames.
+
+Bestaende fuer Grafik, Uploads, Pipeline-/Glyphcaches und Readback werden
+wiederverwendet. Groessere Compiler-/Pipelinearbeiten laufen ausserhalb
+des interaktiven Framepfads. Ruhende Szenen brauchen keine erneute
+Vollbildkomposition, keinen Vollbildupload und keinen Pflichtreadback.
+
+Ausgabemodell
+-------------
+Adapter, physischer Connector, Empfaengergeneration, Head/Plane,
+Geometrie, Refresh, Farbe und Puffer bilden einen pruefbaren Zustand.
+Test-only validiert alle gemeinsam benoetigten Ressourcen. Commit
+veraendert erst danach das Geraet und besitzt einen Wiederherstellungspfad.
+
+Routingdetails der jeweiligen GPU bleiben im Treiber. Desktoppolicy
+arbeitet mit Ausgaengen und ihren Faehigkeiten. Der Verlust eines
+Monitors invalidiert alte EDID-, Modus-, Farb- und ELD-Daten. Eine
+abgeschnittene EDID ist keine vollstaendige Empfaengerbeschreibung.
+
+Pro Ausgabe gibt es eine eigene Zeitleiste. Mehrmonitorbetrieb darf
+nicht alle Monitore durch eine globale niedrigste Refreshschranke
+synchronisieren. Logische Desktopkoordinaten, physische Pixel, DPI,
+Rotation und Cursorposition werden getrennt umgerechnet.
+
+Direct Scanout und Overlayplanes sind gepruefte Optimierungen. Format,
+Modifier, Skalierung, Farbe, Cursor, Menues und Capture koennen einen
+Kompositionsschritt erforderlich machen. Die Umschaltung behaelt
+Pufferlebensdauer und sichtbare Szene.
+
+Farbe umfasst die gesamte Kette: Quellfarbraum, Alpha, lineare
+Komposition, Ausgangskonvertierung, Linkformat und Empfaengermetadaten.
+HDR und VRR werden als durchgaengig gepruefte Betriebsarten umgesetzt,
+nicht als isolierte Schalter. Die Faehigkeit des Fernsehers wird aus
+realen Daten und Messungen festgestellt.
+
+Fallback und Wiederherstellung
+------------------------------
+1. Kein passender nativer Treiber:
+   Limine-bootfb und Softwaredarstellung bleiben der normale Pfad.
+   Das gilt fuer unbekannte NVIDIA-Geraete sowie AMD, Intel und andere
+   Adapter, solange kein eigener gepruefter Backend vorhanden ist.
+
+2. Uebernahme noch nicht abgeschlossen:
+   Der bisherige Besitzer bleibt aktiv. Ressourcen/Modus der nativen
+   Ausgabe werden zuerst vorbereitet und bestaetigt. Ein Initfehler
+   schaltet keinen halb fertigen Backend frei.
+
+3. Rendering ausgefallen, Displayengine funktionsfaehig:
+   Software zeichnet in weiterhin gueltige native Scanout-Puffer.
+   Die normale Ausgabesteuerung bleibt beim nativen Displaytreiber.
+
+4. Reset / nativer Displayzustand verloren:
+   Neue Auftraege stoppen, Geraetegeneration wechseln, Waits beenden,
+   Geraetestillstand feststellen und bekannten Displayzustand
+   wiederherstellen. CPU-Quellen erlauben Ressourcenrekonstruktion.
+
+5. Lokale Wiederherstellung hardwarebedingt unmoeglich:
+   SSH/Seriell und dokumentierter sicherer Neustart bleiben der Weg.
+   Die alte Limine-Adresse wird nach Uebernahme nur verwendet, wenn ihre
+   Speicher- UND Displaygueltigkeit wieder bestaetigt sind.
+   Bootoption und Recovery liefern einen sicheren naechsten Start.
+   Eine defekte GPU kann nicht durch eine Softwaregarantie repariert werden.
+
+Fallbacks sind regulaere Produktpfade und Bestandteil der Abnahme.
+Ein Initialisierungsfehler, fehlende Firmware, unbekannte IDs oder ein
+fehlendes optionales Renderingmodul duerfen keinen unbedienbaren
+Standardstart erzwingen.
+
+NVIDIA-Strategie und Voraussetzungen
+-----------------------------------
+Die Primärquellen liefern Hardwareklassen und Register sowie umfangreiche
+offene Implementierung. Die offiziellen offenen Kernelmodule sind fuer
+Turing und neuere Generationen vorgesehen und benoetigen passende GSP-
+Komponenten; deren Linux-Integration ist kein direkt ladbarer R4OS-Treiber:
+https://github.com/NVIDIA/open-gpu-kernel-modules
+https://docs.nvidia.com/datacenter/tesla/driver-installation-guide/kernel-modules.html
+
+Gesichert sind zwei absichtlich getrennte NVIDIA-RM-Staende:
+- 610.57.04 als aktuelle offizielle Quelle.
+- 570.144 als Quelle zum RM/GSP-Pfad des gesicherten Nouveau-Amperecodes.
+Linux 7.2.4 nennt dort 570.144 und 535.113.01. Hardwareklassen,
+Firmwareblob, RPC-ABI und Treiberlogik werden nicht beliebig gemischt.
+
+0.79.3 entscheidet anhand eines begrenzten Machbarkeitsnachweises:
+- welche OS-unabhaengigen MIT-Teile uebernommen werden koennen;
+- welche Hardwareteile eigenstaendig in Zig entstehen;
+- welche Linux-/Nouveau-Stellen nur Verhalten erklaeren;
+- welchen Firmware-/RM-Pfad der erste Treiber wirklich spricht;
+- welcher Compiler-/NVK-Unterbau ohne versteckte Linux-Abhaengigkeit
+  getragen werden kann.
+
+NVIDIA-Dokumentation und zahlreiche eigene Quelldateien sind offen
+verfuegbar. Die konkrete Lizenz jeder uebernommenen Datei und von
+Firmware bleibt massgeblich; Fremdmaterial wird nicht als originales
+Apache-2.0-R4OS-Material ausgegeben. Der gesicherte Referenzkatalog
+verweist auf Originalhinweise und trennt Beschaffung von Codeuebernahme.
+
+Die erste echte Abnahme gilt dem OssiPC. Turing, weitere Ampere-Boards,
+Ada und Blackwell bekommen eigene Capability-/Versions- und
+Hardwareberichte. Legacy-Familien sind ein eigener Portierungsentscheid.
+Eine PCI-ID-Erweiterung ist keine Treiberportierung.
+
+Erweiterter Funktionsumfang
+--------------------------
+Die Roadmap umfasst neben dem produktiven 2D-Desktop:
+- DP-SST und DP-Audio, mehrere Monitore, Skalierung und Rotation.
+- SDR-Farbverwaltung und echte HDR-Kette.
+- VRR, hohe Bandbreiten sowie getrennte DSC/MST/FRL-Ausbaupfade.
+- VRAM-Residenz, Auslagerung, faire Queues, Leistungs-/Thermalzustaende.
+- GPU-Reset, Bildschirmruhe, vorhandene Suspend-/Resume-Anbindung.
+- Screenshots und asynchronen Remote-Readback bei aktivem Verbraucher.
+- Native Vulkan-Integration und WSI, OpenGL/EGL und Software-3D.
+- Separate Video-Decode- und Encodepfade mit begrenzten Profilen.
+- Installation, Updates, GUI, Entwicklerbeispiele und reale Abnahme.
+
+Mesa/NVK ist als offene Userland-Referenz gesichert. Sein dort
+beschriebener Standard-API-Umfang belegt keinen automatischen R4OS-Port:
+https://docs.mesa3d.org/drivers/nvk.html
+
+Erweiterte Features benoetigen passende Hardware, Firmware, normative
+Schnittstellen und gegebenenfalls weitere lizenzierte Referenzen.
+Das betrifft besonders weitere GPU-Generationen, DP-Monitore/Docks,
+HDR-/VRR-Messung, DSC/MST/FRL und Videoeinheiten. Fehlende Voraussetzung
+bleibt als solche sichtbar. Sie wird weder durch einen Dummyabschluss
+noch durch eine pauschale Supportbehauptung ersetzt.
+
+Formale Vulkan-/OpenGL-Konformitaet und Standard-Branding setzen die
+jeweilige Konformitaetspruefung voraus. Neue R4OS-WSI-Begriffe werden
+nicht als bereits registrierte Khronos-Extensions bezeichnet.
+
+Die Pflichtbasis fuer einen reifen Desktop umfasst gepruefte native
+Ausgabe, GPU-Komposition, Puffer/Fences, HDMI-Audio, Hotplug/Resize,
+fortschreitende Eingabe, Ressourcenabbau und funktionierende Fallbacks.
+Welche optionalen Funktionsprofile die Gesamtfreigabe einschliesst,
+steht explizit in den betreffenden Unterversionen. Offene notwendige
+Arbeit verhindert Abschluss; eine spaetere Umfangsaenderung wird als
+Entscheidung festgehalten.
+
+Abnahmen und Kostenkontrolle
+---------------------------
+Bestehende DISPLAYD-/Desktop-/Ownerpruefungen werden gezielt erweitert.
+Es entstehen keine 45 neuen Testframeworks oder obligatorischen
+Dauerbenchmarks. Roadmap-Abnahmen beschreiben Ergebnisse und koennen
+bestehende Tests oder gezielte reale Proben nutzen.
+
+Automatisierte Gastabnahmen verwenden SMP4. Virtio/QEMU prueft
+generische Vertragseigenschaften. NVIDIA-Ausgabe, HDMI-Ton, GPU-Arbeit,
+Takte, Reset und besondere Displaymodi brauchen reale Hardwarebelege.
+Windows/Linux-Hostbuilds werden bei entsprechenden Implementierungen
+separat nachgewiesen; Linux-Erfolg allein ist kein Windows-Test.
+
+Leistung wird anhand gemeinsamer Szenen und einzelner Kostenstellen
+beurteilt: CPU-Arbeit, Upload, GPU-Ausfuehrung, Warteschlange, Present,
+Readback, Speicherbudget und Eingabe-zu-Sichtbarkeit. p50/p95/p99 und
+Testumstaende werden zusammen ausgewiesen. Im Framepfad sind
+unbegrenzte Queues, Pflichtreadbacks und vermeidbare Vollbildkopien
+konkrete zu beseitigende Kosten, keine blossen FPS-Vermutungen.
+
+Besondere Risiken mit vorgeschalteter Klaerung
+--------------------------------------------
+- Firmware/RM-ABI und Portierungsumfang: Entscheidung 0.79.3, Bringup 0.79.10.
+- Bestehende DMA-/MMIO-/IRQ-Grenzen: Erfassung 0.79.2, Erweiterung 0.79.5/6.
+- Bildschirmverlust bei nativer Uebernahme: Vertrag 0.79.4, Hardware 0.79.13.
+- Shader-/Rust-/C-Build und Librarygroesse: Prototyp 0.79.3, Ausbau 0.79.34.
+- Unsicherer DMA-Abbau nach Hang: Grundsemantik 0.79.5/6, Recovery 0.79.30.
+- Vollstaendige Empfaengerdaten: 0.79.12; Audio erst mit echtem ELD 0.79.15.
+- Fehlende Zusatzhardware/Standards: ausdrueckliche Voraussetzungen fuer
+  0.79.23 bis 27, 33 sowie 40/41.
+- Funktionsversprechen aus Referenzprojekten: R4OS-Implementierung und
+  eigene Hardware-/Konformitaetsnachweise bleiben erforderlich.
+
+Die geordnete Umsetzung mit Aufgaben, Abhaengigkeiten und Abnahmen steht
+in GrafikRoadmap079.txt und in der aktuellen Roadmap-API. Die API ist die
+Statuswahrheit; dieses Zielbild ist keine zweite installierte
+Hardware- oder Modulliste.

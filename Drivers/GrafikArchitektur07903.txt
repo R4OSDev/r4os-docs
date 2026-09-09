@@ -1,0 +1,399 @@
+﻿Grafikarchitektur: NVIDIA-Entscheid und Portierungsvertrag 0.79.3
+================================================================
+
+Stand: 09.09.2026. Verbindliche Implementierungsentscheidung fuer die
+folgenden Unterversionen. Der produktive Treiber ist noch bootfb mit
+optionalem DISPBLIT; dieses Dokument meldet keine native GPU-Funktion.
+Messbasis: Desktop/GrafikBaseline07902.txt, Ressourcenluecken:
+Drivers/GrafikRessourcen079.txt. Nachweise und SHA-256 stehen in
+Drivers/GrafikArchitektur07903.json.
+
+Entscheidung
+------------
+NVIDIA.R4D uebernimmt den betriebssystemunabhaengigen RM- und NVKMS-Kern
+aus NVIDIA Open GPU Kernel Modules 570.144. Eine eigene R4OS-OS-Schicht
+bindet Speicher, PCI, Interrupts, Zeit, Arbeit, Firmware und Lebensdauer
+an die generischen Plattformvertraege. Die Linux-Kernelmodule werden
+nicht als Binaerdateien geladen. Linux DRM, UVM, procfs und /dev/nvidia
+werden nicht als zweite Betriebssystemschicht nachgebaut.
+
+Der erste Hardwarepfad ist OssiPC, PCI 09:00.0 / 10DE:2504, mit einem
+GA10x-Ampere-Desktopprofil, sofern 0.79.9 die genaue Chipfamilie bestaetigt.
+Der RTX-3060-Tabellenname ist weiterhin kein gelesener Chip-/VBIOS-Nachweis.
+Bei abweichender Identitaet erfolgt eine neue konkrete Zuordnung vor
+Schreibzugriffen. Unbekannte Familien bleiben beim Softwarepfad.
+
+R4NV verwendet fuer Rendering NVIDIA-Klassen und spaeter Mesa/NAK/NVK
+26.2.2 mit einem R4OS-winsys. Eine fertige Verbindung zwischen NVK und dem
+offiziellen RM wird damit nicht behauptet: Nouveau-ioctl, VM_BIND, EXEC,
+syncobj, DRM-Dateideskriptoren und BO-Import muessen auf die R4OS-Vertraege
+abgebildet werden. RM-Objekte, erlaubte Engineklassen und Semaphoren werden
+mit genau dem gebundenen R4D ausgehandelt. NVIDIA-Linux-Userlandbinaerdateien
+sind kein R4NV-, Vulkan-, OpenGL- oder NVENC-Implementierungsweg.
+
+Vergleich der untersuchten Wege
+-------------------------------
+Gebiet       Offizieller RM/NVKMS 570.144       Nouveau-basierter Zig-Port
+Display      NVKMS-KAPI, HDMI, Flip, DP,         nvkm/disp und DRM-Anbindung
+             Modusvalidierung vorhanden         in eigenen Besitzer uebertragen
+GSP          RPC, Metadaten, Loader, ABI-       r535/r570-Vertraege und Loader
+             Pruefungen zusammen versioniert   erneut in Zig materialisieren
+GPU-MMU      RM-Memory/VA/HAL vorhanden;        NVKM-MMU, Speicherobjekte und
+             physische Dienste portieren      Linux-GEM/TTM-Grenzen abloesen
+Channels     RM-Objekte, FIFO, Fehlerpfade      NVKM-FIFO und Nouveau-UAPI in
+             vorhanden; R4OS-Submit anbinden   gemeinsamen R4OS-Submit uebersetzen
+Reset        RM/GSP-Sequenzen vorhanden;       Sequenzen, Generationen und
+             R4OS-Quiesce ergaenzen            Wiederaufbau selbst portieren
+Aufwand      grosse C/C++-Integration, viele   zusaetzlich Neuuebersetzung der
+             OS-Dienste und Linkpruefungen     Hardware-/Firmwarestrukturen
+
+Die Wahl reduziert die erneute Implementierung von GSP- und Displaywissen
+und behaelt NVIDIAs zusammengehoerende ABI-Pruefungen. Sie ist keine Aussage,
+dass die Integration klein ist: der gesicherte src-Baum umfasst 1191 C-
+und 35 C++-Dateien, einschliesslich generierter und fremder Hilfsteile.
+Nouveau bleibt wichtige unabhaengige Referenz fuer Sequenzen und Fehlerfaelle.
+Fremdcode wird nur unter seiner jeweiligen Lizenz uebernommen; der
+Vergleich macht weder Nouveau pauschal GPL-only noch NVIDIA pauschal MIT.
+
+Konkrete Quellgrenzen
+--------------------
+Basis: ExFiles/Reference/GFX/Nvidia/OpenKernelModules-570.144/
+Revision: 8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f.
+
+- src/nvidia/: RM, generierte NVOC/HAL-Teile und GSP-Vertraege im R4D.
+  src/nvidia/arch/nvalloc/unix/include/os-interface.h und
+  src/nvidia/arch/nvalloc/unix/include/nv.h bilden wesentliche OS-Anbindungsgrenzen.
+  src/nvidia/interface/gsp_abi_check.c bleibt als Buildpruefung erhalten.
+- src/nvidia/src/kernel/gpu/gsp/kernel_gsp.c sowie die zugehoerigen
+  Firmware-, Booter-, RPC-, FIFO-, MMU- und Speicherdateien bleiben derselbe
+  Releaseverbund. Die benoetigte Abhaengigkeitshuelle wird beim Linken
+  bestimmt; einzelne erfolgreich kompilierte Dateien ersetzen sie nicht.
+- src/nvidia-modeset/ mit kapi/interface/nvkms-kapi.h ist die interne
+  Displayanbindung. os-interface/include/nvidia-modeset-os-interface.h
+  bekommt echte R4OS-Implementierungen. HDMI-/Flipcode und gemeinsame
+  DisplayPort-C++-Teile werden in denselben R4D-Besitzer aufgenommen.
+- src/common/sdk/nvidia/inc/, shared/, modeset/, displayport/ und die
+  tatsaechlich benoetigten Hilfsbibliotheken behalten Herkunftshinweise.
+  Softfloat, xz, Kryptografie und eingebettete Shader erhalten eigene
+  Eintraege im THIRD_PARTY_NOTICES des spaeteren Treiberrepositories.
+- kernel-open/nvidia und kernel-open/nvidia-modeset dienen als Referenz
+  fuer OS-Dienste. Linux-DRM/UVM, Linux-MM, Linux-Scheduler, ioctl- und
+  Linux-Dateimodell werden nicht in den R4OS-Kernel aufgenommen.
+- NVKMS darf intern seine Head-Surface-/Displayhilfen verwenden. Desktop-
+  Fensterpolicy und die Komposition der R4OS-Fenster bleiben bei Desktop
+  und R4GFX; es entsteht kein konkurrierender Desktop in NVKMS.
+
+Neue kanonische Module entstehen bei ihrem Implementierungsschritt:
+Drivers/NVIDIA im oeffentlichen R4OSDev/r4os-driver-nvidia; R4GFX, R4NV,
+R4VK und R4GL als Einheiten des vorhandenen Libraries-Repositories.
+0.79.3 legt keine leeren Module und keine fiktiven Inventareintraege an.
+
+Versions- und Firmwarepaarung
+---------------------------
+Teil                         Festlegung
+RM/NVKMS und RPC-Header       570.144, obige Quellrevision
+GSP-Paket                    NVIDIA-Linux-x86_64-570.144-no-compat32.run
+GA10x-Firmware               firmware/gsp_ga10x.bin, .fwversion 570.144
+TU10x/TU11x und GA100         gsp_tu10x.bin, getrennte Familienfreigabe
+Booter/Sequencer              zugehoerige 570.144-Quellen/Tabellen
+FWSEC und Boardkonfiguration vom echten VBIOS; 0.79.9/0.79.10 noch offen
+R4D/R4NV-Privatvertrag        zusammen gepruefte ABI-/Generationstabelle
+Mesa/NAK/NVK-Quellen          26.2.2; eigenes Compiler-/Engine-Kompatibilitaetsfeld
+Nouveau-Vergleich             gesicherter Linux-7.2.4-Baum, r570/r535
+NVIDIA 610.57.04              getrennte Referenz, kein Ersatzblob/-Header
+535.113.01                   erkannte Nouveau-Alternative; nicht freigegeben
+
+Ein Paketwechsel erfordert RM/NVKMS, GSP, Booter, RPC-/Klassenheader und
+R4NV-Enginevertrag gemeinsam zu pruefen. Mesa-Version und RM-Version sind
+verschiedene Achsen; ein neuer Mesa-Compiler impliziert keinen passenden
+GSP-Wechsel. Caches tragen Compiler-, Klassen-, R4NV- und Treiberschluessel.
+Ein Start mit gemischtem Satz endet vor Firmwareupload mit einer konkreten
+Fehlermeldung und erhaelt bootfb. Kein automatischer Versuch mit 610 oder
+535, falls 570 scheitert.
+
+Firmwarebestand und Ladegrenze
+-----------------------------
+Originalquelle und offizieller Hash:
+https://download.nvidia.com/XFree86/Linux-x86_64/570.144/
+NVIDIA-Linux-x86_64-570.144-no-compat32.run
+SHA-256: f3532d135c934c1a25480275da3cf8edb32aa6c5fccef64f657463c26e26fb70
+
+Ablage: ExFiles/Reference/GFX/Nvidia/Firmware-570.144/
+Originalpaket, offizielles sha256sum, Lizenz, GSP-/Kernel-open-README,
+unveraenderte Firmwaredateien und extraction.json sind gesichert.
+Der Makeself-Header wurde begrenzt gelesen; der zstd/tar-Inhalt wurde mit
+Hostwerkzeugen entpackt. Weder Installer noch eingebettetes Entpackprogramm
+wurden ausgefuehrt. Es fand keine Firmwaredisassemblierung statt.
+
+gsp_ga10x.bin: 63.571.696 Bytes
+  SHA-256 a8c3ebeed280323aedb51c061f321e73379cce7a9ae643a33dd03915df027f7f
+gsp_tu10x.bin: 28.542.040 Bytes
+  SHA-256 3052aee2872182a14d8d7c069e3a14fe4642405894b24692c4aca4101dfb1809
+
+Beide sind ELF64 little endian ET_REL / EM_RISCV, mit .fwimage,
+.fwversion (acht Bytes einschliesslich NUL) und Familien-Signatursektionen.
+Sie sind Daten fuer den GPU-Ladepfad, keine x86-R4M0-Module. Der GA10x-
+Container besitzt unter anderem .fwsignature_ga10x, ad10x, gh100, gb10x
+und gb20x; der andere Container tu10x, tu11x und ga100. Diese Sektionen
+erlauben keine pauschale Hardwarefreigabe. Der Index enthaelt alle
+gemessenen Sektionen mit Groesse und Offset.
+
+SHA-Pruefung und Sektionserkennung sind erfolgt. Kryptografische Annahme
+durch GPU/Boot-ROM, Firmwarestart und RPC-Antwort sind noch nicht erfolgt.
+Der Treiber muss die Familienauswahl, Signatur-/Fusezuordnung, FWSEC aus
+VBIOS, Booter, WPR-/Heap-/DMA-Metadaten und Versionskontrolle aus demselben
+Quellverbund implementieren. Erfolgswerte als Ersatz fuer fehlende Dienste
+oder eine umgangene Signaturpruefung sind unzulaessig.
+
+Beide Firmwaredateien ueberschreiten die heutigen 16-MB-Mappinggrenzen.
+0.79.5 muss grosse/segmentierte DMA-Puffer und deren Lebensdauer tragen.
+Die Blobgroesse ist nur ein Teil des Bedarfs; GSP-Heap, WPR, RPC-Ringe,
+Booter und weitere Puffer werden getrennt aus den RM-Anforderungen gebucht.
+Ein grosser Heap-Alloc allein beweist keine fuer die GPU nutzbare DMA-Map.
+
+Die mitgelieferte NVIDIA Driver License, insbesondere 1.1(d), erlaubt
+unveraenderte Binaerweitergabe fuer ein unter OSI-Lizenz verteiltes OS mit
+beigelegtem Vertrag. R4OS behaelt die Firmware bytegleich und legt den
+vollstaendigen Vertrag ins spaetere Firmwarepaket und Distributionsimage.
+NVIDIA-Plattformbindung und weitere Bedingungen, einschliesslich 2.1-2.9,
+bleiben bestehen; die Firmware wird nicht unter Apache umdeklariert.
+Separat lizenzierter Quellcode behaelt seine eigenen Hinweise. Massgeblich
+ist der gesicherte Volltext, keine gekuerzte Zusammenfassung:
+https://download.nvidia.com/XFree86/Linux-x86_64/570.144/license.txt
+
+Besitzer und oeffentliche Vertraege
+----------------------------------
+R4DRAW bleibt der normale Zeichen-/Ressourcen-/Presentzugang. Vorhandene
+Slots und fixed_layout-Typen bleiben binaer unveraendert. Neue Abfragen
+tragen size/version, neue Handles ihre Generation. Keine NVKMS-Struktur
+wird in den Plattformvertrag kopiert: bereits der gemessene interne
+RequestedModeSetConfig ist 14.568 Bytes gross und releaseabhaengig.
+
+R4DEV beschreibt Adapter, aktive Backends, Firmwarestatus und Gruende
+fuer reduzierte Faehigkeiten aus dem vorhandenen Inventar. Treiber liefern
+gebundene Daten; Diagnosen lesen keine fremden PCI-/MMIO-Register nach.
+R4DESK bleibt Besitzer von Fenstern, Ausgabezuordnung, logischer Eingabe,
+Fullscreen, Capture und UI-Einstellungen. Physische Anschluesse und
+berechnete Modi werden durch denselben Displaybesitzer veroeffentlicht.
+
+Der Kernel traegt ausschliesslich technisch notwendige Bruecken:
+- generationengebundener Displaybesitz und Bootzustand;
+- physische Seiten, Cacheattribute, PCI/MMIO/DMA-Maps, IRQ und Wait;
+- BO-Referenzen, Scanout-Leases und eindeutige Completion-/Fehlerzustellung;
+- zentrale Programmlifecycle-Anbindung fuer Abbruch und Freigabe.
+
+NVIDIA.R4D besitzt PCI/MMIO, VRAM-Verwaltung, GPU-Seitentabellen, RM/GSP,
+Channels, IRQ-Auswertung, Scanout, Connector-/ELD-Transport, Reset und
+spaeter Takt/Thermal. Ein R4D-interner Callbackvertrag bietet probe/query,
+prepare/commit/abort/recover, BO/VM, submit/poll und shutdown. Namen sind
+hier semantische Entwuerfe; Nummern und Layouts werden erst im zustaendigen
+Contract-Schritt festgelegt. Callbacks werden ausserhalb des generischen
+No-Sleep-Owners aufgerufen und liefern begrenzte Status-/Ereignisdaten.
+
+R4NV kodiert Userland-Renderauftraege und Shader, besitzt aber keine
+konkurrierenden PCI-, Firmware-, Display- oder Speicherallokatoren.
+R4GFX besitzt gemeinsame Renderressourcen, CPU-Umsetzung, Upload und
+Swapchain-Organisation; GPU-Speicher und Fences bleiben dieselben Objekte.
+R4VK/R4GL verwenden diese Ressourcen auch fuer Standard-APIs. Ihre
+unabhaengigen R4L-Vertraege liegen im Libraries-Repository und werden nicht
+als neue eingebaute Kernel-Platform-API ausgegeben.
+
+HDA bleibt Codec-/Streambesitzer, AUDSVC Mixer und App-Audiozugang.
+NVIDIA liefert Connector-, Presence- und ELD-Generationen und programmiert
+nur den GPU-seitigen HDMI-Transport. Eine alte ELD darf nach Hotplug/Reset
+keinen neuen Empfaenger freischalten. TV-Standby ist ein eigener Zustand,
+keine aus gespeicherter Boot-EDID abgeleitete Anwesenheitsgarantie.
+
+Uebernahme und Wiederherstellung
+-------------------------------
+0.79.4 definiert bootfb, Vorbereitung, native Ausgabe, CPU auf nativem
+Scanout, Wiederherstellung und unavailable. Bis zum bestaetigten Commit
+bleibt ein nachweislich gueltiger alter Besitzer aktiv. Wenn Vorbereitung
+bereits Hardwareveraenderungen verlangt, muss der Treiber entweder deren
+Unabhaengigkeit vom alten Scanout oder eine gepruefte Wiederherstellung
+belegen; ein Software-State-Rollback allein stellt keinen CRTC wieder her.
+
+Nach nativer Uebernahme wird der alte Limine-FB nicht blind beschrieben.
+Native Softwarekomposition braucht einen bestaetigten nativen Scanout.
+Ist nach Reset weder dieser noch ein wiederhergestellter Bootmodus sicher,
+meldet die Ausgabe unavailable. SSH/serielle Diagnose bleiben erreichbar;
+ein einmaliger Softwarestart stellt beim Neustart den Firmwarepfad her.
+Ohne NVIDIA, bei abgelehnter Familie oder deaktiviertem Treiber bleibt
+bootfb ein produktiver, eigenstaendig gepflegter Backendpfad.
+
+Verbindliche Voraussetzungen vor dem Hardware-Bringup
+---------------------------------------------------
+0.79.4: genau ein Ausgabeowner, transaktionaler Wechsel, Softwareboot.
+0.79.5: ausreichend grosse MMIO/DMA-Objekte, Offset/Cache/Unmap/Rollback,
+        BO-Lebensdauer; CPU-VA, DMA-Adresse und GPU-VA getrennt.
+0.79.6: begrenzte asynchrone Auftraege, IRQ/Worker, Wait/Cancel, Fences;
+        DMA nicht freigeben, solange Stillstand unbewiesen ist.
+0.79.9: PCI-Subsystem/Revision, Chip, VBIOS, BAR-Groessen und IRQ-Optionen
+        im gebundenen Init-Kontext lesen; vorhandene IDs reichen nicht.
+0.79.10 und folgende: geforderte RM-OS-Dienste tatsaechlich implementieren,
+        Fehlerpfade und fehlende Firmware vor Aktivierung abfangen.
+
+Keine stillen Erfolgs-Stubs fuer MMIO, IRQ, Timer, Sperren, Firmware,
+PCI oder Speicher. Nicht benoetigte Plattformfunktionen melden explizit
+unsupported. Schlafende RM/NVKMS-Sperren duerfen Waits ermoeglichen, ohne
+den globalen R4OS-IO-Owner darueber zu halten. Der vorhandene begrenzte
+Treiberworker ersetzt keinen lang laufenden RM-Thread; benoetigte Arbeit
+erhaelt begrenzte eigene Aufgaben oder eine bewiesene Fortsetzung.
+
+Hostprototyp und Toolchain
+-------------------------
+Auf Debian mit Zig 0.16.0 wurden sieben Proben erfolgreich kompiliert:
+nvstatus.c, Display-/Engineheader mit Layoutabfragen, gsp_abi_check.c,
+kernel_gsp.c, nvkms-hdmi.c, nvkms-hw-flip.c und dp_bitstream.cpp.
+Ziel: x86_64-freestanding-none, PIC, kein Red Zone, keine SSE/FPU-Nutzung,
+gnu11 beziehungsweise gnu++11 ohne Exceptions/RTTI. NV_LINUX und eine
+Linux-Kernel-Interface-Schicht wurden nicht vorgetaeuscht. Die GSP-Datei
+enthaelt 1110 ABI_CHECK-Aufrufzeilen mit statischen Groessen-/Offsetchecks.
+Die Fehler der ersten erweiterten Probe lagen an fehlender
+NV_VERSION_STRING-Definition, Make-Quote-Escaping und eingerueckten
+Includezeilen. Nach korrekter Uebertragung der Buildparameter sind alle
+sieben Proben ohne Compilerdiagnosen erfolgreich.
+
+Gesicherter Ablauf: ExFiles/Reference/GFX/Nvidia/Portability-0.79.3/
+Probe-Portability.ps1, probe_layout.c, Einzelprotokolle, Objekte und Index.
+Ab Workspace-Root:
+  pwsh -NoProfile -File ExFiles/Reference/GFX/Nvidia/Portability-0.79.3/Probe-Portability.ps1 -WorkspaceRoot .
+Der Prototyp liest literale Make-Parameter; er ist noch kein vollstaendiger
+per-translation-unit Produktbuild. Er fuehrt weder Vendor-Makefiles noch
+GPU-Code aus. Link, Relokationen, R4M0-Lader, OS-Anbindung, kompletter RM,
+Windows-Ausfuehrung und Hardwarebetrieb sind damit nicht nachgewiesen.
+
+Produktbuild: gemeinsame PS7-Orchestrierung und Zig-Buildbeschreibung mit
+gepinnten Quellen; duenne .bat/.sh-Starter. NVIDIAs fno-pic/mcmodel=kernel
+wird durch die zum modularen R4M0-Lader passende PIC-Konfiguration ersetzt.
+Globale Initialisierer, new/delete, pure-virtual/Guard-Helfer, Compiler-
+Builtins, TLS, Formatierung, Allokation und Symbollisten werden vor dem
+ersten R4D-Link auditiert. Linux-Shellgeneratoren erhalten gemeinsame
+PS7-/Zig-Schritte oder vorab reproduzierbar erzeugte, gehashte Eingaben.
+
+Mesa 26.2.2 verlangt fuer seinen Rust/NVK-Zweig Meson >=1.7.0,
+Rust >=1.85.0 und bindgen >=0.71.1; bindgen 0.72.0 sowie eine unbekannte
+Versionskennung werden dort abgelehnt. Hinzu kommen Ninja, Python,
+Rust-Hilfscrates, libclang/bindgen und libelf. NVK verwendet auch die
+Mesa-CLC-Werkzeugkette; deren LLVM/Clang-Abhaengigkeit ist von einem
+LLVM-JIT im R4OS-Gast zu unterscheiden. Versionen werden in 0.79.34 als
+zusammen getesteter Windows-/Linux-Hostsatz festgeschrieben.
+
+NAK verwendet aktuell unter anderem std::env, panic/catch_unwind,
+OnceLock und C/Mesa-Bindings. x86_64-unknown-none mit unveraendertem NAK ist
+deshalb kein nachgewiesener no_std-Pfad. Zuerst wird NAK als Hostcompiler
+fuer feste Desktopshader verwendet; fuer dynamische Anwendungsshader muss
+0.79.34 eine begrenzte R4OS-Rust/C-Runtime-Anbindung oder einen tatsaechlich
+portierten no_std/alloc-Zweig liefern. Hostvorkompilierung allein erfuellt
+keine allgemeine Vulkan-Pipelineerstellung. NVK-winsys, POSIX-Abstraktionen,
+Zeit/Thread/Synchronisation, ELF-Zugriff, Dateicaches und Loader folgen
+denselben R4OS-Librarygrenzen. Der Mesa-Quellsnapshot ist kein kompletter
+einsatzbereiter R4OS-Buildbaum.
+
+Freigabeprofile und messbare Leistungsziele
+-----------------------------------------
+Pflichtprofil Desktop: ein verifizierter Ampere-Adapter, mindestens eine
+SDR-Ausgabe 1920x1080/60 Hz, XRGB/ARGB8888, Damage, Text/Alpha/Bilder,
+Skalierung, Cursor, Resize/Fullscreen, HDMI-Audio, Standby/Hotplug und
+Fehlerwiederherstellung. Modi oberhalb davon werden nach EDID/Linkbudget
+und echter Messung freigegeben. Softwaredesktop ohne NVIDIA bleibt Pflicht.
+
+Vorlaeufige Abnahmebudgets fuer das native 1080p60-Profil, keine Messwerte:
+- unveraenderter Desktop: keine neuen Render-/Upload-/Presentauftraege;
+- kein obligatorisches CPU-Vollbildkopieren oder GPU-Readback im nativen
+  GPU-Desktop; CPU-Produzenten laden nur neue/geaenderte Ressourcen hoch;
+- stabile Szenen ohne Frameallokation und Shaderkompilierung; hoechstens
+  zwei noch nicht dargestellte Desktopframes, FIFO fuer Inhalte mit
+  notwendiger Vollstaendigkeit, sonst explizite Latest-Frame-Policy;
+- p95 Desktop-CPU-Vorbereitung <=4 ms, CPU-Submit <=1 ms,
+  GPU-Komposition <=8 ms; diese Stufen werden getrennt gemessen;
+- Ende-zu-Ende bei normaler Last p95 <=2 Refreshperioden ab verarbeiteter
+  Eingabe bis bestaetigtem Present, Warteschlangenzeit eingeschlossen;
+- p99, Upload-/Readbackbytes, verworfene Frames und Schedulerzeit werden
+  mitberichtet; kurzfristige Spitzen werden nicht im Mittelwert versteckt.
+
+Das 16,667-ms-Refreshbudget ist ein Ziel fuer eine definierte Szene, keine
+Garantie fuer jede App. Die 0.79.2-Prozedurskalierung ist keine Messung des
+spaeteren GPU-Skalierers. 4K60 hat 33.177.600 Bytes pro 32-Bit-Bild und
+erfordert eigene Speicher-/Link-/Latenzabnahme. HDR und hoehere Refresh-
+raten vergroessern den Umfang und werden nicht aus dem GPU-Namen abgeleitet.
+Speicherbudgets werden vor GSP-Start aus gemessenem VRAM und RM-Bedarf
+berechnet; niemals aus angenommenen 12 GB einer Produktbezeichnung.
+Scanout, Firmware, Queue und Recovery erhalten getrennte Reserven;
+optionale Caches werden vor diesen Besitzern begrenzt und verworfen.
+
+Vulkan: erstes vollstaendiges Zielprofil Vulkan 1.3 Core fuer den
+freigegebenen Amperepfad plus eigene R4OS-WSI. Vor dessen vollstaendiger
+Implementierung/Pruefung wird kein Vulkan-1.3-Erfolg gemeldet. Dynamisches
+Rendering, Synchronization2, Timeline, Pflichtformate/-limits und deren
+Fehler-/Lebensdauersemantik gehoeren dazu. Vulkan 1.4, Mesh, Raytracing und
+weitere optionale Funktionen erhalten einzelne belegt implementierte
+Features. Upstream-NVK-Konformitaet geht nicht automatisch auf R4OS ueber.
+
+OpenGL: EGL-1.5-/OpenGL-3.3-Core als erstes vollstaendiges Zielprofil ueber
+Zink; benoetigte Vulkan-Features werden explizit geprueft. OpenGL 4.6 ist
+ein anschliessendes Ziel, keine sofortige Zusage. Ohne 3D-GPU wird Mesa
+softpipe zuerst fuer ein ausdruecklich vermessenes Softwareprofil portiert;
+vor dessen Tests wird keine GL-Version versprochen. llvmpipe/Lavapipe sind
+moegliche spaetere LLVM-abhaengige Wege, keine Basisanforderung fuer bootfb.
+Offizielle Khronos-Konformitaet/Branding setzt das jeweilige Verfahren
+voraus; gezielte CTS-/dEQP-Proben dienen zuvor der Entwicklung.
+
+Hardware- und Featurematrix
+--------------------------
+Familie/Profil        Implementierungsziel          Freigabestatus 0.79.3
+OssiPC GA10x/Ampere    erster RM/NVKMS/GSP-Pfad        Identitaet noch zu lesen
+Turing TU10x/TU11x     tu10x-Blob, eigene Klassen      geplant, keine Testkarte
+Ada AD10x             ga10x-Blob, eigene Klassen      geplant, keine Testkarte
+Blackwell GB10x/20x   eigene Board-/GSP-Pruefung      geplant, kein Ersatz durch 610
+GA100/Hopper          eigene Compute-/Boardprofile   kein implizites Desktopprofil
+Pascal und aelter     bootfb, separater Legacypfad    kein 570-RM/GSP-Versprechen
+andere Hersteller     bootfb, spaeter eigene R4Ds     Softwaredesktop bleibt
+Virtio-GPU            gemeinsamer nativer 2D-Vertrag  QEMU-Pruefbackend ab 0.79.8
+
+Keine dieser nativen Funktionen ist mit 0.79.3 hardware-verified.
+Eine Firmware-Signatursektion oder eine Mesa-Klassenliste ist nur ein
+Implementierungsansatz, keine Hardwareabnahme.
+
+Zusatzprofil     Benoetigte reale Voraussetzungen
+HDMI-Audio       eingeschalteter Empfaenger, aktuelles ELD, hoerbarer Test
+HDR              belegte EDID-Metadaten, 10-Bit-Pfad, HDR-faehiger aktiver Sink
+VRR              gemeldete Bereiche, passender Link, aktiver VRR-Sink
+MST              DP-MST-Branch/Hub, mindestens zwei passende Bildschirme
+DSC              passender Encoder/Decoder/Link, nachgewiesene Aushandlung
+Mehrmonitor      mehrere Anschluesse und aktive passende Monitore
+NVDEC            verifizierte Videoengine, offene Firmware-/Codec-Schnittstelle,
+                 rechtmaessiger Referenzclip; zuerst H.264 8-Bit 4:2:0 pruefen
+NVENC            eigenstaendig nutzbare offene Engine-/Firmware-Schnittstelle,
+                 getrennte Qualitaets-/Codecabnahme; derzeit noch ungeklaert
+
+Video bleibt offen, falls Klassenheader keinen nutzbaren Lade-/Codecpfad
+bereitstellen. Die proprietaere Linux-NVENC-Library ist kein Ersatz.
+Codec-/Clipbedingungen werden beim konkreten Profil geklaert.
+
+OssiPC laeuft, der direkt angeschlossene Hisense 65U8QF ist ausgeschaltet,
+aber stromversorgt. Lesen, Build und generische SMP4-Abnahmen koennen in
+diesem Zustand weitergehen. Sichtbares Bild, hoerbarer Ton und die obigen
+Zusatzprofile werden nicht vorweg abgenommen. Wird spezielle Hardware
+benoetigt, wird gemaess Userregel pausiert und gefragt. Ist OssiPC
+unerreichbar, kann der betroffene Schritt offen zurueckgestellt oder die
+Arbeit pausiert werden; die Gesamtroadmap bleibt bis zu ihren Pflicht-
+abnahmen offen.
+
+Primaerquellen
+--------------
+NVIDIA 570.144 README und OS-agnostische Quellgrenzen:
+https://github.com/NVIDIA/open-gpu-kernel-modules/tree/570.144
+https://download.nvidia.com/XFree86/Linux-x86_64/570.144/README/kernel_open.html
+https://download.nvidia.com/XFree86/Linux-x86_64/570.144/README/gsp.html
+Nouveau: gesicherte nvkm/subdev/gsp/ga102.c sowie rm/r570, rm/r535 und
+zugehoerige Firmware-/RM-Header unter ExFiles/Reference/GFX/Nvidia/Nouveau.
+Mesa: gesicherte meson.build, docs/drivers/nvk.rst, nouveau/compiler/nak,
+nouveau/winsys und nouveau/vulkan; Version und Archivhash im Referenzkatalog.
+Gemeinsame Betriebsmodelle:
+https://docs.kernel.org/gpu/drm-kms.html
+https://learn.microsoft.com/en-us/windows/win32/direct3ddxgi/for-best-performance--use-dxgi-flip-model
+
+Die Quellvergleiche und Portierungswahl sind R4OS-Entscheidungen aus diesen
+Quellen. Sie sind keine Zusage von NVIDIA, Mesa, Linux oder Microsoft zur
+Unterstuetzung von R4OS.

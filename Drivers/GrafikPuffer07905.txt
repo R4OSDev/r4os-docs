@@ -1,0 +1,232 @@
+﻿Grafikpuffer und Speicherlebensdauer in 0.79.5
+===========================================
+
+Der gemeinsame Buffer-Object-Vertrag ist die Speichergrundlage fuer CPU-
+Raster, Uploads, Rendering und Scanout. Kernel/memory besitzt Reservierung,
+residente Seiten, Referenzen, Maps und Freigabe. R4DRAW stellt den Vertrag
+Programmen bereit; der optionale DriverApi-v25-Anhang stellt ihn R4Ds bereit.
+R4GFX ist eine unabhaengige Userland-R4L im bestehenden Libraries-Repository.
+Sie berechnet lineare Layouts und zeichnet in eine caller-eigene CPU-Map.
+Sie besitzt weder einen zweiten Allocator noch GPU-Seitentabellen.
+
+Descriptor und Adressraeume
+-------------------------
+GfxBufferDescriptor v1/144 Bytes beschreibt logische Bytelaenge, Alignment,
+Modifier, Format, Breite/Hoehe, bis zu vier Ebenen mit Offset/Pitch, Nutzung,
+Speicherort und Adapter-/Treiber-/Geraetegeneration. Alle Groessen, Pitches,
+Offsets, GPU-Adressen und DMA-Spannen sind 64 Bit. Gepruefte Rechnungen
+weisen Ueberlauf, unvollstaendige gepaddete Zeilen, ueberlappende Ebenen,
+falsche Chromaausdehnung und unvollstaendige Adapterbindung zurueck.
+
+Implementierte Layouts: rohe Bytes, XRGB8888, ARGB8888, R8, NV12 und P010
+mit linearem Modifier 0. FourCCs stammen aus dem lokal gesicherten Linux-
+DRM-Vertrag. R4GFX zeichnet bisher XRGB8888, ARGB8888 und R8; NV12/P010
+sind Speicherlayouts, keine implementierten YUV-Renderer. Unbekannte
+Formate/Modifier liefern unsupported, niemals einen geratenen CPU-Pfad.
+Die letzte gepaddete Zeile gehoert vollstaendig zum Puffer. Indexed8-
+SharedRaster behaelt seine Palette vor der R8-Pixelebene unveraendert.
+
+Getrennte Begriffe:
+- System-RAM: eigener residenter VM-Bereich, CPU-Map mit write-back.
+- DMA: gehaltene Systemseiten, paginierte 64-Bit-Busadress-Segmente;
+  Segmentzahl ist nicht auf das alte 64-Segment-Array beschraenkt.
+- GPU-VA: vom R4D gesetzte virtuelle Adresse und eigene Residency-Lease.
+  Dieser Kernelvertrag installiert keine GPU-Seitentabelle.
+- Device-local/VRAM: expliziter Speicherort samt Adapterbindung. Der
+  jetzige Allocator weist diese Anforderung als unsupported zurueck.
+- BAR/MMIO: eigener Fensterbesitzer mit physischer Ressourcenbasis,
+  Ressourcengroesse, Offset, Cachetyp und CPU-Adresse. Kein BO-RAM-Pointer.
+
+Eine CPU-Adresse wird nie als GPU- oder DMA-Adresse interpretiert. Der
+jetzige x86-DMA-Pfad verwendet koharente residente RAM-Seiten und explizite
+direkte Busadressen ohne IOMMU-Uebersetzung. Jede Seite wird gegen die
+angeforderte DMA-Maske geprueft; es gibt keinen stillen Bounce-Puffer.
+Eine GPU-Residency-Lease ist ein Lebensdauerversprechen, kein Nachweis,
+dass Hardware-PTEs, Submission oder GPU-Cacheoperationen erfolgt sind.
+
+Lebensdauer und Sichtbarkeit
+---------------------------
+Objekte, Referenzen und Nutzungen haben verschiedene Handles mit
+nicht umlaufender Generation. Der wiederverwendbare R4D-Registryplatz
+erhaelt zusaetzlich eine nicht umlaufende Treiberepoche. Alte oder geaenderte
+Completion-Deskriptoren koennen damit keine neue Nutzung abschliessen.
+
+Referenzen, mehrere CPU-Maps, Geraeteleser/-schreiber, Residency und Scanout
+halten das Backing unabhaengig. CPU-Schreibzugriff ist exklusiv gegen
+andere Leser/Schreiber. Residency allein ersetzt keine Ausfuehrungslease
+und blockiert kein CPU-Update; der Treiber muss GPU-Auftraege zusaetzlich
+als passende Geraetenutzung halten. CPU-Lesen eines WC-Backings wird
+abgewiesen. MFENCE ordnet CPU-WB-Zugriffe an Map-/Unmap-/Completiongrenzen;
+geraeteeigene Caches und GPU-TLBs bleiben Treiberverantwortung.
+
+Produzentenende schliesst neue Imports und entfernt dessen Referenzen und
+CPU-Maps. Andere Verbraucher und ausstehende Geraetenutzungen bleiben
+gueltig. R4D-Shutdown darf vorhandene Ressourcen schliessen, nimmt aber
+keine neuen mehr an. Ausstehende Treiber-Maps, Referenzen, DMA-/GPU-Leases
+oder MMIO-Fenster verhindern die endgueltige Entladung des Treibers.
+
+Geraeteabschluss und MMIO-Freigabe verlangen quiesced=1. Der aufrufende
+Treiber muss zuvor den echten Stillstand, bei GPU-Mappings auch die
+GPU-TLB-Invalidierung, beweisen. quiesced=0 liefert busy. Die EXAMPLE-Probe
+darf quiesced=1 setzen, weil sie niemals Hardwarearbeit uebermittelt.
+Eine vereinheitlichte Fence-/Submission-API folgt in den naechsten Schritten.
+
+Die letzte Referenz reicht nicht zur Freigabe, solange Maps/Jobs bestehen.
+Ein Destruktionsversuch beansprucht das Objekt exklusiv; ein eigener
+Versuchszaehler weist spaete Bestaetigungen frueherer Versuche zurueck.
+Budget und Slot bleiben bis zur erfolgreichen VM-/CPU-TLB-Freigabe belegt.
+Fehlgeschlagene Freigaben bleiben auffindbar und spaeter erneut ausfuehrbar.
+
+MMIO-Fenster verlangen eine vom Treiber ermittelte Ressourcenbegrenzung.
+RAM-/ACPI-/Kernelbereiche und widerspruechliche vorhandene Cache-Aliasse
+werden abgewiesen. Registerfenster sind UC; WC ist nur fuer explizit
+prefetchable Ressourcen erlaubt. Bestehende passende Firmwareabbildungen
+werden als borrowed ausgewiesen. Neue Abbildungen werden besitzgebunden
+angelegt; Teilfehler behalten nicht sicher geloeschte Seiten und Budget.
+Es findet keine automatische Cacheumstellung einer lebenden Abbildung statt.
+
+Gemeinsame Raster und Budgets
+----------------------------
+SharedRaster verwendet dieselben BO-Backings und denselben kurzen
+Metadaten-Lock. Write-Map, Publish, Frame-Pin und Leserlease behalten ihre
+bisherige Generation; Pixel bleiben an derselben Adresse. Export einer
+gueltigen Raster-Leserlease erzeugt eine immutable BO-Referenz ohne Kopie.
+Auch nach Ende der alten Rasterlease verhindert sie neue Schreibzugriffe.
+Weitere Imports behalten immutable. Der Produzent versucht alle drei
+geeigneten Backings, bevor er Rueckstau meldet. Frame-Abbruch und
+Produzenten-/Verbraucherende fuehren denselben Ressourcenabbau aus.
+
+Das neue interne VM-Fenster graphics (ID 8) beginnt bei
+0xFFFFFF7000000000 und umfasst 16 GB virtuellen Adressraum. Das reserviert
+keinen entsprechenden physischen RAM. Die alten Fenster-IDs bleiben gleich.
+Das zuvor verwendete temp-kernel-Fenster umfasst nur 16 MB und eignet sich
+nicht fuer grosse GPU-Upload-/Firmwarepuffer.
+
+Aktuelle Admission: 256 Objekte, 1024 Referenzen, 2048 Nutzungsleases,
+1024 MB global und 256 MB je Produzentenidentitaet; mindestens 16 MB
+physischer Systemspielraum vor einer neuen Allokation. Alignment wird
+in der RAM-Abrechnung beruecksichtigt. Reservierter oder zurueckgehaltener
+Speicher bleibt belastet. Das sind Grenzen und keine Allokationsgarantie.
+OOM/Budget/Capacity/Busy sind unterscheidbare Rueckgaben. Seiten werden in
+begrenzten 64-Seiten-Schritten committed; es gibt keine grosse Heap-Kopie.
+
+ABI und Verbraucher
+-------------------
+R4DRAW v10/472 Bytes haengt acht optionale Funktionen an: create, describe,
+import, release, map, unmap, export_raster und stats. Bisherige Slots,
+Payloads und Mindestprefixe bleiben erhalten. Zig- und C-Fassaden pruefen
+die tatsaechliche Tabellengroesse und den jeweiligen optionalen Slot.
+
+DriverApi v25/568 Bytes ergaenzt den unveraenderten v24-Prefix von 560 Bytes
+um gfx_memory_query. GfxDriverMemoryApi v1/112 Bytes liefert 13 Callback-
+Adressen: sechs BO-Aufrufe, Geraete-Acquire/Segment/Release, MMIO-Map/Unmap,
+Collect und Stats. SDK apiCompatible behaelt fuer bestehende Treiber den
+v24-Mindestvertrag; memory() handelt v25 gesondert aus. Die C-Fassade
+r4os/driver_memory.h nimmt die ausgehandelte Tabelle entgegen. Aufrufe
+muessen im besitzgebundenen R4D-Callbackkontext erfolgen.
+
+R4GFX 0.1.0 besitzt einen eigenen generierten Runtime-R4L-Vertrag mit
+linear_layout und fill_rect. Caller halten die exklusive CPU-Schreibmap
+waehrend fill_rect. Alle Grenzen werden vor dem ersten Schreibzugriff
+geprueft; Zeilenpadding wird nicht gelesen oder ueberschrieben.
+DISPLAYD /BUFFERS verwendet den geladenen R4GFX-Provider, legt einen BO an,
+zeichnet, importiert ohne Kopie und prueft zwei gleichzeitige Maps sowie
+die Freigabe nach Schliessen beider Referenzen. /DRIVER verlangt zusaetzlich
+den erfolgreichen EXAMPLE-Modus gfx-memory-test aus diesem Boot.
+
+Abnahmen und Grenzen
+-------------------
+Der vorhandene Kernel-display-test umfasst jetzt 34 Pruefungen. Neue
+Besitzerfaelle decken Descriptorueberlaeufe, Ebenen, Budget/OOM, doppelte
+Maps, Produzentenende, ausstehende Geraetenutzung, immutable-Importe,
+fehlgeschlagene Freigabe und veraltete Destruktionsbestaetigung ab. Der
+MMIO-Besitzermodelltest prueft Fenster-Offsets oberhalb 4 GB, Aliasregeln
+und Teilfehler bei Map/TLB-Rueckbau. Keine physische GPU wird dabei benutzt.
+
+R4GFX: gepruefte Softwareoperation und generierte C/Zig-Konformitaet.
+Contract: kanonische Generierung, 26 Mutationen, C-/Zig-Layouts.
+Bestehende GUI-Fassadenprobe: sieben Zig-Faelle und ausfuehrbares C mit
+-Wall -Wextra -Werror; optionale alte Tabellen und Werte oberhalb 4 GB.
+R4D-Prefix: identische Kernel-/SDK-Feldreihenfolge und 560/568-Byte-Nachweis.
+EXAMPLE: 80 MB reale Gastallokation, 20480 DMA-Segmente, separate GPU-VA,
+zwei CPU-Maps, zurueckgewiesene falsche Completion und ausgeglichener Abbau.
+Die 37 internen ProgramStorage-Faelle pruefen auch kopierfreien Rasterexport
+ueber Produzentenende und exakte BO-/graphics-VM-Balance.
+
+Beim Wiederverwenden der bestehenden Abnahme wurde ein alter Rollbackfehler
+sichtbar: Nach Allokation des Console-Headers durfte das noch nicht
+angelegte Transcript-Kind beim privaten Transaktionsrollback fehlen.
+Der Fehler wurde mit dem unveraenderten 0.79.4-Kernel reproduziert. Die
+Validierung lebender Instanzen bleibt streng. Der Heap-Balancevergleich
+prueft lebende Bytes/Bloecke und Fehler; legitim vorgehaltene Heapkapazitaet
+ist kein Payload-Leak. CLEANUPD erwartete ausserdem veraltet 33 statt 36
+interne Faelle. Segmentierte Ausgabe und nach Prozessende gehaltene
+Transcripts koennen mehr Console-Output-Payloads als aktive Konsolen
+belegen. Die Summenpruefung beruecksichtigt das; die exakte Differenz aus
+Allokationen und Freigaben sowie alle Ressourcenbaselines bleiben Pflicht.
+Die vollstaendige bestehende Abnahme braucht im privaten Testimage
+OPTION PROGRAMLIFECYCLE selftest=yes und den SVCSTALL-Testdienst. Fehlende
+Fixtures waren getrennte Testaufbaufehler, keine erfolgreiche Abnahme.
+Die aktualisierten Pruefungen und Erstbefunde werden mit dem
+abschliessenden Nachweisindex gesichert.
+
+Native NVIDIA-PTEs, VRAM-Allokation, DMA-Hardwareausfuehrung, Fence-IRQs,
+HDMI-Audio, Modesetting und sichtbare TV-Ausgabe sind damit nicht bewiesen.
+OssiPC wurde fuer 0.79.5 weder aktualisiert noch neu gestartet. Er ist laut
+User bis auf weitere Nachricht nicht erreichbar. Erforderliche echte
+Hardwareabnahmen bleiben offen, waehrend unabhaengige Roadmapschritte
+weiter bearbeitet werden. Windows-Starter nutzen dieselbe PS7-Logik;
+ausgefuehrt wurden Builds und Proben unter Debian.
+
+Referenzen: ExFiles/Reference/GFX/Linux/include/uapi/drm/drm_fourcc.h;
+die gesicherten Linux-/Libdrm-/Khronos-Unterlagen und deren Herkunft im
+GrafikReferenzen079.txt. Der abschliessende Index GrafikPuffer07905.json
+bindet die konkreten lokalen Quellen, Artefakte und Abnahmelogs per SHA256.
+
+Stack-Grenze und Speicherindex
+------------------------------
+Die erweiterte Rasterabnahme traf einen Stack-Seitenfehler waehrend einer
+physischen AVL-Mutation. Der Debugger bestaetigte gehaltenen Physical-Owner
+(Rang 30, Tiefe 1) und den spaeteren Selbstverweis. Das Stack-Wachstum hatte
+denselben Index rekursiv veraendert. 20.000 isolierte Claims/Freigaben des
+unveraenderten AVL-Algorithmus bestanden ihre Invariantenpruefung.
+
+Die erste No-Sleep-/Runtime-Owner-Aufnahme sichert nun 64 KB Stack-Vorlauf
+seitenweise ab; innerhalb eines gehaltenen Owners wird Fault-Aufloesung
+abgewiesen. Die 37. interne ProgramStorage-Probe erzwingt beide Aufnahmen an
+der echten wandernden Stack-Grenze, prueft ein 32-KB-Frame ohne Wachstum unter
+dem Owner und anschliessend den physischen Index (STACKOWNER-Marker).
+
+I/O-Fixture ohne geerbte Fortschrittsausgabe
+------------------------------------------
+Der erste vollstaendige Lauf nach der Stack-Korrektur meldete genau 16424
+zusaetzliche Console-Payloadbytes und einen zusaetzlichen Ausgabeblock.
+ASYNIOD hatte seinen Fortschritt in das geerbte Elternterminal geschrieben;
+dieses haelt den 16-KB-Block samt Header bestimmungsgemaess weiter.
+CLEANUPD verwendet fuer die gemessenen /KILLWAIT-Aufrufe deshalb /QUIET.
+ASYNIOD unterdrueckt dort nur erfolgreiche Fortschrittsmeldungen; Fehler,
+unerwartetes Aufwachen, Queue-/Completion-/Kill-Synchronisierung und alle
+exakten Ressourcen-, Speicher- und Allokationsvergleiche bleiben erhalten.
+
+Pageable Ergebnisstrukturen
+---------------------------
+BO-Describe, Import, Map, Stats, Rasterexport und DMA-Segmentabfrage nehmen
+ihren konsistenten Wert unter dem Metadaten-Owner auf und schreiben ihn erst
+nach dessen Freigabe in den Aufruferpuffer. Erzeugte Referenzen/Maps bleiben
+dabei an ihren Besitzer gebunden; ein UnwindToken schuetzt ihre Publikation.
+DISPLAYD /BUFFERS legt fuer Describe, Import, Map und Stats jeweils eine
+8-KB-Demand-Region an. Nur der 8-Byte-Header am Ende der ersten Seite ist
+zunaechst resident. Die API muss die zweite Seite ohne gehaltenen Owner
+nachladen; der Gast prueft resident_bytes=4096 -> 8192 und vollstaendigen
+Rueckbau fuer alle vier Aufrufe. Marker: DISPLAYD pageable-output.
+
+Gemischtes Churn-Messintervall
+----------------------------
+Nach 72 bestandenen I/O-Abbruechen zeigte die unveraenderte exakte Bilanz
+auch die weiter gehaltene Ausgabe der sechs CSTARTD-Console-Kinder im
+gemischten Churn. CSTARTD0.1.2 fuehrt mit /QUIET dieselben C-ABI-/Import-/
+VM-Pruefungen und den normalen Exit aus, ohne erfolgreiche Fortschritts-
+meldungen zu erzeugen. Fehler bleiben sichtbar. CLEANUPD druckt seine
+Baseline erst nach dem Messintervall. Die 18 Console-/GUI-/Service-Zyklen
+und alle Speicher-, Klassen-, Fehler- und Allocation-/Release-Vergleiche
+bleiben vollstaendig; Console-Ausgabetests laufen ausserhalb dieses Intervalls.

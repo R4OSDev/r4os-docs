@@ -55,7 +55,7 @@ v1/112-Prefix bleibt lesbar.
 <!-- R4OS-APIREF:BEGIN R4DRAW (generiert von ApiContractGen aus ApiContract.json - NICHT von Hand editieren) -->
 ## Tabellen-Referenz R4DRAW (generiert)
 
-Kernel-Gruppentabelle `R4XStartR4Draw` v9, 408 Bytes, 49 Funktionsfelder und 49 Slots insgesamt.
+Kernel-Gruppentabelle `R4XStartR4Draw` v10, 472 Bytes, 57 Funktionsfelder und 57 Slots insgesamt.
 Signatur-Wahrheit: `abi.R4DrawFns` (Feldname == Tabellenfeld).
 Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 
@@ -110,6 +110,14 @@ Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 | 46 | 384 | function | `gui_shared_raster_publish` | `*const fn (*const GuiSharedRasterWriteMap, *u64) callconv(.c) i32` |
 | 47 | 392 | function | `gui_shared_raster_acquire` | `*const fn (*const ProgramProcessHandle, u64, *const GuiSharedRasterHandle, u64, *GuiSharedRasterMap) callconv(.c) i32` |
 | 48 | 400 | function | `gui_shared_raster_release` | `*const fn (*const GuiSharedRasterLease) callconv(.c) i32` |
+| 49 | 408 | function | `gfx_buffer_create` | `*const fn (*const GfxBufferDescriptor, *GfxBufferReference) callconv(.c) i32` |
+| 50 | 416 | function | `gfx_buffer_describe` | `*const fn (*const GfxBufferHandle, *GfxBufferDescriptor) callconv(.c) i32` |
+| 51 | 424 | function | `gfx_buffer_import` | `*const fn (*const GfxBufferHandle, *GfxBufferReference) callconv(.c) i32` |
+| 52 | 432 | function | `gfx_buffer_release` | `*const fn (*const GfxBufferHandle) callconv(.c) i32` |
+| 53 | 440 | function | `gfx_buffer_map` | `*const fn (*const GfxBufferHandle, u32, u64, u64, *GfxBufferMap) callconv(.c) i32` |
+| 54 | 448 | function | `gfx_buffer_unmap` | `*const fn (*const GfxBufferHandle) callconv(.c) i32` |
+| 55 | 456 | function | `gfx_buffer_export_raster` | `*const fn (*const GuiSharedRasterLease, *GfxBufferReference) callconv(.c) i32` |
+| 56 | 464 | function | `gfx_buffer_stats` | `*const fn (*GfxBufferStats) callconv(.c) i32` |
 <!-- R4OS-APIREF:END R4DRAW -->
 
 

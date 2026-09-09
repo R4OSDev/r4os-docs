@@ -310,3 +310,37 @@ coverage, controlled writes during I/O, incomplete reads, dirty-epoch failure
 and a second waiting fault. These use the actual backing module and actual VM
 function bodies with controlled scheduler/mapping/I/O edges. They are neither
 hardware failure reproductions nor memory-pressure throughput measurements.
+
+Grafikpuffer seit 0.79.5
+-----------------------
+Gemeinsame Raster und R4DRAW-BOs verwenden denselben residenten Speicher-
+und Lease-Besitzer. CPU-Maps, Exporte, Jobs und Scanout koennen eine
+Produzenteninstanz ueberleben. Neue Imports enden mit dem Produzenten;
+Seiten und Budgets werden erst nach erfolgreichem Rueckbau freigegeben.
+Details, graphics-VM-Fenster und Abnahmen: Drivers/GrafikPuffer07905.txt.
+
+Resident owner stack budget (0.79.5)
+-----------------------------------
+R4X currently calls kernel APIs on its guarded, demand-grown program stack.
+Before the first no-sleep or scheduler-runtime owner is acquired, the kernel
+probes 64 KB below the current RSP, one page at a time. Any growth therefore
+finishes on the resident fault IST stack before metadata mutation begins.
+Nested owners perform no probes. Boot, resident Task and IST stacks are
+outside the program-stack window and never receive these probes. Reads
+preserve canaries; page-by-page traversal cannot skip a terminal guard.
+
+Fault resolution is rejected if a no-sleep/runtime owner was already held
+at exception entry. Reentrancy of an owner lock never authorizes recursive
+mutation from a fault. A critical operation must fit the resident call budget
+and prepare pageable caller data before taking its owner. The prefix probe
+is a bounded cost at outer admission, not an eager commit of every reserved
+program-stack page and not a second kernel-stack switch per public API call.
+
+The graphics-buffer acceptance exposed a real fault inside physical AVL
+removal. Growing that stack recursively mutated the same tree and the outer
+call wrote a self-link on return. The isolated tree algorithm passed 20,000
+bounded claims/releases; the fix changes owner admission, not AVL semantics.
+The existing ProgramStorage selftest additionally enters at the moving stack
+guard for both physical and runtime ownership, calls a 32-KB stack frame,
+requires growth before admission and no growth while held, and checks the
+real physical index. Its marker is STACKOWNER; no new recurring gate is added.

@@ -1,0 +1,141 @@
+﻿Grafikressourcen: Ausgangsstand und Luecken vor nativen GPU-Treibern
+================================================================
+
+Stand: Arbeit an 0.79.2; Quellpruefung des Kernels 0.1.132.
+Besitzer: Contract fuer ABI, Kernel fuer allgemeine Ressourcen und Lebenszeit,
+externe R4D fuer Hardware. Dies ist eine Bestandsaufnahme, keine Freigabe fuer
+GPU-Registerzugriffe. Zielbild: Docs/Desktop/GrafikZielbild079.txt.
+
+PCI und Hardwareinventar
+-----------------------
+
+platform/pci_scan.zig speichert maximal 64 PCI-Funktionen. Gespeichert werden
+Busart/BDF, Vendor-/Device-ID und Klasse/Subklasse/ProgIF. Das bereits gelesene
+Revision-Byte wird verworfen. Subsystem-IDs, BAR-Groessen, VBIOS und eine
+Hersteller-Chipkennung gehoeren nicht zum bestehenden Snapshot.
+
+platform/pci_inventory.zig ist der gemeinsame Inventarbesitzer. ECAM-Segment
+0 und ein begrenzter Legacy-Fallback sind vorhanden. Nicht unterstuetzte
+Segmente/ueberlaufende Inventare muessen sichtbar bleiben. R4DEV liefert das
+allgemeine DeviceInventoryRecord; Klassen sind busabhaengig: USB-Klasse 3 ist
+HID, PCI-Klasse 3 Display. DISPLAYD filtert zusaetzlich auf PCI-Adressgueltigkeit.
+
+DriverApi.pci_device_at materialisiert Command/Interruptdetails aus Config-
+Zugriffen; es ist kein rein gecachter R4DEV-Diagnoseaufruf. Fremde PCI-
+Konfiguration wird gemaess Agents/Konventionen.txt nur im Treiber-Init-Kontext
+gelesen, nicht aus DISPLAYD oder einem normalen Poll-/Recovery-Task.
+
+OssiPC 09:00.0 / 10DE:2504 wird im vorhandenen Snapshot erkannt. Die Bezeichnung
+GeForce RTX 3060 stammt aus NVIDIAs unter GFX/Nvidia archivierter ID-Tabelle.
+Sie ersetzt weder ein gelesenes Chipregister noch Subsystem-/Boardrevision.
+Fehlende Werte werden ausdruecklich als unavailable aufgezeichnet. Die passive
+Treiberprobe in 0.79.9 muss sie nachliefern. BAR-Sizing durch temporaere Writes
+in aktive BARs ist fuer diese Ausgangsmessung nicht zulaessig; VBIOS- und
+Capability-Zugriffe benoetigen den kuenftigen Besitzer und dokumentierte Grenzen.
+
+MMIO / BAR-Fenster
+-----------------
+
+kernel/driver_api.zig: DriverApi v24, MmioRegion mit u64-Adressen, jedoch
+u32 bytes/mapped_bytes. pci_map_bar akzeptiert u32-Laenge, maximal 16 MB,
+beginnt immer an der BAR-Basis und besitzt keinen Offsetparameter.
+64-Bit-BAR-Adressen sind lesbar; ihre tatsaechliche Groesse wird nicht geprueft.
+Die Rueckgabe beschreibt die angeforderte Mappinglaenge, nicht die BAR-Groesse.
+
+Mappings liegen im Direct Map. Fehlende Seiten werden einzeln UC/NX gemappt;
+vorhandene Aliase werden dabei nicht vollstaendig auf einheitliche Attribute
+abgeglichen. Teilfehler haben keinen transaktionalen Rollback. Angefordertes
+Write Combining ruft setWriteCombiningRange auf, ignoriert dessen Ergebnis
+aber bei der Erfolgsrueckgabe. Ein eigenstaendiger ownergebundener Unmapvertrag
+fuer MMIO fehlt in dieser API. MMIO-Flags sind daher kein WC-Nachweis.
+
+Folge fuer 0.79.4/.5/.9: explizite Ressourcenbereiche, 64-Bit-Groessen und
+Offsets, nachgewiesene BAR-Grenzen, Rollback, Unmap, Cache-/Aliasvertraege und
+Ownerbindung. Keine pauschale dauerhafte Abbildung des gesamten VRAM.
+
+DMA / Speicher
+--------------
+
+kernel/driver_api.zig und kernel/dma_segments.zig:
+- DmaBuffer, DmaPinnedBuffer, DmaMapping und DmaSegment verwenden u32-Laengen.
+  Diese Breite endet bei 4 GB minus 1 Byte; eine einfache Anhebung der
+  Laufzeitgrenze allein reicht fuer grosse VRAM-Ressourcen nicht aus.
+- Ein Mapping ist auf 16 MB begrenzt; maximal 128 Allokationen, 128 Pins und
+  128 Mappings sind gleichzeitig registrierbar. Es gibt keine per GPU
+  ausgehandelte Kapazitaet oder einen VRAM-Evictionbesitzer.
+- Segmentlisten haben maximal 64 Eintraege. Ohne physische Zusammenfassung
+  reichen 64 einzelne 4-KB-Seiten nur fuer 256 KB. Grosse kontinuierliche
+  Bereiche koennen zusammengefasst werden; das ist keine Fragmentierungsgarantie.
+- DMA-Masken, Ausrichtung, Boundary und maximale Segmentlaenge werden
+  validiert. Gerichtetes Sync und kontrollierter Bounce sind vorhanden.
+  Bounce-Kopien muessen bei GPU-Hotpaths zaehlbar und vermeidbar sein.
+- Das ist keine GPU-VA-, GPU-Seitentabellen- oder IOMMU-Abstraktion.
+  Coherent-Flags ersetzen keine Engine-spezifischen Cache-/Orderingregeln.
+
+XRGB32 bei 1920x1080 benoetigt 8.294.400 Bytes; bei 3840x2160 sind es
+33.177.600 Bytes. Schon ein einzelner 4K-Puffer uebersteigt die 16-MB-Grenze.
+Mehrere Scanout-, Render- und Uploadpuffer brauchen getrennte Lebenszeiten,
+Budgets und ggf. Seitenlisten. Festes physisches Zusammenhaengen darf keine
+Voraussetzung fuer alle GPU-Puffer werden.
+
+0.79.5 muss BO/Pin/Map/Handle/Rueckgabe als gemeinsame, begrenzte Ressourcen
+modellieren. Erst nach dem letzten GPU-Verbrauch duerfen Seiten frei werden.
+Abbruch oder Programmende koennen eine laufende DMA-Operation nicht durch
+blosses Freigeben des CPU-Puffers beenden.
+
+IRQ / Wait / Treiberarbeit
+-------------------------
+
+irq_router: 32 Router-IRQs, maximal vier Handler je IRQ. DriverApi verwaltet
+acht gemeinsame MSI-Slots (Router-IRQs 24 bis 31). pci_enable_msi kann nach
+Policy auch MSI-X verwenden, liefert aber eine Route statt einer frei
+ausgehandelten Vectorliste. Aktivierung, Readback und Rollback existieren.
+Das ist noch kein Multi-Engine-/Mehrvektor-/Affinityvertrag fuer eine GPU.
+
+driver_work_queue: 16 Slots; driver_work: 16 Owner, zwei normale Worker,
+ein Deadline-Worker. Die Deadline-Klasse besitzt vier Slots, davon zwei
+reserviert. Completion-Handles, Status, begrenztes Warten, Abbruch und Release
+sind vorhanden. Audio-Refills duerfen nicht von GPU-Firmwarearbeit oder
+wartenden GPU-Callbacks verdraengt werden. Langfristiges Warten auf eine
+GPU gehoert nicht in einen solchen Callback.
+
+DriverCompletion ist die Fertigmeldung eines CPU-Callbacks. Sie beweist
+keinen fertigen GPU-Commandbuffer. 0.79.6 braucht Engine-/Queue-Fences,
+Completion-IRQ, Fehler/Timeout/Reset und einen gemeinsamen Waitpfad.
+IRQ-Handler bleiben kurz; Aufwecken/Arbeitshandoff statt Rendering im IRQ.
+Keine GPU-Waits unter No-Sleep-Owner-Locks. Bestehende Lockreihenfolge und
+Lebenszeit-Unwindregeln bleiben verbindlich.
+
+Display / Present
+-----------------
+
+display/ownership.zig erlaubt genau eine nichtblockierend zugelassene
+Praesentation. Der Ausfuehrungsabschnitt ist praeemptierbar. Metadaten haben
+kurze Owner-Abschnitte; der externe Callback laeuft ausserhalb davon.
+Die Freigabe ordnet ausstehende WC-Stores mit SFENCE.
+
+R4DRAW Present ist synchron: maximal acht Regionen, XRGB32-Quelle mit
+u32-Dimensionen/Stride/Pixelzahl. Ein zurueckgegebener fertiger Fence bedeutet
+CPU-Kopierabschluss, nicht VBlank, Scanout-Start oder vollstaendige Anzeige.
+Das Flag accelerated_blit beschreibt heute DISPBLITs SIMD-CPU-Kopie und
+darf nicht als GPU-Beschleunigung ausgegeben werden.
+
+DisplaySummary hat globale Zaehler fuer Praesentationen, Pixel, Bytes und
+periodische Ticks. Parallele Produzenten koennen diese Zaehler aendern;
+DISPLAYD beurteilt einzelne Auftraege anhand ihres PresentResult und meldet
+globale Differenzen als systemweite Werte. Es gibt noch keine getrennten
+Zeitstempel fuer den Eintritt in den Kopierbackend und die sichtbare Ausgabe.
+Die Submit-Wandzeit umfasst Validierung, CPU-Kopie und Praeemption. Ein
+separater Uploadwert, GPU-Zeitstempel und sichtbares Present sind unavailable.
+
+Naechste Zuordnung
+------------------
+
+0.79.3: konkrete Treiber-/Firmware-/Portierungsentscheidung und Ownergrenzen.
+0.79.4: expliziter Displaybesitz, Uebergabe und dauerhafter bootfb-Fallback.
+0.79.5: grosse Buffer-/MMIO-/DMA-Ressourcen und sichere Lebenszeiten.
+0.79.6: asynchrone Queues, Fences und Completion-/Resetmodell.
+0.79.7/.9: Connector-/EDID-Vertrag und passive NVIDIA-Hardwareprobe.
+
+Grenzen werden an ihren Besitzern geloest; weder eine Diagnose-R4X noch der
+CPU-Blittreiber erhalten NVIDIA-Registerlogik als Zwischenloesung.

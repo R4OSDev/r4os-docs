@@ -3,12 +3,81 @@
 
 Stand: 11.09.2026. Software-Zwischenstand; 0.79.10 bleibt offen.
 RELEASE_VERSION bleibt 0.79.9; Kernel 0.1.147, NVIDIA 0.1.21, DISPLAYD 0.1.9.
-OssiPC: Release 0.79.8 und NVIDIA 0.1.21 nach normalem Neustart und exaktem
-Modul-Rueckdownload bestaetigt. GSP-/VRAM-Vorpruefung und TCM-Grenzen sind
-jetzt real gemessen. GPU-Ausfuehrung und native Anzeige bleiben offen.
-Die nachfolgenden aelteren Abschnitte sind historische Zwischenstaende.
+Der neueste Stand ergaenzt die CPU-Speicherplanung fuer GSP. NVIDIA.R4D und
+der auf OssiPC installierte Stand bleiben bytegleich; kein weiteres Update.
+Die Grundlage ist die bereits gesicherte 0.1.21-Hardwareaufnahme. Im neuen
+Schritt wurden keine aktuellen Hardwarewerte oder sichtbaren Bilder erhoben.
+Die folgenden aelteren Abschnitte behalten ihren historischen Umfang.
 
-GSP-/VRAM-Vorpruefung (NVIDIA 0.1.21)
+GSP-Speicherplanung und Radix3-Vorbereitung (Host)
+------------------------------------------------
+Der externe NVIDIA-Besitzer besitzt nun gsp_boot.zig, gsp_layout.zig und
+gsp_radix.zig. Der optionale Hostschritt inspect-gsp-layout verbindet den
+aufgenommenen GA106-Zustand mit der geprueften .fwimage-Sektion sowie dem
+Produktions-Bootabbild und seinem V5-RISC-V-Deskriptor. Alle Eingaben bleiben
+an den vorhandenen NVIDIA-570.144-Pin gebunden. Der Bericht wird erst nach
+Hash-, Struktur- und Bereichspruefung exklusiv in eine neue Datei geschrieben.
+Ein gesicherter Bericht oder eine Quelldatei wird nicht ueberschrieben.
+
+Das eigentliche GSP-Abbild hat 63541248 Bytes ab ELF-Offset 64; der komplette
+Container ist groesser und wird nicht als VRAM-Abbild verwendet. Das
+Bootabbild hat 24576 Bytes, der Deskriptor 84 Bytes. Dessen Monitor-Code liegt
+bei 6144/10496, Daten bei 2048/4096 und Manifest bei 0/2048 (Offset/Bytes).
+Der Host prueft Grenzen und Ueberlappungen, keine Signatur auf der GPU.
+
+Vorgeschlagenes Layout fuer die gespeicherte 12-GB-Aufnahme; Intervalle
+sind halb offen, also Basis bis exklusives Ende:
+- Non-WPR-Heap: 0x2f4000000, 1 MB.
+- WPR-Metadatenreservierung: 0x2f4100000, 1 MB; Datensatz selbst 256 Bytes.
+- GSP-Heap: 0x2f4200000, 128 MB.
+- Firmware: 0x2fc240000, 63541248 Bytes.
+- Bootabbild: 0x2ffeda000, 24576 Bytes.
+- FRTS: 0x2ffee0000, 1 MB; WPR-Ende 0x2fffe0000.
+- VGA: geplant 0x2fffe0000 bis 0x300000000, 128 KB.
+
+Gesamtreservierung samt Ausrichtungspuffern: 192 MB am oberen VRAM-Ende.
+Sie passt in die 256 MB, die dieser GA106-Pfad als bereits vorgesaeubert
+voraussetzt. Der Standardheap beruecksichtigt Libos3, GSP-RM, aufgerundete
+VRAM-Groesse und 2048 Clientkanaele; die vorgesaeuberte Region begrenzt ihn.
+Die aktuelle VGA-Basis 0x10e0000 wird als notwendige Verlagerung ausgewiesen.
+Weder alte noch neue Bereiche werden durch die Rechnung reserviert oder
+geschrieben. Aktives WPR2, unbekannte/beschaeftigte Engines, andere Chips und
+unpassende Groessen werden abgewiesen. Recovery-Margen, vGPU und Overrides
+benoetigen spaeter eigene Behandlung; dies ist nur der normale erste Start.
+
+Der Radix3-Encoder beschreibt physisch verteilte DMA-Segmente in ihrer
+logischen Reihenfolge. Bis zu 256 Segmente sind moeglich. Volle 49-Bit-
+Adressgrenzen, Seitenausrichtung, Gesamtgroesse, Segmentueberlappungen und
+Aliase mit Eingabe oder Segmenttabelle werden vor jeder Ausgabemutation
+geprueft. Drei Ebenen mit 4-KB-Seiten und 512 Eintraegen je Seite fuehren auf
+15513 Firmwareseiten. Zusaetzlich werden 33 Tabellenseiten/132 KB benoetigt,
+insgesamt 63676416 Bytes Hauptspeicher. Tabellen und Seitenrest werden
+genullt, das Abbild wird einmal kopiert. Der Runtime-Owner muss spaeter echte
+Mappings bereitstellen, synchronisieren und bis zum gesicherten Abschluss
+behalten. Der Hostbericht setzt keine erfundenen DMA-Adressen ein.
+
+Gezielte Abnahme: bestehender NVIDIA-unit-test 34/34 Faelle, davon drei neue
+zusammengefasste Faelle fuer Deskriptor, VRAM-Layout und Radix3; keine neue
+Gate- oder Gastvariante. Der echte Dateilauf bestand mit 3/3 Schritten und
+stimmt mit einer getrennten Layoutrechnung ueberein. Zwei gezielte
+Fehlerpfade bestaetigen Ablehnung eines geaenderten Deskriptors und einer
+Ausgabe, die auf die Eingabe zeigt, ohne bestehende Dateien zu veraendern.
+Kein Modul-, Gesamt-, RM-/Bootstrap-Neubau, Gast-/Langlauf oder Hardwareupdate.
+
+Das Modul bleibt 92386544 Bytes, SHA256:
+160866500af285811f7287332ecd280c825469bbd8c712d4d06cb67324e91e0e
+Referenzen und Belege: ExFiles/Reference/GFX/Nvidia/0.79.10/gsp-memory-layout-20260911
+167 gehashte Dateien, davon 127 Besitzerquellen; 13 komplette
+Originalquellen samt Lizenzen, Quellkatalog, zwei unveraenderte Bootartefakte
+und ihre Original-Exportmetadaten. Maschinenlesbar: gsp_memory_checkpoint.
+
+Offen bleiben die tatsaechliche Reservierung und Bindung der Bootressourcen,
+VGA-Verlagerung mit abgesichertem Bootdisplay, Metadatenuebergabe,
+FWSEC-FRTS/GSP-Start, RPC/IRQ und voller RM-/NVKMS-Link. Native Anzeige und
+HDMI-Audio sind nicht abgenommen. Der User ist voruebergehend nicht verfuegbar;
+Bild-/Tonbeobachtungen bleiben offen, unabhaengige Arbeit wird fortgesetzt.
+
+Historische GSP-/VRAM-Vorpruefung (NVIDIA 0.1.21)
 ------------------------------------
 Der externe Treiber liest maximal sechs gemessene BAR0-Seiten mit 13
 benannten Registern. RISC-V und VGA werden nur nach lesbarer, aktivierter

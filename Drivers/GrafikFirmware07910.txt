@@ -2,7 +2,7 @@
 ==================================================================
 
 Stand: 10.09.2026. Software-Zwischenstand, keine abgeschlossene Unterversion.
-RELEASE_VERSION bleibt 0.79.8. Kernel 0.1.138, NVIDIA 0.1.1; DISPLAYD 0.1.9
+RELEASE_VERSION bleibt 0.79.8. Kernel 0.1.139, NVIDIA 0.1.2; DISPLAYD 0.1.9
 unveraendert. OssiPC bleibt auf Useranweisung offline und wurde nicht
 kontaktiert. 0.79.9 und die Realhardware-Abnahmen von 0.79.10 bleiben offen.
 
@@ -73,7 +73,7 @@ kryptografische Authentifizierung und kein Beweis der Boardkompatibilitaet.
 
 Monotone Zeit und absolute Deadline werden vor/nach dem Reader geprueft;
 Clock-Ruecksprung, Ablauf, kurze Reads und I/O-Fehler sperren die Freigabe.
-Ein spaeterer R4D-I/O-Adapter muss selbst begrenzte Reads garantieren. Die
+Der R4D-Adapter verwendet jetzt echte begrenzte Ressourcenreads. Die
 Hostpruefung kann eine blockierende Betriebssystem-Dateioperation nicht
 gewaltsam unterbrechen und weist ihre Deadlinegrenze entsprechend aus.
 Keine GPU-DMA- oder IRQ-Nutzung entsteht durch diese Softwarepruefung.
@@ -89,15 +89,36 @@ R4L-Ressourcen, Ressourceneinspruenge, Exporte und beide Relocationenden
 werden abgelehnt. Dieselbe Regel gilt fuer Datei- und Preloadbytes.
 Die veroeffentlichte Laufzeitbasis der Dateisection ist null.
 
-Die fachliche NVIDIA-Paketpruefung bleibt im externen Treiberprojekt. Ein
-Kernel-Resource-Reader mit Bindung an Modulquelle, Generation und echten
-DriverApi-Owner ist noch zu implementieren. Die Korrektur behauptet diese
-Lebensdauer nicht aus einem Dateipfad und veraendert die vorhandenen
-R4SYS-Ressourcenlesefunktionen fuer Anwendungen nicht.
+Die fachliche NVIDIA-Paketpruefung bleibt im externen Treiberprojekt.
+Kernel 0.1.139 erfasst nun vor R4D-Publikation den begrenzten Ressourcen-
+katalog und bewahrt die originale FileSource mit Mount-/Dateiknoten-Snapshot.
+DriverApi29 bindet stat/read_at an Modul und echten Treiberstart. Alte und
+fremde Handles werden abgelehnt; Beginn von Shutdown schliesst Admissions.
+Reads halten den Lifecycle-Owner und den Dateisystem-Request bis zum sicheren
+I/O-Ende. Worker treten ohne Lock-Wartezyklus ein; IRQ-/Storagecallbacks sind
+ausgeschlossen. Es gibt weder frei waehlbare Pfade noch dauerhafte Leases.
+Dateiinhalt ist nicht als unveraenderlich garantiert; Hashpins bleiben Pflicht.
+Byte-/Preloadmodule besitzen keine gespeicherte Ressourcendatei und melden
+source-unavailable. Die vorhandenen R4SYS-Appfunktionen bleiben unveraendert.
+
+Die optionale Query steht nach dem unveraenderten 592-Byte-Praefix;
+DriverApi29 ist 600 Bytes gross. Neue Payloads und Werte sind zentral
+generiert, Zig-/C-Fassaden erhalten alte und kurze Tabellen. Genauer Vertrag:
+Repositories/Contract/ABI/R4DDriver.txt, Abschnitt Loaded R4D resources.
+now_ns ist eine reine monotone Uhr; Ressourcenoperationen sind ownergebunden.
+64-KB-Bereichsreads pruefen Deadline und Uhr vor/nach synchronem Storage.
+Kein erzwungener Hardwareabbruch: Cleanup darf die Deadline ueberschreiten.
+
+NVIDIA 0.1.2 liest seine 1241-Byte-Lockressource vor PCI ueber diesen echten
+Pfad. Falsche/fehlende/kurze/abgelaufene Daten verhindern Init ohne PCI-Zugriff.
+firmware_resources.Reader bindet den vorhandenen Load an exakten Ressourcen-
+namen, Umfang und dieselbe Modulgeneration. Im aktuellen Modul liegen weiter
+nur Lockdaten; die explizite GSP-Paketintegration und Endspeicherverwaltung
+sind noch offen. DriverApi28 erlaubt weiterhin nur die passive Basisprobe.
 
 Pruefung und offene Punkte
 -------------------------
-Elf NVIDIA-Besitzerfaelle im vorhandenen unit-test, darunter zwei neue
+Zwoelf NVIDIA-Besitzerfaelle im vorhandenen unit-test, darunter zwei neue
 Firmwarefaelle: alle 4672 Trunkierungen und 3072 Metadatenbitmutationen eines
 synthetischen ELF sowie inkrementelle Hash-/Read-/Deadline-/Clock-/Close-
 Fehler. Beide echte GSP-Container wurden mit 971 beziehungsweise 436 Reads
@@ -105,7 +126,7 @@ bis maximal 64 KB verifiziert. Falscher Hash, falsche Containerfamilie und
 fehlende Paketquellen erzeugen keinen neuen Erfolgsbericht oder Paketpfad.
 Ein zweiter Vorbereitungsdurchlauf bestaetigt dasselbe Paket unveraendert.
 
-Der gemeinsame Kernel-Testlauf umfasst 407 Hostfaelle. Die bestehende
+Der gemeinsame Kernel-Testlauf umfasst 409 Hostfaelle. Die bestehende
 Modulladerprobe erweitert sich um zwei Ressourcenfaelle; eine virtuelle
 64-MB-Ressource vergroessert das Image nicht. Eine alte API-Negativfixture
 erwartete irrtuemlich weiterhin verpflichtende Providerfelder. Sie prueft
@@ -116,11 +137,31 @@ im SMP4-Gast, echten Fehllade-Shutdown und nutzbaren bootfb ohne NVIDIA.
 Konkrete Resultate, Quell-/Artefakt-/Imagehashes und Rohbelege:
 GrafikFirmware07910.json und ExFiles/Reference/GFX/Nvidia/0.79.10.
 
-Offen bleiben der Besitzervertrag fuer echte R4D-Ressourcenreads, die
-Einbindung des originalen RM/NVKMS, FWSEC aus dem gemessenen Board-VBIOS,
+Offen bleiben die vollstaendige GSP-Paketintegration und ihr CPU-Endspeicher,
+die Einbindung des originalen RM/NVKMS, FWSEC aus dem gemessenen Board-VBIOS,
 GSP-Bootstrap/WPR, Mailboxes/RPC/Notifications, Generation und IRQ/DMA-
 Rueckbau, Hardware-Deadlines, Thermik sowie reale Displaywiederherstellung.
-Die naechste unabhaengige Softwarearbeit ist der R4D-Ressourcenleseweg.
+Die naechste unabhaengige Softwarearbeit ist die GSP-Ladung durch diesen Ressourcenweg.
 Hardware-Freigaben, HDMI-Audio, native Anzeige und Performance sind weiterhin
 gesondert auf OssiPC beziehungsweise ausdruecklich vereinbarter Hardware
 nachzuweisen. Ein Windows-Hostlauf wurde hier nicht ausgefuehrt.
+
+Ressourcen-Zwischenstand: zusaetzliche bestehende Testabdeckung
+------------------------------------------------------------
+Der Kernel-Ladertest prueft kanonische Kataloge ohne Payloadkopie, 4096
+Trunkierungen, ungueltige Namen/Reihenfolgen/Padding und I/O-Ausfall sowie
+fremde/veraltete/geschlossene Handles, Neustart und Generationsexhaustion.
+NVIDIAs zweiter Lifecycle-Fall benutzt die echte SDK-/Treiberimplementierung
+fuer Lock- und Ressourcenfehler. Resource-Fassade: sechs Zig-Faelle plus
+C-Ausfuehrung, Grafik-Fassade: acht Zig-Faelle plus C-Ausfuehrung. Die
+Contractpruefung bestaetigt 26 Negativmutationen, sechs Gruppen, 375 Slots
+und 200 Payloads. Keine neue Gatefamilie und kein Emulator-Langlauf.
+
+Der aktuelle nvidia-passive-SMP4-Lauf unter KVM benoetigte 20,21 Sekunden.
+Kernel aktiv/installiert 0.1.139; echter Lockread meldet Modulgeneration 1.
+R4D-Image weiterhin 24576 Bytes; die 1289-Byte-Ressourcensection bleibt auf
+dem Datentraeger. DISPLAYD, fehlender NVIDIA-Adapter, Fehllade-Shutdown und
+bootfb sind erfolgreich. Kein OssiPC-Kontakt, keine GPU-/HDMI-Abnahme.
+Aktuelle Belege: GrafikFirmware07910.json -> resource_checkpoint und
+ExFiles/Reference/GFX/Nvidia/0.79.10/resources. Die aelteren JSON-Felder und
+das Archiv 0.79.10 beschreiben weiterhin den ersten .138/.1.1-Zwischenstand.

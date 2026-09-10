@@ -2,14 +2,71 @@
 ==================================================================
 
 Stand: 11.09.2026. Software-Zwischenstand; 0.79.10 bleibt offen.
-RELEASE_VERSION bleibt 0.79.9; Kernel 0.1.147, NVIDIA 0.1.21, DISPLAYD 0.1.9.
-Der neueste Stand ergaenzt die CPU-Speicherplanung fuer GSP. NVIDIA.R4D und
-der auf OssiPC installierte Stand bleiben bytegleich; kein weiteres Update.
-Die Grundlage ist die bereits gesicherte 0.1.21-Hardwareaufnahme. Im neuen
-Schritt wurden keine aktuellen Hardwarewerte oder sichtbaren Bilder erhoben.
-Die folgenden aelteren Abschnitte behalten ihren historischen Umfang.
+RELEASE_VERSION bleibt 0.79.9; Kernel 0.1.147, NVIDIA 0.1.22, DISPLAYD 0.1.9.
+OssiPC bleibt auf Release 0.79.8 und wurde gezielt auf NVIDIA 0.1.22 gebracht.
+Der neueste Schritt prueft echten DMA-Besitz des GSP-Abbilds. Fruehere
+Checkpoints bleiben historisch; keine neue Bild- oder Tonabnahme.
 
-GSP-Speicherplanung und Radix3-Vorbereitung (Host)
+GSP-Abbild und Radix3-Tabellen im echten DMA-Besitz (NVIDIA 0.1.22)
+----------------------------------------------------------------
+gsp_dma.zig bindet das hashgepruefte GA10X-.fwimage im vorhandenen Modus
+firmware-check an getrennten, seitenausgerichteten residenten Hauptspeicher.
+63541248 Bytes Abbild plus 135168 Bytes Tabellen ergeben 63676416 Bytes.
+Vier Pin-/Mapping-Paare halten das 16-MB-Limit je DriverApi-Aufruf ein;
+64 Segmente pro Mapping, zusammen hoechstens 256, 49-Bit-Geraeteadressen.
+Der normale passive Modus allokiert diesen grossen Puffer nicht.
+
+Der Owner nullt das Backing vor dem Mapping, weil bereits die erste Abbildung
+in einen Bounce-Puffer synchronisieren kann. Erst nach Aufbau der Tabellen
+mit den wirklichen Geraeteadressen und Kopie des Abbilds synchronisiert er
+alle Mappings erneut. Die Radixwurzel wird erst danach veroeffentlicht, aber
+nicht an die GPU uebergeben. Teilergebnisse bleiben ihrem Besitzer zugeordnet.
+Cleanup schliesst zuerst alle Mappings, dann alle Pins, zuletzt den Heap.
+Fehlgeschlagene Freigaben behalten unveraenderte Deskriptoren fuer Shutdown.
+Der 30-Sekunden-Gesamtablauf prueft monotone Fristen um Task-Kontext-Aufrufe;
+er verspricht keinen Abbruch eines blockierten Kernelcallbacks. Nach einer
+spaeteren GPU-Einreichung muss echte Quieszenz vor jeder Freigabe stehen.
+
+Gezielte Abnahme: bestehender Besitzerlauf 35/35, Modulbuild 7/7 Schritte.
+Ein zusammengefasster neuer Fall prueft 14 Szenarien, einschliesslich zweiter
+Pin-/Map-Fehler, Deskriptoren, physischer Ueberlappung, Synchronisierung,
+Frist/Clock-Ruecklauf und wiederholter Freigabe. Kein neues Gate oder
+zusaetzlicher QEMU-/Langlauf und kein voller RM-/Bootstrap-Neubau.
+
+OssiPC: Radixwurzel 0x1118000, vier reale Mappings mit 10/9/9/7 Segmenten;
+zusammen 35 Segmente, ohne Bounce. Das letzte Mapping umfasst 13344768 Bytes.
+Nach Synchronisierung wurden alle Mappings, Pins und die CPU-Allokation
+geschlossen. Beide GSP-Container blieben hashgueltig und wurden freigegeben.
+Bootfb blieb 800x600, Generation 1, Reset 0, Owner 0; alle 14 automatischen
+Dienste laufen ohne Fehler. Die nachfolgenden passiven Boardprobes bestanden.
+
+OSSIGFX 0.1.11 installierte NVIDIA 0.1.22 plus zeitweiligen Diagnosemodus
+als Batch 11/Transaktion 11, Journalgeneration 124. OSSIGFX 0.1.12 stellte
+die originale 350-Byte-CONFIG.R4S bytegleich wieder her: Batch 12,
+Transaktion 12, Generation 135. Reine Konfigurationspakete werden trotz
+Paketmerkmal activation=live als Neustartbatch aktiviert; insgesamt zwei
+Neustarts. Der zweite Boot bestaetigt erneut denselben Bootfb-Zustand.
+CONFIG.R4S SHA256: f24d8b25daf61e2435f93039dca41d5796f300a0389b67419e53a4e8de1acd3a
+
+Der komplette Paket-Roundtrip, SYSUPD VERIFY/RESUME-BATCH, installierter
+Modulkatalog und neue eindeutige Laufzeitmarker belegen die Installation.
+Es gab keinen zusaetzlichen Komplettdownload des installierten NVIDIA.R4D;
+ein unabhaengiger Hash genau dieser installierten Datei wird nicht behauptet.
+NVIDIA.R4D: 92411792 Bytes, 176 KB allokierte Sections,
+2454 Relokationen; fuenf unveraenderte, nicht allokierte Ressourcen.
+Artefakt SHA256: 237808f7211ac450d8a40990d13360c9b3b6868f11332d096a808c8c746737f2
+Referenzen und Belege: ExFiles/Reference/GFX/Nvidia/0.79.10/gsp-dma-20260911
+244 gehashte Dateien, davon 129 Besitzerquellen. Originale NVIDIA-
+Quellen/Lizenzen und sechs R4OS-Vertrags-/Updatequellen sind vollstaendig
+gesichert. Maschinenlesbarer aktueller Abschnitt: gsp_dma_checkpoint.
+
+Bootloader-/Signaturpuffer, WPR-Metadaten und echte VRAM-Reservierung,
+VGA-Verlagerung/Recovery, FWSEC-FRTS/GSP-Start, RPC/IRQ sowie der volle
+RM-/NVKMS-Link bleiben offen. Native Anzeige und HDMI-Audio sind nicht
+abgenommen. Der Hisense ist laut User ausgeschaltet, aber am Strom; der
+User ist voruebergehend nicht verfuegbar. Unabhaengige Arbeit geht weiter.
+
+Historische GSP-Speicherplanung und Radix3-Vorbereitung (Host)
 ------------------------------------------------
 Der externe NVIDIA-Besitzer besitzt nun gsp_boot.zig, gsp_layout.zig und
 gsp_radix.zig. Der optionale Hostschritt inspect-gsp-layout verbindet den

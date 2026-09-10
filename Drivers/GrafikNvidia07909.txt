@@ -1,0 +1,92 @@
+﻿R4OS 0.79.9: passiver NVIDIA-Besitzer, Hardwareabschluss offen
+============================================================
+
+Stand: 10.09.2026. 0.79.1 bis 0.79.8 sind abgeschlossen. 0.79.9 wird wegen
+fehlender OssiPC-Hardwarebefunde nicht abgeschlossen; RELEASE_VERSION bleibt
+0.79.8, Kernel 0.1.137 unveraendert. Neuer externer Treiber NVIDIA 0.1.0,
+DISPLAYD 0.1.9 mit /NVIDIA. Kein Kontakt/Update/Probe zu OssiPC seit der
+Offline-Anweisung. Repository: https://github.com/R4OSDev/r4os-driver-nvidia
+
+Umgesetzt
+---------
+Eigenes oeffentliches R4D-Projekt mit Manifest, Lizenz, Inventar, PS7-Build
+und IMAGE_SCOPE=none. Einmaliger kanonischer PCI-Bestand statt eigener
+PCI-Probes: Subsystem-/Revisionsdaten, 64-Bit-BAR-Adressen, genau zugeordnete
+HDA-Geschwister und begrenzte PM/MSI/MSI-X/PCIe-/ReBAR-Listen. ReBAR meldet
+nur seine tatsaechlich lesbare aktuelle Groesse; andere Groessen bleiben
+unbekannt. Keine PCI-Schreibzugriffe, Busmaster-Aenderung, IRQ-Registrierung,
+DMA, Reset, Firmwareinitialisierung oder Displayuebernahme.
+
+Der einzige PCI-Bootstrap-Kandidat 10de:2504 liest bei aktivem Memory-Decode
+und passendem Energiezustand BOOT0/BOOT1/BOOT0 aus einer eigenen UC-Seite.
+Die 4-KB-PMC-Leseapertur ist keine erfundene Gesamtgroesse von BAR0. Erst
+gemessenes Chip-ID 0x176 ohne virtuelle/erweiterte Identitaet waehlt GA106
+im Profil ga106-identity-only; dieses Profil erlaubt keinerlei native
+Writes. Alle anderen Karten werden ohne MMIO nur inventarisiert. Gemeinsame
+Klassennamen schalten keine weiteren Registergruppen frei.
+
+Die echten Init-/Shutdown-Funktionen halten Mappingzustand auch nach Fehlern.
+Ein fehlgeschlagenes Map kann ohne Handle private Teilmaps behalten; deshalb
+ist ownergebundenes Collect vor einer Freigabebehauptung verpflichtend.
+Unmap/Collect-Fehler behalten das Modul und verhindern erneutes Init. Derselbe
+Shutdownpfad kann nach behobenem Fehler abschliessen. Es gibt keinen eigenen
+Worker/Timer und keine dauerhaft gehaltene GPU-Ressource im Erfolgsfall.
+
+VBIOS-Parser und Diagnose
+------------------------
+Originaler allokationsfreier Parser fuer maximal 1 MB, 16 ROM-Images,
+64 BIT-Eintraege und 32 DCB-Routen. Laengen, Versions-/Signaturfelder,
+Initialisierungs-/BIT-Pruefsummen, Tabellenueberlappungen, Skip/EOL und
+Querverweise werden geprueft. DCB 4.0/4.1, CCB 4.1 und Connector 3.0/4.0
+liefern rohe Anschlussfakten und getrennte I2C-/AUX-Indizes; 0x1F ist
+unbenutzt. Unbekannte Versionen und Legacy-/BIT-b-Sonderformen werden
+ausdruecklich abgelehnt. Nie eine teilweise gueltige Topologie veroeffentlichen.
+
+Der Besitzerstep inspect-vbios liest eine ausdruecklich uebergebene Hostdatei
+und schreibt nur bei Erfolg einen JSON-Befund mit SHA-256, Pruefsummenumfang,
+Routen und hardware_verified=false. Kein BIOS wird ausgefuehrt; eine
+Pruefsumme ist keine Signaturpruefung und beweist keine laufende Boardbindung.
+DISPLAYD /NVIDIA gibt vollstaendige Bootdatensaetze des Treibers aus, ohne
+selbst PCI oder MMIO zu lesen. Fehlende Daten bleiben als fehlend sichtbar.
+
+Belege
+------
+Neun gezielte Besitzerfaelle bestanden: acht PCI-/Parserfaelle, darunter
+8192 Einzelbitmutationen und 1023 nichtleere Trunkierungen des synthetischen
+1024-Byte-ROMs; zusaetzlich ein Test der echten R4D-Ein-/Ausstiege mit echter
+SDK-Fassade und simulierter DriverApi. Verbotene API-Aufrufe fuehren zum
+Testfehler. Oeffentliche und private Mappingfehler werden gezielt injiziert.
+Host-Inspektor: zwei erwartete Routen und korrekter Hash; falsche ROM-Signatur
+mit Fehlercode und ohne JSON abgelehnt. Modulbuilds und Distribution-Check
+bestanden. Kein zusaetzliches Dauer-Gate; gleicher unit-test-Step.
+
+Der bestehende Grafikrunner wurde um graphics-test Test nvidia-passive
+erweitert. Ein frischer SMP4/KVM-Gast ohne Netzwerk bestand in
+20.22 Sekunden: NVIDIA fehlt, echter Fehllade-Shutdown raeumt auf,
+Bootdatensaetze sind lesbar und normale DISPLAYD-Praesentation auf bootfb
+funktioniert bis zum regulaeren Poweroff. Keine emulierte NVIDIA-Hardware.
+Artefakt-/Quell-/Imagehashes: GrafikNvidia07909.json. Rohbelege:
+ExFiles/Reference/GFX/Nvidia/0.79.9. Windows-Hostlauf nicht ausgefuehrt.
+
+Was weiterhin fehlt
+--------------------
+Auf OssiPC fehlen die echte Chip-/Board-/Subsystem-/Revisionsaufnahme,
+gemessene BAR-Bereiche und IRQ-Capabilities, sein VBIOS und native
+Displaygeneration. PROM-Shadowing und PRAMIN-Fensterwahl sind schreibende
+Operationen; sie werden nicht als passiver ROM-Leseweg ausgegeben. Der
+quellengebundene, wiederherstellbare reale VBIOS-Transport ist noch offen.
+Die beiden 0.79.9-Abnahmen bleiben offen. Parser- und Abwesenheitsproben
+ersetzen weder eine echte Boardzuordnung noch eine Ablehnung manipulierten
+ROMs im spaeteren Hardware-Ladepfad.
+
+Naechster Freigabepunkt ist die Hardwareaufnahme aus 0.79.9. 0.79.10 benoetigt
+diese fuer die passende RM/NVKMS/GSP-570.144-Firmware und einen kontrollierten
+Bringup. Alle spaeteren Unterversionen haengen laut aktuellem Plan transitiv
+davon ab; auch R4NV-/Mesa-/Vulkan-/GL-Integration hat konkrete vorangehende
+Backend-/Darstellungsabhaengigkeiten. Die allgemeinen Quellen, OS-Portierungs-
+entscheidungen und sieben Kompilierproben sind bereits in 0.79.3 gesichert.
+Keine Folgeversion wird anhand eines angenommenen RTX-Namens freigegeben.
+
+Referenz- und Registerdetails stehen im NVIDIA-Owner in PROVENANCE.txt und
+DOCUMENTATION.de.txt sowie in GrafikArchitektur07903.txt/.json. Die native
+HDR-/VRR-/3D-/HDMI-Audio-Unterstuetzung entsteht erst in ihren Folgeschritten.

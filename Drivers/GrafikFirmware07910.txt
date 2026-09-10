@@ -2,7 +2,7 @@
 ==================================================================
 
 Stand: 10.09.2026. Software-Zwischenstand, keine abgeschlossene Unterversion.
-RELEASE_VERSION bleibt 0.79.8. Kernel 0.1.139, NVIDIA 0.1.2; DISPLAYD 0.1.9
+RELEASE_VERSION bleibt 0.79.8. Kernel 0.1.140, NVIDIA 0.1.3; DISPLAYD 0.1.9
 unveraendert. OssiPC bleibt auf Useranweisung offline und wurde nicht
 kontaktiert. 0.79.9 und die Realhardware-Abnahmen von 0.79.10 bleiben offen.
 
@@ -21,7 +21,8 @@ Upstream-Commit, offizielle Installerquelle, Installerhash, beide GSP-Dateien
 mit Groesse und SHA-256, vollstaendige Lizenz sowie die acht originalen
 Containerfamilien. Der Zig-Code liest die feste JSON beim Kompilieren; PS7
 liest dieselbe Datei bei der Paketvorbereitung. Kein zweiter Hashkatalog.
-NVIDIA.R4D traegt die Sperrdatei als NVFW-LOCK.json in seiner .rsrc-Section.
+NVIDIA.R4D traegt die Sperrdatei als NVFW-LOCK.json, beide Originalcontainer
+und die vollstaendige Lizenz in seiner nicht allokierten .rsrc-Section.
 
 Die bereits in 0.79.3 archivierten Originale bleiben unveraendert:
 gsp_ga10x.bin mit 63571696 Bytes, gsp_tu10x.bin mit 28542040 Bytes und LICENSE
@@ -34,8 +35,10 @@ diese acht GPU-Familien bereits unterstuetzt.
 Paketbildung
 ------------
 Der Besitzerstep prepare-firmware verwendet auf Windows und Linux denselben
-PS7-Ablauf. SourceDirectory, OutputDirectory und ScratchDirectory werden
-ausdruecklich angegeben; Scratch liegt unter Temp und fuer atomare
+PS7-Ablauf. SourceDirectory und ScratchDirectory werden ausdruecklich
+angegeben. Ausgabe ist standardmaessig das ignorierte Firmware/ im NVIDIA-
+Besitzer; ein optionales OutputDirectory erzeugt ein separates Paket, ohne
+die Modulmanifestpfade zu veraendern. Scratch liegt unter Temp und fuer atomare
 Publikation auf demselben Dateisystem wie Output. Der Treiber und diese
 Hostaktion laden nichts herunter und fuehren keinen Installer aus.
 
@@ -48,9 +51,17 @@ Erst das vollstaendige Verzeichnis wird publiziert. Bei erneutem Aufruf
 muessen Dateien, Sperrdatei und Befunde bytegenau mit dem vorhandenen Paket
 uebereinstimmen. Abweichungen werden nicht still repariert.
 
-Der vorbereitete Ordner ist noch kein installiertes R4D-Firmwarepaket. Die
-beiden proprietaeren Binaerdateien sind weder im oeffentlichen Quellrepo noch
-im aktuellen NVIDIA.R4D enthalten. Seine .rsrc enthaelt nur die Paketbindung.
+module.R4MF ist die einzige Build-/Ressourcenwahrheit. Der normale Build
+verlangt die vorbereiteten Originale und prueft Laenge/Hash vor Paketierung
+und Installation. Fehlende oder beschaedigte Daten liefern einen Fehler und
+lassen ein zuvor installiertes NVIDIA.R4D bytegleich. SDK-Pfade werden erst
+im ausgewaehlten Paketstep geoeffnet; Vorbereitung und Hosttests bleiben
+dadurch auch ohne die proprietaeren Quelldateien ausfuehrbar.
+Die Binaerdateien sind weiterhin nicht im oeffentlichen Quellrepository.
+Das erzeugte NVIDIA.R4D enthaelt sie und die komplette Originallizenz.
+Distribution fuehrt denselben bytegleichen Lizenztext zusaetzlich unter
+/R4OS/LICENSES/NVIDIA-570.144-LICENSE.txt und neben Images in Legal mit.
+IMAGE_SCOPE=none bleibt erhalten; normale Images aktivieren NVIDIA nicht.
 
 Begrenzter Lade- und Pruefpfad
 -----------------------------
@@ -109,16 +120,43 @@ now_ns ist eine reine monotone Uhr; Ressourcenoperationen sind ownergebunden.
 64-KB-Bereichsreads pruefen Deadline und Uhr vor/nach synchronem Storage.
 Kein erzwungener Hardwareabbruch: Cleanup darf die Deadline ueberschreiten.
 
-NVIDIA 0.1.2 liest seine 1241-Byte-Lockressource vor PCI ueber diesen echten
+NVIDIA liest seine 1241-Byte-Lockressource vor PCI ueber diesen echten
 Pfad. Falsche/fehlende/kurze/abgelaufene Daten verhindern Init ohne PCI-Zugriff.
 firmware_resources.Reader bindet den vorhandenen Load an exakten Ressourcen-
-namen, Umfang und dieselbe Modulgeneration. Im aktuellen Modul liegen weiter
-nur Lockdaten; die explizite GSP-Paketintegration und Endspeicherverwaltung
-sind noch offen. DriverApi28 erlaubt weiterhin nur die passive Basisprobe.
+namen, Umfang und dieselbe Modulgeneration. NVIDIA 0.1.3 besitzt alle vier
+Ressourcen und firmware_storage.Storage verwaltet den CPU-Endspeicher.
+DriverApi28 erlaubt weiterhin nur die passive Basisprobe.
+
+Laufzeitspeicher und Abschluss
+-----------------------------
+OPTION NVIDIA mode=firmware-check laedt beide Container nacheinander vor
+dem passiven PCI-Pfad. Der Standard bleibt passive und liest keine GSP-
+Nutzdaten. Ein normales GfxBuffer-Systemobjekt mit Write-Back-CPU-Map stellt
+den Endpuffer; maximal 64 KB je Read und 30 Sekunden absolutes Budget je
+Container einschliesslich Lockread und Allokation. Nur vollstaendige Hash-/
+ELF-/Versionspruefung erzeugt eine geliehene ready-Sicht. Der positive
+SMP4-Gast liest die Originale aus dem geladenen Modul mit 971/436 Reads.
+GPU-Signaturannahme bleibt ausdruecklich unverified.
+
+Close entwertet alle Sichten vor Unmap, Release und Collect. Die gecachte
+Speichertabelle bleibt im echten Shutdownkontext verwendbar, obwohl neue
+Query-/Allokationsadmission geschlossen ist. Fehlgeschlagener Rueckbau
+behaelt Handles oder die ausstehende Collection; erfolgreicher mehrfacher
+Abschluss bleibt idempotent. Jeweils nur ein Containerpuffer lebt; beide
+werden geschlossen, bevor die normale passive PCI-Probe beginnt.
+
+Kernel 0.1.140 korrigiert den gemeinsamen CPU-BO-Abschluss. Releasing- oder
+Destroying-Objekte bleiben am exakten Produzenten samt Treiberstartepoche
+sichtbar, selbst wenn kein oeffentlicher Referenzhandle mehr existiert.
+Collect liefert bei ausstehendem VM-/TLB-Abschluss BUSY; die Loaderpruefung
+verhindert Wiederverwendung der Owner-ID. Auch private Allokationsreste
+werden so behalten. CPU-Seiten werden erst nach realem TLB-Abschluss frei.
+Dieser Laufzeitpfad verlangt Kernel 0.1.140 oder neuer. Kein Firmwarepuffer
+wird durch diesen Check als GPU-DMA gemappt und kein GPU-Register geschrieben.
 
 Pruefung und offene Punkte
 -------------------------
-Zwoelf NVIDIA-Besitzerfaelle im vorhandenen unit-test, darunter zwei neue
+Dreizehn NVIDIA-Besitzerfaelle im vorhandenen unit-test, darunter zwei
 Firmwarefaelle: alle 4672 Trunkierungen und 3072 Metadatenbitmutationen eines
 synthetischen ELF sowie inkrementelle Hash-/Read-/Deadline-/Clock-/Close-
 Fehler. Beide echte GSP-Container wurden mit 971 beziehungsweise 436 Reads
@@ -126,28 +164,35 @@ bis maximal 64 KB verifiziert. Falscher Hash, falsche Containerfamilie und
 fehlende Paketquellen erzeugen keinen neuen Erfolgsbericht oder Paketpfad.
 Ein zweiter Vorbereitungsdurchlauf bestaetigt dasselbe Paket unveraendert.
 
-Der gemeinsame Kernel-Testlauf umfasst 409 Hostfaelle. Die bestehende
+Der gemeinsame Kernel-Testlauf umfasst 410 Hostfaelle. Die bestehende
 Modulladerprobe erweitert sich um zwei Ressourcenfaelle; eine virtuelle
 64-MB-Ressource vergroessert das Image nicht. Eine alte API-Negativfixture
 erwartete irrtuemlich weiterhin verpflichtende Providerfelder. Sie prueft
 jetzt unbekannte Felder; fehlende optionale Callbacks sind vertragsgemaess.
 Neue Dauer-Gates oder Emulator-Langlaeufe wurden nicht angelegt.
-Der kurze vorhandene nvidia-passive-Lauf prueft den geaenderten R4D-Container
-im SMP4-Gast, echten Fehllade-Shutdown und nutzbaren bootfb ohne NVIDIA.
+Der vorhandene Grafiklauf prueft nvidia-firmware mit beiden Originalen und
+nvidia-firmware-missing/-corrupt mit privaten fehlerhaften Modulkopien im
+SMP4-Gast. Alle verlangen echten Fehllade-Shutdown und nutzbaren bootfb ohne
+NVIDIA. Fehlender Ressourcenname und falscher Hash sperren weitere PCI-Arbeit.
+Ein ausgewaehlter Storage-Hostfall prueft Create/Map/Unmap/Release/Collect,
+I/O/Kurzreads/Deadline, keine Teilfreigabe und die gecachte Shutdowntabelle.
+Der Kernel-Besitzerfall prueft private CPU-Reste ohne Referenz, fremde Epoche,
+beibehaltenes Budget und echten Abschluss nach aufgehobenem Backendfehler.
 Konkrete Resultate, Quell-/Artefakt-/Imagehashes und Rohbelege:
 GrafikFirmware07910.json und ExFiles/Reference/GFX/Nvidia/0.79.10.
 
-Offen bleiben die vollstaendige GSP-Paketintegration und ihr CPU-Endspeicher,
-die Einbindung des originalen RM/NVKMS, FWSEC aus dem gemessenen Board-VBIOS,
+Offen bleiben die Einbindung des originalen RM/NVKMS, FWSEC aus dem gemessenen Board-VBIOS,
 GSP-Bootstrap/WPR, Mailboxes/RPC/Notifications, Generation und IRQ/DMA-
 Rueckbau, Hardware-Deadlines, Thermik sowie reale Displaywiederherstellung.
-Die naechste unabhaengige Softwarearbeit ist die GSP-Ladung durch diesen Ressourcenweg.
+Die naechste unabhaengige Softwarearbeit ist der R4OS-Adapter fuer den
+ausgewaehlten originalen RM-/NVKMS-Pfad. Der Paketladepunkt von 0.79.10 ist
+softwareseitig nachgewiesen; die Unterversion bleibt wegen des Bringups offen.
 Hardware-Freigaben, HDMI-Audio, native Anzeige und Performance sind weiterhin
 gesondert auf OssiPC beziehungsweise ausdruecklich vereinbarter Hardware
 nachzuweisen. Ein Windows-Hostlauf wurde hier nicht ausgefuehrt.
 
-Ressourcen-Zwischenstand: zusaetzliche bestehende Testabdeckung
-------------------------------------------------------------
+Vorheriger Ressourcen-Zwischenstand: bestehende Testabdeckung
+----------------------------------------------------------
 Der Kernel-Ladertest prueft kanonische Kataloge ohne Payloadkopie, 4096
 Trunkierungen, ungueltige Namen/Reihenfolgen/Padding und I/O-Ausfall sowie
 fremde/veraltete/geschlossene Handles, Neustart und Generationsexhaustion.
@@ -157,11 +202,23 @@ C-Ausfuehrung, Grafik-Fassade: acht Zig-Faelle plus C-Ausfuehrung. Die
 Contractpruefung bestaetigt 26 Negativmutationen, sechs Gruppen, 375 Slots
 und 200 Payloads. Keine neue Gatefamilie und kein Emulator-Langlauf.
 
-Der aktuelle nvidia-passive-SMP4-Lauf unter KVM benoetigte 20,21 Sekunden.
+Der vorherige nvidia-passive-SMP4-Lauf unter KVM benoetigte 20,21 Sekunden.
 Kernel aktiv/installiert 0.1.139; echter Lockread meldet Modulgeneration 1.
 R4D-Image weiterhin 24576 Bytes; die 1289-Byte-Ressourcensection bleibt auf
 dem Datentraeger. DISPLAYD, fehlender NVIDIA-Adapter, Fehllade-Shutdown und
 bootfb sind erfolgreich. Kein OssiPC-Kontakt, keine GPU-/HDMI-Abnahme.
-Aktuelle Belege: GrafikFirmware07910.json -> resource_checkpoint und
+Belege dieses vorherigen Stands: GrafikFirmware07910.json -> resource_checkpoint und
 ExFiles/Reference/GFX/Nvidia/0.79.10/resources. Die aelteren JSON-Felder und
 das Archiv 0.79.10 beschreiben weiterhin den ersten .138/.1.1-Zwischenstand.
+
+Aktueller Laufzeit-Zwischenstand
+------------------------------
+GrafikFirmware07910.json -> runtime_checkpoint und das getrennte Archiv
+ExFiles/Reference/GFX/Nvidia/0.79.10/runtime enthalten die aktuellen Quell-,
+Artefakt- und Imagehashes, Rohlogs, Paketfehler und die drei SMP4-Ergebnisse.
+Das geladene NVIDIA-Image ist 45056 Bytes (44 KB) gross; die vier Ressourcen
+bleiben ausserhalb dieser Allokation. Der positive Imagepfad enthaelt die
+vollstaendige bytegleiche Lizenz auch als gemeinsame Beigabe. Die beiden
+Negativgaeste verwenden denselben Kernel und Treibercode, vor Ergaenzung
+dieser zusaetzlichen Image-Beigabe; ihre Modulressource enthielt die Lizenz.
+Keine neue Gatefamilie, keine Realhardware und kein Emulator-Langlauf.

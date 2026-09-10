@@ -2,7 +2,7 @@
 ==================================================================
 
 Stand: 10.09.2026. Software-Zwischenstand, keine abgeschlossene Unterversion.
-RELEASE_VERSION bleibt 0.79.8. Kernel 0.1.143, NVIDIA 0.1.6; DISPLAYD 0.1.9
+RELEASE_VERSION bleibt 0.79.8. Kernel 0.1.144, NVIDIA 0.1.7; DISPLAYD 0.1.9
 unveraendert. OssiPC bleibt auf Useranweisung offline und wurde nicht
 kontaktiert. 0.79.9 und die Realhardware-Abnahmen von 0.79.10 bleiben offen.
 
@@ -669,3 +669,64 @@ Symbole bleiben Bestandteil des vorherigen Quellbau-Nachweises. Noch fehlen
 RM-Warte-/Synchronisations-/Threadadapter, kombinierter Link, GSP/RPC-Boot
 und Hardwareabnahme. RELEASE bleibt 0.79.8; 0.79.10 bleibt offen. OssiPC
 wurde nicht kontaktiert, und keine GPU-Ausfuehrung wird aus CPU-Tests abgeleitet.
+
+Residente R4D-Semaphore und fruehere SMP-Deadlines (10.09.2026)
+--------------------------------------------------------------
+Kernel 0.1.144 / DriverApi33 fuegt semaphore_query bei Offset 624 hinzu;
+Gesamtgroesse 632 Bytes. Drei Payloads mit 40/80/64 Bytes und 15 Konstanten
+kommen hinzu; alle alten Felder bleiben unveraendert. Typisierte Zig-/C-
+Fassaden pruefen optionale Felder und erhalten die volle Zaehler-/Handle- und
+Timeoutbreite. RELEASE bleibt 0.79.8, NVIDIA ist 0.1.7.
+
+Der generische Kernelbesitzer verwendet echte residente Heaprecords mit
+Treap-Index und exakter Treiberstartepoche. Wait-Leases und Task-Unwindschutz
+halten das Objekt bis zur Rueckkehr jedes wartenden Aufrufs. Allokation,
+Freigabe und Warten liegen ausserhalb kurzer Runtime-Metadatenabschnitte.
+Fehlgeschlagene Freigabe behaelt dieselbe Identitaet; erfolgreiche Freigabe
+liest kein freigegebenes Record. Es gibt keinen festen Semaphorepool.
+
+Der vorhandene Scheduler-Semaphorepfad uebergibt genau ein Permit an den
+naechsten Waiter. Null-Timeout prueft sofort, endliche Ticks verwenden eine
+Deadline, UINT64_MAX wartet auf ein echtes Permit. Neue Anlage schliesst
+beim Owner-Close; vorhandene Operationen bleiben fuer Shutdown nutzbar.
+Stop oder Close gelten niemals als erfolgreicher Erwerb. Ein Zaehler besitzt
+keinen Task-Mutexhalter; der Treiber muss alle Benutzer vor Destroy beenden.
+Generisches Cleanup folgt IRQ-/Work-/Task-Quieszenz und geht DMA/CPU-Heap voraus.
+Try und Einzel-Release sind resident und IRQ-faehig; echte Geraete-IRQ-Abnahme
+steht aus. Der private C-Anbieter und originale RM-/NVKMS-Adapter fehlen noch.
+
+Die Konkurrenzprobe deckte einen bestehenden SMP-Fehler auf: APs konnten eine
+fruehere Deadline anmelden, waehrend der BSP bereits auf eine spaetere
+One-Shot-Deadline wartete. Ein diagnostischer Gast erreichte nur 22 geschuetzte
+Aenderungen bis zum unveraenderten Fuenf-Sekunden-Join-Timeout (-8). Der
+kontrollierte Rueckbau und bootfb blieben dabei erhalten. blockCurrent sendet
+nun bei einer frueheren endlichen AP-Deadline den vorhandenen Reschedule-IPI
+an den BSP. Dessen bestehender STI/HLT-Pfad prueft das aktuelle Minimum neu;
+APs programmieren weder HPET noch den Timer des BSP. Kein Polling-Ersatz.
+
+Mit dieser Korrektur besteht dieselbe Probe: drei FIFO-Waiter, vier Tasks mit
+256 geschuetzten Aenderungen, Timeout, Ueberlauf, alte Handles und Busy-Destroy.
+Ein gestoppter Task bleibt beim echten Owner-Close bis zur Shutdown-Freigabe
+an seiner Semaphore wartend. Danach entfernt generisches Cleanup zwei
+Semaphore, die bisherigen drei Taskrecords und zwei CPU-Puffer (4185 Bytes).
+Die bestehenden Heap-/Uhr-/Threadproben bleiben erfolgreich. Der Runtimegast
+besteht in 20,72 s, der passive Fallback in 20,32 s; jeweils SMP4/KVM, 1 GB RAM,
+frische 2-GB-Images ohne Gastnetz oder NVIDIA-Geraet. Das sind Ablaufzeiten,
+keine Grafik-/Treiberbenchmarks. Auch der vorhandene kurze SMP4-/Clocklauf
+besteht mit dem neu gebauten Kernel. Dabei wurde eine vorhandene Luecke in
+der Testkonfiguration behoben: Der Pflichtmarker NVMEIRQ verlangte ein
+Geraet, obwohl der Starter nur SATA konfigurierte. Headless-Testlaeufe
+erhalten jetzt eine virtuelle NVMe mit frischer 16-MB-Testnamespace; der
+interaktive SATA-Standard bleibt bestehen. MSI/MSI-X-IRQ und asynchroner
+Blockabschluss werden damit wieder tatsaechlich ausgefuehrt.
+
+419 Kerneltests, 15 NVIDIA-Faelle, zehn Zig-Fassadenfaelle mit C-Ausfuehrung
+und 13 Contract-Bauschritte bestehen. Der Windows-C-Checker ist lediglich
+crosskompiliert. Der Besitzerindex deckt unter anderem 4096 echte Records,
+Close-Rennen und behaltene Freigabefehler ab. Die vier Originalressourcen im
+R4D wurden erneut vollstaendig gehasht; bisherige C-Adapter, private Heap-/
+Uhr-Anbieter und der Originalquellbau bleiben unveraendert. Ein neuer RM-Link
+oder GSP-/HDMI-Erfolg wird daraus nicht abgeleitet. Belege einschliesslich
+negativer Deadline-Probe: semaphores_checkpoint und
+ExFiles/Reference/GFX/Nvidia/0.79.10/semaphores. OssiPC wurde nicht kontaktiert;
+0.79.10 und alle betreffenden Hardwareabnahmen bleiben offen.

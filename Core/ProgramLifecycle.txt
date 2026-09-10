@@ -324,3 +324,32 @@ shutdown closes starts and must quiesce callbacks before generic resources
 are destroyed. Failed creation/free and outstanding waits remain represented;
 closed driver/module ownership cannot retire early. Details and byte layouts
 are in Contract/ABI/R4DDriver.txt and Drivers/GrafikFirmware07910.txt.
+
+R4D semaphore waits (0.79.10)
+----------------------------
+DriverApi33 exposes real resident counting semaphores through the existing
+scheduler WaitQueue/FIFO handoff. Each blocking acquire retains its exact
+record and a Task unwind token until return. Owner close refuses creation,
+but existing operations remain usable; neither owner close nor dedicated
+thread stop cancels semaphore waits or manufactures a permit. An outer finite
+join can fail without claiming the callback has stopped. Drivers complete
+shutdown by their real protocol, otherwise the closed module stays retained.
+
+Try and one-permit release are resident IRQ-capable operations; allocation,
+free and nonzero waits require an admitted sleep-capable task. Generic cleanup
+runs after actual IRQ/work/task quiescence and before DMA/CPU heap release.
+A counter has no Task holder ownership, so the driver must stop all users
+before explicit destruction; the kernel also rejects retained acquire leases.
+The byte and error contracts are in Contract/ABI/R4DDriver.txt.
+
+Earlier AP deadlines and BSP idle (0.79.10)
+------------------------------------------
+The timed-wait projection is global and its hardware deadline source belongs
+to the BSP. blockCurrent compares the old minimum with the new finite wait
+under the runtime owner. If an AP publishes an earlier deadline, it sends
+the existing reschedule IPI to CPU0. The BSP's existing atomic idle check and
+STI/HLT sequence consume that notification and recheck the current minimum.
+This also covers an idle source that was disarmed with no prior deadline.
+APs never program the BSP-owned HPET/LAPIC timer. No extra timeout scanner or
+periodic polling is introduced. The same explicit SMP4 semaphore contention
+probe exercises this path while its init caller waits in a finite join.

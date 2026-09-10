@@ -360,3 +360,32 @@ stack. The graphics worker hit its 64-KB guard with nested 17-KB job-table
 copies. Queue and BO pool scans now iterate by address under their metadata
 owner; they keep only individual entry snapshots. No worker stack increase
 or fault-resolution exception is used. Details: Drivers/GrafikQueues07906.txt.
+
+Resident R4D CPU allocations (0.79.10)
+-------------------------------------
+DriverApi30 heap_query exposes the existing kernel heap to authenticated R4D
+init/shutdown and Driver Work contexts. It provides resident WB CPU virtual
+addresses, at least 16-byte alignment and exact u64 payload lengths. It is not
+a program VM allocator, DMA allocator or GPU virtual address space. A driver
+must retain CPU backing through any separately admitted hardware borrow.
+
+kernel/driver_heap.zig owns the runtime bridge; driver_memory_owner.zig owns
+its metadata. Each heap allocation contains one intrusive treap record and
+its aligned payload. There is no separate fixed allocation pool. Lookup has
+expected logarithmic cost, independent of the fixed number of driver slots.
+Only metadata and unwind enrollment run under the narrow scheduler runtime
+owner. Heap operations and payload access occur after releasing that owner.
+
+Every record binds to an exact non-reused driver-start epoch; allocation IDs
+never wrap. Allocation publication racing close is retained privately. A free
+detaches a record but keeps all accounting until the actual heap result; failure
+reinserts the exact identity for retry. Successful free never dereferences its
+old record again. Unwind enrollment covers the gaps between these phases.
+
+DriverShutdown closes new allocation admission. Remaining CPU records are
+reclaimed only after callbacks, IRQ, work and DMA cleanup have succeeded. A
+pending operation or rejected heap free retains the closed owner and module.
+Successful logical frees can leave kernel-owned heap VM tail capacity retained
+internally; that capacity no longer belongs to the R4D. Existing loader tests
+cover lifecycle races, failed release, handle exhaustion and 4096 real records;
+the explicit NVIDIA runtime-check exercises the actual service in SMP4.

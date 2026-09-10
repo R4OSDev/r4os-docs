@@ -2,7 +2,7 @@
 ==================================================================
 
 Stand: 10.09.2026. Software-Zwischenstand, keine abgeschlossene Unterversion.
-RELEASE_VERSION bleibt 0.79.8. Kernel 0.1.140, NVIDIA 0.1.3; DISPLAYD 0.1.9
+RELEASE_VERSION bleibt 0.79.8. Kernel 0.1.141, NVIDIA 0.1.4; DISPLAYD 0.1.9
 unveraendert. OssiPC bleibt auf Useranweisung offline und wurde nicht
 kontaktiert. 0.79.9 und die Realhardware-Abnahmen von 0.79.10 bleiben offen.
 
@@ -380,11 +380,11 @@ Null Bytes werden auf ein Byte normalisiert. NVKMS zero fuellt ausschliesslich
 die angeforderte Nutzlast. Der Anbieter besitzt die echte Allokationsgroesse;
 Release rekonstruiert keine Speicherklasse aus dem NVKMS-Groessenargument.
 
-Die zwei privaten Imports r4nv_heap_allocate/free bleiben im Ziel offen.
-Der zugehoerige R4OS-Anbieter ist noch nicht implementiert. Er muss residente,
-16-Byte-ausgerichtete CPU-Puffer an den echten Treiberstart binden, Allokation
-bei Close verhindern und fehlgeschlagenen Rueckbau bis zur Bestaetigung halten.
-Ein erfolgreicher Host-Testallocator erfuellt diesen R4OS-Vertrag nicht.
+In den getrennten RM-/NVKMS-Teilobjekten bleiben die zwei privaten Imports
+r4nv_heap_allocate/free offen. Im hier dokumentierten Quellbau gab es noch
+keinen R4OS-Anbieter. Der nachfolgende Laufzeitcheckpoint implementiert ihn
+in NVIDIA.R4D; der finale kombinierte Link bleibt ausstehend. Der Host-
+Testallocator des Quellbaus ist weiterhin ausschliesslich ein Hostnachweis.
 
 Die aktuelle Kernelanbindung erlaubt GfxDriverMemoryApi-Operationen nur
 innerhalb des globalen R4D-Lade-/Entladeguards. Hintergrund-Worker besitzen
@@ -395,8 +395,8 @@ darf ein allgemeiner RM-Allocator nicht durch eine spin-wartende Schleife oder
 einen vorgetaeuschten Owner umgehen. Der R4X-SDK-VM-Allocator gehoert wiederum
 einer Programminstanz und bietet keinen Ersatz fuer residenten Treiberbesitz.
 
-Die weitere Runtime-Anbindung braucht daher einen unabhaengig synchronisierten
-Besitz fuer Allokationen und eine eindeutige Treiber- und Taskgeneration.
+Die Runtime-Anbindung verwendet deshalb den unten beschriebenen unabhaengig
+synchronisierten CPU-Besitz mit eindeutiger Treiber- und Taskgeneration.
 Speicher-Metadaten duerfen keine Waits/I/O ueberspannen. Schlafende RM-/NVKMS-
 Sperren, IRQ-Metadaten und zeitversetzte Callbacks brauchen getrennte Semantik;
 insbesondere bleibt ein RM-Mutex kein IRQ-Owner. Das GSP-Container-Storage
@@ -430,7 +430,97 @@ NVIDIA-unit-test besteht weiterhin; er behaelt seine 13 Faelle.
 Belege: GrafikFirmware07910.json -> os_memory_checkpoint sowie
 ExFiles/Reference/GFX/Nvidia/0.79.10/os-memory. Tests.json erfasst den neuen
 gezielten Component-Test nur beim expliziten Quellbau. Kein weiterer
-Workspace-/Gasttest und kein neues Modul. NVIDIA.R4D bleibt bytegleich,
-Versionen bleiben Release 0.79.8, Kernel 0.1.140, NVIDIA 0.1.3. GSP-Start,
-OS-Runtime, finale globale Symbolzuordnung und R4M0-Link, HDMI und echte
-Hardwareabnahmen bleiben offen; OssiPC wurde nicht kontaktiert.
+Workspace-/Gasttest und kein neues Modul. In diesem Quellbaucheckpoint blieb
+NVIDIA.R4D bytegleich: Release 0.79.8, Kernel 0.1.140, NVIDIA 0.1.3. Diese
+Versions-/Objektstaende sind historische Quellbaubelege. Der nachfolgende
+CPU-Laufzeitcheckpoint aendert Kernel und Treiber; GSP-Start, weitere OS-
+Adapter, finale globale Symbolzuordnung und R4M0-Link, HDMI und echte
+Hardwareabnahmen bleiben offen. OssiPC wurde nicht kontaktiert.
+
+Residenter Treiberheap mit echtem Worker- und Abschlussweg
+---------------------------------------------------------
+Kernel 0.1.141 / DriverApi30 erweitert den unveraenderten 600-Byte-Praefix um
+heap_query auf 608 Bytes. DriverHeapApi v1/32 liefert allocate/release/stats;
+DriverHeapAllocation hat 40 und DriverHeapStats 104 Bytes. Alle Payloads und
+zehn Ergebniswerte werden aus dem zentralen Contract erzeugt. Der kontrollierte
+Baselinevergleich laesst jeden bisherigen Typ, Wert und sonstigen Schemawert
+unveraendert, ausser der ausdruecklichen API-Versionsanhebung 29 auf 30.
+SDK-Mindestversion bleibt 24; heap() handelt den optionalen Anhang aus.
+
+Der Loader bindet den CPU-Besitz vor Init an den bereits vorhandenen echten
+Treiberstartepoch. Kernel/kernel/driver_heap.zig verwendet den residenten
+Kernelheap, waehrend driver_memory_owner.zig nur Metadaten verwaltet. Ein
+intrusiver Treap-Eintrag liegt zusammen mit jeder Nutzlast in deren Allokation.
+Es gibt keinen separaten festen Allokationspool. Die erwartete Suchzeit ist
+logarithmisch; das ist keine harte Worst-Case-Latenz- oder Hardwaremessung.
+Alle Groessen-/Paddingadditionen werden vor Allokation auf Ueberlauf geprueft.
+Die echte Heapkapazitaet begrenzt den Bestand.
+
+Nur Metadaten und Task-Unwind-Aufnahme laufen unter dem kurzen Runtime-Owner.
+Heap-Allokation, echte Freigabe und Nutzdatenzugriffe erfolgen ausserhalb.
+IRQ und Storage-Callbacks werden abgewiesen; Init/Shutdown und authentisierte
+Driver-Worker duerfen zugreifen. Ein Worker braucht keinen globalen R4D-
+Ladeguard, waehrend Init oder Shutdown auf seine Completion warten kann.
+Der vorherige Ressourcen-I/O- und GfxDriverMemoryApi-Vertrag wird nicht
+umgangen oder durch vorgetaeuschte Programmeigentuemerschaft erweitert.
+
+Eine beim Allozieren beginnende Close-Phase behaelt die fertige Allokation
+privat, statt einen Pointer zu veroeffentlichen. Freigabe loest den Indexeintrag
+und behaelt Bestands-/Bytezaehler bis zur echten Heapantwort. Fehler setzen
+dasselbe Handle wieder ein; Erfolg liest niemals mehr aus dem freigegebenen
+Eintrag. Ein Task-Unwind-Token deckt diese geteilten Schritte ab. Ausstehende
+Operationen verhindern das Zuruecksetzen des Startepochs. Handles laufen nie
+ueber; alte oder fremde IDs finden keinen neuen Besitzer.
+
+Nach erfolgreichem DriverShutdown, Backendfinalizern und IRQ-/Work-/DMA-
+Rueckbau gibt der Kernel noch vorhandene CPU-Allokationen frei. Ein endlicher
+Durchlauf stoppt beim ersten Freigabefehler; ausstehende oder fehlgeschlagene
+Rueckgaben halten den geschlossenen Treiber und das Modul fest. Vom Kernelheap
+intern behaltene VM-Endkapazitaet nach erfolgreicher logischer Freigabe ist
+Kernelbesitz. Sie ist keine weiterlebende Treiberallokation.
+
+NVIDIA 0.1.4 implementiert r4nv_heap_allocate/free in rm_heap.zig. Ein eigener
+16-Byte-Praefix speichert Handle und Korruptionsmarker. Nutzdaten bleiben
+16-Byte-ausgerichtet; u64-Laenge und Praefix werden geprueft addiert. Ein
+fehlgeschlagenes void-free behaelt den Puffer im echten Kernelbesitz fuer
+Retry oder spaetere Ownerbereinigung. Der Marker ersetzt keine Validierung
+beliebiger oder bereits freigegebener C-Pointer. Diese CPU-Adressen sind
+weder DMA- noch GPU-Adressen; physische Benutzer brauchen eigene nachgewiesene
+Lebensdauer und Synchronisation.
+
+Pruefungen: 413 Kernel-Faelle, darunter drei neue Besitzerfaelle im bestehenden
+loader_tests-Step und 4096 echte dynamische Eintraege. 14 NVIDIA-Faelle,
+darunter der tatsaechliche C-Anbieter mit Hostspeicher, fehlgeschlagenem Free,
+Close, alter API und >32-Bit-Laenge. Sieben bestehende/erweiterte Zig-
+Ressourcenfassadenfaelle und das zugehoerige C-Programm bestehen; Contract-
+Generierung, Kompatibilitaetsreview und Zig/C-Konformanz sind erfolgreich.
+
+Der explizite Modus runtime-check prueft je 64 Allokationen aus Init und einem
+echten Driver-Worker, Ausrichtung, Inhalte und veraenderte Freigabereihenfolge.
+Ein weiterer Worker erlebt die echte Shutdown-Admission, prueft abgewiesene
+neue Allokation und gibt seinen bestehenden Puffer frei. Init endet bewusst
+mit -8 vor PCI. Zwei verbliebene Allokationen umfassen 4185 CPU-Bytes:
+4096 direkt sowie 73 C-Nutzbytes und 16 Byte Praefix. Der echte generische
+Owner-Rueckbau muss beide freigeben. Ein fehlgeschlagener CPU-Pruefpunkt
+verhindert nach erwiesener Callback-Ruhe keinen sicheren generischen Rueckbau;
+eine ungeklärte physische Nutzung bleibt dagegen ein Entladeveto.
+
+Der SMP4/KVM-Lauf besteht in 20,31 Sekunden mit Kernel 0.1.141, frischem
+2-GB-Testmedium, 1 GB RAM und ohne Gastnetz/NVIDIA-Geraet. Die generische
+Kernelmeldung bestaetigt cpu-heap=2, cpu-bytes=4185, result=complete, gefolgt
+von nutzbarem bootfb und regulaerem Poweroff. Der erste Versuch bestand die
+CPU-/Shutdown-Probe, scheiterte aber am fehlenden Hostmarker: Die Bootlog-
+Freigabezeile hatte keinen Treibernamen und fiel aus DISPLAYD /NVIDIA heraus.
+Sie wird nun mit dem Registry-Namen als eine vollstaendige begrenzte Zeile
+geschrieben; die Freigabeanforderung im Hosttest wurde nicht abgeschwaecht.
+Die normale passive Variante besteht mit demselben Kernel und NVIDIA.R4D
+in 20,22 Sekunden, einschliesslich fehlender GPU, erfolgreichem Shutdown und
+weiter nutzbarem bootfb. Beide Laufzeiten enthalten den kompletten Gastboot;
+sie sind keine Allokations- oder Grafikleistungsmessungen.
+
+Belege: GrafikFirmware07910.json -> driver_heap_checkpoint und das getrennte
+Archiv ExFiles/Reference/GFX/Nvidia/0.79.10/driver-heap. Der vorhandene
+SMP4-Grafiklauf hat die explizite Variante nvidia-runtime; normale Profile und
+die all-Auswahl bleiben unveraendert. Kein neues Modul, keine GPU-Initialisierung,
+kein kombinierter RM-Link, kein OssiPC-Kontakt. 0.79.10 bleibt offen; der
+Release bleibt 0.79.8, solange keine weitere Unterversion abgeschlossen ist.

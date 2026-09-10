@@ -1,14 +1,70 @@
 ﻿R4OS 0.79.10: Firmwarevorbereitung und dateigebundene Modulressourcen
 ==================================================================
 
-Stand: 10.09.2026. Software-Zwischenstand; 0.79.10 bleibt offen.
-RELEASE_VERSION bleibt 0.79.9; Kernel 0.1.147, NVIDIA 0.1.20, DISPLAYD 0.1.9.
-OssiPC: Release 0.79.8, Kernel 0.1.147 und NVIDIA 0.1.20 nach Neustart und
-exaktem Modul-Rueckdownload bestaetigt. FWSEC besitzt jetzt eine reale
-DMA-Zuordnung und einen geprueften Ladeplan. GPU-Ausfuehrung bleibt offen.
+Stand: 11.09.2026. Software-Zwischenstand; 0.79.10 bleibt offen.
+RELEASE_VERSION bleibt 0.79.9; Kernel 0.1.147, NVIDIA 0.1.21, DISPLAYD 0.1.9.
+OssiPC: Release 0.79.8 und NVIDIA 0.1.21 nach normalem Neustart und exaktem
+Modul-Rueckdownload bestaetigt. GSP-/VRAM-Vorpruefung und TCM-Grenzen sind
+jetzt real gemessen. GPU-Ausfuehrung und native Anzeige bleiben offen.
 Die nachfolgenden aelteren Abschnitte sind historische Zwischenstaende.
 
-FWSEC-DMA-Vorbereitung (NVIDIA 0.1.20)
+GSP-/VRAM-Vorpruefung (NVIDIA 0.1.21)
+------------------------------------
+Der externe Treiber liest maximal sechs gemessene BAR0-Seiten mit 13
+benannten Registern. RISC-V und VGA werden nur nach lesbarer, aktivierter
+Faehigkeit abgefragt. Zwei identische Durchgaenge muessen innerhalb einer
+monotonen Sekunde enden. Fehlende, wechselnde oder geschuetzte Werte
+(FFFFFFFF/BADFxxxx) erlauben keine weitere Initialisierung. MMIO-Fenster
+schliessen vor DMA-Mapping, Pin und CPU-Puffer; fehlgeschlagener Cleanup
+behaelt den Besitzer fuer einen spaeteren Shutdown-Versuch.
+
+Aktuelle Hardwareaufnahme:
+
+- IMEM 64 KB, DMEM 64 KB. Das unveraenderte FWSEC-Abbild mit
+  57856 Code- und 2048 Datenbytes passt vollstaendig in beide Zielbereiche.
+- Reset=false, RESET_READY-Hinweis=false, Scrubbing=false.
+  Falcon halted=true, DMA idle=true, DMA full=false.
+- RISC-V enabled=true, selected=false, active=false,
+  halted=true, BCR valid=true. GSP-Besitz bleibt ungeklärt.
+- Nutzbarer VRAM: 12288 MB aus dem Devinit-Register, nicht BAR1.
+  WPR2 up=false, LO=0x1ffffe0000, HI=0x0 (Adressfelder).
+- Display enabled=true, VGA valid=true, aktuelle Basis
+  0x10e0000; Relocation benoetigt=true. Der aktuelle
+  VGA-Bereich bleibt erhalten. Kein FRTS-/WPR-Bereich wird daraus allokiert.
+
+NVIDIA 570.144 waehlt fuer GA106 den No-op-MMU-Lock-HAL; GA100-Lockregister
+werden deshalb nicht gelesen. RESET_READY ist wegen eines dokumentierten
+Hardwarefehlers nur ein Hinweis. Bei inaktivem WPR2 ist LO keine aktive
+Reservierung. WPR-HI wird nicht als exklusives Bereichsende ausgegeben.
+Registeraufnahme und passende TCM-Grenzen beweisen weder Reset, Quieszenz,
+Firmwareauthentifizierung noch Wiederherstellbarkeit.
+
+Gezielte Abnahme: bestehender NVIDIA-unit-test 31/31 Faelle, Modulbau 7/7.
+Ein neuer Fall im bestehenden FWSEC-Test prueft Schutzwerte und reale
+Kapazitaetsgrenzen; der vorhandene Lebenszyklusfall umfasst jetzt 38 Szenarien.
+Eine anfangs falsche Zuordnung der gemeinsam genutzten Fuse-Seite im Hostfixture
+wurde korrigiert; der folgende Lauf bestand. Kein neues Gate, Gesamt-/Langlauf,
+erneuter RM-/Bootstrapbau oder zusaetzlicher Gastlauf.
+
+OssiPC: Bootfb 800x600, Generation 1/Reset 0/Owner 0, 14 automatische
+Dienste ohne Fehler; CONFIG.R4S bytegleich. Hisense laut User ausgeschaltet
+und stromversorgt. Keine neue EDID-/HPD-/ELD-, Bild- oder Tonabnahme.
+OSSIGFX 0.1.10: Batch/Transaktion 10, Journalgeneration 112.
+Paket 92387590 Bytes, SHA256 7722236792750fca1a443ff48754ca166793ecea0dbb91e3c183ea257a5141bf.
+NVIDIA.R4D 92386544 Bytes, 156 KB allokiert,
+2348 Relocations; fuenf unveraenderte nicht allokierte Ressourcen.
+Modul-SHA256: 160866500af285811f7287332ecd280c825469bbd8c712d4d06cb67324e91e0e
+Referenzarchiv: ExFiles/Reference/GFX/Nvidia/0.79.10/gsp-preflight-20260911
+31 komplette Originalreferenzen mit Lizenzen; 218 gehashte Dateien,
+davon 122 Besitzerquellen. Maschinenlesbar: gsp_preflight_checkpoint.
+
+Offen bleiben kontrollierter Falcon-Reset, abgesicherter Bootdisplay-Erhalt,
+FRTS-/WPR-Besitz, FWSEC-FRTS und GSP-Boot/RPC/IRQ. SB ist das originale
+Unload-Kommando, kein Ersatz fuer die GSP-Startkette. Voller RM-/NVKMS-Link,
+native Anzeige und HDMI-Audio sind ebenfalls offen. Keine Unterversion oder
+Hardwareabnahme wird durch diese Vorpruefung abgeschlossen.
+
+Historische FWSEC-DMA-Vorbereitung (NVIDIA 0.1.20)
 --------------------------------------
 Das unveraenderte 59904-Byte-SB-Image wird mit 256-Byte-Ausrichtung im
 residenten Treiberheap angelegt. Die vorhandene R4D-DMA-API pinnt diesen

@@ -2,7 +2,7 @@
 ==================================================================
 
 Stand: 10.09.2026. Software-Zwischenstand, keine abgeschlossene Unterversion.
-RELEASE_VERSION bleibt 0.79.8. Kernel 0.1.144, NVIDIA 0.1.7; DISPLAYD 0.1.9
+RELEASE_VERSION bleibt 0.79.8. Kernel 0.1.146, NVIDIA 0.1.11; DISPLAYD 0.1.9
 unveraendert. OssiPC bleibt auf Useranweisung offline und wurde nicht
 kontaktiert. 0.79.9 und die Realhardware-Abnahmen von 0.79.10 bleiben offen.
 
@@ -993,3 +993,104 @@ Der getrennte volle RM-/NVKMS-Partiallink besitzt weiterhin offene private
 Anbieter. Sein kompletter Ziel-Link, weitere OS-/Kryptofunktionen, GSP/RPC,
 GPU-Authentifizierung/Initialisierung, native Anzeige und HDMI-/IRQ-Hardware
 bleiben offen. Diese CPU-Abnahme ersetzt keinen dieser Schritte.
+
+Native Wartefunktionen und monotone Aufruffristen (10.09.2026)
+-----------------------------------------------------------
+NVIDIA 0.1.11 linkt os_delay_us, os_delay, os_schedule, nvkms_usleep und
+nvkms_yield ueber die beiden echten privaten Anbieter r4nv_wait_ns und
+r4nv_schedule. Insgesamt 42 original-headerbasierte C-Adapter und zwoelf
+private Anbieter im normalen R4D; keine offenen ELF-Symbole, TLS oder
+automatischen Initialisierer. Keine neue vendor-Implementierung im Ziel;
+dieselben 19 Originalheader mit vollstaendigen Notices bleiben bytegleich.
+
+Busy-Waits pruefen die wirkliche monotone Zeit. Laengere schlaffaehige
+Pausen uebergeben ganze Ticks an den Scheduler und pruefen nach jedem
+Wakeup die Uhr erneut; erst der Rest wird aktiv abgewartet. Fruehes
+Aufwachen ist kein Erfolg. RM-Mikrosekunden bleiben busy, NVKMS-Pausen
+unter 1000us ebenso; groessere NVKMS-Pausen verlangen schlaffaehigen Kontext.
+Die volle 64-Bit-Zeit bleibt erhalten, Multiplikations-/Endzeitueberlauf
+wird abgewiesen. Die zwoelf Bit breite Millisekundenmaske des gepinnten
+Linux-Helfers wird nicht kopiert. Im Gast werden mindestens 4100ms an
+einer echten NVKMS-Pause geprueft.
+
+IRQ-Busy-Requests ueber 20ms werden gemaess der gepinnten Primaerreferenz
+abgelehnt. Ein rein periodischer Ereignistakt darf bei abgeschalteten
+Interrupts keinen Busy-Wait versorgen. Ungueltige, ruecklaeufige oder
+feststehende Uhren liefern Fehler und schliessen weitere normale native
+Zulassung. Die Grenze unveraenderter Ablesungen erkennt fehlenden
+Fortschritt, sie ist keine kalibrierte Zeitangabe. Die primaeren Originale
+nv-time.h, Linux-os-interface.c, nvidia-modeset-linux.c und NVKMS-OS-Header
+samt COPYING und Hash-/Revisionsindex liegen im neuen Nachweisarchiv.
+
+Jede normale caller-eigene Invocation verlangt eine absolute monotone
+Frist. Vor Start, bei Eintritt, in Wait/Yield und nach normaler Rueckkehr
+wird diese geprueft. Ein bereits vorhandener Callbackfehler bleibt erhalten.
+Die aktuelle Invocation stammt ueber current_request aus dem tatsaechlich
+laufenden Task, ohne globale Zuordnungstabelle oder CPU-lokale Vermutung.
+Der unveraenderte caller-eigene Datensatz bleibt bis zur Taskfreigabe
+resident. Explizites Cleanup darf ohne Frist zugelassen werden; damit ist
+begrenzter Ressourcenabbau auch nach Uhrverlust weiterhin moeglich.
+Ein Deadlinefehler ist -76002, Uhrverlust -76003. Dies beendet keine
+beliebige upstream Endlosschleife und entzieht keinen GPU-/DMA-Zugriff.
+
+Kernel 0.1.146 erweitert ausschliesslich die optionale ThreadApi um
+current_request bei Offset80 (Version1, jetzt88 Bytes). Kapazitaeten72..79,
+80..87 und ab88 erhalten den jeweils vollstaendigen Praefix72/80/88;
+Randbytes bleiben unveraendert. Ungueltige Requestpraefixe bleiben intakt,
+ein gueltiger wird vor einer Kontext-/Besitzerablehnung geleert. Der neue
+Statuswert8 wird aus dem wirklich blockierten Task in seiner Sleepqueue
+abgeleitet; Statusflags4/8 bleiben als Startflags ungueltig. DriverApi33/632,
+Importnamen und RELEASE0.79.8 bleiben erhalten. Keine neue Allokation,
+Warteoperation oder weiterer Unwind-Guard in der Taskbindungsabfrage.
+
+Stop weckt den tatsaechlich schlafenden dedizierten Task; RM erhaelt
+NV_ERR_SIGNAL_PENDING und keine angeblich erfolgreich abgelaufene Pause.
+Fristablauf bleibt NV_ERR_TIMEOUT; void-NVKMS-Fehler nutzen den vorhandenen
+nativen Selbstabbruch. Init/Work koennen ihren schlaffaehigen Legacy-Tickpfad
+nutzen, nach dessen Rueckkehr die echte Zeit geprueft wird. Echter Yield
+verlangt einen dedizierten Task: waitTicks(0) im alten ABI ist ein No-op
+und wird nicht als Scheduleruebergabe ausgegeben.
+
+Die vorhandene SMP4-Probe bestaetigt vor Stop die reale Sleepqueue samt
+blockierter Task, prueft parallele 250ms-/5s-Aufruffristen, abgelaufene
+Neuzulassung ohne Callbackeintritt und vollstaendige Taskfreigabe. Alle
+bisherigen nativen C-/Semaphore-/Abbruch-/Cleanup-Proben bleiben erfolgreich,
+einschliesslich behaltenen 145 Bytes bei Busy-Free und spaeterem echtem
+Permit. Der generische Shutdown hat weiterhin drei Tasks, zwei Semaphoren
+und zwei CPU-Puffer mit 4185 Bytes; bootfb/DISPLAYD und Poweroff funktionieren.
+Runtimegast 26.86s, passiver Fallback 20.33s;
+frische SMP4/KVM-Images ohne NVIDIA-Geraet oder Gastnetz. Keine GPU-Messung.
+
+421 Kerneltests, 13 Contractschritte, zehn Zig-Fassadenfaelle plus C,
+21 NVIDIA-Besitzerfaelle einschliesslich vier gezielter Zeitpolicyfaelle,
+normaler Kernel-/Modulbau und kurzer SMP4-Kernel-Smoke bestehen. Die
+bestehende C-Fassade kompiliert auch fuer Windows; dort keine Ausfuehrung.
+Die getrennte C-Adapterabnahme prueft 58 Bedingungen/13 noreturn-Fehler auf
+den exakten freestanding Objekten. Kein neuer Workspace-Testeinstieg.
+
+Zwei frische volle Quellbuilds ueber 1196 originale Uebersetzungseinheiten
+und 3156 verifizierte Dateien liefern bytegleiche Partiallinks. Alle acht
+Shaderfamilien bleiben exakt geprueft; acht Adapterobjekte/17 versionierte
+Inputs werden integriert. RM hat 328 offene Symbole, NVKMS 48, darunter die
+privaten Zielanbieter. Weitere OS-/Kryptofunktionen und der volle R4D-Link
+bleiben offen; der Partiallink ist kein installierter GPU-Treiber.
+RM-Partiallink: 14664968 Bytes,
+SHA256 7d8e70315b275ea6a4c813677181c5d1fb2736b6d38964285744db3b5ec05aaa.
+NVKMS-Partiallink: 2942456 Bytes,
+SHA256 34f603525df92edb8ef681650dcfb0987eeac8de9904a2b206a8ebfe0ebf79de.
+
+R4D-Datei 92293808 Bytes, allokiert 81920 Bytes
+(80 KB), 1563 Relocations
+(83 ABS64/1480 REL32), ein Import/zwei Exports.
+Fuenf nicht allokierte Ressourcen, echte NTFS-Treiber-/Lizenzdateien beider
+Images und danebenliegende Legal-Dateien stimmen mit den kanonischen
+Bytes ueberein. Strenge Relocation-/Lizenzpruefungen bleiben erhalten.
+
+717 Testquellen, 147 Module, 108 Dokumente. Vier Quellen ergaenzen bestehende
+Abnahmeeinstiege, kein neues Modul oder Workspace-Gate. Nachweise:
+native_waits_checkpoint und ExFiles/Reference/GFX/Nvidia/0.79.10/native-waits.
+Alle frueheren JSON-Checkpoints bleiben semantisch unveraendert. OssiPC
+wurde nicht kontaktiert. GSP/RPC, GPU-Authentifizierung, nativer Display-
+und HDMI-Pfad sowie Hardwareabnahmen bleiben offen. Auf Useranweisung
+wird nur noch an 0.79.10 gearbeitet und danach pausiert; kein Uebergang
+zur naechsten Unterversion und kein unbelegter Abschluss.

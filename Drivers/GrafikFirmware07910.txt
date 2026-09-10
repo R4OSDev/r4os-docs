@@ -361,3 +361,76 @@ vollstaendigen Originalquellen und Lizenzen. Sie sind nicht in NVIDIA.R4D
 installiert. Echte OS-Adapter, eindeutige globale Symbole, finale R4M0-
 Relokationen, GPU-Ausfuehrung und Hardwareabnahmen bleiben offen. Kernel,
 Treibermodul und Release behalten ihre Versionen; kein OssiPC-Kontakt.
+
+CPU-Speicheradapter gegen die Originalschnittstellen
+----------------------------------------------------
+Der Quellbau enthaelt jetzt acht RM- und neun NVKMS-Adapter fuer Allokation,
+Freigabe, Kopie/Fuellen, Vergleich und Zeichenketten; NVKMS zudem memmove.
+Die zwei C-Einheiten binden unveraenderte Herstellerheader ein. Integer-
+register und exakte REP-Wort-/Bytetails verhindern eine Rekursion durch
+RM gcc_helper.c (memcpy -> os_mem_copy). Keine SIMD-Abhaengigkeit, keine
+Aenderung des Direction Flags. Ueberlappende Zielbereiche werden bei Bedarf
+rueckwaerts kopiert. Vergleich ist unsigned; strncpy behaelt Nullauffuellung
+und den auf n begrenzten, nicht zwingend abgeschlossenen Eingabetext.
+Alle Pfade betreffen CPU-RAM; MMIO und DMA haben weiterhin eigene Grenzen.
+
+os_alloc_mem setzt seinen Ausgabepointer auch bei Fehler auf NULL, lehnt
+einen fehlenden Ausgabeparameter ab und reicht die ganze NvU64-Laenge weiter.
+Null Bytes werden auf ein Byte normalisiert. NVKMS zero fuellt ausschliesslich
+die angeforderte Nutzlast. Der Anbieter besitzt die echte Allokationsgroesse;
+Release rekonstruiert keine Speicherklasse aus dem NVKMS-Groessenargument.
+
+Die zwei privaten Imports r4nv_heap_allocate/free bleiben im Ziel offen.
+Der zugehoerige R4OS-Anbieter ist noch nicht implementiert. Er muss residente,
+16-Byte-ausgerichtete CPU-Puffer an den echten Treiberstart binden, Allokation
+bei Close verhindern und fehlgeschlagenen Rueckbau bis zur Bestaetigung halten.
+Ein erfolgreicher Host-Testallocator erfuellt diesen R4OS-Vertrag nicht.
+
+Die aktuelle Kernelanbindung erlaubt GfxDriverMemoryApi-Operationen nur
+innerhalb des globalen R4D-Lade-/Entladeguards. Hintergrund-Worker besitzen
+zwar einen authentisierten Treiber, treten diesem Guard aber nicht automatisch
+bei. Beim Ressourcen-I/O ist der Beitritt bewusst nicht blockierend, weil ein
+anderer Treiber auf denselben Worker warten kann. Diese bestehende Grenze
+darf ein allgemeiner RM-Allocator nicht durch eine spin-wartende Schleife oder
+einen vorgetaeuschten Owner umgehen. Der R4X-SDK-VM-Allocator gehoert wiederum
+einer Programminstanz und bietet keinen Ersatz fuer residenten Treiberbesitz.
+
+Die weitere Runtime-Anbindung braucht daher einen unabhaengig synchronisierten
+Besitz fuer Allokationen und eine eindeutige Treiber- und Taskgeneration.
+Speicher-Metadaten duerfen keine Waits/I/O ueberspannen. Schlafende RM-/NVKMS-
+Sperren, IRQ-Metadaten und zeitversetzte Callbacks brauchen getrennte Semantik;
+insbesondere bleibt ein RM-Mutex kein IRQ-Owner. Das GSP-Container-Storage
+bleibt waehrenddessen beim bereits abgenommenen, einmaligen Init-/Close-Pfad.
+
+Tools/Rm/Adapter.ps1 kopiert den eigenen Quellstand in den privaten Versuch,
+baut beide Zielobjekte mit den jeweiligen Original-Komponentenflags und
+verlangt genau die zwei privaten Heapimports, keine TLS-/Initialisierer.
+Tests/RmMemory.c verwendet reale Hostallokation mit Fehlern und Release-
+Canaries, vergleicht Byteoperationen mit der Host-C-Library und prueft
+Zugriffsgrenzen mit tatsaechlich unzugaenglichen Randseiten. Unter Linux
+x86_64 werden exakt die Freestanding-Zielobjekte ausgefuehrt. Unter Windows
+wird derselbe C-Quellstand fuer die Host-ABI gebaut; die Hostobjekte gelangen
+nie in das R4OS-Teilobjekt. Die Testallokation ist ausschliesslich hostseitig.
+
+Der frische volle Besitzerlauf besteht in 153,08 Sekunden: 1196 Original-
+einheiten, acht Shader, zwei Adapter und beide Links. Der Hosttest besteht
+393138 begrenzte Einzelpruefungen; 189 Allokationsaufrufe einschliesslich
+sechs Fehlinjektionen, 183 Freigaben und null lebende Puffer. Alle 1196
+Originalobjekte stimmen mit dem vorigen Quellbau ueberein; Adapter und
+Teilobjekte reproduzieren bytegleich gegen den getrennten Komponentenlauf.
+Eine unabhaengige nm-Aufnahme bestaetigt exakt die geaenderte Importmenge.
+
+RM:    14663112 Bytes, 334 offene Symbole, 12501 Definitionen.
+NVKMS:  2939472 Bytes,  47 offene Symbole,  2598 Definitionen.
+Die zwei privaten Heapimports zaehlen bei beiden Komponenten mit. TLS und
+automatische Initialisierer bleiben null. Windows-Hostpruefer als PE fuer
+x86_64-windows-gnu cross-kompiliert, dort nicht ausgefuehrt. Der bestehende
+NVIDIA-unit-test besteht weiterhin; er behaelt seine 13 Faelle.
+
+Belege: GrafikFirmware07910.json -> os_memory_checkpoint sowie
+ExFiles/Reference/GFX/Nvidia/0.79.10/os-memory. Tests.json erfasst den neuen
+gezielten Component-Test nur beim expliziten Quellbau. Kein weiterer
+Workspace-/Gasttest und kein neues Modul. NVIDIA.R4D bleibt bytegleich,
+Versionen bleiben Release 0.79.8, Kernel 0.1.140, NVIDIA 0.1.3. GSP-Start,
+OS-Runtime, finale globale Symbolzuordnung und R4M0-Link, HDMI und echte
+Hardwareabnahmen bleiben offen; OssiPC wurde nicht kontaktiert.

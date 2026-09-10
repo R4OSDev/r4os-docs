@@ -2,7 +2,7 @@
 ==================================================================
 
 Stand: 10.09.2026. Software-Zwischenstand, keine abgeschlossene Unterversion.
-RELEASE_VERSION bleibt 0.79.8. Kernel 0.1.142, NVIDIA 0.1.5; DISPLAYD 0.1.9
+RELEASE_VERSION bleibt 0.79.8. Kernel 0.1.143, NVIDIA 0.1.6; DISPLAYD 0.1.9
 unveraendert. OssiPC bleibt auf Useranweisung offline und wurde nicht
 kontaktiert. 0.79.9 und die Realhardware-Abnahmen von 0.79.10 bleiben offen.
 
@@ -588,3 +588,84 @@ Originalressourcen sind erneut vollstaendig gehasht. Produktartefakte,
 Quellobjekte, Importdifferenz, Gastimages und Logs sind in clock_checkpoint
 und ExFiles/Reference/GFX/Nvidia/0.79.10/clock nachvollziehbar erfasst.
 RELEASE bleibt 0.79.8; OssiPC wurde nicht kontaktiert. 0.79.10 bleibt offen.
+
+Dedizierte R4D-Tasks und echte SMP-Ausfuehrung (10.09.2026)
+---------------------------------------------------------
+Kernel 0.1.143 / DriverApi32 fuegt thread_query bei Offset 616 hinzu;
+Gesamtgroesse 624 Bytes. Alle vorhandenen Felder und Konstanten bleiben
+unveraendert, mit Ausnahme der ausdruecklichen API-Versionserhoehung.
+Vier neue Payloads besitzen 32/64/96/72 Bytes. SDK bietet typisierte Zig-
+und C-Fassaden; der kontrollierte Contract-/Baselinevergleich besteht.
+
+kernel/driver_threads.zig ist ein generischer Scheduler-/Lebensdauerbesitzer,
+keine NVIDIA-Implementierung im Kernel. driver_thread_owner.zig verwaltet
+dynamische residente Records mit intrusive Treap, exakter R4D-Startepoche
+und nicht umlaufenden Handles. Kein neuer fester Threadpool. Jeder echte
+Task erhaelt die vorhandenen 64-KB-Kernelstacks mit 16-KB-Guard und den vollen
+Modul-FPU-Zustand. Ausfuehrungsbesitz und Kill-Schutz stehen vor Registry-
+Publikation fest. BSP ist Standard; SMP benoetigt ausdrueckliche Freigabe
+durch den Treiber. Die bestehenden Schedulerrollen bleiben unveraendert.
+
+Die neue Schnittstelle nimmt keinen globalen R4D-Lifecycle-Guard. Ein solcher
+Guard darf weiterhin beim wartenden Init-/Shutdown-Aufrufer liegen; die
+dedizierten Callbacks koennen unabhaengig fortschreiten. Kurze Runtime-
+Abschnitte schuetzen nur Metadaten und Wait-Anmeldung. Heap-, Task-, Stack-
+und FPU-Arbeit, Modulaufrufe und Warten liegen ausserhalb dieser Abschnitte.
+Die kleine Storage-Callback-Besitzprojektion ist ebenfalls synchronisiert,
+damit SMP-Aufrufer deren bestehenden Ausschluss verlaesslich pruefen.
+Treiberlogs veroeffentlichen komplette begrenzte Zeilen mit echtem Besitzer.
+
+Start/Stop/Join/Release/Status/Current/Sleep/Stats sind an den wirklichen
+Treiberkontext gebunden. Join ist endlich; null pollt, UINT64_MAX ist verboten.
+Ein gestoppter Aufrufer kann seinen eigenen Join abbrechen, ohne den Zieltask
+zu stoppen. Sleep verwendet logische Ticks; null yieldet, UINT64_MAX wartet
+bis zum kooperativen Stop. Geweckt werden ausschliesslich eigene Waits des
+Threaddienstes, niemals beliebige Kernel-I/O- oder Lock-Waits. Kein harter
+Callback-Abbruch und keine Mindestdauer in Nanosekunden werden behauptet.
+
+Owner-Close sperrt neue Starts und weckt diese Waits. Alle Modulcallbacks
+und laufenden Anlegevorgaenge muessen vor Backend-/IRQ-/Work-Abbau beendet
+sein. Anschliessend gehen exakte Task-/Stack-Freigabe und Record-Freigabe
+dem DMA-/CPU-Heap-Abbau voraus. Abgeschlossene Callbacks koennen noch einen
+Kernel-Epilog besitzen; ein erfolgreicher Join bedeutet deshalb nicht, dass
+release sofort erfolgreich sein muss. Ein gemeinsames 1000-Tick-Budget
+begrenzt generische Retirement-Retries. Freigabefehler behalten Record und
+Treiber; Close-Rennen und Fehler vor Publikation bleiben privat besitzend.
+
+416 Kerneltests bestehen, darunter drei neue Besitzerfaelle mit echten
+4096 Records, Start-/Close-Rennen, Join-Leases und fehlgeschlagener Freigabe.
+15 NVIDIA-Faelle, neun Zig-Fassadenfaelle mit C-Ausfuehrung und 13 Contract-
+Bauschritte bestehen. Die C-Fassade ist zusaetzlich fuer Windows x86_64
+crosskompiliert; sie wurde nicht auf einem Windows-Host ausgefuehrt.
+
+Der echte SMP4/KVM-runtime-check besteht in 20,22 s. Vier dedizierte
+Callbacks laufen mit CPU-Maske 0xf tatsaechlich auf allen vier CPUs,
+waehrend die alte gemeinsame BSP-Workqueue noch belegt ist. Sie pruefen
+Task-/Epochenidentitaet, CPU-Heapinhalt und monotone Zeit. Das ist ein
+Fortschritts- und Integrationsnachweis, kein Durchsatz-/Grafikbenchmark.
+Die Probe verlangt mindestens zwei CPUs, keine feste Vier-CPU-Affinitaet.
+
+Selbst-Join/Selbst-Freigabe, Timeout-Poll, noch aktiver Zieltask, gezielter
+Join-Abbruch, kooperativer Stop und alte Handles werden im echten Dienst
+geprueft. Owner-Close weckt einen weiteren Task, sperrt neue Starts und
+Allokationen und erlaubt die Freigabe seines vorhandenen CPU-Puffers.
+Generisches Cleanup entfernt danach drei behaltene Taskrecords und die
+bisherigen zwei CPU-Allokationen mit 4185 Payloadbytes. Die bisherigen
+64 Init-/64 Worker-Heap- und Uhrproben bleiben erfolgreich.
+
+Der separate passive SMP4-Fallback besteht in 20,21 s. Beide Gaeste nutzen
+frische 2-GB-Images mit 1 GB RAM, ohne Gastnetz und ohne NVIDIA-Geraet.
+bootfb/DISPLAYD und regulaeres Poweroff bleiben erfolgreich. NVIDIA.R4D
+belegt jetzt 57344 allokierte Imagebytes (56 KB); alle vier unveraenderten
+Paketressourcen wurden erneut vollstaendig gehasht. Nachweise und Artefakt-
+Hashes liegen in driver_threads_checkpoint sowie unter
+ExFiles/Reference/GFX/Nvidia/0.79.10/driver-threads.
+
+Der neue Ausfuehrungsbesitz gilt fuer CPU-Heap, Threaddienst und Logs; die
+bereits unabhaengige Uhr bleibt nutzbar. Alte PCI-/DMA-/Backend-/Dateipfade
+erhalten dadurch keine pauschale SMP-Freigabe. Die Original-RM/NVKMS-Teil-
+objekte und bisherigen C-Adapter sind nicht geaendert; ihre 333/47 offenen
+Symbole bleiben Bestandteil des vorherigen Quellbau-Nachweises. Noch fehlen
+RM-Warte-/Synchronisations-/Threadadapter, kombinierter Link, GSP/RPC-Boot
+und Hardwareabnahme. RELEASE bleibt 0.79.8; 0.79.10 bleibt offen. OssiPC
+wurde nicht kontaktiert, und keine GPU-Ausfuehrung wird aus CPU-Tests abgeleitet.

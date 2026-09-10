@@ -1,0 +1,174 @@
+﻿Ausgaenge, Empfaengerdaten und atomarer Zustandsvertrag in 0.79.7
+===============================================================
+
+Dieser Schritt schafft den herstellerneutralen Anschlusskatalog, den
+begrenzten Parser und den vorab pruefbaren Commit-/Rollbackvertrag.
+Er programmiert noch keinen nativen Grafikmodus. Der einzige produktive
+Commit behaelt den vorhandenen Firmware-Scanout ohne Hardwarezugriff bei.
+Native DisplayManager-Bindung, Scanout-Leases, GPU-spezifische Commit-
+Callbacks und koordinierte Geometrieaenderungen folgen mit den Treibern.
+OssiPC war offline; keine Verbindung, Aktualisierung oder neue EDID-Messung.
+
+Besitzer und additive Schnittstelle
+----------------------------------
+Contract besitzt R4DRAW ABI12/584 Bytes: sechs optionale Funktionen fuer
+Ausgangsrevision, Anschlussinfo, Modus, EDID-Block, atomic_test und
+atomic_commit. Der alte ABI11-Prefix von 536 Bytes, alle bisherigen Slots
+und Payloads bleiben unveraendert. DriverApi27/584 haengt output_query bei
+Offset 576 hinter memory_query (560) und queue_query (568) an. Die C-/Zig-
+Fassaden pruefen jeden Tail vor Zugriff, auch bei alten API-Tabellen.
+Nicht vorhandene Katalogplaetze/Modi/Bloecke liefern 0; Erfolg liefert 1.
+Negative Ergebnisse lassen die Ausgabe unveraendert. App-Ausgaben werden
+erst nach Verlassen des Metadaten-Owners in Caller-Speicher kopiert.
+
+Kernel/display besitzt feste Tabellen, Generationen, Besitzerzuordnung und
+die Pruefung privilegierter Ressourcen. R4GFX besitzt Parser und den
+einkompilierten Lesehelfer; keine Parser- oder EDID-Politik im Kernel.
+R4D beschafft seine Empfaengerdaten selbst und publiziert sie ueber den
+echten aktiven DriverApi-Owner. Der Katalog kopiert die begrenzte gesamte
+Publikation; er behaelt weder Treiberpointer noch Callback-Adressen.
+Die native Queue-Bindung muss exakt Adapter/Geraetegeneration entsprechen.
+Reset/Entladung invalidieren auch eine vorher gepruefte Publikation.
+Die generische Bruecke lehnt native modeset-Faehigkeit derzeit ab.
+
+Identitaet, Hotplug und Grenzen
+------------------------------
+32 Anschlussplaetze, hoechstens 64 publizierte Modi und 4096 EDID-Bytes pro
+Anschluss; 8 kombinierte Scanout-Zuweisungen pro Zustandsanfrage.
+OutputId besteht aus Adapter, lokal stabilem Connector, Geraetegeneration
+und 64-Bit-Connectiongeneration. Jede Publikation erzeugt eine neue
+Empfaengergeneration, auch am gleichen Port. Trennen loescht Modi, EDID
+und Preferred-ID vollstaendig. Reset/Unregister/Driver-Close invalidieren
+alle zugehoerigen Anschluesse. Zaehler laufen nicht um; Erschoepfung wird
+abgewiesen, Empfaengerdaten bleiben nicht als gueltiger Ersatz bestehen.
+Die Adapterfaehigkeiten werden zwischen dessen Anschluessen abgeglichen.
+Katalogleser iterieren die feste Kapazitaet; present ist keine obere
+Indexgrenze. Jede Info enthaelt die aktuelle globale Topologierevision.
+
+Erst nach vollstaendiger Publikation signalisiert der Kernel den vorhandenen
+Desktop-Ereignispfad. Der Desktop beobachtet dessen Outputrevision im
+bestehenden Eventloop und invalidiert bei Aenderung die Szene. Kein eigener
+Hotplugtimer und keine zweite Eventqueue. Alte Kerneltabellen deaktivieren
+nur diese optionale Abfrage. Ein Anschlusswechsel allein aendert weder
+Desktopbreite noch Oberflaechengeometrie. Fuer spaetere echte Modesets muessen
+DisplayManager, Surface-Pipeline und alle Desktopverbraucher gemeinsam
+umgestellt werden; siehe GrafikFallback07904.txt.
+
+EDID-Parser und Quellen
+----------------------
+R4GFX parst ohne Heap, I/O oder globale Daten in caller-eigenen Report:
+maximal 32 Bloecke, 128 Modi, 32 Audio-SADs. Basisheader, Herstellerzeichen,
+Version, Blocklaenge und Checksummen werden geprueft. Detaillierte Timings
+enthalten begrenzte Clock-/Sync-/Totalwerte; Interlace bleibt gekennzeichnet.
+Standard-/Established-Timings bleiben nominale Groessen-/Refreshangaben,
+solange kein vollstaendiger DMT/CVT/GTF-Timingpfad ausgehandelt ist. Sie
+werden nicht in programmierbare Modusdatensaetze umgewandelt. Bereichs-
+deskriptoren mit EDID-1.4-Offsets werden erkannt, aber nicht als synthetischer
+Timinggenerator benutzt. Unbekannte Inhalte bleiben explizit markiert.
+
+CTA prueft Datenblockgrenzen, SADs, SVDs, detaillierte Timings, Padding,
+Farbangaben und 4:2:0-Zuordnungen. Der Parser kennt 154 CTA-Timingrecords,
+HDMI-/Forum-OUI, maximale TMDS-Angabe, Lautsprecher, Audioformate/Raten,
+Colorimetry und grundlegende statische HDR-Angaben. Sinkangaben sind keine
+Treiberfaehigkeiten. 4:2:0-only wird nie versehentlich zu einem RGB-Modus.
+DisplayID prueft zusaetzlich die innere Checksumme und Datenblocklaengen;
+vollstaendige Timings werden aus Type I (1.x) und Type VII (2.x) gelesen.
+Weitere DisplayID-/Vendorbloecke, CVT/GTF, DSC, VRR und vollstaendige HDR-
+Ausgabepolitik sind nicht implementiert. complete bezeichnet strukturelle
+Vollstaendigkeit, nicht Unterstuetzung jedes unbekannten Feldes.
+
+Eine fehlerhafte Erweiterung wird transaktional verworfen: keine ihrer
+Modus-/Audio-/Farbangaben gelangen teilweise in das Ergebnis. Gueltige
+Basisdaten/fruehere Erweiterungen bleiben erhalten. Fehlende Bloecke sind
+missing, korrupte checksum/malformed, unerwartete extra. Ein fataler
+Basis-/Laengen-/Kapazitaetsfehler laesst den Caller-Report unveraendert.
+Der Lesehelfer prueft die genaue Connectiongeneration fuer jeden Block
+und abschliessend erneut; Daten mehrerer Empfaenger werden nie gemischt.
+
+MIT-lizenzierte libdisplay-info-Quellen liefern die abgeleitete CTA-Tabelle
+und unveraenderte QEMU-, Hisense-55U8K- und Apple-XDR-Fixtures. Die 65U8QF-
+Basisdaten stammen aus der frueheren OssiPC-Messung: 128 Bytes, Erweiterung
+fehlt; daraus folgt kein HDMI-Audionachweis. Die fremde 55U8K-Fixture ist
+ebenfalls kein 65U8QF-Ersatz: ihr CTA-4:2:0-Bitmap besitzt laut Upstream
+einen ungueltigen Index. Ein ausschliesslich im Test korrigiertes Exemplar
+prueft den gueltigen Audio-/HDMI-Zweig; die Originaldatei bleibt unveraendert.
+Hashes, Lizenz und Transformationen: Libraries/R4GFX/ThirdParty/DisplayInfo;
+Example dokumentiert seine beiden eingebetteten Fixtures getrennt.
+Die Distribution fuehrt libdisplay-info-MIT.txt im Image und neben disk.img.
+Keine Linux-GPL-Parserimplementierung wurde uebernommen.
+
+Atomare Vorpruefung und Rueckfallvertrag
+--------------------------------------
+Eine Anfrage bindet die aktuelle Topologierevision und konkrete Outputs,
+Mode-ID/Refresh, BO, Source-/Destination-Rechteck, Rotation, Farbe/BPC,
+Head, Plane, PLL und optionalen Ready-Fence. Vor jedem Commit werden
+Header/Reserviertfelder, Identitaeten, Anschlusszustand, eindeutige
+Routingressourcen, Geometrie/Skalierung, Sourcefaehigkeiten und BO-Layout
+geprueft. Native Pruefung akzeptiert derzeit nur explizit unterstuetzte
+lineare XRGB/ARGB-Layouts; Pitch, Binding und Scanout-Usage muessen stimmen.
+Bandbreite verwendet konservativ Pitch mal gesamte BO-Hoehe mal Refresh;
+Pixelclock je Output und die Adaptersumme muessen im Budget bleiben.
+Ausstehende physische Fence-Ressourcen melden busy; fehlgeschlagene
+Abhaengigkeiten bleiben von stale/invalid/routing/bandwidth getrennt.
+Test-only reserviert keine BOs und ist keine Garantie fuer einen spaeteren
+Commit: native Aktivierung muss unter dem gemeinsamen DisplayExecution-
+Owner neu pruefen, reale BO-Leases erwerben und aktive Zugriffskonflikte
+gegen denselben BO-Owner absichern.
+
+Das reine Modell liefert nicht wiederverwendete Transaktionstickets und
+outcome applied / old_preserved / lost. Anwendungsfehler und unbewiesener
+Stillstand sind verschieden: applied verlangt Altstillstand, Rueckfall
+verlangt Neustillstand. Bei lost bleibt unbewiesener Alt-/Neubesitz erhalten
+und blockiert neue Transaktionen. Das Modell gibt selbst keine BOs frei.
+Die spaetere native Umsetzung muss die vom Modell bezeichneten Leases
+tatsaechlich halten; ein Zaehler oder Ergebnis allein beweist keine
+Hardwarequieszenz. Native Commit-Callbacks sind noch nicht ausgehandelt.
+
+Firmware bietet exakt einen geometry-only Modus, die tatsaechliche
+Bootgroesse, Rotation 0 und unknown Refresh/Clock. EDID ist nur der
+Firmware-Snapshot, keine aktuelle physische Verbindungsprobe. Ein Commit
+derselben Geometrie mit leerem BO/Fence behaelt den vorhandenen Scanout;
+ein anderer Puffer/Modus wird unsupported. Dieser No-op wird mit der
+normalen Praesentation ueber deren vorhandenen DisplayExecution-Owner
+serialisiert und fuehrt keinen Firmware-/Geraeteschreibzugriff aus.
+
+Abnahme und Reproduktion
+-----------------------
+Die zugehoerige JSON-Datei bindet finale Quellen, Artefakte, private Images,
+Logs, Helfer und Referenzmaterial per SHA256. Bestehende Pruefwege:
+46 Kernel-display-test-Faelle, davon vier neue Output-Zustandsfaelle;
+R4GFX: sieben Faelle inklusive fuenf Parserfaellen und 635 begrenzten
+Einzelbyte-Mutationen mit reparierter aeusserer Checksumme;
+Contract: 26 negative Mutationen plus additive Prefixpruefung;
+SDK: acht Zig-Fassadenfaelle, C-Konformitaetsprogramm und 15 Manifestfaelle.
+Keine neuen dauerhaften Gates; Tests.json erfasst die neuen Testquellen.
+
+Kurze SMP4/KVM-Laeufe nutzen frisch kopierte private Testmedien. Der native
+Testmodus ist nur EXAMPLEs virtueller Connector 0xffff0007: Barrieren
+schalten zwischen QEMU, getrennt, frueherer Hisense-Basis und Reset/QEMU.
+DISPLAYD /OUTPUTS /DRIVER prueft leere getrennte Ports, neue Generationen,
+Stale-Ausgaben ohne Mutation, Resetinvalidierung, Desktop-Wakeup und
+ausgeglichene BOs. Beide Gaeste pruefen normalen Present, echte Software-
+Queuekopien und abgelehnte Konfiguration vor der ersten Geraeteaenderung.
+Ein dritter Softwaregast prueft den bestehenden Desktop-Window-Idle-Smoke
+mit Geometrie, Timern, Fensterdienstneustart und Ressourcenabbau. Er startet
+R4DESK als System-Shell; der private kanonische Testkatalog ergaenzt genau
+APPDEF und MEMVIEW, die der bestehende Smoke benoetigt.
+Kein Browser-/Emulatorlanglauf, kein echter GPU-/VBlank-/TV-Nachweis.
+
+Fuer Reproduktion die gesicherten Run-Qemu/Test-Facades/Review-Contract-
+PS7-Helfer nach Temp/gfx-07907 zuruecklegen. Kernel, SDK, DisplayDiag,
+Example, Desktop, AppDefaults und MemView ueber Besitzerstarter bauen,
+dann Run-Qemu.ps1 mit -Variant native, software und desktop nacheinander
+ausfuehren. Der Helfer
+restauriert TestInjection/AUTOEXEC.BAT bytegleich und hat einen 90-s-Watchdog.
+Keine Produktions-AUTOEXEC wird fuer die Diagnose veraendert.
+
+Buildmigration: R4D darf wie R4X deklarierte Zig-Quellmodule verwenden;
+R4L/R4P und C erhalten dadurch keine neuen Manifestoptionen. Example,
+DisplayDiag und Desktop teilen SDK/Tools/BuildModule.ps1 ueber duenne
+Windows-/Linuxstarter. Argumente werden als eigenes Array weitergereicht,
+damit Zig-Optionen nicht von PowerShell gebunden werden. Alte lokale
+Example-Settings ohne LIBRARIES_ROOT koennen den konfigurierten SDK-
+Nachbarn verwenden. Kein fest codierter Workspacepfad. Debian-Builds und
+Argumentweitergabe geprueft; Windows-Ausfuehrung bleibt ungetestet.

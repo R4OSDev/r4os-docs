@@ -876,3 +876,120 @@ Belege: native_c_checkpoint und
 ExFiles/Reference/GFX/Nvidia/0.79.10/native-c, einschliesslich der genauen
 ELF-Datei, Symbol-/Disassemblypruefung, Paketfehler, Image- und SMP4-Protokolle.
 Alle frueheren Checkpoints bleiben als historische Nachweise unveraendert.
+
+Native Semaphore-C-Aufrufe und kontrollierter Selbstabbruch (10.09.2026)
+--------------------------------------------------------------------
+NVIDIA 0.1.10 verbindet alle 37 eigenen Speicher-, String-, Uhr- und
+Semaphore-C-Adapter mit zehn echten privaten Anbietern. Alle sechzehn
+Semaphore-C-Einstiege laufen nun im fertigen R4D. Kernel 0.1.145 stellt
+dafuer einen expliziten, synchronen Selbstabbruch dedizierter R4D-Tasks
+bereit. DriverApi33/632 und RELEASE 0.79.8 bleiben erhalten. Die Unterversion
+und ihre Hardwareabnahmen bleiben offen; OssiPC wurde nicht kontaktiert.
+
+Die versionierte optionale DriverThreadApi behaelt Version 1 und ihren
+vollstaendigen 72-Byte-Praefix. abort_current folgt bei Offset 72; die neue
+Tabelle hat 80 Bytes. Query schreibt fuer Kapazitaeten 72 bis 79 genau 72
+Bytes und ab 80 genau 80 Bytes. Zig und C pruefen die Slotverfuegbarkeit;
+ein Start mit Abort-Flag ohne entsprechenden Dienst wird vor dem Aufruf
+abgelehnt. Die kontrollierte Contract-Baseline-Aenderung betrifft diese
+angehaengte Funktion, ihre neue Defaultkapazitaet, drei Konstanten und
+beschreibende Flags. Alle anderen Layouts und bisherigen Felder bleiben
+erhalten. Vorheriger normaler Generatorlauf hatte den Defaultwechsel
+korrekt zur ausdruecklichen Baselinepruefung angehalten.
+
+Startflag 2 installiert einen pro echtem Task auf dessen Stack lebenden
+Aufrufrahmen. Statusflag 4 zeigt einen angenommenen Abbruch an und ist
+als Startflag ungueltig. Nur derselbe authentifizierte Task darf mit einem
+negativen Ergebnis zurueckkehren. IRQ, deaktivierte Interrupts, Kernel-
+Locks, Runtime-Sektionen, Wait-Leases und weitere Unwind-Guards verhindern
+den Transfer. Der initiale Guard bleibt bis zum normalen Taskabschluss
+erhalten. Keine fremde Task-ID, CPU-Index-Vermutung oder feste Frame-Tabelle.
+
+Die originale R4OS-Assembly in arch/x86_64/callback_abort.zig stellt den
+SysV-Callerstack, dessen callee-saved GPRs sowie MXCSR-/x87-Steuerzustand
+wieder her und loescht DF. Es ist eine regulaere Aufruf-/Rueckkehrgrenze;
+kein als returns-twice angenommener Zig-Setjmp und keine fremde kopierte
+Implementierung. Die gepinnte primaere AMD64-ABI-Referenz samt originaler
+Herausgeber-/Lizenzangabe liegt unter
+ExFiles/Reference/GFX/SysV-AMD64-ab2062ad. Vollstaendiger CC-BY-4.0-Text
+aus dem offiziellen Creative-Commons-Repository liegt daneben; Hashes
+und beide festen Quellrevisionen sind dokumentiert.
+
+Modul-Defers und fremde Unwind-Handler werden nicht ausgefuehrt. Der native
+Besitzer muss alle Speicher-, Lock-, Semaphore- und DMA-Verpflichtungen
+explizit verfolgen. Erst das Ruhen aller beteiligten Aufrufe erlaubt die
+Freigabe. Die Kernelgrenze faengt weder CPU-Exceptions noch endlose Schleifen
+oder beliebige GPU-Fehler ab. Abgelehnte Plattformaufrufe kehren mit Status
+zurueck. Die private void-C-Fehlerfunktion ausserhalb ihrer vereinbarten
+abortierbaren Grenze ist eine ABI-Verletzung und trappt; ein angenommener
+nativer Fehler erreicht diesen Zweig nicht. Keine erfundene Semaphore-
+Freigabe, endlose Ersatzparkung oder erzwungene fremde Taskbeendigung.
+
+rm_native nimmt caller-eigene Invocations bis zur Taskfreigabe entgegen,
+prueft die Zulassung vor Start und erneut vor Eintritt und speichert den
+ersten Fehler atomar. Neue normale Aufrufe werden dann abgelehnt; bereits
+eingetretene Peers muessen kooperativ fertig werden. Explizite Cleanup-
+Aufrufe bleiben moeglich, ohne den Fehler zu loeschen. Es gibt weder einen
+festen Invocation-Pool noch eine globale native Serialisierung.
+
+Die vorhandene Runtimeprobe prueft im echten Kernel Kapazitaeten 72, 73,
+79 und 80 mit unveraenderten Randbytes, falsche Version/71-Byte-Kapazitaet,
+Init-/nicht-abortierbaren Kontext, nichtnegative Ergebnisse und Statusflag
+als ungueltiges Startflag. Danach nutzt sie alle sechzehn C-Adapter im
+gesunden Betrieb mit null verbleibenden Ressourcen.
+
+Ein C-Waiter blockiert anschliessend wirklich auf einer Null-Semaphore;
+die Kernelstatistik bestaetigt seine Einschreibung. Ein zweiter C-Aufruf
+versucht Busy-Free. Der reale private Anbieter behaelt Semaphore und
+CPU-Box; die void-C-Schicht ruft r4nv_native_fault auf. Der Task endet
+mit -76001/Abbruchflag, sein Folgebefehl bleibt unerreicht. Zwei Allokationen
+mit 145 Bytes inklusive privater Praefixe und der Waiter bleiben erhalten;
+Join ohne Wartezeit meldet weiterhin Timeout. Ein weiterer normaler nativer
+Start wird abgewiesen.
+
+Erst ein expliziter Cleanup-C-Aufruf liefert einen echten Permit. Der
+Waiter beendet sich, wird gejoint und samt exakter Taskgeneration freigegeben.
+Ein weiterer C-Aufruf prueft 97 Speicher-Canarybytes und gibt die Semaphore
+frei. Der native Besitzer gibt danach den Speicher mit der statusfaehigen
+privaten Heapfunktion frei. Alle Zaehler erreichen die vorherige Basis;
+der native Fehler bleibt gespeichert. Teilweise fehlgeschlagene Proben
+werden nach Owner-Close ohne neue Tasks geordnet beendet; keine Freigabe
+bei unklarer Peer-Ausfuehrung. Der bisherige private Semaphoreanbieter
+bleibt verfuegbar, weil Busy ein erwartetes Retry und kein Anbieterdefekt ist.
+
+Direkt gespeicherte C-Funktionsadressen erzeugten zunaechst
+REX_GOTPCRELX-Hinweise, die der Packager korrekt abwies. Kleine Zig-
+Taskeinstiege rufen die echten C-Funktionen jetzt direkt auf. Es wurde
+keine Relocationpruefung gelockert. Das verpackte ELF definiert alle
+37 Adapter und zehn Anbieter; die Proben rufen die echten C-Symbole auf.
+Keine offenen ELF-Symbole, TLS oder automatischen Initialisierer. Der
+C-Teil verwendet keine SIMD-Register und setzt DF nicht. R4M0 bleibt bei
+1410 Relocations (83 ABS64, 1327 REL32), einem Import und zwei Exports.
+Das Modul hat 92285616 Dateibytes und 77824 allokierte Imagebytes (76 KB).
+Alle fuenf nicht allokierten Ressourcen, 19 Originalheader und vollstaendigen
+Notices sind bytegleich. Beide realen NTFS-Treiber-/Lizenzdateien und
+danebenliegende Legal-Dateien stimmen mit den kanonischen Dateien ueberein.
+
+421 Kerneltests einschliesslich zwei Architekturfaellen, 13 Contract-
+Buildschritte, zehn Zig-Fassadenfaelle plus C-Ausfuehrung und alle 17
+NVIDIA-Besitzerfaelle bestehen. Die bestehenden Architektur-/C-Fassaden-
+Quellen wurden auch fuer Windows kompiliert, dort nicht ausgefuehrt.
+Der neue normale Kernel-/Modulbau und der kurze SMP4-Kernel-Smoke bestehen,
+einschliesslich Clock-, TLB-, Lock-, Serial- und NVMe-IRQ-Abnahme.
+Runtimegast: 21,02 s; passiver Fallbackgast: 20,32 s, beide SMP4/KVM mit
+frischen 2-GB-Images, 1 GB RAM, ohne Gastnetz oder NVIDIA-Geraet. Das sind
+Ablaufzeiten und keine Grafikbenchmarks. Der gesamte bisherige Shutdown
+bleibt erfolgreich: generisch drei Tasks, zwei Semaphoren, zwei CPU-Puffer
+mit 4185 Bytes, bootfb/DISPLAYD und regulaeres Ausschalten.
+
+Inventare: 713 Testeintraege, 147 Module, 108 Dokumente. Drei Quellen sind
+in vorhandene Testeinstiege aufgenommen; kein neues Modul oder Workspace-
+Gate. Fruehe Compiler-/Packagerfehler sind separat erhalten und zaehlen
+nicht als Erfolg. Belege: native_abort_checkpoint sowie
+ExFiles/Reference/GFX/Nvidia/0.79.10/native-abort. Alle frueheren Checkpoints
+bleiben als historische Nachweise semantisch unveraendert.
+
+Der getrennte volle RM-/NVKMS-Partiallink besitzt weiterhin offene private
+Anbieter. Sein kompletter Ziel-Link, weitere OS-/Kryptofunktionen, GSP/RPC,
+GPU-Authentifizierung/Initialisierung, native Anzeige und HDMI-/IRQ-Hardware
+bleiben offen. Diese CPU-Abnahme ersetzt keinen dieser Schritte.

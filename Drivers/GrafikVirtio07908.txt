@@ -1,0 +1,107 @@
+﻿R4OS 0.79.8: nativer virtueller 2D-Treiber
+========================================
+
+Stand: 10.09.2026. Ergebnis: 0.79.8 umgesetzt und gezielt geprueft.
+Kernel 0.1.137, VIRTGPU 0.1.0, DISPLAYD 0.1.8. Das externe oeffentliche
+Repository ist https://github.com/R4OSDev/r4os-driver-virtiogpu.
+OssiPC ist laut User offline und wurde nicht kontaktiert.
+
+Produktiver Datenweg
+-------------------
+Firmware-Start -> DisplayManager mit genauem R4D-Besitzer -> gemeinsames
+gehaltenes WB-System-BO -> CPU-Schreibmap -> begrenzte Uploadqueue mit
+Quellenpin -> externe Virtio Transfer/Flush-Befehle -> bestaetigte
+Device-Execution-Fence und Ressourcenfreigabe. Kein Virtio-Befehl und kein
+QEMU-Sonderpfad kommt in Desktop oder Kernel.
+
+Das R4D handelt VERSION_1/EDID aus, richtet eine Split-Controlqueue ein,
+erstellt ein gepacktes XRGB-Resource und attachiert seitenbegrenzte physische
+Segmente. Die Zulassung verlangt den ruhenden Virtio-VGA-Besitzer des
+gesicherten Bootframebuffers. Erst nach Sperrung aller Firmwarewriter wird
+Set-Scanout erlaubt. Eine neue optionale DriverApi28-Query liegt auf
+Offset 584; der alte 584-Byte-Praefix bleibt kompatibel, Gesamtgroesse 592.
+Die neue 40-Byte-Displaytabelle bietet Bootinfo, Prepare, Transition und
+IRQ-faehiges Schedule. R4DRAW ABI12/584 bleibt unveraendert.
+
+Eine residente, generationstreue IRQ-Mailbox weckt den vorhandenen
+Grafikworker auch ohne neue Frames. GetDisplayInfo/EDID aktualisieren den
+Ausgangskatalog; alte Empfaengerreferenzen werden ungueltig. Geaenderte
+Hostaufloesungen bleiben von der aktiven Startgeometrie getrennt.
+Gemeinsame BO-Mutexe, Kommandos und Freigaben laufen niemals im IRQ.
+
+Frame-Schreibmaps und GPU-Lesepins schliessen sich aus. Access4 haelt nur
+Attachment-Backing; es erfindet weder GPU-VA noch Zugriffserlaubnis.
+Die CPU-Schreibregionen liefern eine Bounding-Box. Fuer die zwei Testfelder
+werden 374784 Byte pro Frame uebertragen, bei 32 Frames 11993088 Byte
+(11.4375 MB) statt 117964800 Byte (112.5 MB) bei Vollbildern. Die wirkliche
+CPU-Schreibmenge ist 16384 Pixel pro Frame. Dies ist eine gepruefte
+Transfermengen-Aussage, kein Durchsatzbenchmark und keine allgemeine
+Desktop-Beschleunigungszahl.
+
+Fehler und Fallback
+------------------
+Cancel/Timeout bedeuten logischen Abschluss, keinen nachgewiesenen DMA-Stopp.
+Unbestaetigte Arbeit haelt Puffer, Queue und Treiber fest. Nach bestaetigtem
+Status-null-Gesamtreset stellt das exakt zugeordnete Virtio-VGA-Geraet laut
+Spezifikation 5.7.7 seinen VGA-Startzustand wieder her. IRQ-Zulassung wird
+geschlossen und synchronisiert, Attachment, Referenzen, Control-DMA und MMIO
+werden freigegeben, der urspruengliche PCI-Command-Wert wird restauriert.
+Der Kernel gibt erst dann seine eigenen Quellenpins und BO-Referenzen frei.
+Fehlgeschlagene Wiederherstellung behaelt den Besitzer statt blind in den
+alten Framebuffer zu schreiben. Fehlende/unpassende Hardware bleibt bootfb.
+
+Nebenbefund: Der gemeinsame MMIO-Mapper verwendete bisher den ueblichen
+PAT-Eintrag 2, der UC-minus statt UC ist. Er sucht jetzt einen tatsaechlichen
+UC-Eintrag und setzt dessen PWT/PCD/PAT-Bits. Die alte WC-Funktion darf
+ausschliesslich den Bootframebuffer umstellen, kein natives WB-BO.
+
+Abnahme
+-------
+47 vorhandene Kernel-Displayfaelle inklusive CPU-Lease-/Uploadfehler,
+Cancellation mit gehaltenem Quellpuffer und koaleszierter IRQ-Mailbox;
+2 Virtio-Wirefaelle mit verweigerten Features, fehlerhaften Replies,
+Rechteckgrenzen, Used-Wrap und Cancel/Reset; 8 Zig-Fassadenfaelle plus
+C-Ausfuehrung mit -Wall -Wextra -Werror; Contract-Build/Layoutpruefungen,
+26 Contract-Mutationen und Distribution-Check bestanden.
+
+Drei frische SMP4/KVM-Gaeste des festen graphics-test-Profils bestanden:
+native=30.37s, timeout=24.3s, fallback=20.19s. Kein Gastnetz, jeweils regulaeres Poweroff innerhalb 90 Sekunden.
+Native: 1280x720, 32 wechselnde Frames, ein wiederverwendetes BO,
+unveraenderte Objekt-/Referenz-/Lease-/Bytezahlen; zwei QMP-Screenshots mit
+je 16384 exakt geprueften Pixeln. VNC meldet im Leerlauf 1600x900 und danach
+1280x720: frische Empfaengergenerationen, alte EDID abgelehnt, aktive
+Startflaeche erhalten. Timeout: dritte Control-Completion ausgeblendet,
+physisches Reset bestaetigt, bootfb schreibbar und genau ein BO, zwei
+Referenzen sowie eine Attachmentlease abgebaut. Fallback: dieselben
+Artefakte mit Standard-VGA ohne Virtio-GPU, normaler DISPLAYD-Lauf bestanden.
+
+Einstieg unter Linux:
+    ./Repositories/Distribution/Build.sh graphics-test Test
+Unter Windows:
+    Repositories\Distribution\Build.bat graphics-test Test
+Optional dahinter native, timeout, fallback oder probe. Aktuelle Testartefakte
+und explizit gebautes VIRTGPU erforderlich; das Profil baut keine Module
+und startet keine Browser-/Emulatorlanglaeufe. VIRTGPU bleibt IMAGE_SCOPE=none.
+Das Profil besitzt eigene Temp-Dateien und schreibt keine versionierte
+CONFIG/AUTOEXEC um. Windows teilt die PS7-Orchestrierung, wurde hier aber
+nicht auf einem Windows-Host ausgefuehrt.
+
+Grenzen und Nachweise
+--------------------
+Ein einzelnes WB-Schatten-BO, serialisierte Control-RPCs und unveraenderte
+Startgeometrie sind die begrenzte erste 2D-Stufe. Keine neue native
+Modusumschaltung, Swapchain, sichtbare VBlank-Fence, echte Pageflips,
+Hardwarecursor, NVIDIA-Beschleunigung, 3D, VRR oder physische HDMI-/Audiowirkung
+werden daraus abgeleitet. Spaetere Unterversionen bauen diese Faehigkeiten
+auf denselben gemeinsamen Besitz-/Queuevertraegen auf.
+
+Maschinenlesbarer Nachweis mit Artefakt-/Bild-SHA256:
+Docs/Drivers/GrafikVirtio07908.json.
+Rohlogs, Bilder und Konfigurationen: ExFiles/Reference/GFX/Virtio/0.79.8.
+Besitzerbeschreibung: Repositories/Drivers/VirtioGpu/DOCUMENTATION.de.txt.
+OASIS-Spezifikation: ExFiles/Reference/GFX/Specifications/Virtio-1.3.html.
+QEMU 11.0.2 e545d8bb9d63e9dd61542b88463183314cff9482: Virtio-GPU, VNC-
+Resizeprotokoll und QAPI; zwei weitere Dateien aus dem bereits gepinnten
+Archiv unter ExFiles/Reference/GFX/Qemu, mit Hashes in References.json.
+Originaltreiber Apache2; kompilierte R4GFX-/CTA-Daten mit MIT-Provenienz.
+Linux-/QEMU-GPL-Implementierungen wurden nicht in den Treiber kopiert.

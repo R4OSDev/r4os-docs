@@ -1,0 +1,195 @@
+﻿Asynchrone Grafikauftraege und Fences in 0.79.6
+==============================================
+
+Kernel/display besitzt begrenzte Auftragstabellen, Referenzen, Wartezustaende
+und den IRQ-/Worker-Uebergang. R4GFX liefert den einkompilierten
+Produzentenhelfer; R4D besitzt native Kommandos, Register und den Nachweis des
+Geraetestillstands. Der Softwareadapter fuehrt echte BO-Kopien aus. Dieser
+Schritt implementiert keinen NVIDIA-Renderer und keine neue Scanout-Engine.
+
+Vertrag und Kapazitaeten
+-----------------------
+R4DRAW ABI11/536 Bytes ergaenzt den bisherigen ABI10-Prefix von 472 Bytes
+um acht optionale Slots: queue_open, queue_close, queue_submit, fence_query,
+fence_wait, fence_cancel, fence_release und queue_backend. Alte Slots und
+Payloads bleiben unveraendert. C- und Zig-Fassaden akzeptieren aeltere
+Tabellen und pruefen jeden neuen Slot einzeln. Fehlt er, bleibt eine
+vorhandene Ergebnisstruktur unberuehrt. Parameter/Ergebnisse werden vor
+beziehungsweise nach der Metadaten-Owner-Aufnahme kopiert.
+
+Ein Fence besteht aus Slot, Timeline, Punkt, Adapter, Geraetegeneration und
+Resetgeneration. Timeline/Punkt/Generationen laufen nicht ueber; Erschoepfung
+wird zurueckgegeben. Wiederverwendete Slots sind allein keine Identitaet.
+Ein Auftrag bekommt genau einen logischen Endzustand und Endzeitpunkt.
+Spaete physische Bestaetigungen koennen diese nicht ersetzen.
+
+Globale Grenzen: 32 Queues, 128 gleichzeitig gehaltene Fences, 8 explizite
+Abhaengigkeiten pro Auftrag, 16 native Backends sowie Softwareadapter 0,
+256 wartende Task-Generationen. Backendabfrage durchsucht 17 feste Plaetze;
+freie oder schliessende Plaetze liefern keinen Eintrag (0). Ein Produzent handelt
+die reale Geraete-/Resetgeneration aus, statt sie zu erraten. Die Grenzen
+sind keine vorab zugesicherte Kapazitaet pro Anwendung.
+
+QueueConfig legt Backendbindung, FIFO/latest_frame, Kapazitaet und
+Abschlussmeilenstein fest. Jeder Auftrag verlangt eine endliche monotone
+Deadline in Nanosekunden. Vergangene Deadline, UINT64_MAX, unbekannte
+Operationen, unbenutzte nichtleere Felder und ungueltige Handles werden vor
+Annahme abgewiesen. Submit reserviert bestehendes Backing und kopiert nur
+kleine Deskriptoren; Pixelarbeit beginnt im Worker beziehungsweise R4D.
+
+Status unterscheidet queued/running/terminal sowie pending, complete,
+cancelled, dropped, device_lost, timeout, failed und dependency_failed.
+Admission-/Aufruffehler unterscheiden unter anderem invalid, stale,
+wrong_owner, busy, closed, unsupported, capacity, exhausted, unavailable,
+wait_timeout, wait_cancelled, already_completed und device_lost. Ein
+Wait-Timeout aendert weder Auftragsergebnis noch Hardwarebesitz.
+
+FIFO, neuestes Bild und Abhaengigkeiten
+-------------------------------------
+FIFO fuehrt je Timeline hoechstens einen Auftrag gleichzeitig aus. Ein
+blockierter Kopf wird nicht umgangen. latest_frame ersetzt nur noch nicht
+gestartete Auftraege mit demselben nichtleeren frame_key. Ein laufender
+Auftrag wird nie ersetzt; ohne freien Fence-Platz bleibt auch das alte
+wartende Bild erhalten. Freigegebene Auftragskapazitaet und weiterhin vom
+Caller gehaltene terminale Fences sind verschiedene Ressourcen.
+
+Explizite Abhaengigkeiten duerfen nur bereits existierende genaue Fences
+benennen und bleiben nach Submit unveraenderlich. Zukunfts-/Selbstkanten und
+Duplikate werden abgewiesen; ein Zyklus ist damit nicht konstruierbar.
+Eltern-Fences bleiben bis zum Abbau aller abhaengigen Auftraege erhalten.
+Ein fehlgeschlagener Elternauftrag beendet das Kind mit dependency_failed.
+Ein erfolgreicher, noch physisch aktiver Elternauftrag waere weiter gesperrt.
+
+Queue-Read/-Write-Leases reservieren BO-Nutzungen vor Annahme. Konflikte
+zwischen Timelines brauchen einen expliziten Abhaengigkeitspfad; innerhalb
+derselben Timeline gilt FIFO. Read/Read ist erlaubt. Die Pruefung erfolgt
+konservativ fuer das gesamte BO. Eine implizite FIFO-Vorgaengerposition
+vererbt nicht dessen fremde Abhaengigkeiten: Wird ein noch wartender
+Vorgaenger abgebrochen, entfiele sonst dessen Wartebedingung. Fuer eine
+solche Pufferkette muss der Produzent den tatsaechlichen erzeugenden Fence
+explizit nennen. Das ist gepruefte Admission, kein ungepruefter Hazard.
+
+CPU-Maps duerfen nicht in schreibende beziehungsweise lesende Queue-Nutzung
+eingreifen. Queue-Leases gehoeren einem eigenen Kernelbesitzer und halten
+dasselbe Backing unabhaengig von Referenzfreigabe oder Produzentenende.
+Aliaskopien innerhalb desselben BO sind mangels memmove-Vertrag unsupported.
+Es entsteht keine zweite permanente Bildkopie bei der Queue-Annahme.
+
+Logischer Abschluss und physische Freigabe
+-----------------------------------------
+fence_wait wartet wahlweise auf completion oder resources_released.
+Manuelle sticky Events pro Fence verhindern verlorene Aufwecksignale beim
+Uebergang zwischen Zustandspruefung und Wait-Anmeldung. Jeder registrierte
+Waiter haelt den genauen Fence; Speicher wird erst nach Abbau aller
+Referenzen, abhaengigen Auftraege und Publikationstickets wiederverwendet.
+
+Cancel, Deadline, Queue-Close, Produzentenende, Treiberabbau und Reset
+beenden die logische Arbeit. Laufende native Auftraege behalten dabei
+device_active und resources_held, bis ihr R4D echten Stillstand meldet.
+quiesced=0 ergibt busy. Cancel/Timeout sind niemals ein Beweis dafuer,
+dass ein Geraet keine DMA-Zugriffe mehr ausfuehrt. Ressourcen-Waits koennen
+deshalb nach logischem Abschluss weiter warten und separat auslaufen.
+
+Ein harter Task-Kill fuehrt keine Zig-defers aus. Wait-Referenzen liegen
+deshalb in expliziten Task-ID-/Generationsrecords. Erst nachdem der
+Programmreaper den konkreten Task samt intrusive Wait-Knoten physisch
+abgetrennt hat, entfernt retiredTask diese Records. Ein UnwindToken darf
+nicht den ganzen Grafik-Wait gegen einen Kill sperren. Kurze API-
+Publikationen schuetzen ihre eigenen mutierenden Uebergaenge weiterhin.
+
+Produzentenende schliesst dessen Queues und gibt Caller-Fence-Referenzen
+auf. Fremde Waiter, laufende Geraetearbeit und BO-Leases bleiben gueltig.
+Treiberentladung wird verweigert, solange ein Backend, native Arbeit,
+Callback oder gehaltene BO-Nutzung existiert. Der R4D muss Hardwarezugang,
+Notify-/Issue-Rennen und echten Stillstand vor unregister/reset koordinieren.
+reset(false) schliesst die alte Generation mit device_lost und liefert busy;
+reset(true) darf erst nach echtem Stillstand eine neue Resetgeneration
+oeffnen. Alte Queues bleiben geschlossen, alte Fence-Resultate erhalten.
+
+IRQ, Worker und Softwareausfuehrung
+-----------------------------------
+GfxDriverQueueApi v1/56 Bytes wird ueber den neuen optionalen
+gfx_queue_query-Anhang der DriverApi26/576 ausgehandelt. Der bisherige
+v24/560- und v25/568-Prefix bleibt erhalten. Sechs Funktionen: register,
+unregister, take, complete, reset, segment. Query/Register benoetigen den
+gebundenen Init-Owner; spaetere Aufrufe verwenden den tatsaechlichen
+Driver-Work-/IRQ-Owner. Eine Caller-ID authentifiziert keine Bestaetigung.
+
+take uebergibt feste Jobdeskriptoren und aktiviert einen pro Fence
+reservierten IRQ-Meldeplatz. segment liefert genau ein gehaltenes,
+seitenbegrenztes DMA-Segment mit 64-Bit-Offset und DMA-Maske im Task-Kontext.
+CPU-Pointer, Busadresse und GPU-VA werden nicht gleichgesetzt.
+
+complete ist IRQ-tauglich: Sichtbarkeitsbarriere, Vergleich von Owner und
+vollstaendiger Fence-Identitaet, genau eine Bestaetigung im festen Meldeplatz
+und Signal an den einzigen Worker. Dieser Teil verwendet ausschliesslich
+den vorhandenen Runtime-/IRQ-Owner. Er fasst weder BO-Task-Mutex noch
+Seitentabellen an und fuehrt keine Allokation, Abhaengigkeitssuche oder
+Treiber-/App-Callbacks aus. Doppelte oder veraltete Bestaetigungen werden
+unmittelbar abgewiesen. Die logische Fence-Publikation folgt im Worker;
+ein gleichzeitig gewinnender Cancel/Reset bleibt dabei endgueltig.
+
+Der BO-Mutex ist taskgebunden und kann nicht gefahrlos aus einem IRQ
+verwendet werden: Der unterbrochene Task koennte ihn bereits besitzen oder
+eine andere CPU beim Freigeben auf den Runtime-Owner warten. Der getrennte
+IRQ-Meldeplatz vermeidet sowohl Rekursion in dessen Mutation als auch den
+umgekehrten Lockpfad. Der Worker nimmt Meldungen unter Runtime auf, gibt
+Runtime frei und aktualisiert erst dann die BO-/Queue-Metadaten.
+
+Native Benachrichtigungen laufen ueber die vorhandene Driver-Work-Queue mit
+hoechstens einem ausstehenden Callback pro Backend. Alle Fence-Wakeups und
+VM-/TLB-Freigaben bleiben im Task-Kontext. Der Softwareadapter verarbeitet
+Kopien in hoechstens 64-KB-Scheiben ohne Owner-Lock ueber der Pixelarbeit und
+gibt danach den Scheduler frei. Mehrere aktive Timelines kommen reihum dran.
+Bei Abbruch zwischen Scheiben kann nur dieser CPU-Worker seinen eigenen
+Stillstand bestaetigen. Ohne offene Arbeit schlaeft er ohne Polling; offene
+Deadlines und Treiberbenachrichtigungen werden begrenzt bedient.
+
+Tabellen werden ueber ihre Adresse iteriert. Array-Wertiteration hatte im
+ersten Gastlauf mehrere vollstaendige 17-KB-Auftragstabellen auf dem
+64-KB-Kernelworkerstack erzeugt und die Guard-Seite getroffen. Die
+Pointeriteration entfernt diese Kopien; der Stack wurde nicht vergroessert.
+Auch die vom Queue-Pfad benutzten BO-Tabellenschleifen verwenden sie.
+
+Abschlussbedeutung
+------------------
+cpu_stores bedeutet geordnete CPU-Schreibzugriffe. device_execution
+bedeutet den vom R4D bestaetigten Geraeteabschluss; scanout ist ein separat
+ausgehandelter Meilenstein und darf nur nach dem entsprechenden Hardware-
+ereignis bestaetigt werden. Der Softwareadapter bietet nur cpu_stores an.
+Der bisherige synchrone Presentvertrag kennzeichnet CPU-Store-Abschluss
+zusaetzlich explizit in Capabilities und Completion. Keine der CPU-
+Bestaetigungen ist VBlank, Pageflip, TV-Ausgabe oder sichtbare Praesentation.
+
+Nachweise
+---------
+Die bestehenden Kernel-display-test- und C/Zig-Fassadenpruefungen wurden
+gezielt erweitert. Neue Faelle behandeln genau einen Abschluss, spaete/
+doppelte IRQ-Meldung, falschen Owner, Resetgeneration, FIFO/latest_frame,
+Kapazitaet, Abhaengigkeiten, Produzententod und sichere Ressourcenfreigabe.
+DISPLAYD /QUEUES prueft reale Softwarebytes; /DRIVER verwendet die explizite
+EXAMPLE-Timer-IRQ-Fixture. Die abschliessenden Ergebnisse und Hashes stehen
+in GrafikQueues07906.json und ExFiles/Reference/GFX/Queues/0.79.6.
+
+Abgeschlossen am 10.09.2026: 42 Kernel-Hostfaelle, 26 Contractmutationen,
+sieben Zig-Fassadenfaelle und die ausfuehrbare C-Konformitaet bestanden.
+Zwei frische SMP4/KVM-Gaeste liefen regulaer bis zum Herunterfahren:
+Native Fixture 37,39 Sekunden, Software-Fallback 20,18 Sekunden. Beide
+kopierten zwei Stufen mit je 8.388.575 echten Bytes und prueften Padding
+sowie ausgeglichene Ressourcen nach frueher Referenzfreigabe.
+Die native Probe bestaetigte Tastatur und SSH waehrend des Grafik-Waits,
+drei geweckte Waiter, Resetgenerationen und den harten Kill eines weiteren
+Produzenten mit drei blockierten Tasks. Dessen Backing blieb bis zur
+IRQ-Bestaetigung erhalten; anschliessend wurde auch der Fence freigegeben.
+Getestete Artefakte: Kernel 0.1.135, DISPLAYD 0.1.6, EXAMPLE 0.1.5.
+Die Kandidatenimages tragen noch das Releasebanner 0.79.5; nach erfolgreicher
+Abnahme wurde allein die Distributionskennung auf 0.79.6 angehoben.
+
+Die Testfixture verwendet echte Gast-IRQs und BOs, jedoch keine GPU-DMA.
+OssiPC bleibt bis zur Nachricht des Users offline. NVIDIA-, HDMI-, sichtbare
+Scanout- und weitere echte Hardwareabnahmen werden dadurch nicht ersetzt.
+
+Referenzgrundlage: die lokal gesicherten Linux dma-fence-/drm-syncobj-
+Vertraege, Khronos Vulkan Synchronization und Wayland presentation-time/
+fifo. Linux-Implementierungen wurden nicht uebernommen. Der R4OS-Code ist
+eigenstaendig; Herkunft/Lizenzen der Referenzen: GrafikReferenzen079.txt.

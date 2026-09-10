@@ -1,0 +1,126 @@
+﻿R4OS 0.79.10: Firmwarevorbereitung und dateigebundene Modulressourcen
+==================================================================
+
+Stand: 10.09.2026. Software-Zwischenstand, keine abgeschlossene Unterversion.
+RELEASE_VERSION bleibt 0.79.8. Kernel 0.1.138, NVIDIA 0.1.1; DISPLAYD 0.1.9
+unveraendert. OssiPC bleibt auf Useranweisung offline und wurde nicht
+kontaktiert. 0.79.9 und die Realhardware-Abnahmen von 0.79.10 bleiben offen.
+
+Offline-Arbeit trotz Hardwareabhaengigkeiten
+------------------------------------------
+Die fehlende Board-/VBIOS-Aufnahme blockiert den realen GPU-Bringup. Sie
+blockiert aber nicht die gemeinsame Ressourcenbehandlung, die exakte
+Paketbildung und die unabhaengige Pruefung bereits festgelegter Firmware.
+Diese Arbeiten werden aus 0.79.10 vorgezogen. Der Softwarefortschritt ist
+kein Ersatz fuer eine Hardwareabnahme und schliesst keine Folgeversion ab.
+
+Ein Quellen- und Versionsvertrag
+-------------------------------
+NVIDIA/src/firmware-lock.json ist die einzige Paketwahrheit: RM/GSP 570.144,
+Upstream-Commit, offizielle Installerquelle, Installerhash, beide GSP-Dateien
+mit Groesse und SHA-256, vollstaendige Lizenz sowie die acht originalen
+Containerfamilien. Der Zig-Code liest die feste JSON beim Kompilieren; PS7
+liest dieselbe Datei bei der Paketvorbereitung. Kein zweiter Hashkatalog.
+NVIDIA.R4D traegt die Sperrdatei als NVFW-LOCK.json in seiner .rsrc-Section.
+
+Die bereits in 0.79.3 archivierten Originale bleiben unveraendert:
+gsp_ga10x.bin mit 63571696 Bytes, gsp_tu10x.bin mit 28542040 Bytes und LICENSE
+mit 17863 Bytes. Die Rohquellen liegen in
+ExFiles/Reference/GFX/Nvidia/Firmware-570.144. Herkunft und OS-Portierungs-
+entscheidungen: GrafikArchitektur07903.txt/.json sowie NVIDIA/PROVENANCE.txt.
+Die Zuordnung zu acht NVIDIA-Containerfamilien bedeutet nicht, dass R4OS
+diese acht GPU-Familien bereits unterstuetzt.
+
+Paketbildung
+------------
+Der Besitzerstep prepare-firmware verwendet auf Windows und Linux denselben
+PS7-Ablauf. SourceDirectory, OutputDirectory und ScratchDirectory werden
+ausdruecklich angegeben; Scratch liegt unter Temp und fuer atomare
+Publikation auf demselben Dateisystem wie Output. Der Treiber und diese
+Hostaktion laden nichts herunter und fuehren keinen Installer aus.
+
+Groesse und Hash aller drei Quellen werden vor dem Kopieren und erneut an
+den privaten Kopien geprueft. Beide Container gehen durch den echten
+Firmwareinspektor. Alle erwarteten Familiensignatursektionen werden dabei
+gefunden und begrenzt. Die vollstaendige originale NVIDIA-Lizenz begleitet
+die beiden unveraenderten Binaerdateien; sie werden nicht Apache-lizenziert.
+Erst das vollstaendige Verzeichnis wird publiziert. Bei erneutem Aufruf
+muessen Dateien, Sperrdatei und Befunde bytegenau mit dem vorhandenen Paket
+uebereinstimmen. Abweichungen werden nicht still repariert.
+
+Der vorbereitete Ordner ist noch kein installiertes R4D-Firmwarepaket. Die
+beiden proprietaeren Binaerdateien sind weder im oeffentlichen Quellrepo noch
+im aktuellen NVIDIA.R4D enthalten. Seine .rsrc enthaelt nur die Paketbindung.
+
+Begrenzter Lade- und Pruefpfad
+-----------------------------
+Der externe NVIDIA-Besitzer besitzt firmware.zig. Load schreibt pro Schritt
+hoechstens 64 KB direkt in den vom Aufrufer bereitgestellten Endpuffer.
+Es gibt keinen zweiten vollstaendigen Firmwarepuffer. Die gesamte Laenge und
+der SHA-256 muessen exakt passen; erst danach liefern gueltige ELF-Struktur,
+Versions- und Signatursektion eine nutzbare geliehene Sicht. Der Aufrufer
+besitzt Allokation, Freigabe und Lebensdauer dieses unveraenderten Puffers.
+Fehler und idempotentes Close geben keine neue gueltige Sicht frei.
+
+ELF64 Little Endian ET_REL/EM_RISCV, maximal 64 MB, 64 Sections, 4096 Bytes
+Namensbereich und 63 Bytes je Namen. Unterstuetzt wird das Containerprofil
+der gesperrten Version: keine Programheader, Kompression oder ausfuehrbare
+Section. Laengen, Ueberlaeufe, Ausrichtung, Namen, Mehrdeutigkeiten und
+Bereichsueberlappungen werden geprueft; .fwimage, exakte .fwversion und die
+passende 4096-Byte-Signatursektion sind erforderlich. Signaturbytes und
+Firmwarecode bleiben opak. Bytegleichheit zum Hash ist keine GPU-seitige
+kryptografische Authentifizierung und kein Beweis der Boardkompatibilitaet.
+
+Monotone Zeit und absolute Deadline werden vor/nach dem Reader geprueft;
+Clock-Ruecksprung, Ablauf, kurze Reads und I/O-Fehler sperren die Freigabe.
+Ein spaeterer R4D-I/O-Adapter muss selbst begrenzte Reads garantieren. Die
+Hostpruefung kann eine blockierende Betriebssystem-Dateioperation nicht
+gewaltsam unterbrechen und weist ihre Deadlinegrenze entsprechend aus.
+Keine GPU-DMA- oder IRQ-Nutzung entsteht durch diese Softwarepruefung.
+
+Korrektur im gemeinsamen Modullader
+----------------------------------
+Der R4X-Lader trennte .rsrc bereits vom Programmimage; der gemeinsame
+R4D/R4P/R4L-Lader allokierte und kopierte noch alle Sections. Kernel 0.1.138
+wendet den vorhandenen R4M0-Vertrag nun auch dort an. Eine einzige .rsrc mit
+Flags null, Alignment 16 und gleich grossen nichtleeren Datei-/Speicher-
+Extentfeldern bleibt ausserhalb von Imageallokation und Sectionkopie.
+R4L-Ressourcen, Ressourceneinspruenge, Exporte und beide Relocationenden
+werden abgelehnt. Dieselbe Regel gilt fuer Datei- und Preloadbytes.
+Die veroeffentlichte Laufzeitbasis der Dateisection ist null.
+
+Die fachliche NVIDIA-Paketpruefung bleibt im externen Treiberprojekt. Ein
+Kernel-Resource-Reader mit Bindung an Modulquelle, Generation und echten
+DriverApi-Owner ist noch zu implementieren. Die Korrektur behauptet diese
+Lebensdauer nicht aus einem Dateipfad und veraendert die vorhandenen
+R4SYS-Ressourcenlesefunktionen fuer Anwendungen nicht.
+
+Pruefung und offene Punkte
+-------------------------
+Elf NVIDIA-Besitzerfaelle im vorhandenen unit-test, darunter zwei neue
+Firmwarefaelle: alle 4672 Trunkierungen und 3072 Metadatenbitmutationen eines
+synthetischen ELF sowie inkrementelle Hash-/Read-/Deadline-/Clock-/Close-
+Fehler. Beide echte GSP-Container wurden mit 971 beziehungsweise 436 Reads
+bis maximal 64 KB verifiziert. Falscher Hash, falsche Containerfamilie und
+fehlende Paketquellen erzeugen keinen neuen Erfolgsbericht oder Paketpfad.
+Ein zweiter Vorbereitungsdurchlauf bestaetigt dasselbe Paket unveraendert.
+
+Der gemeinsame Kernel-Testlauf umfasst 407 Hostfaelle. Die bestehende
+Modulladerprobe erweitert sich um zwei Ressourcenfaelle; eine virtuelle
+64-MB-Ressource vergroessert das Image nicht. Eine alte API-Negativfixture
+erwartete irrtuemlich weiterhin verpflichtende Providerfelder. Sie prueft
+jetzt unbekannte Felder; fehlende optionale Callbacks sind vertragsgemaess.
+Neue Dauer-Gates oder Emulator-Langlaeufe wurden nicht angelegt.
+Der kurze vorhandene nvidia-passive-Lauf prueft den geaenderten R4D-Container
+im SMP4-Gast, echten Fehllade-Shutdown und nutzbaren bootfb ohne NVIDIA.
+Konkrete Resultate, Quell-/Artefakt-/Imagehashes und Rohbelege:
+GrafikFirmware07910.json und ExFiles/Reference/GFX/Nvidia/0.79.10.
+
+Offen bleiben der Besitzervertrag fuer echte R4D-Ressourcenreads, die
+Einbindung des originalen RM/NVKMS, FWSEC aus dem gemessenen Board-VBIOS,
+GSP-Bootstrap/WPR, Mailboxes/RPC/Notifications, Generation und IRQ/DMA-
+Rueckbau, Hardware-Deadlines, Thermik sowie reale Displaywiederherstellung.
+Die naechste unabhaengige Softwarearbeit ist der R4D-Ressourcenleseweg.
+Hardware-Freigaben, HDMI-Audio, native Anzeige und Performance sind weiterhin
+gesondert auf OssiPC beziehungsweise ausdruecklich vereinbarter Hardware
+nachzuweisen. Ein Windows-Hostlauf wurde hier nicht ausgefuehrt.

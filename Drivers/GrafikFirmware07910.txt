@@ -3,11 +3,53 @@
 
 Stand: 11.09.2026. Software-Zwischenstand; 0.79.10 bleibt offen.
 RELEASE_VERSION bleibt 0.79.9; Kernel 0.1.147, NVIDIA 0.1.22, DISPLAYD 0.1.9.
-OssiPC bleibt auf Release 0.79.8 / NVIDIA 0.1.22. Der neue Schritt betrifft
-ausschliesslich CPU-seitige WPR-Metadaten; kein weiterer Hardwarekontakt,
-Neustart oder Modulbuild. Die letzte echte DMA-Aufnahme steht darunter.
+OssiPC bleibt auf Release 0.79.8 / NVIDIA 0.1.22. Der neueste Schritt
+qualifiziert gemeinsamen GSP-/Bootspeicher am Host. Kein neuer Hardware-
+kontakt, Neustart, Modul- oder Gesamtbau; fruehere Belege bleiben historisch.
 
-GSP-WPR-Metadaten und originaler C-ABI-Abgleich (Host)
+Gemeinsamer GSP-/Bootspeicher (Host)
+----------------------------------
+gsp_boot_storage.zig verbindet den GSP-DMA-Owner mit einem eigenen 32-KB-
+Paket: Bootabbild 24576 Bytes ab 0, Signatur 4096 Bytes ab 24576 und eine
+4-KB-Metadatenseite ab 28672. Nur deren erste 256 Bytes tragen GspFwWprMeta,
+der Rest bleibt null. Ein Pin und ein zusammenhaengendes Mapping mit
+begrenztem Bounce-Fallback decken das Paket ab. Zusammen: zwei residente
+CPU-Allokationen und fuenf Mappings, 63709184 Bytes ohne Bouncekopien.
+
+stageAdmitted verlangt zuvor zugelassene, unveraenderte Firmwarequellen.
+Der kleine Produktionsdeskriptor und das Erststartprofil werden erneut
+geprueft. Erst nach Abbildung setzt der Owner die wirklichen Boot-/Signatur-
+und GSP-Adressen; die komplette Metadatenseite muss ebenfalls von allen
+GSP-Segmenten getrennt sein. Eine abschliessende Synchronisierung aktualisiert
+auch die anfangs noch leere Metadatenseite einer moeglichen Bouncekopie.
+Erst dann wird der Gesamtbericht sichtbar. Die gemeinsame endliche Frist
+begrenzt beide Phasen; keine Adresse wird an die GPU uebergeben.
+
+Cleanup schliesst zuerst den auf GSP zeigenden Bootpuffer, dann den GSP-
+Owner. Je Allokation gilt Mapping vor Pin vor Heap. Teilfehler behalten die
+urspruenglichen Deskriptoren und beide benoetigten Speicherbereiche fuer
+den naechsten Abschlussversuch. API-Tabellen sind fuer Shutdown gecacht.
+Nach spaeterer GPU-Einreichung muss vor Freigabe echte Quieszenz feststehen.
+
+Der bestehende Besitzerlauf besteht 37/37 Faelle bei 12/12 Schritten.
+Ein neuer zusammengefasster Fall prueft 12 Szenarien, darunter partielle
+Allokation/Pin/Map, falsche Deskriptoren, Frist/Synchronisierung, nur die
+Metadatenseite betreffende Ueberlappung, Unmap/Unpin/Release-Retry und Bounce.
+Firmwarekoerper und Geraeteadressen sind dabei synthetisch. Dies prueft den
+echten Besitzerablauf, keine neue Firmwarezulassung oder Hardwareausfuehrung.
+Kein neues Gate, Gast-/Langlauf oder erneuter RM-/Bootstrap-Bau.
+
+Die Bereitstellung der Bootressourcen und die Modulanbindung dieses Owners
+stehen noch aus. NVIDIA.R4D bleibt 92411792 Bytes, SHA256:
+237808f7211ac450d8a40990d13360c9b3b6868f11332d096a808c8c746737f2
+Referenzen: ExFiles/Reference/GFX/Nvidia/0.79.10/boot-storage-20260911
+166 gehashte Dateien, davon 132 Besitzerquellen; 16 vollstaendige
+Originalquellen/Lizenzdateien und sechs R4OS-Vertraege. Aktueller JSON-
+Abschnitt: gsp_boot_storage_checkpoint. Letzte echte Hardwareaufnahme:
+gsp_dma_checkpoint. VRAM-Besitz, VGA-Recovery, Firmwarestart/RPC/IRQ,
+native Anzeige und HDMI-Audio bleiben offen; unabhaengige Arbeit geht weiter.
+
+Historische GSP-WPR-Metadaten und originaler C-ABI-Abgleich (Host)
 ---------------------------------------------------
 gsp_wpr.zig erzeugt GspFwWprMeta im 256-Byte-Format des vorhandenen Pins
 NVIDIA 570.144. Der Produktions-Bootdeskriptor wird erneut hashgeprueft,

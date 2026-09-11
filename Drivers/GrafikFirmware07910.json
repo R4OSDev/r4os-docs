@@ -2,17 +2,17 @@
   "schema": 1,
   "subversion": "0.79.10",
   "date": "2026-09-11",
-  "status": "NVIDIA 0.1.36 erweitert die gehaltene Head-/SOR-Aufnahme um Windows und alle sechs ISO-Kontext-/Plane-Bindungen. Zweifache Aufnahme und Recovery-Vergleich erfassen Aenderungen; Layout/physische Adresse bleiben bis zur Kontextaufloesung unbekannt. 51 bestehende Faelle und Modulbuild bestanden. Native Recovery/Firmware/Scanout/HDMI offen; OssiPC offline/unveraendert.",
+  "status": "NVIDIA 0.1.37 sichert die ganze 64-KB-Displayinstanz und ordnet benutzte ISO-Kontexte den geprueften VRAM-Flaechen zu. Format/Stereomodus waehlen aktive Planes, Layout/Grenzen und Reservierungskollisionen werden geprueft. 51 bestehende Faelle und Modulbuild bestanden. Zusaetzliche Bild-/Farb-/Cursor-Recovery und native Firmware/Scanout/HDMI offen; OssiPC offline/unveraendert.",
   "versions": {
     "release": "0.79.9",
     "kernel": "0.1.150",
-    "nvidia": "0.1.36",
+    "nvidia": "0.1.37",
     "displayd": "0.1.9"
   },
   "ossipc_contacted": true,
   "hardware_verified": false,
   "native_initialization_authorized": false,
-  "history_note": "Aktuell: status, versions und boot_planes_checkpoint (eingebundene Window-/Plane-Beobachtung, Hostnachweis). boot_scanout_checkpoint bleibt der vorherige Head-/SOR-Nachweis, bar1_reader_checkpoint die Boot-Mapping-Grundlage. boot_display_checkpoint bleibt der letzte physische OssiPC-Nachweis mit Kernel 150 / NVIDIA 28. Andere Felder sind historisch/kumulativ; gesamte 0.79.10-Hardwareabnahme bleibt false.",
+  "history_note": "Aktuell: status, versions und display_context_checkpoint (eingebundene Instanzsicherung/Kontextaufloesung, Hostnachweis). boot_planes_checkpoint und boot_scanout_checkpoint sind vorherige Anzeige-Metadatenstaende; bar1_reader_checkpoint ist die Boot-Mapping-Grundlage. boot_display_checkpoint bleibt der letzte physische OssiPC-Nachweis mit Kernel 150 / NVIDIA 28. Andere Felder sind historisch/kumulativ; gesamte 0.79.10-Hardwareabnahme bleibt false.",
   "firmware": [
     {
       "schema": 1,
@@ -292,9 +292,9 @@
     }
   ],
   "open": [
-    "Resolve retained ISO context handles to actual surface layout/backing, preserve remaining color/cursor state and implement native UEFI console/device recovery before firmware effects. Armed head/SOR/window metadata and held pixels/BAR1 pages are now retained; existing callback remains aperture/pixel-only.",
+    "Preserve remaining color/cursor and any additional boot surface data, then implement native UEFI console/device recovery before firmware effects. Held instance/context and used plane VRAM spans are now resolved; existing callback remains aperture/pixel-only.",
     "Native same-run admission for paired FWSEC, Booters and cold stages, retained DMA and real log reader; package additional execution-source notices before linking those stages.",
-    "Physical boot mapping and display/plane observation when OssiPC returns, then authentication/bootstrap/INIT_DONE, IRQ/log/health and proven post-submission quiescence.",
+    "Physical boot mapping, context/plane observation and recovery when OssiPC returns, then authentication/bootstrap/INIT_DONE, IRQ/log/health and proven post-submission quiescence.",
     "General VRAM/MMU/contexts, remaining RM/NVKMS integration, native connectors/modesets and HDMI audio; suspend/resume/GC6 and later roadmap work."
   ],
   "archive": "ExFiles/Reference/GFX/Nvidia/0.79.10",
@@ -14567,6 +14567,355 @@
       "Resolve retained ISO context handles to actual surface layout/backing, preserve remaining color/cursor state and implement native UEFI console/device recovery before firmware effects. Armed head/SOR/window metadata and held pixels/BAR1 pages are now retained; existing callback remains aperture/pixel-only.",
       "Native same-run admission for paired FWSEC, Booters and cold stages, retained DMA and real log reader; package additional execution-source notices before linking those stages.",
       "Physical boot mapping and display/plane observation when OssiPC returns, then authentication/bootstrap/INIT_DONE, IRQ/log/health and proven post-submission quiescence.",
+      "General VRAM/MMU/contexts, remaining RM/NVKMS integration, native connectors/modesets and HDMI audio; suspend/resume/GC6 and later roadmap work."
+    ]
+  },
+  "display_context_checkpoint": {
+    "schema": 1,
+    "recorded_utc": "2026-09-11T09:45:33.610164+00:00",
+    "subversion": "0.79.10",
+    "complete": false,
+    "versions": {
+      "release": "0.79.9",
+      "kernel": "0.1.150",
+      "nvidia": "0.1.37",
+      "driver_api": 34
+    },
+    "implementation": {
+      "owner": "Drivers/NVIDIA: linked boot_context owner and display_context decoder. Existing boot_scanout, boot_vram and boot_vram_lease extended; Kernel, SDK and Contract unchanged.",
+      "instance": "Preserve the complete 64KB display instance in a private BO, not just selected descriptors. Read through the actual shared BAR0/PRAMIN reader in 16 pages, repeat all pages, compare held register state and retain a read-only BO mapping. The exact parent owner/epoch prevents moving or premature release. Native display context programming remains absent.",
+      "lookup": "Pinned GA102 MEM0 target/valid and MEM1 address are captured twice. Each fused window supplies its actual 14-bit PBCLIENT and channel 1+window. Scan the fixed 1024-entry hash table using the original RM client/handle/channel hash and exact live-key matching. Ignore invalid instance zero; reject duplicates or out-of-object-area descriptors. Decode exactly 20 bytes including 39-bit base/inclusive limit, target and memory layout.",
+      "surfaces": "Present stereo mode and one of all 27 C67E format codes select the used planes/eyes; stale unused handles do not imply active buffers. Full surface geometry, source rectangle, pitch, YUV decimation and stored component width determine spans. Block-linear rows round to the complete 8<<blockHeight GOB rows; descriptor and physical VRAM bounds must contain each span. PCI/system targets and unknown formats fail without guessing.",
+      "admission": "The full 64KB instance and every used window plane must avoid the whole reserved GSP VRAM region. After cheap metadata validation, re-read all instance pages and reobserve the parent before publishing the VRAM lease. That lease holds both mapping and display-context owners, including the existing FWSEC/DMA retention chain. No context/plane/GSP writes.",
+      "limits": {
+        "instance_bytes": 65536,
+        "hash_entries": 1024,
+        "descriptor_bytes": 20,
+        "surfaces": 48,
+        "scratch_bytes": 4096,
+        "window_core_words": 5,
+        "window_words": 27,
+        "max_register_reads": 748,
+        "register_deadline_ns": 1000000000,
+        "reader_deadline_ns": 5000000000
+      },
+      "boundary": "Only display-instance bytes are newly backed up; extra image pixels and remaining color/cursor state are not. Decoded used VRAM ranges are protected against reservation overlap. The aperture/pixel callback is not full native UEFI/device recovery; no firmware execution or native modeset is enabled."
+    },
+    "validation": {
+      "owner_cases": 51,
+      "owner_steps": 13,
+      "module_steps": 7,
+      "owner_invocations": 1,
+      "module_invocations": 1,
+      "test_count_added": 0,
+      "guest_runs": 0,
+      "hardware_runs": 0,
+      "existing_groups_extended": [
+        "lifecycle_test.zig existing boot/VRAM case",
+        "gsp_init_storage_test.zig existing complete run lease case"
+      ],
+      "coverage": "Actual production context owner uses fixture BO callbacks and shared PRAMIN reads: two windows 0/7, distinct client/channel keys, mono ignores unused handles, pitch and block-linear spans, full instance hash/retention, wrong key and duplicate rejection, descriptor/format/stereo/geometry bounds, 10-bit YUV chroma extent, context and image overlap rejection, unused-byte mutation before reservation, retained lease and idempotent cleanup. Existing register fixture now uses 208 reads with corrected whole-pass mutation boundary.",
+      "fixture_boundary": "The complete GSP DMA lifetime case supplies a structural held context/BO with real host memory; it does not simulate context capture. Capture/read/backing behavior is exercised separately by the existing lifecycle case. No new test case or gate.",
+      "review": "Both owner and module builds pass on their first invocation. All 27 nonallocated resource payloads verified; preceding 26 unchanged. Source facts verify actual GA106 dispatch, manual fields, 27 format values and right-eye method through the exact armed mirror definition.",
+      "legal": "New complete MIT notice is 14984 bytes, identical in driver resource and Distribution license overlay/staging list.",
+      "source_facts": {
+        "scope": "Static correspondence with complete pinned originals, not a GPU execution test or new gate.",
+        "manual_definitions": {
+          "NV_PDISP_FE_INST_MEM0": "0x00610010",
+          "NV_PDISP_FE_INST_MEM0_TARGET": "1:0",
+          "NV_PDISP_FE_INST_MEM0_STATUS": "3:3",
+          "NV_PDISP_FE_INST_MEM1": "0x00610014",
+          "NV_PDISP_FE_INST_MEM1_ADDR": "30:0",
+          "NV_PDISP_FE_PBCLIENT_WIN(i)": "(0x00610B2C+(1+(i))*16)",
+          "NV_PDISP_FE_PBCLIENT_CLIENT_ID": "13:0",
+          "NV_UDISP_HASH_LIMIT": "0x00001FFF",
+          "NV_UDISP_OBJ_MEM_BASE": "0x00002000",
+          "NV_UDISP_OBJ_MEM_LIMIT": "0x0000FFFF",
+          "NV_UDISP_HASH_TBL_CLIENT_ID": "(1*32+13):(1*32+0)",
+          "NV_UDISP_HASH_TBL_INSTANCE": "(1*32+24):(1*32+14)",
+          "NV_UDISP_HASH_TBL_CHN": "(1*32+31):(1*32+25)",
+          "NV_DMA_TARGET_NODE": "(0*32+1):(0*32+0)",
+          "NV_DMA_ACCESS": "(0*32+2):(0*32+2)",
+          "NV_DMA_PAGE_SIZE": "(0*32+6):(0*32+6)",
+          "NV_DMA_KIND": "(0*32+20):(0*32+20)",
+          "NV_DMA_ADDRESS_BASE_HI": "(2*32+6):(2*32+0)",
+          "NV_DMA_ADDRESS_LIMIT_HI": "(4*32+6):(4*32+0)",
+          "NV_DMA_SIZE": "20",
+          "NV_DMA_ALIGN": "32",
+          "NV_DMA_ADDRESS_BASE_SHIFT": "8",
+          "NV_UDISP_FE_CHN_ARMED_BASEADR_WIN(i)": "((0x00690000+(i)*4096)+2048)"
+        },
+        "c67e_formats": {
+          "I8": "0x1e",
+          "R4G4B4A4": "0x2f",
+          "R5G6B5": "0xe8",
+          "A1R5G5B5": "0xe9",
+          "R5G5B5A1": "0x2e",
+          "A8R8G8B8": "0xcf",
+          "X8R8G8B8": "0xe6",
+          "A8B8G8R8": "0xd5",
+          "X8B8G8R8": "0xf9",
+          "A2R10G10B10": "0xdf",
+          "A2B10G10R10": "0xd1",
+          "R16_G16_B16_A16_NVBIAS": "0x23",
+          "R16_G16_B16_A16": "0xc6",
+          "RF16_GF16_BF16_AF16": "0xca",
+          "Y8_U8__Y8_V8_N422": "0x28",
+          "U8_Y8__V8_Y8_N422": "0x29",
+          "Y8___U8V8_N444": "0x35",
+          "Y8___U8V8_N422": "0x36",
+          "Y8___V8U8_N420": "0x38",
+          "Y8___U8___V8_N444": "0x3a",
+          "Y8___U8___V8_N420": "0x3b",
+          "Y10___U10V10_N444": "0x55",
+          "Y10___U10V10_N422": "0x56",
+          "Y10___V10U10_N420": "0x58",
+          "Y12___U12V12_N444": "0x75",
+          "Y12___U12V12_N422": "0x76",
+          "Y12___V12U12_N420": "0x78"
+        },
+        "window_methods": {
+          "window_core_methods": 5,
+          "window_methods": 27
+        },
+        "right_eye_point": "C67E SET_POINT_IN(1)=0x294, addressed through the exact GA102 armed-window base/stride. This word is absent from the older Nouveau method table; it is justified by NVIDIA definitions, not asserted to be in that table.",
+        "instance": "64KB total; fixed 8KB hash region then objects. Window channel is 1+index; client, handle and channel all participate in the original six-term XOR hash and live-key match. Complete 20-byte descriptors only; 24-byte Nouveau allocation padding is not interpreted.",
+        "surface": "NVKMS format/surface sources establish stored component widths, ceil horizontal decimation and even-before-division vertical decimation. GOB width=64 bytes, height=8 rows; block height rounds backing rows. C67E method offsets are 256-byte units. The NVKMS software registration policy of 1KB offset alignment is not assumed for every firmware client.",
+        "consistency": "Two whole register passes include MEM0/MEM1, client and present/right point. 748 maximum reads; existing two-head/two-window fixture uses 208. All 16 instance pages copied then re-read; another complete instance comparison and parent observation precede VRAM lease publication.",
+        "boundary": "Local VRAM context and used window-plane ranges only. Extra surface pixels, remaining color/cursor state and native device/display recovery are not provided by this decoder. Full global quiet and firmware execution remain separate work."
+      }
+    },
+    "artifact": {
+      "file": {
+        "path": "Artifacts/Modules/NVIDIA/NVIDIA.R4D",
+        "bytes": 92995040,
+        "sha256": "8ce199891e4e0df713dda90341c7bb56dc7cf8c3973c8c3004d6c341d3e06ad2"
+      },
+      "allocated_bytes": 503808,
+      "relocations": 4241,
+      "nonallocated_resources": 27,
+      "full_catalog": "evidence/artifact.json",
+      "catalog_sha256": "fa51bba8d90002ca50299789a34d16b27ce1a820b890f0c579a381f3b16e463c"
+    },
+    "references": {
+      "schema": 1,
+      "nvidia_pin": "8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f",
+      "linux_revision": "7.2.4",
+      "linux_archive": {
+        "archive": "Archives/linux-7.2.4.tar.xz",
+        "archive_bytes": 160081332,
+        "archive_sha256": "01710ee01737dac492f1bae52becd057e08d20d11589089aa06accff415c28dd"
+      },
+      "files": [
+        {
+          "path": "nouveau/drivers/gpu/drm/nouveau/nvkm/engine/device/base.c",
+          "bytes": 130605,
+          "sha256": "68f7e36f3a7b63c9486ba170f09f144f053df3bf92cc52ba0b2e0c1d30aea0cd",
+          "url": "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/tree/drivers/gpu/drm/nouveau/nvkm/engine/device/base.c?h=v7.2.4"
+        },
+        {
+          "path": "nouveau/drivers/gpu/drm/nouveau/nvkm/engine/disp/ga102.c",
+          "bytes": 4705,
+          "sha256": "3a7bb3aa30c548cabf9078d5295e772b81fc7b66d27326db2451b8aae5c35cc1",
+          "url": "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/tree/drivers/gpu/drm/nouveau/nvkm/engine/disp/ga102.c?h=v7.2.4"
+        },
+        {
+          "path": "nouveau/drivers/gpu/drm/nouveau/nvkm/engine/disp/gv100.c",
+          "bytes": 33537,
+          "sha256": "31c1fefe1198acadefee2e606a5954c56d07381a39632cd2f2e15b1963aa7120",
+          "url": "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/tree/drivers/gpu/drm/nouveau/nvkm/engine/disp/gv100.c?h=v7.2.4"
+        },
+        {
+          "path": "nvidia/COPYING",
+          "bytes": 19391,
+          "sha256": "d8e96d29bc323000e7ba56102d77c88226a7a3d0d94e2081cb4b071ae9de4a06",
+          "url": "https://github.com/NVIDIA/open-gpu-kernel-modules/blob/8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f/COPYING"
+        },
+        {
+          "path": "nvidia/src/common/sdk/nvidia/inc/class/clc67d.h",
+          "bytes": 120297,
+          "sha256": "adccb6c2442b4b8d01717b72efca0dee8f183e1a07204968e840d54e559c564c",
+          "url": "https://github.com/NVIDIA/open-gpu-kernel-modules/blob/8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f/src/common/sdk/nvidia/inc/class/clc67d.h"
+        },
+        {
+          "path": "nvidia/src/nvidia/src/kernel/gpu/gsp/arch/turing/kernel_gsp_tu102.c",
+          "bytes": 45126,
+          "sha256": "6eb2e2702f956053a960e26a7bd7917ddb1a8b0fcbbdd0fac2eeebbd73b69303",
+          "url": "https://github.com/NVIDIA/open-gpu-kernel-modules/blob/8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f/src/nvidia/src/kernel/gpu/gsp/arch/turing/kernel_gsp_tu102.c"
+        },
+        {
+          "path": "nvidia/src/nvidia/arch/nvalloc/unix/src/unix_console.c",
+          "bytes": 12299,
+          "sha256": "60859076c66b6138d380f31cacb8a53aeb0b7fe01df33c406381adf41d4e0688",
+          "url": "https://github.com/NVIDIA/open-gpu-kernel-modules/blob/8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f/src/nvidia/arch/nvalloc/unix/src/unix_console.c"
+        },
+        {
+          "path": "nvidia/src/nvidia-modeset/src/nvkms-rm.c",
+          "bytes": 186998,
+          "sha256": "5eb39c8a57a6a396f7d03b4a657aa140ef56f1d96c6c0178c505ddc306b31411",
+          "url": "https://github.com/NVIDIA/open-gpu-kernel-modules/blob/8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f/src/nvidia-modeset/src/nvkms-rm.c"
+        },
+        {
+          "path": "nvidia/src/nvidia-modeset/src/nvkms-console-restore.c",
+          "bytes": 34659,
+          "sha256": "25f2059e4cbaeb5979d27a3bc1f8ff8b0295f1ce4ab332b838039a2f85108868",
+          "url": "https://github.com/NVIDIA/open-gpu-kernel-modules/blob/8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f/src/nvidia-modeset/src/nvkms-console-restore.c"
+        },
+        {
+          "path": "nvidia/src/nvidia/src/kernel/mem_mgr/console_mem.c",
+          "bytes": 3657,
+          "sha256": "1260a48bc7c3b9553e092da48dc94f46470feb9483ee858afe1b35bdf7af8957",
+          "url": "https://github.com/NVIDIA/open-gpu-kernel-modules/blob/8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f/src/nvidia/src/kernel/mem_mgr/console_mem.c"
+        },
+        {
+          "path": "nouveau/drivers/gpu/drm/nouveau/nvkm/engine/disp/nv50.c",
+          "bytes": 46229,
+          "sha256": "fd20c951fa04189d98f1038a41c5774c7b1b95baf151f92894eab826029cae95",
+          "url": "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/tree/drivers/gpu/drm/nouveau/nvkm/engine/disp/nv50.c?h=v7.2.4"
+        },
+        {
+          "path": "nouveau/drivers/gpu/drm/nouveau/dispnv50/wndwc67e.c",
+          "bytes": 3857,
+          "sha256": "8ca6aa5ddad890ffc7db6d30d563998de7474a6a6a06d282ebe0920baa907f34",
+          "url": "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/tree/drivers/gpu/drm/nouveau/dispnv50/wndwc67e.c?h=v7.2.4"
+        },
+        {
+          "path": "nvidia/src/common/sdk/nvidia/inc/class/clc67e.h",
+          "bytes": 60972,
+          "sha256": "2925642cbfef82ddea42a3c6be1551ae6e0e04e50a0533666042a4e72a1725b9",
+          "url": "https://github.com/NVIDIA/open-gpu-kernel-modules/blob/8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f/src/common/sdk/nvidia/inc/class/clc67e.h"
+        },
+        {
+          "path": "nvidia/src/nvidia-modeset/src/nvkms-evo3.c",
+          "bytes": 347587,
+          "sha256": "8d9feac7175aa6ad7f2dc1d4021cf9a6babe9c290d93bb023d484383858b58b2",
+          "url": "https://github.com/NVIDIA/open-gpu-kernel-modules/blob/8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f/src/nvidia-modeset/src/nvkms-evo3.c"
+        },
+        {
+          "path": "nvidia/src/nvidia-modeset/include/nvkms-utils.h",
+          "bytes": 9156,
+          "sha256": "d107f60705ea32493a7f2b2cd930f9d3c59fa552bf8d1db57694473d257ef9a8",
+          "url": "https://github.com/NVIDIA/open-gpu-kernel-modules/blob/8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f/src/nvidia-modeset/include/nvkms-utils.h"
+        },
+        {
+          "path": "nouveau/drivers/gpu/drm/nouveau/nvkm/engine/disp/tu102.c",
+          "bytes": 7373,
+          "sha256": "40f1682301caeb41b67f299031f1703107826dcdadc5c9ec06f271413267cff5",
+          "url": "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/tree/drivers/gpu/drm/nouveau/nvkm/engine/disp/tu102.c?h=v7.2.4"
+        },
+        {
+          "path": "nouveau/drivers/gpu/drm/nouveau/nvkm/engine/dma/gv100.c",
+          "bytes": 1419,
+          "sha256": "977c7bf51c295e82623e9b7ef538bd1395a3c4676e0f1dc639b5191df76aede0",
+          "url": "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/tree/drivers/gpu/drm/nouveau/nvkm/engine/dma/gv100.c?h=v7.2.4"
+        },
+        {
+          "path": "nouveau/drivers/gpu/drm/nouveau/nvkm/engine/dma/usergv100.c",
+          "bytes": 3568,
+          "sha256": "e153e17f3bcfed4fd25376d2c653f1b8fd5b163f0b7042ab1b0d2eb35c8fe4b7",
+          "url": "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/tree/drivers/gpu/drm/nouveau/nvkm/engine/dma/usergv100.c?h=v7.2.4"
+        },
+        {
+          "path": "nouveau/drivers/gpu/drm/nouveau/nvkm/core/ramht.c",
+          "bytes": 4102,
+          "sha256": "b8b4ed50eed3db4d34368ef519f7e21fbde833c778bfde07e5755326d13ab31b",
+          "url": "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/tree/drivers/gpu/drm/nouveau/nvkm/core/ramht.c?h=v7.2.4"
+        },
+        {
+          "path": "nvidia/src/nvidia/src/kernel/gpu/disp/inst_mem/disp_inst_mem.c",
+          "bytes": 31090,
+          "sha256": "4aeb262949bf4b4e4efd3ee5d4f005b24c157b61c50db614709a0ab565a937fd",
+          "url": "https://github.com/NVIDIA/open-gpu-kernel-modules/blob/8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f/src/nvidia/src/kernel/gpu/disp/inst_mem/disp_inst_mem.c"
+        },
+        {
+          "path": "nvidia/src/nvidia/src/kernel/gpu/disp/inst_mem/arch/v03/disp_inst_mem_0300.c",
+          "bytes": 11608,
+          "sha256": "221fd6bec82587dc591f3b53d4e377803dc271cd345c6857a85d5c5a0df4816d",
+          "url": "https://github.com/NVIDIA/open-gpu-kernel-modules/blob/8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f/src/nvidia/src/kernel/gpu/disp/inst_mem/arch/v03/disp_inst_mem_0300.c"
+        },
+        {
+          "path": "nvidia/src/nvidia/generated/g_disp_inst_mem_nvoc.c",
+          "bytes": 10630,
+          "sha256": "ac0d3ed971eaf13529e62d16a9892e00d71efe3b3637e680681c297e7c63d9cf",
+          "url": "https://github.com/NVIDIA/open-gpu-kernel-modules/blob/8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f/src/nvidia/generated/g_disp_inst_mem_nvoc.c"
+        },
+        {
+          "path": "nvidia/src/common/inc/swref/published/disp/v03_00/dev_disp.h",
+          "bytes": 13168,
+          "sha256": "bdc85c2f842f9e5af27ef3cbc18971891c6588afae259948007793cbcb49e363",
+          "url": "https://github.com/NVIDIA/open-gpu-kernel-modules/blob/8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f/src/common/inc/swref/published/disp/v03_00/dev_disp.h"
+        },
+        {
+          "path": "nvidia/src/nvidia-modeset/include/nvkms-types.h",
+          "bytes": 118306,
+          "sha256": "1c3a9cad6f41d38695eeadfe33c408d94b5bf46483ec89b64904c57c84366daf",
+          "url": "https://github.com/NVIDIA/open-gpu-kernel-modules/blob/8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f/src/nvidia-modeset/include/nvkms-types.h"
+        },
+        {
+          "path": "nvidia/src/nvidia-modeset/src/nvkms-headsurface.c",
+          "bytes": 100264,
+          "sha256": "dd8c13a673368a0b28484388963a792d46f3f6358e883cdde87e736afdc194ba",
+          "url": "https://github.com/NVIDIA/open-gpu-kernel-modules/blob/8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f/src/nvidia-modeset/src/nvkms-headsurface.c"
+        },
+        {
+          "path": "nvidia/src/nvidia-modeset/lib/nvkms-format.c",
+          "bytes": 5163,
+          "sha256": "f2a95ee5507ac73c81849e97e0b68c0c8e26e529e0851cf25bc7ea1a8f44e594",
+          "url": "https://github.com/NVIDIA/open-gpu-kernel-modules/blob/8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f/src/nvidia-modeset/lib/nvkms-format.c"
+        },
+        {
+          "path": "nvidia/src/nvidia-modeset/src/nvkms-surface.c",
+          "bytes": 48832,
+          "sha256": "2355cf13f996e852d2917bdd2fde9ccc55545646519719c3fc80cdf32479e850",
+          "url": "https://github.com/NVIDIA/open-gpu-kernel-modules/blob/8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f/src/nvidia-modeset/src/nvkms-surface.c"
+        },
+        {
+          "path": "manual/manuals/ampere/ga102/dev_display_withoffset.ref.txt",
+          "bytes": 1170232,
+          "sha256": "9d562e843f2fc202bf1e3aa0efd5aef9f68a7dc5dc196449762fe980b40c2ec9",
+          "url": "https://github.com/NVIDIA/open-gpu-doc/blob/9fdf5c4062007929d9f4e6cbad9c9771fe61b880/manuals/ampere/ga102/dev_display_withoffset.ref.txt"
+        }
+      ],
+      "ga106_dispatch": "Nouveau nv176_chipset selects ga102_disp_new. Its head/state and SOR state use gv100 functions; no cross-generation register guess.",
+      "registers": "gv100 reads capability mask 0x610060 and counts 0x610074. Armed state adds 0x8000 to the asynchronous method mirror: head 0x682000+n*0x400, SOR 0x680300+n*0x20. Its explicit core method/address table confirms all ten selected head fields, including control, clock configuration and viewports. HDMI control read at 0x6165c0+n*0x800 follows the same source.",
+      "fields": "NVIDIA C67D defines 15-bit raster/viewport dimensions, progressive/stereo control, sync polarities and output depth code. Pixel clock is 31-bit HERTZ plus ADJ1000DIV1001 at bit31; rational numerator/denominator retained. C67D explicitly adds HDMI_FRL protocol0xc beyond Nouveau gv100_sor_state legacy switch.",
+      "capture": "Two whole register passes include MEM0/MEM1, client and present/right point. 748 maximum reads; existing two-head/two-window fixture uses 208. All 16 instance pages copied then re-read; another complete instance comparison and parent observation precede VRAM lease publication.",
+      "uefi_recovery": "unix_console.c RmSaveDisplayState and RmRestoreDisplayState explicitly return without UEFI framebuffer restoration. NVKMS imports a linear console surface (pitch multiple256, depth restrictions) and uses its native display core channel for console modeset. Thus saved pixels/tables and successful FWSEC-SB/BooterUnload alone cannot claim restored UEFI scanout.",
+      "teardown": "kernel_gsp_tu102.c kgspTeardown resets GSP, executes FWSEC-SB to restore PreOsApps and executes BooterUnload. This is distinct from NVKMS console modeset and does not alone prove global DMA quiescence.",
+      "boundary": "Local VRAM context and used window-plane ranges only. Extra surface pixels, remaining color/cursor state and native device/display recovery are not provided by this decoder. Full global quiet and firmware execution remain separate work.",
+      "window_registers": "Five core and 27 window methods plus client per fused window. Thirty-one methods match explicit Nouveau mappings; right-eye point 0x294 follows the exact GA102 armed mirror and C67E array definition. MEM0/MEM1 are included in the guarded complete observations.",
+      "window_fields": "All six raw bindings retained, but present stereo mode and format select used slots for context resolution. Descriptor KIND determines pitch/block-linear layout; encoded pitch widens to 64-byte rows in both cases. Surface offsets are context-relative 256-byte units, not direct physical pointers.",
+      "manual_pin": {
+        "revision": "9fdf5c4062007929d9f4e6cbad9c9771fe61b880",
+        "archive": "Archives/nvidia-open-gpu-doc.tar.gz",
+        "archive_bytes": 3796114,
+        "archive_sha256": "901999de58461d953531f55445a3f653ca76ff58cec722bedb9f064d25808707"
+      },
+      "instance": "GA102 manual: FE_INST_MEM0 at0x610010, VALID bit3 and TARGET bits1:0; MEM1 at0x610014 has31 address bits in64-KB units. Instance region is64KB: fixed8-KB hash table then objects0x2000..0xffff. PBCLIENT for each window channel1+n is0x610b2c+(1+n)*16, low14 client bits.",
+      "lookup": "1024 eight-byte RAMHT entries: handle32, client14, instance11 in32-byte units, channel7. Original RM hash includes client/handle/channel; bounded wrapped lookup never equates equal handles on other clients/channels. Invalid instance0 ignored; duplicate live matches and out-of-object-area pointers refused.",
+      "descriptor": "Exact20-byte NV_DMA descriptor: target bits1:0, access bit2, page bit6, layout bit20; base and inclusive limit use39-bit256-byte addresses. Decoder never consumes uninitialized padding at byte20. Only actual local-VRAM surface ranges may enter boot preservation.",
+      "surface": "Use C67E present stereo mode and format to select active planes/eyes; unused nonzero handles are not active bindings. Source format table supplies RGB bytes and YUV plane/decimation/storage widths. Pitch uses64-byte rows or block counts; block-linear backing rounds height to8<<blockHeight and has64-byte GOB width. All geometry and descriptor/VRAM bounds checked before reservation."
+    },
+    "legal": "28 complete originals: nine Nouveau, eighteen NVIDIA 570.144 including COPYING, one GA102 manual. Twelve additional full per-source MIT notices retained in display_context and the new module/Distribution resource. Generated RM dispatch is reference-only and has no per-file notice; no generated implementation copied. Original R4OS lifetime and validation policy remains Apache-2.0.",
+    "ossipc": {
+      "contacted": false,
+      "availability": "Offline per user; no probe/update/reboot.",
+      "last_verified_release": "0.79.8",
+      "last_verified_kernel": "0.1.150",
+      "last_verified_nvidia": "0.1.28",
+      "last_verified_mode": "passive",
+      "current_artifact_installed": false
+    },
+    "gpu_executed": false,
+    "firmware_ready": false,
+    "native_scanout": false,
+    "hardware_verified": false,
+    "fresh_visual_acceptance": false,
+    "fresh_audio_acceptance": false,
+    "open": [
+      "Preserve remaining color/cursor and any additional boot surface data, then implement native UEFI console/device recovery before firmware effects. Held instance/context and used plane VRAM spans are now resolved; existing callback remains aperture/pixel-only.",
+      "Native same-run admission for paired FWSEC, Booters and cold stages, retained DMA and real log reader; package additional execution-source notices before linking those stages.",
+      "Physical boot mapping, context/plane observation and recovery when OssiPC returns, then authentication/bootstrap/INIT_DONE, IRQ/log/health and proven post-submission quiescence.",
       "General VRAM/MMU/contexts, remaining RM/NVKMS integration, native connectors/modesets and HDMI audio; suspend/resume/GC6 and later roadmap work."
     ]
   }

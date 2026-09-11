@@ -2,7 +2,7 @@
   "schema": 1,
   "subversion": "0.79.10",
   "date": "2026-09-11",
-  "status": "0.79.12: feste RM-Objektkette mit gemeinsamem RPC-Besitzer, gepruefter Uebergabe an Monitorabfragen und umgekehrtem/fehlerbewusstem Abbau hostseitig implementiert.51 bestehende Faelle und Modul erstversuchsweise bestanden; Produktartefakt NVIDIA44 bytegleich. Native Einbindung/Hardwareabnahmen offen; OssiPC offline.",
+  "status": "0.79.10: Queue-Publikation mit anschliessender gebundener GSP-Benachrichtigung, gemeinsamer DMA-/BAR0-Lebensdauer und Fehlerhaltung hostseitig umgesetzt.51 bestehende Faelle und Modulbuild bestanden; Produktartefakt NVIDIA44 bytegleich. Native Einbindung/Hardwareabnahmen offen; OssiPC offline.",
   "versions": {
     "release": "0.79.9",
     "kernel": "0.1.150",
@@ -12,7 +12,7 @@
   "ossipc_contacted": true,
   "hardware_verified": false,
   "native_initialization_authorized": false,
-  "history_note": "Aktuell: status, versions, rm_object_checkpoint (hostseitige RM-Objekt-/Exchange-Verwaltung fuer0.79.12, Produktionsartefakt NVIDIA44 unveraendert). rm_display_control_checkpoint und GPIO/Connector-Belege bleiben historische veroeffentlichte Staende. Fruehere Firmware-/Recovery-Belege und boot_display_checkpoint (letzter physischer OssiPC-Nachweis NVIDIA28) unveraendert. Keine neue Hardwareabnahme.",
+  "history_note": "Aktuell: status, versions, queue_notification_checkpoint (hostseitiger Queue-/Registerpfad fuer0.79.10, NVIDIA44-Produktartefakt unveraendert). rm_object_checkpoint und rm_display_control_checkpoint bleiben veroeffentlichte Vorarbeiten fuer0.79.12; GPIO/Connector sowie alle frueheren Firmware-/Recovery-Belege bleiben unveraendert. boot_display_checkpoint bleibt letzter physischer OssiPC-Nachweis NVIDIA28. Keine neue Hardwareabnahme.",
   "firmware": [
     {
       "schema": 1,
@@ -296,7 +296,7 @@
     "Complete indexed CSC LUT/output-scaler tables and native UEFI/device recovery. Raw image/cursor/LUT backing is preserved but not restored through native display channels; no additional compression or device state is inferred.",
     "Connect same-run admission for paired FWSEC/Booters/cold stages, retained DMA and real log reader, with full execution-source notices and proven global post-submission quiescence.",
     "On OssiPC return, verify actual mapping/contexts/payloads, native PRAMIN throughput/deadlines and full recovery, then GPU authentication/bootstrap/INIT_DONE, IRQ/log/health, native modesets/connectors and HDMI audio.",
-    "0.79.12: connect the shared exchange/object lifecycle to actual native GSP admission, global RM name reservation, internal RM initialization and display-instance-memory binding; retained queue/doorbell and real notification handlers, complete validated EDID/CTA publication and physical Hisense/HPD/audio acceptance remain open. External GPIO expanders are still unresolved."
+    "0.79.12: global RM name reservation, internal RM initialization and display-instance-memory binding; activate the bound queue facade only from actual native GSP admission, with real notification handlers, complete validated EDID/CTA publication and physical Hisense/HPD/audio acceptance. External GPIO expanders remain unresolved."
   ],
   "archive": "ExFiles/Reference/GFX/Nvidia/0.79.10",
   "resource_checkpoint": {
@@ -17788,6 +17788,340 @@
       "Connect same-run admission for paired FWSEC/Booters/cold stages, retained DMA and real log reader, with full execution-source notices and proven global post-submission quiescence.",
       "On OssiPC return, verify actual mapping/contexts/payloads, native PRAMIN throughput/deadlines and full recovery, then GPU authentication/bootstrap/INIT_DONE, IRQ/log/health, native modesets/connectors and HDMI audio.",
       "0.79.12: connect the shared exchange/object lifecycle to actual native GSP admission, global RM name reservation, internal RM initialization and display-instance-memory binding; retained queue/doorbell and real notification handlers, complete validated EDID/CTA publication and physical Hisense/HPD/audio acceptance remain open. External GPIO expanders are still unresolved."
+    ],
+    "ossipc": {
+      "contacted": false,
+      "availability": "Offline per user; no probe/update/reboot.",
+      "last_verified_release": "0.79.8",
+      "last_verified_kernel": "0.1.150",
+      "last_verified_nvidia": "0.1.28",
+      "last_verified_mode": "passive",
+      "current_artifact_installed": false
+    },
+    "gpu_executed": false,
+    "firmware_ready": false,
+    "native_scanout": false,
+    "hardware_verified": false,
+    "fresh_visual_acceptance": false,
+    "fresh_audio_acceptance": false
+  },
+  "queue_notification_checkpoint": {
+    "schema": 1,
+    "recorded_utc": "2026-09-11T13:08:27.547499+00:00",
+    "subversion": "0.79.10",
+    "complete": false,
+    "versions": {
+      "release": "0.79.9",
+      "kernel": "0.1.150",
+      "nvidia": "0.1.44",
+      "driver_api": 34
+    },
+    "source_only": true,
+    "artifact_unchanged": true,
+    "implementation": {
+      "wire": "Pinned NVIDIA570.144 _kgspRpcSendMessage sends queue data then calls kgspSetCmdQueueHead(queueIdx,0). RPC_TASK_RM_QUEUE_IDX is0; TU102 bare-metal HAL writes NV_PGSP_QUEUE_HEAD(0)=0x110c00. GA106 shares that HAL. Nouveau confirms wmb before cursor, mb before Falcon-relative0xc00, base0x110000. No SWGEN0 or VF doorbell assumption.",
+      "transport": "Optional Notification capability on the range port is mandatory for send. Missing notifier fails before queue I/O. Queue and notifier epochs are checked together, with one absolute request deadline. Full-queue waiting performs no preparation or notification. Prepare admits/retains before any payload publication; submit follows all payload spans and the synchronized cursor. One notification per request, including wrapped multi-page messages. Receive/ACK does not notify the command queue.",
+      "native_binding": "gsp_sequencer_port exposes the queue facade only for the exact run_memory.Lease frozen in its Owner at open, with matching DriverApi and epoch. Every queue/MMIO callback rechecks it and the BAR0 lifetime. The owner retains all DMA before queue publication, including ACK, and admits queue0/BOOT0 access before sending. Register accesses reuse bounded native x86 UC volatile access, mfence ordering and same-device BOOT0 posted-write flush.",
+      "deadline": "The native run deadline is never renewed. A shorter request deadline is rechecked after the last callback before the notification store. A request cannot use an unrelated longer native run deadline to write late. Outstanding firmware/core work excludes queue traffic.",
+      "failures": "Prepare/notification, queue synchronization, epoch, clock or deadline failure stops the Session. The driver keeps the native failure and DMA/MMIO owners after possible effects. Notification may already have reached firmware before an error; no replay, cursor rollback, claimed completion or automatic free. One-shot posted write is not proof of firmware execution.",
+      "integration_limit": "This source facade is host-linked only. Passive main still does not open the native executor or drive GSP/RM. Real bootstrap, runtime admission/phase transitions and deadline handoff, handlers and complete recovery/quiescence remain open. No new module/ABI/kernel or hardware owner."
+    },
+    "validation": {
+      "owner_invocations": 3,
+      "failed_owner_invocations": 2,
+      "compile_failures": 0,
+      "final_pass": true,
+      "correction": "Initial and diagnostic owner runs each passed49 of51 cases; the complete-run native fixture returned0 instead of gfx_buffer_result_ok(1) from its new graphics-memory callbacks. API admission failed, retained fixture backing caused a leak report and the following allocation fixture aborted. Diagnostic run identified error.Api. Corrected all four graphics-memory fixture callbacks to the named success constant; unchanged production implementation then passed51/51. Initial, diagnostic and final logs preserved.",
+      "owner_cases": 51,
+      "owner_build_steps": 13,
+      "module_invocations": 1,
+      "module_build_steps": 7,
+      "new_cases": 0,
+      "new_gates": 0,
+      "inspector_runs": 0,
+      "guest_runs": 0,
+      "physical_runs": 0,
+      "covered": "Existing transport case: publication/notification ordering, ring wrap/full, no ACK kick, missing/mismatched notifier, before/after signal faults, deadline/epoch loss and no replay. Existing init-storage cases: real range facade including bounce memory and notification observes device-visible bytes/cursor; native facade binds actual complete-run lease, rejects wrong API/epoch/missing queue, retains before first effect, handles denied/partial retain/posted-flush failure and shorter request expiry before MMIO. Host-aligned memory is the register fixture, not real MMIO hardware.",
+      "artifact": "One canonical module build; whole NVIDIA44 R4D remains byte-identical, including all30 resources. No release/kernel/module version or Distribution change.",
+      "limit": "51 existing grouped cases; synthetic firmware/queue and aligned host register models. No new native/hardware readiness or EDID/audio acceptance."
+    },
+    "legal": {
+      "native_port_full_source_notices": 4,
+      "transport_full_source_notices": 2,
+      "description": "Eight full hash-pinned originals archived. Complete NVIDIA MIT notices retained for register and command-queue adaptation. Original R4OS owner/retention/facade policy Apache-2.0. Product resources/notices byte-identical."
+    },
+    "references": {
+      "files": [
+        {
+          "path": "Nvidia570.144/src/nvidia/src/kernel/gpu/gsp/kernel_gsp.c",
+          "bytes": 168764,
+          "sha256": "5b99422b7e5cf424e4b782d9a9b2389118f9bd9d74085e49223b1c5170e5f018",
+          "revision": "8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f",
+          "upstream_url": "https://github.com/NVIDIA/open-gpu-kernel-modules/tree/570.144"
+        },
+        {
+          "path": "Nvidia570.144/src/nvidia/src/kernel/gpu/gsp/message_queue_cpu.c",
+          "bytes": 26090,
+          "sha256": "acefc9555e95cc5663f872c10fa796c9e8416e15ee292b78efd1e85d3a4a7816",
+          "revision": "8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f",
+          "upstream_url": "https://github.com/NVIDIA/open-gpu-kernel-modules/tree/570.144"
+        },
+        {
+          "path": "Nvidia570.144/src/nvidia/src/kernel/gpu/gsp/arch/turing/kernel_gsp_tu102.c",
+          "bytes": 45126,
+          "sha256": "6eb2e2702f956053a960e26a7bd7917ddb1a8b0fcbbdd0fac2eeebbd73b69303",
+          "revision": "8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f",
+          "upstream_url": "https://github.com/NVIDIA/open-gpu-kernel-modules/tree/570.144"
+        },
+        {
+          "path": "Nvidia570.144/src/common/inc/swref/published/ampere/ga102/dev_gsp.h",
+          "bytes": 3214,
+          "sha256": "c919344deae0025cd08ff2a5f84c015be2bcbc900ee6fb3536700e864f14a5f7",
+          "revision": "8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f",
+          "upstream_url": "https://github.com/NVIDIA/open-gpu-kernel-modules/tree/570.144"
+        },
+        {
+          "path": "Nvidia570.144/src/nvidia/inc/kernel/gpu/gsp/message_queue.h",
+          "bytes": 1988,
+          "sha256": "218fb1f9646631f3cd9d6d8f88034f3a5dbf729fa48522133a32a2da12cc348d",
+          "revision": "8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f",
+          "upstream_url": "https://github.com/NVIDIA/open-gpu-kernel-modules/tree/570.144"
+        },
+        {
+          "path": "Nvidia570.144/src/nvidia/generated/g_kernel_gsp_nvoc.c",
+          "bytes": 93441,
+          "sha256": "4ba9ad215a5eca831a9361d4e895e9056604b3d20d9d7889e5ac784292cf8db4",
+          "revision": "8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f",
+          "upstream_url": "https://github.com/NVIDIA/open-gpu-kernel-modules/tree/570.144"
+        },
+        {
+          "path": "Nouveau/drivers/gpu/drm/nouveau/nvkm/subdev/gsp/base.c",
+          "bytes": 4151,
+          "sha256": "77cab7495588981e966942b852408d206988495b9c6c1f6febbbc6fe20d38e80",
+          "revision": "7.2.4",
+          "upstream_url": "https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.2.4.tar.xz"
+        },
+        {
+          "path": "Nouveau/drivers/gpu/drm/nouveau/nvkm/subdev/gsp/rm/r535/rpc.c",
+          "bytes": 17822,
+          "sha256": "6ab6fa460a1d9926b5f533237068cd34208750077442b02f73b753cf34ee2ddd",
+          "revision": "7.2.4",
+          "upstream_url": "https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.2.4.tar.xz"
+        }
+      ],
+      "boundary": "Pinned bare-metal GA106/RM570.144 queue notification, fixed queue0 and zero write after cursor publication. No SWGEN0, vGPU doorbell or native firmware/hardware readiness claim."
+    },
+    "artifact": {
+      "file": {
+        "path": "Artifacts/Modules/NVIDIA/NVIDIA.R4D",
+        "bytes": 93101593,
+        "sha256": "2c6e9bb21474d29a88501cbded74cd762d3df7babcc05d58b1845d3ddad761e2"
+      },
+      "allocated_bytes": 577536,
+      "sections": [
+        {
+          "name": ".text",
+          "flags": 3,
+          "offset": 110592,
+          "bytes": 191658,
+          "memory_bytes": 191658,
+          "alignment": 4096
+        },
+        {
+          "name": ".rodata",
+          "flags": 1,
+          "offset": 303104,
+          "bytes": 210732,
+          "memory_bytes": 210732,
+          "alignment": 4096
+        },
+        {
+          "name": ".data",
+          "flags": 5,
+          "offset": 516096,
+          "bytes": 129616,
+          "memory_bytes": 129616,
+          "alignment": 4096
+        },
+        {
+          "name": ".bss",
+          "flags": 13,
+          "offset": 0,
+          "bytes": 0,
+          "memory_bytes": 40288,
+          "alignment": 4096
+        },
+        {
+          "name": ".rsrc",
+          "flags": 0,
+          "offset": 645712,
+          "bytes": 92455777,
+          "memory_bytes": 92455777,
+          "alignment": 16
+        }
+      ],
+      "resources": [
+        {
+          "name": "NVFW-LOCK.json",
+          "bytes": 9923,
+          "sha256": "a6cc7e90aecbc29ed724b71a2e8ed06de67a691dbf642c004309d9dcb1cae6a6"
+        },
+        {
+          "name": "NVIDIA-570.144-HEADERS-LICENSE.txt",
+          "bytes": 43561,
+          "sha256": "093605f2e2b133cf52b95e3e2a65ece1db7a013849b951012f511782295b6ef4"
+        },
+        {
+          "name": "NVIDIA-570.144-LICENSE.txt",
+          "bytes": 17863,
+          "sha256": "5ac626496a6388d37cdd53e0300525267a4b8c89fb5980da060783afd561faf7"
+        },
+        {
+          "name": "GSP-570.144-GA10X.bin",
+          "bytes": 63571696,
+          "sha256": "a8c3ebeed280323aedb51c061f321e73379cce7a9ae643a33dd03915df027f7f"
+        },
+        {
+          "name": "GSP-570.144-TU10X.bin",
+          "bytes": 28542040,
+          "sha256": "3052aee2872182a14d8d7c069e3a14fe4642405894b24692c4aca4101dfb1809"
+        },
+        {
+          "name": "GSP-570.144-GA102-BOOT.bin",
+          "bytes": 24576,
+          "sha256": "3df651acb174fd5f5561a1996965b192f50c5d763168446ed0d4ead19d895768"
+        },
+        {
+          "name": "GSP-570.144-GA102-BOOT-DESC.bin",
+          "bytes": 84,
+          "sha256": "cc5a3fc1f4c47f2fe107b1b68f0176d8a448e6dec84b575e5560ccef5262bf15"
+        },
+        {
+          "name": "NVIDIA-570.144-GSP-BOOT-LICENSE.txt",
+          "bytes": 33543,
+          "sha256": "034411c3bf35fa6c7df412070140d621affb15b0e4be2e286ff25c8fc1d69d25"
+        },
+        {
+          "name": "GSP-570.144-GA102-BLOAD-IMAGE.bin",
+          "bytes": 60416,
+          "sha256": "6803188fef6bd352f7ab47b2cf13e18175ac3f12243fa6afae7c4e2872f246f0"
+        },
+        {
+          "name": "GSP-570.144-GA102-BLOAD-HEADER.bin",
+          "bytes": 36,
+          "sha256": "052c05b44171a5a38eac5dcc4f3e4c552d87e0588ecf2bba064d73c1bf13482f"
+        },
+        {
+          "name": "GSP-570.144-GA102-BLOAD-SIG.bin",
+          "bytes": 768,
+          "sha256": "4db5a10949e475df7ecc011e34229895b296653cd401f6d88396ae00412cf0ea"
+        },
+        {
+          "name": "GSP-570.144-GA102-BLOAD-LOC.bin",
+          "bytes": 4,
+          "sha256": "d1e41f2cc86f71800099c63cc18c396984961da6ccfa0d61601fe8a98beff5b3"
+        },
+        {
+          "name": "GSP-570.144-GA102-BLOAD-INDEX.bin",
+          "bytes": 4,
+          "sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119"
+        },
+        {
+          "name": "GSP-570.144-GA102-BLOAD-META.bin",
+          "bytes": 12,
+          "sha256": "0fe5ea953905a7e632f48916bee4115fa1bc91a8b14bdd57f57ccf3c79f11926"
+        },
+        {
+          "name": "GSP-570.144-GA102-BLOAD-COUNT.bin",
+          "bytes": 4,
+          "sha256": "26b25d457597a7b0463f9620f666dd10aa2c4373a505967c7c8d70922a2d6ece"
+        },
+        {
+          "name": "GSP-570.144-GA102-BUNLOAD-IMAGE.bin",
+          "bytes": 40192,
+          "sha256": "023d474cd84acc33c840bf239c27f36b16f3f6709c88862f59892697a5959010"
+        },
+        {
+          "name": "GSP-570.144-GA102-BUNLOAD-HEADER.bin",
+          "bytes": 36,
+          "sha256": "1b43779de3f13ece4b0db88d73a89d8a61f25b529a568a0219406c260055f7f8"
+        },
+        {
+          "name": "GSP-570.144-GA102-BUNLOAD-SIG.bin",
+          "bytes": 768,
+          "sha256": "8bbb42f4f9c7f71b9be4eec0eeb8002c27f4ae677bca3492898feea791269330"
+        },
+        {
+          "name": "GSP-570.144-GA102-BUNLOAD-LOC.bin",
+          "bytes": 4,
+          "sha256": "c5e7ecffc846e85c9d075535d20d09e84cfda89a20cdf53c1b97e56d6a7b8844"
+        },
+        {
+          "name": "GSP-570.144-GA102-BUNLOAD-INDEX.bin",
+          "bytes": 4,
+          "sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119"
+        },
+        {
+          "name": "GSP-570.144-GA102-BUNLOAD-META.bin",
+          "bytes": 12,
+          "sha256": "0fe5ea953905a7e632f48916bee4115fa1bc91a8b14bdd57f57ccf3c79f11926"
+        },
+        {
+          "name": "GSP-570.144-GA102-BUNLOAD-COUNT.bin",
+          "bytes": 4,
+          "sha256": "26b25d457597a7b0463f9620f666dd10aa2c4373a505967c7c8d70922a2d6ece"
+        },
+        {
+          "name": "NVIDIA-570.144-BOOTER-LICENSE.txt",
+          "bytes": 24640,
+          "sha256": "f40115086b5a24f4c5c27b8b61a2e9beea3419183dbb7569fce940d97c8167f1"
+        },
+        {
+          "name": "NVIDIA-570.144-PRAMIN-LICENSE.txt",
+          "bytes": 6676,
+          "sha256": "7fde22e24c5e3ee88631490ad967334b745ef13384a805686d94f6f50a6e09ba"
+        },
+        {
+          "name": "NVIDIA-570.144-BAR1-LICENSE.txt",
+          "bytes": 21757,
+          "sha256": "51b7c491167447be6e0736d7fc562693deebb1584b18c36c567ad873d034b669"
+        },
+        {
+          "name": "NVIDIA-BOOT-DISPLAY-LICENSE.txt",
+          "bytes": 17645,
+          "sha256": "a07599e20b2d5e10731d1930c31dfeef1047dd3dc11ecc7b40c41ad17aafeaa9"
+        },
+        {
+          "name": "NVIDIA-DISPLAY-CONTEXT-LICENSE.txt",
+          "bytes": 14984,
+          "sha256": "bf86a663e6bf4f3c29547ddf34a8908d350ee982beffc7e3aea7bd7c7ed8003b"
+        },
+        {
+          "name": "NVIDIA-DISPLAY-COLOR-LICENSE.txt",
+          "bytes": 7664,
+          "sha256": "02e97b14fee0ae488c2d157e88314cf50f6e457dddf4ffb393ca91121f63c9cf"
+        },
+        {
+          "name": "NVIDIA-DISPLAY-ASSETS-LICENSE.txt",
+          "bytes": 10098,
+          "sha256": "f05031b97aab9acf2aeed1504fbf5f5c79482beb7a41646d9fa9177bb3519c45"
+        },
+        {
+          "name": "NVIDIA-CONNECTORS-LICENSE.txt",
+          "bytes": 5105,
+          "sha256": "0eea44c589c8051332bbcf79342f428ed4342c98d7003443b4906f92f366a9d7"
+        }
+      ],
+      "imports": 1,
+      "exports": 2,
+      "relocations": 4565
+    },
+    "open": [
+      "Owner-bound system-memory attachment reads with correct GPU DMA namespace, target encoding and read-error handling; production still rejects those targets.",
+      "Complete indexed CSC LUT/output-scaler tables and native UEFI/device recovery. Raw image/cursor/LUT backing is preserved but not restored through native display channels; no additional compression or device state is inferred.",
+      "Connect same-run admission for paired FWSEC/Booters/cold stages, retained DMA and real log reader, with full execution-source notices and proven global post-submission quiescence.",
+      "On OssiPC return, verify actual mapping/contexts/payloads, native PRAMIN throughput/deadlines and full recovery, then GPU authentication/bootstrap/INIT_DONE, IRQ/log/health, native modesets/connectors and HDMI audio.",
+      "0.79.12: global RM name reservation, internal RM initialization and display-instance-memory binding; activate the bound queue facade only from actual native GSP admission, with real notification handlers, complete validated EDID/CTA publication and physical Hisense/HPD/audio acceptance. External GPIO expanders remain unresolved."
     ],
     "ossipc": {
       "contacted": false,

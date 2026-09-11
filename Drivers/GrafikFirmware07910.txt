@@ -3,10 +3,55 @@
 
 Stand: 11.09.2026. Software-Zwischenstand; 0.79.10 bleibt offen.
 RELEASE_VERSION bleibt 0.79.9; Kernel 0.1.147, NVIDIA 0.1.23, DISPLAYD 0.1.9.
-OssiPC bleibt auf Release 0.79.8 / NVIDIA 0.1.23, passiv. Der neue Schritt
-qualifiziert Initialisierungsdaten am Host, ohne weiteren Hardwarekontakt.
+OssiPC bleibt auf Release 0.79.8 / NVIDIA 0.1.23, passiv. Der neueste Schritt
+qualifiziert den Besitzer des Initialisierungsspeichers am Host.
 
-Libos-/RM-/Log-/Queue-Initialisierung (Host)
+DMA-Besitzer fuer GSP-Initialisierungsspeicher (Host)
+---------------------------------------------------
+gsp_init_storage.zig besitzt den 844-KB-Initialisierungspuffer ueber die
+vorhandene R4D-Fassade. Eine residente Allokation und sieben Pins/Mappings:
+ein zusammenhaengender 8-KB-Argumentbereich mit Richtung to-device, fuenf
+zusammenhaengende 64-KB-Logs bidirectional und 516 KB Queue-Speicher mit bis
+zu64 Segmenten ebenfalls bidirectional. Die DMA-Maske umfasst49 Bits; alle
+Bereiche sind4KB-ausgerichtet und erlauben den begrenzten Bounce-Fallback.
+
+Vor initialer Abbildung wird das Backing genullt. Erst nach den wirklichen
+Mappings kodiert der zuvor gepruefte Encoder alle Startdaten und PTEs.
+Anschliessend werden alle sieben Mappings erneut fuer das Geraet synchroni-
+siert, einschliesslich der bidirektionalen Logs/Queues. Nur danach gibt es
+einen vollstaendigen Report. Die gemeinsame monotone Frist wird um jeden
+Aufruf geprueft; sie verspricht keinen Abbruch eines blockierten Callbacks.
+
+Rueckbau: alle Mappings rueckwaerts, danach alle Pins rueckwaerts, zuletzt
+die residente Allokation. Teilweise veroeffentlichte Pin-/Map-Fehler und
+fehlgeschlagene In-/Out-Freigaben behalten die exakten Deskriptoren.
+Fehler lassen den Owner fuer einen weiteren Abschluss bestehen; die Heap-
+API bleibt fuer Shutdown gecacht. Fremde angegebene Bootspannen werden nur
+auf Ueberlappung geprueft und nicht von diesem Besitzer freigegeben.
+
+40/40 Besitzerfaelle in12/12 Schritten bestanden. Ein neuer zusammengefasster
+Fall prueft17 Szenarien, einschliesslich letzter Teil-Pin/Map, Richtung und
+Deskriptoren, interne/externe Aliase, voller Adressspanne, letzter Synchroni-
+sierung, Frist/Clock-Ruecklauf sowie Unmap-/Unpin-/Heap-Retry. Der Bouncefall
+vergleicht alle864256 Bytes nach finaler Synchronisierung. Die erste Kompilation
+fand eine falsche Breite fuer max_segments; auf den vorhandenen u16-ABI-Typ
+korrigiert. Keine neue Gate-/Gastvariante; kein Modul-/Hardware-/Datei-/ABI-
+oder RM-/Bootstrap-Neulauf. Originalencoder und dessen C-ABI-Beleg bleiben
+hashgleich und mussten nicht erneut abgenommen werden.
+
+Archiv: ExFiles/Reference/GFX/Nvidia/0.79.10/gsp-init-storage-20260911
+191 gehashte Dateien, davon 137 Besitzerquellen;25 vollstaendige
+Originalquellen/Lizenzdateien und der vorherige originale C/msgq-Nachweis.
+NVIDIA.R4D bleibt 92504165 Bytes, SHA256:
+5482eb3525fd844ff2aea8eb357954f36c5a5841ac98753d83b61d6626c827a4
+Aktueller JSON-Abschnitt: gsp_init_storage_checkpoint. Letzte echte
+Hardwareaufnahme: boot_resources_checkpoint mit restaurierter passiver
+Konfiguration. Neue Modulanbindung, Empfangssynchronisierung, Queue-
+Aushandlung/RPC/IRQ, VRAM-/VGA-Recovery und GPU-Start bleiben offen.
+Nach spaeterer Einreichung muss der Ausfuehrungsbesitzer vor Speicherfreigabe
+echte Quieszenz nachweisen. Keine neue Bild-/Tonabnahme ohne den User.
+
+Historische Libos-/RM-/Log-/Queue-Initialisierung (Host)
 -----------------------------------------
 gsp_init.zig kodiert die Startdaten des gepinnten normalen GA106-Profils.
 Der caller-eigene Puffer umfasst 844 KB: je eine 4-KB-Seite fuer Libos und

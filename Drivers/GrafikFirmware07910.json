@@ -2,17 +2,17 @@
   "schema": 1,
   "subversion": "0.79.10",
   "date": "2026-09-11",
-  "status": "NVIDIA 0.1.30 bindet im vorhandenen Bootcheck die gehaltenen Boot-/VGA-Snapshots an eine exakte VRAM-Reservierung und frisch gepruefte WPR-Metadaten. Vorzeitige Freigaben, alte Bindungen und ueberlappende MMIO-Abbildungen verhindert. 51 bestehende Besitzerfaelle in einem Lauf und Modulbuild bestanden. OssiPC offline, kein Hardwarelauf/Update. Vollstaendige GPU-Recovery und Firmwarestart bleiben offen.",
+  "status": "NVIDIA 0.1.31 bereitet FWSEC-FRTS ueber die echte CPU-/DMA-Schicht fuer den exakt gehaltenen VRAM-Zielbereich vor. Exklusive Zielbindung bleibt durch Teilallokation und Abbaufehler erhalten; alte oder vorzeitig geloeste Bindungen werden abgewiesen. 51 vorhandene Besitzerfaelle und Modulbuild bestanden. OssiPC offline, kein Zugriff/Update. Firmwareausfuehrung, vollstaendige GPU-Recovery und HDMI bleiben offen.",
   "versions": {
     "release": "0.79.9",
     "kernel": "0.1.150",
-    "nvidia": "0.1.30",
+    "nvidia": "0.1.31",
     "displayd": "0.1.9"
   },
   "ossipc_contacted": true,
   "hardware_verified": false,
   "native_initialization_authorized": false,
-  "history_note": "Aktuell sind status, versions und vram_reservation_checkpoint. boot_vram_checkpoint bewahrt den NVIDIA29-Stand, boot_display_checkpoint den letzten physischen OssiPC-Nachweis mit Kernel150/NVIDIA28. NVIDIA30 ist nur lokal gebaut/geprueft; historische Artefakte/Tests bleiben erhalten und die gesamte 0.79.10-Hardwareabnahme bleibt false.",
+  "history_note": "Aktuell sind status, versions und fwsec_frts_checkpoint. vram_reservation_checkpoint bewahrt NVIDIA30, boot_vram_checkpoint NVIDIA29, boot_display_checkpoint den letzten physischen OssiPC-Nachweis mit Kernel150/NVIDIA28. NVIDIA31 ist lokal gebaut/geprueft; historische Nachweise bleiben erhalten. Die gesamte 0.79.10-Hardwareabnahme bleibt false.",
   "firmware": [
     {
       "schema": 1,
@@ -292,10 +292,10 @@
     }
   ],
   "open": [
-    "Physical VGA/PRAMIN capture, restore and complete boot-reservation lifecycle on OssiPC after the user reports it available.",
-    "Resolve the real scanout GPU mapping and implement full VGA/VRAM/device recovery before firmware effects. The current aperture-only callback cannot recover firmware execution.",
-    "Bind the exact retained reservation, DMA run and recovery to FRTS/Booter execution; executable Falcon paths remain unlinked.",
-    "Firmware result/authentication checks, IRQ/log/health and demonstrated post-submission quiescence.",
+    "Physical VGA/PRAMIN preservation and the combined VRAM/FRTS CPU-DMA preparation lifecycle on OssiPC after the user reports it available.",
+    "Resolve the actual old scanout GPU mapping and full device/VGA/VRAM recovery before firmware effects. The aperture-only recovery callback is insufficient.",
+    "Bind the retained FRTS target, DMA run, native reset/TCM and full recovery to actual FWSEC/Booter execution; executable Falcon paths remain unlinked.",
+    "Firmware result/authentication checks, GSP startup, IRQ/log/health and demonstrated post-submission quiescence.",
     "General VRAM allocator, GPU MMU/contexts, remaining RM/NVKMS integration, native outputs/scanout and HDMI audio."
   ],
   "archive": "ExFiles/Reference/GFX/Nvidia/0.79.10",
@@ -13138,6 +13138,110 @@
       "Resolve the real scanout GPU mapping and implement full VGA/VRAM/device recovery before firmware effects. The current aperture-only callback cannot recover firmware execution.",
       "Bind the exact retained reservation, DMA run and recovery to FRTS/Booter execution; executable Falcon paths remain unlinked.",
       "Firmware result/authentication checks, IRQ/log/health and demonstrated post-submission quiescence.",
+      "General VRAM allocator, GPU MMU/contexts, remaining RM/NVKMS integration, native outputs/scanout and HDMI audio."
+    ]
+  },
+  "fwsec_frts_checkpoint": {
+    "schema": 1,
+    "recorded_utc": "2026-09-11T07:01:42.268362+00:00",
+    "subversion": "0.79.10",
+    "complete": false,
+    "versions": {
+      "release": "0.79.9",
+      "kernel": "0.1.150",
+      "nvidia": "0.1.31",
+      "driver_api": 34
+    },
+    "implementation": {
+      "owner": "NVIDIA fwsec_storage, boot_vram_lease and gsp_run_memory; existing opt-in boot-check in main.zig",
+      "preparation": "Fully close the earlier SB CPU/DMA image before preparing a fresh immutable FRTS image from the same retained VBIOS and fuse selection. Existing original R4OS encoder writes command 0x15 and its 48-byte input: exact reserved target in 4-KB pages, 1-MB region (0x100 pages), framebuffer media 2. Stage through the actual retained DMA API, including bounce support; check TCM against the observation under the display hold.",
+      "binding": "Only the exact live boot-VRAM lease supplies FRTS. Driver API identity, stable consumer address, full display epoch, nonwrapping reservation serial, exact target and actual staged metadata are checked. No bare caller offset authorizes preparation. An invalidated binding refuses execution-lease admission.",
+      "lifetime": "Exclusive FRTS borrow is published before fallible allocation and remains through errors. Release only after actual DMA unmap, unpin and CPU free, then release the parent VRAM reservation and snapshots. Failed descriptor release preserves retry handles. A late target-release failure cannot free the CPU image twice. Retained execution owners refuse close.",
+      "runtime": "The default passive SB path is unchanged. FRTS is prepared and mapped by the opt-in boot-check, never executed. Native Falcon execution remains unlinked; current aperture-only recovery cannot recover firmware effects. No general VRAM allocator, GPU MMU, native scanout or HDMI output is implemented here."
+    },
+    "validation": {
+      "owner_cases": 51,
+      "owner_steps": 13,
+      "module_steps": 7,
+      "owner_invocations": 2,
+      "final_owner_runs": 1,
+      "test_count_added": 0,
+      "guest_runs": 0,
+      "hardware_runs": 0,
+      "first_attempt": "A test-fixture local name shadowed an existing PCI helper. Renamed to input_offset; initial compilation log preserved as unit-before-fixture-name-fix.log. No production failure was found. Final owner run passed all 51 cases.",
+      "existing_groups_extended": [
+        "actual SDK lifecycle case",
+        "existing complete DMA run lease case"
+      ],
+      "cases": "Ten scenarios inside the existing lifecycle case: normal, short 47-byte input, partial allocation, pin, map, unmap, unpin, CPU free, late borrow release and bounce. Check actual encoded CPU/DMA bytes, immutable ROM, wrong API, duplicate/moved consumers, premature close and retry cleanup. The existing run-lease case rejects command 0x15 without a retained target and preserves SB command 0x19 inputs.",
+      "scope": "Host-backed registers, real production owners and SDK descriptors; no whole boot-check hardware run or firmware authentication. Only the NVIDIA owner step and module build; no new gate or guest run. Resource catalog inspected against immutable pins."
+    },
+    "artifact": {
+      "file": {
+        "path": "Artifacts/Modules/NVIDIA/NVIDIA.R4D",
+        "bytes": 92804732,
+        "sha256": "1a997d9e33168b5dc371f9b4becf54facbaa440868ac5e159b6a24b58e604200"
+      },
+      "allocated_bytes": 380928,
+      "relocations": 3589,
+      "nonallocated_resources": 24,
+      "sections": 5,
+      "full_catalog": "evidence/artifact.json",
+      "catalog_sha256": "575be717aa3e1b5947df3f1c26d93bc3239658ab4bc641ad72156f486029c89a"
+    },
+    "references": {
+      "rm_version": "570.144",
+      "commit": "8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f",
+      "files": [
+        {
+          "path": "COPYING",
+          "bytes": 19391,
+          "sha256": "d8e96d29bc323000e7ba56102d77c88226a7a3d0d94e2081cb4b071ae9de4a06",
+          "url": "https://raw.githubusercontent.com/NVIDIA/open-gpu-kernel-modules/8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f/COPYING"
+        },
+        {
+          "path": "src/nvidia/src/kernel/gpu/gsp/arch/turing/kernel_gsp_frts_tu102.c",
+          "bytes": 19905,
+          "sha256": "28d87a2715e71bae77c8a12ead5f5a3718bf3ca6a9111e2ed2e6fffdc23d81b5",
+          "url": "https://raw.githubusercontent.com/NVIDIA/open-gpu-kernel-modules/8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f/src/nvidia/src/kernel/gpu/gsp/arch/turing/kernel_gsp_frts_tu102.c"
+        },
+        {
+          "path": "src/nvidia/src/kernel/gpu/gsp/arch/turing/kernel_gsp_tu102.c",
+          "bytes": 45126,
+          "sha256": "6eb2e2702f956053a960e26a7bd7917ddb1a8b0fcbbdd0fac2eeebbd73b69303",
+          "url": "https://raw.githubusercontent.com/NVIDIA/open-gpu-kernel-modules/8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f/src/nvidia/src/kernel/gpu/gsp/arch/turing/kernel_gsp_tu102.c"
+        }
+      ],
+      "source_unchanged": true,
+      "upstream_implementation_linked": false
+    },
+    "historical_input_capacity": {
+      "source": "Temp/gfx-07910-boot-hold/nvidia.txt",
+      "input_bytes": 64,
+      "current_command_bytes": 48,
+      "meaning": "Historical installed NVIDIA28 VBIOS parsing only. No new OssiPC read, command capability check or FRTS execution."
+    },
+    "legal": "New owner binding is original R4OS Apache-2.0 code. Existing command encoder and its ABI remain unchanged. No NVIDIA execution routine is newly linked. The same 24 resources retain complete existing licenses; Distribution staging is unchanged and was not repeated.",
+    "ossipc": {
+      "contacted": false,
+      "availability": "Temporarily offline per user; no connection, update or reboot attempted.",
+      "last_verified_release": "0.79.8",
+      "last_verified_kernel": "0.1.150",
+      "last_verified_nvidia": "0.1.28",
+      "last_verified_mode": "passive",
+      "current_artifact_installed": false
+    },
+    "gpu_executed": false,
+    "firmware_ready": false,
+    "native_scanout": false,
+    "hardware_verified": false,
+    "fresh_visual_acceptance": false,
+    "fresh_audio_acceptance": false,
+    "open": [
+      "Physical VGA/PRAMIN preservation and the combined VRAM/FRTS CPU-DMA preparation lifecycle on OssiPC after the user reports it available.",
+      "Resolve the actual old scanout GPU mapping and full device/VGA/VRAM recovery before firmware effects. The aperture-only recovery callback is insufficient.",
+      "Bind the retained FRTS target, DMA run, native reset/TCM and full recovery to actual FWSEC/Booter execution; executable Falcon paths remain unlinked.",
+      "Firmware result/authentication checks, GSP startup, IRQ/log/health and demonstrated post-submission quiescence.",
       "General VRAM allocator, GPU MMU/contexts, remaining RM/NVKMS integration, native outputs/scanout and HDMI audio."
     ]
   }

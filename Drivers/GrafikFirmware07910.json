@@ -2,17 +2,17 @@
   "schema": 1,
   "subversion": "0.79.10",
   "date": "2026-09-11",
-  "status": "NVIDIA 0.1.29 sichert im bestehenden Bootcheck den aktuellen VGA-Bereich ueber PRAMIN unter gemeinsamem Displaybesitz. Fensterrestore und Ressourcenretention durch 51 bestehende Besitzerfaelle samt realem SDK-Owner im Hostmodell geprueft; Modul und Legal-Staging bestanden. OssiPC laut User offline, kein Hardwarelauf/Update. Physischer VGA-Nachweis, VRAM-Reservierung und vollstaendige Firmware-Recovery bleiben offen.",
+  "status": "NVIDIA 0.1.30 bindet im vorhandenen Bootcheck die gehaltenen Boot-/VGA-Snapshots an eine exakte VRAM-Reservierung und frisch gepruefte WPR-Metadaten. Vorzeitige Freigaben, alte Bindungen und ueberlappende MMIO-Abbildungen verhindert. 51 bestehende Besitzerfaelle in einem Lauf und Modulbuild bestanden. OssiPC offline, kein Hardwarelauf/Update. Vollstaendige GPU-Recovery und Firmwarestart bleiben offen.",
   "versions": {
     "release": "0.79.9",
     "kernel": "0.1.150",
-    "nvidia": "0.1.29",
+    "nvidia": "0.1.30",
     "displayd": "0.1.9"
   },
   "ossipc_contacted": true,
   "hardware_verified": false,
   "native_initialization_authorized": false,
-  "history_note": "Aktuell sind status, versions und boot_vram_checkpoint. Historischer boot_display_checkpoint enthaelt den letzten echten OssiPC-Nachweis mit Kernel 150 / NVIDIA 28. NVIDIA 29 ist nur lokal gebaut/geprueft. Fruehere Checkpoints behalten ihre Artefakte und Tests; vollstaendige 0.79.10-Hardwareabnahme bleibt false.",
+  "history_note": "Aktuell sind status, versions und vram_reservation_checkpoint. boot_vram_checkpoint bewahrt den NVIDIA29-Stand, boot_display_checkpoint den letzten physischen OssiPC-Nachweis mit Kernel150/NVIDIA28. NVIDIA30 ist nur lokal gebaut/geprueft; historische Artefakte/Tests bleiben erhalten und die gesamte 0.79.10-Hardwareabnahme bleibt false.",
   "firmware": [
     {
       "schema": 1,
@@ -292,11 +292,11 @@
     }
   ],
   "open": [
-    "Physical current-VGA capture/window restoration and cleanup on OssiPC once the user reports it available.",
-    "Exact native VRAM interval ownership and recovery of VGA/scanout after actual firmware effects; the current aperture-only callback cannot supply this.",
-    "Bind the retained boot display and exact VRAM owner to the real firmware run; executable Falcon paths remain unlinked.",
-    "FRTS/Booter first execution, firmware result/authentication checks, IRQ/log/health and demonstrated post-submission quiescence.",
-    "Remaining RM/NVKMS integration, native outputs/scanout and HDMI audio; package the additional full MIT notices before linking executable Falcon paths."
+    "Physical VGA/PRAMIN capture, restore and complete boot-reservation lifecycle on OssiPC after the user reports it available.",
+    "Resolve the real scanout GPU mapping and implement full VGA/VRAM/device recovery before firmware effects. The current aperture-only callback cannot recover firmware execution.",
+    "Bind the exact retained reservation, DMA run and recovery to FRTS/Booter execution; executable Falcon paths remain unlinked.",
+    "Firmware result/authentication checks, IRQ/log/health and demonstrated post-submission quiescence.",
+    "General VRAM allocator, GPU MMU/contexts, remaining RM/NVKMS integration, native outputs/scanout and HDMI audio."
   ],
   "archive": "ExFiles/Reference/GFX/Nvidia/0.79.10",
   "resource_checkpoint": {
@@ -13063,6 +13063,82 @@
       "Bind the retained boot display and exact VRAM owner to the real firmware run; executable Falcon paths remain unlinked.",
       "FRTS/Booter first execution, firmware result/authentication checks, IRQ/log/health and demonstrated post-submission quiescence.",
       "Remaining RM/NVKMS integration, native outputs/scanout and HDMI audio; package the additional full MIT notices before linking executable Falcon paths."
+    ]
+  },
+  "vram_reservation_checkpoint": {
+    "schema": 1,
+    "recorded_utc": "2026-09-11T06:40:08.886522+00:00",
+    "subversion": "0.79.10",
+    "complete": false,
+    "versions": {
+      "release": "0.79.9",
+      "kernel": "0.1.150",
+      "nvidia": "0.1.30",
+      "driver_api": 34
+    },
+    "implementation": {
+      "owner": "NVIDIA/src/boot_vram_lease.zig binds boot_vram.Capture and gsp_boot_storage.Storage",
+      "reservation": "One exclusive unsubmitted boot reservation, seven exact typed target regions. General VRAM allocation remains withheld while the old scanout GPU mapping is unresolved. No general allocator, page table, physical memory clear or GPU command is introduced.",
+      "admission": "Fresh double preflight under the retained boot/VGA capture. Recompute the pinned first-boot layout and compare the complete plan plus all 14 VRAM fields in the actual staged WPR metadata. Reject changed framebuffer size, workspace, owner, backing or metadata before publishing either borrow.",
+      "identity": "Stable owner address, full display epoch and nonwrapping per-reservation serial. Reacquiring within the same display hold cannot revive old bindings. Every target lookup rechecks plan/metadata and backing handles.",
+      "lifetime": "The bootcheck keeps both snapshots across DMA/resource/queue preparation. The boot storage close and capture close refuse while borrowed. Release the unsubmitted DMA execution owner first, then the VRAM reservation and boot storage, then recover the CPU aperture and release the display. A retained DMA run blocks release.",
+      "mmio": "The fresh preflight borrows the exact existing VGA register window; it never creates an overlapping physical alias and never unmaps the borrowed window. Kernel mmio_windows.Manager explicitly rejects overlap.",
+      "runtime": "Linked into the existing opt-in boot-check. The default passive path is unchanged; the executable Falcon path remains unlinked. This reservation does not supply full firmware/GPU recovery or authorize firmware execution."
+    },
+    "validation": {
+      "owner_cases": 51,
+      "owner_steps": 13,
+      "module_steps": 7,
+      "owner_runs": 1,
+      "test_count_added": 0,
+      "guest_runs": 0,
+      "hardware_runs": 0,
+      "existing_groups_extended": [
+        "actual SDK lifecycle case",
+        "existing GSP boot storage case"
+      ],
+      "cases": "Production capture and reservation against host-backed registers/BOs plus prepared metadata: changed metadata and FB size, duplicate/moved owner, altered target, stale display epoch, serial exhaustion, reacquire within the same hold, blocked close and retained execution borrow. Existing storage test checks actual encoded/synchronized metadata and refuses close while borrowed.",
+      "scope": "Targeted NVIDIA owner step and module build; final R4M0 resource catalog inspected against the immutable pin. No additional gate, guest profile, whole-system build or repeated passing test run."
+    },
+    "artifact": {
+      "file": {
+        "path": "Artifacts/Modules/NVIDIA/NVIDIA.R4D",
+        "bytes": 92800540,
+        "sha256": "aa859f0ce4f672c09848cbf527c5f8170d4d10d808b3c436b27c9622d7cb2835"
+      },
+      "allocated_bytes": 380928,
+      "relocations": 3511,
+      "nonallocated_resources": 24,
+      "sections": 5,
+      "full_catalog": "evidence/artifact.json",
+      "catalog_sha256": "d84b98aa4d1b8bad1fe5c09edf573f16cc2d19f7b9e845b6adba5b8a2bf3d635"
+    },
+    "references": [
+      "ExFiles/Reference/GFX/Nvidia/0.79.10/boot-vram-20260911",
+      "ExFiles/Reference/GFX/Nvidia/0.79.10/vga-workspace-sources-20260911"
+    ],
+    "legal": "No new external source family; existing pinned GSP WPR/layout attribution and complete resource notices unchanged. The artifact inspector verified all 24 resources. Distribution legal staging from the preceding checkpoint remains applicable and was not repeated.",
+    "ossipc": {
+      "contacted": false,
+      "availability": "Temporarily offline per user; no connection, update or reboot attempted.",
+      "last_verified_release": "0.79.8",
+      "last_verified_kernel": "0.1.150",
+      "last_verified_nvidia": "0.1.28",
+      "last_verified_mode": "passive",
+      "current_artifact_installed": false
+    },
+    "gpu_executed": false,
+    "firmware_ready": false,
+    "native_scanout": false,
+    "hardware_verified": false,
+    "fresh_visual_acceptance": false,
+    "fresh_audio_acceptance": false,
+    "open": [
+      "Physical VGA/PRAMIN capture, restore and complete boot-reservation lifecycle on OssiPC after the user reports it available.",
+      "Resolve the real scanout GPU mapping and implement full VGA/VRAM/device recovery before firmware effects. The current aperture-only callback cannot recover firmware execution.",
+      "Bind the exact retained reservation, DMA run and recovery to FRTS/Booter execution; executable Falcon paths remain unlinked.",
+      "Firmware result/authentication checks, IRQ/log/health and demonstrated post-submission quiescence.",
+      "General VRAM allocator, GPU MMU/contexts, remaining RM/NVKMS integration, native outputs/scanout and HDMI audio."
     ]
   }
 }

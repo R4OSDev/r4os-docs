@@ -2,8 +2,63 @@
 ==================================================================
 
 Stand: 12.09.2026. Software-Zwischenstand; 0.79.10 bleibt offen.
-RELEASE_VERSION bleibt 0.79.9; gebauter Kernel 0.1.151, NVIDIA 0.1.51, DISPLAYD 0.1.10.
+RELEASE_VERSION bleibt 0.79.9; gebauter Kernel 0.1.152, NVIDIA 0.1.52, DISPLAYD 0.1.10.
 OssiPC online: Release 0.79.9 / Kernel 0.1.150; NVIDIA 0.1.50 passiv; Bootvorbereitung und initialer GSP-Protokollzugriff physisch belegt.
+
+Nativer GSP-Startpfad (NVIDIA 0.1.52 / Kernel 0.1.152)
+-----------------------------------------------------
+Der explizite Modus gsp-start verbindet nun die vorbereiteten Original-
+Ressourcen mit dem realen GA106-MMIO-/DMA-Port: FWSEC-FRTS, GSP-Vorbereitung,
+normaler Booter Load, Startpruefung und Notifications bis zum bestaetigten
+INIT_DONE. CPU-Sequencer und Libos-Print nutzen die vorhandenen begrenzten
+Decoder. Unbekannte Ereignisse und nicht freigegebene Register stoppen den
+Lauf. INIT_DONE meldet Firmwarebereitschaft, noch keine native Bildausgabe.
+
+Voraussetzungen sind DriverApi35, genau ein passender NVIDIA-Adapter, bereits
+aktiviertes PCI-Bus-Mastering und unveraenderte Boot-/VRAM-/DMA-Bindungen.
+Das 648-Byte-Tabellenlayout bleibt unveraendert. Kernel152 erlaubt einer lebenden
+dedizierten Task, normalen DriverWork mit ihrer echten Besitzerkennung zu
+posten; Stop oder Admission-Close verweigert neue Arbeit. IRQ-/Storage-
+Callbacks behalten Vorrang vor einer unterbrochenen Task. Direkte MMIO/DMA-
+Aufrufe bleiben an den bisherigen Kontext gebunden. DriverApi35 setzt auch
+den terminalen Display-Abbau vor Warmstart voraus.
+
+Eine dedizierte Task uebernimmt die Wartezeiten. Genau eine ausstehende
+Completion fuehrt hoechstens 64 Schritte oder 2 ms im gemeinsamen Worker
+aus; anschliessend wartet die Task einen Tick. Insgesamt gelten 30 Sekunden
+Startfrist und maximal 5 Sekunden je Firmware-/Corephase. Nach einem Fehler
+versucht derselbe Besitzer einmalig den vorhandenen FWSEC-SB-/Booter-Unload-
+Abbau mit frischen 10 Sekunden. Kein Ergebnis gibt Firmware-DMA frei.
+Stop, Completion und exakte Taskfreigabe werden vor jedem Rueckbau geprueft.
+
+Vor dem ersten moeglichen Firmwareeingriff sperrt eine dauerhafte Bindung
+den bisherigen PRAMIN-Rueckweg. Er darf dann keine Bootpixel, MMIO-Freigabe
+oder Wiederverwendung des Framebuffers mehr bestaetigen. Erfolg und Fehler
+behalten alle Ressourcen; bis zum vollstaendigen GPU-/UEFI-Rueckweg fuehrt
+ein Neustart deshalb in Poweroff beziehungsweise Halt. Ohne Firmwareeingriff
+bleibt der bestehende Aufraeumpfad nutzbar; Standardmodus ist weiter passive.
+
+Die bestehende Besitzergruppe fuehrt den echten Controller gegen Host-RAM:
+INIT_DONE mit ACK, alte API, deaktiviertes Bus-Mastering, FWSEC-Fehler,
+Timeout, verlorener Displaybesitz und unbekannte Notification. Die vorhandene
+Lebenszyklusgruppe prueft die Sperre des registrierten Recovery-Callbacks.
+Alle 51 bestehenden Faelle, Modul-/Kernelbuild und Vertragspruefung bestanden.
+Das Hostmodell ist kein Beleg fuer GPU-Authentifizierung oder echtes Timing.
+Der bestehende SMP4-Runtime-Lauf prueft die neue Task-/Worker-Besitzerbindung
+und verweigerte Einreichung beim Schliessen: final 29.36 s bestanden.
+Die Kontextabgrenzung wurde im Review korrigiert und derselbe kurze Lauf
+wiederholt; keine physische IRQ-Injektion. Beleg im gsp_start_checkpoint.
+Der Runner waehlt enthaltene Slim-Treiber nur einmal und nimmt DISPLAYD als
+Zusatz auf. Keine neue Testgruppe, keine weiteren Varianten oder Langlaeufe.
+
+OssiPC bleibt Kernel150/NVIDIA50 passiv; keine Firmware wurde ausgefuehrt.
+Vor dem Hardwareversuch ist Kernel152 erforderlich. Die Verfuegbarkeit zum
+Wiedereinschalten nach notwendigem Poweroff ist weiterhin angefragt.
+IRQ-/Health-/laufende Loganbindung, native Bildausgabe, volle GPU-Ruhe und
+UEFI-Wiederherstellung bleiben offen. Quellen, Softwarestand und Belege:
+ExFiles/Reference/GFX/Nvidia/0.79.10/gsp-start-20260912.
+
+Die folgenden Abschnitte dokumentieren vorherige Zwischenstaende.
 
 Grafiktreiber vor Warmstart stoppen (Kernel 0.1.151)
 ---------------------------------------------------

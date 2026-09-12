@@ -1,50 +1,39 @@
 ﻿NVIDIA-Scanout und native Moduswechsel – 0.79.13
 =============================================
-Stand: NVIDIA 0.1.86, Kernel 0.1.159. Unterversion und Aufgaben/Abnahmen
-bleiben offen; Release 0.79.12. Bootfb bleibt der Standard.
+Stand: NVIDIA 0.1.87, Kernel 0.1.159, Release 0.79.12.
+Unterversion und Aufgaben/Abnahmen bleiben offen. Bootfb ist der Standard.
 
-Eigene RGB-Puffer, RAMHT, initialer CE-Upload und Present sind im
-Device-/GSP-Worker verbunden. Die echte Quellabbildung samt letzter
-Teilseite bleibt erhalten; der GPU-SYS-Semaphor bestaetigt den Upload.
-Folgende Rechtecke nutzen dasselbe Mapping.
+Der Device-Worker verbindet eigene RGB-Puffer/RAMHT, initialen CE-Upload,
+Present sowie Boot-Timing/Position ueber WIMM/Window/Core. Die neue
+HDMI-Transaktion ist Bestandteil dieses Ablaufs:
+- Vor Scanout: belegte Empfaengerfaehigkeiten, gesicherten HDMI/DVI-Zustand
+  und bei HDMI Audio-Stummschaltung beim RM bestaetigen lassen.
+- Nach Core-FINISHED, Window-BEGUN und abschliessendem WIMM-GET: RGB8-AVI,
+  benoetigtes Legacy-VSI beziehungsweise Abschaltung, HDR-Abschaltung und
+  GCP zum Aufheben der Bildstummschaltung bestaetigen lassen.
+- Erst danach den internen Bildzustand samt Linkquittung publizieren.
+  DVI ueber HDMI benoetigt zwei Steuerbefehle, HDMI sieben. Folgeframes
+  behalten den bestaetigten Linkzustand. Audiowiedergabe folgt separat.
 
-Der gesicherte progressive RGB8-TMDS-Bootmodus wird mit unveraendertem
-Pixeltakt, Raster, Head/SOR und eindeutiger aktueller RM-Zuordnung geplant.
-Generation, Quittung, Geometrie und unterstuetzte Signalparameter muessen
-passen; fehlendes EDID erzeugt keinen neuen Modus. Alte Cursor-/LUT-
-DMA-Handles werden nicht in die neue RAMHT uebertragen.
+Der gemeinsame EDID-Parser liefert SCDC und Scrambling getrennt; defekte
+Erweiterungen geben keine Teilfaehigkeiten frei. Nur vollstaendiges aktuelles
+EDID liefert Linkfaehigkeiten. Fehlendes EDID erfindet weder Modus noch
+SCDC-Unterstuetzung. Der gesicherte Pixeltakt wird einschliesslich 1000/1001
+exakt gegen die Grenzen verglichen; oberhalb 340 MHz ist SCDC erforderlich.
 
-WIMM setzt jetzt die primaere Position auf (0,0), gekoppelt mit Window/Core.
-Die echte RM-Klassenantwort muss C67B anbieten. Kompakte Softwareindizes
-werden von Hardwarekanal33 aufwaerts und dessen Registeradressen getrennt.
-Es gibt keinen erfundenen WIMM-Notifier: Der Worker reicht Position,
-Window und Core ein; Core-FINISHED, Window-BEGUN und erst danach der
-abgeschlossene WIMM-Befehlsabruf publizieren Bild, Timing und Position.
-GET allein reicht nicht. Solange eine Bestaetigung fehlt, bleibt der
-vorherige vollstaendige interne Bildzustand bestehen. Folgeframes behalten
-die bestaetigte Position. Die GPU-Sichtbarkeit ist damit noch nicht belegt.
+Der echte Device-Besitzer prueft Auftrag, RM-Objekt, Generation, Reihenfolge
+und Deadline. Ablehnung, Timeout oder unklare Quittierung halten Ressourcen.
+Auch nach letzter erfolgreicher HDMI-Quittung hat ein anstehender GPU-Fehler
+Vorrang vor der Bildfreigabe. Das belegt keine physische Wiederherstellung.
 
-Der Device-Besitzer prueft Kanal, Zuordnung, Interlock, gesicherten Plan
-und Befehle vor MMIO. Fehler oder Timeout nach moeglichen GPU-Effekten
-halten abhaengige Ressourcen; Firmwarefehler haben Vorrang vor zeitgleicher
-Fertigmeldung. WIMM muss vor Window/Core physisch stillgelegt sein.
-Ein Kanal-Free erlaubt keine Freigabe alter Bilder oder Tabellenersetzung.
+Nachweis: 51 NVIDIA-Tests, sieben R4GFX-Tests und Modulbuild bestanden;
+14 vollstaendige Original-C-Payloads aus archivierten NVIDIA-Headern
+bytegleich reproduziert. Kein neues Gate, kein unveraenderter Gastlauf.
+R4GFX.R4L bleibt bytegleich bei 0.1.1; der Parser wird im Treiber kompiliert.
+Belege, Quellhashes und Grenzen: GrafikScanout07913.json.
 
-Die gemeinsame prepare_held-Bruecke haelt RAM-Bootbild und Generation;
-Abbruch behaelt den Bootbesitz. Nach nativer Uebernahme muss der Treiber
-zuerst GPU-Ruhe und die urspruengliche Abbildung wiederherstellen, danach
-folgen Pixel und Referenzen. Bestaetigte Recovery wird nicht wiederholt.
-
-Nachweis: 51 bestehende NVIDIA-Tests und Modulbuild bestanden. Original-C-
-Vektoren pruefen WIMM-Protokoll, 67 Registerfaelle, vorzeichenbehaftete
-Positionen und gegenseitigen Interlock. Device-Tests verbinden Upload,
-Boot-Timing/Position, Bildwechsel und Present; fruehes/verspaetetes GET,
-fehlende Klasse, veraenderte Auftraege sowie spaeter Timeout/GPU-Fehler
-sind abgedeckt. Keine neuen Gates oder unveraenderten Gastwiederholungen.
-Belege und genaue Grenzen: GrafikScanout07913.json.
-
-Offene Software: Produktablauf mit prepare_held und bestaetigter nativer
-Uebergabe; vollstaendiger Linkzustand; Atomic-SDR-Moduswechsel,
-Bestaetigung, Timer-Rueckkehr, Diagnose und Ressourcenabbau.
+Offene Software: Produktablauf mit Ausgabeanmeldung, prepare_held und
+bestaetigter nativer Uebergabe; Atomic-SDR-Moduswechsel, Bestaetigung,
+Timer-Rueckkehr, Diagnose und physisch wirksamer Ressourcenabbau.
 Die internen APIs werden noch nicht automatisch aufgerufen.
-Physische Abnahmen: ExFiles/Reports/OssiGPU.txt /0.79.13.
+Physische Abnahmen: ExFiles/Reports/OssiGPU.txt / 0.79.13.

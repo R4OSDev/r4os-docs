@@ -1,6 +1,6 @@
 ﻿NVIDIA-Speicherbesitz 0.79.11
 =============================
-Stand: 12.09.2026, NVIDIA 0.1.66. T1 softwareseitig abgeschlossen;
+Stand: 12.09.2026, NVIDIA 0.1.67. T1 softwareseitig abgeschlossen;
 Unterversion und weitere Implementierungsaufgaben bleiben offen.
 Release 0.79.12 / Kernel 0.1.153 unveraendert. Standard bleibt passiv.
 Physische Nacharbeit: ExFiles/Reports/OssiGPU.txt / 0.79.11, Status OFFEN.
@@ -100,10 +100,55 @@ ungueltige Antwort, ACK, Timeout und Free-Fehler. Kein neues Gate/Gastlauf.
 vollstaendige MIT-Texte bleiben im Modul und Image. Nachweis:
 address_space_checkpoint in der JSON und dessen Belegverzeichnis.
 
+Nativer Steuerpuffer (NVIDIA 0.1.67)
+-----------------------------------
+Der wirkliche gsp-start-Pfad legt nach dem privaten VASpace einen 12-KB-
+Steuerpuffer fuer kommende native Channels an. Drei residente Systemseiten
+gehoeren dem vorhandenen DriverHeap-/DMA-Besitzer. Vor der DMA-Abbildung
+werden sie geloescht, vor der RM-Registrierung fuer das Geraet synchronisiert.
+CPU-WB, bidirektionales koharentes DMA, keine Bounce-Kopie; Adressaliase,
+falsche Groessen oder veraenderte Seiten-/Besitzerdescriptoren sind ungueltig.
+Der reale Kernel liefert Busadressen; kein CPU-Pointer wird als GPU-VA genutzt.
+
+ALLOC_MEMORY registriert die gehaltenen Seiten als NV01_MEMORY_LIST_SYSTEM.
+Der PTE-Descriptor uebermittelt 4-KB-Seitennummern. Anschliessend erzeugt
+NV50_MEMORY_VIRTUAL eine genau passende virtuelle Allocation im bestehenden
+RM-Adressraum; Basis und Bytelimit der Antwort werden vollstaendig geprueft.
+MAP_MEMORY_DMA bindet die Seiten mit Cache-Snooping, 4-KB-Seiten und
+ausdruecklich deaktiviertem GPU-Cache ein. RM verwaltet die Seitentabellen.
+Map und Unmap verschieben die TLB-Invalidierung nicht. GSP-CONTROL liefert
+erst nach bestaetigter Antwort und Queue-ACK die gebundene GPU-Adresse.
+Der Puffer wird noch von keinem Ausfuehrungschannel benutzt.
+
+Anlage und Rueckbau behalten denselben endlichen Queue-/Sessionbesitzer.
+Die beiden neuen Namen folgen auf die bisherigen sieben. Eine bestaetigte
+Ablehnung baut nur den belegten Teil rueckwaerts ab und erhaelt die
+Monitorabfragen. Fehler vor der Registrierung koennen private Seiten
+freigeben. Ab moeglicher TX-Publikation verweigert der Blattbesitzer Cleanup.
+Nach Ereignisabbau folgen GPU-Unmapping, virtuelles Objekt, Speicherobjekt,
+DMA-Abbildung, Pin und Heap; erst danach VASpace, I2C und Basisobjekte.
+Unklare Antworten, ACKs, Timeouts und fehlgeschlagene Freigaben behalten
+erreichbare Seiten und Eltern. GSP-CONTROL nennt Operation, Antwortstatus
+und Retention. Fehlgeschlagener lokaler Rueckbau bleibt ebenfalls sichtbar.
+
+Der Original-C-Abgleich deckt alle sechs Anfrage-/Antwortpaare ab (736 Bytes).
+Insbesondere ist NVOS47 im benutzten RPC 40 Bytes gross, anders als die
+neuere 48-Byte-RM-Struktur. 51/51 bestehende Gruppen und Modulbuild bestehen;
+die Device-Fixture prueft den realen Start-/Rückbau samt Fehlern. Keine neue
+Testgruppe oder Gastwiederholung. Vollstaendige Quellen, MIT-Texte und
+Nachweise: GrafikSpeicher07911.json / control_buffer_checkpoint.
+
+Die gemeinsame GfxDriverMemoryApi verwendet in Kernel 0.1.153 noch den
+Legacy-Lifecycle-Guard. BO-Aufrufe aus normalem Driver Work brauchen eine
+eigene authentifizierte und synchronisierte Integration. Der fuer Work
+geeignete DriverHeap-/DMA-Pfad traegt daher nur private Steuerseiten;
+direkter App-BO-Import ist offene Softwarearbeit. Dies ist keine physische
+Abnahme und wird nicht nach OssiGPU.txt verschoben.
+
 Verbleibende Software
 --------------------
-Pufferallokation/-registrierung, GPU-/GART-Mappings und deren TLB-
-Lebensdauer, Instanz-/Channelressourcen, Layoutauswahl, Upload-/Readback-Sichtbarkeit
-und MMU-/Channelfehler gehoeren weiterhin zu 0.79.11. Der Katalog ersetzt
-diese Implementierung nicht. Hardwaremuster und echte GPU-Completion
-bleiben als spaetere Arbeit in OssiGPU.txt offen.
+Allgemeine VRAM-/BO-Allokation, App-BO-Zugriff aus Driver Work,
+weitere GPU-/GART-/Instanzressourcen, Layoutauswahl, Channels,
+GPU-Upload/Readback und MMU-/Channelfehler bleiben Softwarearbeit in 0.79.11.
+Der private Steuerpuffer ersetzt diese Integration nicht. Hardwaremuster
+und echte GPU-Completion bleiben in OssiGPU.txt offen.

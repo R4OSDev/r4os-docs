@@ -1,8 +1,8 @@
 ﻿NVIDIA-Speicherbesitz 0.79.11
 =============================
-Stand: 12.09.2026, NVIDIA 0.1.70. T1 softwareseitig abgeschlossen;
+Stand: 12.09.2026, NVIDIA 0.1.71. T1 softwareseitig abgeschlossen;
 Unterversion und weitere Implementierungsaufgaben bleiben offen.
-Release bleibt 0.79.12; Kernel 0.1.156. Standard bleibt passiv.
+Release bleibt 0.79.12; Kernel 0.1.157. Standard bleibt passiv.
 Physische Nacharbeit: ExFiles/Reports/OssiGPU.txt / 0.79.11, Status OFFEN.
 
 Erfasste Speichergrenzen
@@ -271,10 +271,47 @@ Die Runtime-Schnittstelle bleibt bis zu ihren echten Engine-Verbrauchern
 ungenutzt. Sie registriert kein Ausfuehrungsbackend und qualifiziert weder
 Scanout noch Rendering. Der Standardstart bleibt passiv.
 
+Treibergebundene VRAM-BOs (NVIDIA 0.1.71 / Kernel 0.1.157)
+-------------------------------------------------------
+GfxDriverMemoryApi 1/152 behaelt den 112-Byte-Praefix. Fuenf optionale
+Funktionen reservieren, veroeffentlichen und beenden treibereigene BOs.
+Reservierung (88 Bytes) und Freigabeticket (80 Bytes) binden Objekt,
+Referenz, Allokationsumfang, Cookie, Adapter, Geraet und echten Treiberstart.
+Budget/Slot werden vor Hardware-I/O belegt. Unveroeffentlichte Referenzen
+sind nicht importierbar; unklare Allokationen halten auch ohne Referenzen
+den Treiber. System-Collect ueberspringt native BOs und bleibt arbeitsfaehig.
+
+allocateNativeBuffer verbindet die gemeinsame Reservation mit echten
+RM-Allokationen: NV01_MEMORY_LOCAL_USER, NV50_MEMORY_VIRTUAL und Map-ACK,
+danach Commit. RM waehlt die physische Platzierung; screened_bytes und der
+erste gemeldete Seitenoffset sind kein selbstverwalteter freier Bereich.
+Der Startpfad ist roh/linear, unkomprimiert, nur Transferquelle/-ziel:
+64-KB-Allokationsausrichtung, 4-KB-GPU-Seiten, lokaler GPU-Cache, kein
+CPU-Snoop oder CPU-Zeiger. Render-/Scanout-/Tiling-Eignung bleibt separat.
+
+nativeBufferStatus liefert nach Commit eine geliehene Treiberreferenz;
+Verbraucher importieren sie gemeinsam. releaseNativeBuffer schliesst diese
+Referenz. Erst nach allen Importen und Queue-/Geraetenutzungen gibt der
+Kernel ein Freigabeticket aus: Unmap, virtuelle und physische RM-Frees,
+dann gemeinsame Budgetfreigabe. Die eigene GPU-Zuordnung des Backings
+erzeugt keine permanente BO-Lease, die ihre Freigabe selbst blockiert.
+Kindressourcen enden vor dem RM-Elternobjekt. Bekannte Ablehnung baut nur
+den bestaetigten Praefix zurueck; unklare Antwort/ACK/Timeout behaelt Besitz.
+Falsche Quieszenz laesst dasselbe Freigabeticket weiter beansprucht.
+BO-Aufraeumen und gespeicherte Heap-Freigaben funktionieren auch nach
+gesperrter Neuanmeldung. Fremde Importe sperren nur ihre eigenen Ressourcen.
+
+Beleg: owned_vram_checkpoint in GrafikSpeicher07911.json. Bestehende
+NVIDIA-Gruppen 51/51, Kernel 52/52, C/Zig-Fassaden und Original-C-Vergleich
+(sechs Paare, 896 Bytes) bestehen. Ein SMP4-Lauf prueft Init/Work/Shutdown,
+alten Tabellenpraefix, exakte Tickets, Imports, GPU-Leases und System-Collect
+mit synthetischem Backing. Kein neues Gate und keine Hardwareabnahme.
+Der native Runtimepfad registriert weiterhin kein Ausfuehrungsbackend.
+
 Verbleibende Software
 --------------------
-Native VRAM-Allokation und Instanzressourcen, Anbindung der gemappten
+Instanz-/Kontextressourcen, Anbindung der nativen und gemappten
 Auftragspuffer an echte Engines, Layoutauswahl, Channels,
 GPU-Upload/Readback und MMU-/Channelfehler bleiben Softwarearbeit in 0.79.11.
-System-BO-Mappings ersetzen diese Integration nicht. Hardwaremuster
+Vorhandene Allokationen/Mappings ersetzen diese Integration nicht. Hardwaremuster
 und echte GPU-Completion bleiben in OssiGPU.txt offen.

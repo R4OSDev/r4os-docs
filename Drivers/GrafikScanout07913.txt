@@ -1,46 +1,51 @@
 ﻿NVIDIA-Scanout und native Moduswechsel – 0.79.13
 =============================================
-Stand: NVIDIA 0.1.84, Kernel 0.1.159. Unterversion und Aufgaben/Abnahmen
+Stand: NVIDIA 0.1.85, Kernel 0.1.159. Unterversion und Aufgaben/Abnahmen
 bleiben offen; Release 0.79.12. Bootfb ist weiterhin der Standard.
 
-Eigene RGB-Puffer, RAMHT und gekoppelte C67E-Window/C67D-Core-Auftraege
-sind im Device-/GSP-Worker vorhanden. Der Present-Verbraucher kopiert
-CPU-Schattenrechtecke mit unterschiedlichen Zeilenabstaenden in VRAM.
+Eigene RGB-Puffer, RAMHT, Window/Core, Present und initialer CE-Upload
+sind im Device-/GSP-Worker verbunden. Die echte Quellabbildung inklusive
+letzter Teilseite bleibt erhalten; eine separate GPU-Leselease schuetzt
+das Anfangsbild bis zum SYS-Semaphor. Spaetere Rechtecke nutzen dasselbe
+Mapping. GET oder kopierte Bytes allein bestaetigen keinen Abschluss.
 
-Der initiale Upload nutzt jetzt denselben realen Speicher- und CE-Pfad:
-Der importierte Schattenpuffer wird anhand seiner echten Seiten auf der
-GPU abgebildet. Bei normalen Imports bleibt die gemeinsame DMA-Lease
-auf die Bildbytes begrenzt, einschliesslich einer letzten Teilseite.
-Eine separate GPU-Leselease schuetzt den Inhalt bis zum SYS-Semaphor.
-Bestehende Queue-Mappingreferenzen behalten ihren bisherigen Vertrag.
+Der Bootmodusplan verbindet nun den gesicherten aktiven Head mit einer
+eindeutigen aktuellen RM-Ausgabe: GPU-/Holdgeneration, Topologiegeneration,
+Quittung, HDMI-Buchse und SOR muessen passen. Der erste Pfad uebernimmt
+einen progressiven, unskalierten RGB8-TMDS-Modus. Unpassende Geometrie,
+mehrdeutige Zuordnung, Klone, YUV/Deep Color, FRL, Pixelwiederholung,
+Frame Lock und Clock-Hopping werden vor einem Auftrag abgewiesen.
+Fehlendes EDID eines ausgeschalteten Empfaengers erzeugt keinen neuen Modus.
 
-Erst der bestaetigte initiale CE-Abschluss erlaubt die Bildaktivierung.
-Core-FINISHED plus Window-BEGUN bestaetigen danach den internen Scanout;
-Notifierplaetze bleiben bis FINISHED gebunden. Spaetere Rechtecke nutzen
-die vorhandene Quellabbildung. GET oder kopierte Bytes allein reichen
-nicht als Abschluss. Es wird keine kuenstliche Queue-Fence erzeugt.
+Der gekoppelte Commit setzt Rastertimings, Viewport, Min-Frame-Idle,
+Display-ID, SOR und den unveraenderten Pixeltakt einschliesslich 1000/1001.
+RGB-/Identitaetszustand deaktiviert alte Cursor-/LUT-Kontexte. Alte DMA-
+Handles werden nicht in die neue RAMHT uebertragen. Der Device-Besitzer
+prueft den Plan vor MMIO und beim Abschluss erneut. Core-FINISHED plus
+Window-BEGUN publizieren den bestaetigten internen Bild-/Timingzustand;
+gleich grosse Folgeframes behalten ihn. Das beweist noch kein sichtbares Bild.
 
-Vor PUT kann ein Timeout den initialen Lesezugriff freigeben und einen
-neuen Versuch zulassen. Nach PUT bleiben Ressourcen bei Timeout oder
-Fehler gebunden. Eine fehlgeschlagene Freigabe ist ebenfalls kein Erfolg.
-Bereits sichtbare Firmwarefehler haben Vorrang vor einem Abschluss.
+Vor PUT kann ein initialer Upload-Timeout aufgeraeumt und erneut versucht
+werden. Nach moeglichen GPU-Effekten halten Timeout, Fehler und gescheiterte
+Freigabe alle abhaengigen Ressourcen. Firmwarefehler haben Vorrang vor
+gleichzeitig beobachteter Fertigmeldung. Notifierplaetze werden erst nach
+FINISHED erneut verwendet.
 
-Der gemeinsame prepare_held-Pfad behaelt gesichertes RAM-Bootbild,
-Treiber-/Adapteridentitaet, Generation und gesperrte Firmware-Schreiber.
-Abbruch behaelt den Bootbesitz. Nach nativer Uebernahme muss der Treiber
-GPU-Ruhe und die urspruengliche Scanout-Abbildung wiederherstellen;
-erst dann folgen Pixel und Referenzen. Bestaetigte Hardware-Recovery
-wird bei spaeteren Bereinigungsversuchen nicht wiederholt.
+Die gemeinsame prepare_held-Bruecke behaelt RAM-Bootbild, Treiber-/
+Adapteridentitaet, Generation und gesperrte Firmware-Schreiber. Abbruch
+behaelt den Bootbesitz. Nach nativer Uebernahme muss der Treiber erst
+GPU-Ruhe und urspruengliche Abbildung wiederherstellen; dann folgen
+Pixel und Referenzen. Bestaetigte Recovery wird nicht wiederholt.
 
-Nachweise: bestehende 51 NVIDIA-Tests und Modulbuild bestehen. Geprueft
-sind Bild/Padding, reale Auftraege im Modell, Teilseite, Mapping-Reuse,
-Abbruch/Retry, falsche Besitzer/Befehle und Fehler mit gehaltenen Daten.
-Der vorherige SMP4-Nachweis der gemeinsamen BO-/Displaybruecken bleibt
-separat erhalten; deren unveraenderte Tests wurden nicht wiederholt.
-Belege und Grenzen: GrafikScanout07913.json. Keine neuen Test-Gates.
+Nachweise: bestehende 51 NVIDIA-Tests, unabhaengiger 512-Byte-C-Vektor
+aus Originalheadern und Modulbuild bestehen. Der Device-Nachweis verbindet
+initialen Upload, Boot-Timing-Commit und folgende Present-Rechtecke;
+veraltete Zuordnung, veraenderte Befehle und Commitfehler sind abgedeckt.
+Keine neuen Gates; unveraenderte gemeinsame Gasttests nicht wiederholt.
+Belege und genaue Grenzen: GrafikScanout07913.json.
 
-Offene Software: Produktablauf mit prepare_held, initialem Upload und
-bestaetigter Uebergabe; Bootmodusuebernahme samt Windowposition und
-Head/SOR/Pixeltakt; Atomic-SDR-Test/Commit, Bestaetigung, Timer-Rueckkehr
-und Ressourcenuebergabe. Die internen APIs werden noch nicht automatisch
-aufgerufen. Physische Abnahmen: ExFiles/Reports/OssiGPU.txt /0.79.13.
+Offene Software: WIMM-Windowposition mit Interlock; Produktablauf mit
+prepare_held und bestaetigter nativer Uebergabe; vollstaendiger Linkzustand,
+Atomic-SDR-Moduswechsel, Bestaetigung, Timer-Rueckkehr und Ressourcenabbau.
+Die internen APIs werden noch nicht automatisch aufgerufen.
+Physische Abnahmen: ExFiles/Reports/OssiGPU.txt /0.79.13.

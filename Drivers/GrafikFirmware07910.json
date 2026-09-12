@@ -2,17 +2,17 @@
   "schema": 1,
   "subversion": "0.79.10",
   "date": "2026-09-12",
-  "status": "NVIDIA56: interne GPC/TPC-/Interrupt-Controls nach statischer RM-Konfiguration an den echten Laufzeitkanal angeschlossen. Nur vollstaendig gepruefter und quittierter Snapshot verfuegbar. Ein Hostlauf51/51, C-ABI18 Felder, Modulbau und Lizenz-Staging bestanden. Kernel152 unveraendert; Hardware, IRQ-Service, Health/Thermik, RM-Objekte und voller Rueckweg offen.",
+  "status": "NVIDIA 0.1.57: GSP-IRQ ueber MSI/INTx und begrenzten Semaphor-Anstoss des seriellen Workers angeschlossen. Reset erst nach IRQ-Abbau; Fehler halten die GPU-Ressourcen. 51/51 Hosttests nach Modellkorrektur, 12 Registervergleiche, Modulbau und Lizenzen bestanden. Kernel152 unveraendert. Hardware/Weckfolge, Health/Thermik, RM-Objekte und voller Rueckweg offen.",
   "versions": {
     "release": "0.79.9",
     "kernel": "0.1.152",
-    "nvidia": "0.1.56",
+    "nvidia": "0.1.57",
     "displayd": "0.1.10"
   },
   "ossipc_contacted": true,
   "hardware_verified": false,
   "native_firmware_executed": false,
-  "history_note": "Aktuell: versions und gsp_postinit_checkpoint; statische Konfiguration gsp_static_checkpoint, Vorabmeldungen gsp_preboot_checkpoint, Laufzeit gsp_runtime_checkpoint, Startpfad/Kernel152 gsp_start_checkpoint. Letzter physischer Stand gsp_logs_checkpoint (Kernel150/NVIDIA50). Aeltere Eintraege sind historische Belege.",
+  "history_note": "Aktuell: versions und gsp_irq_checkpoint; interne RM-Abfragen gsp_postinit_checkpoint, statische Konfiguration gsp_static_checkpoint, Vorabmeldungen gsp_preboot_checkpoint, Laufzeit gsp_runtime_checkpoint, Startpfad/Kernel152 gsp_start_checkpoint. Letzter physischer Stand gsp_logs_checkpoint (Kernel150/NVIDIA50). Aeltere Eintraege sind historische Belege.",
   "firmware": [
     {
       "schema": 1,
@@ -23271,5 +23271,319 @@
       "visible video/audio"
     ],
     "evidence_directory": "ExFiles/Reference/GFX/Nvidia/0.79.10/gsp-postinit-20260912"
+  },
+  "gsp_irq_checkpoint": {
+    "recorded_at_utc": "2026-09-12T00:56:29.126015+00:00",
+    "nvidia_version": "0.1.57",
+    "kernel_version": "0.1.152",
+    "release": "0.79.9",
+    "mode": "gsp-start; default passive",
+    "finding": "RM discovery now provides the GSP stall vector. GA106 routes CPU interrupts through the r535/ga100 VFN controller, the ga102 Falcon mask and gp100 PCI MSI rearm. The existing kernel supports IRQ registration and IRQ-safe resident semaphore release; no kernel/API extension is required.",
+    "implementation": "After the final post-init ACK, the actual device owner acquires a dedicated lease of the already complete BAR0 mapping, masks unowned VFN leaves and registers MSI (or a valid shared level-low INTx route when MSI is unavailable). Only the returned GSP vector/subtree is enabled. Register fields and wake binding are immutable while callbacks can run. The handler has a bounded atomic admission gate; it unarms delivery, rearms MSI, checks identity/source, ACKs VFN and Falcon SWGEN0, retriggers Falcon and releases one existing semaphore permit. It does not call the task-bound lease owners, queue/DMA APIs, heap or log sink.",
+    "worker": "The existing dedicated task waits on a semaphore with maximum one permit instead of sleeping unconditionally. A finite 1-tick/100-Hz idle timeout still drives startup, deadlines and raw-log polling. It continues to own exactly one normal Work completion; all device and queue mutations stay in the existing 64-step/2-ms serialized slice.",
+    "errors": "Raw Falcon cause/mask and counters are atomic diagnostics, logged only in Work. Unexpected causes or wake/device failure keep the first IRQ fault and stop rearming. Close pins state through the last handler, masks the owned source, unregisters the callback, disables owned MSI and then releases its BAR borrower. Failure or ambiguous PCI routing retains the graph. Device recovery cannot issue reset until IRQ retirement completes, within the existing total10s teardown deadline. Stop destroys the wake semaphore only after IRQ and pacing-task retirement.",
+    "policy": "The standard image remains passive. This checkpoint does not execute firmware on OssiPC, change release/kernel/API versions, release boot VRAM/DMA/display holds, restore UEFI or claim native image/audio output.",
+    "validation": {
+      "owner_invocations": 3,
+      "failed_owner_invocations": 2,
+      "existing_grouped_tests": 51,
+      "new_test_groups": 0,
+      "nvidia_unit_exit": 0,
+      "module_invocations": 1,
+      "nvidia_module_exit": 0,
+      "register_comparisons": 12,
+      "register_comparison_exit": 0,
+      "legal_staging_exit": 0,
+      "guest_runs": 0,
+      "physical_runs": 0,
+      "initial_failure": "The first run and a diagnostic rerun rejected the existing complete-run model BAR as too small for VFN (error.Profile); its expansion had inadvertently been applied to the independent teardown fixture. Corrected only those fixture sizes. Diagnostic checkpoints remain useful on failure. No production guard was relaxed.",
+      "covered": "The existing complete-run group now installs the actual GSP IRQ endpoint after RM discovery using SDK MSI/INTx and IRQ-register facades with host providers. Invokes the real registered handler over RAM MMIO: foreign/empty IRQ, GSP SWGEN0 ACK/retrigger, no queue/DMA work until the next serialized device step, MSI versus shared INTx, registration failure, ambiguous MSI result, unknown Falcon cause, wake failure, close while handler pinned, and unregister failure. Reset waits for complete IRQ retirement; timeout/uncertainty retains callback/mapping/GPU resources.",
+      "limits": "Host RAM does not model electrical IRQ routing or W1C side effects. The IRQ wake sink is a host callback; the production semaphore/pacing binding is compiled against unchanged DriverApi35 but has not run with physical GPU interrupts. No real firmware, latency, IRQ-affinity or SMP hardware acceptance."
+    },
+    "references": {
+      "files": [
+        {
+          "path": "Nvidia570.144/COPYING",
+          "bytes": 19391,
+          "sha256": "d8e96d29bc323000e7ba56102d77c88226a7a3d0d94e2081cb4b071ae9de4a06",
+          "revision": "8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f",
+          "upstream_url": "https://github.com/NVIDIA/open-gpu-kernel-modules/tree/570.144"
+        },
+        {
+          "path": "Nvidia570.144/src/common/inc/swref/published/ampere/ga102/dev_vm.h",
+          "bytes": 5903,
+          "sha256": "85115d68fff97da764ae075cda4d13b1735cfae8d9d576dafb26e90aa699072c",
+          "revision": "8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f",
+          "upstream_url": "https://github.com/NVIDIA/open-gpu-kernel-modules/tree/570.144"
+        },
+        {
+          "path": "Nvidia570.144/src/common/inc/swref/published/ampere/ga102/dev_falcon_v4.h",
+          "bytes": 13940,
+          "sha256": "42cfc2cfae62b2c2652b3c9d630ef5085e03016dd8ed7dcd30179964aca224ce",
+          "revision": "8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f",
+          "upstream_url": "https://github.com/NVIDIA/open-gpu-kernel-modules/tree/570.144"
+        },
+        {
+          "path": "Nvidia570.144/src/common/inc/swref/published/ampere/ga102/dev_riscv_pri.h",
+          "bytes": 3423,
+          "sha256": "47dd8e04d669c7cdfe34fb8f7535455a99c4771b7436cc761d5cecbea067a1bd",
+          "revision": "8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f",
+          "upstream_url": "https://github.com/NVIDIA/open-gpu-kernel-modules/tree/570.144"
+        },
+        {
+          "path": "Nouveau/LICENSES/preferred/MIT",
+          "bytes": 1372,
+          "sha256": "323c587d0ccf10e376f8bf9a7f31fb4ca6078105194b42e0b1e0ee2bc9bde71f",
+          "revision": "7.2.4",
+          "upstream_url": "https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.2.4.tar.xz"
+        },
+        {
+          "path": "Nouveau/drivers/gpu/drm/nouveau/nvkm/core/intr.c",
+          "bytes": 10997,
+          "sha256": "57b8d2205e8d1cd22c04c061cddf157dcdf972693d0c43a62fdf175a5bedbcff",
+          "revision": "7.2.4",
+          "upstream_url": "https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.2.4.tar.xz"
+        },
+        {
+          "path": "Nouveau/drivers/gpu/drm/nouveau/nvkm/subdev/vfn/tu102.c",
+          "bytes": 3448,
+          "sha256": "5299a6b1c4bc89b4d5bf43802e8a94645fbb85a2411eebcd38b06586ca77f861",
+          "revision": "7.2.4",
+          "upstream_url": "https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.2.4.tar.xz"
+        },
+        {
+          "path": "Nouveau/drivers/gpu/drm/nouveau/nvkm/subdev/vfn/ga100.c",
+          "bytes": 1918,
+          "sha256": "4d146125e50f7ff344926b722cf8065f1d9f3b0ccac0bcc00c55b9d41c087b79",
+          "revision": "7.2.4",
+          "upstream_url": "https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.2.4.tar.xz"
+        },
+        {
+          "path": "Nouveau/drivers/gpu/drm/nouveau/nvkm/subdev/vfn/r535.c",
+          "bytes": 1845,
+          "sha256": "95283f0df6788cd26ca3cec20f7cf93c82b52efc75a2f25fe7319263249fadc8",
+          "revision": "7.2.4",
+          "upstream_url": "https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.2.4.tar.xz"
+        },
+        {
+          "path": "Nouveau/drivers/gpu/drm/nouveau/nvkm/subdev/gsp/rm/r535/gsp.c",
+          "bytes": 61986,
+          "sha256": "2c9ef4fa42061481cc01617436dc2ef50de023351cbae4e7856b8bbb8e495679",
+          "revision": "7.2.4",
+          "upstream_url": "https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.2.4.tar.xz"
+        },
+        {
+          "path": "Nouveau/drivers/gpu/drm/nouveau/nvkm/subdev/gsp/ga102.c",
+          "bytes": 5892,
+          "sha256": "b5cc57963d9e73c0031c1f6ae97481d2a2b3e3cdc4dfd66d0c2deb862db4ebdd",
+          "revision": "7.2.4",
+          "upstream_url": "https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.2.4.tar.xz"
+        },
+        {
+          "path": "Nouveau/drivers/gpu/drm/nouveau/nvkm/falcon/ga100.c",
+          "bytes": 2322,
+          "sha256": "208ac31899fd5da07d40e4bfabff29a8a51ff03dd9661e2a019e307e8a977aa5",
+          "revision": "7.2.4",
+          "upstream_url": "https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.2.4.tar.xz"
+        },
+        {
+          "path": "Nouveau/drivers/gpu/drm/nouveau/nvkm/subdev/pci/gp100.c",
+          "bytes": 1607,
+          "sha256": "40abc2e7c6f20fcbc23eedf6328ed98c977bc9261320dd06ccd5657b386be958",
+          "revision": "7.2.4",
+          "upstream_url": "https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.2.4.tar.xz"
+        },
+        {
+          "path": "Nouveau/drivers/gpu/drm/nouveau/nvkm/subdev/pci/base.c",
+          "bytes": 4682,
+          "sha256": "07d4389138a2c7910d45302d571b91d06858898be429343b9eb6ead9a64a461c",
+          "revision": "7.2.4",
+          "upstream_url": "https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.2.4.tar.xz"
+        },
+        {
+          "path": "Nouveau/drivers/gpu/drm/nouveau/nvkm/engine/device/base.c",
+          "bytes": 130605,
+          "sha256": "68f7e36f3a7b63c9486ba170f09f144f053df3bf92cc52ba0b2e0c1d30aea0cd",
+          "revision": "7.2.4",
+          "upstream_url": "https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.2.4.tar.xz"
+        },
+        {
+          "path": "Nouveau/drivers/gpu/drm/nouveau/nvkm/subdev/mc/ga100.c",
+          "bytes": 2427,
+          "sha256": "c82aa33e7143d372cbcf0c7910b808d1080b91165da3df304765bedee567a36b",
+          "revision": "7.2.4",
+          "upstream_url": "https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.2.4.tar.xz"
+        }
+      ],
+      "register_comparisons": [
+        [
+          "NV_VIRTUAL_FUNCTION_PRIV_CPU_INTR_LEAF(6)+0xb80000",
+          "0xb81018"
+        ],
+        [
+          "NV_VIRTUAL_FUNCTION_PRIV_CPU_INTR_LEAF_EN_SET(6)+0xb80000",
+          "0xb81218"
+        ],
+        [
+          "NV_VIRTUAL_FUNCTION_PRIV_CPU_INTR_LEAF_EN_CLEAR(6)+0xb80000",
+          "0xb81418"
+        ],
+        [
+          "NV_VIRTUAL_FUNCTION_PRIV_CPU_INTR_TOP(0)+0xb80000",
+          "0xb81600"
+        ],
+        [
+          "NV_VIRTUAL_FUNCTION_PRIV_CPU_INTR_TOP_EN_SET(0)+0xb80000",
+          "0xb81608"
+        ],
+        [
+          "NV_VIRTUAL_FUNCTION_PRIV_CPU_INTR_TOP_EN_CLEAR(0)+0xb80000",
+          "0xb81610"
+        ],
+        [
+          "NV_VIRTUAL_FUNCTION_PRIV_CPU_INTR_LEAF__SIZE_1",
+          "8"
+        ],
+        [
+          "NV_PFALCON_FALCON_IRQSCLR+NV_FALCON2_GSP_BASE-0x1000",
+          "0x110004"
+        ],
+        [
+          "NV_PFALCON_FALCON_IRQSTAT+NV_FALCON2_GSP_BASE-0x1000",
+          "0x110008"
+        ],
+        [
+          "NV_PFALCON_FALCON_IRQMCLR+NV_FALCON2_GSP_BASE-0x1000",
+          "0x110014"
+        ],
+        [
+          "NV_PFALCON_FALCON_INTR_RETRIGGER(0)+NV_FALCON2_GSP_BASE-0x1000",
+          "0x1103e8"
+        ],
+        [
+          "NV_FALCON2_GSP_BASE+NV_PRISCV_RISCV_IRQMASK",
+          "0x111528"
+        ]
+      ],
+      "compiler_exit": 0,
+      "decision": "GA106 uses ga100/r535 VFN at 0xb80000, ga102 GSP Falcon mask at 0x111528 and gp100 PCI MMIO MSI rearm at 0x88704. Register the actual returned GSP vector after RM discovery. Kernel provides MSI/INTx routes and IRQ-safe semaphore release; CPU queue and teardown remain serialized Work. Only the GSP subtree is rearmed.",
+      "mc_review": "GA106 ga100_mc_new returns ENODEV when GSP RM is active: no second legacy MC interrupt owner is instantiated. The endpoint therefore follows the VFN route without adding PMC writes."
+    },
+    "dependencies": [
+      {
+        "path": "r4os-dependencies/SDK/LICENSE",
+        "commit": "4a6577b86b68facb19982e04b3a5d5a41809968f",
+        "bytes": 11358,
+        "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+      },
+      {
+        "path": "r4os-dependencies/SDK/NOTICE",
+        "commit": "4a6577b86b68facb19982e04b3a5d5a41809968f",
+        "bytes": 211,
+        "sha256": "f7891159dc5eaba8977cab0176af1a37b1b0727b156d77ebf23b46955aefa998"
+      },
+      {
+        "path": "r4os-dependencies/SDK/r4os/driver.zig",
+        "commit": "4a6577b86b68facb19982e04b3a5d5a41809968f",
+        "bytes": 20147,
+        "sha256": "9196bdc5eeaadd3afc9eb886a4f1e310375b28a20bfcaae21666162e61a4bb9a"
+      },
+      {
+        "path": "r4os-dependencies/SDK/r4os/driver_threads.zig",
+        "commit": "4a6577b86b68facb19982e04b3a5d5a41809968f",
+        "bytes": 4091,
+        "sha256": "17fcdb36b0a1d093b696fe8e9c6d9bf8df5e92c2a7fe024064b5e27c815a459f"
+      },
+      {
+        "path": "r4os-dependencies/SDK/r4os/driver_semaphores.zig",
+        "commit": "4a6577b86b68facb19982e04b3a5d5a41809968f",
+        "bytes": 2389,
+        "sha256": "a2f222b5bd67fee63efbcd30a9be49bbf7edcb50eef63b640852c646324513ce"
+      },
+      {
+        "path": "r4os-dependencies/Kernel/LICENSE",
+        "commit": "3879255a965a1517f39d5c2b9f568232677add64",
+        "bytes": 11358,
+        "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+      },
+      {
+        "path": "r4os-dependencies/Kernel/NOTICE",
+        "commit": "3879255a965a1517f39d5c2b9f568232677add64",
+        "bytes": 211,
+        "sha256": "f7891159dc5eaba8977cab0176af1a37b1b0727b156d77ebf23b46955aefa998"
+      },
+      {
+        "path": "r4os-dependencies/Kernel/kernel/irq_router.zig",
+        "commit": "3879255a965a1517f39d5c2b9f568232677add64",
+        "bytes": 12592,
+        "sha256": "77141a2a74cdcdd210309559e1cd51f0ed43e1c049cc4e66d5c2a7853ad4e27d"
+      },
+      {
+        "path": "r4os-dependencies/Kernel/kernel/driver_work.zig",
+        "commit": "3879255a965a1517f39d5c2b9f568232677add64",
+        "bytes": 52533,
+        "sha256": "a56d05405cd74cd13d687224939dd0f9c5542ddbe849215f500150be374706fd"
+      },
+      {
+        "path": "r4os-dependencies/Kernel/kernel/driver_api.zig",
+        "commit": "3879255a965a1517f39d5c2b9f568232677add64",
+        "bytes": 148045,
+        "sha256": "c1a747aa6830e5d59f4e40b915f991146c371b9f48635ae3a45adc24f76888ae"
+      },
+      {
+        "path": "r4os-dependencies/Kernel/kernel/driver_semaphores.zig",
+        "commit": "3879255a965a1517f39d5c2b9f568232677add64",
+        "bytes": 10353,
+        "sha256": "72a6b1311cb2eca629cd112bc8bd00219852c1cca0b650a1fabb07d0054299ea"
+      }
+    ],
+    "legal": {
+      "provenance": {
+        "resource": "NVIDIA-GSP-RUNTIME-LICENSE.txt",
+        "sources": 13,
+        "previous_bytes": 66681,
+        "bytes": 82408,
+        "sha256": "c2d399adf004f6bb5848f90a03c00d02144649bd48f57eaf1a2851c6a8efb136",
+        "previous_prefix_unchanged": true
+      },
+      "validation": {
+        "source": "NVIDIA-GSP-RUNTIME-LICENSE.txt",
+        "bytes": 82408,
+        "sha256": "c2d399adf004f6bb5848f90a03c00d02144649bd48f57eaf1a2851c6a8efb136",
+        "staged": true,
+        "embedded": true,
+        "requiredFiles": 22
+      }
+    },
+    "artifacts": [
+      {
+        "path": "Artifacts/Modules/NVIDIA/NVIDIA.R4D",
+        "bytes": 93726064,
+        "sha256": "1774a9fb1a388a741b7c6827431d0cb849646066e33f0a11b34b99a301da06eb"
+      },
+      {
+        "path": "Repositories/Kernel/zig-out/bin/r4os.elf",
+        "bytes": 24115960,
+        "sha256": "9bbc4b5683b4bdcb122783714bb6932e5e2ea2fcd569641280e8c28c890890fc"
+      }
+    ],
+    "hardware": {
+      "contacted": false,
+      "updated": false,
+      "firmware_executed": false,
+      "last_verified_kernel": "0.1.150",
+      "last_verified_nvidia": "0.1.50",
+      "mode": "passive",
+      "display": "Hisense off with mains connected",
+      "pending": "Onsite power-on availability after a required poweroff remains unanswered."
+    },
+    "open": [
+      "physical firmware/RM/IRQ and wakeup acceptance",
+      "host-created RM objects and subsequent event owners",
+      "firmware health/thermal/performance policy",
+      "complete GPU quiescence and UEFI restore",
+      "visible video/audio"
+    ],
+    "evidence_directory": "ExFiles/Reference/GFX/Nvidia/0.79.10/gsp-irq-20260912"
   }
 }

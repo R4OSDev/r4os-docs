@@ -1,9 +1,56 @@
 ﻿NVIDIA-Speicherbesitz 0.79.11
 =============================
-Stand: 12.09.2026, NVIDIA 0.1.75. T1 bis T4 softwareseitig abgeschlossen;
+Stand: 12.09.2026, NVIDIA 0.1.76. T1 bis T5 softwareseitig abgeschlossen;
 Unterversion und weitere Implementierungsaufgaben bleiben offen.
 Release bleibt 0.79.12; Kernel 0.1.158. Standard bleibt passiv.
 Physische Nacharbeit: ExFiles/Reports/OssiGPU.txt / 0.79.11, Status OFFEN.
+
+Native Copy-Ausfuehrung und Sichtbarkeit (NVIDIA 0.1.76)
+-------------------------------------------------------
+T5 ist softwareseitig abgeschlossen. createCopyChannel fragt C7B5/C6B5
+ab und legt die bestaetigte Klasse mit dem passenden NV-Engine-Typ unter
+C56F an. beginCopyWork nimmt den unveraenderten Auftrag aus queue.take;
+retainResource bindet seine BOs. Bestaetigte native GPU-Adressen und
+wiederverwendete System-Mappings liefern die Operanden. Begrenzte,
+virtuelle lineare Transfers unterstuetzen Upload und Readback. Ein
+Produkt-Backend oder Render-/Display-Capability wird damit nicht freigegeben.
+
+Der private12-KB-System-BO enthaelt512 GPFIFO-Eintraege,16 Push-Slots
+und in der dritten Seite USERD sowie das Abschlusswort. Der CPU-Writer
+haelt eine eigene WB-Map; der FIFO haelt die bestaetigte GPU-Residency.
+USERD-DMA und Channel-VA bleiben unter1TB, CE-Operanden unter49Bit.
+Die vorhandene native USERD-Variante bleibt fuer leere FIFOs verfuegbar.
+
+SET_OBJECT, virtuelle Quell-/Zieladressen und ein nicht pipelinierter
+Pitch-Copy werden gefolgt von SYS-Flush und Semaphore-Release. C7B5 setzt
+wie der originale Ampere-HAL explizit DISABLE_PLC. CPU-Befehle
+werden vor GPPut sichtbar; auf dessen Write folgt die RM-Token-Doorbell.
+Sie liegt bei BAR0 BB0090: VFN-Basis B80000 + User-Fenster030000 +90.
+Der Port prueft den konkreten Besitzer, Auftrag, Epoch und Deadline.
+Normale Sequencer erhalten dadurch keine weitere Registerfreigabe.
+
+GPGet bestaetigt ausschliesslich den Abruf. Erst das von der CE geschriebene,
+monotone Semaphorewort erlaubt queue.complete und die Referenzfreigabe.
+Wartende Auftraege sperren Mapping-/Channel-/Graph-Rueckbau auch bei
+quiesced=true. Timeout, unmoegliche Completion oder unklarer Teilabschluss
+behalten Ressourcen. Nach bestaetigtem CE-/Channel-Free werden CPU-Map und
+Befehls-BO abgebaut. Wiederholte Transfers nutzen bestehende Mappings ohne
+neue RM-RPCs; Monitorabfragen starten erst nach dem aktuellen Copy-Auftrag.
+GSP-Ereignisse bleiben waehrenddessen verarbeitbar.
+
+Dieser Producer schreibt Nutzdaten nur in Systemspeicher, nie ueber BAR1.
+Ein kuenftiger BAR1-Writer braucht zusaetzlich den von UVM beschriebenen
+BAR1-Read vor SYS-GPPut; ein mfence allein ersetzt diesen Read nicht.
+
+Beleg: copy_checkpoint in GrafikSpeicher07911.json.1196 Original-C-Bytes,
+51/51 bestehende Testgruppen und Modulbuild bestanden. Die Device-Pruefung
+trennt Befehlsabruf, GPU-Daten und CPU-Sichtbarkeit und fuehrt514 Transfers
+ueber den Ringumlauf. Nach der zweiten Richtung entstehen keine neuen
+Mapping-RPCs. Ablehnung, geaenderte Antwort, Timeout, unmoegliche Completion
+und bestaetigter Rueckbau sind enthalten. Keine Hardware-/Performance-
+Behauptung, kein neues Gate und keine erneute Gastabnahme.
+
+Fruehere Abschnitte dokumentieren den jeweiligen damaligen Softwarestand.
 
 Erfasste Speichergrenzen
 -----------------------
@@ -440,9 +487,8 @@ Kein neues Gate oder Gastlauf; Kernel/SDK/Contract unveraendert.
 
 Verbleibende Software
 --------------------
-T5: Engine-Objekte und Befehlsconsumer, GPFIFO-/USERD-/Doorbell-Uebergabe,
-GPU-Upload/Readback, Cache-Sichtbarkeit und modellierte Completion.
-T6: IRQ-/MMU-/Channelfehler mit Quarantaene, Quieszenz und Rueckbau.
-Danach passende gemeinsame Softwareabnahmen A1/A2; vorhandene Allokation
-und ein leerer FIFO ersetzen diese Ausfuehrung nicht. Reale GPU-Muster,
-Completion und Hardware-Rueckweg bleiben in OssiGPU.txt offen.
+T6: IRQ-/MMU-/Channelfehler und Ressourcenknappheit mit Quarantaene,
+Quieszenz und bestaetigtem Rueckbau. Danach gezielte gemeinsame A1/A2-
+Abnahmen. Reale GPU-Muster, Completion und Hardware-Rueckweg bleiben in
+OssiGPU.txt offen. Produkt-Backend, Rendering und Scanout folgen den
+eigenen Unterversionen.

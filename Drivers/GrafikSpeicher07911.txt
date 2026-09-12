@@ -1,8 +1,8 @@
 ﻿NVIDIA-Speicherbesitz 0.79.11
 =============================
-Stand: 12.09.2026, NVIDIA 0.1.67. T1 softwareseitig abgeschlossen;
+Stand: 12.09.2026, NVIDIA 0.1.68. T1 softwareseitig abgeschlossen;
 Unterversion und weitere Implementierungsaufgaben bleiben offen.
-Release 0.79.12 / Kernel 0.1.153 unveraendert. Standard bleibt passiv.
+Release bleibt 0.79.12; Kernel 0.1.154. Standard bleibt passiv.
 Physische Nacharbeit: ExFiles/Reports/OssiGPU.txt / 0.79.11, Status OFFEN.
 
 Erfasste Speichergrenzen
@@ -100,13 +100,13 @@ ungueltige Antwort, ACK, Timeout und Free-Fehler. Kein neues Gate/Gastlauf.
 vollstaendige MIT-Texte bleiben im Modul und Image. Nachweis:
 address_space_checkpoint in der JSON und dessen Belegverzeichnis.
 
-Nativer Steuerpuffer (NVIDIA 0.1.67)
+Nativer Steuerpuffer (NVIDIA 0.1.68)
 -----------------------------------
 Der wirkliche gsp-start-Pfad legt nach dem privaten VASpace einen 12-KB-
 Steuerpuffer fuer kommende native Channels an. Drei residente Systemseiten
-gehoeren dem vorhandenen DriverHeap-/DMA-Besitzer. Vor der DMA-Abbildung
-werden sie geloescht, vor der RM-Registrierung fuer das Geraet synchronisiert.
-CPU-WB, bidirektionales koharentes DMA, keine Bounce-Kopie; Adressaliase,
+gehoeren jetzt einem gemeinsamen BO. Eine exklusive CPU-Schreibmap loescht
+sie; Unmap bestaetigt die WB-Sichtbarkeit vor der direkten DMA-Residency.
+Es gibt weder eine Heap-Zwischenkopie noch Legacy-Pins. Adressaliase,
 falsche Groessen oder veraenderte Seiten-/Besitzerdescriptoren sind ungueltig.
 Der reale Kernel liefert Busadressen; kein CPU-Pointer wird als GPU-VA genutzt.
 
@@ -126,28 +126,52 @@ Ablehnung baut nur den belegten Teil rueckwaerts ab und erhaelt die
 Monitorabfragen. Fehler vor der Registrierung koennen private Seiten
 freigeben. Ab moeglicher TX-Publikation verweigert der Blattbesitzer Cleanup.
 Nach Ereignisabbau folgen GPU-Unmapping, virtuelles Objekt, Speicherobjekt,
-DMA-Abbildung, Pin und Heap; erst danach VASpace, I2C und Basisobjekte.
+GPU-/DMA-Residency, CPU-Mapreste, BO-Referenz und Collect; erst danach
+VASpace, I2C und Basisobjekte. Fehlende GPU-Residency-Admission nach
+bestaetigtem RM-Mapping fuehrt ebenfalls durch diesen Rueckbau.
 Unklare Antworten, ACKs, Timeouts und fehlgeschlagene Freigaben behalten
 erreichbare Seiten und Eltern. GSP-CONTROL nennt Operation, Antwortstatus
 und Retention. Fehlgeschlagener lokaler Rueckbau bleibt ebenfalls sichtbar.
 
-Der Original-C-Abgleich deckt alle sechs Anfrage-/Antwortpaare ab (736 Bytes).
-Insbesondere ist NVOS47 im benutzten RPC 40 Bytes gross, anders als die
-neuere 48-Byte-RM-Struktur. 51/51 bestehende Gruppen und Modulbuild bestehen;
-die Device-Fixture prueft den realen Start-/Rückbau samt Fehlern. Keine neue
-Testgruppe oder Gastwiederholung. Vollstaendige Quellen, MIT-Texte und
-Nachweise: GrafikSpeicher07911.json / control_buffer_checkpoint.
+Der Original-C-Abgleich der sechs Anfrage-/Antwortpaare bleibt unveraendert
+(736 Bytes; NVOS47 im RPC 40 Bytes). Die bestehende Device-Fixture verwendet
+nun modellierte gemeinsame BO-Callbacks und prueft zusaetzlich verweigerte
+GPU-Residency sowie fehlgeschlagene GPU-/DMA-/Referenzfreigabe. 51/51
+NVIDIA-Gruppen und der Modulbuild bestehen. Kein echter GPU-Lauf.
 
-Die gemeinsame GfxDriverMemoryApi verwendet in Kernel 0.1.153 noch den
-Legacy-Lifecycle-Guard. BO-Aufrufe aus normalem Driver Work brauchen eine
-eigene authentifizierte und synchronisierte Integration. Der fuer Work
-geeignete DriverHeap-/DMA-Pfad traegt daher nur private Steuerseiten;
-direkter App-BO-Import ist offene Softwarearbeit. Dies ist keine physische
-Abnahme und wird nicht nach OssiGPU.txt verschoben.
+Gemeinsame BOs aus Driver Work (Kernel 0.1.154)
+----------------------------------------------
+Der echte Treiberstart bindet die BO-Identitaet vor Init. Fruehe XHCI- und
+Storagetreiber binden vor dem Scheduler nur ihre BSP-Lebensdauer; Puffer-
+operationen verlangen einen Task. Init, normaler Work und Shutdown nutzen
+denselben kurzen BO-Metadatenbesitzer. Geraeteslots sind vor dem Seitenlauf
+reserviert; VM-Arbeit, Nutzdaten und lange Seitenlaeufe halten keinen Lock.
+
+Jeder Aufruf prueft den aktuellen Treiberkontext. IRQ, Storage-Callbacks und
+dedizierte Tasks erhalten keine BO-Admission. Work-Queries enthalten keine
+MMIO-Funktionen; gecachte Init-Tabellen umgehen deren Kontextpruefung nicht.
+Collect im Worker behandelt CPU-BOs und den synchronisierten Status offener
+MMIO-Rueckbauten. Lebende, fehlerfreie Fenster verursachen kein falsches Busy.
+Nach Work-Quieszenz folgt vor generischem Cleanup eine weitere Retentions-
+pruefung. Abgeschlossene Aufrufe duerfen keine neue Startgeneration treffen.
+DriverApi 35/648 und die optionale Speichertabelle 1/112 bleiben unveraendert.
+Details: GrafikPuffer07905.txt und Contract/ABI/R4DDriver.txt.
+
+EXAMPLE 0.1.9 prueft in einem kurzen SMP4-Gast den unveraenderten Bootbild-
+vertrag, Init-/Work-Import desselben BO, 80 MB und 20480 echte DMA-Segmente
+im Worker, Kontextablehnungen und den wirklichen Failed-Load-Shutdown.
+Neue Zugriffe sind geschlossen; CPU-/DMA-/GPU-Leases und Referenzen werden
+ueber die gecachte Tabelle bilanziert freigegeben. DISPLAYD bestaetigt den
+normalen Softwarepfad; Version 0.1.13 prueft und exportiert auch Work- und
+optionale Close-Marker. Behobene Entwicklungsfehler und Korrekturen der
+privaten Probe stehen im JSON. Der finale Lauf besteht. Kernel: 52/52 im
+vorhandenen display-test, Build bestanden.
+Nachweise: GrafikSpeicher07911.json / bo_work_checkpoint; Originalquellen
+und C-Abgleich weiterhin unter control_buffer_checkpoint.
 
 Verbleibende Software
 --------------------
-Allgemeine VRAM-/BO-Allokation, App-BO-Zugriff aus Driver Work,
+Allgemeine VRAM-/BO-Allokation, App-Pufferintegration im nativen Backend,
 weitere GPU-/GART-/Instanzressourcen, Layoutauswahl, Channels,
 GPU-Upload/Readback und MMU-/Channelfehler bleiben Softwarearbeit in 0.79.11.
 Der private Steuerpuffer ersetzt diese Integration nicht. Hardwaremuster

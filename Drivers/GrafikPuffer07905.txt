@@ -125,13 +125,30 @@ v24-Mindestvertrag; memory() handelt v25 gesondert aus. Die C-Fassade
 r4os/driver_memory.h nimmt die ausgehandelte Tabelle entgegen. Aufrufe
 muessen im besitzgebundenen R4D-Callbackkontext erfolgen.
 
-Kontextgrenze, geprueft bei NVIDIA 0.1.67 (0.79.11): Die BO-/MMIO-
-Funktionen der GfxDriverMemoryApi verwenden in Kernel 0.1.153 noch den
-globalen Lifecycle-Guard von Init/Shutdown. Der normale Driver-Work-Kontext
-erhaelt darueber keine BO-Admission. Die authentifizierte und synchronisierte
-Work-Anbindung bleibt Softwarearbeit in 0.79.11. DriverHeap und die
-vorhandene DMA-API sind bereits Work-faehig und tragen native private
-Steuerseiten; sie ersetzen keinen kopierfreien R4DRAW-BO-Import.
+Seit Kernel 0.1.154 (0.79.11) sind BO-Create/Describe/Import/Release,
+CPU-Map/Unmap, Device-Acquire/Segment/Release, Collect und Stats auch im
+normalen Driver Work authentifiziert. Die echte nicht umlaufende Start-
+generation wird vor DriverInit gebunden. IRQ, Storage-Callbacks, dedizierte
+Tasks und der noch tasklose Boot duerfen keine Pufferoperationen ausfuehren.
+Fruehe Treiber binden dort ausschliesslich ihre BSP-Lebensdauermetadaten.
+
+BO- und Geraetetabellen teilen denselben kurzen Metadatenbesitzer. Ein
+Geraeteslot bleibt waehrend des Seitenlaufs busy und behaelt seine echte
+Backing-Lease. Reservierung, Abbruch, Segmentzugriff und Freigabe sind
+synchronisiert; kein VM-Rueckbau oder langer Seitenlauf haelt den Lock.
+Nach Work-Quieszenz prueft Cleanup erneut auf nachtraeglich fertiggestellte
+Ressourcen. Erst danach darf generischer DMA-/Heap-/Modulabbau fortfahren.
+
+MMIO bleibt an Init/Shutdown gebunden. Work-Queries liefern dort Nullslots;
+gecachte Tabellen umgehen die Aufrufpruefung nicht. Work-Collect sammelt
+BOs und prueft den synchronisierten MMIO-Rueckbaustatus: laufende oder
+fehlgeschlagene Rueckbauten bedeuten Busy, fehlerfreie lebende Fenster nicht.
+MMIO-Retry erfolgt weiterhin aus Init/Shutdown. Tabellenbytes und Versionen
+bleiben gleich; BO-Erfolg ist 1, nicht der DMA-/Work-Erfolgswert 0.
+NVIDIA 0.1.68 nutzt diesen Pfad fuer seinen privaten 12-KB-Steuerpuffer und
+bindet die GPU-Residency erst nach RM-Map plus ACK. Allgemeine App-GPU-
+Ressourcen bleiben Aufgabe des nativen Backends. Nachweise einschliesslich
+SMP4, Generation/Close und Context-Denial: GrafikSpeicher07911.json.
 
 Praezisierung seit Kernel 0.1.140 (0.79.10): Collect meldet BUSY auch fuer
 ausstehende CPU-BO-Freigaben des exakten Treiberstarts. Nach Drop der letzten
@@ -153,8 +170,9 @@ den erfolgreichen EXAMPLE-Modus gfx-memory-test aus diesem Boot.
 
 Abnahmen und Grenzen
 -------------------
-Der vorhandene Kernel-display-test umfasst jetzt 34 Pruefungen. Neue
-Besitzerfaelle decken Descriptorueberlaeufe, Ebenen, Budget/OOM, doppelte
+Der historische 0.79.5-Nachweis umfasste 34 Kernel-display-Pruefungen.
+Kernel 0.1.154 besteht 52/52 im selben Teststep; GrafikSpeicher07911.json
+enthaelt die aktuellen Nachweise. Die bestehenden Besitzerfaelle decken Descriptorueberlaeufe, Ebenen, Budget/OOM, doppelte
 Maps, Produzentenende, ausstehende Geraetenutzung, immutable-Importe,
 fehlgeschlagene Freigabe und veraltete Destruktionsbestaetigung ab. Der
 MMIO-Besitzermodelltest prueft Fenster-Offsets oberhalb 4 GB, Aliasregeln

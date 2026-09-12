@@ -1,48 +1,49 @@
 ﻿NVIDIA-Scanout und native Moduswechsel – 0.79.13
 =============================================
-Stand: NVIDIA 0.1.79; Unterversion und alle Aufgaben/Abnahmen offen.
+Stand: NVIDIA 0.1.80; Unterversion und alle Aufgaben/Abnahmen offen.
 Release bleibt 0.79.12, Kernel 0.1.158. Bootfb bleibt der Standard.
 
-Displaybesitz und physische Befehlsringe
---------------------------------------
-Der bestehende Device-/GSP-Worker besitzt C670-Root, C67D-Core und
-C67E-Windowchannels generationsgebunden. Klassen und Windowmaske kommen
-vom RM. Interne Firmware-Controls und die Objekte des Display-Clients
-bleiben getrennt. Ergebnisse werden erst nach dem exakten ACK sichtbar.
+Displaybesitz und Speichertabellen
+---------------------------------
+Der Device-/GSP-Worker besitzt C670-Root, C67D-Core, C67E-Windowchannels
+und die gehaltene 64KB-VRAM-Instanz. Klassen und Windowmaske kommen vom RM.
+Channelringe werden erst nach ACK und belegtem Hardwarestillstand frei.
+Die Instanz und spaetere Bildpuffer brauchen eine eigene Hardwareuebergabe.
 
-Eine eigene, anfangs geloeschte 64KB-VRAM-Instanz wird vor Channels an
-die Hardware gebunden. Ein separater Besitz haelt sie auch nach Schliessen
-der Erzeugerreferenz. Root-/Channel-Free geben diese Instanz nicht frei:
-Ihr Hardwarezeiger benoetigt einen spaeteren belegten Uebergabe-/Resetpfad.
-Fehler behalten Instanz, Boot-/VRAM- und Firmwaresicherung.
+Die Displayinstanz erhaelt eine 8KB-RAMHT mit 1024 Hashplaetzen und
+bis zu 64 physischen DMA-Kontexten. Die 24-Byte-Deskriptoren liegen im
+32-Byte-Abstand dahinter; insgesamt werden 10KB uebertragen. Format und
+Hash entsprechen den gepinnten Nouveau-Funktionen fuer GA106/GV100.
+Ein Heap-Besitzer haelt eingetragene VRAM-Puffer unabhaengig vom Erzeuger.
+Tabellenersetzung ist ab der ersten Channelerzeugung gesperrt; auch
+Channel-Free allein erlaubt keine Aenderung einer zuvor aktiven Tabelle.
 
-Jeder Channel besitzt einen privaten, kohaerenten 4KB-Systempuffer.
-Nullfuellung und CPU-Sichtbarkeit gehen der physischen DMA-Bindung voraus.
-Adresse, Laenge, Generation, Referenz und Lease werden exakt geprueft.
-Die Device-Zulassung bindet Besitzer, kanonische Requestbytes, Adresse,
-Funktion und feste Frist. Ein vom RM geliefertes pControl bleibt opak.
+Uebertragung und Fehlerverhalten
+-------------------------------
+Der vorhandene private Systempuffer wird ueber einen CPU-WB-Zugriff
+befuellt. Nach dem Unmap schuetzt ein echter GPU-Lesezugriff diese Bytes.
+Die vorhandene Copy Engine uebertraegt sie in die gehaltene VRAM-Instanz.
+Die Device-Zulassung prueft Besitzer, Revision, Speicher, Channel, Frist
+und die tatsaechlichen GPU-Befehle einschliesslich Abschlussadresse.
+Dieser interne Transfer erzeugt keinen kuenstlichen allgemeinen Queuejob.
 
-Windows werden vor dem Core abgebaut. Nach moeglicher Hardwareallokation
-genuegt selbst ein erfolgreiches RM-Free nicht zur Pufferfreigabe:
-Der Worker verarbeitet zuerst ausstehende Ereignisse und liest dann nur
-die zum konkreten Channel gehoerenden Register. Zwei gleiche, durch
-Identitaetspruefungen eingerahmte Stichproben muessen Deallokation,
-Trennung, gesperrte PUT-Schreibzugriffe, leere FIFO, ruhende Stufen sowie
-fehlende Speicherzugriffe und Befehlsausfuehrung belegen. Frist, Fehler
-oder unklarer Zustand halten die erreichbaren Ressourcen fest.
+Nur die CE-Abschlussmeldung gibt den Systempufferzugriff frei und markiert
+die Revision als uebertragen. Ausstehende Firmwarefehler haben Vorrang;
+GPGet und Fristablauf ersetzen keinen GPU-Abschluss. Vor der Einreichung
+sind sauber abgebrochene Speicher-/Fristfehler wiederholbar. Unklare
+Zustaende halten die erreichbaren Puffer und den Firmware-/Bootbesitz.
 
-Gezielter Nachweis und Grenzen
------------------------------
-Original-C-Vektoren pruefen sieben Paketpaare (768 Bytes) und 134
-Registerfaelle. Die Parameter sind 24/56/40 Bytes gross. 13 Szenarien
-im vorhandenen Device-Test pruefen Ablauf, Besitz und Fehlerpfade;
-51 bestehende Testgruppen und der Modulbuild bestehen. Kein neues Gate.
+Nachweis und verbleibende Software
+---------------------------------
+64 kollidierende Original-C-Eintraege pruefen Tabellenumlauf, VRAM-/SYS-
+Deskriptoren und das gesamte 10KB-Abbild. Sieben gezielte Uploadszenarien
+ergaenzen die vorhandene Device-Gruppe; 51 Testgruppen und Modulbuild
+bestehen. Kein neues Gate, kein unveraenderter QEMU-Wiederholungslauf.
 Quellen, vollstaendige Lizenzen, Hashes und Belege: GrafikScanout07913.json.
 
-Diese expliziten internen APIs werden noch nicht automatisch gestartet.
-Die Ringe sind leer; RAMHT-/Kontextbefuellung, Methodenerzeugung,
-PUT-/Abschlussprotokoll und eigene Scanout-Puffer am Presentpfad folgen.
-Danach: sichere Bootmodusuebernahme, Head/SOR/Pixeltakt, Atomic-SDR-
-Test/Commit, Musterbestaetigung, Timer-Rueckkehr und Fehlerdiagnose.
-Eine leere Instanz allein ersetzt keine aktiven Bootkontexte und ihr Bild.
+Die internen APIs starten noch nicht automatisch. Notifierbesitz,
+Displaymethoden und PUT-/Abschlussprotokoll fehlen noch; anschliessend
+folgen eigene Scanout-Puffer am Presentpfad, sichere Bootmodusuebernahme,
+Head/SOR/Pixeltakt, Atomic-SDR-Test/Commit, Bestaetigung und Timer-Rueckkehr.
+Eine befuellte private Instanz ersetzt noch keine aktiven Bootkontexte.
 Physische Nacharbeit: ExFiles/Reports/OssiGPU.txt /0.79.13, weiterhin offen.

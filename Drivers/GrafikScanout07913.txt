@@ -1,50 +1,48 @@
 ﻿NVIDIA-Scanout und native Moduswechsel – 0.79.13
 =============================================
-Stand: NVIDIA 0.1.78; Unterversion und alle Aufgaben/Abnahmen offen.
+Stand: NVIDIA 0.1.79; Unterversion und alle Aufgaben/Abnahmen offen.
 Release bleibt 0.79.12, Kernel 0.1.158. Bootfb bleibt der Standard.
 
-Display-Root: integrierter Zwischenstand
+Displaybesitz und physische Befehlsringe
 --------------------------------------
-Der bestehende Device-/GSP-Worker besitzt nun einen generationsgebundenen
-C670-Display-Root. Er verlangt die gehaltene GA106-Bootreservierung und
-die vom RM bestaetigte Klasse. Head-/Window-/Channeldaten kommen ueber
-den internen Firmware-Client/Subdevice; der Root gehoert zum separaten
-Display-Client. Dessen Allokation hat wie bei Nouveau keine Parameter.
+Der bestehende Device-/GSP-Worker besitzt C670-Root, C67D-Core und
+C67E-Windowchannels generationsgebunden. Klassen und Windowmaske kommen
+vom RM. Interne Firmware-Controls und die Objekte des Display-Clients
+bleiben getrennt. Ergebnisse werden erst nach dem exakten ACK sichtbar.
 
-Ein reservierter Kindname und der exakt uebertragene Queuebesitz sichern
-den Lebenszyklus. Die Device-Zulassung prueft Besitzer, Requestadresse,
-Funktion und feste Frist. Ergebnisse werden erst nach dem exakten ACK
-sichtbar. HPD-Meldungen koennen waehrend einer Antwort verarbeitet werden.
+Eine eigene, anfangs geloeschte 64KB-VRAM-Instanz wird vor Channels an
+die Hardware gebunden. Ein separater Besitz haelt sie auch nach Schliessen
+der Erzeugerreferenz. Root-/Channel-Free geben diese Instanz nicht frei:
+Ihr Hardwarezeiger benoetigt einen spaeteren belegten Uebergabe-/Resetpfad.
+Fehler behalten Instanz, Boot-/VRAM- und Firmwaresicherung.
 
-Vor Free wird PRESERVE_HW fuer den naechsten RmFree bestaetigt. Fehler
-beim Setzen oder Freigeben stoppen die Laufzeit mit gehaltenem Root.
-Fehlende Klassen und bestaetigte Allokationsablehnungen geben nur ihre
-Namensreservierung zurueck. Unklare Antworten/ACKs und Fristen behalten
-moeglicherweise angelegte Objekte. Der Elterngraph kann erst nach dem
-expliziten Rootabschluss abgebaut werden. Die aeussere Boot-/VRAM- und
-Firmwaresicherung bleibt auch nach erfolgreichem Root-Free gehalten.
+Jeder Channel besitzt einen privaten, kohaerenten 4KB-Systempuffer.
+Nullfuellung und CPU-Sichtbarkeit gehen der physischen DMA-Bindung voraus.
+Adresse, Laenge, Generation, Referenz und Lease werden exakt geprueft.
+Die Device-Zulassung bindet Besitzer, kanonische Requestbytes, Adresse,
+Funktion und feste Frist. Ein vom RM geliefertes pControl bleibt opak.
 
-Die Diagnose zeigt Klasse, Root, Heads, Windowmaske und Channelzahl sowie
-Fehleroperation, RM-Status und bestaetigten/moeglichen Allokationszustand.
-Rootbesitz ist noch keine Bilduebernahme oder physische Quieszenz.
-Dieser Schritt schreibt keine Instanzadresse und erstellt keine Channels.
+Windows werden vor dem Core abgebaut. Nach moeglicher Hardwareallokation
+genuegt selbst ein erfolgreiches RM-Free nicht zur Pufferfreigabe:
+Der Worker verarbeitet zuerst ausstehende Ereignisse und liest dann nur
+die zum konkreten Channel gehoerenden Register. Zwei gleiche, durch
+Identitaetspruefungen eingerahmte Stichproben muessen Deallokation,
+Trennung, gesperrte PUT-Schreibzugriffe, leere FIFO, ruhende Stufen sowie
+fehlende Speicherzugriffe und Befehlsausfuehrung belegen. Frist, Fehler
+oder unklarer Zustand halten die erreichbaren Ressourcen fest.
 
-Gezielter Nachweis
-------------------
-1136 Bytes aus fuenf Original-C-Paketpaaren pruefen das Wireformat.
-GET_STATIC_INFO hat 36 Bytes; numDispChannels liegt an Offset32.
-Neun Szenarien im vorhandenen Device-Test decken Erfolg, erneute Anlage,
-Ablehnungen, falsche Daten, ACK/Frist und fehlgeschlagenen Rueckbau ab.
-51 vorhandene Testgruppen sowie der Modulbuild bestehen. Kein neues Gate
-und keine erneute Gastabnahme; Kernel und gemeinsame APIs unveraendert.
-Details, Quell-/Artefakthashes und Belegpfade: GrafikScanout07913.json.
+Gezielter Nachweis und Grenzen
+-----------------------------
+Original-C-Vektoren pruefen sieben Paketpaare (768 Bytes) und 134
+Registerfaelle. Die Parameter sind 24/56/40 Bytes gross. 13 Szenarien
+im vorhandenen Device-Test pruefen Ablauf, Besitz und Fehlerpfade;
+51 bestehende Testgruppen und der Modulbuild bestehen. Kein neues Gate.
+Quellen, vollstaendige Lizenzen, Hashes und Belege: GrafikScanout07913.json.
 
-Naechste Softwarearbeit
-----------------------
-Bootmodus praktisch uebernehmen; eigene Instanz/Kontexte und Core-/Window-
-Channels mit gehaltenen physischen Pushbuffern einrichten. Eigene Scanout-
-Puffer an den gemeinsamen Presentpfad anbinden. Danach Head/SOR/Pixeltakt,
-Atomic-SDR-Test/Commit, Musterbestaetigung und Timer-Rueckweg integrieren.
-Beim Instanzwechsel genuegt weder ein leerer neuer Puffer noch ein RM-Free
-als Nachweis: aktive Kontextinhalte und deren echte Nutzungsdauer sichern.
-Physische Nacharbeit bleibt offen in ExFiles/Reports/OssiGPU.txt /0.79.13.
+Diese expliziten internen APIs werden noch nicht automatisch gestartet.
+Die Ringe sind leer; RAMHT-/Kontextbefuellung, Methodenerzeugung,
+PUT-/Abschlussprotokoll und eigene Scanout-Puffer am Presentpfad folgen.
+Danach: sichere Bootmodusuebernahme, Head/SOR/Pixeltakt, Atomic-SDR-
+Test/Commit, Musterbestaetigung, Timer-Rueckkehr und Fehlerdiagnose.
+Eine leere Instanz allein ersetzt keine aktiven Bootkontexte und ihr Bild.
+Physische Nacharbeit: ExFiles/Reports/OssiGPU.txt /0.79.13, weiterhin offen.

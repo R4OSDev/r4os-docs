@@ -1,39 +1,42 @@
 ﻿NVIDIA-Scanout und native Moduswechsel – 0.79.13
 =============================================
-Stand: NVIDIA 0.1.87, Kernel 0.1.159, Release 0.79.12.
+Stand: NVIDIA 0.1.88, Kernel 0.1.160, EXAMPLE 0.1.15, Release 0.79.12.
 Unterversion und Aufgaben/Abnahmen bleiben offen. Bootfb ist der Standard.
 
-Der Device-Worker verbindet eigene RGB-Puffer/RAMHT, initialen CE-Upload,
-Present sowie Boot-Timing/Position ueber WIMM/Window/Core. Die neue
-HDMI-Transaktion ist Bestandteil dieses Ablaufs:
-- Vor Scanout: belegte Empfaengerfaehigkeiten, gesicherten HDMI/DVI-Zustand
-  und bei HDMI Audio-Stummschaltung beim RM bestaetigen lassen.
-- Nach Core-FINISHED, Window-BEGUN und abschliessendem WIMM-GET: RGB8-AVI,
-  benoetigtes Legacy-VSI beziehungsweise Abschaltung, HDR-Abschaltung und
-  GCP zum Aufheben der Bildstummschaltung bestaetigen lassen.
-- Erst danach den internen Bildzustand samt Linkquittung publizieren.
-  DVI ueber HDMI benoetigt zwei Steuerbefehle, HDMI sieben. Folgeframes
-  behalten den bestaetigten Linkzustand. Audiowiedergabe folgt separat.
+OPTION NVIDIA mode=native verbindet jetzt den Produktablauf: reale
+CE-/Displayressourcen, eigene Scanout-Puffer, Ausgabeanmeldung, prepare_held,
+initialen Upload und Boot-WIMM/Window/Core/HDMI mit dem gemeinsamen
+Displaybesitzer. Der Worker wartet dabei nie synchron auf sich selbst.
+Er entdeckt CE-Engine und Windowmaske; Generationen und Deadlines bleiben
+durchgehend gebunden. Fehlende APIs werden vor Firmwareausfuehrung erkannt.
 
-Der gemeinsame EDID-Parser liefert SCDC und Scrambling getrennt; defekte
-Erweiterungen geben keine Teilfaehigkeiten frei. Nur vollstaendiges aktuelles
-EDID liefert Linkfaehigkeiten. Fehlendes EDID erfindet weder Modus noch
-SCDC-Unterstuetzung. Der gesicherte Pixeltakt wird einschliesslich 1000/1001
-exakt gegen die Grenzen verglichen; oberhalb 340 MHz ist SCDC erforderlich.
+Der CPU-Schattenpuffer kommt zeilenweise aus derselben unveraenderlichen
+RAM-Sicherung wie der gemeinsame Commit. Erst CE-Semaphor, WIMM-GET,
+Window-/Core-Notifier und letzte HDMI-Quittung erlauben die Uebergabe.
+Danach verarbeitet die bestehende Present-Queue weitere Bildaenderungen.
+software-native bedeutet CPU-Zeichnen im RAM mit nativem VRAM-Scanout.
 
-Der echte Device-Besitzer prueft Auftrag, RM-Objekt, Generation, Reihenfolge
-und Deadline. Ablehnung, Timeout oder unklare Quittierung halten Ressourcen.
-Auch nach letzter erfolgreicher HDMI-Quittung hat ein anstehender GPU-Fehler
-Vorrang vor der Bildfreigabe. Das belegt keine physische Wiederherstellung.
+Empfaengerkatalog und nativer Ausgang koennen dieselbe Karte besitzen.
+Die native Anmeldung ersetzt nur den eigenen Anschluss; Empfaengerupdates
+erhalten dessen Identitaet. Unbekannte Verbindung erlaubt ausschliesslich
+die gehaltene Bootgeometrie, keinen erfundenen angeschlossenen Monitor.
+Normales prepare lehnt diesen Fall ab. HDMI/DVI, SCDC und 1000/1001-Grenzen
+bleiben an die gesicherten Timings und echte vollstaendige EDID gebunden.
 
-Nachweis: 51 NVIDIA-Tests, sieben R4GFX-Tests und Modulbuild bestanden;
-14 vollstaendige Original-C-Payloads aus archivierten NVIDIA-Headern
-bytegleich reproduziert. Kein neues Gate, kein unveraenderter Gastlauf.
-R4GFX.R4L bleibt bytegleich bei 0.1.1; der Parser wird im Treiber kompiliert.
-Belege, Quellhashes und Grenzen: GrafikScanout07913.json.
+Ablehnung, Timeout, veraltete Route oder falsche Uebergabequittung ziehen
+Metadaten zurueck und halten erreichbare Ressourcen. Native Bereinigung
+folgt den tatsaechlich fortgeschriebenen Recoverygenerationen. Der noch
+fehlende physische Restore wird ausdruecklich nicht bestaetigt; die
+RAM-Sicherung bleibt erhalten. Quarantaene ist kein Recovery-Erfolg.
 
-Offene Software: Produktablauf mit Ausgabeanmeldung, prepare_held und
-bestaetigter nativer Uebergabe; Atomic-SDR-Moduswechsel, Bestaetigung,
-Timer-Rueckkehr, Diagnose und physisch wirksamer Ressourcenabbau.
-Die internen APIs werden noch nicht automatisch aufgerufen.
+Nachweis: 51 NVIDIA- und 52 Kernel-Grafikpruefungen, drei Artefaktbuilds
+und gezielte EXAMPLE-Integration im SMP4-testquick bestanden. Sieben
+Produktszenarien nutzen die bestehende Device-Gruppe; kein neues Gate.
+Modelle und Gast belegen Softwareablauf, keine sichtbare NVIDIA-Ausgabe.
+Quellhashes, Belege und fruehere Teilstaende: GrafikScanout07913.json.
+
+Offene Software: Atomic-SDR-Moduswechsel, echte Empfaengermodusauswahl,
+Pruefmuster/Bestaetigung, Timer-Rueckkehr, Zustandsdiagnose und physisch
+wirksamer Restore mit Ressourcenabbau. Der passive Standard bleibt bis
+zur weiteren Integration bestehen. HDMI-Audio folgt separat.
 Physische Abnahmen: ExFiles/Reports/OssiGPU.txt / 0.79.13.

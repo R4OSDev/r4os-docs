@@ -1,6 +1,6 @@
 ﻿NVIDIA-Speicherbesitz 0.79.11
 =============================
-Stand: 12.09.2026, NVIDIA 0.1.73. T1 und T3 softwareseitig abgeschlossen;
+Stand: 12.09.2026, NVIDIA 0.1.74. T1 und T3 softwareseitig abgeschlossen;
 Unterversion und weitere Implementierungsaufgaben bleiben offen.
 Release bleibt 0.79.12; Kernel 0.1.158. Standard bleibt passiv.
 Physische Nacharbeit: ExFiles/Reports/OssiGPU.txt / 0.79.11, Status OFFEN.
@@ -371,9 +371,42 @@ und kein erneuter Gastlauf bei unveraenderter Kernel-/API-Implementierung.
 Instanz-/RAMFC-/USERD-/Methodspeicher, GPFIFO, Bind/Schedule und der wirkliche
 Engine-Verbraucher bleiben zu implementieren; T2/T4 bleiben offen.
 
+Privater nativer Steuerungsspeicher (NVIDIA 0.1.74)
+--------------------------------------------------
+allocateNativeStorage verlangt eine gebundene RM-Zusage zur anfaenglichen
+VRAM-Loeschung. Ohne sie erfolgt keine Allokation. Der Pfad verwendet
+lineares IMAGE/NO_SCANOUT, ausdruecklich zusammenhaengende Platzierung und
+64-KB-Ausrichtung. Nur passende, bestaetigte Antworten innerhalb beobachteter
+und gemeldeter VRAM-Grenzen liefern nach ACK/Commit einen physischen Bereich.
+Gewoehnliche Grafikpuffer behalten ihre bisherigen Zuteilungsregeln und
+legen keine physischen Bereiche offen. RM bleibt Besitzer der Platzierung.
+
+retainNativeStorage haelt eine eigene gemeinsame Referenz und aktive
+Geraeteschreibnutzung fuer die logischen Bytes: access=1/address_space=1.
+Mapping-Residency mit access=3 hat einen anderen Zweck und verlangt ganze
+Seiten. Die gehaltene Sicht liefert die lebende Importreferenz, auch nach
+Freigabe der urspruenglichen Referenz. Kopierte/verfaelschte Besitzer,
+unpassende Antworten und falsche Quieszenz erlauben keine Freigabe.
+Anfaenglich geloeschter Zustand wird je Allokation nur einmal beansprucht;
+spaetere Wiederverwendung verlangt eine neue Allokation oder echten Clear.
+
+attachContextMethods ordnet einen solchen BO anhand der exakt abgefragten
+Methodpuffergroesse dem RM-Kontext zu. NVIDIA haelt den Method-Descriptor
+in der Channel-Gruppe: Kindchannels, Context-Share und Gruppe muessen vor
+Geraetelease/Import enden. Erst danach folgen normale BO-Freigabetickets,
+Unmap/VRAM-Free und Graph-Eltern. Fehlende Geraetefreigabe behaelt Speicher
+auch nach erfolgreichem Group-Free. Gespeicherte Tabellen tragen den Rueckbau.
+
+Beleg: native_storage_checkpoint in GrafikSpeicher07911.json. 51/51
+bestehende NVIDIA-Gruppen, Original-C-Abgleich und Modulbuild bestehen.
+Der unveraenderte Kernelvertrag und vorhandene SMP4-Nativ-BO-Nachweis
+wurden abgeglichen; kein zusaetzlicher Gastlauf oder Testeinstieg.
+Konkrete Instanz-/RAMFC-/USERD-Deskriptoren, Befehlsbacking, GPFIFO und
+Ausfuehrung sind weiterhin Softwarearbeit; T2/T4 bleiben offen.
+
 Verbleibende Software
 --------------------
-Instanz-/Channel-Backing, Anbindung der nativen und gemappten
+Konkrete Channel-Ressourcen, Befehlsbacking und Anbindung der nativen/gemappten
 Auftragspuffer/Flaechenplaene an echte Engines, Channels,
 GPU-Upload/Readback und MMU-/Channelfehler bleiben Softwarearbeit in 0.79.11.
 Vorhandene Allokationen/Mappings ersetzen diese Integration nicht. Hardwaremuster

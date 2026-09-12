@@ -1,109 +1,111 @@
 {
-  "recorded_at_utc": "2026-09-12T12:17:03.027417+00:00",
-  "status": "0.79.11 open: T1/T3 complete; engine discovery and RM group/share ownership integrated as part of T4",
+  "recorded_at_utc": "2026-09-12T12:49:37.657003+00:00",
+  "status": "0.79.11 open: T1/T3 complete; private contiguous backing and group-owned methods integrated into the existing runtime",
   "release": "0.79.12 unchanged",
-  "nvidia": "0.1.73",
+  "nvidia": "0.1.74",
   "kernel": "0.1.158 unchanged",
-  "scope": "Actual Device/runtime exchange creates confirmed engine-bound channel groups and synchronous context shares in the existing RM VA space; bounded child references gate reverse teardown. No FIFO or engine execution backend yet.",
+  "scope": "Actual runtime allocates confirmed contiguous control storage under common BO ownership; independent consumer references/device leases can bind fault-method storage to an RM context until the group is freed. FIFO construction and execution remain software work.",
   "facts": {
-    "discovery": "Pointer-free class list V2, complete paged FIFO device table and CE method-buffer-size control. Eight pages maximum,32 entries/page. Candidate topology is copied before ACK and published after ACK; a later duplicate or malformed page cannot leave a qualified partial result.",
-    "classes": "Explicit A06C channel-group,9067 context-share and C56F Ampere GPFIFO class availability required. RM GR0..7/COPY0..19 IDs are converted to original NV2080 IDs, including COPY10..19 starting at0x34. This class admission does not qualify rendering or another GPU family.",
-    "allocation": "Reserve two names under the same RM parent/epoch. Group receives existing VA space and queried engine; share receives that VA space with synchronous subcontext policy. Returned subcontext is accepted only after exact reply validation and ACK. Instance/RAMFC/USERD/method backing and FIFO allocation are still absent.",
-    "lifetime": "64 runtime contexts with nonwrapping generation/serial handles,64 bounded child holders per context. Copied owners or substituted request storage cannot pass Device command admission. Creation/publication is serialized with existing BO, output and runtime exchanges.",
-    "retirement": "Last child/quiescence -> context share free -> group free -> RM child namespace -> cached heap release; graph parents wait. Held contexts do not prevent an unrelated context from retiring. Cached cleanup survives closed heap queries.",
-    "errors": "Known class/engine absence or RM allocation rejection unwinds only confirmed objects. Unknown replies, ACK failures, timeout or failed free retain the child namespace and parent; no replay or optimistic free. These are RM-context errors, not yet an MMU/engine fault implementation."
+    "allocation": "allocateNativeStorage selects linear IMAGE/NO_SCANOUT with explicit contiguous physicality,64-KB alignment and the existing virtual allocation/map/commit path. Ordinary buffers and surfaces keep their prior policies and do not expose physical extents.",
+    "clearing": "Creation requires same-epoch/client/device FB caps. VIDMEM_ALLOCS_ARE_CLEARED comes from pinned memmgrIsScrubOnFreeEnabled; allocation sets no SKIP_SCRUB internal flag. Without that guarantee this private path rejects before allocation. No invented CPU pointer or software memset of VRAM.",
+    "extent": "Successful RM response must preserve contiguous placement, exact size/layout and64-KB alignment. Nonzero physical range must fit both reported and observed framebuffer capacity without overflow. Extent becomes available after ACK and common publication. RM owns placement; the range is not a free-pool estimate.",
+    "consumer": "retainNativeStorage imports a new common reference and takes active device-write access1 in GPU address space1 for the logical byte extent. This is distinct from access3 page-aligned mapping residency. Full descriptors, driver/adapter/epoch and owner address are checked; copied or altered uses cannot close resources. Info returns the held import, including after the producer reference closes.",
+    "initial_state": "The initial clearing guarantee is consumed once per allocation. A released consumer cannot reuse the old allocation as newly cleared channel state. Known admission failure unwinds its private import/lease; unknown descriptors retain ownership.",
+    "methods": "attachContextMethods binds exact queried method bytes and same RM VA space to a bounded runqueue slot before child channels. Group-owned storage remains imported/device-held through child teardown, context-share free and group free. Only then does the context drop its device lease/import, allowing ordinary last-use BO tickets to unmap/free backing before graph parents.",
+    "failure": "False quiescence, malformed/changed native responses, absent clearing support, out-of-capacity extents, bad lease descriptors and failed group/device frees do not publish a usable replacement or optimistically free storage. Cached ownership is used for cleanup after heap admission closes."
   },
   "validation": {
-    "nvidia": "51/51 existing groups pass. Existing actual Device/TX/notifier case covers two live contexts, engine-page continuation, interleaved notifications, wrong owner/request, missing classes/engine, duplicate/invalid pages, query/group/share rejection, changed success, ACK, timeout, free failure, held child and closing heap cleanup.",
-    "reference": "Eight original-C request/response pairs14112 bytes plus28 original RM/NV2080 engine macro pairs224 bytes; unchanged pinned SDK structures and constants. 13 complete source files hashed with full notices. Exact wire and malformed replies checked inside existing transport group.",
+    "nvidia": "51/51 existing groups. Actual Device/TX/notifier cases cover private allocation, contiguity/bounds/caps denial, imported active device use, changed/copy ownership, logical producer close, independent BO retirement and one-time initial state. Context cases cover group-held methods, sibling context retirement, known lease rejection, rejected group free and failed device release after confirmed group free.",
+    "reference": "Six original-C request/reply pairs896 bytes cover contiguous IMAGE allocation, VA, map/unmap/free; existing raw/surface fixtures still pass. Five complete pinned reference files and full notices archived.",
+    "kernel_contract_review": "Inspected unchanged gfx_driver_memory.acquire and common owner: access1 supports the logical device-write range; access3 requires page-aligned mapping residency. The prior actual EXAMPLE native opaque case already uses access1/address_space1 and4091 bytes in Init/Work/closing.",
+    "development_fixes": "Fixed a shadowed local identifier and model callbacks returning0 instead of gfx_buffer_result_ok=1. Contract review corrected consumer access3 to actual device-write access1. Held info now returns its live imported reference; allocation-time clearing cannot be consumed again after device use.",
     "builds": {
-      "nvidia-unit-2.log": "51/51 tests passed",
+      "nvidia-unit-final.log": "51/51 tests passed",
       "nvidia-build.log": "7/7 steps succeeded",
-      "vector.log": "8 request/reply pairs / 14112 bytes; 28 RM/NV2080 engine pairs / 224 bytes"
+      "vector.log": "contiguous storage pairs: phys=160 virtual=160 map=56 unmap=40 free=16 bytes=896"
     },
     "new_gate": false,
-    "guest": "Not repeated: no Kernel/SDK/Contract/API change. Prior focused SMP4 BO proof remains surface_layout_checkpoint.",
-    "development_fixes": "Initial compile errors (shadowed identifier, discarded error-set value, fixture ledger field) fixed. New fixture expected Busy from VRAM creation during context exchange; existing public API first rejects unavailable address-space view with State. Corrected the fixture; no allocation is issued.",
-    "limits": "Host model drives the production Device/runtime methods. No real GSP context allocation, channel execution, performance, visible image or HDMI-audio acceptance."
+    "guest": "Not repeated: Kernel/SDK/Contract/API implementation unchanged. Existing surface_layout_checkpoint SMP4 proof covers actual native import/device-write/closing API.",
+    "limits": "Host Device model validates the production runtime methods. No real allocation/clear, group use, GPFIFO submission, GPU completion, visible image or HDMI-audio result is claimed."
   },
   "open_software": [
-    "Instance/RAMFC/USERD/method backing and FIFO allocation/bind/schedule",
-    "Engine consumers of mapped BOs and retained surface plans",
-    "GPU upload/readback and cache visibility transitions",
-    "MMU/channel faults, engine quiescence and complete recovery"
+    "Concrete instance/RAMFC/USERD descriptors and per-channel command backing",
+    "GPFIFO allocation, bind/schedule and engine consumers using held context/BO resources",
+    "GPU upload/readback and visibility transitions",
+    "MMU/channel faults, quiescence and complete recovery"
   ],
   "source_files": [
     {
       "path": "Repositories/Drivers/NVIDIA/Licenses/NVIDIA-GSP-RUNTIME-LICENSE.txt",
-      "bytes": 169223,
-      "sha256": "9f8fd1e39ecb6599400ddf27ff082a58568d2fdd19a63b8e9efc7780caee1206"
+      "bytes": 175715,
+      "sha256": "58a38366ad900a930332392432cfe6fdebe9791d2e1f4cd2549ba65e286d7fa4"
     },
     {
       "path": "Repositories/Drivers/NVIDIA/module.R4MF",
       "bytes": 4176,
-      "sha256": "1addd06ad8550d3c942acd706f590b57b77212076818428038fd3c5e9e97931f"
-    },
-    {
-      "path": "Repositories/Drivers/NVIDIA/src/gsp_device.zig",
-      "bytes": 29158,
-      "sha256": "59df27c6f6c6fc29d927a12fd8d5b92c7166a0c0daff9b01d52e58527e09f5f0"
-    },
-    {
-      "path": "Repositories/Drivers/NVIDIA/src/gsp_init_storage_test.zig",
-      "bytes": 213523,
-      "sha256": "d5ba3d4513196995385b73316457e05663d044d11eb964e5f63cc8afb1c437fe"
-    },
-    {
-      "path": "Repositories/Drivers/NVIDIA/src/gsp_runtime.zig",
-      "bytes": 56736,
-      "sha256": "288ca5226f660a346455adc65a720ef10b9755809435601b55f0a9181009794c"
-    },
-    {
-      "path": "Repositories/Drivers/NVIDIA/src/gsp_transport_test.zig",
-      "bytes": 170296,
-      "sha256": "ea23a90285839a094199b06c5ca147895363fb1b610fdc4e879022708b7835a9"
-    },
-    {
-      "path": "Repositories/Drivers/NVIDIA/src/fixtures/context-570.144.bin",
-      "bytes": 14112,
-      "sha256": "a88404ebeb3bd2b506a9442e4c78f32b7a72b76bc7a3160cf2b5d4ad63262f13"
-    },
-    {
-      "path": "Repositories/Drivers/NVIDIA/src/fixtures/context-570.144.json",
-      "bytes": 678,
-      "sha256": "bb3fe4612883c5c08647663ed737f86da30190109ca9cde6cc18078662b4ad2a"
-    },
-    {
-      "path": "Repositories/Drivers/NVIDIA/src/fixtures/context-engines-570.144.bin",
-      "bytes": 224,
-      "sha256": "e0f2e8b0030154effbb9946e08c3cd66e25675b98304ab53b7c0f8af6478b87e"
-    },
-    {
-      "path": "Repositories/Drivers/NVIDIA/src/fixtures/context-engines-570.144.json",
-      "bytes": 684,
-      "sha256": "825489bd8d3059691dbfab467ae7572b26bf079c379c7f6c8e33580ba1e29204"
+      "sha256": "8f01ea6975662cf86e053f21cb9b8d64ecb886160bd96369c7db647254e95ab1"
     },
     {
       "path": "Repositories/Drivers/NVIDIA/src/gsp_context.zig",
-      "bytes": 27743,
-      "sha256": "34dc9d500112471d8cdaf4bb08c7e32b419f1df6b15fa4e43593ac4ba1115c4b"
+      "bytes": 29287,
+      "sha256": "56f38157a460681f39bcd3b8d9e64eec0c6473f4f1aa44d6cc1be3fbf31d1f0a"
     },
     {
-      "path": "Repositories/Drivers/NVIDIA/src/gsp_context_test.zig",
-      "bytes": 3901,
-      "sha256": "bac700f281b8686f281a4f907707d7c29946038b95ceb229d4ab3cc367cac755"
+      "path": "Repositories/Drivers/NVIDIA/src/gsp_init_storage_test.zig",
+      "bytes": 222541,
+      "sha256": "5884edc173401f9acd526d5bd2d91aaad9df09c40371ededdbab47fba2a1f9a4"
     },
     {
-      "path": "Repositories/Drivers/NVIDIA/src/gsp_context_wire.zig",
-      "bytes": 23235,
-      "sha256": "4ac7f50970f3b8ecdc134f6fa161dbed27e988ca941012904b652b155efb4f05"
+      "path": "Repositories/Drivers/NVIDIA/src/gsp_runtime.zig",
+      "bytes": 58382,
+      "sha256": "e778abe3f595ece7edf8911a6b3c4909b8ce7f06aaee75e1815e23471cde5dbf"
+    },
+    {
+      "path": "Repositories/Drivers/NVIDIA/src/gsp_transport_test.zig",
+      "bytes": 170352,
+      "sha256": "417d2d98d801d154ee75fd56d0dbff206e87a9f16ce3aaf4149c19a10acda6f6"
+    },
+    {
+      "path": "Repositories/Drivers/NVIDIA/src/gsp_vram.zig",
+      "bytes": 14625,
+      "sha256": "01be2d4240c0ff3690bb55be70b42ed818eec59502d2377bd1cdd6b03060c488"
+    },
+    {
+      "path": "Repositories/Drivers/NVIDIA/src/gsp_vram_test_model.zig",
+      "bytes": 9002,
+      "sha256": "95f354d644688a11e0714ebe257e4e0e21baabc22040c046a007992398cc18d4"
+    },
+    {
+      "path": "Repositories/Drivers/NVIDIA/src/gsp_vram_wire.zig",
+      "bytes": 10186,
+      "sha256": "475be3a7e66be713072d25c41a774cad777eb25f21308e9dcb03d5bcd8c9afc1"
+    },
+    {
+      "path": "Repositories/Drivers/NVIDIA/src/fixtures/native-storage-570.144.bin",
+      "bytes": 896,
+      "sha256": "ee786a37c155464aae5f8675d8182052fdcc4de17fc9ff59df1f5411f55c0ff2"
+    },
+    {
+      "path": "Repositories/Drivers/NVIDIA/src/fixtures/native-storage-570.144.json",
+      "bytes": 695,
+      "sha256": "04dd6b0322ec5f89068c57fe853d23540a4320ac6ebadfd21fd6677f31c2f0e9"
+    },
+    {
+      "path": "Repositories/Drivers/NVIDIA/src/gsp_native_backing.zig",
+      "bytes": 12785,
+      "sha256": "2891aa25a3f89fc7a4f011af88a5d2eaf88c25a2a7fe8b80c669ab8fc26435d4"
+    },
+    {
+      "path": "Repositories/Drivers/NVIDIA/src/gsp_native_backing_test.zig",
+      "bytes": 2571,
+      "sha256": "87568e819bd058a011acfccd65e04f83267a6ca335067f14fc8bce8465584449"
     }
   ],
   "artifacts": [
     {
       "path": "Artifacts/Modules/NVIDIA/NVIDIA.R4D",
-      "bytes": 95540495,
-      "sha256": "4915517f59de38fc7dd17d172bccd2b2609fe611b3323457ce8fc61d2fa21afe"
+      "bytes": 95546987,
+      "sha256": "1281b94d264479ce465ecee127f095bf5738079a92343a01baf5d73d2b951ebf"
     }
   ],
   "references": {
@@ -141,7 +143,7 @@
   },
   "hardware_contact": false,
   "physical_followup": "ExFiles/Reports/OssiGPU.txt / 0.79.11 remains OPEN",
-  "evidence_directory": "ExFiles/Reference/GFX/Nvidia/0.79.11/channel-context-20260912",
+  "evidence_directory": "ExFiles/Reference/GFX/Nvidia/0.79.11/channel-backing-20260912",
   "memory_inventory_checkpoint": {
     "recorded_at_utc": "2026-09-12T06:44:00.820449+00:00",
     "status": "0.79.11 T1 software complete; subversion and remaining software open",
@@ -2303,5 +2305,170 @@
     ],
     "hardware": "OssiPC unavailable throughout the rest of0.79.X; no contact. Physical context/topology/teardown and later FIFO execution remain OPEN in ExFiles/Reports/OssiGPU.txt /0.79.11.",
     "evidence_directory": "ExFiles/Reference/GFX/Nvidia/0.79.11/channel-context-20260912"
+  },
+  "native_storage_checkpoint": {
+    "recorded_at_utc": "2026-09-12T12:49:37.657003+00:00",
+    "status": "0.79.11 open: T1/T3 complete; private contiguous backing and group-owned methods integrated into the existing runtime",
+    "release": "0.79.12 unchanged",
+    "kernel": "0.1.158 unchanged",
+    "nvidia": "0.1.74",
+    "scope": "Actual runtime allocates confirmed contiguous control storage under common BO ownership; independent consumer references/device leases can bind fault-method storage to an RM context until the group is freed. FIFO construction and execution remain software work.",
+    "facts": {
+      "allocation": "allocateNativeStorage selects linear IMAGE/NO_SCANOUT with explicit contiguous physicality,64-KB alignment and the existing virtual allocation/map/commit path. Ordinary buffers and surfaces keep their prior policies and do not expose physical extents.",
+      "clearing": "Creation requires same-epoch/client/device FB caps. VIDMEM_ALLOCS_ARE_CLEARED comes from pinned memmgrIsScrubOnFreeEnabled; allocation sets no SKIP_SCRUB internal flag. Without that guarantee this private path rejects before allocation. No invented CPU pointer or software memset of VRAM.",
+      "extent": "Successful RM response must preserve contiguous placement, exact size/layout and64-KB alignment. Nonzero physical range must fit both reported and observed framebuffer capacity without overflow. Extent becomes available after ACK and common publication. RM owns placement; the range is not a free-pool estimate.",
+      "consumer": "retainNativeStorage imports a new common reference and takes active device-write access1 in GPU address space1 for the logical byte extent. This is distinct from access3 page-aligned mapping residency. Full descriptors, driver/adapter/epoch and owner address are checked; copied or altered uses cannot close resources. Info returns the held import, including after the producer reference closes.",
+      "initial_state": "The initial clearing guarantee is consumed once per allocation. A released consumer cannot reuse the old allocation as newly cleared channel state. Known admission failure unwinds its private import/lease; unknown descriptors retain ownership.",
+      "methods": "attachContextMethods binds exact queried method bytes and same RM VA space to a bounded runqueue slot before child channels. Group-owned storage remains imported/device-held through child teardown, context-share free and group free. Only then does the context drop its device lease/import, allowing ordinary last-use BO tickets to unmap/free backing before graph parents.",
+      "failure": "False quiescence, malformed/changed native responses, absent clearing support, out-of-capacity extents, bad lease descriptors and failed group/device frees do not publish a usable replacement or optimistically free storage. Cached ownership is used for cleanup after heap admission closes."
+    },
+    "validation": {
+      "nvidia": "51/51 existing groups. Actual Device/TX/notifier cases cover private allocation, contiguity/bounds/caps denial, imported active device use, changed/copy ownership, logical producer close, independent BO retirement and one-time initial state. Context cases cover group-held methods, sibling context retirement, known lease rejection, rejected group free and failed device release after confirmed group free.",
+      "reference": "Six original-C request/reply pairs896 bytes cover contiguous IMAGE allocation, VA, map/unmap/free; existing raw/surface fixtures still pass. Five complete pinned reference files and full notices archived.",
+      "kernel_contract_review": "Inspected unchanged gfx_driver_memory.acquire and common owner: access1 supports the logical device-write range; access3 requires page-aligned mapping residency. The prior actual EXAMPLE native opaque case already uses access1/address_space1 and4091 bytes in Init/Work/closing.",
+      "development_fixes": "Fixed a shadowed local identifier and model callbacks returning0 instead of gfx_buffer_result_ok=1. Contract review corrected consumer access3 to actual device-write access1. Held info now returns its live imported reference; allocation-time clearing cannot be consumed again after device use.",
+      "builds": {
+        "nvidia-unit-final.log": "51/51 tests passed",
+        "nvidia-build.log": "7/7 steps succeeded",
+        "vector.log": "contiguous storage pairs: phys=160 virtual=160 map=56 unmap=40 free=16 bytes=896"
+      },
+      "new_gate": false,
+      "guest": "Not repeated: Kernel/SDK/Contract/API implementation unchanged. Existing surface_layout_checkpoint SMP4 proof covers actual native import/device-write/closing API.",
+      "limits": "Host Device model validates the production runtime methods. No real allocation/clear, group use, GPFIFO submission, GPU completion, visible image or HDMI-audio result is claimed."
+    },
+    "sources": {
+      "pin": "NVIDIA570.144 / 8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f",
+      "sources": [
+        {
+          "path": "ExFiles/Reference/GFX/Nvidia/OpenKernelModules-570.144/src/common/sdk/nvidia/inc/nvos.h",
+          "bytes": 146013,
+          "sha256": "9e878195c522919f133c497aefbc3f4c076aae8bda25d4c7915e8981bb43563a"
+        },
+        {
+          "path": "ExFiles/Reference/GFX/Nvidia/OpenKernelModules-570.144/src/nvidia/src/kernel/gpu/mem_mgr/mem_mgr_ctrl.c",
+          "bytes": 28968,
+          "sha256": "dc1340f80fc3aabad006d7354ad39899853a1103bc1af2120be489066b122107"
+        },
+        {
+          "path": "ExFiles/Reference/GFX/Nvidia/OpenKernelModules-570.144/src/nvidia/src/kernel/mem_mgr/video_mem.c",
+          "bytes": 59271,
+          "sha256": "c461f85d8f1a9f612ecc38f43cf24c89fa2961028aa8632150611d047906cc36"
+        },
+        {
+          "path": "ExFiles/Reference/GFX/Nvidia/OpenKernelModules-570.144/src/nvidia/src/kernel/gpu/fifo/kernel_channel.c",
+          "bytes": 181338,
+          "sha256": "2f366454ca726e80bf91b6902db05d472c7a7ea09029c04b3470370bab9739a5"
+        },
+        {
+          "path": "ExFiles/Reference/GFX/Nvidia/OpenKernelModules-570.144/src/nvidia/src/kernel/gpu/fifo/arch/volta/kernel_channel_group_gv100.c",
+          "bytes": 12331,
+          "sha256": "c73c1188d5ff7d390964664099990d0c5b9dd691e41bb4c6b3b58497894719ec"
+        }
+      ]
+    },
+    "source_files": [
+      {
+        "path": "Repositories/Drivers/NVIDIA/Licenses/NVIDIA-GSP-RUNTIME-LICENSE.txt",
+        "bytes": 175715,
+        "sha256": "58a38366ad900a930332392432cfe6fdebe9791d2e1f4cd2549ba65e286d7fa4"
+      },
+      {
+        "path": "Repositories/Drivers/NVIDIA/module.R4MF",
+        "bytes": 4176,
+        "sha256": "8f01ea6975662cf86e053f21cb9b8d64ecb886160bd96369c7db647254e95ab1"
+      },
+      {
+        "path": "Repositories/Drivers/NVIDIA/src/gsp_context.zig",
+        "bytes": 29287,
+        "sha256": "56f38157a460681f39bcd3b8d9e64eec0c6473f4f1aa44d6cc1be3fbf31d1f0a"
+      },
+      {
+        "path": "Repositories/Drivers/NVIDIA/src/gsp_init_storage_test.zig",
+        "bytes": 222541,
+        "sha256": "5884edc173401f9acd526d5bd2d91aaad9df09c40371ededdbab47fba2a1f9a4"
+      },
+      {
+        "path": "Repositories/Drivers/NVIDIA/src/gsp_runtime.zig",
+        "bytes": 58382,
+        "sha256": "e778abe3f595ece7edf8911a6b3c4909b8ce7f06aaee75e1815e23471cde5dbf"
+      },
+      {
+        "path": "Repositories/Drivers/NVIDIA/src/gsp_transport_test.zig",
+        "bytes": 170352,
+        "sha256": "417d2d98d801d154ee75fd56d0dbff206e87a9f16ce3aaf4149c19a10acda6f6"
+      },
+      {
+        "path": "Repositories/Drivers/NVIDIA/src/gsp_vram.zig",
+        "bytes": 14625,
+        "sha256": "01be2d4240c0ff3690bb55be70b42ed818eec59502d2377bd1cdd6b03060c488"
+      },
+      {
+        "path": "Repositories/Drivers/NVIDIA/src/gsp_vram_test_model.zig",
+        "bytes": 9002,
+        "sha256": "95f354d644688a11e0714ebe257e4e0e21baabc22040c046a007992398cc18d4"
+      },
+      {
+        "path": "Repositories/Drivers/NVIDIA/src/gsp_vram_wire.zig",
+        "bytes": 10186,
+        "sha256": "475be3a7e66be713072d25c41a774cad777eb25f21308e9dcb03d5bcd8c9afc1"
+      },
+      {
+        "path": "Repositories/Drivers/NVIDIA/src/fixtures/native-storage-570.144.bin",
+        "bytes": 896,
+        "sha256": "ee786a37c155464aae5f8675d8182052fdcc4de17fc9ff59df1f5411f55c0ff2"
+      },
+      {
+        "path": "Repositories/Drivers/NVIDIA/src/fixtures/native-storage-570.144.json",
+        "bytes": 695,
+        "sha256": "04dd6b0322ec5f89068c57fe853d23540a4320ac6ebadfd21fd6677f31c2f0e9"
+      },
+      {
+        "path": "Repositories/Drivers/NVIDIA/src/gsp_native_backing.zig",
+        "bytes": 12785,
+        "sha256": "2891aa25a3f89fc7a4f011af88a5d2eaf88c25a2a7fe8b80c669ab8fc26435d4"
+      },
+      {
+        "path": "Repositories/Drivers/NVIDIA/src/gsp_native_backing_test.zig",
+        "bytes": 2571,
+        "sha256": "87568e819bd058a011acfccd65e04f83267a6ca335067f14fc8bce8465584449"
+      }
+    ],
+    "kernel_contract_sources": [
+      {
+        "path": "Repositories/Kernel/kernel/gfx_driver_memory.zig",
+        "bytes": 15523,
+        "sha256": "bd82c486fe44be1d026567f7a0d8db2e87283fe142fc74a1d568d1c9e2967743"
+      },
+      {
+        "path": "Repositories/Kernel/memory/gfx_buffer_owner.zig",
+        "bytes": 38450,
+        "sha256": "e1c83de0092a7c6c0a869d4d91ca263dfd1da9101cea4673b683d0290b5db34e"
+      },
+      {
+        "path": "Repositories/Drivers/Example/src/gfx_memory_test.zig",
+        "bytes": 25197,
+        "sha256": "2505696c925a35ff81eb3eb2923cf72ab65f12be7f5144de499ee153ae7d9c7a"
+      }
+    ],
+    "legal": {
+      "path": "Repositories/Drivers/NVIDIA/Licenses/NVIDIA-GSP-RUNTIME-LICENSE.txt",
+      "bytes": 175715,
+      "sha256": "58a38366ad900a930332392432cfe6fdebe9791d2e1f4cd2549ba65e286d7fa4"
+    },
+    "artifacts": [
+      {
+        "path": "Artifacts/Modules/NVIDIA/NVIDIA.R4D",
+        "bytes": 95546987,
+        "sha256": "1281b94d264479ce465ecee127f095bf5738079a92343a01baf5d73d2b951ebf"
+      }
+    ],
+    "open_software": [
+      "Concrete instance/RAMFC/USERD descriptors and per-channel command backing",
+      "GPFIFO allocation, bind/schedule and engine consumers using held context/BO resources",
+      "GPU upload/readback and visibility transitions",
+      "MMU/channel faults, quiescence and complete recovery"
+    ],
+    "hardware": "OssiPC unavailable for remainder0.79.X; no contact. Real contiguity/clearing, channel memory and group-method lifetime remain OPEN in ExFiles/Reports/OssiGPU.txt /0.79.11.",
+    "evidence_directory": "ExFiles/Reference/GFX/Nvidia/0.79.11/channel-backing-20260912"
   }
 }

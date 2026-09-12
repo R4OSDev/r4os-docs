@@ -1,49 +1,35 @@
 ﻿NVIDIA-Scanout und native Moduswechsel – 0.79.13
 =============================================
-Stand: NVIDIA 0.1.80; Unterversion und alle Aufgaben/Abnahmen offen.
+Stand: NVIDIA 0.1.81; Unterversion und alle Aufgaben/Abnahmen offen.
 Release bleibt 0.79.12, Kernel 0.1.158. Bootfb bleibt der Standard.
 
-Displaybesitz und Speichertabellen
----------------------------------
-Der Device-/GSP-Worker besitzt C670-Root, C67D-Core, C67E-Windowchannels
-und die gehaltene 64KB-VRAM-Instanz. Klassen und Windowmaske kommen vom RM.
-Channelringe werden erst nach ACK und belegtem Hardwarestillstand frei.
-Die Instanz und spaetere Bildpuffer brauchen eine eigene Hardwareuebergabe.
+Der Device-/GSP-Worker besitzt Displayroot, Core-/Windowchannels, die
+64KB-VRAM-Instanz und ihre per Copy Engine uebertragene RAMHT. Der neue
+Notifierbesitzer haelt private 4KB-Systempuffer samt CPU-Abbildung und
+physischem DMA-Besitz. NVIDIA-Referenzcode belegt die gemeinsame Ablage
+von Befehlsring und Notifier im kohaerenten Systemspeicher fuer diesen Pfad.
 
-Die Displayinstanz erhaelt eine 8KB-RAMHT mit 1024 Hashplaetzen und
-bis zu 64 physischen DMA-Kontexten. Die 24-Byte-Deskriptoren liegen im
-32-Byte-Abstand dahinter; insgesamt werden 10KB uebertragen. Format und
-Hash entsprechen den gepinnten Nouveau-Funktionen fuer GA106/GV100.
-Ein Heap-Besitzer haelt eingetragene VRAM-Puffer unabhaengig vom Erzeuger.
-Tabellenersetzung ist ab der ersten Channelerzeugung gesperrt; auch
-Channel-Free allein erlaubt keine Aenderung einer zuvor aktiven Tabelle.
+Core-Befehle setzen Notifierkontext und Formatgrenzen der tatsaechlichen
+Windowmaske; ein UPDATE fordert die Abschlussmeldung an. Der typisierte
+PUT-/GET-Zugriff prueft Device, Channel, Epoche, Frist und Befehlsbytes.
+Nur ein Auftrag ist gleichzeitig offen. Beim Umlauf publiziert der Ring
+zuerst JUMP0/PUT0 und wartet auf GET0, bevor er den Anfang neu beschreibt.
 
-Uebertragung und Fehlerverhalten
--------------------------------
-Der vorhandene private Systempuffer wird ueber einen CPU-WB-Zugriff
-befuellt. Nach dem Unmap schuetzt ein echter GPU-Lesezugriff diese Bytes.
-Die vorhandene Copy Engine uebertraegt sie in die gehaltene VRAM-Instanz.
-Die Device-Zulassung prueft Besitzer, Revision, Speicher, Channel, Frist
-und die tatsaechlichen GPU-Befehle einschliesslich Abschlussadresse.
-Dieser interne Transfer erzeugt keinen kuenstlichen allgemeinen Queuejob.
+GET und Notifierstatus BEGUN bedeuten noch keinen Abschluss. FINISHED
+liefert den bestaetigten Softwarepunkt und Zeitstempel; bereits anstehende
+Firmwarefehler haben Vorrang. Fristablauf, falsche Cursor/Notifier oder
+unklare Speicherzustaende halten alle erreichbaren Ressourcen. Erst
+Channel-Free mit belegtem Hardwarestillstand erlaubt die Freigabe des
+Befehlsrings; Notifier, Tabelle und Instanz bleiben weiter gebunden.
 
-Nur die CE-Abschlussmeldung gibt den Systempufferzugriff frei und markiert
-die Revision als uebertragen. Ausstehende Firmwarefehler haben Vorrang;
-GPGet und Fristablauf ersetzen keinen GPU-Abschluss. Vor der Einreichung
-sind sauber abgebrochene Speicher-/Fristfehler wiederholbar. Unklare
-Zustaende halten die erreichbaren Puffer und den Firmware-/Bootbesitz.
+Vier Original-C-Befehlssaetze und sechs gezielte Device-Szenarien inklusive
+128 Updates mit Ringumlauf ergaenzen bestehende Tests. Alle 51 Tests und
+der Modulbuild bestehen. Keine neuen Gates oder unveraenderten QEMU-Laeufe.
+Quellen, volle Lizenzen, Hashes und Belege: GrafikScanout07913.json.
 
-Nachweis und verbleibende Software
----------------------------------
-64 kollidierende Original-C-Eintraege pruefen Tabellenumlauf, VRAM-/SYS-
-Deskriptoren und das gesamte 10KB-Abbild. Sieben gezielte Uploadszenarien
-ergaenzen die vorhandene Device-Gruppe; 51 Testgruppen und Modulbuild
-bestehen. Kein neues Gate, kein unveraenderter QEMU-Wiederholungslauf.
-Quellen, vollstaendige Lizenzen, Hashes und Belege: GrafikScanout07913.json.
-
-Die internen APIs starten noch nicht automatisch. Notifierbesitz,
-Displaymethoden und PUT-/Abschlussprotokoll fehlen noch; anschliessend
-folgen eigene Scanout-Puffer am Presentpfad, sichere Bootmodusuebernahme,
-Head/SOR/Pixeltakt, Atomic-SDR-Test/Commit, Bestaetigung und Timer-Rueckkehr.
-Eine befuellte private Instanz ersetzt noch keine aktiven Bootkontexte.
+Die internen APIs werden noch nicht automatisch aufgerufen. Ein Core-
+Abschluss bestaetigt Befehlsausfuehrung, aber keine sichtbare Bilduebernahme.
+Offene Software: Window-Bildzustand, eigene Scanout-Puffer am Presentpfad,
+sichere Bootmodusuebernahme, Head/SOR/Pixeltakt, Atomic-SDR-Test/Commit,
+Bestaetigung und Timer-Rueckkehr sowie belegte Ressourcenuebergabe.
 Physische Nacharbeit: ExFiles/Reports/OssiGPU.txt /0.79.13, weiterhin offen.

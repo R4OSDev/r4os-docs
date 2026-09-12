@@ -1,6 +1,6 @@
 ﻿NVIDIA-Speicherbesitz 0.79.11
 =============================
-Stand: 12.09.2026, NVIDIA 0.1.74. T1 und T3 softwareseitig abgeschlossen;
+Stand: 12.09.2026, NVIDIA 0.1.75. T1 bis T4 softwareseitig abgeschlossen;
 Unterversion und weitere Implementierungsaufgaben bleiben offen.
 Release bleibt 0.79.12; Kernel 0.1.158. Standard bleibt passiv.
 Physische Nacharbeit: ExFiles/Reports/OssiGPU.txt / 0.79.11, Status OFFEN.
@@ -404,10 +404,45 @@ wurden abgeglichen; kein zusaetzlicher Gastlauf oder Testeinstieg.
 Konkrete Instanz-/RAMFC-/USERD-Deskriptoren, Befehlsbacking, GPFIFO und
 Ausfuehrung sind weiterhin Softwarearbeit; T2/T4 bleiben offen.
 
+GPFIFO und Channel-Besitz (NVIDIA 0.1.75)
+-----------------------------------------
+T2/T4 sind mit der konkreten Instanz-/Channel-Anbindung softwareseitig
+abgeschlossen. createExecutionChannel legt C56F unter der vorhandenen
+A06C-Gruppe an; hContextShare verwendet deren9067-Share, hVASpace bleibt0.
+Engine/Runlist und Klassen kommen aus der bestaetigten Kontextabfrage.
+
+Jeder Channel besitzt einen eigenen12-KB-System-BO: CPU-Nullung/Unmap,
+DMA-Residency, RM-Registrierung, VA/Map und GPU-Residency laufen ueber
+den gemeinsamen Speichervertrag. Die erste Seite enthaelt512 GPFIFO-
+Eintraege; die restlichen Seiten sind fuer den spaeteren Consumer reserviert.
+Instanz4096/USERD512 und RAMFC512 in der Instanz verwenden gehaltene native
+BOs. Der Gruppenkontext haelt weiter den gemeinsamen Methodspeicher.
+
+Die Anlage verlangt anfangs geloeschten Speicher, verzoegert Scheduling
+und sperrt physische CE-Adressen. RM waehlt eine neue USERD-Seite an Index0.
+Die zurueckgegebene cid ist eine RM-Sitzungskennung, kein Hardware-CHID.
+Auf bestaetigte Anlage folgen Bind, Tokenabfrage und Enable. Der FIFO ist
+zunaechst leer; das ist noch kein Engine-/Render-Backend.
+
+64 begrenzte Channelplaetze verwenden Sitzungs-/Serienhandles und halten
+Kontextkinder. Disable allein erlaubt keine Freigabe: auf Channel-Free-ACK
+folgen Befehls-Unmap/VA/Memory-Free, BO-Leases/Importe und Kontextkind.
+Methodspeicher bleibt bis Share-/Group-Free. Bekannte Ablehnungen bauen
+bestaetigte Teile zurueck; unklare Antworten/ACKs oder fehlgeschlagene
+Frees behalten erreichbare Ressourcen. Zwei FIFOs koennen denselben
+Kontext nutzen und unabhaengig enden; gespeicherte Tabellen tragen den
+Rueckbau auch bei geschlossener Heap-Zulassung.
+
+Beleg: fifo_checkpoint in GrafikSpeicher07911.json. Sieben Original-C-
+Paketpaare1848 Bytes,51/51 vorhandene NVIDIA-Gruppen und Modulbuild bestehen.
+Der echte Device-/Runtime-Pfad wird mit modellierten Antworten geprueft.
+Kein neues Gate oder Gastlauf; Kernel/SDK/Contract unveraendert.
+
 Verbleibende Software
 --------------------
-Konkrete Channel-Ressourcen, Befehlsbacking und Anbindung der nativen/gemappten
-Auftragspuffer/Flaechenplaene an echte Engines, Channels,
-GPU-Upload/Readback und MMU-/Channelfehler bleiben Softwarearbeit in 0.79.11.
-Vorhandene Allokationen/Mappings ersetzen diese Integration nicht. Hardwaremuster
-und echte GPU-Completion bleiben in OssiGPU.txt offen.
+T5: Engine-Objekte und Befehlsconsumer, GPFIFO-/USERD-/Doorbell-Uebergabe,
+GPU-Upload/Readback, Cache-Sichtbarkeit und modellierte Completion.
+T6: IRQ-/MMU-/Channelfehler mit Quarantaene, Quieszenz und Rueckbau.
+Danach passende gemeinsame Softwareabnahmen A1/A2; vorhandene Allokation
+und ein leerer FIFO ersetzen diese Ausfuehrung nicht. Reale GPU-Muster,
+Completion und Hardware-Rueckweg bleiben in OssiGPU.txt offen.

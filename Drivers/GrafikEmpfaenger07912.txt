@@ -1,0 +1,96 @@
+﻿R4OS 0.79.12: Native Empfaengerdaten im gemeinsamen Katalog
+=========================================================
+
+Stand 12.09.2026: NVIDIA 0.1.60, Kernel 0.1.153, DISPLAYD 0.1.11.
+Die Plattformpublikation ist implementiert; die Unterversion bleibt wegen
+weiterer Anschluss-/Transportarbeit offen. RELEASE_VERSION bleibt 0.79.10.
+OssiPC ist nicht verfuegbar. Reale Nacharbeit: ExFiles/Reports/OssiGPU.txt,
+Abschnitt 0.79.12. Standard weiterhin passiv; native Ausfuehrung experimentell.
+
+Besitz und Datenfluss
+---------------------
+NVIDIA beschafft Anschluss-/EDID-Daten ueber seinen einzigen lebenden
+GSP/RM-Kanal. Erst nach Maskenpruefung, Schlussantwort, ACK und Rueckgabe
+veroeffentlicht gsp_catalog die gesamte konsistente Generation. Der
+bestehende R4GFX-Parser und modeFromTiming bleiben die gemeinsame Wahrheit.
+Kein zusaetzlicher Parser, Hardwarebesitzer oder Rendering-Queueplatz.
+
+Der Kernel besitzt nur Metadaten, Identitaeten und die atomare Uebernahme.
+RegisterSource bindet den Adapter an den echten DriverInit-/Work-Owner samt
+Startgeneration aus dem vorhandenen residenten Laufzeitbesitzer. Ein vor der
+Anmeldung erfasster Stop-/Resetzaehler schliesst die Zulassungsrace. Kein
+Worker wartet auf den vom Init gehaltenen Lifecycle-Guard. ReplaceReceivers
+validiert alle Datensaetze vor der ersten Mutation und ersetzt die ganze Quellgeneration unter dem Programm-Owner.
+Danach wird der bestehende Desktop-Ereignispfad signalisiert. Kein Callback,
+I/O, Heapzugriff oder komplettes Tabellenabbild auf dem Kernelstack.
+
+Publikationssequenzen und Quell-/Empfaengeridentitaeten laufen nicht um.
+Veraltete Antworten, fremde Besitzer, doppelte Ports, fehlerhafte Modi und
+Kapazitaetsfehler veraendern die alte Generation nicht. Leere Publikationen
+entwerten sie vollstaendig; Stop schliesst Quelle und alle Empfaenger.
+Das darf auch waehrend einer gehaltenen fremden Scanout-Transaktion oder
+unsicherer GPU-Ressourcen geschehen. Metadatenentwertung beweist keine
+GPU-Ruhe und erlaubt keine Freigabe von DMA, Firmware oder Scanout.
+
+Schnittstelle und Kompatibilitaet
+--------------------------------
+GfxDriverOutputApi behaelt den 24-Byte-Praefix fuer echte Queue-Publikation.
+Der optionale 48-Byte-Tail bietet register_source, replace_receivers und
+close_source. Query schreibt nur vollstaendige Slots innerhalb der vom
+Caller genannten Kapazitaet. Wire-Version bleibt 1; das Contract-Schema
+verzeichnet die additive Typentwicklung als Revision 2. DriverApi bleibt 35
+mit unveraendertem 648-Byte-Layout. Bestehende feste Payloads/Slots/Zahlen
+bleiben identisch; nur neue Typen/Konstanten und optionale Slots kommen hinzu.
+Der neue gsp-start verlangt diesen Tail vor der ersten Firmwarewirkung.
+
+GfxReceiverSource umfasst 16 Bytes, GfxReceiverInfo 8224 und
+GfxReceiverUpdate 48. Der Updatepointer leiht exklusiv unveraenderte residente
+R4D-Daten bis zur Rueckkehr; der Kernel behaelt keine Pointer. Hoechstens
+32 Empfaenger pro Quelle, 64 Katalogeintraege einschliesslich bootfb,
+64 publizierte Timings und 4096 EDID-Bytes pro Empfaenger. Der alte
+Konstantwert gfx_output_capacity bleibt 32; neue Leser verwenden die
+zur Laufzeit gemeldete Anzahl und den groesseren Katalograhmen.
+Info-Indizes sind dicht 0..present-1, auch nach Entfernen einer Quelle.
+Globale Revision vor/nach Lesen vergleichen; alte Identitaeten sind Stale.
+
+Keine erfundenen Faehigkeiten
+-----------------------------
+receiver_only kennzeichnet reine Empfaengerbeobachtungen. Head-/Plane-/PLL-
+Masken und alle Quellgrenzen sind null. Atomic Test/Commit lehnt diese
+Eintraege ab; sie aktivieren weder Scanout noch HDMI-Audio. Bootfb bleibt
+eine getrennte Firmwarebeobachtung mit seiner tatsaechlichen Geometrie.
+RM-Display-IDs bleiben quelllokale Endpunkte; mehrdeutige physische
+Connector-Datensaetze liefern Typ unbekannt. Sie werden weder als bekannte
+Buchse ausgegeben noch anhand eines HDMI-EDID-Blocks umgedeutet.
+
+Getrennte Flags melden unbekannte Verbindung, fehlende/ungueltige EDID,
+unvollstaendige Daten und abgelehnte Abfragen. Defekte Basisdaten liefern
+keine Modi; ganze Rohbloecke bleiben diagnostisch lesbar. Teilbloecke werden
+nicht aufgefuellt. Unvollstaendige oder mehr als 64 programmierbare Timings
+bleiben ausdruecklich unvollstaendig. Fehlende EDID beweist keinen TV-Standby.
+HDMI-/Audio-/Farbinformationen kommen ausschliesslich aus dem gemeinsamen
+Parser. Der native RAW-EDID-Aufruf ist weiterhin auf 2048 Bytes begrenzt.
+
+HPD entwertet auch fertige Plattformdaten. Fehler beim Publizieren schliessen
+zusatzlich den internen Laufzeit-Snapshot und behalten Firmware-/DMA-Besitz.
+DISPLAYD /RECEIVERS zeigt Identitaeten, Status, Modi/EDID-Laenge und geparste
+Empfaengerangaben. Der Befehl liest nur den gemeinsamen R4DRAW-Katalog;
+kein Firmwarestart, Hotplug-Polling, Modeset oder Present.
+
+Pruefung und offene Software
+----------------------------
+Gezielte bestehende Besitzerpruefungen: Kernel display-test, NVIDIA unit-test,
+SDK-Zig/C-Fassade und Contract-Generierung/Layouts. Zwei zusaetzliche Faelle
+innerhalb der vorhandenen Displaygruppe pruefen atomare Generationen,
+Kapazitaet/Entwertung und alte Caller-Puffer. Die vorhandene NVIDIA-Device-
+Pruefung verfolgt jetzt auch die Plattformpublikation und ihre Fehler.
+Der bestehende explizite SMP4 nvidia-runtime prueft die echten R4D-Aufrufe
+in Init/Work mit gekennzeichneten synthetischen Metadaten, entfernt sie
+wieder und liest danach den verbleibenden Firmwarekatalog. Keine neue
+Testgruppe oder physische Abnahme. Ergebnisse/Hashes: begleitende JSON.
+
+Offen bleiben die vollstaendige Head-/Bus-/Portzuordnung, Segmentpointer,
+begrenzte Transport-Retries, groessere EDID-Lesewege und AUX-Grundtransport.
+GSP bleibt alleiniger Hardwarebesitzer; kein konkurrierender direkter
+DDC-/GPIO-Treiber. Physische HDMI/DP-/Hisense-Abnahme folgt OssiGPU.txt.
+Native Moduswechsel, Bild und Ton behalten ihre weiteren Roadmapschritte.

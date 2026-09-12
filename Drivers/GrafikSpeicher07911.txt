@@ -1,8 +1,8 @@
 ﻿NVIDIA-Speicherbesitz 0.79.11
 =============================
-Stand: 12.09.2026, NVIDIA 0.1.69. T1 softwareseitig abgeschlossen;
+Stand: 12.09.2026, NVIDIA 0.1.70. T1 softwareseitig abgeschlossen;
 Unterversion und weitere Implementierungsaufgaben bleiben offen.
-Release bleibt 0.79.12; Kernel 0.1.155. Standard bleibt passiv.
+Release bleibt 0.79.12; Kernel 0.1.156. Standard bleibt passiv.
 Physische Nacharbeit: ExFiles/Reports/OssiGPU.txt / 0.79.11, Status OFFEN.
 
 Erfasste Speichergrenzen
@@ -223,13 +223,58 @@ DMA-Adressen bei versetzten Auftragsbereichen, GPU-/DMA-Retention,
 IRQ-Ablehnung, Reset/Close, Producer-Kill und ausgeglichene Freigabe.
 52/52 bestehende Kernel-Faelle, Contract und acht Zig-/C-Fassadenfaelle
 bestehen ebenfalls. Kein neues Gate, kein GPU- oder OssiPC-Kontakt.
-Allgemeine NVIDIA-RM-Pufferregistrierung und GPU-Ausfuehrung bleiben offen.
+Die allgemeine Registrierung folgt im unten dokumentierten NVIDIA 0.1.70;
+GPU-Ausfuehrung bleibt offen.
 Beleg: GrafikSpeicher07911.json / queue_resource_checkpoint.
+
+Allgemeine System-BO-Mappings (NVIDIA 0.1.70 / Kernel 0.1.156)
+--------------------------------------------------------------
+Die echte Runtime uebernimmt Quelle oder Ziel eines aktiven Auftrags ueber
+mapQueuedBuffer. Die Queue liefert eine reine Mappingreferenz; rohe
+Objektkennungen bleiben Diagnosewerte. Dieselben gehaltenen Seiten werden
+ohne CPU-Pixelzugriff oder Zwischenkopie in den privaten RM-Adressraum
+registriert. BufferHandle bindet Sitzung, fortlaufende Seriennummer und Slot.
+bufferStatus liefert erst nach allen Map-Antworten und ACKs eine GPU-Adresse.
+
+Eine MEMORY_LIST_SYSTEM-Nachricht beschreibt maximal 8175 Seiten. Grosse
+BOs verwenden mehrere Speicherobjekte in einer gemeinsamen virtuellen
+Allokation. Map-Offsets sind relativ, Antworten und Unmaps absolut
+(originales NVOS46, fixed=false). 4-KB-Seiten, Cache-Snoop und nicht
+aufgeschobene TLB-Invalidierung bleiben explizit. Pixel werden nicht kopiert.
+Pro Worker-Schritt werden hoechstens 64 weitere Seitenadressen gesammelt.
+Die etwa 128 KB grossen Hilfsdaten werden nach Anlage freigegeben; dauerhaft
+bleiben kleine Besitzer und 160 Bytes fuer Rueckbaunachrichten. Maximal 256
+Mappingbesitzer; gemeinsame BO-Budgets bleiben massgeblich.
+
+Nur Mappingreferenzen duerfen die wirklich allokierte letzte Seite ganz
+halten. CPU-/Auftrags-/Ausfuehrungsgrenzen bleiben logisch: der SMP4-Beleg
+verwendet 4091 Bytes mit versetztem 4079-Byte-Auftrag und 4096-Byte-Residency.
+Ablehnung baut nur den bestaetigten Praefix zurueck. Unklare Antworten,
+ACK-Ausfall, Timeout oder fehlgeschlagene Freigabe behalten Ressourcen.
+Wiederholter Abschluss eines bereits bereinigten Fehlversuchs ist sicher.
+
+retireBuffer und beginDestroyGraph verlangen unabhaengig festgestellte
+Engine-Quieszenz. Zuerst alle Teilmappings und RM-Speicherobjekte freigeben,
+dann GPU-/DMA-Leases und Referenz, zuletzt den RM-Elternbesitzer. Der Graph
+verweigert seinen ersten Free bereits bei lebenden Kindreservierungen.
+Logisches Ende oder Abbruch reicht dafuer nicht. Namen werden nie recycelt.
+
+51/51 bestehende NVIDIA-Gruppen bestehen einschliesslich des echten Device-
+und Notifierpfads mit 80 MB minus 5 Bytes ueber drei Objekte, einem zweiten
+kleinen BO, 16 Ringelementen, Benachrichtigungen und gezielten Fehlerfaellen.
+Sechs neue Original-C-Paare (736 Bytes) pruefen einen versetzten Teilbereich;
+der alte Steuerpuffervergleich bleibt gueltig. Kernel: 52/52; geaenderte
+Artefakte gebaut; ein vorhandener kurzer SMP4-Queuelauf besteht. Kein neues
+Gate und kein Hardwarekontakt. Beleg: native_buffer_checkpoint in der JSON.
+
+Die Runtime-Schnittstelle bleibt bis zu ihren echten Engine-Verbrauchern
+ungenutzt. Sie registriert kein Ausfuehrungsbackend und qualifiziert weder
+Scanout noch Rendering. Der Standardstart bleibt passiv.
 
 Verbleibende Software
 --------------------
-Allgemeine VRAM-/BO-Allokation, App-Pufferintegration im nativen Backend,
-weitere GPU-/GART-/Instanzressourcen, Layoutauswahl, Channels,
+Native VRAM-Allokation und Instanzressourcen, Anbindung der gemappten
+Auftragspuffer an echte Engines, Layoutauswahl, Channels,
 GPU-Upload/Readback und MMU-/Channelfehler bleiben Softwarearbeit in 0.79.11.
-Der private Steuerpuffer ersetzt diese Integration nicht. Hardwaremuster
+System-BO-Mappings ersetzen diese Integration nicht. Hardwaremuster
 und echte GPU-Completion bleiben in OssiGPU.txt offen.

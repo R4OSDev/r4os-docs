@@ -1,7 +1,7 @@
 ﻿R4OS 0.79.12: Native Empfaengerdaten im gemeinsamen Katalog
 =========================================================
 
-Stand 12.09.2026: NVIDIA 0.1.62, Kernel 0.1.153, DISPLAYD 0.1.11.
+Stand 12.09.2026: NVIDIA 0.1.63, Kernel 0.1.153, DISPLAYD 0.1.11.
 Die Plattformpublikation ist implementiert; die Unterversion bleibt wegen
 weiterer Anschluss-/Transportarbeit offen. RELEASE_VERSION bleibt 0.79.10.
 OssiPC ist nicht verfuegbar. Reale Nacharbeit: ExFiles/Reports/OssiGPU.txt,
@@ -129,8 +129,8 @@ zwei Wiederholungen mit mindestens 1 ms Abstand. Die urspruengliche Deadline
 bleibt bestehen. Waehrend des Abstands bleibt der Worker abgebbar und der
 Nachrichtenempfang aktiv. Transport-/Framing-/ACK-Fehler werden nicht erneut
 gesendet. Fehlerparameter werden mangels COPYOUT nicht ausgewertet.
-GSP-RECEIVER protokolliert Datenquelle, Retryzahl und letzte DDC-RPC/RM-
-Fehler zusaetzlich zum abschliessenden Parserstatus.
+GSP-RECEIVER/GSP-DDC protokollieren Datenquelle, Retryzahl und letzte
+DDC-RPC/RM-Fehler zusaetzlich zum abschliessenden Parserstatus.
 
 Gezielte bestehende NVIDIA-Pruefungen: 51/51, einschliesslich realem Device-
 und Katalogpfad mit 4096 Bytes. Modulbuild und Rechtsdokument-Staging sind
@@ -140,6 +140,49 @@ weitere Originalheader belegen Objektklasse, Layout und Fehlerwerte.
 Kein weiterer Gastlauf oder Hardwarekontakt. Details: ddc_checkpoint in
 GrafikEmpfaenger07912.json; vollstaendige Quellen/Notizen und Belege unter
 ExFiles/Reference/GFX/Nvidia/0.79.12/ddc-20260912.
+
+AUX-Grundtransport und EDID ueber DisplayPort
+---------------------------------------------
+NVIDIA 0.1.63 fragt nach fehlender/unvollstaendiger RAW-EDID die Ressource
+frisch ab. Bestaetigte statische DP-SORs verwenden denselben RM-Kanal fuer
+eine begrenzte DPCD-Beobachtung und EDID ueber I2C-over-AUX. Die feste
+Allowlist erlaubt nur EDID-Segment/Offset, Schreibstatus, 1..16 Lesebytes
+und Address-only-STOP; keine DPCD-Schreibzugriffe oder Linktrainings.
+
+COPYOUT_ON_ERROR=1 entspricht dem originalen exportierten Methodenvertrag.
+Auf expliziten RM-Retryfehlern wird nur die dokumentierte Wartezeit gelesen;
+Fehlerdaten werden nicht als Nutzlast verwendet. Hoechstens drei RM-Versuche,
+sieben DEFER-Wiederholungen mit mindestens 500 us und die urspruengliche
+Erfassungsdeadline begrenzen jede Phase. I2C-DEFER nach einer Auswahl nutzt
+Schreibstatus statt die Auswahl unkontrolliert zu wiederholen.
+
+Ganze EDID-Bloecke entstehen aus begrenzten Teilantworten. Ein kurzer letzter
+Read hat MOT bereits beendet; die restlichen Bytes erhalten eine neue genaue
+Segment-/Offsetauswahl. Kein Teilblock wird in den Katalog kopiert. Nach
+allen bis zu 32 Bloecken folgen Basis-, Ressourcen-, Verbindungs- und
+HPD-Pruefung sowie Vergleich mit der Topologie. Der gemeinsame Parser und
+die atomare Katalogpublikation bleiben unveraendert.
+
+Ein begonnenes I2C-MOT bleibt eine Verpflichtung des Kanals, auch nach HPD
+oder verworfener Vorbereitung. Erst bestaetigter finaler Read/STOP samt ACK
+schliesst ihn. Fehler, Abbruch und Hotplug senden gegebenenfalls STOP, bevor
+der Graph zurueckgegeben wird. Ungewisse ACKs oder fehlgeschlagener STOP
+behalten den Graph und DMA-Besitz. Keine rekursive Queue und kein IRQ-I/O.
+
+Dynamische Endpunkte erhalten keine erfundenen Daten des Root-Monitors.
+Dort bleibt der begrenzte RM-RAW-Pfad bestehen; MST/Sideband gehoert zu
+0.79.27. Aktives DP-Linktraining und DP-Audio bleiben 0.79.23. Die reine
+Empfaengererfassung ist weiterhin keine native Scanout-Freigabe.
+GSP-RECEIVER, GSP-DDC und GSP-AUX liefern getrennte kurze Diagnosezeilen;
+Datenquelle, Port-/DPCD-Beobachtung, Retries und Fehler bleiben sichtbar.
+
+51/51 bestehende NVIDIA-Pruefungen, Original-C-Vektoren und Modulbuild
+bestanden. Die echte Device-/Katalogkette enthaelt eine vollstaendige
+4096-Byte-AUX-Generation. Zusaetzliche Faelle innerhalb der vorhandenen
+Gruppe pruefen Teilantworten, DEFER, Prefix-NACK, Deadline, Hotplug vor/nach
+Senden sowie STOP-/ACK-Fehler. Kein weiterer Gastlauf oder Hardwarekontakt.
+Alle Quellen/Hashes/Notizen: ExFiles/Reference/GFX/Nvidia/0.79.12/aux-20260912;
+maschineller Nachweis: aux_checkpoint in GrafikEmpfaenger07912.json.
 
 Pruefung und offene Software
 ----------------------------
@@ -153,8 +196,8 @@ in Init/Work mit gekennzeichneten synthetischen Metadaten, entfernt sie
 wieder und liest danach den verbleibenden Firmwarekatalog. Keine neue
 Testgruppe oder physische Abnahme. Ergebnisse/Hashes: begleitende JSON.
 
-Offen bleiben die vollstaendige VBIOS-/RM-/Port- und externe GPIO-
-Zuordnung sowie AUX-Grundtransport und Empfaengerintegration fuer DP.
+Offen bleibt in 0.79.12 die vollstaendige VBIOS-/RM-/Port- und externe
+GPIO-Zuordnung. Weiteres DP-Linktraining/MST folgt 0.79.23/27.
 GSP bleibt alleiniger Hardwarebesitzer; kein konkurrierender direkter
 DDC-/GPIO-Treiber. Physische HDMI/DP-/Hisense-Abnahme folgt OssiGPU.txt.
 Native Moduswechsel, Bild und Ton behalten ihre weiteren Roadmapschritte.

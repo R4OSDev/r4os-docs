@@ -1,0 +1,73 @@
+﻿NVIDIA-Renderzustand 0.79.19 – Teilstand
+======================================
+
+NVIDIA 0.1.107 / R4NV 0.1.3, 13.09.2026. Release bleibt 0.79.18.
+Der private C797-Zeichenpfad verbindet Renderziel, Textur/Sampler, feste
+SM86-Shader und Cachebarrieren mit den wirklichen Device-/Runtime-Besitzern.
+Die gemeinsame Render-API, Layoutkonvertierungen und Referenzbildabnahmen
+folgen; 0.79.19 bleibt OFFEN. Der produktive Desktop rendert weiter per CPU.
+
+Bild- und Befehlszustand
+-----------------------
+R4NV beschreibt einzelne 2D-Ebenen in XRGB8888, premultipliziertem ARGB8888
+oder R8: linear oder Turing-Blocklinear mit block_height 0..5. Der Zustand
+kommt aus originalen NVIDIA-Klassenmakros sowie dem gepinnten Mesa NIL/NVK.
+Renderziele verlangen 40-Bit-Adressen; TIC erlaubt 48 Bit. Beide pruefen den
+gesamten Umfang. Linearer Renderpitch/-anfang ist 128-Byte-ausgerichtet;
+Blocklinear verlangt den kanonischen, auf 64 Byte gerundeten Pitch.
+
+Das begrenzte Paket setzt Dreiecksstreifen mit vier Eckpunkten, Viewport,
+Scissor, Single-Sample, Kanalmaske und optional ONE/ONE_MINUS_SRC_ALPHA.
+Texturen verwenden Nearest/Bilinear und Clamp-to-Edge; sRGB-Konvertierung
+geschieht explizit im Shader. Unbenutzte Shaderstufen/Attribute und fremder
+Tiefen-/Stencil-/Mesh-/Rasterzustand werden gezielt zurueckgesetzt. Vor dem
+Zeichnen werden Instruktions-, Daten-, Konstanten- und Deskriptorcaches
+invalidiert. Der Abschluss folgt mit WFI, Flush und privater Semaphore.
+
+Die beiden Vertexprogramme passen zur Textur- bzw. Solid-Pixelstufe.
+Profil6 solid_vertex entfernt die unbenutzte UV-Ausgabe, statt Shaderfehler
+zu unterdruecken. Alle fuenf bisherigen Shaderbytes bleiben unveraendert.
+Sechs reproduzierbar mit NIR/NAK erzeugte Programme: zusammen 1984 Byte Code,
+2944 Byte mit Headern/Ausrichtung, 24 GPR, keine Spills/Scratch/Stackdaten.
+Contract: neuer Profilkonstantenwert6; BACKEND_V1 rev2 und SHADER_V1 rev1
+bleiben unveraendert. Es entsteht kein neuer Plattform-ABI-Slot.
+
+Upload, Besitz und Abschluss
+---------------------------
+Zwei private, geloeschte VRAM-BOs halten Shader und ein begrenztes Paket.
+Der Cache besitzt 128 KB physische Belegung und eine Geraetegeneration.
+Shader werden einmal je Cachegeneration hochgeladen. TIC, TSC, Bindung und
+vier Vertices belegen 1024 Byte; Bildpixel werden dabei weder CPU-gemappt
+noch skaliert. Eine bestehende CE kopiert aus dem gehaltenen Staging-BO.
+Erst ihre tatsaechliche Semaphorecompletion veroeffentlicht den Cacheinhalt.
+
+Ein Draw haelt kanonische Ziel-/Quellreferenzen, GPU-Leases und den Cache.
+App-Close darf diese Bindungen nicht loesen. Der Device-Port prueft die
+privaten Kommandobytes und gehaltenen Bindungen erneut vor der Doorbell.
+GET oder modellierte Ausfuehrung allein schliessen keinen Auftrag ab.
+Erst die GR-Semaphore gibt Ressourcen frei. Timeout nach Veroeffentlichung
+und unbekannte Freigabezustaende behalten Ressourcen bis zur Stilllegung.
+
+Beleg und Grenzen
+-----------------
+Gezielte bestehende Schritte: NVIDIA 51/51 Faelle, R4NV 2/2 Faelle; keine
+neue Testgruppe. Original-C-Makros liefern Bild-/Sampler-Fixtures und den
+C797-Initialzustand. Der reale Device/Runtime-Softwarepfad legt GR und CE an,
+laedt die Cachebytes, prueft Paket-/Bindungsmanipulation vor PUT, rendert im
+Hostmodell ein beschnittenes Solid-Rechteck und trennt Fetch, modellierte
+Pixel und Semaphorerelease. Zielreferenzen bleiben bei App-Close gehalten;
+der vollstaendige Ressourcenabbau ist ausgeglichen. Das Modell fuehrt keine
+SM86-Instruktionen aus und belegt keine physischen GPU-Pixel.
+
+Offen bleiben der gemeinsame asynchrone Renderauftrag, produktive Nutzung,
+texturierte Referenzbilder mit expliziten Toleranzen sowie Cachepolitik fuer
+mehrere Bilder/Pipelines. Bilinear auf Teilrechtecken braucht gesondertes
+Clamping bzw. gezielte Konvertierung; der aktuelle Encoder lehnt es ab.
+Quell-/Zielalias und nichtkanonische Layouts brauchen ebenfalls einen
+definierten Konvertierungsweg. Scanout-Ziele sind bis zur Integration der
+Inaktivbild-Freigabe gesperrt. Kein beschleunigter Desktop wird behauptet.
+
+Maschinenlesbarer Beleg: GrafikRenderState07919.json. Originale, Generatoren,
+Compilerprovenienz und Logs: ExFiles/Reference/GFX/Nvidia/0.79.19/
+render-state-20260913. Physische Nacharbeit: ExFiles/Reports/OssiGPU.txt /19,
+weiter OFFEN; weder OssiPC-Zugriff noch neue Hardwareabnahme.

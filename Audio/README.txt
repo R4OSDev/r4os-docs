@@ -61,9 +61,13 @@ survive enumeration changes but may change after hardware relocation.
 
 The output controls require the R4AUDIO output functions from Kernel 0.1.104;
 older providers report the feature unavailable. Selection cannot make an
-unavailable HDMI receiver ready: OssiPC's NVIDIA display handoff remains an
-open hardware prerequisite in 0.78.16.
-
+unavailable receiver ready. In 0.79.15 the native NVIDIA owner supplies
+confirmed HDMI ELD/audio state and HDA checks exact physical readback against
+its current display revision. A stopped old route must be reactivated even
+when its stable output ID is unchanged. The existing AUDSVC consumer and
+Desktop status/selection already handle this transition and preserve an
+explicit analog preference. Hardware tone/receiver qualification is pending
+in ExFiles/Reports/OssiGPU.txt; see Drivers/GrafikAudio07915.txt/.json.
 Synth engines render productively into the common 48 kHz, stereo, signed
 16-bit little-endian PCM path. A render request contains 1 to 1024 frames;
 the audio core writes the complete block to the active R4D backend. Backend

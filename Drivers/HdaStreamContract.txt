@@ -89,6 +89,29 @@ evidence, the same speaker/line-out/headphone fallback stays fixed and is
 reported explicitly. Unsolicited jack responses remain disabled; any later
 activation must use the same hardened IRQ/Worker path.
 
+Display-to-HDA integration (0.79.15)
+-----------------------------------
+NVIDIA 0.1.101 and HDA 0.3.18 use the optional GfxDriverOutputApi 88-byte
+tail from Kernel 0.1.164. Copied 176-byte routes bind source generation,
+receiver sequence, publication revision, connector, HDA PCI identity, head,
+device entry and exact ELD bytes. Physical GPU programming remains in the
+display driver; only bounded metadata enters the common kernel registry.
+
+NVIDIA publishes pending before confirmed Mute/Clear, then programs ELD and
+unmutes only after active-mode completion and supported stereo PCM. HDA
+matches physical PD/ELDV and complete ELD to the current route before and
+after programming its codec plan. HDMI device entry is zero regardless of
+display head; the real ELD port identifies the codec pin. Duplicate pin
+associations fail closed. A new receiver batch invalidates prior routes;
+source close removes them even when video resources must remain retained.
+
+A changed revision stops an active old route even when its name, ID and
+ELD bytes are unchanged. AUDSVC reacts to the cleared active flag and
+reactivates a newly valid route; analog preference and controller ownership
+remain intact. Format is still stereo 48-kHz S16LE. General automatic
+hotplug recovery follows in 0.79.16. Hardware qualification remains open in
+ExFiles/Reports/OssiGPU.txt / 0.79.15; the older diagnoses below are history.
+Details and evidence: GrafikAudio07915.txt/.json.
 HDMI and output catalog (0.78.16)
 --------------------------------
 Each controller retains at most 32 physical output routes. Their identities
@@ -248,7 +271,13 @@ Interrupt and refill contract
   arrived during a refill pass is represented by a freshly deadline-stamped
   successor or already belongs to the successor claimed by the racing IRQ.
   A pass that could not acquire the stream lock also retains a successor,
-  even without a new IRQ generation. HDA keeps its error latch until the lock
+  even without a new IRQ generation. During synchronous Stop, including Drain
+and descriptor reset, the task already owns DMA progress. HDA 0.3.18 therefore
+blocks both new IRQ work and worker resubmission for that interval while
+continuing to acknowledge and latch interrupts. This prevents a contended
+deadline worker from repeatedly requeuing and starving Close. Normal work
+admission resumes when Stop returns; its existing timeout and forced cleanup
+remain unchanged. HDA keeps its error latch until the lock
   is acquired; AC97 likewise exchanges its pending status only inside the
   acquired owner. A contended progress/status callback reports Busy for a
   bounded follow-up. Completion inspection/release is serialized between worker and task context

@@ -1,0 +1,90 @@
+﻿HDMI-Audio und Display-/HDA-Kopplung – 0.79.15
+=============================================
+Stand: 13.09.2026. NVIDIA 0.1.101, HDA 0.3.18, Kernel 0.1.164.
+Softwarepfad implementiert; Pruefungen und Artefakte: GrafikAudio07915.json.
+Physische Abnahme bleibt offen in ExFiles/Reports/OssiGPU.txt / 0.79.15.
+
+Besitz und Zuordnung
+--------------------
+NVIDIA besitzt Connector, aktiven Head, EDID und die RM/GSP-Audiosteuerung.
+HDA besitzt seinen PCI-Controller, Codec, Pin, Stereo-PCM, InfoFrame und DMA.
+Der Kernel vermittelt ausschliesslich begrenzte kopierte R4D-Metadaten.
+AUDSVC und Desktop verwenden ihren vorhandenen gemeinsamen Ausgabekatalog.
+
+GfxDriverOutputApi erhaelt hinter dem unveraenderten 72-Byte-Praefix zwei
+optionale Audiofunktionen (Layoutrevision 4, Groesse 88, Wireversion 1).
+GfxAudioRoute ist 176 Bytes gross: Quellgeneration, Empfaengersequenz,
+Publikationsrevision, Connector, PCI-Identitaet des HDA-Controllers, Head,
+Device Entry, Zustand und hoechstens 96 ELD-Bytes. Alle Plattformgruppen
+und DriverApi bleiben unveraendert. Alte Tabellen liefern unavailable.
+
+Der ELD-Port enthaelt nach NVIDIA 570.144 die RM-Display-ID in den unteren
+vier Bytes. HDMI verwendet Device Entry 0, auch bei Head 1 oder hoeher.
+Ein Head ist keine Pin-NID. HDA gleicht den physischen ELD-Port mit dem
+Controller und der Displayquelle ab; doppelt zugeordnete Pins bleiben
+unbenutzbar. Neue Empfaengerdaten entwerten alte Freigaben unmittelbar.
+Quellende entfernt sie auch bei bewusst behaltenen Displayressourcen.
+
+ELD und Freigabe
+---------------
+Der gemeinsame R4GFX-Helfer erzeugt ELD v2 nur aus vollstaendiger digitaler
+HDMI-EDID mit gueltigen CTA-Daten. Name, Hersteller, Produkt, SADs, Speaker,
+Supports-AI und Audio-Latenz bleiben begrenzt. CTA Basic Audio liefert nur
+seine vorgeschriebenen Stereo-/16-Bit-Raten 32/44,1/48 kHz. SAD-Felder
+werden nicht zu unbewiesenen Formaten kombiniert; ungueltige, unvollstaendige
+oder zu grosse Daten erhalten keine Freigabe. Der vorhandene 128-Byte-
+OssiPC-Bootblock alleine reicht weiterhin nicht fuer HDMI-Audio.
+
+Der native Worker publiziert zuerst pending, bestaetigt Mute und ELD Clear
+ueber echte serialisierte RM-Quittungen und programmiert erst nach dem
+aktiven Videomodus ELD und Audio Enable. Der Ablauf verwendet die
+SET_ELD_AUDIO_CAPS- und SET_HDMI_AUDIO_MUTE-Steuerungen aus NVIDIA 570.144.
+Pixeltakt, Timing und HDMI Enable stammen aus dem bestaetigten Core-/RM-
+Moduspfad; die maximale ELD-Abtastrate wird an RM uebergeben. Die nativen
+N/CTS-Register bleiben Eigentum der Firmware/Hardware. R4OS schreibt keine
+geschaetzten Audio-Taktwerte. Deren physische Wirkung ist noch zu pruefen.
+
+HDA verlangt PD und ELDV vor und nach dem begrenzten Auslesen sowie eine
+bytegleiche aktuelle Displaypublikation. Erst danach sind 48 kHz, Stereo,
+S16LE, Converterformat 0x0011, FL/FR-Slots und der checksummierte Audio-
+InfoFrame zulaessig. Weitere PCM-Formate, komprimiertes Audio und DP/MST
+werden hier nicht aktiviert. Einmal an die Displayquelle gebundene HDA-
+Instanzen akzeptieren spaeter keine verwaisten Firmware-ELD-Daten.
+
+Wechsel und Fehler
+------------------
+Modusauftraege entziehen Audio vor der Umschaltung. Auch gleiche ELD-Bytes
+mit neuer Revision stoppen die alte aktive HDA-Route. Vor und nach ihrer
+erneuten Programmierung wird die Zuordnung nochmals geprueft. AUDSVC
+aktiviert den wieder verfuegbaren Ausgang trotz unveraenderter stabiler ID
+neu; gespeicherte Analogwahl und unabhaengige Controller bleiben erhalten.
+
+Die Audiofolge hat eine Fuenf-Sekunden-Deadline und blockiert keinen
+Display-Lock ueber Hardwarezugriffe. Eine bekannte RM-Audioablehnung
+deaktiviert Audio und erhaelt Video; fehlende oder defekte gemeinsame
+Transportquittungen folgen dem bestehenden begrenzten GSP-Fehlerabbau.
+Unklare Display-/DMA-Nutzungen werden behalten. Hotplug entwertet Audio;
+die umfassende automatische Head-/Ausgabewiederkehr wird in 0.79.16 ergaenzt.
+
+Nachweise und Grenze
+-------------------
+Bestehende Gruppen pruefen Parser/ELD, Kernel-Quelllebensdauer, HDA-
+Zuordnung und Codecplan, echten NVIDIA-Start-/Modus-/Audio-Worker sowie
+AUDSVC-Katalog/Neuauswahl. Originale NVIDIA-C-Header erzeugen unabhaengige
+Mute/Clear/ELD/Unmute-Payloads. Die kurze SMP4-Pruefung umfasst bootfb,
+zwei analoge HDA-Controller, Auswahl, PCM ueber AUDSVC und Close.
+Dabei wurde ein vorhandener HDA-Stopfehler behoben: Waehrend Drain den
+Stream-Lock ueber kurze Wartephasen haelt, darf der konkurrierende IRQ-Worker
+keine endlose Nachfolgearbeit erzeugen. Ein atomarer Stopzustand sperrt diese
+Anmeldung bis zum Ende des synchronen DMA-/Descriptorstopps. Der bestehende
+Worker-Test und dieselbe schnelle SMP4-Schreib-/Close-Folge pruefen die
+Korrektur; Timeouts wurden nicht erhoeht. Fehlversuche und Zaehler stehen in
+guest-analysis.txt im Referenzverzeichnis.
+Keine neue Testgruppe; keine Aussage ueber hoerbaren HDMI-Ton.
+
+Native Aktivierung bleibt an die vorhandene experimentelle NVIDIA-Option
+und deren tatsaechliche Faehigkeitspruefungen gebunden. Ohne passende GPU
+bleiben bootfb und analoge Audioausgaenge verfuegbar. OssiPC wurde nicht
+kontaktiert. Referenzen und Original-MIT-Volltexte liegen unter
+ExFiles/Reference/GFX/Nvidia/0.79.15/hdmi-audio-20260913; die benoetigten
+Volltexte sind identisch im Treibermodul und in der Distribution enthalten.

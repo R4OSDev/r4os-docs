@@ -1,0 +1,101 @@
+﻿Hotplug und automatische Ausgabewiederkehr – 0.79.16
+===================================================
+NVIDIA 0.1.102; Kernel 0.1.165. Implementierung und Softwarebelege:
+GrafikHotplug07916.json. Physische Abnahme bleibt OFFEN unter
+ExFiles/Reports/OssiGPU.txt / 0.79.16.
+
+Besitz und Ereignisse
+--------------------
+NVIDIA besitzt Empfaengerabfragen, GPU-Kommandos und Ressourcenabbau.
+Der bestehende serialisierte Device-Worker erledigt die gesamte Folge;
+IRQs melden Ereignisse, ohne DDC/AUX, Audio oder Speicherfreigaben auszufuehren.
+Kernel/display vermittelt ausschliesslich Katalog, CPU-Bildpuffer und
+asynchrone Modusauftraege. Desktop und AUDSVC nutzen ihre bestehenden APIs.
+
+Authentifizierte HPD-/DP-Ereignisse entwerten alte Empfaengerdaten sofort.
+Die Entprellfrist endet nach 100 ms Ruhe, bei einer Ereignisfolge spaetestens
+nach einer Sekunde. Abfragen beginnen, sobald der gemeinsame Worker frei ist;
+zwischen ihnen liegt mindestens eine Sekunde.
+Pro Ereignisfolge gibt es hoechstens zwei Wiederholungen. Ein neues Ereignis
+waehrend der Abfrage bleibt als eigener Auftrag erhalten. Unabhaengige
+GSP-Registersequenzen koennen ebenfalls eine erneute Erfassung verlangen.
+Die Anfangserfassung behaelt ihren bisherigen getrennten Startpfad.
+
+Expliziter Kabelverlust, unbekannte Verbindung, fehlende/ungueltige EDID,
+abgelehnte Abfrage und gueltiger Empfaenger bleiben verschiedene Zustaende.
+Der SHA-256-Abdruck der vollstaendigen EDID zeigt geaenderte Daten.
+HPD und EDID beweisen keine TV-Betriebsart: Die Diagnose meldet power=unknown.
+Ein ausgeschalteter, versorgter Fernseher kann daher connected, unknown oder
+edid_pending liefern. Fehler werden nicht als angeblicher Standby erfunden.
+
+Abstecken und Ressourcen
+-----------------------
+Neue Praesentationen pausieren sofort. Noch nicht eingereichte Uploads
+enden CANCELLED; eingereichtes CE/DMA wartet auf seine echte Quittung.
+Ein Window-BEGUN ohne Head-IRQ wird beim Abstecken nicht als sichtbar gezaehlt.
+Angefangene interlockte Modekommandos werden mit ihrer urspruenglichen
+Zulassung beendet; noch nicht begonnene Modustransaktionen werden verworfen. Eine bereits
+gesendete Modusabfrage laeuft aus, ohne weitere Abfragen fuer die alte EDID.
+
+Die zuletzt bestaetigte HDMI-Route wird stummgeschaltet und ihr ELD geloescht.
+Danach entkoppelt NVIDIA die Ausgabe durch NULL-ISO/Window und Core-UPDATE.
+Erst Core- und Window-Abschluss, FINISHED fuer das vorherige Bild sowie
+passende ARM-Register beweisen den physischen Stillstand. Cursor-DMA,
+SOR-Zuordnung und alle ISO-Ebenen muessen dabei abgeschaltet sein.
+Bis dahin bleiben alle verwendeten Speicherobjekte gebunden. Ausstehende
+gemeinsame Mode-/Cursorauftraege behalten ihre Identitaet und bekommen erst
+nach ihrem wirklichen Abschluss eine Quittung. Eine unklare GPU-Nutzung
+wird weiterhin gehalten; ein Timeout erlaubt keine optimistische Freigabe.
+
+Headless und Wiederkehr
+----------------------
+Der gemeinsame RAM-Desktop bleibt waehrend der Pause beschreibbar. Fenster,
+Eingabe und RemoteFrame/SSH benoetigen keinen aktiven physischen Monitor.
+Pausierte CPU-Paints erzeugen keine nutzlosen GPU-Auftraege und keine
+Sichtbarkeitsquittungen. Der Rueckfall auf einen alten Firmwarepuffer wird
+durch einen ordnungsgemaess stornierten Present nicht ausgeloest.
+
+Wiederkehr verwendet ausschliesslich die neue Erfassung. Passende bisherige
+Geometrie wird bevorzugt, sonst ein unterstuetzter Empfaengermodus gewaehlt.
+Bei gleicher Groesse erfolgt eine neue IMP-/Taktpruefung und ein vollstaendiger
+Upload des aktuellen RAM-Bildes vor der normalen Window/Core/HDMI-Folge.
+Bei anderer Groesse erzeugt der Treiber einen SYSTEM-Puffer und initialisiert
+ihn in begrenzten Schritten. Der gemeinsame Modusworker uebernimmt ihn ueber
+seinen normalen Apply-/Confirm-Pfad und aktualisiert die Desktopgeometrie.
+Der Treiber wartet auf den gemeinsamen Abschluss; erst dann gibt er die
+Ausgabe frei. Alte CPU-/GPU-Puffer durchlaufen den bestehenden quittierten
+Abbau. Neue Ereignisse koennen auch diese Wiederkehr wieder entwerten.
+Ein unbenutzbarer Modus oder eine abgelehnte Pufferanlage behaelt Headless;
+eine weitere Erfassung erlaubt einen neuen begrenzten Versuch.
+
+HDMI-Audio erhaelt erst nach erfolgreichem Video eine frische ELD-/RM-Freigabe.
+Der bestehende gemeinsame Audiokatalog entwertet alte HDA-Zuordnungen sofort;
+AUDSVC uebernimmt die Wiederkehr ueber seine vorhandene Katalogbeobachtung.
+Es gibt keinen staendigen Vollscan aller PCI-/Audiogeraete.
+
+Schnittstelle und Nachweise
+--------------------------
+GfxDriverOutputApi bleibt Wireversion 1. Die optionale Layoutrevision 5 hat
+112 Bytes: unveraendertes 88-Byte-Praefix, output_pause@88, mode_restore@96
+und mode_status@104. Alte Aufrufer erhalten nur ihr angefordertes Praefix.
+NVIDIA verlangt alle drei Funktionen vor nativer Uebernahme. mode_restore
+gilt nur fuer den eigenen pausierten nativen Ausgang; Revision 0 erfasst
+die aktuelle Topologie, die genaue Anschlussgeneration bleibt Pflicht.
+Die Statusabfrage liefert nur den eigenen Ticketabschluss. 225 andere
+Typen, alle sechs Plattformgruppen und deren 382 Slots bleiben unveraendert.
+
+Die bestehenden NVIDIA-Gruppen pruefen Entprellung, Abfragefehler, EDID-
+Aenderungen, echte Device-/Flip-/Audiofolgen, NULL-ISO/ARM-Quittungen und
+Wiederkehr mit gleicher sowie anderer Geometrie. Weitere HPD-Ereignisse
+waehrend Modusabfrage und Pufferinitialisierung pruefen erneuten Abbruch
+ohne verwaiste Referenzen. Bestehende Kernel- und Zig-/C-Fassadentests
+pruefen Stornierung, automatische Bestaetigung und die alten Tabellenpraefixe.
+Die kurze SMP4-Abnahme prueft Desktop, Fenster und Softwarecursor auf bootfb.
+Ihre genauen Ergebnisse, Artefakte und Grenzen stehen im JSON-Beleg.
+
+Kein zusaetzliches Gate und keine neue Testgruppe. GPU-Zeitpunkte und
+Empfaengerantworten im Device-Test sind Modelle, keine physische Qualifikation.
+OssiPC wurde nicht kontaktiert. Originale NVIDIA-570.144-Quellen und
+unabhaengige C-Kommandovektoren liegen unter
+ExFiles/Reference/GFX/Nvidia/0.79.16/hotplug-20260913. Die vollstaendigen
+MIT-Hinweise bleiben im Quellcode und im unveraenderten Laufzeit-Lizenzpaket.

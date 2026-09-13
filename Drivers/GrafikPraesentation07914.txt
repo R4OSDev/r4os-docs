@@ -1,6 +1,6 @@
 ﻿VBlank, Pageflips und Hardwarecursor – 0.79.14
 ============================================
-Stand: NVIDIA0.1.96, Kernel0.1.161, Release0.79.13. Unterversion offen.
+Stand: NVIDIA0.1.97, Kernel0.1.161, Release0.79.13. Unterversion offen.
 
 Der VBlank-Eingang ist implementiert: Nach bestaetigter nativer Uebernahme
 bindet der bestehende IRQ-Besitzer den von GSP gelieferten Display-Stall-
@@ -36,8 +36,8 @@ GrafikPraesentation07914.json. Lizenztexte bleiben in Modul und Distribution.
 Der neue Window-Flip-Einstieg nimmt nur inaktive, durch CE fertiggestellte
 Bilder gleicher Geometrie an. Er sendet einen nicht zerreissenden Window-
 UPDATE ohne Core-Interlock; Takt, HDMI, Position und Core-Punkt bleiben
-erhalten. Ein Auftrag ist gleichzeitig zulaessig; Modus-/Copy-/Tabellen-
-arbeit wartet auf seinen Abschluss. PUT-Admission prueft Bild, Import,
+erhalten. Ein Flip ist gleichzeitig zulaessig; Modus-/Tabellenarbeit
+wartet auf seinen Abschluss. PUT-Admission prueft Bild, Import,
 Renderquittung, bisherigen Scanout und den echten Head-IRQ-Besitzer erneut.
 
 GET allein bestaetigt keinen Flip. Window BEGUN plus ein nach Einreichung
@@ -55,9 +55,36 @@ drei fehlenden Ereignisse. Erst nach FINISHED folgt regulaerer Tabellen-/
 BO-/RM-Abbau. Kopierzaehler und gemeinsame Queuefences bleiben unveraendert.
 Die zweite Pruefung umfasst auch die Serialisierung gegen den Modus-Worker.
 
-Offen: normale Present-Anbindung dieses Flip-Einstiegs, Zwei-/Dreifachpuffer
-mit begrenzter Queue und Damage-Nachfuehrung, Hardwarecursor und gemeinsame
-sichtbare Presentstatistik. Normales Present kopiert derzeit weiter direkt;
-der neue Einstieg ist noch kein aktivierter Framepool. CPU-Kopierfences
-werden nicht als sichtbarer Abschluss umgedeutet.
+Normales Present verwendet jetzt zwei private VRAM-Bilder; mit
+OPTION NVIDIA buffers=3 sind drei waehlbar (buffers=2 ist der Standard).
+Alle Bilder einer Modusgruppe teilen das gemeinsame SYSTEM-RAM-Bild.
+Zusaetzliche Bilder entstehen beim ersten Auftrag ueber die vorhandenen
+RM-/CE-/RAMHT-Besitzer. Danach braucht ein Frame keine Allokation oder
+Tabellenaenderung. Jedes Bild sammelt die Aenderungen seit seiner letzten
+Aktualisierung. Der erste Upload ist vollstaendig, Wiederverwendung kopiert
+das umschliessende Aenderungsrechteck. Eine eigene Lesesperre auf das ganze
+RAM-Bild schuetzt diesen Bereich und endet erst mit CE SYS-Abschluss.
+
+Die gemeinsame Queue meldet weiterhin Kopierabschluss. Window BEGUN mit
+Head-Ereignis waehlt das sichtbare Bild; der vorherige Puffer bleibt bis zu
+seinem FINISHED gehalten. Drei Bilder erlauben eine weitere CE-Kopie,
+waehrend ein bereits eingereichter Flip die anderen beiden noch haelt.
+Es gibt hoechstens einen CE-Auftrag, ein fertig kopiertes wartendes Bild
+und einen Flip; die bestehende gemeinsame Queue hat Tiefe eins. Rueckstau
+wartet begrenzt beziehungsweise liefert Busy, failed oder device-lost.
+Fehlende Hardwarequittungen werden nie durch eine Deadline freigegeben.
+Der normale Bildwechsel schreibt keinen Logeintrag pro Frame.
+
+Bis zu sechs feste Plaetze tragen die aktive und eine zu bestaetigende
+Modusgruppe. Bestaetigung oder Ruecknahme baut die gesamte ausgehende Gruppe
+ab: erst inaktive Shadow-Mappings/Importe, dann RAMHT und native Allokationen.
+Der geliehene gemeinsame Referenzbesitz bleibt beim gemeinsamen Worker.
+Die Device-Pruefung umfasst beide Pufferzahlen, unterschiedliche Aenderungen
+ueber mehrere Umlaeufe, Kopieren im dritten Bild bei noch laufendem Flip,
+einen Timeout mit gleichzeitig gehaltener CE-Lesesperre und den Abbau beider
+Modusgruppen nach einer weiteren Auswahl innerhalb der Kandidatengruppe.
+Ungueltige Rechtecke erzeugen einen Fehler und keinen sichtbaren Frame.
+
+Offen: Hardwarecursor mit Softwareersatz und gemeinsame sichtbare
+Presentstatistik. Kopierfences werden nicht als sichtbarer Abschluss umgedeutet.
 Physische Nacharbeit: ExFiles/Reports/OssiGPU.txt / 0.79.14.

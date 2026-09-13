@@ -1,0 +1,97 @@
+﻿Grafik-Kopierpfade 0.79.18
+=========================
+
+Softwarestand 13.09.2026: Release0.79.18; Kernel0.1.167, NVIDIA0.1.104,
+R4GFX0.1.3, R4NV0.1.1, Desktop0.1.48, DISPLAYD0.1.21.
+Physische Abnahme OFFEN: ExFiles/Reports/OssiGPU.txt /0.79.18.
+
+Vertrag und Integration
+----------------------
+R4DRAW17 behaelt alle383 Plattformslots und die648-Byte-Tabelle. Vier erweiterbare
+Payloads wachsen am Ende: Submission408->432, DriverJob112->136,
+BackendRegistration32->48, BackendInfo136->152 (Metadaten2, Wire1).
+Alte vollstaendige Praefixe werden begrenzt gelesen/geschrieben; halbe neue
+Feldgruppen werden nicht benutzt. Operationsmasken verhindern neue Auftraege
+an alte Backends. NVIDIA meldet13 (Copy, privater Present-Upload, Rowcopy),
+Software11 (Copy, Barrier, Rowcopy). Kein unimplementierter nativer Barrier.
+
+Die vom Kernel vergebene Queuegeneration unterscheidet sich von der RM-Speicher-
+epoche. memory_generation wird getrennt registriert/veroeffentlicht. Native BOs
+muessen Adapter, registrierten Treiberbesitzer und Speicherepoche exakt treffen.
+R4GFX importiert gegen diese Epoche; Queue-/Resetwechsel invalidiert betroffene
+native Ressourcen, waehrend SYS-Puffer und alte Freigabebelege erhalten bleiben.
+
+Rowcopy uebertraegt Bytes je Zeile, Zeilenzahl, zwei Pitches und logische Offsets.
+Admission prueft Ueberlaeufe, ganze logische Ebenen, echte BO-Grenzen und geordnete
+Abhaengigkeiten. Fuer opake Layouts bleibt konservativ das gesamte Backing
+reserviert. CPU-Arbeit erfolgt ausserhalb des Metadatenbesitzers und ist je
+Worker-Schritt auf64KB/256Spans begrenzt; Padding wird nicht mitkopiert.
+
+R4NV BACKEND_V1 Revision2/56Byte erweitert den gemeinsamen C6B5/C7B5-Encoder um
+encode_copy_layout. Der unveraenderte bisherige Aufruf braucht hoechstens19,
+Layoutkopien hoechstens37DWORDs. NVIDIA.R4D verwendet denselben Encoder; nur der
+Treiber deutet den opaken Modifier anhand seines bestaetigten Surface-Plans.
+Plane-Basis512Byte, GOB512Byte, log2-GOB-Hoehe0..5, Tiefen-/Layerzustand1/0,
+Bytekoordinaten und vollstaendige Extents werden geprueft. Kein Remapping,
+keine Kompression oder CPU-Abbildung von VRAM. GP GET ist kein Fenceabschluss.
+Erst die SYS-Semaphore nach dem echten GPFIFO-/Doorbell-Auftrag erlaubt Freigabe.
+
+Native Buffer-/Surface-Allokation bleibt eine asynchrone NVIDIA-Treiberoperation.
+Der Kopierworker kann vorhandene native BOs lesen/schreiben und SYS-BOs mappen;
+R4GFX DEVICE_V1 erzeugt SYS-Bilder oder importiert bestehende BO-Referenzen.
+DISPLAYD erzeugt bewusst SYS-BOs. Renderzielanlage und Shaderzeichnen fuer die
+nachfolgende GPU-Renderpipeline gehoeren zu19, komplette GPU-Komposition zu20.
+Diese Unterversion behauptet weder diese Features noch physische GPU-Ausfuehrung.
+
+DEVICE_V1 Revision2/160Byte fuegt copy_submit_ex und job_fence hinzu. Bis zu8
+exakte Abhaengigkeiten werden vor Admission kopiert und vom gemeinsamen Owner
+gehalten. Ein exportierter Fence ersetzt keine Referenz. Jobs halten Quellen,
+Ziele und gegebenenfalls alte Queues bis zum quittierten Ressourcenabbau.
+Ein altes Backend kann SYS-Rowcopies an eine wiederverwendete Softwarequeue
+abgeben; opake/native BOs erfordern weiterhin ein passendes natives Backend.
+Aktuelle Desktop-/Diagnoseimports verlangen DEVICE2 und optional BACKEND2.
+
+Staging und Praesentation
+------------------------
+Die bestehenden persistenten SYS-Mappings, begrenzten Command-/GPFIFO-Slots und
+asynchronen Present-Puffer werden weiterbenutzt. Dirtybereiche werden gebuendelt,
+Uploadquelle und Zielbild behalten getrennte Leases; Copy-Semaphore, Window/Core-
+Quittung und Scanout-Freigabe bleiben getrennte Grenzen. Der gemeinsame CE-Worker
+serialisiert Hardwareauftraege; die CPU blockiert nicht pro Kopie. R4GFX kann
+Folgejobs vor der ersten Completion abgeben. Keine Allokation pro Pixelblock.
+Bei Slot-/Bytepressure werden unbenutzte Mappings kontrolliert ueber RM abgebaut;
+der bisherige128MB-Zielbestand und Schutz aktiver/Present-Ressourcen bleiben.
+Zaehler verwenden erfolgreiche Rowbytes ohne Pitchluecken. Physische Bandbreite,
+GPU-Zeit oder Frames werden daraus nicht abgeleitet.
+
+Gezielte Nachweise
+-----------------
+- Contract-Check und Praefixvergleich; bestehende8 SDK-Zig-Fassadentests sowie
+  C-Gegenstueck. Vollstaendige64Bit-Operation-/Speichergenerationsfelder erhalten.
+- Bestehende54 Kernel-Displaytests: unterschiedliche Pitches, Chunk-Grenzen,
+  vorab eingereihte Abhaengigkeiten, CPU-Readbusy, Padding, Ueberlaeufe und
+  Ressourcenabbau. Native Speicherepoche73 akzeptiert trotz Queuegeneration3;
+  fremder Besitzer oder falsche Epoche vor Admission abgewiesen. Alle erlaubten
+  Payloadkapazitaeten mit unveraenderten Guardbytes geprueft.
+- R4GFX8/R4NV2 bestehende Faelle: Provider, Ressourcen, Zeilenkopie, Software-
+  Ersatzqueue, exportierter Fence, Reset/Cancel/Retirement; C/Zig-Konformitaet.
+  Zwei komplette37DWORD-Kommandos plus GPFIFO-Eintraege stimmen mit separat aus
+  Originalheadern erzeugten C-Vektoren ueberein (312Byte, kein Hardwarelauf).
+- Bestehende51 NVIDIA-Faelle: 514 wiederverwendete lineare Transfers plus echte
+  Treiber-/Encoder-/RM-Ressourcenpfade fuer RAM->tiledVRAM->tiledVRAM->RAM.
+  69Bytes x19Zeilen, RAM-Pitches83/79, R8-Flaechen129x41/193x41, Blockhoehen1/2,
+  unterschiedliche Urspruenge. Modellierte GPU-Sicht und CPU-Sicht sind getrennt;
+  alle Readbackbytes inklusive unberuehrter Bereiche stimmen. Raw-tiled und
+  falscher Pitch scheitern vor GP PUT; Mappings werden ohne neue RPCs benutzt.
+  Die bisherigen Abbruch-/Fehler-/Druck-/Quieszenzfaelle bleiben enthalten.
+- Ein kurzer SMP4-Gast mit echten aktuellen Modulen: DISPLAYD /BUFFERS reicht
+  zwei24Byte-Rowcopies mit einer Abhaengigkeit vor dem Warten ein. Pitches16/24/32,
+ 16Pixel exakt, backend1 mangels NVIDIA, CPU read112/write304, upload0,
+  ERRORLEVEL0 und balancierte Ressourcen. R4NV ist installiert/geladen.
+  Der Imagekernel entspricht bytegenau dem aktuellen Kernelartefakt.
+
+Keine neue Testgruppe oder Langlauf; Testinventar weiterhin739 Eintraege.
+Alle sechs betroffenen Artefakte gebaut. OssiPC wurde nicht kontaktiert.
+Quellen, Originale, Lizenzvermerke, ABI-Entscheid und Logs:
+ExFiles/Reference/GFX/Nvidia/0.79.18/copy-20260913.
+Maschinenlesbare Hashes und genaue Abnahmegrenzen: GrafikCopy07918.json.

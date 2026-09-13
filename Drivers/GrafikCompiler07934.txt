@@ -1,10 +1,11 @@
-﻿Grafikcompiler 0.79.34: vorgezogener Hostpfad
+﻿Grafikcompiler 0.79.34: Hostpfad und Shadercache
 ===========================================
 
 Stand: 13.09.2026. 0.79.34 bleibt OFFEN. Dieser Zwischenstand liefert
 den echten NIR/NAK-Hostcompiler fuer die festen Shader aus 0.79.19.
 Er ersetzt weder den R4OS-Compilerport noch die Windows-/GPU-Abnahmen.
-Release bleibt 0.79.18; kein Kernel- oder R4M0-Artefakt wurde geaendert.
+R4NV 0.1.2 integriert die festen Programme mit SHADER_V1; DISPLAYD
+0.1.22 prueft den Bytecache. Release bleibt 0.79.18, Kernel 0.1.167.
 Besitzer: Libraries/R4NV/Tools/Compiler. Nachweise: gleichnamige JSON-Datei.
 
 Quellen und Ablauf
@@ -59,14 +60,45 @@ Hostwerkzeug: 27206248 Bytes, kein R4OS-Modul. Das separate Legal-Paket
 enthaelt die originalen Mesa-/Crate-Archive, Lizenzen und Rust-Hinweise
 (rund 66 MB). Exakte Groessen, Dauer und Hashes stehen im Buildnachweis.
 Normale Modul-/Imagebuilds starten diesen Compiler nicht. Kein Gasttest,
-kein neuer Grafik-Smoke und kein Kontaktversuch zum OssiPC.
+kein neuer Grafik-Smoke und kein Kontaktversuch zum OssiPC im urspruenglichen
+Hostcheckpoint. Die folgende Laufzeitintegration ist separat belegt.
+
+Feste Programme und Laufzeitcache
+---------------------------------
+EmitRuntime.ps1 prueft aktuelle Compiler-Eingaben sowie die Hashes aller
+Code-/Metadaten-/NIR-/Assemblerdateien, bevor es die generierten Dateien
+unter R4NV/Source/Generated/Shaders ersetzt. Auch Headeraenderungen ohne
+Codeaenderung werden abgelehnt. Ein normaler R4NV-Build bindet ausschliesslich
+die fuenf Programme ein; weder Mesa noch eine Rust-Runtime werden mitgeladen.
+
+SHADER_V1 revision1 ist eine eigene 56-Byte-Tabelle; BACKEND_V1 bleibt
+unveraendert. Metadatenabfrage und Cachelesen/-schreiben sind begrenzt,
+ohne Heap, Datei-I/O oder GPU-Zugriff. Der aktuelle Treiber/Renderer liefert
+Geraeteidentitaet, Artefaktstand, Klasse, RM-/Command-/Shader-/Ressourcen-ABI,
+Formate und Pipelinezustands-Hash. Der Compiler-Hash kommt aus dem Build.
+
+Ein Eintrag umfasst maximal 1152 Bytes: 384-Byte-Praefix und Maschinencode.
+Das explizite Little-Endian-Format enthaelt den 128-Byte-NVIDIA-Header und
+SHA-256. Lesen verlangt identische Schluessel, Metadaten, Header, Code und
+Pruefsumme; unpassende oder beschaedigte Daten ergeben CACHE_MISS, ohne
+das Ergebnis anzutasten. Auch neue gueltige Pruefsummen legitimieren keinen
+abweichenden Programmcode. Die Rueckgabe leiht byteausgerichtete Bereiche
+im unveraenderten Aufruferpuffer. Es werden keine GPU-Adressen gespeichert.
+
+Gezielte Pruefung: zwei bestehende R4NV-Provider-/C-/Zig-Faelle; alle fuenf
+Compiler-Codehashes, jedes Byte/jede Verkuerzung des groessten Eintrags,
+Identitaets-/ABI-Wechsel sowie Alias-/Kapazitaetsfehler. Ein veraenderter
+Compilerheader wird vor der Materialisierung verworfen. DISPLAYD /BUFFERS
+nutzt dieselbe Laufzeittabelle mit synthetischer Geraeteidentitaet; der
+separate kurze SMP4-Nachweis steht im shader_cache_checkpoint der JSON-Datei.
+Er prueft Softwarecache und bestehenden Software-Fallback, keine GPU-Pixel.
 
 Noch umzusetzen
 ---------------
 - R4OS-Rust/C-Anbindung fuer dynamische Shader; allozierende Compilerarbeit
   ausserhalb des Framepfads und mit wirksamem Fehler-/Ressourcenabbau.
-- Ausfuehrbare Shader-/Pipelinecache-Anbindung an Treiber, GPU, Compiler,
-  ABI und Ressourcenformat; bisher liegt nur die Build-/Quellidentitaet vor.
+- Nativen Pipelinebesitz an den geprueften Shadercache anbinden; residente
+  Shader-/Pipelineressourcen nach Reset validieren oder erneut erzeugen.
 - Integration der Shader, Deskriptoren und nativen Renderressourcen in 0.79.19.
 - Nativer Windows-Buildnachweis. Physische NVIDIA-Ausfuehrung bleibt separat
   OFFEN in ExFiles/Reports/OssiGPU.txt /0.79.34 zusammen mit /19 und /36.

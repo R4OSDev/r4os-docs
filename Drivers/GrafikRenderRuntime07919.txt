@@ -1,0 +1,76 @@
+﻿R4OS 0.79.19 - Rendercache und Fehlerauswertung
+============================================
+
+Softwareabschluss T5/T6 und damit0.79.19. NVIDIA0.1.111; Kernel0.1.169,
+R4GFX0.1.6, R4NV0.1.5, DISPLAYD0.1.26 und R4DESK0.1.50 unveraendert.
+Belege: GrafikRenderRuntime07919.json sowie
+ExFiles/Reference/GFX/Nvidia/0.79.19/render-runtime-20260913/.
+Die vorausgehenden Teilabschluesse dokumentieren Ressourcen und Transport
+(GrafikRenderQueue07919), Shader/Referenzbilder (GrafikRenderTextur07919)
+und Layoutvorbereitung (GrafikRenderLayouts07919).
+
+Cachebetrieb
+------------
+Der bestehende Device-Worker legt vor der Renderfreigabe genau zwei private
+64-KB-Allokationen an: sechs feste Programme sowie ein wiederverwendbares
+Deskriptor-/Vertexpaket. Die128-KB-Grenze umfasst die physische Granularitaet
+und weiterhin gehaltene Speicherreservierungen. Es gibt kein Wachstum pro
+Frame. Die festen SM86-Programme werden einmal je Devicegeneration ueber CE
+hochgeladen; erst die echte CE-Receipt erlaubt die Renderfaehigkeit29.
+Fehlende Mittel lassen den Renderer nach sauberem Abbau unbenutzbar; der
+bisherige Ausgabepfad bleibt bestehen. Die Kanal-/Backendregistrierung
+erfolgt weiterhin ueber den vorhandenen nativen Ausgabepfad.
+
+Unveraenderte Draw-Parameter verwenden das fertige Deskriptorpaket erneut.
+Generationen, gehaltene Cache-Backings, Adapter, Besitzer und Adressbereiche
+werden zuvor erneut geprueft. Ein geaendertes Paket invalidiert das alte
+bereits vor dem Upload; auch ein abgebrochener Upload macht es nicht wieder
+gueltig. Solange GR das Paket benutzt, bleiben beide Cachepuffer gebunden.
+Die erste Wiederverwendung wird einmal protokolliert; Upload-/Reusezaehler
+und reservierte Bytes wachsen nicht zu einem Pro-Frame-Log.
+
+Offscreen-Auftraege benoetigen keine freie Scanoutflaeche. Die Auswahl eines
+freien Framepuffers geschieht erst im beanspruchten Present-Auftrag. Der
+kalte Framepoolaufbau teilt weiterhin den Allokationsworker und darf nicht
+mit einem bereits beanspruchten Present-Auftrag verklemmen. Bestehende
+Engine-/Flipserialisierung bleibt; dies ist kein paralleler Multi-Engine-
+Scheduler. Produktive Desktop-GPU-Komposition folgt in0.79.20.
+
+Fehler und Abschluss
+--------------------
+Unzulaessige Renderparameter werden vor CE-/GR-PUT als nichtfataler
+Commandfehler erfasst und mit fehlgeschlagenem Queueauftrag freigegeben.
+GPU-Xid69 wird als Commandfehler, Xid13 zunaechst als allgemeine Grafik-
+Exception erfasst. Nur ausdrueckliche Shader-Header-/Warp-/Global-Meldungen
+aus der gepinnten570.144-GA10x-Firmware spezialisieren Xid13 als Shaderfehler.
+Unvollstaendige oder fremde Texte genuegen nicht. Opaque RC-Journale werden
+nicht als erkannter Shaderfehler ausgegeben. Originalheader, offizieller
+Xidkatalog und48 Firmware-Diagnosetexte sind mit Herkunft/Hashes archiviert.
+
+Das Journal verbindet eine Meldung mit der aktiven Renderphase, Queuefence,
+GR-Klasse/-Punkt und Cacheadressen. Vorhandene virtuelle Fehleradressen werden
+gegen Quell-, Ziel-, Programm- und Paketbereiche verglichen. Diese Angaben
+kennzeichnen Kandidaten; Hardware-CHID, RM-cid und Handle bleiben getrennt.
+GPU-Fertigstellung, semantischer Pixelvergleich und Fehlerursache sind
+getrennte Nachweise. Ein fataler GSP-Event wird vor der Completion ausgewertet,
+auch wenn gleichzeitig eine passende Semaphore sichtbar ist. Die Generation
+wird gesperrt, der Auftrag als Device-Lost gemeldet und weiterhin laufende
+Ressourcen bleiben gehalten. Ein spaeterer Punkt oder quiesced=true darf
+diesen Zustand weder wiederbeleben noch Speicher vorzeitig freigeben.
+
+Gezielte Nachweise und Grenzen
+-----------------------------
+Die vorhandenen51 NVIDIA-Testfaelle decken den echten Cacheanlauf, begrenzte
+Reservierung, Draw-Wiederholung ohne CE-Upload, Invalidierung und den
+Command-/Shader-Faultpfad ab. Der Test speist echte GSP-OS-Error-Payloads ein;
+Fetch, semantische Pixelarbeit und Semaphore bleiben getrennt modelliert.
+Ein ungueltiger Auftrag erhoeht weder CE- noch GR-PUT. Zwei fatalen Meldungen
+stehen jeweils gleichzeitig fertige Semaphoren gegenueber; Referenzen und
+Cache bleiben in Quarantaene. Keine neue Testgruppe oder Langlaufserie.
+
+Die14 CPU/f64-Bildreferenzen, Toleranzen und der kurze SMP4-Nachweis des
+gemeinsamen Library-/Kernelpfads stammen aus den vorherigen Teilabschluessen.
+Dieser Treiberschritt aendert keine gemeinsame ABI und wiederholt deshalb
+keinen unveraenderten Gastlauf. Der Modelltest fuehrt keinen SM86-Code aus.
+Reale Cache-/Shaderausfuehrung, Pixel, Sichtabnahme und physische Fehlerfaelle
+bleiben OFFEN in ExFiles/Reports/OssiGPU.txt /0.79.19. Kein OssiPC-Zugriff.

@@ -1,0 +1,68 @@
+﻿NVIDIA-Grafikkanal 0.79.19 – Teilstand
+====================================
+
+NVIDIA 0.1.106, 13.09.2026. Release bleibt 0.79.18; 0.79.19 bleibt OFFEN.
+Implementiert sind GR0/C797, Kontextpuffer, Initialisierung und der private
+Abschlusskanal. Zeichnen, Renderziele, Textur-/Samplerbindung, Pipelinecache
+und GPU-Referenzbilder folgen. Der bisherige Software-Renderer bleibt aktiv.
+
+Aufbau und Speicher
+------------------
+Der bestehende Device-Worker startet GR nach dem nativen Ausgabepfad. Kein
+neuer Dienst, Kernelpfad oder oeffentlicher ABI-Slot. Im Standardmodus bleibt
+NVIDIA passiv. Ohne passenden GR-Klasseneintrag bleibt Grafikbeschleunigung
+unverfuegbar; bekannte RM-Ablehnungen werden vor dem Rueckfall bereinigt.
+
+Die interne RM-Subdevice-Abfrage20800a32 liefert8x26 Groessen/Ausrichtungen.
+Der begrenzte GR0-Plan verwendet MAIN, PATCH, Bundle, Pagepool, Attribute,
+RTV, FECS und die beiden Privilegkarten. Fehlende optionale Puffer werden
+uebersprungen. MAIN enthaelt64 Subkontextheader; Attribute erhalten eine
+Zweierpotenz-Ausrichtung. Allokationsumfang und Ausrichtung stimmen mit dem
+gemeinsamen BO-Vertrag ueberein; keine festen VRAM-Adressen oder App-Pointer.
+Private Puffer verlangen bestaetigte Kontiguitaet und die RM-Loeschgarantie.
+RM reserviert privilegierten Speicher; Privilegkarten sind nur lesbar gemappt.
+Die bestehenden4K-PTEs bleiben erhalten; groessere Ausrichtung ist keine
+Behauptung grosser GPU-Seiten.
+
+Zuerst entsteht ein separater ADMIN-Kanal fuer die Golden-Initialisierung.
+PROMOTE_CTX2080012b uebergibt die gehaltenen Puffer vor der GR-Objektanlage.
+Der leere Kanal wird fuer die RM-Initialisierung freigegeben; R4OS sendet ihm
+keine Renderkommandos. Erst nach bestaetigtem Disable und Objekt-/Kanalabbau
+gilt Golden als abgeschlossen. Danach entsteht ein normaler USER-Kanal mit
+frischen MAIN-/PATCH-Puffern. Gemeinsame Puffer bleiben ueber eine gerichtete
+Besitzreferenz am Initialisierungskontext gehalten; sie werden nicht erneut
+initialisiert. Die unrestricted-Karte wird dem normalen Kanal nicht uebergeben.
+Ein Kontext besitzt im ersten Profil hoechstens einen Kanal; RM-Groessen
+werden pro Golden-Sitzung einmal ermittelt und fuer normale Kontexte uebernommen.
+
+Transport und Abschluss
+----------------------
+C56F-GPFIFO/USERD, BO-Besitz und Doorbell bleiben gemeinsam mit CE. GR besitzt
+einen eigenen Kanal und einen begrenzten4K-Kommandoslot. Die C797-Barriere
+verwendet WAIT_FOR_IDLE, FLUSH_PENDING_WRITES und einen nachgelagerten
+ONE_WORD-Semaphor-Release. Erst dessen tatsaechlich gelesener Wert erzeugt
+eine private Completion. GET-Fortschritt, Doorbell und RM-Antworten genuegen
+nicht. Signalisierung an den gemeinsamen Rendervertrag folgt mit dem Zeichnen.
+Vor dem Doorbell prueft der bestehende Device-Owner Handle, Epoche, Frist,
+gehaltene Ressourcen und die exakten privaten Paketbytes. Unklare Antworten,
+Zeitablauf nach Submission oder unbekannte Freigabe behalten die Ressourcen.
+Keine automatische Wiederholung eines moeglicherweise ausgefuehrten Befehls.
+
+Gezielte Pruefung und Nacharbeit
+-------------------------------
+Die vorhandene NVIDIA-unit-test-Gruppe prueft Original-C-Strukturen und
+Methoden gegen570.144-Header sowie den echten Device/Runtime/FIFO-Ablauf mit
+modelliertem RM/MMIO. Erfolgreicher Golden-/USER-Aufbau, gemeinsame Besitzer,
+frische Kanalpuffer, zwei Abschlussmeldungen, veraenderte Operanden, fehlende
+Klasse, abgelehnte GR-Anlage/Promotion, veraenderte Promotion-Antwort und
+fehlende Completion sind abgedeckt. Bestehende CE-Pruefungen bleiben erhalten.
+Kein neuer wiederkehrender Gate und kein zusaetzlicher QEMU-Lauf: dieser
+Treiberpfad benoetigt NVIDIA-Hardware, die der QEMU-Gast nicht nachbildet.
+Konkrete Lauf-/Buildbelege, Quell- und Artefakthashes stehen in der JSON-Datei.
+
+Referenzen: originale NVIDIA570.144-SDK/RM-Dateien und Nouveau-r535-GR/FIFO
+mit vollstaendigen MIT-Hinweisen unter
+ExFiles/Reference/GFX/Nvidia/0.79.19/graphics-engine-20260913.
+Physische Initialisierung, echte Register-/Pufferwirkung und Bildabnahme
+bleiben OFFEN in ExFiles/Reports/OssiGPU.txt /0.79.19. Ein Modelllauf ist
+kein Nachweis der Ausfuehrung auf dem GA106.

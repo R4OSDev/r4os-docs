@@ -1,0 +1,69 @@
+﻿R4OS 0.79.19 - Bildlayouts und asynchrone Vorbereitung
+====================================================
+
+Software-Teilabschluss fuer T4. Cachebetrieb und Fehlerklassen bleiben offen;
+RELEASE_VERSION bleibt0.79.18, Kernel0.1.169. R4NV0.1.5, R4GFX0.1.6,
+NVIDIA0.1.110, DISPLAYD0.1.26, R4DESK0.1.50.
+Belege: GrafikRenderLayouts07919.json und
+ExFiles/Reference/GFX/Nvidia/0.79.19/render-layout-20260913/.
+Vorgaenger und Bildtoleranzen: GrafikRenderTextur07919.txt/.json.
+
+Verhandlung und Umsetzung
+-------------------------
+R4NV BACKEND_V1 rev3 ergaenzt image_layout; R4GFX DEVICE_V1 rev5 ergaenzt
+image_prepare. Alle bisherigen Slots, Konstanten und Payloadlayouts bleiben
+erhalten. Die aktuellen Desktop-/DISPLAYD-Manifeste deklarieren die neuen
+Revisionen, wie es die erzeugten Clients verlangen. SHADER_V1 bleibt rev1;
+die festen Shader und Ressourcen-ABI2 sind unveraendert.
+
+R4NV prueft bekannte ARGB/XRGB/R8-Single-Plane-Views fuer Textur, Renderziel
+und Scanout. Lineare sowie unkomprimierte Turing-GOB-Layouts (Kind6,
+Generation2, Sector1, Blockhoehe0..5) werden beschrieben. Passende Views
+bleiben erhalten; bekannte unpassende Views erhalten einen CE-Kopierplan.
+Unbekannte/komprimierte Modifier werden abgewiesen: Ohne Decoder ist keine
+korrekte Konvertierung moeglich. Opaque VRAM-Bytes werden nie als CPU-Bild
+behandelt. Scanoutvorbereitung aktiviert keinen Ausgang; Render+Scanout
+benoetigt weiterhin die in0.79.20 geplante Inactive-Image-Lease.
+
+Neue native Bilder bevorzugen Blocklinear; die lineare Praeferenz bleibt
+fuer Staging nutzbar. Pitch folgt der bestehenden nativen256-/64-Byte-Policy,
+GOB-Hoehe der gepinnten NVKMS-Regel, Allokationen der64-KB-Granularitaet.
+Der Treiber vergleicht vor dem Rendern den gehaltenen Deskriptor mit der
+kanonisch erneut berechneten Geometrie und Allokationsgroesse.
+
+image_prepare wird ausserhalb des Framepfads aufgerufen. Ein zusaetzliches
+Bytebudget begrenzt die Zielanlage; Budget0 erlaubt nur Wiederverwendung.
+Das Ergebnis haelt eine eigene Bildreferenz. Eine Konvertierung liefert
+zusaetzlich einen normalen Kopierjob und genau dessen Bereitschaftsfence.
+Reuse reicht die maximal acht Eingangsabhaengigkeiten weiter. Der Aufrufer
+haelt die zugehoerigen Receipts bis zum Folgeauftrag; deren Handles werden
+nicht durch Reuse dupliziert. Eingangs-/Ausgangsfencepuffer duerfen identisch
+sein. Ergebnis, Kapazitaet und Budget werden vor Submit geprueft; nach einem
+erfolgreichen Submit bleiben keine falliblen Schritte vor der Rueckgabe.
+
+Der Folgeauftrag bekommt die ausgegebenen Fences. Erst sein terminaler
+Erfolg und die freigegebenen Ressourcen belegen Abschluss; ein zurueck-
+gegebenes Bild oder GPGet allein genuegt nicht. Kopie skaliert nicht und
+mappt native Bilder nicht auf der CPU. Ohne nutzbaren NVIDIA-Renderer kann
+der gleiche Aufruf bekannte Systembilder wiederverwenden oder asynchron
+kopieren. Inaktive Zielanlage und fehlgeschlagener Submit werden abgebaut.
+
+Gezielte Nachweise
+------------------
+Bestehende R4NV2-, R4GFX8- und NVIDIA51-Faelle bleiben die Testgruppen.
+Sie pruefen Layoutwahl, Bytebudget, Alias/Outputerhalt, Referenzen, Fences,
+Scanout-Usage, falsche Rueckgabedeskriptoren und Cleanup nach Busy. Das
+NVIDIA-Device-Modell fuehrt SYS-Zeilen per tatsaechlichem CE-Strom in GOBs
+ueber und liest sie danach ueber die reale Renderqueue/TIC/Shaderparameter.
+GET, Pixelarbeit und CE-/GR-Semaphore bleiben getrennt. Bilinear-OVER weicht
+maximal1 von erlaubten3 LSB ab, sRGB-Encode0 von1 LSB. Der f32-Verbraucher
+interpretiert Semantik; er ist kein SM86-Maschinencode-Emulator.
+
+Ein kurzer SMP4-Lauf von DISPLAYD /BUFFERS prueft den echten Library-/Kernel-
+Softwarepfad: Vorbereitung, Reuse, Fenceweitergabe, Folgekopie nach Ende der
+oeffentlichen Bildreferenzen,16 exakte Pixel und ausgeglichene Ressourcen.
+Die vorhandenen synthetischen Native-/Rendertransportproben bleiben aktiv.
+Alle fuenf geaenderten Modularten bauen; es gibt keinen neuen Dauertest.
+
+Reale CE-/GR-Ausfuehrung, Scanout und Sichtabnahme bleiben OFFEN in
+ExFiles/Reports/OssiGPU.txt /0.79.19. Kein OssiPC-Zugriff.

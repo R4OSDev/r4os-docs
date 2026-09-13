@@ -1,136 +1,102 @@
 ﻿VBlank, Pageflips und Hardwarecursor – 0.79.14
 ============================================
-Stand: NVIDIA0.1.99, Kernel0.1.162, DISPLAYD0.1.18, Release0.79.13.
-Unterversion offen: Hardwarecursor mit Softwareersatz.
+Stand: NVIDIA0.1.100, Kernel0.1.163, Desktop0.1.46, DISPLAYD0.1.18.
+Release0.79.14: Softwareumfang abgeschlossen. Physische Abnahme offen in
+ExFiles/Reports/OssiGPU.txt / 0.79.14; OssiPC wurde nicht kontaktiert.
 
-Der VBlank-Eingang ist implementiert: Nach bestaetigter nativer Uebernahme
-bindet der bestehende IRQ-Besitzer den von GSP gelieferten Display-Stall-
-Vektor. Die Headzahl kommt aus der realen RM-Abfrage; nur LAST_DATA des
-aktiven Heads wird freigeschaltet. MSI/INTx und der Abbau bleiben beim
-gemeinsamen NVIDIA-IRQ-Besitzer. Die GSP-Queue bleibt im Worker.
+Praesentation
+------------
+Der native NVIDIA-Pfad bindet den real gemeldeten Display-Stall-Vektor und
+LAST_DATA des aktiven Heads beim vorhandenen IRQ-Besitzer ein. Headzahl und
+Vektor kommen von RM. Gleichzeitige GSP-Ursachen teilen denselben Endpoint;
+IRQs allokieren nichts und verarbeiten weder RPCs noch BO-Freigaben.
+Eine monotone Sequenz zaehlt beobachtete IRQ-Ursachen. CPU-Beobachtungszeit
+und roher GPU-Frame-/Zeilensnapshot bleiben getrennt. Leere Ursachen oder
+verstrichene CPU-Zeit erzeugen keinen VBlank.
 
-Jedes bestaetigte Head-Ereignis erzeugt eine monotone Beobachtungssequenz,
-einen monotone-Clock-Zeitstempel und einen GPU-Frame-/Zeilensnapshot.
-Die Sequenz zaehlt beobachtete IRQ-Ursachen, keine geschaetzten Bildperioden.
-Der 16-Bit-Hardwarezaehler darf unabhaengig davon umlaufen. Leere Statusbits
-erzeugen kein Ereignis; fehlende IRQs werden nicht aus CPU-Zeit erzeugt.
-Ein begrenzter atomarer Snapshot verbindet Sequenz, Zeit und Position.
-Der Worker meldet das erste Ereignis pro Head im bestehenden Bootlog:
-DISPLAYD /NVIDIA head-events
-Die Zeit ist eine IRQ-Beobachtung und kein umgerechneter GPU-Zeitstempel.
+Normales Present verwendet zwei VRAM-Bilder, mit OPTION NVIDIA buffers=3
+drei. Pro Modusgruppe gibt es ein gemeinsames SYSTEM-Bild, eine begrenzte
+CE-Kopie, ein fertiges wartendes Bild und einen Window-Flip. Jede Nutzung
+sammelt Aenderungen seit ihrem letzten Upload; erstmalige Nutzung kopiert
+vollstaendig. Die dritte CE-Kopie darf mit einem laufenden Flip ueberlappen.
+Frames allokieren nach dem Aufbau keine weiteren Bilder.
 
-Gleichzeitige GSP-/Displayursachen werden durch denselben Endpoint behandelt
-und wecken den Worker einmal. Der IRQ allokiert nichts, verarbeitet keine
-RPCs und gibt keine BOs frei. Fremde Head-/Displayursachen werden nicht
-quittiert; Fehler sperren weitere Zustellung und halten erreichbare DMA-
-Ressourcen. Close wartet auf den IRQ-Besitzer, blockiert den Displayvektor,
-entfernt eigene LAST_DATA-Enablebits und baut Callback/Mapping danach ab.
+Acquire, CPU-Lesesperre, CE-Abschluss, Window BEGUN plus frischer Head-IRQ
+und altes FINISHED sind eigene Ereignisse. GET allein bestaetigt keinen
+Flip. Erst FINISHED erlaubt die Wiederverwendung des alten Scanouts.
+Eine ausgehende Modusgruppe wird nach Bestaetigung/Ruecknahme vollstaendig
+abgebaut. Fehlende Quittungen erreichen endliche Deadlines und erhalten
+unklare Nutzungen; sie geben keinen spekulativen Besitzer frei.
 
-Die bestehende Device-Gruppe prueft zwei Heads, getrennte Zeit/Sequenz,
-leere Statusregister, GPU-Zaehler-Umlauf, gleichzeitige GSP-/Displayzustellung,
-Vektor-Aliasablehnung und Fehlerabbau. 51 Gruppen und Modulbuild bestanden.
-Keine neue Testgruppe. Hardwareantworten sind
-modelliert; das beweist weder ein physisches Signal noch ein sichtbares Bild.
-Sieben vollstaendige MIT-Originale sowie Source-/Artefakthashes und Logs:
-GrafikPraesentation07914.json. Lizenztexte bleiben in Modul und Distribution.
+DISPLAYD /STATS [Head-ID] liefert den gemeinsamen 208-Byte-Snapshot fuer
+Acquire, Rendern, Einreichung, Sichtbarkeit und beendete Scanout-Nutzungen.
+Quellfence, CE-/Windowpunkt, GPU-Zeit und CPU-/IRQ-Beobachtung bleiben
+getrennt. Reporting erzeugt keine Bildauftraege oder Pro-Frame-Logs.
+Bootfb und Heads ohne nativen Bericht melden unavailable. Alte Kopierfences
+behalten ihre Bedeutung. DISPLAYD /NVIDIA head-events zeigt die IRQ-Quelle.
 
-Der neue Window-Flip-Einstieg nimmt nur inaktive, durch CE fertiggestellte
-Bilder gleicher Geometrie an. Er sendet einen nicht zerreissenden Window-
-UPDATE ohne Core-Interlock; Takt, HDMI, Position und Core-Punkt bleiben
-erhalten. Ein Flip ist gleichzeitig zulaessig; Modus-/Tabellenarbeit
-wartet auf seinen Abschluss. PUT-Admission prueft Bild, Import,
-Renderquittung, bisherigen Scanout und den echten Head-IRQ-Besitzer erneut.
+Cursor
+------
+Der optionale C67A-PIO-Kanal setzt signierte 16-Bit-Positionen, ohne einen
+Desktopframe oder einen DMA-Befehlspuffer zu erzeugen. Vier Methoden werden
+nach erneuter Pruefung von Kanal, Head und Epoche einmal geschrieben.
+Leerer PIO-Prozessor und frischer Head-IRQ bestaetigen die Position. Volle
+Slots warten begrenzt; ein teilweise gesendeter UPDATE wird nicht wiederholt.
+RM Free alleine ersetzt keine beobachtete DEALLOC-/Idle-Bestaetigung.
 
-GET allein bestaetigt keinen Flip. Window BEGUN plus ein nach Einreichung
-beobachtetes LAST_DATA erzeugt eine eigene sichtbare Quittung. GPU-Notifier-
-zeit, CPU-Beobachtungszeit und letzte Head-Sequenz werden getrennt gespeichert;
-die Sequenz ordnet keinen exakten GPU-Zeitpunkt zu. FINISHED fuer die vorherige
-Window-Nutzung erlaubt erst deren Wiederverwendung. Beide VRAM-Allokationen
-bleiben bis zum gesonderten Ressourcenabbau erhalten. Fehlendes IRQ, BEGUN
-oder FINISHED laeuft in eine endliche Deadline mit behaltenen Ressourcen.
+Der Treiber reserviert die Cursorbandbreite bei IMP. Scheitert die erste
+Moduspruefung mit Cursor, wird derselbe Bootmodus einmal ohne Cursor erneut
+geprueft. Fehlende Klasse/Erweiterung behaelt den Softwarepfad. Ein gemeinsamer
+SYSTEM-ARGB8888-Puffer liefert das Bild mit unveraenderter gerader Alpha-
+Darstellung. Groesse, Pitch, Laenge, Hotspot und Grenzen werden geprueft;
+quadratische Hardwarebilder 32/64/128/256 erhalten transparentes Padding.
 
-Die bestehende Device-Gruppe durchlaeuft echte RM-/CE-/PUT-Besitzer mit
-modellierten Antworten: Hin-/Rueckflip, GET ohne Abschluss, beide Reihenfolgen
-von IRQ und BEGUN, leere IRQ-Ursache, vorgezogene zweite Einreichung und die
-drei fehlenden Ereignisse. Erst nach FINISHED folgt regulaerer Tabellen-/
-BO-/RM-Abbau. Kopierzaehler und gemeinsame Queuefences bleiben unveraendert.
-Die zweite Pruefung umfasst auch die Serialisierung gegen den Modus-Worker.
+Eine feste private 512-KB-Allokation traegt zwei Bildplaetze. Der unabhängige
+Quellimport bleibt beim Upload erhalten; vorhandenes 12-KB-Staging und CE
+kopieren begrenzte Teile. GET beendet keine Lesesperre. Nur inaktive Bilder
+werden beschrieben. Core-Quittung, danach neuer Head-IRQ und zwei kohaerente
+ARM-Samples bestaetigen Sichtbarkeit beziehungsweise Ausblenden. Bild-,
+Positions-, Render- und Windowquittungen sind nicht austauschbar.
 
-Normales Present verwendet jetzt zwei private VRAM-Bilder; mit
-OPTION NVIDIA buffers=3 sind drei waehlbar (buffers=2 ist der Standard).
-Alle Bilder einer Modusgruppe teilen das gemeinsame SYSTEM-RAM-Bild.
-Zusaetzliche Bilder entstehen beim ersten Auftrag ueber die vorhandenen
-RM-/CE-/RAMHT-Besitzer. Danach braucht ein Frame keine Allokation oder
-Tabellenaenderung. Jedes Bild sammelt die Aenderungen seit seiner letzten
-Aktualisierung. Der erste Upload ist vollstaendig, Wiederverwendung kopiert
-das umschliessende Aenderungsrechteck. Eine eigene Lesesperre auf das ganze
-RAM-Bild schuetzt diesen Bereich und endet erst mit CE SYS-Abschluss.
+R4DRAW15/640 ergaenzt drei optionale Slots nach dem bisherigen 616-Byte-
+Praefix: display_cursor_info, display_cursor_submit, display_cursor_status.
+GfxDriverDisplayApi bleibt Wireversion1; Revision3/96 ergaenzt configure,
+take und complete hinter Byte72. Neue Datensaetze: Info80, Request88,
+Status72, DriverJob160, Completion40. Alte Praefixe bleiben unveraendert.
+Zig- und C-Fassaden pruefen die gesamte optionale Cursor-Erweiterung.
 
-Die gemeinsame Queue meldet weiterhin Kopierabschluss. Window BEGUN mit
-Head-Ereignis waehlt das sichtbare Bild; der vorherige Puffer bleibt bis zu
-seinem FINISHED gehalten. Drei Bilder erlauben eine weitere CE-Kopie,
-waehrend ein bereits eingereichter Flip die anderen beiden noch haelt.
-Es gibt hoechstens einen CE-Auftrag, ein fertig kopiertes wartendes Bild
-und einen Flip; die bestehende gemeinsame Queue hat Tiefe eins. Rueckstau
-wartet begrenzt beziehungsweise liefert Busy, failed oder device-lost.
-Fehlende Hardwarequittungen werden nie durch eine Deadline freigegeben.
-Der normale Bildwechsel schreibt keinen Logeintrag pro Frame.
+Ein Programmbesitzer und ein Auftrag mit Drei-Sekunden-Deadline sind
+zulaessig. Prepare importiert das Bild, Show bindet die letzte erfolgreiche
+Present-Quellfence als Sichtbarkeitsbarriere, Move setzt nur die Position,
+Hide bestaetigt Ausblenden und Release beendet auch den Programmbesitz.
+Der Kernel haelt Quelle und Metadaten; GPU-Politik bleibt im R4D. BO-Zugriffe
+und Freigaben liegen ausserhalb des Display-Zustandslocks. Programmende
+fordert geordnetes Release; Treiberverlust/Timeout behalten unklare Besitzer.
+Eine echte spaete Quittung kann denselben Auftrag noch abschliessen.
 
-Bis zu sechs feste Plaetze tragen die aktive und eine zu bestaetigende
-Modusgruppe. Bestaetigung oder Ruecknahme baut die gesamte ausgehende Gruppe
-ab: erst inaktive Shadow-Mappings/Importe, dann RAMHT und native Allokationen.
-Der geliehene gemeinsame Referenzbesitz bleibt beim gemeinsamen Worker.
-Die Device-Pruefung umfasst beide Pufferzahlen, unterschiedliche Aenderungen
-ueber mehrere Umlaeufe, Kopieren im dritten Bild bei noch laufendem Flip,
-einen Timeout mit gleichzeitig gehaltener CE-Lesesperre und den Abbau beider
-Modusgruppen nach einer weiteren Auswahl innerhalb der Kandidatengruppe.
-Ungueltige Rechtecke erzeugen einen Fehler und keinen sichtbaren Frame.
+Desktop0.1.46 verwendet fuer Software, Hardware und RemoteFrame denselben
+12x18-Pfeil. Nach Prepare entfernt ein normales erfolgreiches Present den
+Softwarepfeil; erst dessen sichtbarer Flip erlaubt Show. Bewegungen werden
+zusammengefasst und brauchen im Hardwarebetrieb keine Cursor-Damage und
+keinen Desktopframe. Moduswechsel inklusive Bestaetigungszeit und Vollbild-
+terminal blenden die Hardware zuerst bestaetigt aus. Unklare Sichtbarkeit
+erlaubt keinen zweiten Softwarepfeil. Im Bootfb-Fallback bleibt der bisherige
+Softwarecursor aktiv. RemoteFrame zeichnet fuer seine synchrone Kopie einen
+begrenzten Pfeilausschnitt und stellt den lokalen Szenenpuffer danach wieder
+her; reine Mausbewegungen aktualisieren nur die Fernansicht.
 
-Die gemeinsame Presentstatistik ist ein eigener erweiterbarer 208-Byte-Vertrag:
-R4DRAW14/616 ergaenzt den optionalen Slot74; GfxDriverDisplayApi hat eine
-optionale Erweiterung hinter dem bisherigen 64-Byte-Praefix (Revision2/72,
-Wireversion1). DisplaySummary200 und bisherige Kopierfences bleiben binaer
-und fachlich erhalten. Alte Treiber und Programme koennen weiterlaufen.
+Nachweise
+---------
+Bestehende Gruppen: NVIDIA51, Kernel-Display53, Desktop392, SDK-Fassaden8
+plus C; Contract-Pruefung und alle drei Artefaktbuilds bestanden. Original-
+C67D-C-Vektoren belegen Groessen/Hotspot/Alpha/Hide und IMP-Feldlage. Device-
+Modelle durchlaufen echte RM-/CE-/PIO-/Core-Besitzer mit getrennten Antworten,
+Retry, fehlenden Quittungen, Quellende und unveraenderten Presentzaehlern.
+Desktop-Pruefungen sichern die Presentbarriere, zusammengefasste Bewegung,
+Modus/Hide/Timeout und pixelgleichen Capture mit vollstaendiger Restaurierung.
 
-NVIDIA veroeffentlicht nur geaenderte Metadaten aus dem serialisierten Worker:
-Acquire, CE-Renderende, Window-Einreichung, sichtbare Aktivierung, alte FINISHED-
-Freigabe und Ablehnungen haben eigene Zaehler. Die letzte sichtbare Quittung
-enthaelt Quell-Queuefence, CE-/Windowpunkt, rohe GPU-Zeit und monotone CPU-
-Beobachtungszeiten. Released zaehlt beendete Scanout-Nutzungen, keine
-freigegebenen Allokationen. Ein Kopierabschluss erzeugt keine sichtbare Quittung.
-
-Der gemeinsame Displaybesitzer speichert hoechstens acht Head-Snapshots unter
-seinem kurzen Zustandslock: keine Callbacks, BO-Zugriffe oder Warteoperationen.
-Treiber-, Geraete-, Reset- und Displaygeneration sowie monotone Quittungen
-werden geprueft. Neue Bindung entwertet alte Daten. Busy wird spaeter erneut
-gemeldet; ein dauerhafter Statistikfehler beeintraechtigt den Videopfad nicht.
-Stop/Fehler meldet Lost, soweit die gemeinsame Generation noch gilt.
-
-DISPLAYD /STATS [Head-ID] liest einen kohaerenten Snapshot ohne Bildauftrag.
-Bootfb und Heads ohne nativen Bericht melden unavailable. Kernel-Besitzer-
-und NVIDIA-Device-Pruefungen decken Zeit-/Generationsgrenzen, getrennte
-CE-/Flip-/Freigabemeldungen sowie Retry und den alten Tabellenpraefix ab.
-Die bestehenden Zig-/C-Fassadenpruefungen sichern optionale Slots und 64-Bit-
-Werte. Der kurze SMP4-Gastlauf prueft die Abfrage im Fallback und am
-bestehenden nativen Modusmodell; er ersetzt keinen NVIDIA-Hardwarenachweis.
-
-Der private C67A-PIO-Kanal ist in den bestehenden RM-/Device-Besitzer
-integriert. Er braucht keinen DMA-Befehlspuffer; vor seiner Allokation wird
-der Pushbuffer bei RM ausdruecklich deaktiviert. Positionen sind vorzeichen-
-behaftete 16-Bit-Koordinaten. Ein Auftrag ist gleichzeitig zulaessig; volle
-PIO-Slots warten begrenzt. Die vier Registermethoden werden nach erneuter
-Pruefung von Kanal, Head, Geraetegeneration und Auftragsidentitaet geschrieben.
-Ein einmal begonnener UPDATE wird auch bei Teilfehlern nicht wiederholt.
-
-Leerer PIO-Prozessor plus ein neuer realer Head-IRQ bestaetigen den
-Positionsauftrag; dies ist keine Cursorbild-, Window- oder Kopierquittung.
-Fehlendes IRQ erhaelt alle unklaren Besitzer. RM Free gibt den Kanal erst
-nach separat beobachtetem DEALLOC/Idle fuer Wiederverwendung frei. Die
-bestehenden Transport-/Device-Gruppen pruefen Original-C-Headervektoren,
-Grenzen, fehlende Klasse, abgelehnte Allokation, Rueckstau, kein Replay,
-unveraenderte Presentzaehler und den Deadline-/Abbaupfad. 51/51 Tests und
-Modulbuild bestanden; kein zusaetzlicher Gastlauf fuer diesen Treiberpfad.
-
-Offen: Cursorbild/Hotspot/Alpha, gemeinsamer Auftragspfad und Desktop-
-Softwareersatz. Der private Positionskanal allein schliesst T4/A2 nicht ab.
-Physische Nacharbeit: ExFiles/Reports/OssiGPU.txt / 0.79.14.
+Ein kurzer SMP4-Gastlauf verwendet /SMOKE-WINDOW-IDLE /CURSOR: echte neue
+Kernel-API, bootfb, Desktop-Softwarecursor, begrenzte Damage und vorhandener
+RemoteFrame-Vertrag. Keine neue Testgruppe und kein physischer Bildnachweis.
+Quellen, Originale, Artefakthashes und Logs: GrafikPraesentation07914.json.
+MIT-Volltexte bleiben im Treibermodul und in der Distribution enthalten.

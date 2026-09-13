@@ -4,10 +4,10 @@
 Layers
 ------
 
-Planned native graphics evolution (0.79.X) is documented separately in
-GrafikZielbild079.txt and GrafikRoadmap079.txt. Those documents describe
-future work; the implementation and capability statements below remain
-the current baseline until their respective owner changes are accepted.
+The native graphics architecture is tracked in GrafikZielbild079.txt and
+GrafikRoadmap079.txt. Software integration through 0.79.20 is described in
+GrafikKomposition07920.txt/.json. Physical NVIDIA qualification remains open
+in ExFiles/Reports/OssiGPU.txt; implemented capabilities are not hardware proof.
 
 - Boot display: early and fatal output on the Limine framebuffer.
 - Display manager: active backend, geometry and presentation.
@@ -222,31 +222,39 @@ hits/loads and terminal full/incremental refreshes, parsed/skipped bytes and
 changed/skipped rows; the cached glyph is also checked against an exact pixel
 hash.
 
-Backend inventory and first acceleration
-----------------------------------------
+Backend inventory and GPU composition (0.79.20)
+----------------------------------------------
 
-The reproducible QEMU and current real-hardware path exposes a Limine linear
-boot framebuffer. R4OS currently has no owned display-controller BAR,
-modesetting contract, scanout buffer allocation, pageflip interrupt or GPU
-command queue. The standard QEMU configuration also declares no explicit
-GPU device contract. A hardware pageflip/GPU claim would therefore lack an
-owned target and a completion source.
+Limine bootfb remains the early/fatal output and generic software fallback.
+DISPBLIT is an optional synchronous SIMD framebuffer copier. VirtioGpu owns
+an explicit QEMU 2D device and scanout completion. NVIDIA owns its MMIO/GSP
+runtime, queues, native allocations and private scanout images; common BO,
+queue, mode, cursor and output owners serialize their public lifetimes.
+NVIDIA hardware activation still requires its existing qualification policy.
 
-DISPBLIT.R4D is consequently the first and only external accelerated
-consumer: an owner-bound, resident module that performs synchronous XRGB32
-multi-region fast copies with module SIMD, volatile target stores and a final
-store fence. It borrows framebuffer, source and region addresses only for the
-callback. Its bounded self-test covers two separated regions and unchanged
-surroundings before registration. Unload first closes callback admission and
-cannot retire the owner while a call is active. The kernel retains the safe
-format-aware CPU copy as the complete fallback and does not contain a
-driver-specific DISPBLIT special case.
+The productive Desktop selects GPU composition when R4GFX DEVICE_V1 reports
+native render, row-copy and image-present capabilities. The same scene
+painters then produce retained premultiplied ARGB layers. Changed rectangles
+upload once to resident textures, and ordered/scissored GPU draws update a
+reusable XRGB target. A short preparation thread handles cold allocations;
+normal frames submit and poll bounded jobs in the event loop. Input and
+future damage remain responsive while a complete capture is retained.
 
-DISPLAYD measures exact region/pixel work, synchronous fence completion and
-input-to-present ticks in the guest. The Desktop headless gate additionally
-checks small separated damage, culling, zero lost generations, remote shadow
-demand and the active/fallback capability pair. The release benchmark remains
-the project-wide comparison; it is not interpreted as proof of GPU support.
+DEVICE_V1 revision 6 adds image_present. R4DRAW revision 20 adds common queue
+operation 5 without changing existing payload/table layouts. Its source is
+a complete native XRGB image at the active dimensions; only the driver owns
+the destination scanout. NVIDIA CE copies it to an inactive private image,
+then the existing Window flip supplies the visibility receipt. The queue
+fence only proves device-copy completion; Desktop uses the matching
+DisplayPresentationStats observation for visible-frame statistics.
+
+The CPU present contract above and its compatibility slots remain available
+for bootfb, DISPBLIT, Virtio and fallback. Native image presentation avoids
+the final CPU fullscreen copy, but still performs a GPU fullscreen CE copy.
+Unsupported drawing remains in the affected software layer. Device failure
+requires complete CPU reconstruction; partial stale CPU scenes are rejected.
+Detailed budgets, lifecycle, proof limits and reproduction:
+GrafikKomposition07920.txt/.json.
 
 The remote XRGB32 shadow is a readback product, not part of local display
 presentation. R4DESK slot 56 accepts the same bounded region generation, but

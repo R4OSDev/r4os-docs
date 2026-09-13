@@ -1,0 +1,112 @@
+﻿R4OS 0.79.20 - GPU-Komposition des Desktops
+=========================================
+
+Besitzer: Apps/Desktop, Libraries/R4GFX, Kernel/display und Drivers/NVIDIA.
+Artefakte: R4DESK 0.1.51, R4GFX 0.1.7, Kernel 0.1.170, NVIDIA 0.1.112.
+R4DRAW Revision 20; R4GFX DEVICE_V1 Revision 6. Alte Tabellenpraefixe und
+Typen bleiben erhalten. R4NV 0.1.5 bleibt unveraendert.
+Belege: GrafikKomposition07920.json; lokale Quell-/Logarchive unter
+ExFiles/Reference/GFX/0.79.20 und GFX/Nvidia/0.79.20.
+
+Gemeinsame Szene
+---------------
+compositor.zig bleibt die einzige Quelle fuer Ebenenreihenfolge, Fenster,
+Clipping, Damage und Verdeckung. Dieselben Painter zeichnen weiterhin den
+Softwaredesktop; bei nativer Renderfaehigkeit zeichnen sie in begrenzte
+ARGB-Ebenen. Hintergrund, Wallpaper, Desktopobjekte, Fenster, Taskleiste,
+Tooltips, Menues, Dialoge, Vollbildterminal und Softwarecursor behalten ihre
+Reihenfolge. Ebenen benutzen globale Koordinaten und praemultipliziertes
+Alpha. Zeichenoperationen ohne native Entsprechung bleiben dadurch in der
+betroffenen Softwareflaeche; sie erzwingen keinen zweiten Szenenbaum.
+
+Der Desktop haelt bis zu 64 Ebenen und 512 geordnete Kompositionsbereiche.
+Das 128-MB-CPU-Budget umfasst Ebenen, Scratch und den Peak bei Ersatzanlagen.
+Neue Ebenen werden vollstaendig initialisiert, bestehende nur im Damage
+neu gezeichnet. Zeilenvergleich bestimmt die tatsaechlich geaenderten Bytes;
+gleiche Pixel behalten ihre Generation. Die GPU-Ressource bleibt resident.
+Dies vermeidet unveraenderte Uploads, nicht jede CPU-Painterausfuehrung.
+
+GPU-Transaktion
+---------------
+Ein eigenes R4GFX-Device trennt die native Komposition vom bisherigen
+CPU-Painterdevice. Der erste Frame und neue Geometrie brauchen eine volle
+Szene. Nur kalte, fehlende oder unpassende Ressourcen starten einen kurzen
+Vorbereitungsthread. Der Ereignisloop bleibt aktiv; das Device und die
+aufgezeichnete Szene wechseln erst nach dem generationstreuen Thread-Join
+wieder zum Hauptthread. Warme Frames erzeugen keinen Thread.
+
+Ein 256-MB-Budget begrenzt native Ebenentexturen, XRGB-Kompositionsziel und
+SYSTEM-Uploadpuffer mit physischer Allokationsgranularitaet. Ein einziger
+wiederverwendbarer ARGB-Stagingpuffer nimmt jeweils den geaenderten Bereich
+auf. R4GFX copy_submit_ex laedt nur diese Zeilen in die native Textur. Erst
+die physisch abgeschlossene Lesebenutzung erlaubt die naechste Staging-
+Mutation. Renderauftraege setzen die Ebenen im unveraenderten Painterorder
+mit exakten Scissors zusammen. Bis zu 16 Queuejobs und hoechstens vier neue
+Arbeitsschritte pro Ereigniszyklus begrenzen die Verwaltung.
+
+Jeder Nachfolger uebernimmt die ausdrueckliche Fence-Abhaengigkeit seines
+Vorgaengers. Ein fehlgeschlagener Upload/Draw darf daher nicht zu einem
+erfolgreichen Present einer Teilszene fuehren. Busy laesst denselben Schritt
+stehen. Die Szene bleibt bis zum Abschluss unveraenderlich; Eingaben,
+Fensterzustand und neuer Damage laufen weiter und werden zusammengefasst.
+Ohne laufende Arbeit gibt es keine GPU-Polls oder neue GPUjobs.
+
+Native Ausgabe und Lebensdauer
+-----------------------------
+DEVICE_V1.image_present uebernimmt eine fertige native XRGB-Ressource und
+liefert einen normalen R4GfxJob. Die gemeinsame Queueoperation present=5
+validiert aktiven Adapter, Geometrie, Ressourcen und Abhaengigkeiten. Die
+Displaybruecke schliesst parallele CPUwriter, Moduswechsel und weitere
+Bilduebernahmen aus. Nur der Treiber waehlt den privaten inaktiven Scanout.
+
+NVIDIA kopiert das fertige Bild per CE aus linearem oder gekacheltem VRAM
+in diesen Scanoutpuffer. Der folgende vorhandene Window-Flip bestimmt die
+Sichtbarkeit. Es gibt eine GPU-Vollbildkopie, aber keine obligatorische
+abschliessende CPU-Vollbildkopie. Die Queuefence bestaetigt ausschliesslich
+CE-Abschluss. Der Desktop wartet fuer seine Sichtstatistik auf die passende
+DisplayPresentationStats-Receipt mit Adapter, Generationen und Quellfence.
+Eine Semaphore allein wird nicht als sichtbares Bild gewertet.
+
+Die Queue haelt die Quelle auch nach Schliessen der oeffentlichen Referenz.
+Abbruch und Device-Lost geben laufende BOs nicht frei. Physische Quarantaene
+kann Providerstorage laenger als den Desktopabschluss halten; ein Zeitlimit
+ist kein Freigabenachweis. Die privaten Scanouts bleiben unter ihrem
+Treiberbesitzer und werden nicht als schreibbare Appressourcen exportiert.
+
+Fallback, Wiederaufbau und Remote
+--------------------------------
+Ohne passende NVIDIA-Faehigkeiten zeichnet der normale Softwarepainter ueber
+den gewaehlten Ausgabepfad (bootfb/DISPBLIT oder Virtio). Nach Renderfehler,
+Geometrieverlust oder Zeitlimit wird die komplette CPU-Szene aus vorhandenen
+Fenster-/Appquellen rekonstruiert. Die native Generation wird gesperrt;
+erneuter Versuch erst nach einer Ausgaberevision oder Desktop-Neustart und
+abgeschlossener Ressourcenretirement. Laufende Quarantaenejobs werden weiter
+abgebaut, waehrend Eingabe und Softwarezeichnen weiterlaufen koennen.
+
+RemoteFrame ist ein ausdruecklicher CPU-Verbraucher: nur bei aktiven Lesern
+komponiert R4GFX dieselben Ebenen zusaetzlich in die CPU-Szene. Der erste
+Leser fordert eine volle Szene an. Eine veraltete CPU-Szene darf weder als
+RemoteFrame noch als teilweise rekonstruierter Fallback ausgegeben werden.
+
+Gezielte Nachweise und Grenzen
+-----------------------------
+Die 77 vorhandenen Desktoptests pruefen Ebenenkoordinaten/Alpha, sechs
+Fensterszenen, Residenz, Ein-Pixel-Upload (4 Bytes), Busy, Abbruch, fehlende
+Present-Freigabe bei Renderfehler und Vollrekonstruktion. Der Queuemodelltest
+verwendet den echten R4GFX-CPUrenderer fuer Staging und Pixelvergleich.
+55 Kerneltests pruefen unter anderem native Present-Referenzen, Abhaengig-
+keiten, Producer-Close und gehaltenen Abbruch. Acht R4GFX-Tests decken den
+neuen APIpfad und unveraenderte CPU-API ab. Die vorhandenen 51 NVIDIAtests
+ergaenzen echte CE-Pakete, beide Speicherlayouts, Freigabe der Quelle sowie
+den unabhaengig beobachteten Flip. Es entstehen keine neuen Testgruppen.
+
+Die kurzen SMP4-Gaeste verwenden den bestehenden Window-Idle-Smoke fuer
+Fenstergeometrie, Dienstneustart und App-Close. Derselbe Einstieg vergleicht
+die produktive Szene zweimal nach Cache-Neuaufbau und prueft den echten
+Desktop-Fallbackzweig nach einem modellierten Renderausfall. Bootfb und
+Virtio bleiben Softwarekomposition; die Detailergebnisse stehen im JSON.
+
+Keine physische NVIDIA-Abnahme, SM86-Ausfuehrung oder gemessene FPS-Zusage.
+Softwareintegration hebt die bestehende Hardwarefreigabepolitik nicht auf.
+OssiGPU.txt /0.79.20 bleibt die OFFENE Anleitung fuer Sichtvergleich,
+Residenz-/Uploadmessung, Ein-/Ausgabe unter Last, Neustart und reale Fehler.

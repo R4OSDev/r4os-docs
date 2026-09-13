@@ -1,0 +1,85 @@
+﻿R4OS 0.79.19 - Texturierte Renderauftraege und Referenzbilder
+===========================================================
+
+Stand: Software-Teilabschluss fuer Texturierung, Referenzbilder und die
+zugehoerigen Abnahmen. Layout-/Cacheintegration und getrennte Fehlerauswertung
+bleiben in 0.79.19 offen. RELEASE_VERSION bleibt 0.79.18.
+R4NV0.1.4, NVIDIA0.1.109, DISPLAYD0.1.25; Kernel0.1.169/R4GFX0.1.5 unveraendert.
+Vorgaenger: GrafikRenderQueue07919.txt/.json. Belege dieses Standes:
+GrafikRenderTextur07919.json sowie
+ExFiles/Reference/GFX/Nvidia/0.79.19/render-texture-20260913/.
+
+Implementierung
+---------------
+Die drei festen Textur-Fragmentshader begrenzen normalisierte UVs auf die
+Zentren der ersten/letzten Texel des angeforderten Quellrechtecks. Dadurch
+bleiben Nearest und bilineare Ausschnitte innerhalb ihrer Bildregion, auch
+bei einem einzigen Texel. Es entstehen weder temporaere Texturkopien noch
+CPU-Skalierungen. Quelle, Ziel, Scissor, Filter und Alpha kommen aus dem
+bereits integrierten unveraenderlichen R4GFX-/Kernelauftrag.
+
+CBuf1-Ressourcen-ABI2: kombinierter TIC/TSC-Handle bei Byte0, float4 fuer
+minU/minV/maxU/maxV bei Byte16..31. Der Treiber erzeugt diese Werte aus den
+gehaltenen kanonischen Bildern. Shader-/Command-ABI und alle oeffentlichen
+Funktionsslots/Payloadgroessen bleiben gleich; alte Ressourcen-ABI1-Keys
+werden abgewiesen. Der maximale Bytecacheeintrag umfasst jetzt 1216 Bytes.
+Sechs reproduzierbare SM86-Programme: 2176 Bytes Code, 3200 Bytes ausgerichteter
+Header-/Codeupload, 24 GPR je Profil,kein Spill/Scratch/Callstack. Das kleine
+Descriptor-/Vertexpaket bleibt 1024 Bytes. Compilerquellen,NIR,NAK,Header und
+Hashnachweise sind archiviert; normale Builds starten keinen Compiler.
+
+Farbbedeutung und Rundung
+-------------------------
+ARGB8888 ist premultipliziert. XRGB liest Alpha als1 und schreibt das
+unbenutzte X-Byte als0; unberuehrte Bytes bleiben identisch. R8 ist skalar
+und unterstuetzt hier Replace ohne Alpha-/Farbraumtransfer. OVER rechnet
+mit Quellfaktor1 und Zielfaktor(1-Quellalpha); Opacity skaliert RGBA.
+
+Die feste sRGB-Decodefunktion arbeitet nach dem Sampling und vor Tint/
+Opacity; Encode nach Tint/Opacity und vor der Mischung. Beide entmischen
+RGB durch Alpha, begrenzen auf[0,1], wenden IEC61966-2-1 an und multiplizieren
+wieder mit Alpha. Alpha0 bleibt RGB0. Textur/Renderziel fuehren keinen
+zusaetzlichen automatischen sRGB-Transfer aus. Das ist keine Zusage fuer
+lineares Licht waehrend bilinearer sRGB-Texelfilterung; weitergehende
+Farb-/Compositorpolicy folgt in 0.79.27.
+
+14 begrenzte Szenen pruefen Ausschnitte, Nearest/Bilinear, Scissor, negative
+Zielkoordinaten, OVER/Opacity, ARGB/XRGB/R8, einen einzelnen Quelltexel,
+Eins-zu-eins-Abbildung, Vollfarbe, sRGB in beide Richtungen und Alpha0.
+Identitaetsreferenzen stammen aus dem produktiven R4GFX-CPU-Renderer;
+Farbtransferreferenzen aus einer getrennten f64-Berechnung. Rohbytes und
+PPM-Bilder sind archiviert. PPM zeigt die gespeicherten RGB-Kanaele, nicht
+eine zusaetzliche Alpha-Komposition.
+
+Der Host-Verbraucher liest den tatsaechlichen C797-Methodenstrom sowie TIC,
+TSC,CBuf und Vertices und modelliert f32-Sampling/Shader/Mischung. Er fuehrt
+keinen SM86-Maschinencode aus. Zulassung je 8-Bit-Kanal:0 LSB fuer Nearest-
+Replace,einzelnen Texel, Eins-zu-eins,Alpha0 und Solid-Replace;1 LSB fuer
+Nearest-/Solid-OVER und sRGB;2 LSB fuer Bilinear-Replace;3 LSB fuer Bilinear-
+OVER. Diese Grenzen decken die 8-Bit-Gewichte und Zwischenrundung des CPU-
+Renderers gegen eine erst am Ende gerundete f32-Mischung ab. Alle unberuehrten
+Pixel und Pitch-Reservebytes verlangen 0 LSB. Gemessen maximal 2 LSB bei
+Bilinear-Replace und1 LSB bei Bilinear-OVER; Farbtransfer 0 LSB im Modell.
+
+Integration und Grenzen
+-----------------------
+Der vorhandene NVIDIA-Device-/Runtime-Test fuehrt Solid, bilinearen
+Ausschnitt mit Scissor/Opacity/OVER und sRGB-Encode ueber den kanonischen
+Queuepfad aus. Er verwendet echte native Allokations-/RM-Zustaende und
+reale ausgegebene CE-/GR-Pakete mit modellierten Hardwareantworten.
+Quell- und Zielproduzenten schliessen nach Submit. Die Queue haelt beide
+Bilder ohne zusaetzliche Ausfuehrungslease bis zur beobachteten GR-Semaphore;
+GET, modellierte Pixel und Semaphore sind getrennte Beobachtungen.
+Der Hostspeicher der Fixture folgt jetzt der kanonischen BO-Slotzahl und
+haelt auch sekundaere Bildreferenzen bis zur jeweiligen Freigabe.
+
+Gezielte Pruefung: bestehende R4NV-Provider/C-/Zig-Abnahme sowie bestehende
+51 NVIDIA-Faelle und Builds der drei veraenderten Artefakte. Keine neue
+Testgruppe,kein Langlauf. Der vorherige SMP4-Nachweis des unveraenderten
+gemeinsamen Rendertransports bleibt GrafikRenderQueue07919.json zugeordnet;
+dieser interne Shader-/Bildschritt startet keinen weiteren Gastlauf.
+
+Reale GPU-Ausfuehrung,Readback und sichtbare Pixelabnahme sind weiterhin
+OFFEN in ExFiles/Reports/OssiGPU.txt /0.79.19. Dort die archivierten Bilder
+und angegebenen Grenzen verwenden und Abweichungen untersuchen; Grenzen
+nicht still erweitern. Es wurde kein OssiPC-Zugriff vorgenommen.

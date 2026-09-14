@@ -55,7 +55,7 @@ v1/112-Prefix bleibt lesbar.
 <!-- R4OS-APIREF:BEGIN R4DRAW (generiert von ApiContractGen aus ApiContract.json - NICHT von Hand editieren) -->
 ## Tabellen-Referenz R4DRAW (generiert)
 
-Kernel-Gruppentabelle `R4XStartR4Draw` v10, 472 Bytes, 57 Funktionsfelder und 57 Slots insgesamt.
+Kernel-Gruppentabelle `R4XStartR4Draw` v28, 800 Bytes, 98 Funktionsfelder und 98 Slots insgesamt.
 Signatur-Wahrheit: `abi.R4DrawFns` (Feldname == Tabellenfeld).
 Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 
@@ -118,6 +118,47 @@ Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 | 54 | 448 | function | `gfx_buffer_unmap` | `*const fn (*const GfxBufferHandle) callconv(.c) i32` |
 | 55 | 456 | function | `gfx_buffer_export_raster` | `*const fn (*const GuiSharedRasterLease, *GfxBufferReference) callconv(.c) i32` |
 | 56 | 464 | function | `gfx_buffer_stats` | `*const fn (*GfxBufferStats) callconv(.c) i32` |
+| 57 | 472 | function | `gfx_queue_open` | `*const fn (*const GfxQueueConfig, *GfxQueueHandle) callconv(.c) i32` |
+| 58 | 480 | function | `gfx_queue_close` | `*const fn (*const GfxQueueHandle) callconv(.c) i32` |
+| 59 | 488 | function | `gfx_queue_submit` | `*const fn (*const GfxQueueHandle, *const GfxSubmission, *GfxFenceStatus) callconv(.c) i32` |
+| 60 | 496 | function | `gfx_fence_query` | `*const fn (*const GfxFence, *GfxFenceStatus) callconv(.c) i32` |
+| 61 | 504 | function | `gfx_fence_wait` | `*const fn (*const GfxFence, u64, u32, *GfxFenceStatus) callconv(.c) i32` |
+| 62 | 512 | function | `gfx_fence_cancel` | `*const fn (*const GfxFence) callconv(.c) i32` |
+| 63 | 520 | function | `gfx_fence_release` | `*const fn (*const GfxFence) callconv(.c) i32` |
+| 64 | 528 | function | `gfx_queue_backend` | `*const fn (u32, *GfxBackendBinding) callconv(.c) i32` |
+| 65 | 536 | function | `gfx_output_revision` | `*const fn (*GfxDisplayRevision) callconv(.c) i32` |
+| 66 | 544 | function | `gfx_output_info` | `*const fn (u32, *GfxOutputInfo) callconv(.c) i32` |
+| 67 | 552 | function | `gfx_output_mode` | `*const fn (*const GfxOutputId, u32, *GfxOutputMode) callconv(.c) i32` |
+| 68 | 560 | function | `gfx_output_edid` | `*const fn (*const GfxOutputId, u32, *GfxEdidBlock) callconv(.c) i32` |
+| 69 | 568 | function | `gfx_atomic_test` | `*const fn (*const GfxAtomicState, *GfxAtomicResult) callconv(.c) i32` |
+| 70 | 576 | function | `gfx_atomic_commit` | `*const fn (*const GfxAtomicState, *GfxAtomicResult) callconv(.c) i32` |
+| 71 | 584 | function | `gfx_atomic_submit` | `*const fn (*const GfxAtomicState, u32, *GfxModeStatus) callconv(.c) i32` |
+| 72 | 592 | function | `gfx_atomic_status` | `*const fn (u64, *GfxModeStatus) callconv(.c) i32` |
+| 73 | 600 | function | `gfx_atomic_resolve` | `*const fn (u64, u32, *GfxModeStatus) callconv(.c) i32` |
+| 74 | 608 | function | `display_presentation_stats` | `*const fn (u32, *DisplayPresentationStats) callconv(.c) i32` |
+| 75 | 616 | function | `display_cursor_info` | `*const fn (*DisplayCursorInfo) callconv(.c) i32` |
+| 76 | 624 | function | `display_cursor_submit` | `*const fn (*const DisplayCursorRequest, *DisplayCursorStatus) callconv(.c) i32` |
+| 77 | 632 | function | `display_cursor_status` | `*const fn (*DisplayCursorStatus) callconv(.c) i32` |
+| 78 | 640 | function | `gfx_queue_backend_info` | `*const fn (u32, *GfxBackendInfo) callconv(.c) i32` |
+| 79 | 648 | function | `gfx_native_start` | `*const fn (*const GfxNativeAllocation, *GfxNativeStatus) callconv(.c) i32` |
+| 80 | 656 | function | `gfx_native_query` | `*const fn (*const GfxBufferHandle, *GfxNativeStatus) callconv(.c) i32` |
+| 81 | 664 | function | `gfx_native_receive` | `*const fn (*const GfxBufferHandle, *GfxBufferReference) callconv(.c) i32` |
+| 82 | 672 | function | `gfx_native_close` | `*const fn (*const GfxBufferHandle) callconv(.c) i32` |
+| 83 | 680 | function | `gfx_native_wait` | `*const fn (*const GfxBufferHandle, u64, *GfxNativeStatus) callconv(.c) i32` |
+| 84 | 688 | function | `gfx_queue_submit_render_list` | `*const fn (*const GfxQueueHandle, *const GfxSubmission, *const GfxRenderList, *GfxFenceStatus) callconv(.c) i32` |
+| 85 | 696 | function | `display_presentation_info` | `*const fn (u32, *DisplayPresentationInfo) callconv(.c) i32` |
+| 86 | 704 | function | `display_presentation_feedback` | `*const fn (u32, *const GfxFence, *DisplayPresentationStats) callconv(.c) i32` |
+| 87 | 712 | function | `display_output_target` | `*const fn (u32, u32, *GfxOutputTarget) callconv(.c) i32` |
+| 88 | 720 | function | `gfx_queue_submit_output` | `*const fn (*const GfxQueueHandle, *const GfxSubmission, *const GfxOutputTarget, *GfxFenceStatus) callconv(.c) i32` |
+| 89 | 728 | function | `display_output_presentation_info` | `*const fn (*const GfxOutputTarget, *DisplayPresentationInfo) callconv(.c) i32` |
+| 90 | 736 | function | `display_output_presentation_feedback` | `*const fn (*const GfxOutputTarget, *const GfxFence, *DisplayPresentationStats) callconv(.c) i32` |
+| 91 | 744 | function | `gfx_queue_submit_render_grid_list` | `*const fn (*const GfxQueueHandle, *const GfxSubmission, *const GfxRenderGridList, *GfxFenceStatus) callconv(.c) i32` |
+| 92 | 752 | function | `gfx_output_color` | `*const fn (*const GfxOutputId, *GfxOutputColorState) callconv(.c) i32` |
+| 93 | 760 | function | `gfx_queue_submit_render_color_list` | `*const fn (*const GfxQueueHandle, *const GfxSubmission, *const GfxRenderColorList, *GfxFenceStatus) callconv(.c) i32` |
+| 94 | 768 | function | `gfx_atomic_test_color` | `*const fn (*const GfxModeColorRequest, *GfxAtomicResult) callconv(.c) i32` |
+| 95 | 776 | function | `gfx_atomic_submit_color` | `*const fn (*const GfxModeColorRequest, u32, *GfxModeStatus) callconv(.c) i32` |
+| 96 | 784 | function | `gfx_output_refresh` | `*const fn (*const GfxOutputTarget, *GfxOutputRefresh) callconv(.c) i32` |
+| 97 | 792 | function | `gfx_refresh_request` | `*const fn (*const GfxRefreshRequest, *GfxRefreshRequest) callconv(.c) i32` |
 <!-- R4OS-APIREF:END R4DRAW -->
 
 

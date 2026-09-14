@@ -1,0 +1,169 @@
+﻿Grafik 0.79.26: Variable Bildwiederholrate
+=======================================
+
+Abschlussumfang und Bedienung
+----------------------------
+R4GFX, NVIDIA, die gemeinsamen Display-APIs, Desktop und Appearance bilden
+einen durchgehenden VRR-Pfad. Softwarebelege: GrafikVRR07926.json. Die native
+Ausgabe ist damit nicht physisch freigegeben. Die spaetere Hardwareabnahme
+bleibt offen in ExFiles/Reports/OssiGPU.txt / 0.79.26.
+
+APPEARANCE /DISPLAY -> VRR settings bietet pro identifiziertem Monitor:
+- Off: feste Bildwiederholrate.
+- Fullscreen animation: Standard; nur animierter Inhalt im aktiven Vollbild.
+- Fullscreen and animated windows: zusaetzlich animierte Fenster.
+- Flicker: disable VRR: feste Ausgabe anfordern und die Sperre speichern.
+- Retry VRR: Sperre ausdruecklich loesen; erst danach kann die Policy greifen.
+Die Seite zeigt zugelassenen Bereich, bestaetigten Zustand und reale Messwerte
+getrennt. Speichern bestaetigt die Einstellung, nicht die Hardwareaktivierung.
+Ohne native Ausgabe bleibt die vorhandene feste Grafikstrecke nutzbar.
+
+REFRESH.R4S unter C:\R4OS\CONFIG hat Schema GFX_REFRESH_1. Bis zu 16 Eintraege
+speichern PCI-Adapter/Port, die 16-Byte-Empfaengerkennung, Policy, Flackersperre
+und Aenderungsnummer. Verbindungs- und Displaygenerationen werden nicht
+persistiert. Speichern ist atomar ueber R4STD; andere und abwesende Monitore
+bleiben erhalten. Der vorhandene Appearance-Reload weckt die Desktopseite.
+Das Fensterprogramm erhaelt keine eigene dauerhafte Presenter-Lease.
+
+Zulassung
+---------
+R4GFX/Display besitzt EDID-/DisplayID-Daten, Timingzulassung, Policy,
+Frameplanung, Messwertfenster und Konfigurations-/Clientlogik. Der Kernel
+besitzt ausschliesslich kopierte Ausgabedaten, Aufruferzuordnung und Lease.
+NVIDIA besitzt die hardwareabhaengigen RM-, AUX-, EMP- und Core-Operationen.
+
+Ausgewertet werden EDID1.4 Continuous Frequency und Display Range Limits,
+HDMI-Forum-VRR-Intervalle in VSDB/SCDB sowie DisplayID2 Dynamic Video Timing
+Range und Adaptive-Sync-Bloecke. Bereich, Pixeltakt, horizontale Frequenz und
+aktuelles progressives Timing muessen zusammenpassen. Unvollstaendige,
+widerspruechliche oder ungueltige Daten erzeugen keine VRR-Freigabe.
+Ein EDID-Bereich alleine beweist weder Quellenfaehigkeit noch aktive Ausgabe.
+
+Der native Pfad verlangt C67D, einen gebundenen Core, ein tatsaechliches
+Scanoutbild, einen passenden vollstaendigen Link und eine echte Head-IRQ-
+Quelle. HDMI benoetigt den HDMI-Forum-Bereich und den EMP-Pfad. DisplayPort
+benoetigt einen direkten SST-Link, passende Timingdaten und gemeldetes
+Ignore-MSA-Timing in den gelesenen DPCD-Faehigkeiten. DP_ENABLE_VRR fuer
+proprietaere G-Sync-Authentifizierung wird nicht als Adaptive-Sync benutzt.
+
+Das aktuelle Timing bestimmt die maximal moegliche Bildrate; VRR verlaengert
+nur die vertikale Austastung. Hardware-VTotal, 22-Bit-Timeout und Empfaenger-
+Schranken begrenzen das untere Ende. Die gemeldeten Grenzen sind diese
+zugelassene Schnittmenge, nicht ungeprueft der groesste EDID-Bereich.
+LFC wird nicht angeboten. Die zeitgesteuerte Wiederholung des gehaltenen
+Bildes ist keine LFC-Unterstuetzung und erzeugt keinen erfundenen Frame.
+
+Umschalten und Fehler
+--------------------
+Einschalten: DP-Downspread-Register0x107 lesen, Bit7 unter Erhalt aller anderen
+Bits schreiben und ruecklesen beziehungsweise HDMI-VRR-EMP aktivieren;
+VRR_DISPLAY_INFO hinzufuegen, CONFIG_VRR_PSTATE initial/active bestaetigen,
+LWSV-Supervisor armen, Core auf One-Shot stellen und Supervisor disarmen.
+Erst nach allen RM-/Link-/Core-Bestaetigungen ist der Zustand active.
+
+Ausschalten: VRR_DISPLAY_INFO entfernen, Supervisor armen, ELV loeschen,
+Core auf Continuous stellen, Supervisor disarmen, PState deaktivieren und
+DP-Bit ruecklesen beziehungsweise HDMI-End-EMP senden. Erst die vollstaendige
+Bestaetigung gibt fixed beziehungsweise faulted frei. GET-Fortschritt allein
+ist keine Core-Abnahme; Notifier und zugehoeriger Point muessen passen.
+
+Eine Anforderung hat hoechstens drei Sekunden. Bei einer bestaetigten
+Firmware-/AUX-Ablehnung des Einschaltens oder einem inzwischen alten
+Empfaengerstand folgt genau ein begrenzter Ruecknahmeversuch mit gehaltenem
+Modus/Link. Bereits gesendete Antworten werden zuerst exakt konsumiert und
+bestaetigt; ungesendete Arbeit darf verworfen werden. Ein eventuell gearmter
+Supervisor wird zuerst disarmt. Die Ruecknahme darf weitere drei Sekunden
+beanspruchen. Unklare DMA-/Transportzustaende, Timeout oder erneut fehlerhafte
+Ruecknahme gehen in die vorhandene Quarantaene; sie melden keinen festen
+Hardwarezustand vor. Aktive Bilder und BO-Referenzen bleiben korrekt gehalten.
+
+Flackerhinweis, Linkverlust und ungueltiges Timing sperren erneutes VRR.
+Nach drei aufeinanderfolgenden Messausreissern oder fehlender/alter IRQ-Zeit
+wird die feste Ausgabe angefordert. Ein einzelnes verspaetetes IRQ-Sample ist
+kein Beweis fuer einen Linkfehler. Eine Nutzerfreigabe loest die Sperre erst
+nach kontrollierter Rueckkehr; es gibt keine automatische Enable-Fehlschleife.
+
+Bildplanung und Desktop
+----------------------
+R4GFX-Swapchains entfernen die alte feste Phasenprognose nur bei bestaetigtem
+active-Zustand mit passendem OutputTarget, Quellenfaehigkeit und Core-/RM-
+Beleg. Fertige Bilder koennen dann ohne nominales Refreshraster eingereicht
+werden. NVIDIA begrenzt die wirkliche Einreichung anhand der letzten Head-
+Beobachtung, minimaler/maximaler Periodendauer und gemeldeter Aenderungslimits.
+Zu fruehe Bilder warten; bei fehlender Arbeit bleibt das aktuelle Bild fuer
+den Hardware-Timeout erhalten. Verpasste oder ruecklaeufige Zeit wird nicht
+durch synthetische Visibility, VBlank oder Fence-Abschluesse ersetzt.
+Die normale FIFO/Latest-Ready-Auswahl und alle Ressourcenlebenszeiten bleiben
+fuer direkte und komponierte Bilder gemeinsam wirksam.
+
+Der Desktop erneuert seine Anforderung spaetestens im 500-ms-Raster; der
+Kernel vergibt eine 1,5-Sekunden-Lease an genau einen Programmbesitzer.
+Unveraenderte Configure-Erneuerungen behalten die Anforderungsnummer. Pause,
+Programmende und Ablauf fordern off an. Das ist keine Hardwarebestaetigung.
+Neue sichtbare GUI-/Konsoleninhalte bestimmen die Animation: drei Aktualisierungen
+mit hoechstens 200 ms Abstand, mit 500 ms Auslauf. Mauszeiger, Uhr und blosse
+Invalidierung zaehlen nicht. Vollbild verlangt den aktiven Inhalt ueber dem
+ganzen logischen Ausgang; offene Menues/Dialoge verhindern diese Einstufung.
+
+Capture und Modus-/Farbwechsel fordern feste Ausgabe an. Neue Kopier-/Direct-
+Arbeit wird fuer den Wechsel angehalten; nur ungesendete fertige Bilder duerfen
+verworfen werden. Bereits eingereichte Arbeit wird fertig abgearbeitet.
+HDR behaelt Format, Metadaten und Pixeltakt; HDMI-N/CTS, DP-Audiotransport und
+HDA-Takt werden durch VRR nicht umgestellt. Diese Kombinationszulassung ist
+softwareseitig implementiert; reale HDR-/Audiostabilitaet bleibt Hardwarearbeit.
+
+Mehrere aktive Heads bleiben derzeit gemeinsam bei festem Refresh. NVIDIA570
+benoetigt fuer gemischte feste/variable Heads weitere RM-Flip-Traps; diese
+werden nicht vorgetaeuscht. Das independent-heads-Bit ist deshalb null.
+Native HDMI-TMDS und direkter DP-SST sind der aktuelle Umfang; MST/DSC/FRL
+werden aus VRR-Daten nicht abgeleitet. Andere Treiber erhalten ohne die
+optionalen Faehigkeiten keine automatische VRR-Annahme.
+
+Gemeinsamer Vertrag und Diagnose
+-------------------------------
+R4DRAW Revision28 hat 98 Slots/800 Bytes. Die neuen optionalen Slots96/97
+heissen gfx_output_refresh und gfx_refresh_request. GfxDriverOutputApi waechst
+von128 auf144 Bytes; refresh_publish/read folgen am Ende. Alte Praefixe bleiben
+gueltig. SDK C/Zig lassen Ausgabepuffer bei fehlenden Slots/Fehlern unveraendert.
+
+GfxOutputRefresh272 enthaelt OutputTarget48, Capabilities72, Status64 und
+Measure80. GfxRefreshRequest88 traegt OutputTarget, Operation, Policy, Szene,
+Sequenz und Kerneldeadline. Configure, Release, Flicker und ClearFault sind
+getrennte Operationen. Konfiguration/Polling gehoeren in den vorhandenen
+Device-Worker; der Kernel fuehrt dafuer kein MMIO und keine Treiberpolicy aus.
+
+Messungen stammen ausschliesslich aus aufeinanderfolgenden Hardware-Frame-
+Sequenzen, 16-Bit-Framezaehler und monotoner IRQ-Zeit. Ein Ring haelt maximal
+32 Perioden mit letztem/kleinstem/groesstem/Mittelwert und daraus berechneten
+mHz. Luecken setzen das Messfenster zurueck; identische Samples zaehlen nicht
+erneut. Die vollstaendige Anschlusskennung verhindert alte Messwerte/Sperren
+nach einem Wiederanschluss mit zufaellig gleicher Displaygeneration.
+Status-/Messwertupdates aendern keine Topologierevision.
+
+DISPLAYD /RECEIVERS zeigt Faehigkeit/zugelassenen Bereich, nominalen Modus,
+Zustand/Grund/Anforderung/Core-/RM-Belege und echte Messwerte getrennt. Ein
+leeres Messfenster bleibt unknown. Appearance zeigt dieselben getrennten
+Informationen. Die IRQ-Zeit ist eine CPU-Beobachtung; sie ersetzt weder eine
+Messung am Panel noch eine Aussage ueber dessen Reaktionszeit.
+
+Quellen und Abnahme
+------------------
+Originale, Lizenzen und SHA256: ExFiles/Reference/GFX/0.79.26/Sources.json und
+ExFiles/Reference/GFX/Nvidia/0.79.26/Sources.json. NVIDIA570.144 ist auf
+8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f fixiert. Die unabhaengig aus den
+Original-C-Headern erzeugten 15 Steuervektoren liegen unter Nvidia/0.79.26/Wire
+und als 864-Byte-Testfixture im NVIDIA-Repository. Der Dateihash steht im
+Softwarebeleg. Linux dient als Referenz; GPL-Implementierung wurde nicht in
+den Produktcode uebernommen.
+
+Grundlagen: https://docs.kernel.org/gpu/drm-kms.html#variable-refresh-properties
+https://learn.microsoft.com/en-us/windows/win32/direct3ddxgi/variable-refresh-rate-displays
+https://github.com/NVIDIA/open-gpu-kernel-modules/tree/570.144
+https://github.com/gjasny/v4l-utils/tree/master/utils/edid-decode
+https://vesa.org/wp-content/uploads/2023/11/VESA-October-2023-Seoul-Workshop-Presentations.pdf
+
+Vorhandene Besitzerpruefungen decken Parser-/Bereichsgrenzen, Policy/Fristen,
+echte IRQ-Beobachtungen, ABI-Praefixe, kopierte Lease-Lebenszeit, Einstellungen,
+Swapchain-Umstellung und die komplette modellierte Geraetekette ab. Hinzu
+kommt genau ein bestehender SMP4-Desktop-Fallbacklauf. Es gibt keine neue
+permanente Testgruppe und keine aus Softwaretests abgeleitete Hardwarefreigabe.

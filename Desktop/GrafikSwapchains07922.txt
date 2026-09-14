@@ -1,0 +1,110 @@
+﻿R4OS 0.79.22 - Swapchains und direkte Praesentation
+================================================
+
+Softwarestand: Kernel 0.1.172, R4GFX 0.1.9 / DEVICE_V1:8, R4DESK 0.1.53,
+NVIDIA 0.1.114, DISPLAYD 0.1.27. R4NV bleibt 0.1.5. R4DRAW22 ergaenzt die
+Slots85/86 fuer Ausgabefaehigkeiten und exakte Present-Fence-Rueckmeldung.
+Belege: GrafikSwapchains07922.json; lokale Archive GFX/0.79.22 und
+GFX/Nvidia/0.79.22. Physische Freigabe: OFFEN in OssiGPU.txt /0.79.22.
+
+Vertrag und Lebensdauer
+----------------------
+DEVICE_V1 fuehrt bis zu vier Swapchains pro Device mit je zwei oder drei
+caller-eigenen Bildern. Acquire liefert Generation, monotone Seriennummer
+und Bildidentitaet; Present nimmt einen optionalen Renderjob und die
+gewuenschte Ausgabeart an. Poll meldet begrenzt alle Bildzustaende; Release
+verlangt sowohl logischen Abschluss als auch das Ende aller Verbraucher.
+Producer-/Renderbindung und Scanout-/Kopierbindung sind getrennte Pins.
+
+Resize invalidiert die alte Generation und wechselt erst nach vollstaendigem
+Retirement zum neuen Pool. Eine falsche Generation ist stale; verdeckte
+Ausgaben sind occluded, geaenderte Geometrien suboptimal, verlorene Backends
+lost. Close, Resize und Fehler laufen ueber denselben begrenzten Abbau.
+Ein fertiger Auftrag, Timeout, Abbruch oder Producerende beweist niemals
+das physische Ende eines GPU-Zugriffs. Unquiesced Ressourcen bleiben gehalten.
+
+FIFO ordnet nach Present-Aufruf, nicht nach Acquire-Reihenfolge. Latest
+verwirft nur noch nicht abgegebene aeltere Bilder; deren laufende Producer
+werden vor Freigabe abgewartet. NVIDIA bietet FIFO und Latest an; jeder
+tatsaechliche Window-Flip bleibt synchronisiert. Immediate wird dort
+abgelehnt. bootfb/DISPBLIT/Virtio bieten softwareseitige Auswahlpolitiken,
+aber weder FIFO noch ein CPU-Timeout erfinden VSync oder Sichtbarkeit.
+Eine geforderte VSync-Garantie wird ohne reale Ausgabefaehigkeit abgelehnt.
+
+Frameplanung und Zeitbasis
+--------------------------
+Die Planung verwendet das gemeldete Modusintervall, eine echte beobachtete
+Headphase und die begrenzte geglaettete Renderdauer. next_start_ns ist eine
+Empfehlung fuer den normalen Eventwait; kein globaler Frame-Wait. Hoechstens
+der konfigurierte Pool wird vorproduziert. Ohne echte Phase bleibt die
+gewaehlte VBlank-Zeit unbekannt. Der Desktop arbeitet mit mehreren privaten
+Ausgangsbildern und konsumiert exakte Fence-Rueckmeldungen in Reihenfolge.
+
+Input bezeichnet den zuletzt im Desktop beobachteten Eingabezeitpunkt,
+nicht den Start des Renderers oder einen Hardware-Eingabetimestamp. Null
+bedeutet unbekannt/keine neue Eingabe. Acquire, Queued, Renderende, geplante
+VBlank-Auswahl, Submit, Kopierende, Sichtbarkeit und Freigabe sind getrennt.
+CPU-Nanosekunden und GPU-Notifierzeit werden nie voneinander subtrahiert.
+DISPLAYD /STATS zeigt Faehigkeiten, tatsaechlichen Pfad und echte Beobachtung.
+DisplayPresentationStats.released_ns gehoert zum vorherigen Bild des Flips;
+SwapchainFrameStatus.released_ns zum Ende der Zugriffe auf das eigene Bild.
+Die gemeinsame Historie haelt 32 exakte Present-Fences im Displaybesitzer.
+
+Direkte Ausgabe und Rueckweg
+---------------------------
+Der gemeinsame Pfad prueft native Backend-/Speichergeneration, lineares
+XRGB, Scanout-Usage, ausgerichteten Pitch, vollstaendige Bildgeometrie,
+Farbe/Rotation und konkurrierende Leser. Opaque/exklusiv, Fenster, Cursor,
+Capture und Menues gehen in dieselbe Entscheidung fuer Plan und Submit ein.
+Overlay-Geometrie wird validiert; mangels implementierter Plane-Submission
+wird derzeit keine Overlay-Ausgabe ausgewaehlt. Keine fingierte Faehigkeit.
+
+source_create_native_scanout fordert linearen nativen Speicher mit Usage60.
+NVIDIA reserviert dafuer einen von RM bestaetigten zusammenhaengenden
+physischen Bereich und bindet ihn mit einem eigenen Display-DMA-Kontext.
+Queueoperation7 behaelt die Quelle waehrend der gesamten Scanoutbenutzung.
+Die auf112 Byte erweiterte GfxDriverQueueApi ergaenzt retain_scanout,
+begin_scanout und scanout_retire_requested; alter88-Byte-Praefix/Wire1 gilt.
+Die Setupreferenz und unabhaengige Displaybenutzung sind vollstaendig
+read-only; neue BO-Schreiber bleiben ausgeschlossen. Es gibt keine CPUmap.
+
+Window BEGUN uebergibt die Lebensdauer an die Scanoutphase. Die logische
+Fence kann abgeschlossen sein, waehrend device_active/resources_held gesetzt
+bleiben. Weitere unabhaengige Queueauftraege duerfen schon laufen. Erst
+FINISHED, Entfernung des DMA-Eintrags und bestaetigter RAMHT-Upload erlauben
+die abschliessende Freigabe. Ohne Head-IRQ kann BEGUN eine reale Benutzung
+belegen, aber keine Sichtbarkeit melden. Hotplug behaelt diese Benutzung
+bis zum bestaetigten Detach. Deviceverlust ohne Quieszenz behaelt Speicher.
+
+Ein aktives direktes Bild hat keine Freigabefrist. Bei Close/Resize oder
+einem angeforderten privaten Bild kopiert CE den vollstaendigen Inhalt in
+einen FINISHED-geprueften privaten Scanout. Der normale Window-Flip aktiviert
+ihn atomar; die direkte Quelle bleibt bis zu ihrem FINISHED und DMA-Abbau
+erhalten. Modeset wartet vor dem Uebernehmen alter/neuer Bildgruppen auf
+diesen Rueckweg. Ein unveraendertes sichtbares Bild erzwingt im Desktop
+keine kurze Pollschleife und keinen neuen Renderauftrag.
+
+Der Desktop komponiert weiterhin seine vollstaendige Szene auf der GPU.
+Bei Zulassung wird dieses Ausgangsbild selbst gescannt: die bisherige
+abschliessende Vollbild-CE-Kopie entfaellt. Dies ist noch kein direkter
+Scanout einer beliebigen Anwendung ohne Desktopkomposition. Bei Fenstern,
+Softwarecursor, Menues oder Capture bleibt der gemeinsame Kopier-/Flipweg.
+Faehigkeits-/Allokationsausfall erlaubt einen normalen nativen Ausgang oder
+die vollstaendige Software-Rekonstruktion ueber bootfb/DISPBLIT/Virtio.
+
+Gezielte Pruefung
+----------------
+Vorhandene Gruppen: Kernel display-test55, R4GFX8, Desktop render-test77,
+NVIDIA unit-test51. Kein neues Gate; Testinventar743. Die NVIDIA-Pruefung
+fuehrt den wirklichen Device-/DMA-/Windowcode mit getrennten modellierten
+CE-, BEGUN-, IRQ- und FINISHED-Beobachtungen aus. Zwei volle direkte Bilder
+und der CE-Rueckweg werden pixelgenau sowie auf Producerende/Referenzen
+geprueft. Das Modell ersetzt weder GPUhardware noch SM86-ISA-Ausfuehrung.
+C-Praefixe und Wrapper kompilieren fuer x86_64 Linux und Windows.
+
+Zwei kurze SMP4-Gastlaeufe (Software und Virtio) verwenden den bestehenden
+window-idle-Smoke mit DISPLAYD /SWAPCHAIN: echte DEVICE_V1 CPUausgabe,
+begrenzter Pool, Policyauswahl, unbekannte Sichtbarkeit, VSync-Ablehnung,
+Resize/Stale und kompletter Cleanup. Fenstergeometrie, WINSVC-Neustart,
+Desktoprekonstruktion und gepruefter Fehlerfallback bleiben integriert.
+Physische Bildabnahme, Tearing und Latenz sind ausschliesslich Nacharbeit.

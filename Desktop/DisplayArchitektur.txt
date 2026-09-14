@@ -5,8 +5,8 @@ Layers
 ------
 
 The native graphics architecture is tracked in GrafikZielbild079.txt and
-GrafikRoadmap079.txt. Software integration through 0.79.20 is described in
-GrafikKomposition07920.txt/.json. Physical NVIDIA qualification remains open
+GrafikRoadmap079.txt. Software integration through 0.79.21 is described in
+GrafikKomposition07920 and GrafikPrimitive07921 (.txt/.json). Physical NVIDIA qualification remains open
 in ExFiles/Reports/OssiGPU.txt; implemented capabilities are not hardware proof.
 
 - Boot display: early and fatal output on the Limine framebuffer.
@@ -222,39 +222,36 @@ hits/loads and terminal full/incremental refreshes, parsed/skipped bytes and
 changed/skipped rows; the cached glyph is also checked against an exact pixel
 hash.
 
-Backend inventory and GPU composition (0.79.20)
-----------------------------------------------
+Backend inventory and primitive composition (0.79.21)
+---------------------------------------------------
 
-Limine bootfb remains the early/fatal output and generic software fallback.
-DISPBLIT is an optional synchronous SIMD framebuffer copier. VirtioGpu owns
-an explicit QEMU 2D device and scanout completion. NVIDIA owns its MMIO/GSP
-runtime, queues, native allocations and private scanout images; common BO,
-queue, mode, cursor and output owners serialize their public lifetimes.
-NVIDIA hardware activation still requires its existing qualification policy.
+Limine bootfb remains early/fatal output and the generic software fallback.
+DISPBLIT copies software pixels; VirtioGpu owns its QEMU scanout. NVIDIA
+owns native GPU work, allocations and private scanouts behind common owners.
+Physical NVIDIA activation still requires the existing qualification policy.
 
-The productive Desktop selects GPU composition when R4GFX DEVICE_V1 reports
-native render, row-copy and image-present capabilities. The same scene
-painters then produce retained premultiplied ARGB layers. Changed rectangles
-upload once to resident textures, and ordered/scissored GPU draws update a
-reusable XRGB target. A short preparation thread handles cold allocations;
-normal frames submit and poll bounded jobs in the event loop. Input and
-future damage remain responsive while a complete capture is retained.
+Desktop captures the same scene as bounded fills, glyphs and image quads.
+Without RemoteFrame readers it allocates no CPU-painted layer pixels.
+Content-keyed ARGB atlases keep converted glyphs, masks and image sources;
+CPU curve/shadow rasterization stays bounded by existing damage/shape limits.
+R4FONT owns glyphs; R4IMG owns decoding. Cold or dirty sources upload through
+a fixed 1 MB staging image; unchanged sources remain resident. Adjacent
+compatible draws share lists of up to 16 commands without changing order.
 
-DEVICE_V1 revision 6 adds image_present. R4DRAW revision 20 adds common queue
-operation 5 without changing existing payload/table layouts. Its source is
-a complete native XRGB image at the active dimensions; only the driver owns
-the destination scanout. NVIDIA CE copies it to an inactive private image,
-then the existing Window flip supplies the visibility receipt. The queue
-fence only proves device-copy completion; Desktop uses the matching
-DisplayPresentationStats observation for visible-frame statistics.
+DEVICE_V1:7 adds render_submit_list; R4DRAW21 appends one list-submit slot.
+One common queue fence retains the complete source/target pair. NVIDIA
+uploads up to 16 KB of descriptors/vertices and emits one bounded GR stream
+with one completion. The shader/packet cache remains 128 KB; the graph's
+private staging grows to 16 KB while FIFO allocations remain 12 KB.
 
-The CPU present contract above and its compatibility slots remain available
-for bootfb, DISPBLIT, Virtio and fallback. Native image presentation avoids
-the final CPU fullscreen copy, but still performs a GPU fullscreen CE copy.
-Unsupported drawing remains in the affected software layer. Device failure
-requires complete CPU reconstruction; partial stale CPU scenes are rejected.
-Detailed budgets, lifecycle, proof limits and reproduction:
-GrafikKomposition07920.txt/.json.
+The existing image_present path copies the final native XRGB image into
+an inactive scanout. Its queue fence proves CE completion; the independent
+Window/BEGUN receipt proves visibility. A final GPU fullscreen copy remains.
+Failure discards the capture and reconstructs the complete software scene;
+unretired GPU resources remain owned. Without a qualifying native provider,
+the software desktop continues through bootfb, DISPBLIT or Virtio.
+Detailed budgets, sampling semantics and proof limits:
+GrafikPrimitive07921.txt/.json; preceding composition ownership in /07920.
 
 The remote XRGB32 shadow is a readback product, not part of local display
 presentation. R4DESK slot 56 accepts the same bounded region generation, but

@@ -1,0 +1,126 @@
+﻿R4OS 0.79.21 - Beschleunigte Desktop-Zeichenoperationen
+====================================================
+
+Softwarestand: Kernel 0.1.171, R4GFX 0.1.8 (DEVICE_V1:7), R4DESK 0.1.52,
+NVIDIA 0.1.113. R4NV 0.1.5 und dessen Laufzeitvertrag bleiben erhalten;
+sein einkompilierter Renderencoder und seine Hostreferenz sind erweitert.
+R4DRAW21 ergaenzt Slot84; alle bisherigen Tabellenslots bleiben erhalten.
+Nachweise: GrafikPrimitive07921.json und lokale Archive unter
+ExFiles/Reference/GFX/0.79.21 sowie GFX/Nvidia/0.79.21.
+
+Zeichenweg und Besitzer
+----------------------
+Der Desktop zeichnet dieselbe geordnete Szene wie bisher. Im nativen Pfad
+nimmt SceneBuffer Fuellungen, Bildrechtecke und Glyphen als Primitive auf,
+ohne zuvor komplette Ebenen auf der CPU zu malen. R4DRAW-/Canvas-Verbraucher
+brauchen weder NVIDIA-Code noch einen anderen Framevertrag. Kurven, Linien,
+Kantenglaettung und Schatten verwenden den bestehenden, nach Damage und
+Blur-Rand begrenzten CPU-Maskenrasterer; seine Alpha8-Ausgabe wird ebenfalls
+zwischengespeichert und auf der GPU in die Ebene gemischt. Die vorhandenen
+Pixel-, Snapshot-, Clip- und Z-Order-Besitzer bleiben massgeblich.
+
+R4FONT liefert weiterhin Glyphenbits und Fontrevisionen. Die Atlasidentitaet
+enthaelt Font-ID, Revision, Codepoint, DPI, Format und Farben. Der aktuelle
+logische Zeichenweg benutzt 96 DPI; die Ausgabe-/HiDPI-Policy folgt in /24.
+Geaenderte Revisionen/DPI werden bereits als andere Quellen behandelt.
+R4IMG dekodiert unveraendert im Userland. Weder der GPUtreiber noch die
+gemeinsame Queue dekodieren Bilddateien oder besitzen Fontdateien.
+
+Quelle, Atlas und Speicher
+-------------------------
+primitive_image.zig konsumiert geliehene Quellen noch waehrend des Paints.
+Inhaltskeys ignorieren Zeilenpadding und enthalten die Palette. XRGB,
+Indexed8, gerade ARGB-Alphaquellen, Alpha8 und Glyphen werden bei Cachemiss
+einmal pro Quellpixel in praemultipliziertes ARGB umgesetzt. Wiederholte
+Zielpixel entstehen beim GPU-Sampling; es gibt keine CPU-Expansion pro
+Zielpixel. Farben gehoeren bei Masken/Glyphen zum Key. Es handelt sich um
+farbige ARGB-Atlanten, nicht um einen neuen R8-Tint- oder Palettenshader.
+
+Ein Frame hat hoechstens 8192 Primitive. Der Quellcache haelt 2048 Eintraege
+in hoechstens acht 512x512-Atlastexturen und 24 Einzelbildtexturen. Quellen
+bis 128x128 werden gepackt; groessere erhalten eine eigene Textur. 64 MB
+begrenzen CPU-Pixel plus Eintragsmetadaten. Ein erlaubtes Quellformat/-mass
+garantiert keine erfolgreiche Anlage: Metadaten und andere aktive Quellen
+muessen ebenfalls ins Budget passen. Nur im aktuellen Frame unbenutzte
+Seiten duerfen verdraengt werden. Geaenderte Inhalte erhalten neue monotone
+Generationen; eine alte Uploadbestaetigung kann keinen neuen Damage loeschen.
+
+Das vorhandene 256-MB-GPU-Budget umfasst Ebenen, Ausgang, Quellen und Staging
+einschliesslich Allokationsgranularitaet. Ein fester 512x512-ARGB-SYSTEMpuffer
+(1 MB) transportiert kalte Texturen oder geaenderte Teilrechtecke in Kacheln.
+Die naechste CPU-Mutation wartet auf das physische Ende der vorherigen
+CE-Lesebenutzung. Warme, unveraenderte Quellen erzeugen keine Konvertierung,
+Allokation oder Upload. Ihr Inhaltskey wird weiterhin auf der CPU geprueft.
+
+Gebundelte Auftraege
+-------------------
+Benachbarte Primitive mit derselben Quelle, Zielebene, Pipeline und Sampler
+werden in ihrer Zeichenreihenfolge zu bis zu 16 Draws zusammengefasst.
+DEVICE_V1.render_submit_list (Slot19) uebernimmt den begrenzten Aufrufwert.
+Die gemeinsame Queueoperation6 besitzt eine eigene R4DRAW-Submitfunktion:
+GfxRenderList enthaelt 16 feste Commandplaetze (1296 Byte), davon 1..16 aktiv.
+Vor Annahme werden die gesamte Listenstruktur, der gemeinsame Zustand und
+das BO-Paar validiert; die Queue besitzt danach eine unveraenderliche Kopie.
+Ein dort zurueckgewiesener Auftrag hat weder Teilauftrag noch Fence. Der
+Treiber prueft alle nativen Geometrien vor dem ersten CE-/GR-Zugriff. Ein
+dabei abgelehnter Auftrag beendet seine gemeinsame Fence mit Fehler.
+
+Eine Fence behaelt genau ein Quell-/Ziel-BO-Paar. Abhaengigkeiten, Abbruch,
+Producerende und Deviceverlust verwenden den bestehenden Queuelebenszyklus.
+Der Treiber liest die unveraenderliche Liste ueber den optionalen Callback
+read_render_list am Offset80 der 88-Byte-GfxDriverQueueApi; Wireversion1 und
+alte Praefixe bleiben gueltig. Seine Faehigkeit wird erst nach komplettem
+Engine-/Speicheraufbau angeboten. Aeltere Provider behalten Einzeldraws.
+
+NVIDIA C797 bindet die gemeinsame Shader-/Textur-/Zielkonfiguration einmal.
+Jedes Rechteck besitzt eigene Vertices, Scissor und Konstanten im Paket.
+16 gefilterte Draws passen mit 885 Woertern inklusive einer privaten
+Abschlussmeldung in den unveraenderten 4-KB-GR-Befehlspuffer. Ein CE-Upload
+transportiert maximal 16 KB Paketdaten. Die private Graph-Staginganlage ist
+daher 16 statt 12 KB gross; FIFO-Anlagen behalten 12 KB. Shader/Paket-VRAM
+bleibt fest auf zweimal 64 KB begrenzt. Paketwiederverwendung verlangt die
+gesamte gleiche Drawliste und bestaetigte CE-Fertigstellung.
+
+Fehler, Fallback und Rastersemantik
+---------------------------------
+Capturefehler verwerfen die Framegeneration. Die GPU verarbeitet nur eine
+vollstaendig erfasste Szene; fehlerabhaengige Nachfolger koennen kein Present
+erfolgreich publizieren. Laufende Jobs behalten ihre Quellen bis zum echten
+Retirement. Ohne native Faehigkeiten oder nach Fehler wird die vollstaendige
+Szene ueber bootfb/DISPBLIT/Virtio rekonstruiert. RemoteFrame-Leser erhalten
+bei Zuschaltung eine vollstaendige CPU-Ebene; ohne Leser entfällt dieses
+zusätzliche CPU-Malen. Ein Ausgabeereignis allein beweist keine Sichtbarkeit.
+
+Ganzzahlige Nearest-Abbildungen und Glyphkanten behalten ihre Position.
+Einzelne Alpha-Konvertierung/Mischung darf gegen den alten Ganzzahlpfad um
+1 Kanal-LSB abweichen; mehrere Maskenmischungen werden im konkreten
+Referenzfall mit maximal 3 LSB verglichen. Clipping und unberuehrte Pixel
+haben keine geometrische Toleranz. Fuer C797-Bilinear-/sRGB-Faelle gelten
+die bestehenden individuellen Referenzgrenzen von 0..3 LSB.
+
+Native Nearest-Skalierung vollstaendiger Quellen sampelt Pixelzentren.
+Der alte CPU-Gastpfad sampelt linke/obere Pixelkanten. Bei nichtganzzahligen
+Verhaeltnissen koennen sich ausgewaehlte Quelltexel je Achse um eins
+unterscheiden; das ist keine pauschale Farbtoleranz. Transportierte Teilbilder
+mit solchen Verhaeltnissen bleiben wegen ihrer gemeinsamen Blockgrenzen auf
+128x128-CPU-Rasterkacheln mit exakt alter Abbildung. Ganzzahlige Teilbilder
+werden direkt gesampelt. Text und unskalierte Masken betrifft dies nicht.
+
+Gezielter Nachweis
+-----------------
+Vorhandene Gruppen: Desktop render-test 77; Kernel display-test 55;
+R4GFX 8; R4NV 2; NVIDIA unit-test 51. Keine neue wiederkehrende Testgruppe.
+Desktop vergleicht Fuellungen, Glyphen, Indexed8/Alpha/ARGB, Kurven, Schatten,
+16er-Batches und eine grosse Bildquelle mit echter R4GFX-CPU-Ausfuehrung im
+GPU-Auftragsmodell. Cachemiss/Hit, Budget, Revision/DPI, kleine Aenderung,
+Warm-Upload=0 und verworfener Frame werden gezielt geprueft.
+Die NVIDIA-Ownerpruefung partitioniert eine gefilterte Alpha-Referenz in
+16 Draws und liest die wirklichen kodierten Methoden/Paketdaten. Eine Fence,
+Producerende und Fehlerretention sind nachgewiesen. Keine SM86-ISA-Ausfuehrung.
+Alte ABI-Praefixe werden gegen den Ausgangsstand verglichen; generiertes C
+und neue C-Aufrufwrapper kompilieren fuer x86_64 Linux und Windows.
+Ein kurzer bestehender SMP4-window-idle-Gastlauf prueft Integration/Fallback.
+
+Physische Bildqualitaet, Durchsatz, Framelatenz und reale Fehlerretention
+bleiben OFFEN: ExFiles/Reports/OssiGPU.txt /0.79.21. Kein OssiPC-Kontakt.
+Naechster Softwarepunkt: /22 Swapchains und direkte Praesentation.

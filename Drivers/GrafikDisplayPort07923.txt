@@ -1,0 +1,101 @@
+﻿R4OS 0.79.23 - DisplayPort SST und Audio
+======================================
+
+Softwarestand: NVIDIA 0.1.115, HDA 0.3.19, AUDSVC 0.1.12, Kernel 0.1.173,
+R4DESK 0.1.54, DISPLAYD 0.1.28. R4GFX.R4L bleibt bytegleich 0.1.9;
+sein statisch importierter ELD-Helfer kennt jetzt beide Displaytransporte.
+Belege: GrafikDisplayPort07923.json und ExFiles/Reference/GFX/0.79.23
+sowie GFX/Nvidia/0.79.23. Physische Abnahme: OFFEN in OssiGPU.txt /23.
+
+Linkbesitz und Zulassung
+-----------------------
+Der NVIDIA-Treiber besitzt den DP-Link innerhalb derselben Displaytransaktion
+wie HDMI. Core, Window, Speicher, Modusjobs, VBlank, Pageflip und Retirement
+werden wiederverwendet. R4GFX besitzt EDID/ELD; HDA besitzt Codec/DIP und PCM;
+AUDSVC besitzt die Ausgabewahl. Der Kernel ergaenzt nur die gemeinsame DVI-
+Anschlusskennung. Keine neue Platform-API, Tabelle oder Treiber-Wireversion.
+Die einzigen Contract-Ergaenzungen sind DVI-Kind6 und DP-Auto-Audiogrund8.
+
+Zugelassen sind bestaetigte externe statische SORs mit DP_A/DP_B-Protokoll,
+vollstaendiger digitaler RGB-EDID und einem progressiven RGB8-SST-Modus.
+Die vorhandene AUX-I2C-Akquisition und die generationstreue Empfaengerliste
+liefern dieselben Daten wie fuer den vorhandenen Modus-/Hotplugbesitzer.
+Der native Einstieg bleibt an die vorhandene, eng gepruefte GSP-/GPU- und
+Boothead-Zulassung gebunden. Dieser Schritt erweitert keinen GPU-Support
+allein aufgrund einer NVIDIA-PCIkennung und erzeugt keinen zweiten Head.
+
+GET_CAPS begrenzt die Quelle; DPCD-Basis und ggf. Extended Receiver Caps
+begrenzen den Empfaenger. Kandidaten sind 1/2/4 Lanes und RBR/HBR/HBR2/HBR3,
+soweit Quelle, Empfaenger und Bandbreite sie erlauben. Ohne TPS4 wird HBR3
+nicht beansprucht. Vorhandene LTTPR, eDP, MST, UHBR/128b132b, FEC/DSC und
+USB-C-Tunnel werden hier nicht zugelassen; weitere Topologie gehoert /27.
+Ein explizites AUX-NACK im optionalen LTTPR-Bereich bedeutet kein Repeater;
+ein Timeout ist niemals ein Nachweis fuer dessen Abwesenheit.
+
+Die D0-Schaltung erhaelt fremde Powerbits und wartet nichtblockierend 1 ms.
+GSP fuehrt das echte generationsspezifische PHY-Training einschliesslich
+Clock-Recovery und Channel-Equalization aus. Der Treiber verwendet TRAIN_PHY_
+REPEATER fuer den Sink, ohne Skip-/Fake-Training. Anschliessend muessen die
+aus DPCD gelesene Linkkonfiguration, CR/EQ/Symbol-Lock aller genutzten Lanes
+und Interlane-Alignment passen. Erst danach folgen SST-Stream und Scanout.
+
+Jede Kandidatenrate wird gegen RGB8-Payload, Raster und die NVIDIA-TU64-
+Watermark-/Blankinggrenzen gerechnet. 1000/1001-Pixeltakte werden konservativ
+aufgerundet. Es gibt maximal zwoelf passende Kandidaten; fehlerhaftes Training
+oder abweichendes Readback geht begrenzt zum naechsten. Ein RM BUSY/NOT_READY
+mit gueltiger Wartezeit oder AUX-DEFER erlaubt maximal drei Anfragen pro
+Operation. Fristen bleiben beim bestehenden Worker; keine Sleeps im Owner.
+Ein ACK darf die Transaktion erst nach erfolgreichem Ringabschluss bewegen.
+
+Audio, Anschlussarten und Wiederaufnahme
+---------------------------------------
+DP-SST verwendet dieselbe ELD-Publikation und HDA-Zuordnung wie HDMI, inklusive
+Quellgeneration, Empfaengersequenz, Port-ID und Device-Entry0. DP benoetigt
+keinen HDMI-VSDB. Die Daten muessen Stereo-LPCM48kHz/S16LE erlauben; der Link
+muss genuegend Audio-Blanking tragen. Ein Ausfall dieses Audioteils laesst
+den bereits bestaetigten Videomodus weiterlaufen.
+
+Der DP-Besitzer mutet, deaktiviert den DP-Audiotransport, loescht altes ELD,
+publiziert das neue, aktiviert den Transport und entmutet. Disconnect und
+Moduswechsel invalidieren die Route zuerst; Hotplug wartet auf echte laufende
+Nutzer, Detach und Retirement. DP-IRQ durchlaeuft denselben generationstreuen
+Rueckweg mit erneuter Empfaengeraufnahme, Moduspruefung und Linktraining.
+Ein gestoppter Worker oder Timeout beweist keine DMA-Quieszenz.
+
+HDA prueft die zur ELD-Verbindungsart passende HDMI-/DP-Pinfaehigkeit.
+Das Standard-DP-DIP-Paket beginnt 84 1b 44 01; NVIDIA-Codecs erwarten das
+Headerformat mit beibehaltenem Pruefsummenplatz: 84 1b 44 1c 01. Die Wahl
+erfolgt ueber die Codec-Vendor-ID, nicht ueber Monitorname oder PCIannahme.
+FL/FR, 48kHz/S16LE, Streambesitz und Ressourcenabbau bleiben gemeinsam.
+AUDSVC bevorzugt verfuegbare HDMI-/DP-Senken unter derselben bisherigen
+Display-Policy; eine gespeicherte analoge Praeferenz behaelt Vorrang.
+
+Physische DVI-Ports erscheinen als DVI. DP++ mit aktivem TMDS behaelt die
+physische DP-Anschlussart und benutzt den bestehenden HDMI-/DVI-Transport
+mit den wirklichen EDID-Faehigkeiten. Weder DVI-Audio noch Dock-/USB-C-/MST-
+Support wird aus einer digitalen EDID oder einem erfolgreichen AUX abgeleitet.
+DISPLAYD zeigt Anschlussnamen; native Linkdetails stehen im Bootlog unter
+NVIDIA gsp-dp:, dp-dpcd und dp-lanes (Raten, Lanes, Trainingversuche, TU,
+Watermark, Blanking, Audio48k und echte Abschlussquittung).
+
+Pruefung und Grenzen
+-------------------
+Bestehende Gruppen: NVIDIA unit-test51, Kernel display-test55, R4GFX8 sowie
+HDA- und AUDSVC-Besitzertests. Keine neue Testgruppe; Inventar743. Vierzehn
+unabhaengige C++-Vektoren verwenden originale NVIDIA-Strukturen und den
+unveraenderten originalen SST-Watermark-Funktionskoerper. Der produktive
+Zig-Pfad prueft Layout, Rate/Lanes, Trainingantworten, Rueckstufung, ELD und
+Audiokontrollen dagegen. Die C++-Referenz wird nicht in NVIDIA.R4D eingebaut.
+
+Der vorhandene native Device-Test fuehrt fuer einen modellierten DP-Empfaenger
+Adoption, echten Core-/Windowcode, Moduswechsel, Audiofehler, Pageflip,
+Framepool, Detach, DP-IRQ und Wiederanschluss aus. CE-/Notifierantworten
+bleiben ausdruecklich modelliert. Bestehende HDMI- und Fehlerfaelle bleiben
+gruen. Ein kurzer SMP4-Softwaregast prueft Desktop, Fenster, Dienstneustart
+und vollstaendige Softwarerekonstruktion mit den neuen Artefakten.
+Diese Belege sind keine physische DP-, Ton-, Firmware- oder Bildfreigabe.
+
+Referenzen sind die bereits gepinnten NVIDIA570.144- und Linux7.2.4-Quellen.
+Abgeleitete MIT-Abschnitte behalten ihre Originalhinweise in Code, Modul und
+Image. Linux-HDA-Dateien bleiben reine Protokollreferenzen mit Original-
+hinweisen und GPL im Archiv; Linux-Code wird nicht in HDA.R4D uebernommen.

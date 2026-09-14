@@ -1,0 +1,125 @@
+﻿R4OS 0.79.25 - Farbverwaltung, SDR und HDR
+=======================================
+
+Softwarestand und Nachweise: GrafikFarbe07925.json. Physische Bild-, Pegel-,
+HDR- und Metadatenabnahmen bleiben OFFEN in ExFiles/Reports/OssiGPU.txt /25.
+Ein erfolgreicher Host- oder QEMU-Lauf ist kein NVIDIA-Hardwaretest.
+
+Besitzer und Bildkette
+---------------------
+R4GFX besitzt Farbbeschreibung, ICC/CMM, lineare Komposition, Tone Mapping,
+Gamut Mapping und Ausgabeencoding. R4IMG besitzt Datei-/Profilmetadaten und
+Decoder. Desktop besitzt Bildpolitik, Ausgabeworker und SDR-Aufnahmen;
+Appearance die Einstellungen. WINSVC transportiert die begrenzten Anfragen.
+Kernel und NVIDIA enthalten keine duplizierte Farbmathematik: Der Kernel
+haelt BOs, Auftraege und Generationen; NVIDIA programmiert Bilder und Links.
+
+COLOR_V1 beschreibt Primaries, Transfer, Pegelbereich, Alpha, Praezision,
+Referenzweiss, Spitzen- und Schwarzpegel explizit. Ein normaler unmarkierter
+XRGB/ARGB8-Inhalt bedeutet weiterhin sRGB/BT.709 im vollen Bereich. Ein
+benanntes Farbbild behaelt Beschreibung und gegebenenfalls Profilbesitz bis
+zum Abschluss. Vor Present/Swapchain-Nutzung muss es zur tatsaechlich
+bestaetigten Ausgabe passen; gleiche Rohformate allein reichen nicht.
+
+Die gemeinsame Rechendomaene ist lineares BT.2020-Licht in cd/m2 mit
+vormultipliziertem Alpha. sRGB, PQ und HLG inklusive OOTF, volle/begrenzte
+Pegel und straight/premultiplied/opaque Alpha werden an den Grenzen
+umgerechnet. SDR-Weiss wird beim Einbetten in HDR explizit skaliert. Die
+Ausgabe benutzt eine begrenzte rationale Luminanzkurve und ein Mapping zur
+Neutralachse, danach Transferfunktion, Pegel und geordnetes Dithering.
+
+Desktop verwendet FP16-Arbeitsbilder, CPU-Kacheln von64x64 Pixeln und
+getrennte kodierte Ausgabebilder. Bestehende SDR-UI, Raster und Softwarecursor
+gehen durch dieselbe Komposition. Screenshots und Remoteansicht bekommen
+einen eigenen kanonischen SDR-Zweig, unabhaengig von HDR oder Monitorprofil.
+Sie enthalten keine als sRGB falsch bezeichneten PQ-/HLG-Pixel.
+
+Native Farbe und Ausgabewechsel
+------------------------------
+R4NV Resource-ABI4 enthaelt einen siebten festen SM86-Farbshader. R4GFX
+berechnet dessen Parameter; der Shader fuehrt die passende Farbkonvertierung
+aus. R4DRAW27 transportiert eine kopierte Farbliste im bestehenden Queue-
+und Fencevertrag. Je Liste maximal16 Draws; Parameter liegen in CBuf2.
+Der reproduzierbare Shader hat8192 Codebytes,512 Instruktionen und24 GPRs,
+ohne Scratch-/Stackbedarf. Native ICC-LUT-Ausfuehrung und bilineares Sampling
+kodierter Farbbilder werden damit nicht behauptet; allgemeine Profile laufen
+im vorhandenen CPU-CMM, Farbshaderlisten verwenden Nearest-Sampling.
+
+XR24 und XR30 sind Ausgabebilder; FP16 ist ein Arbeitsformat. Ein farbiger
+Moduswechsel behaelt zwei getrennte BOs: den kanonischen SDR-Schatten fuer
+Rueckkehr und das passend kodierte erste Ausgabebild. Kernelreferenzen und
+Leselizenzen ueberdauern den physischen Treiberabschluss. Das Modusticket
+bindet Farbmetadaten an Ziel, Generation und Commitsequenz. Treiber und
+Desktop nehmen Farbe erst nach den zugehoerigen Bild-/Linkbelegen an.
+
+Die Zulassung prueft vollstaendige EDID, exakten Modus/VIC, Quellfaehigkeiten,
+RGB8/10, Farbraum, Transfer, Pegel, Metadaten und Linkbudget gemeinsam.
+HDMI nutzt AVI/GCP und statische HDR-InfoFrames; DisplayPort SST verwendet
+den passenden VSC-/HDR-SDP-Pfad und30-Bit-Bandbreite. DP-HDR setzt die
+implementierte DP1.4-Kette voraus. Eine HDR-EOTF in der EDID schaltet allein
+nichts frei. Gamma-/Degamma-LUT und CTM melden aktuell null Hardwareeintraege;
+Profilkorrektur darf daher keine Hardware-LUT voraussetzen.
+
+Appearance /DISPLAY -> Color settings bietet SDR8, SDR10, PQ, HLG,
+Full/Limited, SDR-Weiss und Spitzenpegel. Test/Keep/Revert verwenden denselben
+zeitlich begrenzten Display-Controller wie Geometrieaenderungen. Erst nach
+bestaetigten neuen Frames beginnt die15-Sekunden-Bildbestaetigung. Die Wahl
+wird nur bei Keep gespeichert. Quelle, Verbindung und Displaygeneration
+werden erneut geprueft; ein alter Auftrag darf nicht auf einen anderen
+Monitor umgelenkt werden. Wiederanschluss stellt eine gespeicherte Wahl
+hoechstens einmal je passender Identitaet wieder her. Ein GPU-Ausfall auf
+farbiger Ausgabe veranlasst eine echte SDR-Modusrueckkehr vor dem CPU-Pfad.
+
+Profile, Kalibrierung und Bilddateien
+-----------------------------------
+LittleCMS2.18 verarbeitet RGB-/GRAY-Matrix- und LUT-Profile ausschliesslich
+im Userland. Profile, Transforme und Speicherarenen gehoeren dem Aufrufer.
+Unbekannte/fehlerhafte Profile werden nicht als gueltiges sRGB-Profil benutzt.
+Die Display-UI bietet Profilpfad, Rendering Intent, Schwarzpunktkompensation
+und optionale VCGT-Kalibrierung. Der allgemeine Monitorprofilpfad ist derzeit
+auf kanonisches SDR mit CPU-Ausgabe begrenzt; gleichzeitiges HDR wird klar
+abgewiesen. Erfundene Kalibrierung oder Monitor-Masteringdaten gibt es nicht.
+
+C:\R4OS\CONFIG\COLORS.R4S speichert bis zu16 Monitorwahlen in8192 Bytes,
+gebunden an stabile PCI-/Connector-/EDID-Schluessel. Schema GFX_COLOR_2
+enthaelt Profilwahl und Ausgabesignal samt statischen Metadaten. Alte
+Schema1-Dateien werden als SDR gelesen. Fehlende Monitore bleiben erhalten;
+Laufzeitgenerationen werden nicht dauerhaft gespeichert. Schreiben nutzt
+den transaktionalen R4STD-Dokumentpfad.
+
+R4IMG:PNG_V1 behaelt PNG-Praezision bis16 Bit und cICP, ICC, sRGB, gAMA/cHRM,
+mDCV/cLLI. Bekannte Metadaten folgen der PNG-Prioritaet; CRC, Chunkreihenfolge,
+Profilgroesse und Zlib-Abschluss werden geprueft. R4IMG:RASTER_V1 verarbeitet
+JPEG-ICC/Exif und BMP V4/V5. JPEG-ICC-Teile werden nach Sequenz zusammengesetzt;
+fehlende, doppelte, widerspruechliche oder zu grosse Teile schlagen fehl.
+BMP-Profile duerfen nicht Header/Pixelspeicher ueberlappen. Kalibrierte
+XYZ2.30-/Gamma16.16-Angaben werden ueber den gemeinsamen CMM interpretiert.
+Verknuepfte Profile werden nicht automatisch von Dateipfaden geladen.
+Unkalibriertes Exif, unbekannte Kennungen und CMYK-Quellen werden nicht
+stillschweigend umetikettiert. JPEG/BMP nutzen weiterhin den ARGB8-Decoder;
+hoehere BMP-Maskenpraezision ist damit nicht zugesichert.
+
+Die eingekompilierte ColorDecoder-Fassade verbindet R4IMG mit COLOR_V1.
+Desktop laedt PNG/BMP-Hintergruende durch diesen Pfad, konvertiert HDR nach
+SDR und mischt Transparenz in linearem Licht. Unmarkierte Altbilder erhalten
+nur durch ausdrueckliche Anwendungspolitik die sRGB-Annahme. Alte API_V1-
+Decoder und alle bisherigen Plattformpraefixe bleiben kompatibel.
+
+Diagnose, Nachweise und Grenzen
+------------------------------
+DISPLAYD /RECEIVERS zeigt Empfaenger- und Quellfarbfaehigkeiten getrennt:
+aktive BPC/Primaries/Transfer/Range, LUT/CTM, Deep Color, HDR und EDID-Grenzen.
+Fehlende Empfaengerinformationen sind keine Bestaetigung eines Farbraums.
+
+Vorhandene Besitzerpruefungen decken Zahlenreferenzen, ICC/LUT/VCGT,
+Bildmetadaten, Farblisten-/BO-Besitz, HDMI/DP-Nachrichten, Modusrollback,
+Persistenz und Present-Abweisungen ab. Der kurze SMP4-Gast prueft Desktop,
+WINSVC-Neustart, SDR-Fallback sowie echte freestanding ICC-/BMP-/Mischaufrufe.
+Es wurde keine neue dauerhafte Testgruppe angelegt. Einzelbelege und Hashes
+stehen im JSON; sich ueberschneidende Testzahlen werden nicht aufsummiert.
+
+Reale Signalpegel, HDR-Helligkeit, SM86-Pixelausfuehrung, Bildschirmabnahme
+und HDR-Hotplug bleiben in OssiGPU.txt offen. Ein Colorimeter ist fuer
+quantitative Messbehauptungen noetig. Der Shaderbuild ist kein Leistungs-
+oder Hardwarebeleg. Dynamische Shader, VRR, DSC/MST und weitere GPU-Klassen
+folgen ihren eigenen Roadmap-Schritten.

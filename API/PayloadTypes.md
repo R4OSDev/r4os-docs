@@ -5,9 +5,9 @@ Diese Datei wird deterministisch aus `API/ApiContract.json` erzeugt. Manuelle Ä
 Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenzen und Conformance-Fixtures werden produktiv aus diesem Schema erzeugt; handgeschriebene Dateien bleiben nur Fassaden oder erklaerende Texte.
 
 - Schema: v11, Baseline `standalone-contract-0.64.11`
-- Reachability: 261 von 261 Typen aufgelöst oder explizit klassifiziert
+- Reachability: 263 von 263 Typen aufgelöst oder explizit klassifiziert
 - Zentrale SDK-only-Wurzeln: 0; Runtime-R4Ls besitzen libraryeigene Vertraege
-- Operationen: 0; Fehlerdomänen: 63; Konstanten: 1809; Limits: 109
+- Operationen: 0; Fehlerdomänen: 63; Konstanten: 1812; Limits: 109
 
 ## App-Profile
 
@@ -188,7 +188,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `GfxBufferDescriptor` | extensible | extern_struct | 144/8 | 144/8 | 144/8 | 144/8 |
 | `GfxBufferReference` | extensible | extern_struct | 48/8 | 48/8 | 48/8 | 48/8 |
 | `GfxBufferMap` | extensible | extern_struct | 48/8 | 48/8 | 48/8 | 48/8 |
-| `GfxBufferStats` | extensible | extern_struct | 56/8 | 56/8 | 56/8 | 56/8 |
+| `GfxBufferStats` | extensible | extern_struct | 136/8 | 136/8 | 136/8 | 136/8 |
 | `GfxDeviceRequest` | extensible | extern_struct | 64/8 | 64/8 | 64/8 | 64/8 |
 | `GfxDeviceLease` | extensible | extern_struct | 80/8 | 80/8 | 80/8 | 80/8 |
 | `GfxDmaSegment` | extensible | extern_struct | 32/8 | 32/8 | 32/8 | 32/8 |
@@ -196,7 +196,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `GfxMmioWindow` | extensible | extern_struct | 56/8 | 56/8 | 56/8 | 56/8 |
 | `GfxOwnedBufferReservation` | extensible | extern_struct | 88/8 | 88/8 | 88/8 | 88/8 |
 | `GfxOwnedBufferRelease` | extensible | extern_struct | 80/8 | 80/8 | 80/8 | 80/8 |
-| `GfxDriverMemoryApi` | extensible | extern_struct | 184/8 | 184/8 | 184/8 | 184/8 |
+| `GfxDriverMemoryApi` | extensible | extern_struct | 192/8 | 192/8 | 192/8 | 192/8 |
 | `GfxFence` | fixed_layout | extern_struct | 40/8 | 40/8 | 40/8 | 40/8 |
 | `GfxQueueConfig` | extensible | extern_struct | 40/8 | 40/8 | 40/8 | 40/8 |
 | `GfxQueueHandle` | extensible | extern_struct | 16/8 | 16/8 | 16/8 | 16/8 |
@@ -204,7 +204,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `GfxFenceStatus` | extensible | extern_struct | 80/8 | 80/8 | 80/8 | 80/8 |
 | `GfxBackendBinding` | extensible | extern_struct | 32/8 | 32/8 | 32/8 | 32/8 |
 | `GfxBackendRegistration` | extensible | extern_struct | 48/8 | 48/8 | 48/8 | 48/8 |
-| `GfxDriverJob` | extensible | extern_struct | 272/8 | 272/8 | 272/8 | 272/8 |
+| `GfxDriverJob` | extensible | extern_struct | 296/8 | 296/8 | 296/8 | 296/8 |
 | `GfxDriverQueueApi` | extensible | extern_struct | 128/8 | 128/8 | 128/8 | 128/8 |
 | `GfxOutputId` | fixed_layout | extern_struct | 24/8 | 24/8 | 24/8 | 24/8 |
 | `GfxOutputMode` | extensible | extern_struct | 64/8 | 64/8 | 64/8 | 64/8 |
@@ -282,6 +282,8 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `GfxRefreshMeasure` | fixed_layout | extern_struct | 80/8 | 80/8 | 80/8 | 80/8 |
 | `GfxOutputRefresh` | fixed_layout | extern_struct | 272/8 | 272/8 | 272/8 | 272/8 |
 | `GfxRefreshRequest` | fixed_layout | extern_struct | 88/8 | 88/8 | 88/8 | 88/8 |
+| `GfxDeviceBudgetRequest` | extensible | extern_struct | 32/8 | 32/8 | 32/8 | 32/8 |
+| `GfxDeviceBudgetState` | extensible | extern_struct | 64/8 | 64/8 | 64/8 | 64/8 |
 
 ## Typdetails
 
@@ -5328,7 +5330,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 - Quelle: `API/ApiContract.json`
 - Klasse: `extensible`
 - Repräsentation: `extern_struct`
-- Version/Größe/Alignment: 1 / 56 / 8
+- Version/Größe/Alignment: 1 / 136 / 8
 
 | Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
 |---|---:|---:|---:|---|---|
@@ -5342,6 +5344,16 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `retained_bytes` | 32 | 8 | 8 | `u64` | - |
 | `budget_bytes` | 40 | 8 | 8 | `u64` | - |
 | `producer_budget_bytes` | 48 | 8 | 8 | `u64` | - |
+| `system_bytes` | 56 | 8 | 8 | `u64` | - |
+| `device_bytes` | 64 | 8 | 8 | `u64` | - |
+| `system_backed_bytes` | 72 | 8 | 8 | `u64` | - |
+| `device_backed_bytes` | 80 | 8 | 8 | `u64` | - |
+| `system_pinned_bytes` | 88 | 8 | 8 | `u64` | - |
+| `device_pinned_bytes` | 96 | 8 | 8 | `u64` | - |
+| `scanout_pinned_bytes` | 104 | 8 | 8 | `u64` | - |
+| `device_mapped_bytes` | 112 | 8 | 8 | `u64` | - |
+| `allocating_bytes` | 120 | 8 | 8 | `u64` | - |
+| `destroying_bytes` | 128 | 8 | 8 | `u64` | - |
 
 ### `GfxDeviceRequest`
 
@@ -5484,7 +5496,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 - Quelle: `API/ApiContract.json`
 - Klasse: `extensible`
 - Repräsentation: `extern_struct`
-- Version/Größe/Alignment: 2 / 184 / 8
+- Version/Größe/Alignment: 3 / 192 / 8
 
 | Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
 |---|---:|---:|---:|---|---|
@@ -5512,6 +5524,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `native_unregister` | 160 | 8 | 8 | `u64` | - |
 | `native_take` | 168 | 8 | 8 | `u64` | - |
 | `native_complete` | 176 | 8 | 8 | `u64` | - |
+| `memory_budget` | 184 | 8 | 8 | `u64` | - |
 
 ### `GfxFence`
 
@@ -5645,7 +5658,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 - Quelle: `API/ApiContract.json`
 - Klasse: `extensible`
 - Repräsentation: `extern_struct`
-- Version/Größe/Alignment: 4 / 272 / 8
+- Version/Größe/Alignment: 4 / 296 / 8
 
 | Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
 |---|---:|---:|---:|---|---|
@@ -5666,6 +5679,10 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `render` | 136 | 80 | 8 | `GfxRenderCommand` | - |
 | `deadline_ns` | 216 | 8 | 8 | `u64` | - |
 | `display_target` | 224 | 48 | 8 | `GfxOutputTarget` | - |
+| `producer_kind` | 272 | 4 | 4 | `u32` | - |
+| `producer_reserved` | 276 | 4 | 4 | `u32` | - |
+| `producer_id` | 280 | 8 | 8 | `u64` | - |
+| `producer_generation` | 288 | 8 | 8 | `u64` | - |
 
 ### `GfxDriverQueueApi`
 
@@ -7207,6 +7224,42 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `reserved0` | 68 | 4 | 4 | `u32` | - |
 | `sequence` | 72 | 8 | 8 | `u64` | - |
 | `deadline_ns` | 80 | 8 | 8 | `u64` | - |
+
+### `GfxDeviceBudgetRequest`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `extensible`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 32 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `adapter_id` | 8 | 4 | 4 | `u32` | - |
+| `operation` | 12 | 4 | 4 | `u32` | - |
+| `memory_generation` | 16 | 8 | 8 | `u64` | - |
+| `limit_bytes` | 24 | 8 | 8 | `u64` | - |
+
+### `GfxDeviceBudgetState`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `extensible`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 64 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `adapter_id` | 8 | 4 | 4 | `u32` | - |
+| `flags` | 12 | 4 | 4 | `u32` | - |
+| `memory_generation` | 16 | 8 | 8 | `u64` | - |
+| `limit_bytes` | 24 | 8 | 8 | `u64` | - |
+| `charged_bytes` | 32 | 8 | 8 | `u64` | - |
+| `shared_limit_bytes` | 40 | 8 | 8 | `u64` | - |
+| `shared_charged_bytes` | 48 | 8 | 8 | `u64` | - |
+| `shared_producer_limit_bytes` | 56 | 8 | 8 | `u64` | - |
 
 ## Fehlerdomänen
 
@@ -9756,6 +9809,9 @@ Geltung: `storage`, Einheit: `status_code`, Stabilität: `fixed_contract`.
 | `gfx_output_link_dp_mst` | `4` | `u32` | identity | number | `gfx_output` | fixed_contract |
 | `gfx_output_link_fec` | `1` | `u32` | flag | bitmask | `gfx_output` | fixed_contract |
 | `gfx_output_link_dsc` | `2` | `u32` | flag | bitmask | `gfx_output` | fixed_contract |
+| `gfx_memory_budget_query` | `0` | `u32` | identity | number | `gfx_memory` | fixed_contract |
+| `gfx_memory_budget_configure` | `1` | `u32` | identity | number | `gfx_memory` | fixed_contract |
+| `gfx_memory_budget_closing` | `1` | `u32` | flag | bitmask | `gfx_memory` | fixed_contract |
 
 ## Limits
 

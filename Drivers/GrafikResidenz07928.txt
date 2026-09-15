@@ -1,0 +1,150 @@
+﻿Grafikspeicher und Scheduling 0.79.28
+===================================
+Softwareabschluss: gezielte Besitzerpruefungen, Produktbuilds und SMP4 bestanden.
+Release 0.79.28, Kernel 0.1.178, NVIDIA 0.1.120, R4GFX 0.1.14,
+DISPLAYD 0.1.32, VIRTGPU 0.1.6. Physische Nacharbeit bleibt OFFEN:
+ExFiles/Reports/OssiGPU.txt / 0.79.28. OssiPC wird dafuer nicht vorausgesetzt.
+
+Besitz und Bilanz
+-----------------
+Der gemeinsame BO-Besitzer im Kernel bilanziert System-/Geraetespeicher,
+tatsaechlich bestaetigtes Backing, einmalig gezaehlte Pins, Scanout,
+Geraetemappings sowie laufende Allokation und Freigabe. Aliasreferenzen
+verdoppeln das Backing nicht. Pinarten sind ueberlappende Teilmengen.
+Ein logischer Fenceabschluss, App-Ende oder eine fehlgeschlagene Freigabe
+beweist keine physische Freigabe; ausstehende Ressourcen bleiben belastet.
+
+NVIDIA ergaenzt die wirklichen RM-/Runtimebesitzer: Reservierungsrahmen,
+physische/map ACKs, Kontroll-/Scanoutspeicher, Firmware-/Bootbelegung,
+Mappingcache, Rendercache und ungeklaerten Rueckbau. Diese Sicht ist keine
+zweite BO-Verwaltung. Firmware ist kein zusaetzliches gemeinsames BO-Backing.
+Unbekannte Firmwareinventare bedeuten unbekannte Kapazitaet, nicht freien VRAM.
+
+Budgets
+-------
+Der Kernel verwaltet bis zu 16 exakte Treiber-/Adapter-/Speichergenerationen.
+Ein Adapter erhaelt keinen zweiten Budgetrahmen, solange der alte Besitzer
+noch belasteten Speicher haelt. Nachtraegliches Konfigurieren uebernimmt
+bereits vorhandene BO-Belastungen. Ein geschrumpftes Budget behaelt vorhandene
+Objekte und sperrt weitere Allokationen; ein schliessender Besitzer bleibt
+bis zum bestaetigten letzten Release sichtbar.
+
+Konfigurierte VRAM-Budgets sind vom gemeinsamen RAM-Budget getrennt.
+Das RAM-Budget betraegt 1 GB, pro Produzent 256 MB; diese Werte reservieren keinen
+Speicher im Voraus. Legacyprovider ohne Budgeterweiterung verwenden weiterhin
+den gemeinsamen Rahmen. Der Treiber autorisiert seine eigene Konfiguration;
+Anwendungen und DISPLAYD erhalten nur die lesende Abfrage.
+
+NVIDIA berechnet eine konservative Obergrenze aus den bestaetigten Kapazitaeten
+abzueglich Boot-/Firmwareunion und spekulativem RM-Reservehinweis, abgerundet
+auf 64 KB. Moegliche Ueberlappung des Hinweises vergroessert keine Zusage.
+Bis zu 64 MB, maximal ein Achtel des Rahmens, bleiben fuer Kontroll-/Scanout-
+Fortschritt frei. Die Ablehnung erfolgt vor Heap-/RM-Mutation. Der Rahmen
+ist keine Platzierungsgarantie; RM kann auch darunter eine Allokation ablehnen.
+
+Auslagern und Rekonstruieren
+---------------------------
+R4GFX besitzt die logischen, mit source_create_native erzeugten Offscreen-
+Images. memory_trim waehlt ungepinnte Bilder nach niedrigster Prioritaet und
+danach letzter Nutzung. Ein echter COPY_ROWS-Readback erzeugt einen RAM-
+Schatten. Erst nach exaktem Fenceabschluss ohne aktive/gehaltene Ressourcen
+wird die alte private native Referenz abgegeben. Der native Besitzer baut
+seine RM-Objekte ab; die gemeinsame Belastung faellt erst nach dessen ACK.
+
+resource_resident fordert die Rekonstruktion an. Neue native Allokation,
+COPY_ROWS-Upload und abschliessende Generationspruefung gehen der Freigabe
+des autoritativen RAM-Inhalts voraus. Die oeffentliche R4GFX-Ressourcenkennung
+bleibt stabil; privater BO und GPU-Adresse duerfen wechseln. Mehrere Anfragen
+werden nach hoher Prioritaet und danach Ankunft bedient. Vordergrundbedarf
+kann einen noch nicht eingereichten Hintergrund-Readback abbrechen.
+
+Pro Device existiert genau eine laufende Speichertransaktion; weitere
+Anfragen belegen begrenzte Ressourcenmetadaten. Nach Allokationsdruck startet
+der normale Erzeugungspfad einen Reclaimversuch und liefert BUSY. Eine
+fehlgeschlagene Wiederherstellung behaelt die RAM-Kopie und meldet den Fehler;
+Trim und spaeterer Wiederholungsversuch bleiben moeglich. Es gibt keine
+zentrale Zwangsauslagerung fremder Anwendungsspeicher.
+
+Importierte oder gemeinsam veraenderbare Aliase, gemappte/aktive Bilder,
+explizit gepinnte Ressourcen und private Scanout-/Firmware-/Kontrollobjekte
+sind von dieser verwalteten Auslagerung ausgeschlossen. Raw-native-BOs
+werden nicht heimlich umgebunden. App-Close, Cancel und Hotplug geben eine
+eingereichte Kopie erst nach nachgewiesenem physischen Abschluss frei.
+Ausgelagerte RAM-Inhalte koennen eine Backendgeneration ueberleben.
+
+Faire Ausfuehrung
+----------------
+Die gemeinsame Queue wechselt zwischen Produzenten und dann deren Queues.
+Oeffnen weiterer Queues erhoeht den Anteil eines Produzenten nicht. Adapter
+besitzen unabhaengige Auswahlzustaende; FIFO und Abhaengigkeiten bleiben
+erhalten. Die optionale GfxDriverJob-Erweiterung nennt den authentifizierten
+Produzenten. Auf alten Providern kann NVIDIA nur Timelines unterscheiden.
+
+NVIDIA haelt bis zu 8 kanonische Jobs an stabilen Adressen. Bei vollem Pool
+bleiben weitere Jobs in der gemeinsamen Queue. Kopien haben hoechstens 1 MB
+logische Nutzdaten pro CE-Abschnitt. Renderabschnitte enthalten hoechstens
+256K ausgeschnittene Pixel und 16 Draws. Nur der Scissor wird geteilt;
+Interpolation, Samplegrid, Blend-Reihenfolge und Originalkoordinaten bleiben
+erhalten. Kleine zusammenpassende Draws bleiben gemeinsam einreichbar.
+
+Ein exakter Hardwareabschluss erlaubt den Wechsel zum naechsten Produzenten.
+Die gesamte oeffentliche Fence und alle benoetigten Referenzen bleiben dabei
+erhalten. Andere Renderjobs duerfen den Packetcache ersetzen; eine Fortsetzung
+validiert und aktualisiert ihren eigenen naechsten Packetinhalt. Neue und
+zurueckkehrende Produzenten reihen sich am aktuellen Turn ein, damit kurze
+nachkommende Jobs lange Auftraege nicht verdraengen. Zwischen Abschnitten
+erhalten die wirklichen Cursor-/Outputbesitzer eine Zulassungschance.
+
+Pro Ausgang wird hoechstens ein Bild teilweise komponiert. Gehaltene Bilder
+und Mappings koennen nicht erneut erworben oder freigegeben werden. Andere
+Ausgaenge und Offscreenarbeiten bleiben einreichbar. Eine Deadline beweist
+keine Quieszenz; ein haengender eingereichter Befehl behaelt seine Ressourcen.
+
+Nach Anlage einer unterstuetzten A06C-Kanalgruppe fordert NVIDIA ueber RM
+eine Zeitscheibe von 2000 us an. Die Hardware darf abrunden. Bestaetigung und
+Ablehnungsstatus werden getrennt protokolliert; eine abgelehnte optionale
+Steuerung behaelt die Softwaregrenzen. Es werden keine gemessene Laufzeit,
+Instruktionspraeemption oder zusaetzliche GFXP/CILP-Kontexte behauptet.
+Spaetere Compute-/Videoausfuehrer muessen denselben begrenzten Job-/Fence-
+Vertrag bedienen und ihre nachgewiesene Praeemptionsgranularitaet ausweisen.
+
+Schnittstellen und Diagnose
+--------------------------
+GfxBufferStats: bestehender 56-Byte-Praefix plus optionale vollstaendige 136-
+Byte-Bilanz. GfxDriverMemoryApi: optionale memory_budget-Funktion ab 184,
+Gesamtgroesse 192 Byte. R4DRAW: lesendes gfx_memory_budget ab 800, Gesamtgroesse 808 Byte.
+GfxDriverJob: alter 272-Byte-Zielpraefix plus optionale Produzentendaten bis 296 Byte.
+Unvollstaendige neue Praefixe werden nicht gelesen oder geschrieben.
+
+R4GFX DEVICE_V1 Revision 10 fuegt memory_info, memory_trim, resource_resident
+und resource_priority an. Hohe Prioritaet schuetzt vor Auslagerung und
+bevorzugt angeforderte Rekonstruktion; PINNED verhindert Auslagerung.
+Diese Werte reservieren keine grossen VRAM-Bereiche pro Anwendung.
+
+DISPLAYD /STATE zeigt BO-Klassen, Pins, Rueckbau und konfigurierte Budgets.
+NVIDIA protokolliert belegte Slots, ACKs, Budgetablehnungen, Cacheteilmengen,
+Schedulinggrenzen und TSG-Antworten. RM-Fragmentierung und groesster freier
+Bereich sind mangels belastbarer RM-Abfrage ausdruecklich unbekannt.
+Ausfuehrliche Inventarsnapshots bei Knappheit erscheinen beim ersten Fehler
+und bei verdoppelter Fehlerzahl; jeder Fehler bleibt im begrenzten Journal.
+Gehaltener Speicher wird nicht allein wegen seiner Lebensdauer als Leck
+bezeichnet; Freigaben sind am Besitzer und an bestaetigten ACKs zu pruefen.
+
+Pruefungen und Grenzen
+---------------------
+Bestehende Besitzergruppen pruefen Bilanz, alte ABI-Praefixe, Budgetschrumpfung,
+verwalteten Readback/Upload, Generationen, App-Ende und Prioritaeten. NVIDIA
+51/51, Kernel 55/55, SDK C/Zig 8, Contract, R4GFX 8/8 und R4NV 2/2 bestanden;
+keine neue Testgruppe. Die NVIDIA-Integration belegt echte Besitzerpfade mit
+modellierten Hardwareantworten: CE-/GR-Teilabschluesse, Budgetdruck waehrend
+Rendern, Cachebesitz, Cursorzulassung und optionale TSG-Annahme/Ablehnung.
+
+Alle sechs geaenderten Produkte gebaut. Der kurze SMP4-Gastlauf mit zwei
+Virtio-Ausgaengen belegt Desktopressourcen, Farbe, getrennte Bildausgabe,
+Displayeinstellungen und Neustart mit regulaerem Poweroff. R4NV bleibt bei
+0.1.7: Das exportierte R4L ist byteidentisch zum Stand aus dem 0.79.27-Image;
+die neuen reinen Slicehelfer werden im NVIDIA-Artefakt eingebunden.
+
+Hashes, Modulstaende und Beleggrenzen: GrafikResidenz07928.json. Protokolle
+unter ExFiles/Reference/GFX/0.79.28/Evidence. Keine Aussage dieses Dokuments
+ersetzt die physische Abnahme in OssiGPU.txt.

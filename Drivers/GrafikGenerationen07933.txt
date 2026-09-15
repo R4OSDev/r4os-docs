@@ -1,0 +1,179 @@
+﻿NVIDIA-Generationen und Adapter 0.79.33
+======================================
+Softwarestand: NVIDIA 0.1.124, R4NV 0.1.8, R4GFX 0.1.15.
+Kernelartefakt und Plattform-/Library-ABIs bleiben unveraendert.
+Belege: GrafikGenerationen07933.json und ExFiles/Reference/GFX/0.79.33.
+Physische Wiederaufnahme: ExFiles/Reports/OssiGPU.txt /0.79.33.
+
+Umfang und Status
+-----------------
+Der erste GA106-Port wird auf die fuenf GA10x- und die fuenf AD10x-Chips
+erweitert. Fuer diese passend zur vorhandenen GA102-HAL integrierbaren
+Familien ist die native Softwarekette implementiert. Turing und Blackwell
+besitzen getrennte Profile und ausfuehrbare Userland-Encoder/Compilerpakete;
+ihre abweichenden nativen Startpfade sind nicht implementiert. Diese Grenze
+ist eine Softwareluecke, keine ausgelagerte Hardwareabnahme.
+
+implementation-ready: Die angegebene Komponente ist integriert und anhand
+Quellen sowie passender Softwaremodelle geprueft. Das erlaubt experimentelle
+native Starts nur hinter den vorhandenen Laufzeitpruefungen. hardware-verified:
+Die konkrete Board-/Firmware-/Ausgabekonfiguration hat zusaetzlich die
+physischen Kriterien bestanden. unavailable: Die Komponente ist nicht nutzbar;
+Firmwaredateien, Shadercode und PCI-Erkennung ersetzen ihre Implementierung
+nicht. Der native Gesamtpfad ist fuer keine Familie hardware-verified.
+Die historische passive GA106-Abnahme bleibt ein gesonderter, engerer Nachweis.
+
+Profile im Treiber (alle Zahlen hex ausser SM):
+Chips                 GSP/Boot      Root/Core  Window/WIMM/Cursor  CE        GR/SM
+TU102/104/106          tu10x/tu102   C570/C57D  C57E/C57B/C57A     C5B5      C597/75
+TU116/117              tu11x/tu116   C570/C57D  C57E/C57B/C57A     C5B5      C597/75
+GA102/103/104/106/107   ga10x/ga102   C670/C67D  C67E/C67B/C67A     C7B5/C6B5 C797/86
+AD102/103/104/106/107   ad10x/ad102   C770/C77D  C67E/C67B/C67A     C7B5/C6B5 C997/89
+GB202/203/205/206/207   gb20x/FSP     CA70/CA7D  CA7E/CA7B/CA7A     CAB5/C9B5 CD97/120
+
+Komponente                Turing       Ampere               Ada                  Blackwell
+Read-only Identifikation  bereit       bereit               bereit               bereit
+Native GSP/RM/IRQ/Display  unavailable  implementation-ready implementation-ready unavailable
+Copy-Encoder              C5B5         C7B5/C6B5            C7B5/C6B5            linear/pitched
+Render/Shader-Encoder     C597/SM75    C797/SM86            C997/SM89            CD97/SM120
+Native Hardwarefreigabe   unavailable  offen                offen                unavailable
+
+generation.zig ist die Laufzeitwahrheit fuer diese unabhaengigen Zuordnungen.
+probe_ids.zig enthaelt 185 veroeffentlichte PCI-IDs (65 Turing, 70 Ampere,
+39 Ada, 11 Blackwell) aus dem gepinnten 570.144-README. GenerateProbeIds.ps1
+reproduziert die reine Probe-Liste. Sie gestattet nur die beiden stabil
+gelesenen PMC-Identitaetswoerter. Virtuelle/unbekannte/D3-Geraete, ungemessene
+BARs und nicht passende Chipprofile erhalten keine native Schreibfreigabe.
+GA100/GH100/GB100 und andere nicht aufgefuehrte ASICs sind nicht mitgemeint.
+
+Native Ampere-/Ada-Integration
+-----------------------------
+NVIDIA 570.144 / Commit 8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f bindet
+Firmware, Booter, Register-HAL und RM-Protokoll. Die originalen NVOC-Tabellen
+ordnen GA10x und AD10x dieselben GA102-Falcon-/PKC- und TU102-Transportpfade
+zu; die jeweiligen Bootarchive und GSP-Signatursektionen bleiben verschieden.
+Die GSP-ELF-Datei ist gemeinsam, die verwendete Signatur ist .fwsignature_ga10x
+bzw. .fwsignature_ad10x. GPU-Authentifizierung bleibt Aufgabe der Hardware.
+
+Originale AD102-Load-/Unload-Booter und Bootdeskriptor werden aus dem geladenen
+Modul begrenzt gelesen, gehasht und mit eigener Signaturauswahl vorbereitet.
+Das Ada-Bootimage ist 36864 Byte gross; der DMA-Boot-/Signatur-/WPR-Puffer
+waechst auf 45056 Byte. Ampere bleibt bei 24576/32768 Byte. Der originalen
+AD102-Unload-Datei folgen 256 Nullbytes hinter der im Header begrenzten DMEM;
+nur diese belegte Nullauffuellung wird akzeptiert und niemals als DMEM geladen.
+Abweichende Laengen, Signaturen, Metadaten oder nichtleere Auffuellung scheitern.
+
+Die urspruenglichen 26 Bootstrapartefakte bleiben bytegleich. Der kanonische
+Exporter liefert mit GenerationSet=all 100 Originalartefakte einschliesslich
+Turing- und GB202-FSP/FMC-Grundlagen. Diese Ausgabe allein startet keine GPU.
+AD102/TU102/TU116 besitzen je ein treiberprivates Paket mit 18 unveraenderten
+Dateien samt vollstaendigen Lizenzen. Lock-Reihenfolge, 16-Byte-Ausrichtung,
+Einzelhashes und Pakethash sind fest; die 64-Ressourcen-Grenze des gemeinsamen
+Containers wird nicht erhoeht. Das NVIDIA-Modul verwendet insgesamt 36 Eintraege.
+Der Treiber liest nur benoetigte Bereiche, nicht das komplette Paket auf den Stack.
+
+Gemessene BAR-/VRAM-/TCM-Grenzen, D0, gespeicherte Bootausgabe und Besitzer
+bleiben Voraussetzungen. Der begrenzte WPR-Plan bleibt innerhalb der durch
+GFW vorbereiteten oberen 256 MB; ein groesserer Ada-Scrubberpfad wird nicht
+benoetigt oder versprochen. Zu grosse Anforderungen scheitern am Layoutcheck.
+GSP-Queues, RM-Speicher, MSI/INTx, Fristen und Quarantaene nutzen dieselben
+Besitzer. Reset erfordert die tatsaechlichen FLR-/PCI- und GFW-Nachweise;
+fehlende Resetfaehigkeit wird getrennt vom initialen Start ausgewiesen.
+
+Ada waehlt C770/C77D, behaelt aber C67E/C67B/C67A. Der unabhaengige Vergleich
+der originalen C67D-/C77D-Header bestaetigt 1264 gemeinsame Methodendefinitionen;
+35 neue Ada-Definitionen werden nicht automatisch als Faehigkeit beworben.
+RM muss die tatsaechlichen Klassen liefern. Vorhandene HDMI/DP-, Modeset-,
+Present-, Farb-, Energie- und Resetbesitzer werden mit der gemessenen Identitaet
+verbunden. Kein zweiter Displaykompositor oder erfundener Firmwareabschluss.
+
+R4NV hat eigenstaendige C597/C797/C997/CD97-Tabellen aus Originalheadern und
+je sieben mit Mesa NIR/NAK reproduzierbar erzeugte Shader fuer SM75/86/89/120.
+Class/SM/Compiler/ABI sind Bestandteil des Bytecaches; fremde Kombinationen
+werden abgewiesen. Native Ada-Uploads und GR-Starts waehlen C997/SM89 bis in
+die tatsaechlichen Channel-, Shader- und Ressourcenbesitzer hinein.
+C5B5 verwendet gepackte 16-Bit-Koordinaten, C6B5/C7B5 getrennte 32-Bit-Felder.
+C9B5/CAB5 unterstuetzen derzeit lineare und gepitchte Kopien; blocklineare
+Kopien benoetigen dort zusaetzliche Kind/BPP-Parameter. Die PLC-Abschaltung
+von C7B5/C9B5/CAB5 gilt auch beim letzten System-Semaphore-Release. Der
+unabhaengige C-Headervergleich korrigiert diesen Fehler in den alten Fixtures.
+
+Mehrere Adapter und Fallback
+---------------------------
+Der Bootadapter ist nur dann bekannt, wenn genau eine gemessene NVIDIA-BAR1
+das gesamte Limine-Bild umfasst. Die Auswahl erfolgt nach der gemeinsamen
+PCI-Bestandsaufnahme, vor dem ersten nativen Start. Bis zu acht Snapshots
+werden betrachtet; Reihenfolge, eine passende Basis ohne ausreichende Laenge
+oder ein zweites Geraet duerfen keine Board-/HDA-Besitzer ueberschreiben.
+Mehrdeutigkeit bewahrt bootfb. Ein NVIDIA-Modul haelt weiterhin genau eine
+native Instanz. Offscreen-Start einer zusaetzlichen NVIDIA-GPU ist unavailable.
+
+R4GFX waehlt unabhaengig unter den registrierten nutzbaren Renderbackends:
+explizite Adapterpraeferenz zuerst; sonst Render vor Copy, bei gleicher
+Faehigkeit den Ausgabeadapter und schliesslich die kleinste stabile Adapter-ID.
+Eine nicht verfuegbare explizite Wahl faellt auf Software zurueck und wird
+nicht heimlich durch eine andere GPU ersetzt. Inventariteration bleibt vom
+Framepfad getrennt. Unbekannte NVIDIA-, AMD-, Intel- und sonstige Karten
+nutzen weiterhin den vorhandenen Limine-/CPU-Fallback; native Herstellerports
+koennen die gleichen Grafikvertraege implementieren.
+
+R4GFX/Display/transfer.zig bietet eine explizite Transferinstanz ueber den
+bestehenden DEVICE_V1/COLOR_V1-Vertrag: ein gemeinsames System-BO bis 64 MB,
+zwei getrennte Importe/Adressraeume, Quell-Readback, bestaetigte physische
+Jobfreigabe und erst dann Zielupload. XRGB8888/XRGB2101010, Pitch und identische
+Farbsemantik werden geprueft. Quellen und Ziele bleiben gehalten; Frist,
+Reset/Cancel oder fehlender Abschluss erlauben keine vorzeitige Freigabe.
+CPU-Farbumrechnung, automatische Hybrid-GPU-Komposition, Peer-to-Peer-DMA,
+SLI und mehrere native NVIDIA-Instanzen sind nicht Bestandteil dieses Pfads.
+Die Transferhilfe ist tatsaechlich mit zwei unabhaengigen R4GFX-Devices geprueft.
+
+Portierungsablauf und noch nicht verfuegbare Familien
+---------------------------------------------------
+1. Exakte ASIC-/Boardidentitaet bestimmen. Originale NVOC-HALs, Firmwarefamilie,
+   Bootarchive, Display/CE/GR-Klassen und SM unabhaengig gegen die Pins abgleichen.
+2. Originale Pakete/Signaturen/Lizenzen aufnehmen. Parser und begrenzte Speicher-
+   plaene mit realen Dateien pruefen, bevor Register- oder Enginepfade oeffnen.
+3. Abweichende Register-/Bootstrapbesitzer implementieren; Reset, VRAM und
+   Quarantaene von Anfang an erhalten. PCI-IDs ersetzen keine dieser Arbeiten.
+4. Das reale Device-Startmodell um die Familie erweitern: FWSEC/Booter/GSP,
+   RM/MMU/IRQ, CE/GR, verbundene Ausgabe, Takte und Reset. Fremde Klassen und
+   spaete/fehlende Receipts muessen kontrolliert scheitern. Vorhandene Gruppen
+   erweitern; keine breite neue Testkampagne je PCI-ID.
+5. Erst danach implementation-ready setzen. Physische Boardfreigabe gesondert
+   mit OssiGPU.txt; weitere Hardware beim User erfragen, sobald benoetigt.
+
+Turing: v4-RISC-V-Deskriptor und Direct-HS-Booter mit anderer Signatur-/Fuse-
+Vorbereitung, FWSEC/Falcon-Laden und TU102-/TU116-Auswahl integrieren. Erst
+danach C57D-Display und Turing-Reset/MMU/IRQ durch den kompletten Besitzerlauf
+qualifizieren. Die Originaldateien und C597/SM75-Encoder sind vorbereitet;
+die reine GA102-HAL darf hier nicht eingeschaltet werden.
+Blackwell: GB202-FSP/FMC-Start, Mailbox-/Payload-/Bootargumentpfad, Generationen-
+und Quieszenzbesitzer sowie CA-Display/Link-/MMU-Abweichungen integrieren.
+Die FSP-Referenzen zeigen einen eigenstaendigen Startweg; ein Austauschen von
+PCI-/Klassen-IDs waere keine Portierung. CD97/SM120 ist bereits erzeugbar.
+Beide nativen Gesamtports bleiben ausdruecklich unavailable. Fuer diese
+fehlende Software wird keine Hardwareabnahme als Ersatz in OssiGPU.txt angelegt.
+
+Legacy-Bewertung: Vor Turing fehlt der gewaehlte GSP/RM-Pfad. Nouveau besitzt
+getrennte NV50/GF119-, GM107/GM200- und GP100/GP102-Displaypfade sowie jeweils
+eigene MMU/FIFO/GR-/Taktbesitzer; GM200/Pascal verwenden zusaetzlich ACR-
+Firmwarestart. Das waere ein eigener groesserer Treiberport, kein Profilalias.
+Ein Display-only-Port koennte die gemeinsame Ausgabe-API nutzen, GPU-Rendering
+braeuchte passende Compiler-/Engine-/Speicherpfade. Aufwand hoch, mit Render,
+Reclocking und Wiederherstellung sehr hoch; kein seriöser Zeitschaetzwert ohne
+festgelegte Zielkarte. Es wurde kein nativer Pre-Turing-Port vereinbart oder
+implementiert. Alle diese Karten behalten bootfb; Originalquellen bleiben
+als Referenz unter ihrer eigenen Lizenz und werden nicht blind uebernommen.
+
+Nachweisgrenzen
+--------------
+Die vorhandenen NVIDIA-51-, R4NV-2- und R4GFX-8-Gruppen decken die Aenderung ab.
+Die zehn nativen Chipvarianten durchlaufen das reale Device-Modell bis zu
+Speicher/Rendering/verbundener Anzeige/Leistung/Reset; GA106/AD104 pruefen
+zusaetzlich die Booter-Fehlermatrix mit originalen Firmwaredateien. Queues,
+Registerantworten und Renderergebnisse werden dabei modelliert. Der
+Renderer-Referenzlauf ist kein Emulator fuer ausgefuehrten NVIDIA-Maschinencode.
+Kurze SMP4-Gaeste pruefen Virtio-Ausgaben und Standard-VGA/bootfb ohne NVIDIA.
+Freestanding-Module und bestehende ABI-Gruppen werden gebaut; es entstehen
+keine neuen dauerhaften Testgruppen oder Langlaeufe. Windows-Compilerabnahme
+und Laufzeitcompilerport bleiben in 0.79.34, physische Qualifikation in OssiGPU.

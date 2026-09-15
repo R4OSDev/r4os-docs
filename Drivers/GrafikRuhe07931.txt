@@ -1,0 +1,104 @@
+﻿Bildschirmruhe und Wiederanschalten 0.79.31
+=========================================
+Status: Software abgeschlossen; physische Abnahme offen.
+Nachweise: GrafikRuhe07931.json.
+Physische Abnahme: ExFiles/Reports/OssiGPU.txt / 0.79.31 bleibt OFFEN.
+
+Bedienung und Grenzen
+--------------------
+Das Desktop-Startmenue bietet "Screen off". Tastatur, Maus oder Remote-Eingabe
+wecken die Ausgaben; das weckende Ereignis aktiviert keine verdeckte Kontrolle.
+C:\R4OS\CONFIG\DESKTOP.R4S enthaelt SCREEN_OFF_SECONDS: 0 deaktiviert die
+automatische Ruhe, 30..86400 setzt die Leerlaufzeit in Sekunden. Vorgabe ist 0.
+Bestehende Appearance-Speicherungen erhalten diesen zusaetzlichen Schluessel.
+
+Nur Ausgaben mit bestaetigter nativer Treiberfaehigkeit werden abgeschaltet.
+Der Limine-/Softwarefallback bleibt benutzbar und meldet Bildschirmruhe als
+nicht unterstuetzt. Ein schwarzes Softwarebild wird nicht als DPMS ausgegeben.
+Schlafende Ausgaben behalten ihre Desktop-Anordnung; ihre Darstellungsworker
+laufen geordnet aus. Beim Aufwecken werden passende neue Worker angelegt.
+
+DISPLAYD /RECEIVERS meldet je Ausgabe screen-power, Faehigkeiten, Status- und
+Anfragesequenz, Fehlergrund sowie Kontroll-/Core-/Window-Belege. Fehlende
+Treiberfaehigkeit erscheint als screen-power=unsupported. DISPLAYD /POWER
+bleibt die getrennte GPU-Leerlauf-/Telemetriediagnose.
+
+Bildschirmruhe laesst CPU, Netzwerk, SSH, Firmware und GPU-Speicher aktiv.
+Sie ist von GPU-Leerlauf/Telemetrie (0.79.29) und Systemsuspend getrennt.
+R4OS besitzt derzeit Poweroff/Reboot und ACPI-_S5, aber keinen vollstaendigen
+S3-, S4- oder S0ix-Pfad. Plattform-Suspend bleibt eine eigene Voraussetzung:
+ACPI/AML, CPU-/SMP-/IRQ-Rueckkehr, Zeitbasis, DMA und alle beteiligten Treiber.
+Diese Version meldet keinen dieser Systemschlafzustaende als unterstuetzt.
+
+Besitzer und Reihenfolge
+-----------------------
+Desktop besitzt Wunsch, Leerlaufzeit und Eingabe. Der Kernel kopiert
+generationstreue Wuensche und Status; er programmiert keine GPU-Register.
+Der serialisierte NVIDIA-Worker besitzt die gesamte physische Umschaltung.
+
+Vor Off endet adaptive Bildwiederholung. Die bestehende Audio-Routenquelle
+meldet pending ohne ELD, damit HDA/AUDSVC keine weiterhin bereite HDMI-Route
+verwenden. Danach folgen Present-Pause, geordnete Queue-/Cursor-/Modusarbeit,
+physisches Mute/Disable/ELD-Clear sowie der reale Core-/Window-Abbau.
+NULL-Notifiers allein genuegen nicht: vorherige Bildnutzung, ARM-Readback und
+gegebenenfalls MST-ACT-/Branch-Abschluss muessen den Stillstand belegen.
+CPU-Bild, benoetigte Residenz und der logische Ausgang bleiben erhalten.
+
+HDMI/DVI verwenden den festen NV0073-Monitor-Power-Control. DisplayPort-SST
+ab DPCD 1.1 schreibt D3 und beendet den Hauptlink; D0 wird ohne vorherigen
+AUX-Read geschrieben, weil ein schlafender Empfaenger diesen verweigern kann.
+Wake-Antworten duerfen begrenzt verzoegert werden, maximal 40 Versuche unter
+derselben Frist. DP 1.0 bietet nur Signalabschaltung ohne Sink-D-State-Beleg.
+MST beendet ausschliesslich seinen Stream. Gemeinsamer Root-Link und
+Empfaenger erhalten kein D3; fremde Ausgaben und die RM-ID-Zuordnung bleiben.
+
+Beim On entstehen frische Empfaenger-/EDID-Belege und Verbindungs-IDs.
+Modus-/IMP-Pruefung, Linktraining, CPU-Bildkopie sowie Core-/Window-Abschluss
+gehen der Aktivierung voraus. Farbe, Cursor und Audio folgen ihren normalen
+Besitzern. Alte Verbindungsanfragen werden nicht in die neue Ausgabe kopiert.
+Ein geaenderter Modus verwendet den bestehenden Rekonstruktionspfad; eine
+resizende Sekundaerausgabe baut ihren alten gemeinsamen Besitzer zuerst ab.
+
+Ein abgelehnter Off-Versuch bekommt einen begrenzten Wiederanschaltversuch.
+Eine gescheiterte Rueckkehr bleibt headless mit gehaltenem CPU-Bild und einer
+konkreten Fehlerursache; eine neue On-Anfrage erlaubt einen neuen Versuch.
+Firmware-/Transport-/GPU-Verlust benutzt Device-Lost und die gemeinsame
+Rekonstruktion aus 0.79.30. Keine alte GPU-Adresse wird durch eine DPMS-Antwort
+zur neuen Speichergeneration erklaert; ungeklaerte DMA-Ressourcen bleiben
+bis zum tatsaechlichen Quieszenznachweis erhalten.
+
+Gemeinsamer Vertrag
+------------------
+R4DRAW ABI31 waechst append-only von 816 auf 832 Byte: gfx_output_power bei
+816, gfx_power_request bei 824. GfxDriverOutputApi bleibt wire1 und erweitert
+144 auf 160 Byte: power_publish bei 144, power_read bei 152. Die Treiber-
+Faehigkeit setzt beide Tailfunktionen voraus. Alte Praefixe bleiben nutzbar.
+Zig- und C-Fassaden kopieren Rueckgaben nur bei Erfolg.
+
+GfxOutputPower (96 Byte) bindet Adapter, Connector und Geraete-/Verbindungs-
+generation. Phase, Statussequenz, Anfragesequenz, Zeitpunkt, Kontrollbeleg
+sowie Core-/Window-Punkte sind getrennt. Signal- und Sink-Steuerung sind
+eigene Faehigkeitsbits. On/Off sind bestaetigte Zustaende, kein Wunsch.
+Das vom Kernel erzeugte Outputflag sleeping (1024) erhaelt das Layout; es
+erzeugt weder einen aktiven Scanout noch eine gefaelschte Empfaengerfaehigkeit.
+
+GfxPowerRequest (64 Byte) ist ein kopierter Wunsch. Eingaben setzen nur die
+genaue Identitaet und off=0/1; Sequenz, Frist und reservierte Felder sind 0.
+Ein Programm besitzt eine Off-Lease fuer 30 Sekunden; Desktop erneuert sie
+alle 10 Sekunden ohne neue Umschaltsequenz. Jeder Aufrufer darf sofort On
+anfordern. Programmende oder Fristablauf erzeugen ein Wake; ein alter
+Programmgeneration-Abschluss betrifft keine neue Instanz. IRQs duerfen weder
+Anfragen noch Treiberstatus publizieren. Wakes erfolgen ausserhalb des Owners.
+
+Pruefumfang und Referenzen
+-------------------------
+Vorhandene Kernel-/NVIDIA-/SDK-/Desktopgruppen pruefen die Besitzer und
+ABI-Praefixe. Ein kurzer SMP4-Desktoplauf prueft den Softwarefallback.
+Die modellierten GPU-/Firmwareantworten sind kein physischer NVIDIA-Nachweis.
+Keine neue Testgruppe und kein zusaetzlicher Langlauf sind erforderlich.
+Der erste Gastlauf fand veraltete R4GFX-Importrevisionen im Desktop und in
+DISPLAYD. Beide Manifeste verlangen nun DEVICE_V1 Revision 10 passend zum
+einkompilierten Client; Initialisierungsfehler nennen ihren konkreten Schritt.
+ExFiles/Reference/GFX/0.79.31/Sources.json bindet die sieben NVIDIA-570.144-
+Originalquellen an Commit/Hash. Die vollstaendigen MIT-Hinweise liegen beim
+Treiber und bytegleich in der Distribution; es gibt keine neue Firmware.

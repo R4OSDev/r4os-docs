@@ -1,0 +1,128 @@
+﻿GPU-Fehler und Wiederherstellung 0.79.30
+======================================
+Softwarestand und Pruefbelege: GrafikReset07930.json.
+Physische Abnahme: ExFiles/Reports/OssiGPU.txt / 0.79.30 bleibt OFFEN.
+
+Besitzer und Fehlergrenze
+------------------------
+NVIDIA besitzt GPU-Reset, Firmware, Kanaele und Anzeigeprogrammierung.
+Der Kernel vermittelt Device-Lost, Ressourcenlebensdauer und den gemeinsamen
+Displaywechsel. R4GFX verwirft alte Geraetebindungen; der Desktop rekonstruiert
+aus seinen CPU-Quellen. Recovery und Limine besitzen den sicheren Folgestart.
+
+Der begrenzte Fehlerjournal unterscheidet Timeout, MMU-/Engine-/Firmware-,
+IRQ- und Displayfehler. Der erste fatale Befund bleibt samt urspruenglicher
+Phase und vorhandenen Transportdaten erhalten. Der Fehlerkontext startet
+keinen PCI-Neuscan und keinen unbegrenzten Registerdump. Versionsangaben
+kommen aus dem kanonischen Treibermanifest und dem Firmware-Lock.
+
+Device-Lost sperrt neue Grafikauftraege und beendet betroffene Waits. Das
+ist keine DMA-Freigabe. Native BOs der betroffenen Speichergeneration werden
+ungueltig; ihre alten Referenzen bleiben schliessbar. Unabhaengiger CPU-
+Speicher und fremde Adaptergenerationen bleiben nutzbar. Der genaue
+Device-Lease und noch ungeklärte physische Ressourcen bleiben erhalten.
+
+GA106-Reset
+-----------
+Die implementierte Stufe gilt fuer GA106, PCI-Funktion 0, in D0 und mit
+bestaetigter PCIe-FLR-Faehigkeit. Grundlage sind die zu NVIDIA 570.144
+gehoerenden HAL-, PCI-/XVE- und Firmwarepfade, festgehalten in
+ExFiles/Reference/GFX/0.79.30/Sources.json. Andere GPU-Generationen erhalten
+daraus keine implizite Resetberechtigung. Kein Secondary-Bus-Reset und kein
+Rueckgriff auf den nicht fuer GA106 belegten Pascal-SW_RESET-Pfad.
+
+PCI-Konfiguration, BARs und Identitaet werden vor dem Firmwarestart gesichert.
+Der Worker schaltet Bus-Master-DMA ab, wartet ausstehende Transaktionen ab,
+setzt FLR und greift mindestens 100 ms weder auf PCI noch MMIO zu. Danach
+folgen begrenzte CRS-/Identitaetspruefung, BAR-/Konfigurationswiederherstellung,
+der dokumentierte XVE-Spiegel und Downstream-Counter-Abschluss sowie GFW-
+und Falcon-Halt-Nachweise. W1C-Status, FLR-Trigger und MSI-Enables werden nicht
+blind aus der Sicherung zurueckgeschrieben; Bus Master bleibt aus.
+
+Ein selbstadressierter, generationstreuer Quieszenznachweis entsteht erst
+nach diesen Postbedingungen. Er verliert seine Gueltigkeit bereits vor dem
+ersten erneuten DMA-Enable. Eine unklare Registeroperation, Fristverletzung
+oder veraenderte Identitaet erlaubt weder Speicher-Reuse noch Bootfb.
+FWSEC-SB/BooterUnload allein ersetzt diesen Nachweis nicht.
+
+Pro Device-Lebensdauer gibt es einen Resetversuch, maximal fuenf Sekunden.
+Ressourcenabbau und neuer Firmwarestart haben eigene endliche Fristen.
+Der Worker arbeitet in begrenzten Schritten; er haelt keinen Kernel-Owner
+ueber Wait, I/O oder Treibercallback. Ein zweiter Fehler endet mit gehaltenen
+Ressourcen und der Diagnose fuer einen sicheren naechsten Boot.
+
+Abbau und neuer nativer Betrieb
+------------------------------
+Nach realem GPU-Stillstand baut der Runtime-Besitzer den alten Graphen in
+Besitzreihenfolge ab: Jobs, Rendercache, Mappings, BOs, Displaykanaele,
+Notifiers, Kontrollpuffer, RM-Objekte, Port, Reader und Init-Speicher.
+Jeder Kindbesitzer prueft denselben Nachweis. Es werden keine RM_FREE-ACKs
+erfunden. Gemeinsam geliehene Referenzen werden nicht doppelt freigegeben.
+Die unveraenderliche Bootsicherung bleibt unabhaengig davon erhalten.
+
+Der Wiederstart erzeugt neue Init-Daten, synchronisiert die echten DMA-
+Segmente und startet eine frische Firmware-/Speichergeneration. Danach
+entstehen RM-Graph, CE, Displayressourcen, CPU-Schatten und Scanout erneut.
+CE-Abschluss, Position, Window/Core-Notifiers, Modus und Link muessen den
+aktuellen Bildaufbau bestaetigen, bevor die gemeinsame Anzeige uebernimmt.
+Der rekonstruierte Betrieb startet mit Softwarerendering auf nativem Scanout;
+GR wird nach dem Fehler nicht automatisch erneut zugelassen.
+
+Der alte Fehlerjournal bleibt sichtbar. Nur seine bereits abgearbeitete
+fatale Zustellung wird beim generationstreuen Neustart zurueckgesetzt.
+Geraetegeneration, neue native Displaygeneration und unveraenderliche
+Generation der gehaltenen Bootsicherung sind getrennte Identitaeten.
+
+Rueckkehr zum urspruenglichen Framebuffer
+---------------------------------------
+Ein angeforderter Boot-Restore nach Firmwareuebernahme laeuft ueber denselben
+Reset-/Wiederstart-Worker. Die alte Restore-Anfrage darf vor dessen Abschluss
+keine erfolgreiche Rueckkehr melden. Der gemeinsame Displayzustand bleibt
+waehrenddessen recovering beziehungsweise unavailable.
+
+Der eigene BootConsole-Besitzer bindet die originale VRAM-Reservation ohne
+sie als neues natives BO auszugeben. Unter bestaetigter alter GPU-Ruhe
+restauriert er die vollstaendig gesicherten BAR1-Seiten und CPU-Bilddaten
+in hoechstens 4096 Byte grossen Schritten, mit Readback und Wiederherstellung
+des PRAMIN-Fensters. Unterstuetzt ist ein durchgaengiger, 4-KB-ausgerichteter
+Originalbereich mit validierbarem linearem XRGB32-Bild und passendem Pitch.
+VRAM-Adresse 0 ist fuer diese explizite Reservation zulaessig.
+
+Nach dem frischen Firmwarestart entsteht ein neuer C67D-Scanout fuer genau
+diesen Originalbereich. Der Worker bindet BAR1, wartet beide Bind-Statusbits
+ab, vergleicht jede gesicherte Seite und laeuft die vollstaendige virtuelle
+Originalzuordnung nochmals ab. Ein gueltiges Mapping allein ist noch keine
+Bildbestaetigung. Aktueller Empfaenger/Modus, Link, Position sowie getrennte
+Core-/Window-Abschluesse muessen ebenfalls zum reservierten Bild passen.
+
+Erst dann darf der Restore-Callback die genaue aktuelle Generation samt
+Originaladresse, Groesse, Pitch und Format bestaetigen. Der Kernel kopiert
+die gehaltenen CPU-Pixel zurueck und oeffnet danach seinen Bootfb-Schreibpfad.
+Die neue Firmware, Consolekanaele und die originale VRAM-/CPU-Sicherung
+bleiben bewusst resident: Der zurueckgekehrte Framebuffer braucht sie weiter.
+Ein normales Close darf diese Ressourcen nicht freigeben.
+
+Gemeinsamer Vertrag und Folgestart
+---------------------------------
+GfxDriverMemoryApi bleibt wire1 und waechst optional auf 208 Byte:
+device_lost liegt bei 200. GfxDriverDisplayApi bleibt wire1 und waechst auf
+136 Byte: device_reset bei 120, prepare_reset bei 128. Die Resetfaehigkeit
+erfordert beide Displayfunktionen. Alte Tabellenpraefixe bleiben nutzbar.
+Details: Repositories/Contract/ABI/R4DDriver.txt.
+
+device_reset(q0) wechselt die genaue alte Displaybindung auf recovering.
+q1 darf erst nach GPU-Stillstand alte gemeinsame Queue-, Cursor-, Modus-
+und Ausgabebesitzer ausraeumen. prepare_reset fordert eine neue Queuebindung
+und eine neue Displaygeneration; die alte Bootsicherung bleibt identisch.
+Keiner dieser Metadatenaufrufe ersetzt einen Hardware-Nachweis.
+
+Bei nicht wiederherstellbarer Ausgabe bleiben SSH und serielle Diagnose
+unabhaengig. Die Meldung nennt den vorhandenen Limine-Eintrag
+R4OS Software Graphics (r4os.graphics=software). Es erfolgt weder ein
+automatischer Reboot noch eine Konfigurationsaenderung im GPU-Fehlerkontext.
+Ohne geeignete NVIDIA-Karte bleibt der bestehende Softwarefallback erhalten.
+
+Die vorhandenen Besitzerpruefungen modellieren Hardware- und Firmware-
+Bestaetigungen am echten Treibercode; ein kurzer SMP4-Gastlauf prueft die
+Desktopintegration. Das belegt weder reale FLR-Wirkung noch Bild, Ton oder
+TV-Verhalten. Diese Nacharbeit ist ausschliesslich in OssiGPU.txt geplant.

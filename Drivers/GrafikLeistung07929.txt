@@ -1,0 +1,142 @@
+﻿GPU-Leistung und Telemetrie 0.79.29
+=================================
+Softwareabschluss: gezielte Besitzerpruefungen, Produktbuilds und SMP4 bestanden.
+Release 0.79.29, Kernel 0.1.179, NVIDIA 0.1.121, DISPLAYD 0.1.33, DEVMGR 0.1.4.
+Physische Nacharbeit: ExFiles/Reports/OssiGPU.txt / 0.79.29 bleibt OFFEN.
+
+Besitzer und Generation
+----------------------
+NVIDIA besitzt die Firmwareabfragen, den RUSD-DMA-Speicher und die Policy.
+R4NV dekodiert reine Messdaten. Der Kernel vermittelt ausschliesslich einen
+begrenzten Cache und Abfragebedarf; er programmiert keine GPU-Takte.
+SDK, DISPLAYD und DEVMGR verwenden dieselben Werte und Einheiten.
+
+Grundlage sind sieben originale MIT-Quellen der Firmwaregeneration 570.144,
+Commit 8ec351aeb96a93a4bb69ccc12a542bf8a8df2b6f. Pfade, URLs und Hashes:
+ExFiles/Reference/GFX/0.79.29/Sources.json. Unabhaengige C-Auswertungen
+pruefen Strukturlaengen und Offsets an den Originalheadern. Die vollstaendigen
+Lizenztexte liegen in den Quellen, R4NV und der NVIDIA-/Distributionslizenz.
+Es wird keine weitere Firmware eingebaut.
+
+RUSD und Sensoren
+----------------
+Der Treiber haelt eine eigene, kohärente WB-Systemseite mit 4096 Byte,
+getrennt vom Graph-Kontrollpuffer. Die Firmware registriert deren physische
+DMA-Adresse mit INTERNAL_INIT_USER_SHARED_DATA (0x20800afe). Registrierung
+und Polling (0x20800aff, Gruppenmaske 0x1b, 1000 ms) verwenden den internen
+GSP-Client/Subdevice. Der Abbau sendet dieselbe Registrierung mit Adresse 0.
+
+Nach moeglicher Veroeffentlichung bleibt die Seite bis zum eindeutigen
+Ablehnungsbeleg oder bestaetigten Detach samt Queue-ACK erhalten. Eine
+Deadline, ein logischer Abschluss oder eine fehlgeschlagene Antwortfreigabe
+beweist keine DMA-Quieszenz. Ein abgelehnter Detach haelt den Speicher ohne
+wiederholte RPC-Schleife; der Graphabbau wartet auf seinen Kindbesitzer.
+
+Die CPU mappt die Seite nur fuer den begrenzten Seqlock-Lesevorgang; maximal
+zehn Versuche pro Gruppe. Ein zerrissener letzter Versuch wird verworfen.
+Die neun Gruppen umfassen Firmware-Zieltakte fuer Grafik/Speicher/Video/SM,
+Throttlegruende, GPU-/Speicherauslastung, P-State, Leistungsgrenzen,
+GPU-/Speichertemperatur sowie durchschnittliche und momentane Leistung.
+P-State ist im Original eine Bitmaske; Temperatur hat das Vorzeichenformat
+S24.8. Die gemeinsame Darstellung nutzt Hz, mW und Milligrad Celsius.
+
+Jede Gruppe kennzeichnet unavailable, changing, malformed, awaiting_change,
+fresh oder stale. Neue Pollanforderungen baselinen vorhandene Zeitstempel;
+erst eine beobachtete Aenderung erlaubt fresh. Der Host beobachtet diese
+Aenderung mit seiner eigenen monotonen Uhr, ohne CPU-/GPU-Epochen gleich-
+zusetzen. Rueckwaerts laufende Quellzeitstempel sperren die Gruppe bis zum
+neuen Pollbaseline. Nach laengerer Beobachtungsluecke beginnt das Verfahren
+erneut. Unbrauchbare Werte sind null und werden als unbekannt angezeigt.
+
+Gemeinsamer Cache und Bedarf
+---------------------------
+R4DRAW ABI 30 fuegt gfx_telemetry am Offset 808 an, Gesamtgroesse 816 Byte.
+GfxDriverMemoryApi fuegt telemetry_exchange am Offset 192 an, Gesamtgroesse
+200 Byte. Alte Praefixe bleiben nutzbar; die optionale Funktion benoetigt
+den vollstaendigen neuen Tabellenanteil. Versionierte Requests (32 Byte),
+Demand (40 Byte), State (544 Byte) und zehn Metrics (je 48 Byte) transportieren
+exakte Adapter-/Speichergenerationen und keine geliehenen Zeiger.
+
+Bis zu 16 Treiber-/Adaptergenerationen liegen unter dem vorhandenen
+BO-Metadatenowner. Abfragen kopieren den Cache ohne I/O, Allokation oder
+Treiber-Callback. Eine nichtleere Metrikmaske fordert maximal zehn Sekunden
+Sammlung an; wiederholte Abfragen koaleszieren diesen Bedarf. Driver Work
+tauscht hoechstens alle 200 ms Daten und Bedarf aus. Die Verarbeitung einer
+Anforderung verlaengert deren Frist nicht. Arbeitslast fordert kurzzeitig
+ebenfalls RUSD-Daten an. Ohne Bedarf wird die Firmwareabfrage abgeschaltet.
+
+Frische Daten laufen spaetestens drei Sekunden nach dem beobachteten
+Quellupdate ab, auch wenn der Worker danach stehenbleibt. Der gemeinsame
+Cache verwendet konservativ die frueheste Frist seiner frischen Gruppen.
+Treiber-Close entfernt Cache und Bedarf; alte Generationen duerfen keine
+Daten des Nachfolgers erhalten. Alte Provider und nicht unterstuetzte
+Sensoren liefern unbekannt, ohne den Grafikfallback zu beeintraechtigen.
+
+Leistungsanforderung
+-------------------
+Die einzige Takt-/Spannungssteuerung ist die dokumentierte interne
+PERF_BOOST_SET_2X-Anforderung (0x20800a9a) am wirklichen Graph-Client/Subdevice.
+Firmware/RM arbitrieren die daraus folgenden P-States, Takte und Spannung.
+R4OS schreibt keine PLL-/Spannungsregister und setzt keine Boardgrenzen.
+Die akzeptierte Anforderung ist keine Zusage erreichter Takte.
+
+Rendern, Vollbild mit Arbeit und Compute fordern BOOST_TO_MAX, Desktopkopien,
+Cursor-/Displayarbeit, Mehrmonitorarbeit und Video BOOST_1LEVEL. Die Policy
+nimmt bereits zugelassene Arbeit auf; Bootstrap bleibt bei Firmwaredefaults.
+Compute/Video sind Policy-Eingaenge fuer entsprechende Ausfuehrer und starten
+keine synthetische Last. Ein angeschlossener Bildschirm oder VBlank allein
+erneuert keine Leistungsanforderung.
+
+Boosts gelten fuer zwei Sekunden und werden bei fortdauernder Arbeit nach
+einer Sekunde erneuert. 250 ms Hysterese begrenzen den Wechsel nach kurzer
+Last. Bei Ruhe wird ausschliesslich die eigene Anforderung geloescht.
+Frische Thermal-/Power-/Hardware-Bremssignale loesen ebenfalls CLEAR aus;
+die Firmware behaelt ihre Schutzfunktion auch bei unbekannten Sensoren.
+Eine abgelehnte optionale Steuerung wird nicht endlos erneut gesendet.
+Die vorherige zeitlich begrenzte Anforderung kann regulaer ablaufen.
+
+Kontroll-RPCs teilen den behaltenen Transportbesitz mit Grafik und Display.
+Sie beginnen zwischen physischen Arbeitsabschnitten; laufende GPU-Jobs,
+Flips und Mappings werden dafuer nicht freigegeben. Neue native Allokation
+meldet waehrend eines Power-RPC BUSY und kann erneut versucht werden.
+R4OS erzwingt keine niedrigere Display-/Speicherfrequenz; die Firmware
+beruecksichtigt ihre bestehenden Display- und Speicherabhaengigkeiten.
+
+GPU-Zeit und Diagnose
+--------------------
+TIMER_GET_TIME (0x20800403) liest ueber den dokumentierten RM-Pfad den
+globalen GPU-Timer in Nanosekunden; der Header nennt 32 ns Aufloesung.
+Die zehnte Metrik enthaelt Timer, optionales Delta zur vorherigen Probe und
+die monotonen Hostzeitpunkte von Anfrage und Antwort. Die erste Probe hat
+kein Delta. Ruecklauf ist fehlerhaft, Stillstand/veraltete Proben sind stale.
+Abfragen sind bedarfsabhaengig auf eine pro Sekunde begrenzt.
+
+Timerdifferenzen messen den Abstand der Proben, keine Renderjobdauer.
+Host-Anfrage-/Antwortzeiten sind keine GPU-Ausfuehrungszeit. Die RUSD-Takte
+sind Firmwareziele und keine unabhaengig gemessenen effektiven Frequenzen.
+Spannung und nicht vorhandene Sensoren werden nicht geschaetzt.
+
+DISPLAYD /POWER fordert Sammlung an und druckt den aktuellen Cache ohne
+Warten oder Lastgenerierung. Fuer eine Folgeprobe erneut ausfuehren.
+DEVMGR aktualisiert sichtbare Grafikdetails einmal pro Sekunde und exportiert
+dieselben Werte in C:\Temp\HWREPORT.TXT. Unbekannte Daten bleiben erkennbar.
+
+Nachweise und Grenzen
+---------------------
+Bestehende Besitzerpruefungen decken Originalheader, Seqlock/Alterung,
+Policy und optionale ABI-Praefixe ab. Die NVIDIA-Integration verwendet den
+tatsaechlichen Runtime-/GSP-Besitzer mit modelliertem DMA und Firmware-ACK:
+Attach/Poll/Detach, Ablehnung, ungeklaerter Queue-ACK, Cachebedarf, GPU-Timer
+und Kanalzulassung neben den bisherigen Grafik-/Displayfaellen.
+Keine neue permanente Testgruppe wurde angelegt.
+
+NVIDIA 51/51, Kernel 56/56, SDK C/Zig 8, Contract und R4NV 2/2 bestanden.
+Alle fuenf betroffenen Produkte sind gebaut. Zwei kurze SMP4-Boots belegen
+unbekannte Telemetrie in DISPLAYD/DEVMGR samt Export und den vorhandenen
+Desktopablauf mit zwei Virtio-Ausgaengen und regulaerem Poweroff.
+Der zweite Boot korrigiert ausschliesslich den Teststarter: Ein direkter
+Desktopstart mit Diagnoseargumenten aus Terminal wurde korrekt abgelehnt.
+R4NV 0.1.7 bleibt bytegleich; die reinen Decoder sind im NVIDIA-Artefakt.
+Artefakthashes, Gastnachweis und Versionen stehen in GrafikLeistung07929.json. Reale Sensorplausibilitaet,
+Leistungsaufnahme, erreichte Takte, Bild/Ton und Boardverhalten bleiben der
+physischen Nacharbeit in OssiGPU.txt vorbehalten.

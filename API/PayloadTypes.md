@@ -5,9 +5,9 @@ Diese Datei wird deterministisch aus `API/ApiContract.json` erzeugt. Manuelle Ä
 Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenzen und Conformance-Fixtures werden produktiv aus diesem Schema erzeugt; handgeschriebene Dateien bleiben nur Fassaden oder erklaerende Texte.
 
 - Schema: v11, Baseline `standalone-contract-0.64.11`
-- Reachability: 263 von 263 Typen aufgelöst oder explizit klassifiziert
+- Reachability: 267 von 267 Typen aufgelöst oder explizit klassifiziert
 - Zentrale SDK-only-Wurzeln: 0; Runtime-R4Ls besitzen libraryeigene Vertraege
-- Operationen: 0; Fehlerdomänen: 63; Konstanten: 1812; Limits: 109
+- Operationen: 0; Fehlerdomänen: 63; Konstanten: 1820; Limits: 109
 
 ## App-Profile
 
@@ -196,7 +196,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `GfxMmioWindow` | extensible | extern_struct | 56/8 | 56/8 | 56/8 | 56/8 |
 | `GfxOwnedBufferReservation` | extensible | extern_struct | 88/8 | 88/8 | 88/8 | 88/8 |
 | `GfxOwnedBufferRelease` | extensible | extern_struct | 80/8 | 80/8 | 80/8 | 80/8 |
-| `GfxDriverMemoryApi` | extensible | extern_struct | 192/8 | 192/8 | 192/8 | 192/8 |
+| `GfxDriverMemoryApi` | extensible | extern_struct | 200/8 | 200/8 | 200/8 | 200/8 |
 | `GfxFence` | fixed_layout | extern_struct | 40/8 | 40/8 | 40/8 | 40/8 |
 | `GfxQueueConfig` | extensible | extern_struct | 40/8 | 40/8 | 40/8 | 40/8 |
 | `GfxQueueHandle` | extensible | extern_struct | 16/8 | 16/8 | 16/8 | 16/8 |
@@ -284,6 +284,10 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `GfxRefreshRequest` | fixed_layout | extern_struct | 88/8 | 88/8 | 88/8 | 88/8 |
 | `GfxDeviceBudgetRequest` | extensible | extern_struct | 32/8 | 32/8 | 32/8 | 32/8 |
 | `GfxDeviceBudgetState` | extensible | extern_struct | 64/8 | 64/8 | 64/8 | 64/8 |
+| `GfxTelemetryMetric` | fixed_layout | extern_struct | 48/8 | 48/8 | 48/8 | 48/8 |
+| `GfxTelemetryRequest` | extensible | extern_struct | 32/8 | 32/8 | 32/8 | 32/8 |
+| `GfxTelemetryDemand` | extensible | extern_struct | 40/8 | 40/8 | 40/8 | 40/8 |
+| `GfxTelemetryState` | extensible | extern_struct | 544/8 | 544/8 | 544/8 | 544/8 |
 
 ## Typdetails
 
@@ -5496,7 +5500,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 - Quelle: `API/ApiContract.json`
 - Klasse: `extensible`
 - Repräsentation: `extern_struct`
-- Version/Größe/Alignment: 3 / 192 / 8
+- Version/Größe/Alignment: 4 / 200 / 8
 
 | Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
 |---|---:|---:|---:|---|---|
@@ -5525,6 +5529,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `native_take` | 168 | 8 | 8 | `u64` | - |
 | `native_complete` | 176 | 8 | 8 | `u64` | - |
 | `memory_budget` | 184 | 8 | 8 | `u64` | - |
+| `telemetry_exchange` | 192 | 8 | 8 | `u64` | - |
 
 ### `GfxFence`
 
@@ -7260,6 +7265,77 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `shared_limit_bytes` | 40 | 8 | 8 | `u64` | - |
 | `shared_charged_bytes` | 48 | 8 | 8 | `u64` | - |
 | `shared_producer_limit_bytes` | 56 | 8 | 8 | `u64` | - |
+
+### `GfxTelemetryMetric`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 48 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `status` | 0 | 4 | 4 | `u32` | - |
+| `flags` | 4 | 4 | 4 | `u32` | - |
+| `source_stamp` | 8 | 8 | 8 | `u64` | - |
+| `values` | 16 | 32 | 8 | `[4]i64` | - |
+
+### `GfxTelemetryRequest`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `extensible`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 32 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `adapter_id` | 8 | 4 | 4 | `u32` | - |
+| `reserved0` | 12 | 4 | 4 | `u32` | - |
+| `memory_generation` | 16 | 8 | 8 | `u64` | - |
+| `metric_mask` | 24 | 8 | 8 | `u64` | - |
+
+### `GfxTelemetryDemand`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `extensible`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 40 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `adapter_id` | 8 | 4 | 4 | `u32` | - |
+| `reserved0` | 12 | 4 | 4 | `u32` | - |
+| `memory_generation` | 16 | 8 | 8 | `u64` | - |
+| `until_ns` | 24 | 8 | 8 | `u64` | - |
+| `metric_mask` | 32 | 8 | 8 | `u64` | - |
+
+### `GfxTelemetryState`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `extensible`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 544 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `adapter_id` | 8 | 4 | 4 | `u32` | - |
+| `reserved0` | 12 | 4 | 4 | `u32` | - |
+| `memory_generation` | 16 | 8 | 8 | `u64` | - |
+| `sampled_ns` | 24 | 8 | 8 | `u64` | - |
+| `valid_until_ns` | 32 | 8 | 8 | `u64` | - |
+| `source` | 40 | 4 | 4 | `u32` | - |
+| `state` | 44 | 4 | 4 | `u32` | - |
+| `policy` | 48 | 4 | 4 | `u32` | - |
+| `boost` | 52 | 4 | 4 | `u32` | - |
+| `control_status` | 56 | 4 | 4 | `u32` | - |
+| `reserved1` | 60 | 4 | 4 | `u32` | - |
+| `metrics` | 64 | 480 | 8 | `[10]GfxTelemetryMetric` | - |
 
 ## Fehlerdomänen
 
@@ -9812,6 +9888,14 @@ Geltung: `storage`, Einheit: `status_code`, Stabilität: `fixed_contract`.
 | `gfx_memory_budget_query` | `0` | `u32` | identity | number | `gfx_memory` | fixed_contract |
 | `gfx_memory_budget_configure` | `1` | `u32` | identity | number | `gfx_memory` | fixed_contract |
 | `gfx_memory_budget_closing` | `1` | `u32` | flag | bitmask | `gfx_memory` | fixed_contract |
+| `gfx_telemetry_unavailable` | `0` | `u32` | value | enum_value | `gfx_telemetry` | fixed_contract |
+| `gfx_telemetry_changing` | `1` | `u32` | value | enum_value | `gfx_telemetry` | fixed_contract |
+| `gfx_telemetry_malformed` | `2` | `u32` | value | enum_value | `gfx_telemetry` | fixed_contract |
+| `gfx_telemetry_awaiting_change` | `3` | `u32` | value | enum_value | `gfx_telemetry` | fixed_contract |
+| `gfx_telemetry_fresh` | `4` | `u32` | value | enum_value | `gfx_telemetry` | fixed_contract |
+| `gfx_telemetry_stale` | `5` | `u32` | value | enum_value | `gfx_telemetry` | fixed_contract |
+| `gfx_telemetry_metric_mask` | `1023` | `u64` | flag | bitmask | `gfx_telemetry` | fixed_contract |
+| `gfx_telemetry_timer_delta_valid` | `1` | `u32` | flag | bitmask | `gfx_telemetry` | fixed_contract |
 
 ## Limits
 

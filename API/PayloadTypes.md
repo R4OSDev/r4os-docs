@@ -7,7 +7,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 - Schema: v11, Baseline `standalone-contract-0.64.11`
 - Reachability: 261 von 261 Typen aufgelöst oder explizit klassifiziert
 - Zentrale SDK-only-Wurzeln: 0; Runtime-R4Ls besitzen libraryeigene Vertraege
-- Operationen: 0; Fehlerdomänen: 63; Konstanten: 1803; Limits: 109
+- Operationen: 0; Fehlerdomänen: 63; Konstanten: 1809; Limits: 109
 
 ## App-Profile
 
@@ -267,7 +267,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `DisplayControlExchange` | fixed_layout | extern_struct | 1248/8 | 1248/8 | 1248/8 | 1248/8 |
 | `GfxSampleGrid` | fixed_layout | extern_struct | 64/4 | 64/4 | 64/4 | 64/4 |
 | `GfxRenderGridList` | fixed_layout | extern_struct | 2320/8 | 2320/8 | 2320/8 | 2320/8 |
-| `GfxOutputColorState` | extensible | extern_struct | 128/8 | 128/8 | 128/8 | 128/8 |
+| `GfxOutputColorState` | extensible | extern_struct | 192/8 | 192/8 | 192/8 | 192/8 |
 | `GfxRenderColorProgram` | fixed_layout | extern_struct | 272/8 | 272/8 | 272/8 | 272/8 |
 | `GfxRenderColorList` | fixed_layout | extern_struct | 1568/8 | 1568/8 | 1568/8 | 1568/8 |
 | `GfxHdrMetadata` | fixed_layout | extern_struct | 24/2 | 24/2 | 24/2 | 24/2 |
@@ -6923,7 +6923,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 - Quelle: `API/ApiContract.json`
 - Klasse: `extensible`
 - Repräsentation: `extern_struct`
-- Version/Größe/Alignment: 1 / 128 / 8
+- Version/Größe/Alignment: 1 / 192 / 8
 
 | Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
 |---|---:|---:|---:|---|---|
@@ -6951,6 +6951,20 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `reserved0` | 108 | 4 | 4 | `u32` | - |
 | `max_tmds_clock_hz` | 112 | 8 | 8 | `u64` | - |
 | `dp_payload_bits_per_second` | 120 | 8 | 8 | `u64` | - |
+| `link_kind` | 128 | 4 | 4 | `u32` | - |
+| `link_flags` | 132 | 4 | 4 | `u32` | - |
+| `dsc_depths` | 136 | 4 | 4 | `u32` | - |
+| `max_frl_rate` | 140 | 4 | 4 | `u32` | - |
+| `compressed_bpp_x16` | 144 | 4 | 4 | `u32` | - |
+| `link_lanes` | 148 | 4 | 4 | `u32` | - |
+| `link_rate_mbps` | 152 | 4 | 4 | `u32` | - |
+| `h_active` | 156 | 4 | 4 | `u32` | - |
+| `h_total` | 160 | 4 | 4 | `u32` | - |
+| `reserved_link` | 164 | 4 | 4 | `u32` | - |
+| `link_payload_bits_per_second` | 168 | 8 | 8 | `u64` | - |
+| `pixel_clock_numerator` | 176 | 8 | 8 | `u64` | - |
+| `pixel_clock_denominator` | 184 | 4 | 4 | `u32` | - |
+| `v_active` | 188 | 4 | 4 | `u32` | - |
 
 ### `GfxRenderColorProgram`
 
@@ -9736,6 +9750,12 @@ Geltung: `storage`, Einheit: `status_code`, Stabilität: `fixed_contract`.
 | `gfx_refresh_reason_timing_fault` | `11` | `u32` | value | number | `gfx_output` | fixed_contract |
 | `gfx_refresh_reason_user_flicker` | `12` | `u32` | value | number | `gfx_output` | fixed_contract |
 | `gfx_refresh_reason_stale_clock` | `13` | `u32` | value | number | `gfx_output` | fixed_contract |
+| `gfx_output_link_tmds` | `1` | `u32` | identity | number | `gfx_output` | fixed_contract |
+| `gfx_output_link_frl` | `2` | `u32` | identity | number | `gfx_output` | fixed_contract |
+| `gfx_output_link_dp_sst` | `3` | `u32` | identity | number | `gfx_output` | fixed_contract |
+| `gfx_output_link_dp_mst` | `4` | `u32` | identity | number | `gfx_output` | fixed_contract |
+| `gfx_output_link_fec` | `1` | `u32` | flag | bitmask | `gfx_output` | fixed_contract |
+| `gfx_output_link_dsc` | `2` | `u32` | flag | bitmask | `gfx_output` | fixed_contract |
 
 ## Limits
 

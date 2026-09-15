@@ -1,0 +1,96 @@
+﻿R4OS 0.79.27 - Erweiterte Displaylinks
+=====================================
+
+Softwareintegration und Produktbuilds bestanden: NVIDIA 51, R4GFX 8,
+Kernel 55 sowie Contract/SDK und ein kurzer SMP4-Fallback-Gast. Belege:
+GrafikLinks07927.json. Physische Abnahme bleibt OFFEN
+in ExFiles/Reports/OssiGPU.txt /0.79.27. Die passenden Quellen und ihre
+Zugaenge stehen in ExFiles/Reference/GFX/0.79.27/Interfaces.txt; Originale
+sind unter Nvidia/0.79.27 und OpenKernelModules-570.144 hashgebunden.
+
+Implementierter Umfang
+---------------------
+NVIDIA besitzt AUX, Sideband, Training, Source-/Payload-/Paketsteuerung und
+die gemeinsame Core-/Window-Transaktion. R4GFX besitzt EDID und exakte
+Linkbudgets. Desktop und DISPLAYD verwenden bestaetigte Linkdaten. Der
+Kernel transportiert begrenzte Metadaten; er berechnet keine Linkpolitik.
+
+RGB8/10 wird mit exakter Pixelclock und aufgerundeten externen Einheiten
+gegen TMDS, DP8b/10b, FRL oder die gesamte MST-Payload geprueft. C372/IMP
+erhaelt alle aktiven Heads/Windows einschliesslich gemeinsam genutzter
+MST-SORs. Kein Hostwert ersetzt den wirklichen RM-Clock-/Bandbreitenbescheid.
+
+DP-SST DSC/FEC verwendet den unveraenderten NVIDIA-PPS-Generator, feste
+Slice-/BPP-Parameter vor IMP, FEC- und Empfaengersteuerung sowie C67D.
+HDMI DSC verwendet dieselbe PPS-Wahrheit und RM-Kommandos fuer DSC-Caps,
+Vorberechnung, HC-Raster und komprimierte Kapazitaet. FRL meldet die wirklich
+trainierte Rate zurueck; eine geringere Rate benoetigt neue Zulassung.
+Bekannte Fehler stellen den alten Link und sein tatsaechliches Bild wieder
+her. Ungeklaerte Abschluesse behalten ihre Ressourcen bis zur Wiederherstellung.
+
+MST: Entdeckung, Betrieb und Rueckkehr
+------------------------------------
+Die physische Hub-Verbindung braucht keine eigene EDID. Auch vor einer
+SOR-Zuweisung werden DPCD/MST ueber AUX abgefragt. Der vorhandene
+ASSIGN_SOR-Besitzer schuetzt andere Ausgaenge; danach folgen frische
+Quellfaehigkeiten, Topologie und echte virtuelle RM-IDs.
+
+LINK_ADDRESS, GUID/RAD/Port, EPR, Remote-DPCD und EDID bilden den Baum.
+Sideband besitzt CRC, Fragmentierung, Deadline und getrennte DOWN-/UP-ACKs.
+Vor dem ersten EPR einer ruhenden Verbindung werden alte Hubbelegungen
+wirklich geloescht und alle 63 Slots rueckgelesen. Ein aktiver fremder
+Firmware-Head erlaubt weder Aktivierung noch globale Tabellenloeschung.
+
+Jede Payloadaenderung reserviert alte/neue ID-Verweise gemeinsam. Training,
+Source-Slots, Empfaengertabelle, Core/Window/ARM, ACT, Branch-PBN und
+Rate-Governing muessen bestaetigt werden. Teilweise angewendete Branch-
+Reservierungen nach einem NAK werden ueber den wirklichen Reparaturpfad
+auf den alten Root-Zustand zurueckgefuehrt. Andere physische SORs bleiben aktiv.
+
+Beim Entfernen eines einzelnen Streams werden ueberlebende GUID-/Portpfade
+frisch geprueft; UP-Meldungen werden beantwortet und danach neu abgefragt.
+Bei CONNECTED=0 werden nur die bestaetigt getrennten Source-Heads stillgelegt.
+Alle alten Payload-/ID-Leases bleiben bis zum letzten Head-Stopp bestehen;
+es gibt keinen erfundenen ACT eines abwesenden Empfaengers. Die naechste
+ruhende Erfassung muss dessen alte Tabelle erneut loeschen.
+
+Ein zurueckgehaltener Desktop-Ausgang besitzt weiterhin seine logische
+Head-/Window-/RM-ID-Zuordnung. Dieselbe GUID/RAD/Port-Identitaet erhaelt nach
+der Rueckkehr ihre ID, neue Moduszulassung, aktualisierte CPU-Pixel und echte
+Core-/Window-/Linkabschluesse. Erst die explizite Routenfreigabe erlaubt nach
+Unpublication und Hardware-Stopp den RM-Free. Stream-Lease, Bildbesitz und
+logische Route sind getrennte, begrenzte Lebensdauern.
+
+Vertrag und Grenzen
+-------------------
+GfxOutputColorState V1 erweitert den unveraenderten 128-Byte-Praefix auf
+192 Bytes. Kopien lesen/schreiben nur den vom Aufrufer angebotenen vollstaendigen
+Praefix. Der Tail meldet Linkart, Rate/Lanes, Payload und DSC-Fakten. Alte
+Aufrufer bleiben verwendbar; R4DRAW28 und die Treibertabellenversion bleiben.
+
+Die vorhandene native GPU-/GSP-/C670/C67D-Zulassung bleibt verbindlich.
+Der native Ersteinstieg uebernimmt weiterhin einen zugelassenen Firmware-
+SST-/TMDS-Boothead; eine fremde Firmware-MST-/DSC-Belegung wird nicht adoptiert.
+Dafuer bleibt bootfb erhalten. MST-Ausgaenge verwenden den vorhandenen
+nativen Adapter und seine gemeinsamen Ressourcen.
+
+MST unterstuetzt RGB8/10 SDR, 8b/10b und bestaetigte RBR/HBR/HBR2/HBR3-
+Konfigurationen: maximal 8 Branches, 16 Sinks je Root, 32 residente ID-Slots,
+14 RAD-Hops und 512-Byte-Nachrichten. MST-DSC/HDR/VSC/VRR, UHBR/128b132b,
+LTTPR, eDP, Type-C-Mux-/Tunnelsteuerung und beliebige SOR-Migration einer
+zurueckgehaltenen Route sind nicht freigegeben. Fremde Hub-/Routenidentitaet
+wird nicht als Rueckkehr des alten Ausganges ausgegeben. Teilweise
+Initialisierung und unbekannte Abschluesse behalten ihre Ressourcen.
+
+Softwarepruefung
+----------------
+Vorhandene NVIDIA-Gruppen pruefen Original-C-Layouts/PPS, genaue Bandbreite,
+Training/Rueckstufung, zwei MST-Streams, Quellen-/Hubtabellen, Teilreservierungs-
+Rollback, Rootverlust, Hub-Rueckkehr und den nativen Geraetepfad neben DP-SST.
+R4GFX, Contract, SDK und Kernel pruefen Parser, Farbbudgets und Praefixkopien.
+Ein kurzer SMP4-Fallback-Gast prueft die gemeinsame Desktopintegration.
+Ergebnis, Artefakte und Hashes stehen im JSON; keine neue permanente Testgruppe.
+
+Die Modelle belegen Softwarepfade und Befehlsabschluesse. Sichtbares Bild,
+Ton, Signalqualitaet und Hardwarekonformitaet bleiben in OssiGPU.txt offen.
+Es gibt keine pauschale HDMI-2.1-, DP-2.x- oder NVIDIA-Generationszusage.

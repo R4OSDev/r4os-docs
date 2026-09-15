@@ -1,104 +1,93 @@
-﻿Grafikcompiler 0.79.34: Hostpfad und Shadercache
-===========================================
+﻿Grafikcompiler 0.79.34: native R4OS-Laufzeit
+==========================================
+Stand: 15.09.2026. Softwareumfang abgeschlossen. R4NAK 0.1.1, DISPLAYD
+0.1.35, Release 0.79.34; Kernel 0.1.182 und R4NV 0.1.8 unveraendert.
+Windows-Hostlauf und reale NVIDIA-Ausfuehrung bleiben separat offen in
+ExFiles/Reports/OssiGPU.txt /0.79.34. Kein Kontaktversuch zum OssiPC.
+Nachweise/Hashes/Messwerte: gleichnamige JSON und ExFiles/Reference/GFX/0.79.34.
 
-Stand: 13.09.2026. 0.79.34 bleibt OFFEN. Dieser Zwischenstand liefert
-den echten NIR/NAK-Hostcompiler fuer die festen Shader aus 0.79.19.
-Er ersetzt weder den R4OS-Compilerport noch die Windows-/GPU-Abnahmen.
-R4NV 0.1.2 integriert die festen Programme mit SHADER_V1; DISPLAYD
-0.1.22 prueft den Bytecache. Release bleibt 0.79.18, Kernel 0.1.167.
-Besitzer: Libraries/R4NV/Tools/Compiler. Nachweise: gleichnamige JSON-Datei.
+Implementierung und Grenzen
+--------------------------
+Die neue unabhaengige R4NAK.R4L uebersetzt vom Aufrufer gelieferte SPIR-V-
+Programme tatsaechlich ueber Mesa NIR und NAK in NVIDIA-Maschinencode.
+COMPILER_V1 mit eigenem Contract, C-/Zig-Bindings und Baseline liefert
+Code/Header, Cacheoperationen und sieben R4GFX-Formatbeschreibungen.
+R4NVs sieben feste Profile je SM75/86/89/120 bleiben davon unabhaengig.
 
-Quellen und Ablauf
-------------------
-Mesa 26.2.2 und sechs Rust-Crates sind mit ihren Original-Hashes in
-Sources.lock.json festgelegt. MesaStandalone.patch aendert acht
-Build-/Bindingdateien: echter NIR-Build, NAK ohne Nouveau-winsys/DRM-
-Hardwaretestbindungen, eigene Hostanwendung. Die NIR-/NAK-Compilerlogik
-bleibt unveraendert; die Dateien Source/shaders.c und r4nak.c gehoeren R4OS.
+ABI1: Vertex/Fragment/Compute fuer SM75/86/89/120, Stage-I/O und lokale
+Arithmetik/Kontrollfluss. Maximal 16384 SPIR-V-Worte/IDs, 63-Byte-Entry,
+256 MB explizites Speicherbudget, 16 MB Code und 1 MB Diagnoseausgabe.
+Descriptor-/Push-/Shared-/Ressourcenlowering folgt mit Vulkan in 0.79.35/36;
+solche Ressourcen werden hier ausdruecklich abgelehnt. Compilerziele und
+Formatbeschreibungen sind keine Geraete-, Pixel- oder Vulkan-Konformitaet.
 
-Gemeinsamer PS7-Ablauf mit .sh/.bat-Startern, Pfaden aus Settings.R4S,
-geprueften Archivdownloads und gesondertem vorbereiteten Quellbaum.
-Meson darf nicht herunterladen; die sechs Rust-Fallbacks sind festgelegt.
-Vor Wiederverwendung wird der vorbereitete Quellbestand gehasht. Build-
-Umgebungsflags werden kontrolliert und danach wiederhergestellt.
+R4SYS-Worker mit 1-MB-Stack, monotoner Zeit, Cancel/Close, Programmgeneration
+und Join. Genau ein Compilerauftrag besitzt die Library; weitere erhalten
+busy. Jeder Auftrag besitzt saemtliche nativen Allokationen und Mesa-Tabellen.
+Erfolg raeumt sie ab; OOM/Panic/Deadline/Cancel raeumt ab und beendet den
+Worker ohne Unwind/Longjmp durch Rust. Aufruferpuffer leben bis zum Join.
+Ganzprogramm-Abbruch verlangt vor Wiederverwendung den kohärenten Nachweis
+vollstaendiger Generation-Retirement; keine alten Allocatorcallbacks.
+Kombinierte Lebensdauer-Stresstests gehoeren weiterhin zu 0.79.43.
 
-Linux: Rust 1.85.1, Meson 1.7.0, Ninja 1.12.1, bindgen 0.71.1,
-cbindgen 0.27.0, Clang/libclang 19.1.7; Python 3.13.5 und Mako 1.3.9.
-Kein libdrm, Vulkan-Treiber, CLC, LLVM-JIT oder Grafikgeraet im Hostpfad.
-libclang erzeugt C/Rust-Bindings. Das Linux-ELF benutzt nur libm,
-libgcc_s, libc und den ELF-Lader als dynamische Bibliotheken.
+Kein Linux, Host-libc, Rust std, TLS oder Host-Dateisystem im Zielartefakt.
+Rust core/alloc/compiler_builtins und begrenzte C-/Rust-Shims laufen nativ.
+Static-large-C/Rust-Code nutzt die bestehenden R4M0-ABS64-Relokationen;
+weder Loaderlockerung noch Kernelveraenderung. Compilerarbeit gehoert
+ausserhalb interaktiver Framepfade; der Software-Fallback bleibt verfuegbar.
 
-Ab Workspace-Root:
-  Repositories/Libraries/R4NV/Tools/Compiler/Build.sh -Offline -VerifyReproducible
-Erstinstallation auf Debian 13: -InstallDependencies statt -Offline.
-Windows: Build.bat mit nativer LLVM-/Windows-SDK-/Rust-Umgebung; genaue
-Voraussetzungen im englischen Tools/Compiler/README.md. Dieser Hostlauf
-ist noch nicht erfolgt und bleibt Softwarepflicht in 0.79.34.
+Quellen, Build und Lizenzen
+--------------------------
+Mesa 26.2.2 und sechs Host-Crates: R4NV/Tools/Compiler/Sources.lock.json.
+R4NAK/Tools/Sources.lock.json ergaenzt Rust-src 1.85.1, compiler_builtins
+0.1.140, hashbrown 0.15.2 und stb_sprintf 1.10 mit exakten Originalhashes.
+Kein Cargo-Netzdownload. Originalbaum, Job-Overlays, Bindings und Produkte
+bleiben getrennt. Die NAK-Loweringalgorithmen bleiben gepinnte Originale;
+Portanpassungen ersetzen Runtime/Debug-/Speicherfacilitaeten.
 
-Shader und gezielte Pruefung
----------------------------
-SM86 mit dem originalen 48-Warp-Profil. Generierte Programme:
-  Rechteck-Vertex:       112 Bytes /  7 Instruktionen
-  Textur-Fragment:       192 Bytes / 12 Instruktionen
-  sRGB nach linear:     752 Bytes / 47 Instruktionen
-  linear nach sRGB:     768 Bytes / 48 Instruktionen
-  Vollfarben-Fragment:   80 Bytes /  5 Instruktionen
-Insgesamt 1904 Bytes; jeweils 24 Register, kein lokaler Scratch,
-Call-Stack oder Speicher-Spill. Der Doppelaufbau jedes Shaders liefert
-identische Binaerdaten, Metadaten, NIR- und NAK-Assemblertexte.
-Das ist Compiler-Reproduzierbarkeit, keine Ausfuehrung oder Bildabnahme.
+Ein gemeinsamer PS7-Ablauf mit duennen .sh/.bat-Startern, abgeleiteten Pfaden,
+Offline-Archivcache und geprueften Quellen/Werkzeugen. Fremdes Arbeits-
+verzeichnis unter Linux geprueft. Rust1.85.1, LLVM/libclang19.1.7,
+bindgen0.71.1, cbindgen0.27.0, Meson1.7.0, Ninja1.12.1 und Python-
+Generatorabhaengigkeiten. Windows benoetigt zusaetzlich die native
+x64-Rust/MSVC/Windows-SDK-Umgebung; Anleitung: Libraries/R4NAK/README.md.
 
-Vertexattribute tragen Clipposition, normalisierte UV und premultiplizierte
-Farbe; Fragmentshader verwenden screen-lineare Interpolation. Der kombinierte
-Textur-/Samplerhandle liegt in CBuf 1 an Byte 0; NAK-interne Konstanten
-verwenden CBuf 0. Nearest/Bilinear bleibt Samplerzustand. sRGB-Umwandlungen
-heben die Premultiplikation voruebergehend auf und erhalten transparente
-Pixel ohne Division durch null. Ansichten muessen doppelte Umwandlung
-verhindern. Deskriptorbindung, Referenzpixel und Toleranzen folgen in 0.79.19.
+  Linux:   ./Repositories/Libraries/Build.sh R4NAK
+  Windows: Repositories\Libraries\Build.bat R4NAK
+  Archiv:  R4NAK/Tools/Build.sh -Offline (Windows: Build.bat)
 
-Hostwerkzeug: 27206248 Bytes, kein R4OS-Modul. Das separate Legal-Paket
-enthaelt die originalen Mesa-/Crate-Archive, Lizenzen und Rust-Hinweise
-(rund 66 MB). Exakte Groessen, Dauer und Hashes stehen im Buildnachweis.
-Normale Modul-/Imagebuilds starten diesen Compiler nicht. Kein Gasttest,
-kein neuer Grafik-Smoke und kein Kontaktversuch zum OssiPC im urspruenglichen
-Hostcheckpoint. Die folgende Laufzeitintegration ist separat belegt.
+SDK/R4MF deklariert NATIVE_ARCHIVE als logischen, nur fuer Zig-R4L erlaubten
+Eintrag. Der Besitzer uebergibt genau passende verfolgte Buildartefakte;
+keine impliziten Hostbibliotheken. Ein normaler R4NAK-Build prueft Cache und
+C/Zig-ABI; unveraenderte Quellen brauchen keinen erneuten nativen Compile.
+Ein Imageplan selbst startet keine Shaderuebersetzung.
 
-Feste Programme und Laufzeitcache
----------------------------------
-EmitRuntime.ps1 prueft aktuelle Compiler-Eingaben sowie die Hashes aller
-Code-/Metadaten-/NIR-/Assemblerdateien, bevor es die generierten Dateien
-unter R4NV/Source/Generated/Shaders ersetzt. Auch Headeraenderungen ohne
-Codeaenderung werden abgelehnt. Ein normaler R4NV-Build bindet ausschliesslich
-die fuenf Programme ein; weder Mesa noch eine Rust-Runtime werden mitgeladen.
+Gemessener nativer Aufbau: 301 C-Einheiten, 201,76 Sekunden ab Werkzeug-
+pruefung, Mesa-Hostvorbereitung bereits gecacht. Archiv 27526318 Bytes,
+R4L 16698527 Bytes, geladenes Image 12664832 Bytes, 168114 Relokationen.
+Vollstaendige gesammelte Originalnotizen: ThirdParty/NOTICES.txt und
+notices.json; bytegleich als R4OS/LICENSES/R4NAK-NOTICES.txt installiert
+und neben Images stageiert. Originales R4OS-Material bleibt Apache-2.0.
 
-SHADER_V1 revision1 ist eine eigene 56-Byte-Tabelle; BACKEND_V1 bleibt
-unveraendert. Metadatenabfrage und Cachelesen/-schreiben sind begrenzt,
-ohne Heap, Datei-I/O oder GPU-Zugriff. Der aktuelle Treiber/Renderer liefert
-Geraeteidentitaet, Artefaktstand, Klasse, RM-/Command-/Shader-/Ressourcen-ABI,
-Formate und Pipelinezustands-Hash. Der Compiler-Hash kommt aus dem Build.
+Cache und gezielte Abnahme
+-------------------------
+Little-Endian-Bytecache mit 464-Byte-Header und Maschinencode, SHA-256 ueber
+Metadaten/Code. Identitaet umfasst Quelle/Pipeline, Compiler, GPU/SM/Stage,
+Treiber, Command-/Ressourcen-/Konstanten-ABI, Format, Pipeline-Layout sowie
+Geraete-/Resetgeneration. Beschaedigte oder unpassende Eintraege sind Misses
+ohne Ausgabemutation. Keine GPU-Handles; der Renderer baut Ressourcen neu.
+Optionaler R4SYS-Dateiadapter verwendet private Stage-/Backupnamen und
+atomare Ersetzung. Zeit-, Speicher- und Logstatistiken werden nicht gecacht.
 
-Ein Eintrag umfasst maximal 1152 Bytes: 384-Byte-Praefix und Maschinencode.
-Das explizite Little-Endian-Format enthaelt den 128-Byte-NVIDIA-Header und
-SHA-256. Lesen verlangt identische Schluessel, Metadaten, Header, Code und
-Pruefsumme; unpassende oder beschaedigte Daten ergeben CACHE_MISS, ohne
-das Ergebnis anzutasten. Auch neue gueltige Pruefsummen legitimieren keinen
-abweichenden Programmcode. Die Rueckgabe leiht byteausgerichtete Bereiche
-im unveraenderten Aufruferpuffer. Es werden keine GPU-Adressen gespeichert.
+Abnahme: vorhandener SDK-module-test, eine generierte C/Zig-ABI-Gruppe und
+abschliessend DISPLAYD /COMPILER in einem kurzen SMP4-Gast. Nachgewiesen:
+echte Laufzeituebersetzung, Wiederholbarkeit, veraenderte Eingabe, vier
+Hostreferenz-Codehashes, OOM-Abbau/Wiederanlauf, Deadline, fehlerhafte/
+aliasierende Eingabe, Cacheidentitaet/Korruption/Kuerzung, atomare Datei-
+publikation und sieben Formate. Alle Worker-Joins enden mit live-bytes=0.
+Kleiner Fragmentshader: 96 Codebytes, Peak 189811 Bytes, 818111 ns in diesem
+KVM-Lauf. Das ist ein Funktionsnachweis, kein allgemeiner Leistungsbenchmark.
 
-Gezielte Pruefung: zwei bestehende R4NV-Provider-/C-/Zig-Faelle; alle fuenf
-Compiler-Codehashes, jedes Byte/jede Verkuerzung des groessten Eintrags,
-Identitaets-/ABI-Wechsel sowie Alias-/Kapazitaetsfehler. Ein veraenderter
-Compilerheader wird vor der Materialisierung verworfen. DISPLAYD /BUFFERS
-nutzt dieselbe Laufzeittabelle mit synthetischer Geraeteidentitaet; der
-separate kurze SMP4-Nachweis steht im shader_cache_checkpoint der JSON-Datei.
-Er prueft Softwarecache und bestehenden Software-Fallback, keine GPU-Pixel.
-
-Noch umzusetzen
----------------
-- R4OS-Rust/C-Anbindung fuer dynamische Shader; allozierende Compilerarbeit
-  ausserhalb des Framepfads und mit wirksamem Fehler-/Ressourcenabbau.
-- Nativen Pipelinebesitz an den geprueften Shadercache anbinden; residente
-  Shader-/Pipelineressourcen nach Reset validieren oder erneut erzeugen.
-- Integration der Shader, Deskriptoren und nativen Renderressourcen in 0.79.19.
-- Nativer Windows-Buildnachweis. Physische NVIDIA-Ausfuehrung bleibt separat
-  OFFEN in ExFiles/Reports/OssiGPU.txt /0.79.34 zusammen mit /19 und /36.
+Historischer Host-/Festshaderbericht aus 0.79.18 bleibt im Belegarchiv.
+Windows-Ausfuehrung und physische Shader-/Cacheabnahme sind konkret in
+OssiGPU.txt beschrieben. Dieser Softwareabschluss erledigt sie nicht.

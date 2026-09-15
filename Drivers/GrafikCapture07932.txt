@@ -1,0 +1,123 @@
+﻿Screenshots, Readback und Remote-Desktop 0.79.32
+==============================================
+Status: Softwareabschluss; physische Abnahme bleibt offen.
+Nachweise: GrafikCapture07932.json; physisch offen: OssiGPU.txt /0.79.32.
+
+Bedienung und Bildinhalt
+-----------------------
+Druck/Print Screen im Desktop speichert C:\SCREENSHOTS\SHOT-<Zeit>.BMP.
+Ein eigener Worker schreibt jeweils eine Aufnahme; weitere Tastendruecke
+waehrenddessen erzeugen keine Warteschlange. Erst nach vollstaendigem Schreiben
+und Flush wird die .PART-Datei in .BMP umbenannt. Fehler erscheinen im Log.
+Der interaktive Desktop meldet Erfolg oder Fehler nach Abschluss.
+
+Screenshot, RDPSVC und RFDIAG verwenden dasselbe fertige Bild der primaeren
+Ausgabe in aufrechten logischen Desktopkoordinaten. Drehung und Skalierung
+werden ruecktransformiert; eine Aufnahme umfasst nicht die gesamte Flaeche
+mehrerer Monitore. Das Dateiformat ist 32-Bit-BI_RGB, top-down, ohne Kompression,
+mit 54-Byte-Header und dichtem XRGB-Pixelarray. Die Farbannahme ist sRGB SDR.
+
+HDR wird durch den vorhandenen R4GFX-Farbpfad mit Ausgabe-Tonemapping,
+relativer Weissbehandlung und Dithering auf sRGB SDR gebracht. Zielweiss und
+Zielspitze sind 100 cd/m2. Monitor-ICC und Kalibrierung werden nicht in die
+Aufnahme eingebrannt: Der entsprechende CPU-Kompositor friert seine schon
+komponierte sRGB-Szene vor dem Monitortransform ein. Eine HDR-Aufnahme ist
+damit kein unveraendertes HDR-Signal und keine Messung des physischen Displays.
+
+Softwarecursor ist bereits Bestandteil der Szene. Ein separater Hardwarecursor
+wird genau einmal mit der Position des aufgenommenen Frames eingesetzt und
+danach aus dem wiederverwendbaren CPU-Bild entfernt. Cursor-Metadaten und
+Bildrevision gehoeren zusammen. Capture setzt den bestehenden readers-Blocker:
+Direct Scanout und Hardwareoverlays verwenden waehrenddessen die vollstaendige
+Komposition. Es wird kein unsichtbarer Overlayinhalt als erfasst ausgegeben.
+
+Besitzer und Lebensdauer
+-----------------------
+Desktop besitzt genau einen aktiven Aufnahmeweg fuer seine primaere Ausgabe.
+R4GFX/Display/readback.zig ist eine einkompilierte Library-Hilfe ueber die
+bestehenden DEVICE_V1- und COLOR_V1-Vertraege. Der Kernel besitzt ausschliesslich
+den CPU-Publisher, Demand, unveraenderliche Snapshots und Prozessbereinigung.
+Encode, Netzwerk und Dateisystem bleiben in ihren Userland-Besitzern.
+
+Eine Aufnahme beginnt erst nach der bestaetigten Kompositions-/Present-Receipt.
+Der tatsaechliche Swapchain-Slot bleibt bis zum Ende seines Kopierauftrags
+gesperrt. Eine blosse Resource-Referenz wuerde dessen Wiederbeschreibung nicht
+verhindern. Danach endet die GPU-Quellbindung, bevor CPU-Farb-/Orientierungsarbeit,
+Kernelpublikation, Encode oder Netzwerk beginnen. Eine Copy-Receipt belegt
+keinen physischen VBlank; die bestehenden Present-Grenzen bleiben unveraendert.
+
+Ein wiederverwendbares System-Stagingbild und CPU-SDR-Bild genuegen je aktiver
+Aufnahme. Hoechstens acht Regionen werden kopiert; Farb- und Orientierungsarbeit
+verarbeiten maximal 65536 Pixel je Poll. Erste Aufnahme, Epochwechsel, Resize,
+verlorene Damagebasis oder fehlgeschlagene Aufnahme erzwingen eine Vollkopie.
+Spaetere Aufnahmen verwenden zusammengefasste Schaeden. Uebersprungene Frames
+werden nicht gesammelt; ein begrenzter Redraw holt den neuesten Stand nach.
+
+Die Kopierfrist betraegt zwei Sekunden. Fehler und Cancel erlauben erst nach
+tatsaechlich beendeten Jobs/Fences die Wiederverwendung. Ungeklaerte GPU-Nutzung
+bleibt im bestehenden Ausgabebesitzer bis zum Quieszenz-/Device-Lost-Nachweis
+erhalten. Ein langsamer CPU-Leser haelt dagegen niemals GPU-/Scanout-Speicher.
+Ohne Demand entstehen keine Capturejobs; der letzte Leser beendet den Bedarf
+und gibt Staging nach dem erforderlichen Abschluss frei.
+
+Unveraenderliche CPU-Snapshots
+----------------------------
+R4DESK ABI14 erweitert das bisherige 496-Byte-Praefix auf 528 Byte. Die vier
+neuen optionalen Funktionen beginnen bei 496, 504, 512 und 520:
+snapshot_acquire, snapshot_release, source_reset und capture_stats (jeweils
+mit remote_frame_-Praefix). Die Query:1-Importnamen bleiben erhalten.
+RemoteFrameInfo bleibt unveraendert 80 Byte; Lease ist fest48, Stats fest96.
+
+Demand gehoert dem aufrufenden Programm samt Generation. Eine Snapshot-Lease
+benennt ebenfalls exakt Programm, Lease-ID und Quellepoche. expected_revision=0
+waehlt den neuesten vollstaendigen Stand; eine andere Revision muss passen.
+Kopierkollision, fehlendes Bild oder volle Quoten liefern unavailable; nur bei
+Erfolg duerfen die Rueckgaben verwendet werden. Leases bleiben bis Release oder
+Ausfuehrungsende des Programms unveraenderlich, auch ueber Resize/Quellwechsel.
+
+Der Pool enthaelt hoechstens drei unterschiedliche CPU-Snapshots mit je maximal
+64 MB. Bis zu 64 Leases insgesamt, maximal acht je Programm, koennen passende
+Snapshots gemeinsam halten. Der Publisher ist ebenfalls auf 64 MB begrenzt.
+Ein voller Snapshotpool verwirft keinen Leser und sperrt keinen lokalen Frame:
+Neue Leser erhalten unavailable und koennen spaeter den neuesten Stand holen.
+Ein Quellneustart entwertet aktuelle Publikation/History; gehaltene alte Bilder
+werden erst nach ihrer letzten Lease freigegeben. Prozessende bereinigt Bedarf
+und Leases erst hinter der gemeinsamen Ausfuehrungsretirement-Grenze.
+
+Der preemptible Kopierbesitzer und kurze Programm-Metadatenowner bleiben
+getrennt. Heap, Pixelkopien, Wakeups und I/O liegen nicht unter dem kurzen Lock.
+Der alte Map-Vertrag bleibt fuer alte Einzelverbraucher binaer verfuegbar;
+RDPSVC, RFDIAG und Screenshot verwenden ausschliesslich neue Snapshot-Leases.
+
+Remote-Dienst und Diagnose
+-------------------------
+RDPSVC haelt eine CPU-Lease bis zum Abschluss seiner Encode-/Sendoperation und
+gibt sie auf jedem Rueckweg frei. Snapshot-Mangel wartet auf diesem Worker
+maximal 250 ms, danach folgt der vorhandene Session-Backoff. Advance zwischen
+Damageabfrage und Snapshot erzwingt eine volle Bildregion. Beim gestreiften
+Erstbild bleibt die erste Revision als Folgeupdate-Basis erhalten, damit auch
+Aenderungen in schon gesendeten Streifen nachgezogen werden. Netzwerkprotokoll,
+Codecs, Inputverarbeitung und bestehende Groessenwechselregeln bleiben erhalten.
+
+RFDIAG prueft unveraenderliche erste/letzte Pixel und geteilte Leases derselben
+Revision. /EXITOWNED ist eine gezielte Diagnose des Prozessabbaus: Sie beendet
+sich mit gehaltenem Bedarf und Snapshot. Kernelretirement muss beides aufheben.
+capture_stats meldet Publisher-/Snapshotkopierbytes, Speicher und maximale
+CPU-Leserdauer. Desktop fuehrt GPU-Kopierbytes, CPU-Konvertierungsbytes und
+Readback-Latenz getrennt; Leserhaltedauer ist keine GPU-Ausfuehrungszeit.
+
+Pruefgrenzen und Referenzen
+-------------------------
+Vorhandene Desktop-, Kernel-, SDK- und Contractgruppen werden gezielt erweitert;
+keine neue Testgruppe oder Langlaufkampagne. Der kurze SMP4-Gast prueft dieselbe
+Aufnahme-/Screenshotkette ueber Virtio und den Firmware-Framebufferfallback.
+Hostmodelle pruefen echte Readback-/Farb-/Capturebesitzer mit simulierten
+GPU-Receipts, Timeout, Skip, Drehung/Skalierung und ICC-Grenze. Der BMP-Test liest
+das erzeugte Format mit dem vorhandenen Bilddecoder zurueck.
+
+Der Gastlauf ist netzlos. Er belegt weder eine externe RDP-Clientansicht noch
+physische NVIDIA-Readbacks, HDR-Signalwirkung oder Cursor-/Overlay-Hardware.
+Deren Wiederaufnahme steht mit Sichtvergleich und langsamer Verbindung in
+ExFiles/Reports/OssiGPU.txt /0.79.32. Sources.json unter GFX/0.79.32 bindet die
+Microsoft-Duplication-/BMP- und Wayland-/Weston-Referenzen an Revision und Hash;
+Originalhinweise bleiben erhalten. Es wurde kein fremder Produktcode kopiert.

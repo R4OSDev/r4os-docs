@@ -3,7 +3,7 @@
 <!-- R4OS-APIREF:BEGIN R4DESK (generiert von ApiContractGen aus ApiContract.json - NICHT von Hand editieren) -->
 ## Tabellen-Referenz R4DESK (generiert)
 
-Kernel-Gruppentabelle `R4XStartR4Desk` v13, 496 Bytes, 59 Funktionsfelder und 60 Slots insgesamt.
+Kernel-Gruppentabelle `R4XStartR4Desk` v14, 528 Bytes, 63 Funktionsfelder und 64 Slots insgesamt.
 Signatur-Wahrheit: `abi.R4DeskFns` (Feldname == Tabellenfeld).
 Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 
@@ -69,6 +69,10 @@ Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 | 57 | 472 | function | `console_input_wait` | `*const fn (u64, u64, *u64) callconv(.c) i32` |
 | 58 | 480 | function | `physical_key_poll` | `*const fn (*PhysicalKeyEvent) callconv(.c) i32` |
 | 59 | 488 | function | `mouse_motion` | `*const fn (*MouseMotion) callconv(.c) i32` |
+| 60 | 496 | function | `remote_frame_snapshot_acquire` | `*const fn (u32, *RemoteFrameInfo, *RemoteFrameLease) callconv(.c) i32` |
+| 61 | 504 | function | `remote_frame_snapshot_release` | `*const fn (*const RemoteFrameLease) callconv(.c) i32` |
+| 62 | 512 | function | `remote_frame_source_reset` | `*const fn () callconv(.c) i32` |
+| 63 | 520 | function | `remote_frame_capture_stats` | `*const fn (*RemoteFrameCaptureStats) callconv(.c) i32` |
 <!-- R4OS-APIREF:END R4DESK -->
 
 
@@ -92,8 +96,8 @@ Programmzustands-Owners, aber unter dem Kopier-/Lebensdauerbesitzer.
 Info, Read, Map und Publikation melden eine Besitzerkollision als
 unavailable. Leser erhalten nur abgeschlossene Pixel samt passender
 Revision. Map liefert seine zwei getrennten Snapshots nur bei genau einem
-registrierten Konsumenten; mehrere Konsumenten verwenden die kopierende
-Read-API. RDPSVC hat diesen Ausweichpfad bereits. Der gehaltene Bezug und
+registrierten Konsumenten. Neue Leser verwenden ab 0.79.32 die unten
+beschriebenen unveraenderlichen Snapshot-Leases. Der gehaltene Bezug und
 der bestehende owner-thread-only-Vertrag gelten bis nach Ende der Nutzung.
 Kein Netzwerk-I/O und keine lange IRQ-/Praeemptionssperre im Kopierbesitzer.
 
@@ -101,3 +105,25 @@ Remote-Eingabequeue und Status verwenden fuer ihre kurzen Aenderungen den
 SMP-Programmzustands-Owner. Ein voller Puffer erhoeht dropped genau einmal;
 pushed, polled und pending folgen der tatsaechlichen Aufnahme/Abholung.
 Der Desktop-Wakeup erfolgt erst nach Veroeffentlichung und Ownerfreigabe.
+
+
+## Snapshot-Leases ab 0.79.32
+
+`remote_frame_snapshot_acquire` liefert passende RemoteFrameInfo und eine
+48-Byte-Lease mit ID, CPU-Adresse, Kapazitaet, Quellepoche und Erwerbszeit.
+expected_revision=0 nimmt den neuesten Stand; sonst muss die Revision passen.
+Nur Programme mit eigenem Demand koennen erwerben. Bis zu acht Leases je
+Programm und 64 insgesamt teilen maximal drei Bilder mit je maximal 64 MB.
+Fehler/volle Quoten liefern unavailable; nur erfolgreiche Rueckgaben sind nutzbar.
+Die Pixel sind bis `remote_frame_snapshot_release` unveraenderlich. Resize,
+SourceReset und letzter Demand entwerten gehaltene Leases nicht.
+
+`remote_frame_source_reset` beansprucht eine neue Publisher-Epoche und verwirft
+den aktuellen Stand samt History. Abgeschlossene Programmausfuehrung bereinigt
+nur die eigenen generationstreuen Leases, Demand und gegebenenfalls Publisher.
+`remote_frame_capture_stats` liefert 96 Byte mit Belegung, Kopierbytes und
+maximaler CPU-Leserdauer. Pixelcopy bleibt preemptible und getrennt vom kurzen
+Metadatenowner; Leasehaltung umfasst weder GPU-Referenz noch lokalen Present.
+
+RDPSVC, RFDIAG und Desktop-Screenshots verwenden diesen gemeinsamen Weg.
+Bild-/Cursor-/Farbpolicy: `Docs/Drivers/GrafikCapture07932.txt`.

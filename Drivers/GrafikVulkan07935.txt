@@ -81,7 +81,7 @@ laufende RM-Auftraege mit eigener endlicher Operationsfrist. Normaler Graph-
 Abbau wartet auf den Broker; Reset loest Aliase und RAM-Registrierungen vor
 Brokerreferenzen und nativen BOs. Unklare Quittungen bleiben bis zum belegten
 Reset erhalten. Der Native-Consumer haelt diese VA-Tokens und ihre BOs bis
-zu echten GPU-Abschlussquittungen; die NVK-Anbindung folgt noch.
+zu echten GPU-Abschlussquittungen; der NVK-Adapter nutzt diesen Besitzer.
 
 Mehrere oeffentliche RAM-Bindungen teilen eine physische Registrierung. Jeder
 neue Broker-Handle wird trotzdem kanonisch importiert und geprueft. Ein
@@ -164,9 +164,27 @@ Epoche setzt dauerhaft device-lost. Logische Geraete teilen keine Listen oder
 Fehlerzustaende. Speicher und VA halten ihren Geraetebesitzer bis zum C-Abbau,
 dieser wiederum den physischen Besitzer. Der residente Broker behaelt spaete
 Arbeit ohne C-Pointer. Fehlgeschlagene Teilanlage erhaelt Ausgabeparameter.
-Dies ist der private Ressourcenbesitzer; Vulkan-Geraetezulassung und nativer
-Submit/Sync fehlen. Keine Ausfuehrungskontexte, Sync-Typen, GPU-Zeitstempel,
-Budgettelemetrie, Tiling-/Kompressions- oder Coherency-Zusagen werden erfunden.
+Dies ist der private Ressourcenbesitzer; Vulkan-Geraetezulassung bleibt offen.
+GPU-Zeitstempel, Budgettelemetrie, Tiling-/Kompressions- oder Coherency-Zusagen
+werden nicht aus Ressourcenanlage abgeleitet.
+
+Der NVK-Submitadapter nutzt kanonische Native-Queues und echte Fence-Waits.
+GR-/Compute-/Copy-Bits werden uebersetzt; NVKs Copy-Uploadkontext nutzt einen
+GR-Kanal mit zugeordnetem CE. Erst ein bestaetigter leerer Batch erlaubt den
+Kontext. Bis 510 Pushes pro Paket bleiben an vollstaendigen Methodengruppen
+getrennt. No-prefetch bleibt erhalten; Fehler behalten gepufferte Befehle.
+Alle lebenden Bindungen werden kanonisch gehalten, auch Aliase nach BO-Free.
+Diese vorsichtige Residenzhaltung ordnet Geraetequeues ueber GPU-Fences;
+ohne sie wuerden indirekte Zugriffe falsche Schreibkonflikte erzeugen.
+Leere Fence-Batches benoetigen keine App-Bindungen. Keine Besitzersperre
+umspannt GPU-Waits; der gehaltene Geraeteabschluss wird bei Close geloest.
+
+Native binaere Syncs tragen echte GPU-Punkte; Mesas originale Timeline-
+Implementierung ordnet ihre Werte darueber. Pending bedeutet eingereicht,
+nicht ausgefuehrt. Exportierte Abhaengigkeiten halten Kernelhandles bis zur
+Uebernahme; erledigte Punkte geben Metadaten frei. Reset/Fehler bleiben
+device-lost. CPU-Signal/Reset/Move und monotone absolute Wartefristen bestehen.
+Der POSIX-Debugtimeout mit globalem Cache entfaellt im nativen Mesa-Pfad.
 
 NVIDIA bereitet externe GPFIFO-Pushbufferlisten im bestehenden Kanal-/Ringbesitzer
 vor: bis 510 Eintraege, Subroutine-Level, no-prefetch/SYNC_WAIT und ungeteilte
@@ -181,8 +199,8 @@ benachbarte Maps sind moeglich; Luecken und veraltete Bindungen werden abgewiese
 Device prueft Auftrag, Kanal, Ticket und Ressourcen vor USERD und Doorbell.
 Erst die Semaphore gibt die Bindungen frei; Timeout/Stop halten sie bis zum
 nachgewiesenen Geraetereset. Normales Polling durchlaeuft nicht erneut alle
-Ressourcen. Die oeffentliche Treiberqueue ist angebunden; NVK-Kontexte/Sync
-sowie parallele/pipelined Einreichung bleiben Softwarearbeit.
+Ressourcen. Die oeffentliche Treiberqueue und NVK-Kontexte/Sync sind angebunden;
+parallele/pipelined Einreichung bleibt Softwarearbeit.
 
 NVIDIA 0.1.134 kann neben dem Renderer weitere regulaere GR-Kontexte aus der
 fertigen Golden-Vorlage anlegen: eigene RM-Gruppe, Kanal und veraenderliche
@@ -193,7 +211,7 @@ Ein geliehener Golden-Besitzer wird nicht vom Kind freigegeben. Die bestehende
 Device-Probe deckt Nebeneinander und Close waehrend Kontext-, Speicher-, Kanal-
 und Barrier-Waits ab. Hardwareantworten bleiben modelliert. Evidence:
 RegularContext. Die Queuezuordnung ergaenzt NativeConsumer; NativeEngines legt
-zusaetzliche Compute-/Kopierobjekte an. NVK-Submit/Sync bleibt Softwarearbeit.
+zusaetzliche Compute-/Kopierobjekte an. Der NVK-Adapter verwendet diese Queues.
 Speicheranlage prueft einen beschaeftigten RM-Kanal vor der Adressraumabfrage;
 spaeter Pufferabbau unterbricht dadurch keinen anschliessenden Renderer-Start.
 
@@ -363,6 +381,19 @@ BO- und C-Heap-Bilanz stimmen. Geraetedaten, GPU-Adressen und Quittungen
 sind modelliert; kein GPU-Submit. Kernel/SDK/Treiber/Release unveraendert.
 Evidence: NvkResourceDevice; weiterhin kein installierter Vulkan-Provider.
 
+NVK-Submit/Sync: Sechs native C-Einheiten und beide originalen Mesa-Sync-
+Einheiten bauen freestanding mit -Werror und Assertions. Die erweiterte
+SMP4-Probe prueft Copy-/kombinierte Kontexte, unabhaengige Queues und explizite
+Abhaengigkeiten, einen gemeinsamen binaeren/Timeline-Punkt, Pending/Abschluss,
+CPU-Signal/Reset/Move, Alias-Free bei laufender Arbeit, 512 Pushes als 509+3,
+OOM mit Retry sowie Reset und neue Backendpublikation. BO-/C-Heap-Bilanzen
+stimmen. Zwei fruehe Laeufe deckten eine Reihenfolgeannahme der Teststeuerung
+auf; ein Handshake mit dem tatsaechlich uebernommenen Auftrag behebt sie.
+GPU-/VA-Antworten sind modelliert. Nur Diagnostik/Geraetefehlerbericht haben
+explizite Fixture-Ersatzfunktionen; diese bestaetigen keine GPU-Arbeit.
+Evidence: NvkSubmit. Kernel/Treiber/Release bleiben unveraendert; die volle
+Providerintegration und physische Ausfuehrung sind damit nicht nachgewiesen.
+
 NVIDIA 0.1.132: Die vorhandene Complete-Run-Gruppe vergleicht 17 unabhaengige
 Originalheader-C-Worte und prueft Batch-Grenzen, fehlerfreie Vorbereitung,
 DMA-Manipulation, Ringumlauf, Fetch ohne Abschluss, gesperrte Wiederverwendung
@@ -409,15 +440,16 @@ Lebensdauern, C-Math-/Dateipfaden, Allocationcallbacks und Rust-Fehlergrenzen;
 R4VK-Contract, Loader/ICD-Modul, Manifest/Inventar und Faehigkeitsabfragen.
 Build-Identitaet und Shader-Metadaten muessen in den finalen Provider eingebunden
 werden. Prozessbroker und NVIDIA-Provider samt mehrteiligen Bindungen bestehen.
-NVKMD-Ressourcengeraete sowie VA-, Speicher- und Beschreibungsadapter bestehen;
+NVKMD-Ressourcengeraete, VA-/Speicher-/Beschreibungs- und Submit-/Syncadapter bestehen;
 Vulkan-Geraetezulassung/-Enumeration, publizierte Speichertypen/Budgets,
-Cache-/Barrierelogik und Verbindung der gemeinsamen Native-Queue mit NVK
-bleiben offen. NVIDIA konsumiert sie fuer regulaere GR-Kontexte mit optionalen
+Cache-/Barrierelogik und vollstaendige Providerintegration bleiben offen.
+NVIDIA konsumiert Native-Queues fuer regulaere GR-Kontexte mit optionalen
 Compute-/Kopierobjekten. Die kanonische BO-/VA-Nutzungshaltung besteht.
 RAM-Registrierungen werden gemeinsam verwendet; RAM-/VRAM-Metadaten wachsen.
 Treiber-Leases sind dynamisch indiziert. Verbleibende Queue-/Geraetegrenzen
 muessen in den publizierten Faehigkeiten stimmen. Lineare Suche und Kopien
-anderer Metadaten sind noch keine Latenzfreigabe fuer grosse Vulkanlasten. Native
-Pushbuffer und GPU-Ereignisse folgen durch die vorhandenen Ressourcen-/Queue-
-und NVIDIA-Besitzer. Fehlende Software bleibt in 0.79.35; CPU-/Modellproben
+anderer Metadaten sowie die konservative Residenzhaltung/Queueverkettung sind
+noch keine Latenz- oder Parallelitaetsfreigabe fuer grosse Vulkanlasten.
+Native Pushbuffer und GPU-Ereignisse laufen ueber die vorhandenen Besitzer.
+Fehlende Software bleibt in 0.79.35; CPU-/Modellproben
 belegen weder reale GPU-Ausfuehrung noch einen fertigen Vulkan-Provider.

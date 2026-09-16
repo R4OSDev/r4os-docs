@@ -38,6 +38,13 @@ relocations; no host library search is implied. R4NAK uses this for its
 pinned C/Rust compiler. Its common PS7 builder produces the archive on
 Windows or Linux; ordinary applications do not acquire these toolchains.
 
+For optional native weak entrypoints, R4XBuilder preserves an already linked
+NULL pointer only when the ELF still identifies a weak undefined symbol and
+the ABS64 value, addend and file-backed pointer are all zero. This does not
+create a module import. Unlinked, strong/local undefined and nonzero targets
+remain errors, as do unsupported GOT relaxation relocations. Public exports
+are still selected by the manifest, independently of native ELF visibility.
+
 `IMAGE_SCOPE` is `slim`, `full`, `test` or `none`. Distribution derives the
 profile plan from discovered manifests and rejects missing artifacts,
 duplicate targets, unknown scopes and unresolved required providers.

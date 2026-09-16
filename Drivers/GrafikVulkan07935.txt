@@ -1,6 +1,6 @@
 ﻿Vulkan 0.79.35: nativer Mesa-Unterbau (Zwischenstand)
 ====================================================
-Unterversion OFFEN. Release 0.79.34, Kernel 0.1.190, NVIDIA 0.1.132.
+Unterversion OFFEN. Release 0.79.34, Kernel 0.1.190, NVIDIA 0.1.133.
 Noch kein installierter R4VK-Provider und keine Vulkan-Konformitaetszusage.
 NVIDIA.R4D bleibt einziger Hardwarebesitzer. OssiPC wurde nicht kontaktiert;
 physische Nacharbeit: ExFiles/Reports/OssiGPU.txt /0.79.35.
@@ -173,9 +173,16 @@ vor: bis 510 Eintraege, Subroutine-Level, no-prefetch/SYNC_WAIT und ungeteilte
 Methodenketten. Der private Abschluss wartet mit WFI_ALL, ordnet mit SYS_MEMBAR
 und schreibt eine Semaphore. Vorbereitung validiert vor DMA-Aenderung; Ring-
 umlauf und leerer Batch sind moeglich. Der Ring wartet vor dem Produzentenwechsel
-und vor Wiederverwendung auf Abschluss; GP_GET reicht nicht. Dies ist nur die
-Transportvorbereitung. Oeffentlicher Submit, Device-Doorbell-Zulassung, gehaltene
-VA-/BO-Auftraege und NVK-Queue-Anbindung bleiben Pflichtarbeit.
+und vor Wiederverwendung auf Abschluss; GP_GET reicht nicht.
+
+Der private Runtime-Besitzer haelt nun eine Kopie der Liste und gezaehlte
+Ausfuehrungsreferenzen auf bestaetigte VA-Bindungen. Auch Pushes ueber zwei
+benachbarte Maps sind moeglich; Luecken und veraltete Bindungen werden abgewiesen.
+Device prueft Auftrag, Kanal, Ticket und Ressourcen vor USERD und Doorbell.
+Erst die Semaphore gibt die Bindungen frei; Timeout/Stop halten sie bis zum
+nachgewiesenen Geraetereset. Normales Polling durchlaeuft nicht erneut alle
+Ressourcen. Oeffentlicher Submit mit kanonischen BO-Ausfuehrungsleihen, NVK-
+Kontexte/Sync sowie parallele/pipelined Einreichung bleiben Softwarearbeit.
 
 Gezielte Softwarepruefung
 -------------------------
@@ -290,6 +297,14 @@ DMA-Manipulation, Ringumlauf, Fetch ohne Abschluss, gesperrte Wiederverwendung
 und anschliessenden regulaeren CE-Auftrag. Device/Firmware bleiben modelliert;
 Batch-Publikation wird in der Probe direkt am privaten Ring aufgerufen, ohne
 fertigen oeffentlichen Submit oder Device-Doorbell-Pfad. Evidence: NvkPushBatch.
+
+NVIDIA 0.1.133: Dieselbe Complete-Run-Gruppe prueft jetzt echte Runtime-/Device-
+Zulassung und Doorbell mit modellierten GPU-Stores: Mapping-Luecken, straddelnde
+Pushes, wiederholte Referenzen, caller-unabhaengige Listen, gesperrtes Unmap,
+Fetch ohne Abschluss, leere Batches und anschliessende regulaere CE-Auftraege.
+Ein Batch-Timeout haelt VA/BO/Metadaten bis zum echten modellierten FLR-Nachweis;
+die folgende Besitzerbereinigung benoetigt keine erfundenen RM-Antworten.
+Kein physischer GPU- oder oeffentlicher Vulkan-Submit. Evidence: NvkBatchExecution.
 
 Shaderpruefung: originale SPIR-V-, NIR- und printf-Daten mit dem Standard-
 Generator verglichen; native Helfer und ihre NVK-Aufrufer freestanding gebaut.

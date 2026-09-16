@@ -1,6 +1,6 @@
 ﻿Vulkan 0.79.35: nativer Mesa-Unterbau (Zwischenstand)
 ====================================================
-Unterversion OFFEN. Release 0.79.34, Kernel 0.1.185, R4SYS v20/1224 Bytes.
+Unterversion OFFEN. Release 0.79.34, Kernel 0.1.186, R4SYS v20/1224 Bytes.
 Noch kein installierter R4VK-Provider und keine Vulkan-Konformitaetszusage.
 NVIDIA.R4D bleibt einziger Hardwarebesitzer. OssiPC wurde nicht kontaktiert;
 physische Nacharbeit: ExFiles/Reports/OssiGPU.txt /0.79.35.
@@ -36,7 +36,7 @@ Mesa CLC erzeugen Tabellen und Query-/Indirect-Copy-Helfer. Shaderdaten bleiben
 unveraendert; printf-Metadaten werden statisch fuer einen expliziten Besitzer
 bereitgestellt. Automatische C++-Konstruktoren entfallen im nativen Ergebnis.
 
-NVIDIA 0.1.126 ergaenzt getrennte RM-Adressreservierungen und Teilabbildungen
+NVIDIA 0.1.127 ergaenzt getrennte RM-Adressreservierungen und Teilabbildungen
 mit unabhaengigen Speicher-/GPU-Offsets. Aliase halten vorhandene RAM-
 Registrierungen beziehungsweise VRAM samt gemeinsamem BO-Import. Frueher
 Abbau und Cache-Eviction sind gesperrt; unklare Quittungen behalten Ressourcen.
@@ -46,6 +46,31 @@ Die dynamische Runtime-Verwaltung verwendet DriverHeap und stabile RM-Namen
 ohne feste VA-/Bindungsanzahl. Anlegen, Abbilden und Abbau laufen ueber den
 bisherigen Device-Worker mit dessen Befehlspruefung. Graph-/Reset-Abbau loest
 Aliase vor den Speicherpuffern; fehlerhafte Heap-Besitzer bleiben erhalten.
+
+Native VRAM-Aliase akzeptieren auch eine gehaltene volle BO-Referenz nach
+Schluss der urspruenglichen Treiberreferenz. Der gemeinsame Besitzer liefert
+die tatsaechliche BO-Identitaet und Zugriffsart; falsche/immutable Referenzen
+und Import-OOM werden vor Hardwarearbeit abgewiesen und sauber freigegeben.
+
+R4DRAW v32/864 Bytes ergaenzt vier optionale gfx_virtual-Aufrufe; alle alten
+102 Slots bleiben unveraendert. Die DriverMemory-Tabelle waechst von 208 auf
+240 Bytes bei Drahtversion 1. Der residente Kernelbroker kopiert Bereichs-/
+Bindungsanfragen und haelt kanonische Treiber-BO-Referenzen. Ressourcen und
+Waiter liegen dynamisch im Heap; Handles werden generationstreu indiziert.
+Start, Query, Close und Wait unterscheiden Anlageergebnis und bestaetigten
+Abbau. Close-Modus 0 erhaelt den Handle fuer Abbau-Waits, Modus 1 gibt ihn
+frei. Bereichsschluss schliesst zuerst alle Bindungen. Zeitueberschreitung,
+Prozessende und Providerschluss behalten laufende Treiberansprueche; spaete
+Anlage wird anschliessend abgebaut. Eine kurze Sperre unter dem Programm-
+und BO-Besitzer schliesst neue Annahmen vor der Exit-Publikation. Kein
+Caller-Pointer oder Userland-Destruktor wird im Broker gespeichert.
+
+Der bisherige gfx-work-Thread publiziert getrennte Anlage-/Abbauereignisse
+und benachrichtigt authentifizierten R4D-Work ausserhalb der Metadatensperre.
+Treiber-Take/Complete bleiben fuer Abbau beim Providerschluss erreichbar.
+Der produktive NVIDIA-Adapter fuer diesen neuen Vertrag folgt noch; ohne
+registrierten Provider meldet Start unsupported. VMBROKER ist ausschliesslich
+eine temporaere Gastprobe und wird nicht in Produktprofile aufgenommen.
 
 Die gemeinsamen BO-/Referenz-/Nutzungstabellen wachsen im Kernelheap.
 Allokation, Initialisierung neuer Eintraege und Heapfreigabe laufen ausserhalb
@@ -82,6 +107,18 @@ wird mit gehaltenen Ressourcen beendet und gereapt; die Bilanz stimmt wieder.
 Auch die 37 vorhandenen Speicher-/Rasterfaelle samt Heapbilanz bestehen.
 Geraete-Quieszenz ist modellgeprueft; der Gast belegt CPU-/System-BOs.
 
+Kernel 0.1.186: 59 Grafiktests und Kernelbuild bestehen. Acht vorhandene
+Zig-Fassadenfaelle, die C-Fassade mit aktiven Assertions und -Werror sowie
+der Contract-Test pruefen die neuen optionalen Felder und Fehlerausgaben.
+Der kurze SMP4-Gast legt mit vier Workern 132 Bereiche und 132 Bindungen an.
+BOs bleiben nach Referenzschluss bis zur modellierten Treiberfreigabe erhalten.
+Die Probe beobachtet claimed vor Timeout beziehungsweise Kindprozess-Kill,
+prueft blockierte Waiter, Reap, spaete Anlage und Providerschluss. Elternabbau
+vor Kindabbau wird vom Modell abgewiesen; danach stimmt die BO-Bilanz.
+Dieser Gast prueft den echten Kernel-/R4D-Transport mit synthetischen
+Quittungen, ohne GPU-Ausfuehrung. Globale Wartungs-/Deadline-Durchlaeufe sind
+noch keine Latenzfreigabe fuer grosse Vulkanlasten.
+
 Shaderpruefung: originale SPIR-V-, NIR- und printf-Daten mit dem Standard-
 Generator verglichen; native Helfer und ihre NVK-Aufrufer freestanding gebaut.
 Der C-Kandidatenlauf ist keine finale Quellliste und kein vollstaendiger Link.
@@ -94,8 +131,9 @@ Vollstaendiger NVK/NIL-Build mit geprueften globalen/devicebezogenen
 Lebensdauern, C-Math-/Dateipfaden, Allocationcallbacks und Rust-Fehlergrenzen;
 R4VK-Contract, Loader/ICD-Modul, Manifest/Inventar und Faehigkeitsabfragen.
 Build-Identitaet und Shader-Metadaten muessen in den finalen Provider eingebunden
-werden. Die VA-Runtime braucht noch den gemeinsamen Prozess-/Auftragsbroker,
-mehrteilige Bindetransaktionen und NVK-Anbindung. Bestehende Kapazitaetsgrenzen
+werden. Der gemeinsame Prozessbroker besteht; die NVIDIA-Provideranbindung
+an seine Take/Complete-Aufrufe, mehrteilige Bindetransaktionen und NVK-Anbindung
+sind weiterhin offen. Bestehende Kapazitaetsgrenzen
 der physischen BO-/Treiberressourcen sind gesondert anzupassen. Native
 Pushbuffer und GPU-Ereignisse folgen durch die vorhandenen Ressourcen-/Queue-
 und NVIDIA-Besitzer. Fehlende Software bleibt in 0.79.35; CPU-/Modellproben

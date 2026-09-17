@@ -1,13 +1,14 @@
 ﻿Vulkan-WSI und gemeinsame Fensterpraesentation – 0.79.37
 ======================================================
 
-Stand: IN ARBEIT. R4VK 0.1.10 bindet kanonische Grafikpuffer an private
-Vulkan-Bilder an; WINSVC 0.1.8 vermittelt gemeinsame GPU-Fensterbilder mit
+Stand: IN ARBEIT. R4VK 0.1.11 verbindet native Fenster-Surfaces und KHR-
+Surface-Abfragen mit WINSVC; der private kanonische BO-/VkImage-Import
+bleibt vorhanden. WINSVC 0.1.8 vermittelt gemeinsame GPU-Fensterbilder mit
 Consumer-Freigabebestaetigung und direktem Desktop-Aufwecksignal.
 R4GFX 0.1.16/NVIDIA 0.1.140 verbinden Farbkonvertierung und logische
 Abtastung in einem GPU-Auftrag; R4NV 0.1.9 liefert die gemeinsamen Shader.
 Desktop 0.1.63 bindet den Fenstertransport an seinen regulaeren Hauptzyklus
-und komponiert externe Bilder direkt in FP16. Vulkan-Surface/Swapchain
+und komponiert externe Bilder direkt in FP16. Vulkan-Swapchain/Present
 und die gemeinsame Endabnahme bleiben offen;
 Release 0.79.36 wird dadurch nicht als 0.79.37 abgeschlossen.
 Nachweise: GrafikVulkan07937.json. Physische Nacharbeit: OssiGPU.txt /0.79.37.
@@ -25,7 +26,8 @@ Die vorhandenen R4GFX-Swapchains beschreiben Ausgaben. Sie sind noch keine
 GPU-Bildwarteschlangen einzelner Fenster. GUI-Frames teilen derzeit CPU-
 Raster; der neue WINSVC-Transport besitzt bereits GPU-Bildreferenzen und
 Consumer-Leihen. Desktop bedient ihn bei geeigneten GPU-Ausgaben;
-der oeffentliche Vulkan-Verbraucher ist noch anzuschliessen.
+Vulkan fragt dieselben Surface-Capabilities ab. Der Bildtransport des
+oeffentlichen Vulkan-Verbrauchers ist noch anzuschliessen.
 Vertrag und Lebensdauer: Docs/Desktop/GrafikFenstertransport07937.txt.
 Kein zweiter Vulkan-Kompositor und keine eigene Vulkan-Displayengine.
 
@@ -210,11 +212,41 @@ geliehenen Import bis zum Leseende. BOs, Referenzen, Leihen, Backing und
 Pinning kehren zum Ausgangswert zurueck. Der private Gast startet diesen
 Besitzer direkt; er belegt keine komplette GPU-Desktop-/Vulkan-Ausgabe.
 
+Native Vulkan-Surface
+---------------------
+
+R4VKs privater Header Bindings/C/r4vk_wsi.h beschreibt
+r4vkCreateWindowSurface. Discovery erfolgt ueber den Instance-Proc-Loader
+bei aktivem VK_KHR_surface; keine erfundene Khronos-Extension oder
+VkStructureType. Die Funktion erhaelt Original-R4XStart-Kontext und Fenster-ID.
+Vor Desktop-Publikation liefert sie VK_NOT_READY; ein erfolgreicher Handle
+wird mit vkDestroySurfaceKHR freigegeben und besitzt keine Displayressource.
+
+KHR_surface und KHR_get_surface_capabilities2 fragen denselben WINSVC-Stand
+ab. Exakte Adapter-/Reset-/Speichergenerationen, Groesse/DPI, FIFO/MAILBOX
+und 2..3 Bilder kommen aus den bestehenden Besitzern. B8G8R8A8 UNORM/sRGB
+mit opakem/elektrisch vormultipliziertem Alpha werden nur bei passenden
+Farbvertraegen und NVK/NIL-Linearbildfunktionen angeboten. Nutzungs-/Alphabits
+gelten fuer alle ausgegebenen Formate. Vulkan-FP16/HDR-Zuordnung und
+KHR_swapchain sind noch nicht freigeschaltet.
+
+Groessenaenderung aktualisiert die Auskunft; Unsichtbarkeit erhaelt den
+Handle. Ein Dienstneustart macht alte Handles surface-lost, auch wenn
+derselbe Fensterplatz wieder publiziert ist. Neuanlage erfolgt ausdruecklich.
+R4L-Tabellenrevision, Kernel und Hardwaretreiber bleiben dabei unveraendert.
+
+Gezielter SMP4-Nachweis: kanonisches R4VK.R4L, originale Vulkan-Einstiege,
+echter WINSVC und vorhandener Modell-GPU-Treiber. Discovery, Callback-OOM,
+vollstaendige/abgeschnittene Formatlisten, KHR-2-Abfragen, Resize, Verstecken,
+veraltete Ausgabegeneration und Dienstneustart bestehen. Surface-Allokationen
+werden freigegeben. Build mit 514 C-Einheiten und bestehender ABI-Pruefung
+erfolgreich; kein neuer dauerhafter Test. Noch kein Vulkan-Bild/Presentlauf.
+
 Naechste Integration
 --------------------
 
-1. Native Surface-Discovery und KHR-Swapchain-Funktionen auf diesen Weg
-   aufsetzen: Formate/Modi aus Capabilities, Acquire/Present, Resize,
+1. KHR-Swapchain-Funktionen auf diesen Surface-Weg aufsetzen:
+   Pufferanlage, Acquire/Present, FP16/HDR-Farbzuordnung, Resize,
    Verdeckung, Hotplug sowie gemeinsame Farbe-/Capture-/Ausgabepolicy.
 2. Die komplette Vulkan-/Desktop-Verbindung einschliesslich App-Abbruch,
    Ausgabewechsel und Desktopneustart mit einem gezielten Softwarelauf pruefen;

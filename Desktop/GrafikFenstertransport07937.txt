@@ -1,0 +1,90 @@
+﻿Gemeinsamer GPU-Fenstertransport – 0.79.37
+=========================================
+
+Stand: WINSVC 0.1.7 stellt den gemeinsamen IPC-/BO-Besitzer bereit.
+Produktiver Desktop-Verbraucher und Vulkan-Surface/Swapchain sind noch offen.
+Nachweise und Grenzen: Docs/Drivers/GrafikVulkan07937.json / window_transport.
+
+Vertrag und Besitzer
+--------------------
+
+WindowGraphics* wird im zentralen Contract nach C und Zig generiert. Die
+vier neuen WINSVC-Opcodes 1824..1827 veraendern keine bestehende Plattform-
+Tabelle oder Funktion. Ein alter Dienst meldet BADOP; die CPU-Fenster und
+der bisherige Bootframebuffer-Pfad bleiben verfuegbar.
+
+Desktop veroeffentlicht eine Surface mit exakter Dienst-, Desktop- und
+Appgeneration, Fenster-ID und nicht wiederverwendeter Seriennummer. Nur
+ein lebender Shell-/GUI-Prozess darf publizieren oder Consumer sein. Die
+App darf nur ihre eigene Surface bedienen. Prozessgenerationen stammen
+aus dem bestehenden Programmregister, nicht aus der Fenster-ID.
+
+Desktop liefert Geometrie, Ausgabe-/Geraetebindung, Revision, 2..3 Bilder,
+FIFO/MAILBOX und hoechstens acht gepruefte Format-/Farbpaare. Die 48 Farb-
+Bytes sind der unveraenderte R4GfxColorDescription-v1-Vertrag. WINSVC
+transportiert sie opak; Farbvalidierung, HDR/SDR, Capture, Direct Scanout
+und Ausgabe bleiben bei Desktop/R4GFX. Die Capability-Publikation ist
+keine Behauptung, dass der Desktop diese Anbindung bereits verwendet.
+
+Bildlebensdauer
+---------------
+
+Pro Surface koennen alte und neue Ketten zeitweise ueberlappen. Insgesamt
+sind 16 Surfaces, 32 Ketten und je drei Bildslots begrenzt. Attach nimmt
+eine eigene BO-Referenz und prueft Geometrie, Format, Render-/Transferrechte
+sowie Platzierung und Speichergeneration. Immutable, Mapping-only und
+doppelte Importe desselben BO als unterschiedliche aktive Bilder scheitern.
+Der Producer behaelt seinen eigenen Import fuer Vulkan/R4GFX.
+
+Ein Bild durchlaeuft available -> acquired -> queued -> leased -> returning.
+Acquire vergibt ein neues Token. Present uebergibt dieses Token und einen
+existierenden Render-Fence. Take wartet nicht auf die GPU: Der Desktop
+muss den gelieferten Fence als Abhaengigkeit verwenden und die geliehene
+BO-Referenz vor Verwendung selbst importieren. FIFO bewahrt die Reihenfolge;
+MAILBOX ersetzt nur queued-Bilder, niemals bereits uebernommene Leihen.
+
+Return erfolgt nach der letzten Kompositions-/Capture-/Scanout-Nutzung mit
+deren eigenem Fence. Dieser darf zu einer anderen Warteschlange gehoeren.
+Ein Null-Fence bestaetigt ausschliesslich, dass kein GPU-Consumer gestartet
+wurde. Abgebrochene Acquires duerfen einen noch laufenden Producer-Fence
+mitgeben. Vor erneuter Vergabe muessen Producer und letzter Consumer
+erfolgreich terminal sein und alle physischen Ressourcen freigegeben haben.
+Beide Fence-Besitzer halten ihre Metadaten bis zu dieser Bestaetigung.
+Fehlerhafte oder verschwundene Fences sind kein Fertigstellungsnachweis.
+
+Acquire liefert NOT_READY und gegebenenfalls einen ausserhalb von WINSVC
+abzuwartenden Fence. Fuer reine Metadatenwechsel gibt es je Teilnehmer
+einen endlichen Long-Poll. Der bestehende Owner-Sweep prueft nur lebende
+Prozesse; er pollt keine GPU-Fences. Ein Dienstwechsel schliesst alte IPCs.
+
+Client und Consumer nummerieren Mutationen pro Surface streng aufsteigend.
+Nur die identische letzte erfolgreiche Anfrage darf wiederholt werden und
+liefert dieselbe Antwort. Nach einem Timeout erst diese Anfrage klaeren;
+kein blindes zweites Acquire/Take. Status/Query reservieren keine Ressourcen.
+
+Resize, Fehler und Abschluss
+---------------------------
+
+Eine reine Sichtbarkeitsaenderung behaelt die Kette. Eine neue Geometrie,
+Ausgabe oder Farb-/Capability-Revision macht sie OUT_OF_DATE; eine geaenderte
+Render-/Speicherbindung DEVICE_LOST. Neue Acquires/Frames scheitern, doch
+bereits vom Desktop uebernommene Bilder bleiben bis Return erhalten.
+
+App-Ende schliesst neue Anfragen und die eigenen Referenzen; die Desktop-
+Leihe bleibt bestehen. Der Kernel schliesst dabei auch neue Imports des
+Producer-BOs. Stirbt die App zwischen Take und Import, gibt der Desktop die
+Leihe mit Fehler zurueck; schon vorhandene Imports bleiben nutzbar.
+Bei Desktop-Ende bzw. Dienstneustart schliesst
+WINSVC seine Referenzen. Bereits importierte Consumer-Referenzen und reale
+GPU-Pins folgen weiter den bestehenden Kernelbesitzern. Ein spaeteres
+Fenster mit derselben ID bekommt eine andere Surface-Seriennummer.
+
+Softwarepruefung
+----------------
+
+Die bestehende WINSVC-Testgruppe deckt Importfehler/-Alias, Retry, beide
+Fence-Enden, noch gehaltene Ressourcen, FIFO/MAILBOX, Verdeckung, Resize,
+App-/Desktop-Ende, endliche Waiter und Fehler ohne falsche Freigabe ab.
+BOs/Fences dieser Hostpruefung sind explizit modelliert. Ein separater
+kurzer SMP4-Nachweis verwendet echte Prozesse, WINSVC-IPC, Kernel-BOs und
+CPU-Kopie. Native GPU-/Bildabnahme folgt OssiGPU.txt /0.79.37.

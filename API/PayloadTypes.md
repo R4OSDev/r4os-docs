@@ -7,7 +7,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 - Schema: v11, Baseline `standalone-contract-0.64.11`
 - Reachability: 291 von 291 Typen aufgelöst oder explizit klassifiziert
 - Zentrale SDK-only-Wurzeln: 0; Runtime-R4Ls besitzen libraryeigene Vertraege
-- Operationen: 0; Fehlerdomänen: 63; Konstanten: 1893; Limits: 109
+- Operationen: 0; Fehlerdomänen: 63; Konstanten: 1895; Limits: 109
 
 ## App-Profile
 
@@ -10477,6 +10477,8 @@ Geltung: `storage`, Einheit: `status_code`, Stabilität: `fixed_contract`.
 | `window_graphics_image_queued` | `3` | `u32` | identity | number | `window_graphics` | fixed_contract |
 | `window_graphics_image_leased` | `4` | `u32` | identity | number | `window_graphics` | fixed_contract |
 | `window_graphics_image_returning` | `5` | `u32` | identity | number | `window_graphics` | fixed_contract |
+| `window_graphics_release_fence` | `2` | `u32` | identity | number | `window_graphics` | fixed_contract |
+| `window_graphics_fence_released` | `1` | `u32` | flag | bitmask | `window_graphics` | fixed_contract |
 
 ## Limits
 

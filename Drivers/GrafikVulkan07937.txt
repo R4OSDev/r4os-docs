@@ -1,0 +1,83 @@
+﻿Vulkan-WSI und gemeinsame Fensterpraesentation – 0.79.37
+======================================================
+
+Stand: IN ARBEIT. R4VK 0.1.9 fuehrt den privaten Import kanonischer
+Grafikpuffer ein. Surface/Swapchain und Desktop-Anbindung bleiben offen;
+Release 0.79.36 wird dadurch nicht als 0.79.37 abgeschlossen.
+Nachweise: GrafikVulkan07937.json. Physische Nacharbeit: OssiGPU.txt /0.79.37.
+
+Besitzer und Anschluss
+---------------------
+
+R4VK besitzt Vulkan-Objekte und die Anpassung von NVK an R4OS. R4GFX besitzt
+Grafikressourcen, Farbverwaltung und Ausgabe-Swapchains; Desktop komponiert
+Fenster, praesentiert und bedient Capture. WINSVC vermittelt die Fenster-
+und Desktop-Lebensdauer. NVIDIA.R4D bleibt alleiniger GPU-/Displaybesitzer.
+Der Kernel verwaltet bestehende BO-Referenzen, Speicherleihen und Fences.
+
+Die vorhandenen R4GFX-Swapchains beschreiben Ausgaben. Sie sind noch keine
+GPU-Bildwarteschlangen einzelner Fenster. GUI-Frames teilen derzeit CPU-
+Raster; die Uebergabe fertiger GPU-Fensterbilder wird separat integriert.
+Kein zweiter Vulkan-Kompositor und keine eigene Vulkan-Displayengine.
+
+Privater Pufferimport
+-------------------
+
+r4vk_nvk_import_buffer nimmt eine unabhaengige kanonische BO-Referenz und
+beschreibt erst danach deren Speicher. Der Erzeuger behaelt seine Referenz
+und darf sie nach erfolgreichem Import schliessen. NVK verwendet fuer den
+Import denselben Speicher-/VA-/Residency-Abbau wie fuer eigene Allokationen.
+Der Import wird in der regulaeren NVK-Speicherliste veroeffentlicht und als
+SHARED markiert; Lookup, Refcount und Unref behalten ihre uebliche Semantik.
+
+VRAM muss zum exakten Adapter und dessen Speichergeneration gehoeren.
+Systemspeicher bleibt portabel; CPU-Zugriff wird nur mit beiden vorhandenen
+CPU-Rechten erlaubt. Immutable und Mapping-only werden nicht aufgewertet.
+Ein importierter Umfang muss ohne Aufrunden in die GPU-Bindungsgranularitaet
+passen. Format, Geometrie, Plane-Offsets, Pitch und Modifier bleiben erhalten.
+Diese Metadaten allein bestaetigen noch kein kompatibles Vulkan-Bildlayout.
+
+Fehler veraendern die Ausgaben nicht. Alte Quellreferenzen sind ungueltige
+Imports, kein automatischer Device-Lost des Empfaengers. Fehler beim Teilen,
+bei Metadaten, VA-Anlage oder Bindung geben nur die neu erworbene Referenz
+und eigene Ressourcen frei. Ein verlorenes Geraet bleibt dagegen verloren.
+Ausstehende GPU-Nutzung wird weiter vom residenten Kernelbesitzer gehalten.
+
+Dies ist ein privater NVKMD-Baustein. Er registriert keine Khronos-Extension,
+aktiviert kein dma-buf/FD-Import und schafft keine oeffentliche Surface-API.
+
+Gezielte Softwarepruefung
+------------------------
+
+Ein kurzer SMP4-Lauf prueft den produktiven Import-/Speicher-/VA-Code mit
+realen Kernel-BOs und Brokern. Ein privater NVKMD-Verbraucher importiert
+denselben RAM- bzw. modellierten VRAM-Bildpuffer in zwei logische Geraete,
+schliesst Erzeuger und einen Import und verwendet den anderen weiter.
+Lineare und opake modellierte Modifier-Metadaten muessen erhalten bleiben.
+
+Gezielte Fehler betreffen Referenzkapazitaet, immutable/mapping-only,
+falschen Adapter/Generation, Umfang, Rechte, Alignment, VA/Bind-OOM und
+Host-OOM. Nach jedem behebbaren Fehler wird derselbe Quellpuffer erneut
+importiert. Ein laufender modellierter GPU-Auftrag haelt die reale BO-
+Nutzung ueber den Abbau der Imports hinaus. Anschliessend muessen BOs,
+Referenzen, Leihen, Backing und Pinning zum Ausgangswert zurueckkehren.
+
+GPU-Allokation, Adressen und Completion sind modelliert; kein Nachweis von
+Shaderausfuehrung, Bildinhalt oder Praesentation. Der private Verbraucher
+ersetzt unbenutzte Compiler-/Logpfade durch harte Fehlersenken. Der regulaere
+R4VK-Build prueft unabhaengig die vollstaendige Bibliothek und C/Zig-ABI.
+Keine neue dauerhafte Testgruppe.
+
+Naechste Integration
+--------------------
+
+1. Kanonische Bildlayouts mit NVK/NIL abgleichen und deren VkImage-/Memory-
+   Lebensdauer anbinden. Linear-Modifier koennen NVK-interne Kachelschatten
+   benoetigen; CPU-Kopien oder Direct Scanout nicht allein daraus ableiten.
+2. Gemeinsame GPU-Fensterbild-Uebergabe mit exakter Programm-, Fenster- und
+   Desktopgeneration, Renderfertigstellung und Consumer-Freigabe integrieren.
+3. Native Surface-Discovery und KHR-Swapchain-Funktionen auf diesen Weg
+   aufsetzen: Formate/Modi aus Capabilities, Acquire/Present, Resize,
+   Verdeckung, Hotplug sowie gemeinsame Farbe-/Capture-/Ausgabepolicy.
+4. App-Abbruch und Desktopneustart mit einem gezielten Softwarelauf pruefen;
+   erst danach die Softwareaufgaben von 0.79.37 abschliessen.

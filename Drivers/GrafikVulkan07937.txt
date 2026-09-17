@@ -1,15 +1,15 @@
 ﻿Vulkan-WSI und gemeinsame Fensterpraesentation – 0.79.37
 ======================================================
 
-Stand: IN ARBEIT. R4VK 0.1.12 verbindet native Fenster-Surfaces, KHR-
+Stand: IN ARBEIT. R4VK 0.1.13 verbindet native Fenster-Surfaces, KHR-
 Swapchains und Acquire/Present mit WINSVC; Bilder teilen den kanonischen
 BO-/VkImage-Import. WINSVC 0.1.8 vermittelt gemeinsame GPU-Fensterbilder mit
 Consumer-Freigabebestaetigung und direktem Desktop-Aufwecksignal.
 R4GFX 0.1.16/NVIDIA 0.1.140 verbinden Farbkonvertierung und logische
 Abtastung in einem GPU-Auftrag; R4NV 0.1.9 liefert die gemeinsamen Shader.
-Desktop 0.1.63 bindet den Fenstertransport an seinen regulaeren Hauptzyklus
-und komponiert externe Bilder direkt in FP16. Vulkan-FP16/HDR-Zuordnung
-und die gemeinsame Endabnahme bleiben offen;
+Desktop 0.1.64 bindet den Fenstertransport an seinen regulaeren Hauptzyklus
+und komponiert externe Bilder direkt in FP16. Vulkan-scRGB/HDR10 nutzt
+die gemeinsame Farb-/Capturepolicy. Die vollstaendige Endabnahme bleibt offen;
 Release 0.79.36 wird dadurch nicht als 0.79.37 abgeschlossen.
 Nachweise: GrafikVulkan07937.json. Physische Nacharbeit: OssiGPU.txt /0.79.37.
 
@@ -187,7 +187,7 @@ Aktiver Desktop-Verbraucher
 App veroeffentlicht den aktuellen GUI-Fenstern bei geeigneten Ausgaben ihre
 GPU-Surface. Adapter, Geraete-/Reset-/Speichergeneration, Ausgabe und DPI-
 abhaengige Bildgroesse stammen aus den vorhandenen Besitzern. Unterstuetzt
-sind XRGB/ARGB8 mit sRGB sowie lineares FP16 mit opakem/optischem Alpha,
+sind XRGB/ARGB8 mit sRGB, lineares FP16 (SDR/scRGB) und RGB10/PQ mit Alpha,
 FIFO/MAILBOX und 2..3 Bilder. Fehlende kombinierte Farbe-/Rasteroperationen,
 Softwareausgaben und ein Fenster ueber mehreren Adaptern erhalten derzeit
 keine GPU-Surface; normale GUI-Zeichnung bleibt verfuegbar.
@@ -227,8 +227,8 @@ ab. Exakte Adapter-/Reset-/Speichergenerationen, Groesse/DPI, FIFO/MAILBOX
 und 2..3 Bilder kommen aus den bestehenden Besitzern. B8G8R8A8 UNORM/sRGB
 mit opakem/elektrisch vormultipliziertem Alpha werden nur bei passenden
 Farbvertraegen und NVK/NIL-Linearbildfunktionen angeboten. Nutzungs-/Alphabits
-gelten fuer alle ausgegebenen Formate. Vulkan-FP16/HDR-Zuordnung und
-weitergehende HDR-Extensions bleiben deaktiviert.
+gelten fuer alle ausgegebenen Formate. EXT_swapchain_colorspace ergaenzt
+die unten beschriebenen scRGB-/HDR10-Paare; HDR-Metadaten bleiben deaktiviert.
 
 Groessenaenderung aktualisiert die Auskunft; Unsichtbarkeit erhaelt den
 Handle. Ein Dienstneustart macht alte Handles surface-lost, auch wenn
@@ -284,10 +284,46 @@ Build: 515 C-Einheiten plus Identitaet, bestehende ABI-Pruefung, R4M0-Pruefung.
 Die GPU-Ausfuehrung ist modelliert; reale Pixel und komplette Desktop-Ausgabe
 sind damit nicht belegt. Kein neuer dauerhafter Test.
 
+Vulkan-Farbe und gemeinsamer HDR-Pfad
+------------------------------------
+
+Bei aktivem VK_EXT_swapchain_colorspace bilden exakte Desktop-Vertraege
+R16G16B16A16_SFLOAT auf EXTENDED_SRGB_LINEAR und A2R10G10B10_UNORM_PACK32
+auf HDR10_ST2084 ab. scRGB verwendet 80 cd/m2 fuer 1,0; PQ absolute ST2084-
+Helligkeit und BT2020. Beide nutzen 10000 cd/m2 als festen Inhaltsumfang,
+solange keine dynamischen HDR-Metadaten angeboten werden. PQ-Referenzweiss
+ist 203 cd/m2. Diese Werte beschreiben Inhalt, keine gemessene Panelhelligkeit.
+Legacy-FP16 mit 100-Nit-SDR bleibt getrennt. Opakes und vormultipliziertes
+Alpha sind verfuegbar; Format/Farbraum werden als Paar geprueft. Ohne aktive
+Instance-Extension bleiben nur die bisherigen beiden sRGB-Formate sichtbar.
+
+Der Desktop erhaelt absolute HDR-Werte bis zur gemeinsamen Ausgabetransform.
+SDR-Ebenen folgen dem bestaetigten Ausgabereferenzweiss; scRGB/PQ behalten
+ihre eigene Helligkeit. Bei Wechsel zwischen SDR- und HDR-Inhalt entstehen
+nach Drain neue private FP16-Arbeitsbilder. Live-BOs werden nicht umgedeutet,
+und warme Frames brauchen keine neue Allokation. Die vorhandene rationale
+Schulter und Gamut-Abbildung begrenzen erst das zusammengesetzte Ausgabebild.
+Ein fixes 10000-Nit-Inhaltsmaximum ist konservativ; spaetere Inhaltsmetadaten
+koennen die Anpassung verbessern. Capture liest den normalen fertigen Frame
+und verwendet weiterhin denselben HDR-zu-SDR-Vertrag vor Monitor-ICC.
+
+Gezielte Nachweise: vorhandener Desktop render-test 79/79 sowie Modulbuild.
+Die wirkliche R4GFX-Pixelarithmetik prueft scRGB/PQ mit 80/1000-Nit-Ankern,
+SDR/HDR-Ausgabe, Capture, warme Wiederverwendung und Entfernen des HDR-Inhalts.
+Native GPU-Ausfuehrung ist dabei modelliert. Der SMP4-Gast verwendet die
+kanonische R4VK-Library, den echten WINSVC und die produktive Desktop-
+Formatpublikation: Extensionfilter, vier Formatpaare, exakte Descriptoren,
+opake/vormultiplizierte scRGB/PQ-Ketten, Acquire/Present und spaeter Abbau.
+Fruehere Swapchain-/Queue-Lebensdauerfaelle bleiben Teil dieses kurzen Laufs.
+Keine neue dauerhafte Testgruppe. Belege: native_color in der JSON-Begleitdatei.
+
+Referenzen: Khronos Vulkan VkColorSpaceKHR und die lokale EGL-Referenz
+Khronos/EGL/extensions/EXT/EGL_EXT_gl_colorspace_scrgb_linear.txt unter
+ExFiles/Reference/GFX (80-Nit-Skala und Bereich bis 10000 cd/m2).
+
 Naechste Integration
 --------------------
 
-1. Vulkan-FP16/HDR an die gemeinsame Farb-/Ausgabepolicy anbinden.
-2. Die komplette Vulkan-/Desktop-Verbindung einschliesslich Capture,
-   App-Abbruch, Ausgabewechsel und Desktopneustart gezielt pruefen;
-   erst danach die Softwareaufgaben von 0.79.37 abschliessen.
+Die komplette Vulkan-/Desktop-Verbindung einschliesslich Capture,
+App-Abbruch, Ausgabewechsel und Desktopneustart gezielt pruefen;
+erst danach die verbleibenden Softwareaufgaben von 0.79.37 abschliessen.

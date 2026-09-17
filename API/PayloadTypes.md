@@ -5,9 +5,9 @@ Diese Datei wird deterministisch aus `API/ApiContract.json` erzeugt. Manuelle Ä
 Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenzen und Conformance-Fixtures werden produktiv aus diesem Schema erzeugt; handgeschriebene Dateien bleiben nur Fassaden oder erklaerende Texte.
 
 - Schema: v11, Baseline `standalone-contract-0.64.11`
-- Reachability: 291 von 291 Typen aufgelöst oder explizit klassifiziert
+- Reachability: 292 von 292 Typen aufgelöst oder explizit klassifiziert
 - Zentrale SDK-only-Wurzeln: 0; Runtime-R4Ls besitzen libraryeigene Vertraege
-- Operationen: 0; Fehlerdomänen: 63; Konstanten: 1895; Limits: 109
+- Operationen: 0; Fehlerdomänen: 63; Konstanten: 1896; Limits: 109
 
 ## App-Profile
 
@@ -312,6 +312,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `WindowGraphicsReply` | fixed_layout | extern_struct | 1248/8 | 1248/8 | 1248/8 | 1248/8 |
 | `WindowGraphicsConsumer` | fixed_layout | extern_struct | 176/8 | 176/8 | 176/8 | 176/8 |
 | `WindowGraphicsWait` | fixed_layout | extern_struct | 40/8 | 40/8 | 40/8 | 40/8 |
+| `GfxRenderColorGridList` | fixed_layout | extern_struct | 2592/8 | 2592/8 | 2592/8 | 2592/8 |
 
 ## Typdetails
 
@@ -7845,6 +7846,23 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `known_revision` | 24 | 8 | 8 | `u64` | - |
 | `deadline_tick` | 32 | 8 | 8 | `u64` | - |
 
+### `GfxRenderColorGridList`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 2592 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `count` | 8 | 4 | 4 | `u32` | - |
+| `reserved0` | 12 | 4 | 4 | `u32` | - |
+| `commands` | 16 | 1280 | 8 | `[16]GfxRenderCommand` | - |
+| `program` | 1296 | 272 | 8 | `GfxRenderColorProgram` | - |
+| `grids` | 1568 | 1024 | 4 | `[16]GfxSampleGrid` | - |
+
 ## Fehlerdomänen
 
 ### `arp`
@@ -10479,6 +10497,7 @@ Geltung: `storage`, Einheit: `status_code`, Stabilität: `fixed_contract`.
 | `window_graphics_image_returning` | `5` | `u32` | identity | number | `window_graphics` | fixed_contract |
 | `window_graphics_release_fence` | `2` | `u32` | identity | number | `window_graphics` | fixed_contract |
 | `window_graphics_fence_released` | `1` | `u32` | flag | bitmask | `window_graphics` | fixed_contract |
+| `gfx_queue_operation_render_color_grid_list` | `11` | `u32` | identity | number | `gfx_queue` | fixed_contract |
 
 ## Limits
 

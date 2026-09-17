@@ -6,9 +6,9 @@ Vulkan-Bilder an; WINSVC 0.1.8 vermittelt gemeinsame GPU-Fensterbilder mit
 Consumer-Freigabebestaetigung und direktem Desktop-Aufwecksignal.
 R4GFX 0.1.16/NVIDIA 0.1.140 verbinden Farbkonvertierung und logische
 Abtastung in einem GPU-Auftrag; R4NV 0.1.9 liefert die gemeinsamen Shader.
-Desktop 0.1.62 kann externe Fensterbilder direkt in FP16 komponieren und
-haelt deren GPU-Nutzungen ueber mehrere Ausgaben bis zum Abschluss.
-Surface/Swapchain und produktive Desktop-Anbindung bleiben offen;
+Desktop 0.1.63 bindet den Fenstertransport an seinen regulaeren Hauptzyklus
+und komponiert externe Bilder direkt in FP16. Vulkan-Surface/Swapchain
+und die gemeinsame Endabnahme bleiben offen;
 Release 0.79.36 wird dadurch nicht als 0.79.37 abgeschlossen.
 Nachweise: GrafikVulkan07937.json. Physische Nacharbeit: OssiGPU.txt /0.79.37.
 
@@ -24,7 +24,8 @@ Der Kernel verwaltet bestehende BO-Referenzen, Speicherleihen und Fences.
 Die vorhandenen R4GFX-Swapchains beschreiben Ausgaben. Sie sind noch keine
 GPU-Bildwarteschlangen einzelner Fenster. GUI-Frames teilen derzeit CPU-
 Raster; der neue WINSVC-Transport besitzt bereits GPU-Bildreferenzen und
-Consumer-Leihen. Desktop und Vulkan verwenden ihn noch nicht produktiv.
+Consumer-Leihen. Desktop bedient ihn bei geeigneten GPU-Ausgaben;
+der oeffentliche Vulkan-Verbraucher ist noch anzuschliessen.
 Vertrag und Lebensdauer: Docs/Desktop/GrafikFenstertransport07937.txt.
 Kein zweiter Vulkan-Kompositor und keine eigene Vulkan-Displayengine.
 
@@ -178,17 +179,43 @@ Ressourcenbudgets leer. Pixelarithmetik kommt aus dem echten R4GFX-Code;
 GPU-Ausfuehrung und BO-Imports sind hier modelliert. Kein neuer Gastlauf
 und keine neue dauerhafte Testgruppe.
 
-Dieser Baustein ist noch nicht als laufender Fenstertransport aktiviert:
-App befuellt die neuen GPU-Fensterslots noch nicht. Capabilities, WINSVC-
-Publikation/Take/Return und Vulkan-Surface/Swapchain bleiben Pflichtarbeit.
+Aktiver Desktop-Verbraucher
+--------------------------
+
+App veroeffentlicht den aktuellen GUI-Fenstern bei geeigneten Ausgaben ihre
+GPU-Surface. Adapter, Geraete-/Reset-/Speichergeneration, Ausgabe und DPI-
+abhaengige Bildgroesse stammen aus den vorhandenen Besitzern. Unterstuetzt
+sind XRGB/ARGB8 mit sRGB sowie lineares FP16 mit opakem/optischem Alpha,
+FIFO/MAILBOX und 2..3 Bilder. Fehlende kombinierte Farbe-/Rasteroperationen,
+Softwareausgaben und ein Fenster ueber mehreren Adaptern erhalten derzeit
+keine GPU-Surface; normale GUI-Zeichnung bleibt verfuegbar.
+
+Pro Fenster halten drei stabile Slots die angenommenen Bilder. Unbekannte
+RPC-Ergebnisse bleiben mit identischem Inhalt/Serial wiederholbar. Eine
+sichtbare FIFO-Front wird erst nach ihrer Komposition ersetzt; der Ausgabe-
+Besitzer begrenzt die Annahme weiterer Bilder.
+Ein vor dem naechsten Ausgabefenster eingetroffenes Bild wird zeitnah erneut
+abgefragt; ein weiteres IPC-Signal ist dafuer nicht erforderlich.
+Fensterwechsel, geaenderte Geometrie und Ausgabe ziehen alte Fronten
+zurueck. Reine Sichtbarkeitsaenderungen erhalten die Kette.
+Fehler geben laufende GPU-Leihen nicht frei. Alte Worker bleiben
+bis zur Bestaetigung am Leben; ein Dienst-Retry darf daran nicht verhungern.
+
+Zusatznachweis mit vier vCPUs: Der echte Desktop-Transportbesitzer ruft
+WINSVC auf, importiert dessen echte Kernel-BOs und uebernimmt einen echten
+R4GFX-CPU-Kopierauftrag. Verlorene Publish-/Take-/Return-Antworten werden
+wiederholt; der Fence endet erst nach Bestaetigung. Dasselbe Bild wird nach
+Fence-Loeschung erneut acquired. App-Kill/Dienstneustart erhalten einen noch
+geliehenen Import bis zum Leseende. BOs, Referenzen, Leihen, Backing und
+Pinning kehren zum Ausgangswert zurueck. Der private Gast startet diesen
+Besitzer direkt; er belegt keine komplette GPU-Desktop-/Vulkan-Ausgabe.
 
 Naechste Integration
 --------------------
 
-1. Den WINSVC-Fenstertransport an Desktop/R4GFX anschliessen: Capabilities,
-   ereignisgetriebene Bildannahme, GPU-Abhaengigkeiten und Consumer-Freigabe.
-2. Native Surface-Discovery und KHR-Swapchain-Funktionen auf diesen Weg
+1. Native Surface-Discovery und KHR-Swapchain-Funktionen auf diesen Weg
    aufsetzen: Formate/Modi aus Capabilities, Acquire/Present, Resize,
    Verdeckung, Hotplug sowie gemeinsame Farbe-/Capture-/Ausgabepolicy.
-3. App-Abbruch und Desktopneustart mit einem gezielten Softwarelauf pruefen;
+2. Die komplette Vulkan-/Desktop-Verbindung einschliesslich App-Abbruch,
+   Ausgabewechsel und Desktopneustart mit einem gezielten Softwarelauf pruefen;
    erst danach die Softwareaufgaben von 0.79.37 abschliessen.

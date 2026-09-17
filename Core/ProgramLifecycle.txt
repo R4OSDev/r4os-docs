@@ -457,3 +457,37 @@ Losing records whose free fails remain attached for reaper retry. Records
 are removed after all process threads retire and before VM teardown. A
 shared R4L may use its pinned static key address, but must not store a caller's
 context, allocator or AppBundle in shared library globals.
+
+R4SYS v21 appends thread_current_handle. It copies the current ProgramThread
+and ProgramInstance IDs and generations through the existing fixed-layout
+ProgramJoinHandle, including for the main thread. Lookup uses the immutable
+Task execution owner; it does not scan a registry, allocate, wait, pin or
+create a join lease. The running Task retains its ProgramThread until exact
+retirement. Errors leave output unchanged. The borrowed identity distinguishes
+reused numeric IDs but does not extend lifetime or change join admission.
+Libraries may key thread-local state by this identity; its storage, cleanup
+and language-runtime policy remain in userland. The ordinary ThreadDiag path
+checks create/current agreement, yield stability, wrong-generation rejection
+and absence after join. It does not force numeric-ID exhaustion.
+
+R4SYS v22 appends cpu_capacity without changing the v21 prefix. CpuCapacity
+reports one atomic scheduler-admission mask count and the immutable SMP boot
+plan's dense slot count, including failed/offline slots. Available capacity
+excludes CPUs not admitted by scheduler/clock qualification; current ordinary
+program threads have no per-process affinity restriction. The query allocates
+nothing and leaves output unchanged on failure. Counts are advisory, not CPU
+reservations, firmware totals, CPUID package counts or physical cache topology.
+Mesa uses this userland-visible capacity to size work; renderer policy stays
+outside the kernel.
+
+R4SYS v23 appends program_exit at offset1240, preserving the v22 prefix.
+An admitted call terminates the calling process from either its main thread
+or a worker and does not return. Only natural and failed reasons are accepted;
+invalid reason, missing program ownership or unsafe kernel execution context
+return an error without initiating exit. Userland owns normal atexit/TLS/stdio
+cleanup; this primitive runs no foreign callbacks or stack unwinding.
+The first committed process exit wins. The caller uses the same pinned exit
+epilogue and terminal scheduler handoff as thread_exit; its peers, I/O,
+notifications, VM and graphics follow the existing process reaper. Ready
+completion still follows actual cleanup. Ordinary secondary thread_exit stays
+thread-local, and external program_handle_kill still rejects self-kill.

@@ -1,8 +1,8 @@
-﻿Gemeinsamer GPU-Fenstertransport – 0.79.37
+﻿Gemeinsamer Grafik-Fenstertransport – 0.79.37/0.79.39
 =========================================
 
-Stand: WINSVC 0.1.8 stellt den gemeinsamen IPC-/BO-Besitzer bereit.
-Desktop 0.1.64 bedient ihn im Hauptzyklus bei geeigneten GPU-Ausgaben.
+Stand: WINSVC 0.1.9 stellt den gemeinsamen IPC-/BO-Besitzer bereit.
+Desktop 0.1.65 bedient GPU- und Softwareausgaben im Hauptzyklus.
 R4VK 0.1.13/R4GFX 0.1.17 sind mit Vulkan-Surface/Swapchain, Ausgabe und
 Capture softwareseitig integriert und gezielt abgenommen.
 Nachweise: GrafikVulkan07937.txt/.json.
@@ -29,9 +29,12 @@ transportiert sie opak; Farbvalidierung, HDR/SDR, Capture, Direct Scanout
 und Ausgabe bleiben bei Desktop/R4GFX. Der Desktop publiziert derzeit
 XRGB/ARGB8-sRGB, lineares SDR-FP16, scRGB-FP16 (80-Nit-Skala) und
 RGB10/PQ (BT2020). Absolute HDR-Werte bleiben bis zur gemeinsamen
-Ausgabetransform erhalten; Einzelheiten in GrafikVulkan07937.txt. Softwareausgaben und Fenster ueber
-mehreren Adaptern erhalten keine GPU-Surface; normale GUI-Frames bleiben
-nutzbar. Fehlende Capabilities werden nicht als GPU-Unterstuetzung ausgegeben.
+Ausgabetransform erhalten; Einzelheiten in GrafikVulkan07937.txt. Softwareausgaben erhalten eine CPU-Surface mit XRGB/ARGB8-sRGB und einem
+echten CPU-Queue-Fence. Der Renderadapter 0 ist unabhaengig vom physischen
+Ausgabeadapter. Systempuffer werden direkt ueber COLOR_V1 komponiert;
+der bisherige GPU-Pfad behaelt seine exakte Geraete-/Speicherbindung.
+Bei gemischten CPU-/GPU-Ausgaben ueber dasselbe Fenster wird noch keine
+gemeinsame Surface publiziert. Normale GUI-Frames bleiben verfuegbar.
 
 Bildlebensdauer
 ---------------
@@ -128,3 +131,284 @@ WINSVC-Neustart und Hard-Kill des GUI-Shell-/Consumer-Prozesses halten
 Generationen und Freigabe ein. GPU-Ausfuehrung ist modelliert; der komplette
 R4DESK-Appzyklus wird nicht gestartet. Details und Belege: GrafikVulkan07937
 .txt/.json /native_desktop; physische Nacharbeit: OssiGPU.txt /0.79.37.
+
+Softwarefenster ab 0.79.39
+-------------------------
+
+Softwareausgaben und der Firmware-Fallback verwenden denselben WINSVC-
+Lebenszyklus. Die Bildgroesse entspricht den logischen Clientpixeln;
+Ausgabeskalierung, Rotation und Capture bleiben beim vorhandenen Desktop-
+Ausgabepfad. Der Desktop bewirbt nur die zwei unterstuetzten SDR-Formate.
+
+Ein uebernommenes CPU-Bild bleibt in Vorbereitung, bis sein exakter Fence
+erfolgreich abgeschlossen ist und eine regulaere Lesemapping-Leihe besteht.
+Das bisherige Frontbild bleibt waehrenddessen sichtbar. Der Haupttask
+blockiert nicht auf den Erzeuger. Die lineare Farbkomposition liest das BO
+ohne zusaetzliche Kopie in den Painter-Cache und bearbeitet nur geaenderte
+Bildbereiche. Vor Return muss die letzte CPU-Nutzung enden und das Mapping
+freigegeben sein. Verlorene Antworten behalten die identische Anfrage.
+Resize, Dienstwechsel und Prozessende behalten laufende Leser bis zum
+gemeinsamen Abbau. Eine CPU-Komposition bestaetigt die FIFO-Nutzung ohne
+einen erfundenen GPU-Consumer-Fence.
+
+Gezielte Abnahme: bestehende Desktop-render-test-Gruppe (79/79), bestehende
+WINSVC-Gruppe und je ein Modulbuild. Ein kurzer SMP4-Lauf verwendet zwei
+echte Prozesse, WINSVC, Kernel-BOs, CPU-Queue und den produktiven Desktop-
+Transport-/Farbkompositionscode. Pixelwerte und unveraenderte Randbereiche
+sowie verlorenes Return, erneutes Acquire, Producer-Kill, Dienstneustart und
+BO-/Referenz-/Mapping-/Backing-/Pinning-Ausgangswerte sind geprueft.
+Belege: ExFiles/Reference/GFX/0.79.39/Evidence/CpuWindow.
+
+EGL-Fensterproducer (Entwicklungsstand 0.79.39)
+--------------------------------------------
+
+Der native Mesa-Frontend verwendet eine eigene R4OS-EGL-Plattform; explizite
+surfaceless-Displays bleiben fensterlos. Softpipe rendert in persistent
+gemappte System-BOs. Vor Present kopiert der Producer synchron in einen
+frei erworbenen Kettenslot, beendet dessen Schreibmapping und uebergibt
+einen echten CPU-Queue-Barrier-Fence. Mesa darf seine Renderflaeche danach
+sofort wiederverwenden; der praesentierte Slot bleibt bis zur Rueckgabe
+durch den Consumer unveraendert. Der aktuelle Producer unterstuetzt lineare und
+sRGB-SDR-Flaechen sowie ausgabeabhaengige Swapintervalle. Farbe, Geometrie und
+Generation werden geprueft; Details und aktuelle Belege folgen unten.
+
+Resize und unbekannte IPC-Ergebnisse behalten die genaue Anfrage und ihre
+Ressourcen. Ein prozesseigener Worker beendet alte Ketten und wartet auf das
+nachgewiesene Ende ausstehender Leihen; ein Timeout ist keine Freigabe.
+Transiente Presentfehler werden einmal an EGL gemeldet und erlauben Retry.
+Shared/Native/window.zig stellt die gemeinsame WINSVC-Anbindung auch fuer
+R4VK bereit; die jeweiligen Producer besitzen weiter ihre Bildlebensdauer.
+
+Ein gezielter SMP4-/1-GB-Lauf verbindet echte EGL-/GL-Aufrufe mit WINSVC,
+Kernel-BOs und dem produktiven Desktop-Consumer/Farbkompositor: 64x64 rot
+mit blauem Feld unten links, Resize auf 80x48 gruen, verlorene Create-Chain-
+Antwort samt EGL-Retry sowie verlorene Consumer-Antworten. Alle Pixel und
+BO-/Referenz-/Lease-/Backing-/Pinning-Ausgangswerte stimmen; nach explizitem
+Abbau bleiben null C-Allokationen. R4VK baut mit der gemeinsamen Anbindung.
+Beleg: ExFiles/Reference/GFX/0.79.39/Evidence/EGLWindow.
+
+Grenzen dieses frueheren Nachweises: Entwicklungsfixture mit EGL 1.4 und
+Softpipe GL 3.3 Core, kontrollierte Fenstergeometrie ohne vollstaendigen
+Desktop-Appzyklus. Der aktuelle Zink-Stand ist unten beschrieben; die integrierte
+Fenster-/Vollbildabnahme bleibt offen. Keine physische GPU- oder
+Konformitaetszertifizierung wird daraus abgeleitet.
+
+Die native Datei-/STDIO-Anbindung liegt inzwischen in Shared/Native als
+optionales Profil vor. Ein gezielter SMP4-Lauf prueft echte R4OS-Dateien,
+Konsole, Seek/Update/Append/exklusive Anlage, parallele Ausgabe und
+expliziten Ressourcenabbau. Beleg: Evidence/NativeFiles neben EGLWindow.
+FILE speichert Pfad und Cursor; externe FDs bleiben nicht unterstuetzt.
+Die Produktanbindung folgt im unten beschriebenen R4GL-Prozessvertrag.
+
+Der optionale native C11-Threadpfad baut bei Rueckkehr und thrd_exit zuerst
+registrierte C++-TLS-Destruktoren, dann EGL-Bindungen und zuletzt rohe TLS
+ab. Eine SMP4-Probe belegt beide Wege mit echten, noch gebundenen Softpipe-
+Kontexten, unveraenderter TLS-Baseline und null C-Allokationen nach Finish.
+Beleg: Evidence/NativeThreadLifecycle. App-eigene Threads muessen ihren
+Laufzeitabschluss vor Rueckkehr ausdruecklich ausloesen.
+
+Globale Finalizer und Streamabbau liegen jetzt ebenfalls in Shared/Native:
+prozessgebundene dynamische LIFO-Liste, nachregistrierte Callbacks und
+STDIO-Schluss nach Nutzerquieszenz. Ein SMP4-Lauf mit Mesa prueft Reihenfolge,
+OOM, wiederholten Abschluss, erhaltene Streamfehler und null C-Allokationen.
+Beleg: Evidence/NativeProcessLifecycle. R4SYS23 stellt jetzt kontrollierten
+Prozessabbruch auch aus Workern bereit; ThreadDiag /PROCESSEXIT belegt Main,
+Worker und Peerabbau in SMP4 (Evidence/ProcessExit).
+
+R4GL 0.1.14 liegt als regulaere Library unter Repositories/Libraries/R4GL:
+Manifest, generierter EGL_V1-Vertrag, C-/Zig-Bindings, gepinnter nativer Build
+und Slim-/Full-Imageaufnahme samt Lizenzen. Das explizite Softwareprofil nutzt
+Mesa 26.2.2 Softpipe ohne LLVM/JIT; EGL 1.5, GL 3.3 Core und ausgabeabhaengige
+Swapintervalle (Firmware-Fallback: 0; synchronisierte native Ausgabe: 0..1).
+Profil 1 bindet Zink direkt an den optionalen R4VK-Import fuer Pbuffer und Fenster.
+Anwendungen uebergeben ihren echten R4XStartContext; Mutable Mesa-Zustaende,
+TLS, C11-Worker, Finalizer und Streams gehoeren dem aufrufenden Prozess.
+release_thread schliesst Appthreads ab. finish folgt erst auf Nutzerquieszenz,
+Objektabbau und eglTerminate; ausstehende Fensterleihen behalten ihre Ressourcen
+bis zum Abschluss. Busy ist wiederholbar, ein geschlossener Prozessruntime
+kann nicht neu geoeffnet werden. Fatale Fehler nutzen R4SYS23 program_exit.
+Aktuelle Buildvoraussetzungen und Grenzen: R4GL/README.md und Docs/API.md.
+
+Evidence/ProductR4GL belegt das regulaere Modul in SMP4/1 GB: oeffentlicher
+Resolver, GLSL-Shader und Pixel-Readback, idempotenter Abschluss, neuer
+Fensterprozess nach geschlossenem Elternruntime, echte rote/blaue und nach
+Resize gruene Fensterpixel ueber WINSVC/Desktop-Consumer. Nach Reap stimmen
+BOs, Referenzen, Leihen, Backing und Pinning mit den Ausgangswerten ueberein.
+Der Hostbuild samt Cachepruefung aus fremdem Arbeitsverzeichnis ist bestanden.
+Dies ist weiterhin keine Abnahme der vollstaendigen Desktop-App im Vollbild.
+
+R4GL 0.1.1 ergaenzt EGL_KHR_fence_sync und EGL_KHR_wait_sync ueber echte
+Gallium-Fences. Softpipe schliesst synchron ab. Geloeschte Handles sind sofort
+ungueltig; laufende API-Aufrufe halten die Ressource bis zur letzten Rueckkehr.
+Fences halten ihren Displaybesitzer auch nach Abbau des erzeugenden Kontexts.
+Evidence/EGLFence: SMP4-Render-/Sync-/Fehlerfallprobe und parallele Handle-
+Loeschung bestanden; hostseitig zwei geparkte Mesa-Dispatcherleihen mit
+ASan/UBSan geprueft. Wiederverwendbare Syncs und OpenCL-Interop werden nicht
+gemeldet. Zink-Fenster folgen unten ab R4GL 0.1.11.
+
+R4GL 0.1.2 bindet EGLImages fuer 2D-Texturen, Cube-Flaechen, 3D-Scheiben und
+Renderbuffer an. Speicherreferenzen bleiben nach Handle-Loeschung erhalten;
+Kontexte verwenden nun ebenfalls den letzten Ressourcen-Releasecallback.
+Gleich grosse Neudefinitionen von Quelltexturen/-Renderbuffern trennen deren
+Speicher. Framebuffer und Sampler uebernehmen Mipmap-/Ebenenauswahl.
+Evidence/EGLImage belegt die gezielten SMP4-Faelle samt Shader-Sampling und
+Kontextaustausch.
+
+R4GL 0.1.3 trennt bei Strukturwechseln alle Bildgeschwister einer Textur;
+neuer Speicher wird vor dem Austausch der Referenzen bereitgestellt. Exporte
+konsolidieren Mipmaps vorher. Unvollstaendige Mipmap-Erzeugung trennt Speicher,
+vollstaendige Erzeugung und SubImage erhalten die gemeinsame Nutzung.
+Renderbufferexport verwendet einen atomaren Claim. Evidence/EGLImageLifecycle
+belegt Neudefinition/Konsolidierung, beide Erzeugungsfaelle, Cube-Ansicht,
+immutable Storage und acht parallele Exportpaare in SMP4/1 GB. Ein dritter
+gleichzeitig lebender GL-Kontext lieferte damals BAD_ALLOC; Ursache und Behebung
+sind unten unter R4GL 0.1.12 dokumentiert.
+
+R4GL 0.1.4 verwendet gemeinsame physische Ebenen-/Mipmapadressen fuer Upload,
+Mapping, Readback, Copy und Clear. Immutable Ansichten importierten Speichers
+behalten ihre Ebenenauswahl. EGL-Exporte und Renderbufferimporte erhalten das
+Ansichtsformat samt Sized-Internalformat. Evidence/EGLImageViews belegt in
+SMP4/1 GB fuenf Bild-/Ansichtstypen, unveraenderte Nachbarbilder, PBO-Transfers,
+Renderbufferkopien und RGBA8/R32UI-Umdeutung samt gemeinsamem Integer-Clear.
+R4GL 0.1.5 prueft Bildtyp und Ressource vor dem Austausch. Abgewiesene Importe
+lassen Inhalt und Veraenderbarkeit erhalten. Surface-Freigabe folgt der letzten
+EGL-Referenz einschliesslich Dispatcher-Leihen. Evidence/EGLImageImport belegt
+Fehlerfaelle, weiterhin gueltige Ansichten und geloeschte gebundene Pbuffer in
+SMP4; die finale Fenster-/Textur-/Displayfreigabe zusaetzlich mit ASan/UBSan.
+R4GL 0.1.6 konsolidiert passende definierte Mips vor dem Export in einem
+vollstaendigen Speicherbereich und behaelt diesen bei Base-/MaxLevelwechseln.
+Passender vorhandener Speicher wird wiederverwendet. Evidence/EGLImageLevels
+belegt beide Wechsel, inaktive Exporte und eine 9x9-Textur mit gemeinsamem
+4x4-Mip in SMP4/1 GB. Physische Compute-/PBO-Pfade folgen
+OssiGPU/39. Die gezielten Nachweise sind keine vollstaendige Konformitaetsabnahme.
+
+R4GL 0.1.7 ergaenzt EGL 1.5 und explizite lineare/sRGB-Flaechen. Das Mesa-
+Frontend behaelt die gewaehlte Attachment-Codierung bei; GL_FRAMEBUFFER_SRGB
+steuert die RGB-Konvertierung, Alpha bleibt linear. WINSVC transportiert die
+SDR-Bytes ohne zweite Codierung. Core-Syncs pruefen die EGL-Version, der
+separate KHR64-Einstieg die weiterhin ungemeldete OpenCL-Erweiterung. Nicht
+unterstuetzte Sync-Typen und nicht darstellbare EGLAttrib-Werte werden abgewiesen.
+Evidence/EGLColorCore: SMP4/1 GB, Pbufferwechsel, Shaderblending, Core-Image-/
+Sync-/Platformaufrufe, sRGB-Fensterpixel nach Resize und vollstaendiger BO-/
+Referenz-/Leihenabbau. Quellen/Auslegung: References/EGL15-ANGLE. Weiterhin
+keine CTS-Zertifizierung; Zink und Desktop-/Vollbildabnahme offen.
+
+R4GL 0.1.8 bindet Swapintervalle an die vorhandene Ausgabezulassung: FIFO allein
+reicht nicht fuer Intervall 1. Eine aktuelle synchronisierte Ausgabe erlaubt
+Configs 0..1 (Default 1); zusaetzliche Configs 0..0 bleiben fuer andere Ziele.
+Ein Fenster muss zur Config passen. Die konkrete Ausgabeidentitaet wird vor
+Intervall-1-Posting erneut geprueft. Intervall 0 waehlt MAILBOX, ersatzweise FIFO
+ohne Taktzusage. Wechsel wirken beim naechsten Swap und lassen vorherige FIFO-
+Bilder auslaufen; verlorene Antworten und Consumer-Leihen behalten ihre Besitzer.
+Evidence/EGLSwapIntervals belegt native Zulassung/Kettenwechsel auf dem Host
+(inklusive ASan/UBSan) sowie Clamping, Resize, Farbe und Abbau im SMP4-Fallback.
+Der physische Bildtakt bleibt ausdruecklich unter OssiGPU/0.79.39 nachzuweisen.
+
+R4GL 0.1.9 / Zink-Bootstrap: Der native R4VK-ICD ersetzt den Hostloader.
+Instanzen/Geraetecache gehoeren dem Prozess; Fehlanlagen werden zurueckgerollt.
+Profil 0 bleibt Softpipe, Profil 1 prueft die Vulkan-Renderanforderungen vor dem
+Start (EGL_NOT_INITIALIZED bei Ablehnung). Profilwechsel sind nicht implizit.
+Evidence/EGLZinkBootstrap: SMP4 ohne GPU (wiederholte Ablehnung/Abbau, danach
+Softpipe-Shaderpixel) und am GA106-Modell (echter Zink-/R4VK-Kontext, GL 3.3 Core,
+Pbuffer-Configs, Abbau). Modellantworten sind kein GPU-Zeichen-/Bildnachweis.
+R4GL 0.1.10 / Evidence/EGLZinkDraw: GLSL330-/Pbuffer-Zeichenbefehle gelangen ueber
+Zink/NVK/NAK in native Pakete; EGL-Fence und vollstaendiger BO-Abbau vor Prozessende
+bestehen im SMP4-Modell. Mesa-C11-Barrieren werden nach allen Worker-Abschluessen
+freigegeben. Das Modell bestaetigt Pakete, fuehrt aber keine GPU-Befehle aus.
+Native Fenster folgen ab 0.1.11; Device-Lost und Desktop-/Vollbildabnahme sind offen.
+
+R4VK 0.1.16 / Evidence/VulkanMutableFormats: KHR_swapchain_mutable_format
+erlaubt kompatible UNORM-/sRGB-Sichten desselben nativen Fensterpuffers.
+Die Formatliste gehoert nach Anlage der Swapchain; echte NVK-Bilder und Aliase
+behalten MUTABLE_FORMAT/EXTENDED_USAGE und die zugelassenen Ansichten.
+SMP4 prueft Ansichten, Caller-Lifetime, Alias, Fehlerlisten, Resize und Abbau;
+ASan/UBSan prueft die originale Mesa-Formatklassenzuordnung. GPU-Ausfuehrung
+bleibt modelliert; native Zink-Fenster sind damit noch nicht abgenommen.
+
+R4GL 0.1.11 / Evidence/EGLZinkWindow: Native Kopper-Anbindung an den vorhandenen
+R4VK-/WINSVC-Fenstervertrag, mit kopierter Anwendungs-/Fensteridentitaet und
+GPU-Puffern. Der Frontend-Flush markiert nach ausstehenden Zeichenbefehlen die
+Ressource fuer Present; so erzeugt Zink das erforderliche Semaphor. Swap wartet
+nicht pauschal auf die GPU. SMP4/1 GB belegt sRGB-Fenster, drei Uebergaben (zwei
+ohne glFinish), Resize, Consumer-Leihe ueber EGL-Abbau und exakten BO-Ausgangsstand
+vor Prozessende. Ein eigener Lauf ohne GPU belegt Softpipe-Shaderpixel und
+explizite Profilwahl. Keine GPU-Pixel-/VSync-Abnahme; Zink meldet vorerst nur
+Intervall 0. Device-Lost, native Intervallwechsel und Desktop/Vollbild bleiben offen;
+der Kontext-Speicherbedarf wird im folgenden Abschnitt behandelt.
+
+R4GL 0.1.12 / Evidence/EGLSoftpipeMemory: Der dritte Softwarekontext scheiterte
+am unveraenderten 512-MB-Prozessbudget, nicht am freien physischen RAM. Softpipe
+legte pro Kontext 201498624 Bytes fuer unbenutzte Texel-Caches an. Jetzt besitzt
+jede tatsaechliche Sampler-View ihren vollen Cache; Stage-/Slot-Kopien leihen ihn.
+Rebind invalidiert, die letzte View-Referenz gibt Mapping, Textur und Cache frei.
+SMP4/1 GB: vier gleichzeitig nutzbare Kontexte, gemeinsames Sampling ueber Stages/
+Slots, Rebind, Texturupdate/Loeschung und Pixel-Readback bestanden. RAM, Prozess-
+budget, Cachekapazitaet und Faehigkeitsgrenzen wurden nicht angehoben/verkleinert.
+Der damalige Kontext-Speicherbefund ist damit behoben; vollstaendige Konformitaet
+wird aus dieser gezielten Probe nicht abgeleitet.
+
+R4GL 0.1.13 / R4VK 0.1.17 / Evidence/EGLZinkSwap: Native Intervallwechsel
+pruefen das genaue Ausgabeziel und erhalten alte FIFO-Bilder bis zur Uebernahme
+durch WINSVCs Consumer. Ein begrenztes Drain vor Kettenersatz laesst bei Timeout
+alle Bilder fuer einen erneuten Versuch bestehen. Bereits erworbene Bilder gehen
+noch ueber die alte Policy; der Ersatz gilt fuer das naechste Bild. Verlorene
+Synchronisationszusage wird vor Anlage des Present-Semaphors abgelehnt; Intervall
+0 kann dasselbe Bild erneut uebergeben. SMP4/1 GB: Timeout mit zwei geordneten
+FIFO-Bildern, beide Wechselrichtungen, Synchronisationsverlust, Consumer-Leihe
+ueber Abbau und exakter BO-Ausgangsstand bestanden. Separat ohne GPU: explizites
+Softpipe-Profil samt Shaderpixeln. Kein physischer Bildtakt-/GPU-Pixelnachweis.
+Device-Lost und Desktop/Vollbild bleiben offen.
+
+R4GL 0.1.14 / Evidence/EGLZinkDeviceLoss: Nach Geraeteverlust darf Kopper keinen
+Ersatzpuffer voraussetzen. Der bisherige Nullzugriff in kill_swapchain ist
+behoben: verlorene Geraete behalten ihre alten Ressourcen bis zum normalen
+Abbau; eine fehlgeschlagene Ersatzallokation wird ebenfalls abgefangen. SMP4/1 GB
+setzt bei lebendem Kontext, ausstehenden GL-Befehlen und Consumer-Leihe die echte
+Backendgeneration zurueck. Wiederholtes Swap meldet EGL_CONTEXT_LOST; EGL-Abbau,
+anschliessende Rueckgabe der Leihe und exakter BO-Ausgangsstand bestehen.
+Physischer Reset bleibt in OssiGPU/0.79.39. Desktop/Vollbild ist noch offen.
+
+
+Fenstermodus ueber WINSVC (0.79.39)
+---------------------------------
+Borderless-Vollbild gehoert dem Desktop, unabhaengig von GL, GPU oder
+WindowGraphicsSurface. Die additive WindowMode-Schnittstelle laesst bestehende
+R4DESK-Tabellen und GuiWindowInfo-Layouts unveraendert. Der SDK-Client
+r4os.window_mode meldet Fenster/Vollbild; der Desktop veroeffentlicht die
+wirkliche Geometrie ueber den normalen Info-/Resize-Pfad und das additive
+FullScreen-Flag. Es findet kein Monitor-Moduswechsel statt.
+
+WINSVC kopiert genau eine ausstehende Anfrage je Fenster. Service-, Desktop-
+und Anwendungs-Handle, Fenster-ID und eine nicht wiederverwendete Seriennummer
+binden die Publikation. Identische Request-IDs duerfen wiederholt werden;
+abweichende Wiederholungen, fremde Besitzer und veraltete Generationen werden
+abgewiesen. Accepted/Pending ist keine bestaetigte Geometrie: Erst der Desktop
+bestaetigt nach der Umsetzung. Unklare RPC-Ergebnisse behalten die Anfrage;
+Neustart oder Entfernen duerfen sie keinem Ersatzfenster zustellen.
+
+Vollbild verwendet die logischen Grenzen des zugeordneten Outputs einschliesslich
+Skalierung/Drehung, ohne Rahmen. Die normale Geometrie und der vorherige
+Maximierungszustand bleiben fuer die Rueckkehr erhalten. Auf dem betroffenen
+primären Output verschwindet die Taskleiste, solange das Vollbildfenster aktiv
+ist und kein Desktop-Menue/Dialog angezeigt wird. Eingabe, Software-/GPU-
+Komposition und Capture verwenden dieselbe Clientflaeche.
+
+Allgemeines Beispiel: Libraries/R4GL/Examples/Triangle.zig. Physische Bild-,
+Hotplug- und VSync-Abnahmen bleiben in ExFiles/Reports/OssiGPU.txt /0.79.39.
+
+Abschluss 0.79.39: Desktop 0.1.66 / WINSVC 0.1.10
+----------------------------------------------
+Evidence/EGLDesktop belegt im regulären SMP4-/1-GB-Desktop ohne NVIDIA echte
+Softpipe-Pixel im Fenster, randloses 1280x720-Vollbild, exakte Rückkehr und
+abgeschlossenen GL-Runtime-Abbau. Die getrennten Fähigkeitenlisten stehen in
+R4GL/Docs/Capabilities.md; native GPU-Pixel bleiben in OssiGPU/0.79.39.
+
+Consumer INSPECT (Action 3, Serial/Result/Fence null) liest ausschließlich eine
+exakte Service-/Surface-/Chain-/Slot-/Token-Leihe. Es verändert weder Revision
+noch Wiederholungsantworten und ist keine Freigabe. Bei Producer-Close verwirft
+Desktop das gehaltene letzte Bild auch bei Verdeckung; Leser, CPU-Mapping und
+GPU-Receipt gehen weiterhin über den bestehenden Return-/Bestätigungsweg.
+Bei leerem Take wird nur nach geänderter Brokerrevision erneut geprüft; verdeckte
+oder noch vorbereitete Bilder folgen den vorhandenen Wake-/Polling-Anlässen.
+Die vorhandenen Besitzerprüfungen decken verlorene Antworten, fremde/veraltete
+Identitäten und Reader-/Mapping-Retention ab. Kein neuer dauerhafter Test-Gate.

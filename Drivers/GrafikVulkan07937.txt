@@ -1,8 +1,8 @@
 ﻿Vulkan-WSI und gemeinsame Fensterpraesentation – 0.79.37
 ======================================================
 
-Stand: IN ARBEIT. R4VK 0.1.9 fuehrt den privaten Import kanonischer
-Grafikpuffer ein. Surface/Swapchain und Desktop-Anbindung bleiben offen;
+Stand: IN ARBEIT. R4VK 0.1.10 bindet kanonische Grafikpuffer an private
+Vulkan-Bilder an. Surface/Swapchain und Desktop-Anbindung bleiben offen;
 Release 0.79.36 wird dadurch nicht als 0.79.37 abgeschlossen.
 Nachweise: GrafikVulkan07937.json. Physische Nacharbeit: OssiGPU.txt /0.79.37.
 
@@ -46,6 +46,33 @@ Ausstehende GPU-Nutzung wird weiter vom residenten Kernelbesitzer gehalten.
 Dies ist ein privater NVKMD-Baustein. Er registriert keine Khronos-Extension,
 aktiviert kein dma-buf/FD-Import und schafft keine oeffentliche Surface-API.
 
+Privater Bildimport
+------------------
+
+r4vk_nvk_import_wsi_image baut auf dem Pufferimport auf. Er akzeptiert
+einzelne 2D-Farbbilder ohne Mips/MSAA: B8G8R8A8 UNORM/sRGB fuer XRGB/ARGB8,
+A2R10G10B10 fuer XRGB/ARGB10 und R16G16B16A16 SFLOAT fuer ABGR16F.
+Geometrie, Pitch, Plane-Offsets, Umfang und Nutzungsrechte werden geprueft.
+NIL und NVK entscheiden anhand der echten Architektur-/Formattabellen ueber
+Modifier und Formatmerkmale; unbekannte oder komprimierte Layouts scheitern.
+
+Das originale NVK legt das VkImage und dessen layoutgebundene VA an. Eine
+regulaere Vulkan-Speicherhuelle uebernimmt den importierten BO und dieselbe
+Heapbuchhaltung wie AllocateMemory/FreeMemory. Import erzeugt keinen zweiten
+Pixelpuffer. Bildumfang und Alignment muessen in das vorhandene Backing passen.
+Der Erzeuger darf seine Referenz nach dem Import schliessen. Nach Ende aller
+Nutzungen zerstoert der WSI-Besitzer zuerst das Bild, dann dessen Speicher;
+wiederholter Abschluss ist leer. Fehler lassen die Ausgabe unveraendert.
+
+Ein lineares Bild kann beim Rendern zusammen mit Depth oder gekachelten
+Attachments NVKs vorhandenen internen Kachelpuffer benoetigen. Dessen Anlage,
+GPU-Kopien und Freigabe bleiben bei NVK. Die dafuer angebundene unkomprimierte
+Allokation verwendet denselben BO-Allokator mit layoutgebundener VA;
+GOB-Hoehe/-Tiefe bleiben in NIL und den Bildbefehlen. Das ist keine CPU-Kopie
+und keine Direct-Scanout-Zusage; die gemeinsame Ausgabepolicy entscheidet.
+Die Helfer sind bisher intern und noch nicht durch die oeffentliche R4VK-API
+erreichbar. Oeffentliche FD-/DRM-Extensions bleiben deaktiviert.
+
 Gezielte Softwarepruefung
 ------------------------
 
@@ -68,16 +95,25 @@ ersetzt unbenutzte Compiler-/Logpfade durch harte Fehlersenken. Der regulaere
 R4VK-Build prueft unabhaengig die vollstaendige Bibliothek und C/Zig-ABI.
 Keine neue dauerhafte Testgruppe.
 
+Ein zweiter gezielter SMP4-Nachweis verwendet die vollstaendigen produktiven
+NVK/NIL/NAK-Archive ohne Compiler-/libc-Ersatz. Der Modelltreiber berechnet
+127x65-Bilder mit dem echten NVIDIA-Surfacecode. Acht Faelle kombinieren die
+vier Vulkan-Formate mit linearem und blocklinearem Speicher. Geprueft werden
+identische BOs, unabhaengige Referenzen, Pitch/Modifier/NIL-Umfang, Erzeuger-
+Close vor Rendering, Barrieren, Queue-Submit und Fence-Wait. Linear plus Depth
+durchlaeuft auch NVKs internen Kachelpuffer. Format-/Usage-Fehler, alte Handles
+und Callback-OOM an Bild/Speicherhuelle erlauben fehlerfreien Wiederanlauf.
+Vulkan-Heap und alle nativen BO-Zaehler kehren nach Abbau zum Ausgangswert
+zurueck; aktive C-Allokationen sind danach null. GPU-Completion bleibt
+modelliert: keine Aussage ueber Pixel, physische Ausgabe oder GPU-Leistung.
+
 Naechste Integration
 --------------------
 
-1. Kanonische Bildlayouts mit NVK/NIL abgleichen und deren VkImage-/Memory-
-   Lebensdauer anbinden. Linear-Modifier koennen NVK-interne Kachelschatten
-   benoetigen; CPU-Kopien oder Direct Scanout nicht allein daraus ableiten.
-2. Gemeinsame GPU-Fensterbild-Uebergabe mit exakter Programm-, Fenster- und
+1. Gemeinsame GPU-Fensterbild-Uebergabe mit exakter Programm-, Fenster- und
    Desktopgeneration, Renderfertigstellung und Consumer-Freigabe integrieren.
-3. Native Surface-Discovery und KHR-Swapchain-Funktionen auf diesen Weg
+2. Native Surface-Discovery und KHR-Swapchain-Funktionen auf diesen Weg
    aufsetzen: Formate/Modi aus Capabilities, Acquire/Present, Resize,
    Verdeckung, Hotplug sowie gemeinsame Farbe-/Capture-/Ausgabepolicy.
-4. App-Abbruch und Desktopneustart mit einem gezielten Softwarelauf pruefen;
+3. App-Abbruch und Desktopneustart mit einem gezielten Softwarelauf pruefen;
    erst danach die Softwareaufgaben von 0.79.37 abschliessen.

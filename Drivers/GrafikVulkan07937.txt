@@ -1,14 +1,14 @@
 ﻿Vulkan-WSI und gemeinsame Fensterpraesentation – 0.79.37
 ======================================================
 
-Stand: IN ARBEIT. R4VK 0.1.11 verbindet native Fenster-Surfaces und KHR-
-Surface-Abfragen mit WINSVC; der private kanonische BO-/VkImage-Import
-bleibt vorhanden. WINSVC 0.1.8 vermittelt gemeinsame GPU-Fensterbilder mit
+Stand: IN ARBEIT. R4VK 0.1.12 verbindet native Fenster-Surfaces, KHR-
+Swapchains und Acquire/Present mit WINSVC; Bilder teilen den kanonischen
+BO-/VkImage-Import. WINSVC 0.1.8 vermittelt gemeinsame GPU-Fensterbilder mit
 Consumer-Freigabebestaetigung und direktem Desktop-Aufwecksignal.
 R4GFX 0.1.16/NVIDIA 0.1.140 verbinden Farbkonvertierung und logische
 Abtastung in einem GPU-Auftrag; R4NV 0.1.9 liefert die gemeinsamen Shader.
 Desktop 0.1.63 bindet den Fenstertransport an seinen regulaeren Hauptzyklus
-und komponiert externe Bilder direkt in FP16. Vulkan-Swapchain/Present
+und komponiert externe Bilder direkt in FP16. Vulkan-FP16/HDR-Zuordnung
 und die gemeinsame Endabnahme bleiben offen;
 Release 0.79.36 wird dadurch nicht als 0.79.37 abgeschlossen.
 Nachweise: GrafikVulkan07937.json. Physische Nacharbeit: OssiGPU.txt /0.79.37.
@@ -26,8 +26,8 @@ Die vorhandenen R4GFX-Swapchains beschreiben Ausgaben. Sie sind noch keine
 GPU-Bildwarteschlangen einzelner Fenster. GUI-Frames teilen derzeit CPU-
 Raster; der neue WINSVC-Transport besitzt bereits GPU-Bildreferenzen und
 Consumer-Leihen. Desktop bedient ihn bei geeigneten GPU-Ausgaben;
-Vulkan fragt dieselben Surface-Capabilities ab. Der Bildtransport des
-oeffentlichen Vulkan-Verbrauchers ist noch anzuschliessen.
+Vulkan nutzt dieselben Surface-Capabilities und denselben Bildtransport.
+Die gemeinsame vollstaendige Endabnahme steht noch aus.
 Vertrag und Lebensdauer: Docs/Desktop/GrafikFenstertransport07937.txt.
 Kein zweiter Vulkan-Kompositor und keine eigene Vulkan-Displayengine.
 
@@ -81,8 +81,8 @@ GPU-Kopien und Freigabe bleiben bei NVK. Die dafuer angebundene unkomprimierte
 Allokation verwendet denselben BO-Allokator mit layoutgebundener VA;
 GOB-Hoehe/-Tiefe bleiben in NIL und den Bildbefehlen. Das ist keine CPU-Kopie
 und keine Direct-Scanout-Zusage; die gemeinsame Ausgabepolicy entscheidet.
-Die Helfer sind bisher intern und noch nicht durch die oeffentliche R4VK-API
-erreichbar. Oeffentliche FD-/DRM-Extensions bleiben deaktiviert.
+KHR-Swapchain verwendet diese Helfer intern. Oeffentliche FD-/DRM-Extensions
+bleiben deaktiviert.
 
 Gezielte Softwarepruefung
 ------------------------
@@ -170,7 +170,7 @@ Erst nach physischem Abschluss ihrer Auftraege uebergibt jede Ausgabe ihren
 letzten echten Render-Fence. Dessen Auftrag haelt den urspruenglichen Worker
 bis zur spaeteren WINSVC-Freigabebestaetigung am Leben. Abbruch mit noch
 gehaltenen Ressourcen reicht nicht zur Freigabe. Rueckgabe und Wiederholung
-bleiben beim noch anzuschliessenden Transportbesitzer.
+liegen beim unten beschriebenen aktiven Transportbesitzer.
 
 Die bestehende Render-Pruefung deckt Zeichenreihenfolge, Software-Fallback,
 vier Rotationen, 125 Prozent DPI, getrennte Clips, optisches Alpha, zwei
@@ -228,7 +228,7 @@ und 2..3 Bilder kommen aus den bestehenden Besitzern. B8G8R8A8 UNORM/sRGB
 mit opakem/elektrisch vormultipliziertem Alpha werden nur bei passenden
 Farbvertraegen und NVK/NIL-Linearbildfunktionen angeboten. Nutzungs-/Alphabits
 gelten fuer alle ausgegebenen Formate. Vulkan-FP16/HDR-Zuordnung und
-KHR_swapchain sind noch nicht freigeschaltet.
+weitergehende HDR-Extensions bleiben deaktiviert.
 
 Groessenaenderung aktualisiert die Auskunft; Unsichtbarkeit erhaelt den
 Handle. Ein Dienstneustart macht alte Handles surface-lost, auch wenn
@@ -240,14 +240,54 @@ echter WINSVC und vorhandener Modell-GPU-Treiber. Discovery, Callback-OOM,
 vollstaendige/abgeschnittene Formatlisten, KHR-2-Abfragen, Resize, Verstecken,
 veraltete Ausgabegeneration und Dienstneustart bestehen. Surface-Allokationen
 werden freigegeben. Build mit 514 C-Einheiten und bestehender ABI-Pruefung
-erfolgreich; kein neuer dauerhafter Test. Noch kein Vulkan-Bild/Presentlauf.
+erfolgreich; kein neuer dauerhafter Test. Der folgende Swapchain-Nachweis
+ergänzt diesen früheren Surface-Stand.
+
+Native Vulkan-Swapchain
+-----------------------
+
+KHR_swapchain erzeugt 2..3 Bilder aus der vorhandenen Surface-Konfiguration.
+Format/Alpha, Groesse, FIFO/MAILBOX und Ausgabegeneration stammen aus WINSVC;
+Pitch und Umfang bestimmt der native Allokator. NVK und Fensterdienst
+importieren denselben BO. Bildlisten, lokale Device-Group-Abfragen sowie
+VkImageSwapchainCreateInfoKHR/BindImageMemorySwapchainInfoKHR sind angebunden.
+
+Acquire meldet ausschliesslich wieder verfuegbare Bilder und signalisiert
+deren Vulkan-Semaphore/Fence. Ohne freies Bild unterscheiden sich sofortiges
+NOT_READY und endliches TIMEOUT. Present verbraucht binaere Warte-Semaphores
+ueber die normale Mesa-Queue und leiht WINSVC den echten nativen Fence.
+Der vorhandene NVIDIA-Abschluss verwendet WFI/SYS_MEMBAR; Vulkan-Bildbarrieren
+bleiben Pflicht der Anwendung. NVKs Kachelpuffer enden im normalen Renderpfad.
+
+Ein Fenster besitzt genau einen unveraenderlichen ausstehenden RPC und
+prozessweit steigende Anfragenummern. Unsichere Ergebnisse werden zuerst
+aufgeloest. Eine ersetzte Swapchain bleibt fuer bereits erworbene Bilder
+presentierbar, auch nach fehlgeschlagener Neuanlage. Verstecken erhaelt die
+Kette; Resize liefert OUT_OF_DATE. Alte Dienstgenerationen binden nicht neu.
+
+Vulkan-Objekte und ihre Allokator-Callbacks enden bei DestroySwapchain.
+Unabhaengige native Datensaetze halten geliehene Fences und Quellreferenzen
+bis zur bestaetigten Freigabe. Auch die Queue bleibt bis zum letzten solchen
+Fence bestehen: Queue-Close entzieht im Kernel alle Client-Fence-Referenzen.
+Der SMP4-Lauf deckte diesen Fehler bei DestroyDevice auf; Completion-Punkte
+halten jetzt die native Queue ueber den Vulkan-Geraeteabbau hinaus am Leben.
+Die Worker-Aufweckrevision verhindert verlorene Signale beim Einschlafen.
+
+Gezielter SMP4-Nachweis mit kanonischem R4VK.R4L, echtem WINSVC und vorhandenem
+Modell-GPU-Treiber: Bildlisten/Aliase, Acquire-Fence und -Semaphore, Timeout,
+NVK-Clear/Barrieren/Render-Submit, Present, Consumer-Rueckgabe und Reacquire.
+Der Queue-Reaper gibt nicht mehr geliehene Fence-Metadaten frei. Eine aktive
+Desktop-Leihe behaelt ihren Fence nach Swapchain- und Device-Abbau;
+Dienstneustart stellt BO-/Referenz-/Leih-/Speicherbudgets wieder her.
+Callback-OOM bei Ersetzung, MAILBOX, Verstecken und Resize sind abgedeckt.
+Build: 515 C-Einheiten plus Identitaet, bestehende ABI-Pruefung, R4M0-Pruefung.
+Die GPU-Ausfuehrung ist modelliert; reale Pixel und komplette Desktop-Ausgabe
+sind damit nicht belegt. Kein neuer dauerhafter Test.
 
 Naechste Integration
 --------------------
 
-1. KHR-Swapchain-Funktionen auf diesen Surface-Weg aufsetzen:
-   Pufferanlage, Acquire/Present, FP16/HDR-Farbzuordnung, Resize,
-   Verdeckung, Hotplug sowie gemeinsame Farbe-/Capture-/Ausgabepolicy.
-2. Die komplette Vulkan-/Desktop-Verbindung einschliesslich App-Abbruch,
-   Ausgabewechsel und Desktopneustart mit einem gezielten Softwarelauf pruefen;
+1. Vulkan-FP16/HDR an die gemeinsame Farb-/Ausgabepolicy anbinden.
+2. Die komplette Vulkan-/Desktop-Verbindung einschliesslich Capture,
+   App-Abbruch, Ausgabewechsel und Desktopneustart gezielt pruefen;
    erst danach die Softwareaufgaben von 0.79.37 abschliessen.

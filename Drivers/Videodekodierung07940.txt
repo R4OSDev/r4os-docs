@@ -1,0 +1,423 @@
+﻿Videodekodierung und YUV — 0.79.40
+=================================
+Stand: Softwareumfang abgeschlossen. VIDEO_V1-Softwarebilder, modellierter
+NVDEC-GPU-Besitzer sowie CPU/native YUV und Medienbesitzer sind integriert.
+Physische Abnahme bleibt offen: ExFiles/Reports/OssiGPU.txt /0.79.40.
+
+Quellen und Grenzen
+------------------
+ExFiles/Reference/GFX/0.79.40/WebSources.json enthält die abgerufenen
+NVIDIA-Dokumentationen mit URL, Datum und SHA256. SourceIndex.json bindet die
+bestehenden offenen Klassen-, Codec- und RM-Quellen einschließlich ihrer Hashes.
+Die proprietäre NVDECODE-/CUDA-Library wird nicht als R4OS-Laufzeit verwendet.
+
+NVDEC-Klassen aus Nouveau nvkm/subdev/gsp/rm/*.c:
+Turing TU10x/TU11x   c4b0     tu1xx.c
+Ampere GA100        c6b0     ga100.c
+Ampere GA10x        c7b0     ga1xx.c; einschließlich GA106
+Hopper GH100        b8b0     gh100.c
+Ada AD10x           c9b0     ad10x.c
+Blackwell GB10x     cdb0     gb10x.c
+Blackwell GB20x     cfb0     gb20x.c
+Pascal und älter bleiben außerhalb des bestehenden GSP-570-R4OS-Profils.
+Klassenwerte sind Kandidaten für die Zulassung, keine fest zugesagte Engine.
+
+Herstellergrenzen, nicht R4OS-Freigaben:
+Turing/GA100/Hopper: H.264 Baseline/Main/High, kein AV1.
+GA10x/Ada: zusätzlich AV1 Main; H.264 bleibt 8 Bit / 4:2:0.
+Blackwell: zusätzlich H.264 High10/High422; eigener Software-/Firmwarepfad nötig.
+H.264: bei Turing bis Ada 48x16..4096x4096, bis Level 5.1; Blackwell
+48x64..8192x8192, bis Level 6.2. HEVC/VP9 erreichen generationenabhängig 8K;
+Bit-Tiefe, Chroma, Streamlevel und Engineanzahl müssen getrennt geprüft werden.
+Quelle: NVIDIA NVDEC Application Note 13.1, Tabelle 1; Programming Guide 13.0,
+Kapitel 2. Konkrete Boards können enger begrenzt sein. Weitere Codecs werden
+mit dieser Untersuchung weder implementiert noch freigeschaltet.
+
+Firmware und Zulassung
+----------------------
+Der implementierte Pfad verwendet den vorhandenen authentifizierten GSP-RM-Besitzer.
+Nouveaus r535/nvdec.c allokiert unter dem Kanal ein Engineobjekt mit
+NV_BSP_ALLOCATION_PARAMETERS (12 Bytes: size, prohibitMultipleInstances,
+engineInstance). Der RM-Besitzer übernimmt das Engine-/Firmwaremanagement;
+eine selbst geladene NVDEC-Microcode-Datei ist kein Bestandteil dieses Pfads.
+Eine erfolgreiche GSP-Anmeldung allein beweist keine betriebsbereite NVDEC.
+
+Vor Anlage einer Decoderwarteschlange sind Geräte-/Resetgeneration, tatsächliche
+Engine-/Runlist-Zuordnung, angebotene Klasse und die RM-Allokationsantwort zu
+prüfen. Der bestehende native Softwarestart umfasst GA10x und Ada. Turing besitzt
+ein separates Profil, benötigt aber noch direct-HS/v4-Startintegration;
+Blackwell FSP/FMC. GA100/Hopper bekommen keine implizite R4OS-Zulassung.
+NV0080_CTRL_CMD_BSP_GET_CAPS_V2 (0x801c02) liefert acht Bytes und instanceId.
+Die veröffentlichten Header erklären ihre einzelnen Bits nicht ausreichend;
+daher werden daraus keine erfundenen Codecflags abgeleitet.
+
+Für den GA10x-Ansatz liegen clc7b0.h und nvdec_drv.h mit Methoden, H.264-
+Picture-/DPB-Strukturen, Slice-/Statuspuffern, Watchdog und Ausgabeoffsets vor.
+H.264 hat 16 DPB-Einträge; Offsets/Layouts und Bitfelder werden gegen die
+Originalheader geprüft. NV12-Ausgabe ist im H.264-Bildvertrag beschrieben.
+Codec-Konstanten im Header ersetzen weder Parser noch Ressourcenbesitzer.
+Ein signalisiertes Queue-Semaphor genügt ohne erfolgreichen Decoderstatus nicht
+als Nachweis eines gültigen Bildes.
+
+Besitzer und erste Implementierung
+---------------------------------
+Drivers/NVIDIA/src/gsp_native_video.zig besitzt den internen RM-Kanallebenszyklus:
+begrenzte Suche nach einer tatsächlich gemeldeten NVDEC-Instanz, passende angebotene
+Klasse, eigener Kontext/Kanal und geordnete Freigabe aus laufenden Startphasen.
+RM-Engine 29..36, NV2080-Typ 0x13..0x1a und Allokationsinstanz 0..7 bleiben getrennt.
+Der allgemeine Batchpfad nutzt HOST-Abschlussmethoden; direkte CE-/GR-Encoder
+sind für den Videoring ausgeschlossen. Ein bereiter Kanal beweist kein dekodiertes Bild.
+Die vorhandenen Transport-/Complete-Run-Fälle prüfen Originalheader-Parameter,
+fehlende Instanzen/Klassen, RM-Ablehnung, Abbruch während Kontext-/Speicher-/Kanalstart
+und vollständige Ressourcenrückgabe. Treiberbuild erfolgreich, keine neue Testgruppe
+oder Gastabnahme. Nachweis: Evidence/NvdecChannel unter dem Referenzverzeichnis.
+Die öffentliche native Queue verwendet R4NV-Maskenbit 8 allein für NVDEC.
+Ihr Kanal bleibt von GR getrennt; Registrierung und Ausführung benötigen keinen
+bereiten GR-Kontext. Grafikmasken 1/3/5/7 behalten ihre Teilmengenregeln. Ein
+bestehender Kanal kann seine Enginefamilie nicht wechseln. Gemeinsame BO-/VA-
+Leihen bleiben bis zum HOST-Abschluss oder nachgewiesenen Reset bestehen.
+Evidence/NvdecQueue belegt tatsächliche öffentliche Dispatcher-/RM-/Ringpfade
+gegen modellierte Antworten: Wiederverwendung, aktives Schließen, Halten nach
+GET, Abschluss durch Semaphor, Klassen-/Allokationsfehler und Ressourcenbilanz.
+R4NV erweitert nur eine Konstante; bestehende Tabellen, Revisionen und Layouts
+bleiben erhalten. Alte Treiber lehnen das neue Bit ab. Der H.264-Hardwarecodec
+ist inzwischen über den unten beschriebenen R4VIDEO-GPU-Besitzer angebunden.
+
+R4VIDEO als unabhängige Library unter Repositories/Libraries besitzt komprimierte
+Pakete, Parser-/Decoderzustand, DPB, Zeitstempel und Ausgabeleihen.
+R4NV/Drivers/NVIDIA besitzen ausschließlich die gerätespezifische Zulassung,
+NVDEC-Kanäle, Methoden und asynchronen Abschluss. R4GFX/der vorhandene Desktop
+besitzen Bilddarstellung, YUV-Abtastung, Farbtransformation und Ausgabe.
+Der Medienhost besitzt Audio-/Videotakt; der Decoder führt keine eigene Uhr
+und keinen AUDSVC-/Desktop-Sonderpfad ein. Kerneländerungen sind nur für
+zwingend fehlende allgemeine Ressourcen-/Queueverträge zulässig.
+
+Erstes Ziel: H.264, 8 Bit, 4:2:0, progressive Frames. FFmpeg 9.0.1 ist
+als Parser-/Decoderkern ausgewählt; seine Hardware-Callbacks teilen SPS/PPS,
+DPB und Reorder mit dem Softwarepfad. Nur tatsächlich integrierte und geprüfte
+Profile werden angeboten. Kein CUDA-/NVDECODE-Laufzeitimport.
+Herkunft/Prüfsumme: Libraries/R4VIDEO/ThirdParty/Sources.json; Originalarchiv
+und Quellen liegen unter ExFiles/Reference/GFX/0.79.40/FFmpeg.
+
+VIDEO_V1 gehört Libraries/R4VIDEO/Contract/LibraryContract.json. Generierte
+C-/Zig-Bindings und API-Dokumentation liegen in derselben Einheit. Die kurze
+ABI-Prüfung umfasst 16 Payloads, neun Slots und den Abgleich der Buffer-/Fence-
+Layouts mit dem Plattformvertrag. Kein installierter Decoder wird dadurch
+behauptet. CICP-Farbmetadaten bleiben erhalten; BT.709 wird nicht zu sRGB.
+
+Vertragsregeln:
+- Send nimmt begrenzte vollständige Access Units mit optionalem PTS/DTS und
+  Streamgeneration an. Backpressure verwirft keine bereits angenommenen Pakete.
+  Paketbytes werden vor Rückkehr übernommen oder durch eine präzise Leihe gehalten.
+- Receive liefert erst nach erfolgreicher Dekodierung eine nummerierte Leihe:
+  generische BO-Referenzen, Planes/Pitches/Offsets, Format, Crop, Farbe/Range,
+  PTS/Dauer und zugehörige Abschlussabhängigkeit; keine fremden Rohzeiger.
+- DPB-Referenzen, Decoderarbeit und Consumer-Leihen sind getrennte Besitzer.
+  Release/Fence-Antwort, nicht bloß Handlelöschung, beendet eine Leihe.
+- Drain erhält Reorder-Ausgaben. Flush/Seek erhöht die Streamgeneration,
+  beendet alte Arbeit geordnet und verwirft alte PTS; geliehene Bilder bleiben
+  bis zur Rückgabe gültig. Neuaufbau beginnt an einer geeigneten Referenzgrenze.
+- NV12 und P010 teilen denselben mehrplanaren Darstellungsvertrag; 10-Bit-
+  Darstellung verspricht noch keinen 10-Bit-H.264-Decoder. GPU-Ausgaben bleiben
+  ohne obligatorische CPU-Farbkonvertierung. Software erhält einen klaren Pfad.
+- Ungültig, nicht unterstützt, Queue voll, weitere Daten nötig, EOS und Device-
+  Lost bleiben unterscheidbar. Abbruch/Timeout blockieren keinen Desktop-Owner.
+
+NVDEC-Bild-/Arbeitsbuffer, Einreichung, YUV-Komposition und Medienzeit sind
+in den folgenden Abschnitten beschrieben. Die Nachweise verwenden gezielte
+bestehende Besitzerprüfungen und kurze SMP4-Referenzfolgen.
+
+Codec und native Laufzeit: Zwischenstand
+---------------------------------------
+Der Build enthält 143 Objekte: 132 FFmpeg-Einheiten, vier private Adapter und
+sieben gemeinsame C-Helfer; dazu die gemeinsamen Math-/Scan-Archive. CAVLC und
+H.274 entstehen beim Build aus den originalen Initialisierern als konstante
+Daten, CRC nutzt FFmpegs konstante Tabellen. Beide Generatoren kompilieren
+auch für Windows; ausgeführt wurde der vollständige Build bisher unter Linux.
+
+FFmpegs CPU-/Log-/Allokationseinstellungen und Codec-Locks sind prozessgebunden.
+CPUID/XCR0 bestimmen SIMD; AVX512 bleibt gemäß SDK-Grenze gesperrt. R4SYS liefert
+CPU-Kapazität, monotone Zeit und UTC. Der private UTC-Adapter verwendet R4STD;
+seine Zahlenformate reichen für die FFmpeg-Logs, unbekannte Formate scheitern.
+
+Speichergrenzen erfassen Payload, Header/Ausrichtung, Decoder-/BO-Belegung und
+bis zum exakten Join gehaltene Worker-Stackreservierungen. Gemeinsamer Code,
+feste Prozess-/TLS-Metadaten, SDK-Heap-Caches und Kernelbuchhaltung sind davon
+ausgenommen; dies ist keine Grenze für den gesamten physischen RAMverbrauch.
+Gleichzeitige Worker teilen das Decoder- und Gesamtbudget. Fehlgeschlagene
+Allokation liefert NULL; Realloc erhält das Original. Neue Threads bestätigen
+ihren Besitzer vor FFmpeg-Zulassung. Ein fehlgeschlagener Join darf nicht in
+FFmpegs Freigaben zurückkehren und beendet den betroffenen Prozess.
+
+Codec und native Laufzeit lassen sich vollständig ohne offene Symbole linken.
+Auf dem Buildhost bleiben 36 Baseline-/Main-/High-Bilder samt Reorder, Metadaten,
+gehaltenen Bildern und Fehlerfällen korrekt. Zwei modellierte Programmbesitzer
+prüfen getrennte Log-/CPU-/Allokationseinstellungen. Die Komponentenprüfung
+enthält drei gezielte Fälle: ABI, Grafikidentitäten und parallele Budgets.
+Nachweise: ExFiles/Reference/GFX/0.79.40/Evidence/CodecCore (früherer Stand)
+und NativeRuntimeReference (früherer Host-/Link-/Modellstand).
+
+Die temporäre VIDPORT.R4L führt den nativen Decoder jetzt im R4OS-SMP4-Gast aus:
+36 Referenzbilder, Reorder/Metadaten, gehaltene Bilder über Flush/Close und
+Fehlerfälle sind korrekt. Exakte Thread-Joins, native TLS und erfasste Speicher-
+reservierungen kehren nach Freigabe zurück. Finish ist wiederholbar.
+
+Source/surface.zig überträgt Y/U/V ohne RGB-Konvertierung in drei gewöhnliche
+R8-BOs. Tatsächliche Deskriptoren, Pitch, Umfang, Mapping und Padding werden
+geprüft. Der Gast liest alle 108 Ebenen bytegenau zurück. Gehaltene BOs bleiben
+über Codec-Flush/Close gültig. Ein Budgetfehler nach Anlage der ersten Ebene
+behält deren Besitzer bis zur erfolgreichen Rückgabe; Puffer-, Referenz-,
+Mapping- und Bytezähler erreichen abschließend den Ausgangswert. Dies ist im
+Softwarepfad eine YUV-Kopie, keine Zero-Copy-Ausgabe. Nachweise: NativeGuest
+und NativeSurfaceGuest neben NativeRuntimeReference.
+
+Öffentliche Softwaredekodierung
+------------------------------
+R4VIDEO.R4L implementiert alle neun VIDEO_V1-Slots. Endliche Eingabequeues
+kopieren vollständige Access Units vor Send-OK; Send dekodiert nicht.
+Der Worker liefert Bilder in Anzeigereihenfolge als gemeinsame BO-Leihen.
+Flush erhöht die Streamgeneration genau einmal; gelieferte Bilder bleiben
+über Flush und Close gültig. Release übernimmt den unveränderlichen Consumer-
+Fence, wartet dessen tatsächliche Ressourcenfreigabe ab und bestätigt die
+Rückgabe erst danach. Alte Tokens können keine neue Bildleihe freigeben.
+Close umfasst exakte Worker-Joins; Destroy entfernt den geschlossenen Besitzer.
+Finish beendet die prozesslokale Laufzeit dauerhaft und ist wiederholbar.
+
+Ein Runtime-Owner erlaubt bis zu 16 Decoder mit getrennten Speicherbudgets.
+Die Threadgrenze zählt Decoder-Worker einschließlich Koordinator; ein fester
+zusätzlicher Aufräumworker bleibt speicherbudgetiert. Pro Decoder sind maximal
+16 Worker möglich. Feste Prozessmetadaten einschließlich des Owner-Mutex bleiben
+für sichere alte Handles bis zum Prozessende bestehen. Die README beschreibt
+Speichergrenzen und die tatsächliche FFmpeg-Threadaufteilung.
+
+Die Softwarezulassung umfasst H.264 Baseline/Main/High, progressiv, 8 Bit / 4:2:0;
+Profil 0 wird zu Baseline aufgelöst. Andere Profile liefern UNSUPPORTED. Der
+NVIDIA-Pfad ist separat zugelassen; die Fallbackwahl gehört dem Medienbesitzer.
+Ein asynchron abgewiesenes Profil weckt den öffentlichen Worker auch ohne
+weiteres Paket; der Fehlerabschluss wartet nicht auf den nächsten Send-Aufruf.
+
+PublicPoolGuest belegt im echten SMP4-Gast 39 bytegenaue Referenzbilder, kopierte
+Eingaben und Queue-Backpressure, Metadaten, Flush/Close mit gehaltenen Bildern,
+Consumer-Fences, alte Tokens und Ressourcenrückgabe. Fehlgeschlagene Runtime-/
+Decoderinitialisierung ist ohne veränderte Ausgabe wiederholbar. Ein fehlerhafter
+Baseline-Owner beeinträchtigt den gleichzeitig aktiven Main-Owner nicht.
+Die gezielten drei Komponentenfälle und der R4L-Build sind ebenfalls erfolgreich.
+
+Passende Ausgabe-BOs werden erst nach finalem Consumer-Fence und bestätigter
+Rückgabe wiederverwendet. Sie behalten ihre Identität und Budgetbelegung;
+Flush, Close und Fehler räumen unbenutzte Puffer auf. Ein Größenwechsel ersetzt
+nur die betroffene freie Ausgabe. Der Gast prüft konstante BO-Identitäten über
+mehrere Bilder, Padding und 64×48 → 96×64 → 64×48 bei weiterhin gehaltenem
+altem Bild. Auch ein Decoderfehler mit gleichzeitigem Pufferbestand und alter
+Bildleihe wird vollständig abgebaut. Beim Kopieren werden nur Paddingbereiche
+genullt, sodass aktive Pixel nicht zuvor nochmals vollständig geschrieben werden.
+
+FFmpegs interner Pixelwächter prüft die auf STRIDE_ALIGN gerundete Breite.
+Die interne Grenze berücksichtigt dies nun; die tatsächlichen SPS-/Bildmaße
+bleiben durch die exakten Nutzergrenzen geschützt. Der zuvor gültige, aber
+intern zu streng abgewiesene 96-Pixel-Fall ist damit korrigiert. Ältere Nachweise
+bleiben unverändert in PublicApiGuest; gemessene Geschwindigkeitsgewinne oder
+Zero-Copy werden aus dieser Funktionsprüfung nicht abgeleitet.
+
+Das Modul und seine Consumer-Bindings sind im Library-Build registriert.
+Der anfängliche technische Stand mit IMAGE_SCOPE=none wurde für den Abschluss
+auf IMAGE_SCOPE=slim angehoben. Native NVDEC, YUV und Medienintegration folgen
+unten; physische Abnahmen bleiben separat in OssiGPU.txt.
+
+H.264-NVDEC-Kodierung
+--------------------
+R4NV besitzt den kompilierten Helfer Source/video.zig für C7B0/C9B0:
+progressives H.264 Baseline/Main/High, 8 Bit / 4:2:0, KBL-NV12,
+höchstens 16 Referenzen und 255 Slices. Er erzeugt die 764 Byte großen
+Bildparameter, DPB-/Skalierungstabellen und 54 Methodenwörter. Die Grenzen
+umfassen Bildmaße, Profilmerkmale, Puffergrößen, 40-Bit-Methodenadressen,
+GOB-Höhe und Überschneidungen. Andere Klassen/Profilpfade bleiben abgewiesen.
+
+Der begrenzte Access-Unit-Sammler kopiert die originalen escaped Slice-NALs
+mit Annex-B-Präfixen, EOS und Nullpadding; die Offsettabelle enthält auch das
+Ende des letzten Slices. Er benötigt vom Aufrufer bereitgestellten Speicher.
+BO-/VA-Leihen, DPB-Lebensdauer und Einreichung gehören weiterhin R4VIDEO
+beziehungsweise dem gemeinsamen Grafikbesitzer.
+
+Jede Einreichung muss ihren Statuspuffer neu markieren. Die Auswertung des
+56-Byte-NVDEC-Status verlangt einen erfolgreichen Queue-Fence, exakt die
+erwartete Makroblockzahl und fehlerfreie Bild-/Slice-Meldungen. Ausbleibender
+Status, Teilbilder und Decoderfehler liefern keinen erfolgreichen Frame.
+
+Originale NVIDIA-C-Header liefern unabhängige Binärvektoren für vorzeichen-
+behaftete Parameter, alle 16 DPB-Einträge, Skalierungen, Methoden und Status.
+Puffergrößen/EOS/Referenzmarkierungen sind mit Mesas NVK-H.264-Code abgeglichen;
+dessen konkreter Commit, Originale und Lizenzen liegen in NvdecH264Source.
+Die bestehende R4NV-Prüfgruppe deckt zusätzlich Grenzen und Slice-Verpackung ab.
+Evidence/NvdecH264 enthält den gezielten Build und die Quellen.
+Der Encoder wird vom folgenden R4VIDEO-GPU-Besitzer verwendet; YUV-Komposition
+und Medienintegration sind in den anschließenden Abschnitten beschrieben.
+
+FFmpeg-NVDEC-Anbindung
+---------------------
+Ein privater Hardware-Bildtyp und H.264-Callbacks sind in den freestanding
+FFmpeg-Build integriert. Port/nvdec.c übernimmt SPS/PPS, Raster-Skalierungen,
+Referenzbilder und escaped NALs aus FFmpegs tatsächlichem Parser. Die Callback-
+Tabelle wird kopiert; ihr externer GPU-Besitzer muss bis zur letzten Bildfreigabe
+leben. Ein AVBuffer hält das Bild über DPB-Nutzung, Ausgabe, Flush und Close.
+Teilfehler führen genau einmal zu Abort und Freigabe; Erfolg bei end setzt den
+geprüften Queue- und Bildstatus des GPU-Besitzers voraus.
+
+NvdecBridge belegt im SMP4-Gast 36 Metadata-/Reorder-Bilder über die realen
+FFmpeg-Callbacks und den R4NV-Encoder. Nur der GPU-Ressourcenbesitzer wird
+modelliert; CPU-Bildebenen bleiben in diesem Pfad leer. Die Prüfung umfasst
+kopierte Tabellen, gehaltene Bilder über Flush/Close, vier Fehlerstellen und
+vollständige Budgetfreigabe. Das geänderte öffentliche R4VIDEO-Modul besteht
+zusätzlich den vorhandenen Softwarelauf mit 39 pixelgenauen Referenzbildern.
+Dieser frühere Nachweis liegt in Evidence/NvdecBridge.
+
+GPU-Ressourcen und öffentliche NV12-Ausgabe
+-----------------------------------------
+R4VIDEO/Source/gpu_resources.zig besitzt native NV12-Bilder, kohärente System-
+puffer für Upload/Status, VRAM-Arbeitsspeicher, GPU-Adressbereiche und Engine-8-
+Aufträge. Architektur und Epoche werden für GA10x/C7B0 und Ada/C9B0 geprüft;
+der Treiber bestätigt unabhängig die angebotene NVDEC-Instanz/Klasse. Es wird
+kein GR-Template verlangt. Nur bestätigte, unter 40 Bit adressierbare Bindings
+gehen an den Encoder. Bildlayout, Modifier und Chromaoffset stammen aus dem
+tatsächlich zugeteilten BO. Ausstehende Zuordnung/Retirement hält Handles und
+Budget; ein logischer Queue-Abbruch erlaubt noch keine Wiederverwendung.
+
+gpu_decoder.zig verbindet FFmpeg, den R4NV-Encoder und diese Ressourcen.
+Bis zu 48 Bildbesitzer halten NV12-BOs unabhängig von den höchstens 17 Coloc-
+Plätzen. Referenzlisten dürfen ihre Reihenfolge wechseln, ohne die physischen
+Colocplätze umzunummerieren. Ausgegebene Bilder überleben ihre DPB-Mitgliedschaft.
+Vor jedem Bild wird der Status neu markiert; ein erfolgreicher Queueabschluss
+ohne vollständigen, fehlerfreien NVDEC-Bildstatus liefert keinen Frame.
+
+VIDEO_V1 veröffentlicht zwei Ebenen desselben kanonischen NV12-BOs samt Crop,
+Zeitstempeln und Farbmetadaten. Der empfangene AVFrame bleibt bis zum Consumer-
+Fence UND der öffentlichen Release-Bestätigung erhalten. Erst danach darf der
+Worker die Leihe abbauen. Flush/Close widerrufen gehaltene Bilder nicht. Der
+Hardwarepfad arbeitet mit einem Koordinator und ohne obligatorische CPU-
+Farbkonvertierung. Geometriewechsel verlangen einen leeren DPB; alte Consumer-
+Bilder bleiben gültig. Weitere Grenzen: progressives H.264 8 Bit/4:2:0,
+höchstens 36.864 Makroblöcke, kohärente Systempuffer und bekannte unkomprimierte
+Blocklinear-Layouts. Andere Geräte/Profile bleiben explizit unsupported.
+
+Evidence/GpuOwner hält die gezielten Besitzerprüfungen fest: verspätete MAP-
+Antwort/Retirement, Timeout, Budgetfehler, Coloc-Reihenfolge/Wiederverwendung,
+Geometriewechsel mit gehaltenen Bildern sowie fehlender/fehlerhafter Bildstatus.
+Im SMP4-Gast läuft das tatsächliche R4VIDEO-Modul einschließlich FFmpeg und
+GPU-Besitzer gegen modellierte GPU-Antworten. 36 Baseline/Main/High-Bilder prüfen
+Metadaten, Reorder, Flush/Close und verzögerte Release-Bestätigung; ein absichtlich
+fehlerhafter Bildstatus liefert keinen Frame und wird vollständig abgebaut.
+Der unveränderte Software-Gastfall besteht mit diesem Modul alle 39 exakten
+Referenzbilder. Der erste GPU-Lauf bestand bereits die 36 Bilder; seine
+Fehlerabnahme erwartete während Close fälschlich last_error=0. Die korrigierte
+Prüfung wartet auf phase_closed und erhält den Decoderfehler als Diagnose.
+Keine neue permanente Testgruppe. Echte NVDEC-Pixel/Farbe/Leistung sind weiter
+physisch in OssiGPU.txt zu prüfen.
+
+YUV-Farbpfad / CPU-Komposition
+-----------------------------
+R4GFX COLOR_V1 Revision3 erweitert die bestehende Tabelle um einen synchronen
+YUV-Einstieg. NV12, P010 und getrennte YUV420P-Ebenen verwenden dieselbe begrenzte
+RGB-Komposition für Skalierung, OVER, ICC-Ziel und SDR/HDR-Ausgabe. Es entsteht
+kein vollständiger RGB-Zwischenpuffer. Ebenen bleiben geliehene CPU-Abbildungen;
+der Einstieg liest VRAM nicht implizit zurück.
+
+Explizite CICP-Metadaten bestimmen Primärfarben, Transfer und Matrix. Luma und
+Chroma haben getrennte Full-/Limited-Range-Koeffizienten. Alle sechs 4:2:0-
+Chroma-Lagen, ungerade Größen/Ausschnitte und unterschiedliche Pitches bleiben
+erhalten. P010 verarbeitet zehn MSBs; Paddingbits beeinflussen das Ergebnis
+nicht. Chroma-Rekonstruktion erfolgt vor der EOTF, RGB-Skalierung und Mischung
+danach in linearem Licht. Fehlende/unbekannte Kennungen verlangen eine explizite
+Entscheidung des Medienbesitzers und werden hier nicht geraten.
+
+BT.601525/625-Primärfarben und die BT.1886-Display-EOTF mit explizitem Schwarz-
+und Weißpunkt ergänzen den gemeinsamen CPU-/NVIDIA-Farbpfad. Die feststehenden
+Farbshader wurden für SM75/86/89/120 reproduzierbar neu erzeugt; ihre Cache-
+Identitäten und Referenzhashes folgen den Compilerartefakten. Das belegt keine
+GPU-Pixel. Die Medienanbindung ist unten beschrieben.
+Quellen: YuvSources/Sources.json mit H.273, BT.1886 und fest gepinntem libplacebo;
+Prüfungen ergänzen die bestehenden R4GFX-/R4NV-Besitzerfälle ohne neue Testgruppe.
+
+Native YUV-Komposition
+---------------------
+COLOR_V1 Revision4 ergänzt color_yuv_render_submit; R4NV RENDER_V1:1 liefert
+den öffentlichen, begrenzten Shaderupload und Befehlsencoder. NV12/P010/YUV420P
+werden als ganzzahlige Ebenen direkt abgetastet. Der Shader entfernt bei P010
+die sechs Paddingbits vor der Chroma-Interpolation, erhält absolute Crop-/Chroma-
+Lagen und teilt den bestehenden linearen RGB-Farb-/Skalierungs-/Mischpfad.
+Die acht festen Shaderprofile wurden für SM75/86/89/120 reproduzierbar erzeugt.
+Der Treiber leitet seinen seitenweisen Uploadpuffer jetzt aus dem Shaderbedarf
+ab; die begrenzte RM-Registrierung wird dabei weiterhin statisch geprüft.
+
+R4GFX hält bis zu 64 BO-/VA-Cacheeinträge und je einen kohärenten 64-KB-Upload
+für seine 16 Auftragsplätze. Quellen/Ziel werden nicht auf der CPU abgebildet;
+es gibt keinen vollständigen RGB-Zwischenpuffer. Wiederholte Bilder verwenden
+bestätigte Adresszuordnungen weiter. BUSY veröffentlicht keinen Auftrag: Der
+Medienbesitzer muss die Decoderleihe bis zum späteren GPU-Abschluss behalten.
+Aufträge verwenden die gemeinsame native Grafikqueue und normale Job-/Fence-
+Freigabe. Trim, Reset und Close warten zusätzlich auf das physische VA-/RM-
+Retirement; aktive Quellen/Ziele bleiben gehalten. Private Cachebelegung fließt
+in den bestehenden Speichersnapshot ein. Softwarefallback bleibt explizit.
+
+Evidence/YuvNative: bestehende R4GFX-/R4NV-Besitzerfälle prüfen echte öffentliche
+Encoderaufrufe, acht Shaderprofile, mehrplanare Bounds, atomare Fehlerausgaben,
+Cachewiederverwendung, Reset sowie getrennte Engine-/Mapping-Freigabe. SMP4 lädt
+COLOR_V1:4 und RENDER_V1:1 als tatsächliche R4Ls; CPU-Farbbilder und öffentlicher
+P010-Encoder bestehen. Dieser Gast führt keine nativen GPU-Pixel aus. Physische
+Bildvergleiche und NVDEC-zu-Komposition stehen in OssiGPU.txt /0.79.40.
+
+Medienbesitzer und normale Distribution
+--------------------------------------
+R4VIDEO/Bindings/Zig/playback.zig verbindet VIDEO_V1, COLOR_V1 und App-Audio
+als einkompilierte Bibliothek des Medienhosts. Demux, Audiodekodierung, Datei-
+Seek und Desktoppräsentation bleiben beim Aufrufer. Drei begrenzte Bildplätze
+halten Decoderleihen über native BUSY-Vorbereitung, GPU-Abschluss und endgültige
+Jobfreigabe beziehungsweise CPU-Unmap. Erst danach erfolgt VIDEO-Release mit
+Bestätigungswiederholung; der Grafikjob behält seinen eigenen Fencebesitz.
+pendingFrame liefert aktuelle Größe/Crop/Farbe; alte Ziele überleben Größenwechsel.
+
+Ein pausenbereinigter monotoner Medientakt steuert Video und PCM. Audioannahme
+ist kein Hardwarecursor. Maximal10ms PCM-Staging/Vorlauf und ein Serviceaufruf
+pro Schritt begrenzen die Zustellung. SDK AudioStream.writeOnce erhält genaue
+Teilantworten. Audioausfall bleibt degraded; Takt und Video laufen unverändert.
+Seek/Pause verwenden Flush und Audio-Close, danach einen expliziten Demux-Seek-
+Handshake. Vorlaufbilder werden auf der neuen Zeitleiste verworfen. Decoder-
+fehler und Deadlines melden Fehler, widerrufen aber keine laufenden GPU-Leihen.
+Ein Backendwechsel verlangt Close und einen neuen Decoder am Random-Access-Punkt.
+
+Bei der Integration wurde die Deckkraft vereinheitlicht: COLOR verwendet auf
+CPU und GPU0..65535. Das neue, noch unveröffentlichte RENDER_V1 behält diese
+Präzision über Float-Vertexattribute. Bestehende8-Bit-Renderbefehle bleiben erhalten.
+Die Shader selbst ändern sich dadurch nicht. Der öffentliche SMP4-Encoder prüft
+die tatsächlich ausgegebenen Attribute mit halber16-Bit-Deckkraft.
+
+Gezielte bestehende Besitzerfälle prüfen Takt, Audio-Teilantwort/Timeout, fehlenden
+Service, Dienstausfall während Close, verzögerte Maps/GPU-Freigabe und Decoderfehler.
+Ein vom Servicebesitzer invalidierter Kanal beendet den lokalen Audio-Close;
+BUSY und unbestätigte Antworten behalten den Besitzer. Der SMP4-
+Medienhost verwendet echte R4VIDEO-/R4GFX-R4Ls:12 Baselinebilder,8 Bilder nach
+Seek mit halber Deckkraft und ein96x64-Bild stimmen pixelweise mit einer skalaren
+BT.709/BT.1886-FP16-Referenz überein. Pause, Größenwechsel und abschließende BO-
+Bilanz bestehen. Zwei anfängliche Prüfannahmen wurden korrigiert: allgemeiner
+Erfolgscode statt BO-Erfolgscode sowie drei erwartete Bilder im Einbild-Resizeclip.
+
+R4VIDEO wird nun in normalen Profilen aufgenommen. Der Imageplan nimmt Lizenz-
+hinweise und das passende Quell-/Neubaupaket nach R4OS/SOURCES/R4VIDEO auf.
+Es enthält das originale FFmpeg-Archiv, Patches, Adapter und benötigte R4OS-
+SDK-/Contract-/Buildquellen; ein SHA256-Manifest bindet Dateien und R4L-Artefakt.
+Tools/RebuildSources.ps1 ermöglicht auf Windows/Linux den vollständigen Neubau
+und Austausch der Library. Unter Linux wurde das Paket unabhängig entpackt,
+anhand aller 536 Quelldatei-Hashes geprüft und ohne Netzwerk neu gebaut.
+Der Neubau einschließlich der drei bestehenden Besitzerfälle besteht.
+Die R4L-Hashes unterscheiden sich zwischen den Buildpfaden; eine bytegleiche
+Reproduzierbarkeit wird damit nicht behauptet. Der native Windows-Build steht
+noch aus. Beleg: Evidence/Media, rebuild-proof.json und Neubauprotokoll.
+
+Abschlussstand
+--------------
+Release 0.79.40: NVIDIA 0.1.141, R4NV 0.1.10, R4GFX 0.1.18 und R4VIDEO 0.1.0.
+Das Kernelartefakt bleibt unverändert bei 0.1.198. Der reguläre Full-Imageplan
+enthält R4VIDEO, Quellarchiv, SHA256-Manifest und vollständige Lizenzhinweise.
+Das erneuerte SDK-Katalogwerkzeug berücksichtigt Header für native R4L-Archive;
+sein bestehender Manifest-/Katalogtest besteht. Kein neuer Gesamtlauf und keine
+weitere permanente Testgruppe. Ein neues Releaseimage wurde hier nicht gebaut.
+Physische NVDEC-/YUV-Bilder, Ton, Drift und Leistung sind damit nicht abgenommen.

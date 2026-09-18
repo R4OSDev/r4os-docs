@@ -1,0 +1,322 @@
+﻿Video-Encoding und Aufnahme — 0.79.41
+=====================================
+Stand: Öffentlicher Software-/NVIDIA-Encoder mit GPU-Eingabe und Desktopaufnahme
+implementiert; Softwareaufnahme in SMP4 unabhängig dekodiert, GPU-Pfad modelliert.
+Physische Nacharbeit: ExFiles/Reports/OssiGPU.txt /0.79.41.
+
+Quellen
+-------
+ExFiles/Reference/GFX/0.79.41 enthält drei NVIDIA-Dokumente, die OpenH264-
+Releasebeschreibung und das originale 2.6.0-Quellarchiv. WebSources.json bindet
+URL, Abrufzeit und SHA256; SourceIndex.json bindet 25 unveränderte Dateien aus
+den vorhandenen OpenGpuDoc-, Nouveau- und RM-570.144-Quellen an deren Pins.
+Die NVIDIA-Methoden-/Parameterheader und die ausgewählten RM-Allokationsquellen
+tragen MIT-Hinweise. OpenH264-Quellcode trägt die Cisco-BSD-2-Clause-Lizenz;
+ein eventuell gebautes R4OS-Modul entsteht aus Quellen, nicht aus Cisco-Binaries.
+
+Generationen und zulässige Aussagen
+-----------------------------------
+Der vorhandene Nouveau-GSP-Stand ordnet folgende Encoderklassen zu:
+Turing TU1xx         C4B7
+Ampere GA10x         C7B7
+Ada AD10x            C9B7
+Blackwell GB20x      CFB7
+GA100, GH100 und GB10x haben dort keine NVENC-Zuordnung. Eine vorhandene
+Klassenheaderdatei oder die gemeinsame Familienbezeichnung ersetzt weder eine
+tatsächliche Engine noch eine erfolgreiche RM-Allokation.
+
+Hersteller-SDK 13.1: Turing/Ampere bieten H.264 und HEVC, Ada zusätzlich AV1.
+Blackwell ergänzt unter anderem H.264 High10 und 4:2:2. Einzelne Boards haben
+keinen Encoder, andere mehrere; konkrete Enginezahl und Formate müssen separat
+ermittelt werden. Die aktuelle Matrix nennt für RTX3060 einen NVENC und H.264/
+HEVC, kein AV1-Encoding. Das ist keine R4OS-Freigabe und kein Livebefund zu OssiPC.
+
+NVIDIAs Qualitäts-/Durchsatztabellen gelten für konkrete Takte, Formate, Presets
+und deren Treiber. P1..P7 tauschen Qualität gegen Durchsatz; Lookahead, B-Frames,
+Mehrpass und VBV beeinflussen Latenz. Die SDK-13.1-Sitzungsgrenze ist keine Zusage
+für den hier gepinnten RM-570.144-Pfad. R4OS leitet weder FPS noch parallele
+Sitzungszahlen aus diesen Tabellen ab. Qualität und Kosten folgen später aus
+definierten eigenen Referenzbildern und dem tatsächlich implementierten Profil.
+
+API- und Firmwaregrenze
+-----------------------
+Die dokumentierte NVENCODE-Anwendungs-API setzt nvEncodeAPI.dll beziehungsweise
+libnvidia-encode.so und einen unterstützten Windows-/Linux-Gerätepfad voraus.
+Sie ist keine freestanding R4OS-Laufzeit. Für R4OS werden die öffentlichen
+Methoden und Bildparameter über den bestehenden GSP-RM-/FIFO-Besitzer verwendet.
+RM allokiert das Encoderobjekt mit NV_MSENC_ALLOCATION_PARAMETERS: drei u32
+(size=12, prohibitMultipleInstances, engineInstance). Es besitzt Firmware und
+Enginezustand; kein unabhängiger Firmwareloader wird hinzugefügt.
+
+MSENC_GET_CAPS_V2 (0x801b02) liefert vier Capabilitybytes plus instanceId. Die
+öffentlichen Header dokumentieren hier keine Codecbit-Zuordnung. Keine eigenen
+Bedeutungen für unbekannte Bits erfinden. Runlist/Engine, angebotene Klasse,
+passende Geräte-/Resetgeneration und RM-Antwort bleiben getrennte Zulassungen.
+
+nvenc_drv.h enthält den 512-Byte-H.264-Bildkopf, 256-Byte-Persistenz, Oberflächen,
+Slice-, Motion-/Mode- und Quantisierungsparameter sowie Statusfelder. C7B7 und
+C9B7 haben passende Magicwerte C7B70006/C9B70006. Die Hardware schreibt Slice-
+Header und Nutzdaten; Sequenz-/Parameter-NALs und deren Konsistenz gehören dem
+Encoderbesitzer. Eingabepadding auf Makroblockgrenzen muss gültige Pixel enthalten.
+Ein Queue-Fence allein bestätigt keinen gültigen oder vollständigen Bitstream.
+Status, tatsächliche Ausgabelänge und Pufferränder müssen zusätzlich passen.
+
+Erstes Implementierungsprofil
+------------------------------
+Geplant ist H.264 Constrained Baseline, progressiv, 8 Bit und 4:2:0 mit IDR/P-
+Bildern ohne B-Reorder. Native Erstzulassung wird auf tatsächlich angebotene
+C7B7/C9B7 beschränkt. Turing/Blackwell brauchen eigene Start-/Wire-Nachweise;
+HEVC, AV1, High10, 4:2:2 und Mehrpass werden nicht implizit freigeschaltet.
+Rate-Control- und QP-Grenzen werden als explizite Fähigkeiten des konkreten
+Encoders modelliert. NVENC- und Softwareprofile müssen dieselbe öffentliche
+Semantik erfüllen; nicht unterstützte Kombinationen liefern UNSUPPORTED.
+
+OpenH264 2.6.0 ist der vorgesehene Softwarekern: eigenständige H.264-Kompression,
+Rate Control, erzwungene IDRs und Annex-B-Ausgabe. Der vorhandene unabhängige
+R4VIDEO-/FFmpeg-Decoder eignet sich zur Ergebnisprüfung. Die Portierung und
+Ausgabeabnahme beginnen mit CQP. CBR/VBR sind im Vertrag vorgesehen, aber ohne
+implementierte Budgetsemantik nicht als Fähigkeit freigegeben.
+
+Zwischenstand der Softwarearbeit
+--------------------------------
+R4ENC besitzt ENCODE_V1:1 mit neun Funktionen und 16 Nutzdatenstrukturen;
+C-/Zig-Konformität und die Identität der kanonischen BO-/Fence-Layouts bestehen.
+Send übernimmt Bildmetadaten und eigene BO-Referenzen vollständig oder gar
+nicht. Volle Queues liefern AGAIN; nur der Verbraucher darf vor Send ein Bild
+auslassen. Empfangene Bitstreams bleiben bis Release unveränderlich. Drain
+liefert alle angenommenen Ergebnisse; Abort bestätigt erst nach Eingaberückgabe
+eine neue Streamgeneration. Ausgegebene Bitstreamleihen überleben Abort/Close.
+Abort/Close dürfen einen wartenden Drain ablösen; Close darf Abort ablösen.
+Die alte Anforderung gilt dadurch nicht als erfolgreich abgeschlossen.
+
+Der Eingabebesitzer importiert gemeinsam genutzte BOs nur einmal und bucht deren
+volle Größe gegen das Streambudget. CPU-Zugriff folgt erst nach dem vollständigen
+Producer-Fence; NV12 wird bei Bedarf für den Softwarecodec in I420 getrennt.
+Der native Verbraucher kann die gehaltenen BOs ohne diesen CPU-Pfad verwenden.
+Modellierte Besitzerfälle bestätigen verzögerte Map-/Referenzfreigaben,
+Budgetfehler, Rückstau, alte Leihen über Abort und physische Abschlussgrenzen.
+R4ENC.R4L verbindet diese Besitzer mit allen neun öffentlichen API-Funktionen.
+Ein Worker je Encoder wartet ohne Arbeit auf Benachrichtigungen. Codecaufrufe,
+Producer-Warten und Freigaben laufen dort; Send/Receive führen keinen Codec aus.
+Worker- und Speicherbudgets gelten zusätzlich für die gesamte Laufzeit. Der
+Workerstack bleibt bis zum exakten Join gebucht. Close wartet auf ausgeliehene
+Bitstreams und physische Eingaberückgabe; Finish verlangt zerstörte Encoder.
+
+Die gepinnte OpenH264-Quelle wird hostagnostisch mit clang 19.1.7 und NASM >=2.16
+für x86_64 freestanding übersetzt: 92 Objekte einschließlich Adapter, dazu der
+bestehende gemeinsame Math-Provider. Die x86-SIMD-Auswahl bleibt erhalten.
+Der Softwareadapter erzwingt einen Codec-Thread; der globale OpenH264-Threadpool
+ist nicht verfügbar. Jeder Stream besitzt seinen eigenen R4OS-Worker.
+
+Vorprüfung mit denselben Codec-Objekten, Host-C-Laufzeit und modellierten
+Mutexen: zwei eigene 320x192-Bildfolgen zu je zwölf Frames, QP18/QP36. Ein
+unabhängiger FFmpeg-Decoder bestätigt Constrained Baseline, BT.709 Limited und
+24 fehlerfreie Bilder. Erzwungene IDR bei Frame4 und periodische IDRs enthalten
+SPS/PPS. QP18: 29567 Bytes / 50,93 dB YUV-PSNR; QP36: 12448 Bytes / 36,45 dB.
+Danach wurde dieselbe Folge über ENCODE_V1 im R4OS-Gast mit vier vCPUs erzeugt:
+QP18 aus I420, QP36 aus NV12. Unabhängiges FFmpeg-Decoding bestätigt dieselben
+Bytes/Qualitätswerte. Der Gast prüft außerdem volle Eingabequeues bei blockierter
+Ausgabe, Leihen über Abort/Close, IDR nach Abort, fehlgeschlagene Speicher- und
+Workerzulassung sowie vollständige BO-Rückgabe und exakte Thread-Joins.
+
+Belege: GFX/0.79.41/Evidence/Foundation und Evidence/PublicSoftware. Der erste
+Gastlauf bestand die Besitzerprüfungen; seine temporäre Hexausgabe war verkürzt.
+Nach Korrektur ausschließlich des Probe-Loggers wurde der Lauf wiederholt und
+die vollständige Ausgabe dekodiert. Kein Desktop-, Echtzeit- oder GPU-Nachweis
+wird aus diesem Softwaretest abgeleitet.
+
+NVENC-Kanäle und Ausgabestatus
+------------------------------
+R4NV ergänzt native_engine_encode=16 als eigenständige Enginefamilie. NVIDIA
+nutzt denselben begrenzten Kanalbesitzer für NVDEC und NVENC: echte paginierte
+RM-Erkennung, angebotene Klasse, MSENC-Allokation und bestätigter Abbau. Die vier
+NVENC-Instanzen haben RM-IDs37..40; NV2080 verwendet 0x1b..0x1d und für NVENC3
+abweichend 0x3f. Originale NVIDIA570.144-C-Strukturen liefern die Vergleichsdaten.
+Der bestehende vollständige Treiberfall besteht für Ampere/Ada mit beiden
+Videoarten: Wiederverwendung, getrennte Kontexte, fehlende/abgelehnte Objekte,
+Close während Aufbau und Arbeit sowie exakte RM-/BO-/Heap-Rückgabe. GET allein
+gibt keine VA-Leihe frei. Das produktive NVIDIA0.1.142-Modul baut erfolgreich.
+
+Die reine R4NV-Statusprüfung verlangt den fertigen Fence und einen kohärenten,
+pro Auftrag vorbelegten Status. Bildidentität, Engine-/Microcodefehler,
+Makroblockzahl, einzelne Slice, Bit-/Bytezahl und Ausgabegrenzen müssen passen.
+Zusätzlich wird die Annex-B-Slice auf NAL-Art und korrekte Escapegrenzen geprüft.
+Original-C-Statusdaten und gezielte Fehlerfälle bestehen im vorhandenen
+R4NV-Test (2/2); Kanal-, Modul- und Statusbelege: Evidence/NvencChannel.
+Das ersetzt weder einen unabhängigen Decoder noch die öffentliche native
+Laufzeitintegration. Keine NVENC-Fähigkeit wird dadurch veröffentlicht.
+
+Native Bildparameter und H.264-Header
+-------------------------------------
+R4NV serialisiert den vollständigen512-Byte-Bildkopf samt Slice-, ME-, MD- und
+Quantisierungsblöcken (insgesamt1152Bytes). C7B7/C9B7, IDR/P und QP0/51 stimmen
+bytegenau mit den originalen C-Strukturen überein. Der61-Wort-Befehlssatz setzt
+Klasse, H.264-Firmware-App, Referenzen, Ein-/Ausgabe, History, Coloc und Status.
+Ungenutzte Methoden werden genullt. Adressen, Mindestgrößen und Überschneidungen
+werden geprüft; die vollständige Zulassung des tatsächlichen GPU-Layouts und
+Makroblockpaddings bleibt Aufgabe der noch zu integrierenden Eingabevorbereitung.
+
+SPS/PPS und Bildkopf verwenden gemeinsam Constrained Baseline, Level5.1,16-Bit-
+Frame-Nummern, POC-Typ2, eine Referenz und feste Quantisierung. Die Header
+enthalten Beschnitt, BT.709 Limited und nominale Zeitfelder für variable Ausgabe.
+Zwei erzeugte Headerpaare (16x16/QP0 und318x190/QP51) mit separaten Test-I_PCM-
+Slices dekodieren unabhängig per FFmpeg zu exakt den erwarteten Pixeln.
+Der Parser bestätigt Beschnitt, Farbe und die eigentlichen VUI-Zeitfelder.
+FFprobes Bildratenschätzungen aus einem einzigen Rohframe waren hierfür kein
+geeignetes Kriterium; am Produktcode war dafür keine Änderung erforderlich.
+Die bestehenden R4NV-Gruppen bestehen weiterhin (2/2). Belege:
+Evidence/NvencParameters. Keine GPU-Ausgabe oder NVENC-Qualität daraus ableiten.
+
+Native Sitzung und gemeinsamer Ressourcenbesitzer
+---------------------------------------------------
+R4ENC/Source/gpu_encoder.zig besitzt jetzt eine begrenzte NVENC-Sitzung mit
+Parameter-, Status-, Bitstream-, Befehls- und Historypuffern sowie zwei Paaren
+aus Rekonstruktion und Coloc. Nur Befehle, Parameter, Status und komprimierte
+Ausgabe sind CPU-gemappt. SPS/PPS werden IDR-Paketen vorangestellt; Bildnummer,
+Referenz und GOP-Zähler ändern sich erst nach gültiger physischer Fertigmeldung
+und geprüftem Status/Bitstream. Reset erzwingt ein neues IDR. Fehler vergiften
+die Sitzung; Timeout und verzögerte VA-Freigabe behalten Puffer und Budget.
+
+Der aus R4VIDEO verschobene Shared/Native/gpu_resources.zig besitzt BOs, VA,
+Queue und Freigaben gemeinsam. Die Enginewahl trennt NVDEC8 von NVENC16; die
+Treiberzulassung bleibt verbindlich. Auch das SDK-Antwortmodell wird geteilt.
+Die bestehenden Gruppen bestehen: R4ENC2/2, R4VIDEO3/3. Beide Ampere-/Ada-
+Sitzungen prüfen IDR/P, wechselnde DPB, erzwungene/periodische IDR, Reset, fehlende
+oder falsche Statusdaten, ungültige Bitstreams, Teilallokation und verspätete
+Freigaben. Keine neue Testgruppe und kein weiterer Gastlauf. Belege: Evidence/NvencSession.
+
+Die private encodePrepared-Grenze erwartet bereits korrekt vorbereitete
+NVENC16x16-Pixel samt Makroblockrändern in einer rohen linearen VA-Allokation.
+Sie konvertiert keine Pixel und deutet keinen generischen BO-Modifikator um.
+Die GPU-Eingabe und öffentliche Worker-/Capability-Anbindung sind inzwischen
+implementiert (siehe unten). Modellierte Statusbytes sind kein Nachweis echter
+NVENC-Ausgabe oder eines bestätigten Pixellayouts.
+
+R4VIDEO0.1.1 wurde nach der gemeinsamen Budget-/GPU-Besitzerumstellung gebaut;
+das passende Quell-/Neubaupaket wurde erneuert. Release bleibt0.79.40.
+
+GPU-Eingabe und öffentlicher Worker
+-----------------------------------
+R4NV-Profil9 lädt NV12/I420 ganzzahlig aus authentifizierten Texturansichten.
+Die sichtbare Größe bleibt von der Speichergröße getrennt; Blocklinear-TICs
+werden nicht auf einen Beschnitt verkleinert. Lineare R8-Ziele haben128-Byte-
+Pitch. Der Shader packt16x16-Byte-Kacheln und repliziert Makroblock-/Pitchränder
+mit erhaltener U/V-Reihenfolge. Das ist die zu qualifizierende Interpretation
+des NVENC16x16-Formats, kein bereits bestätigtes Hardwarelayout.
+
+Alle vier ISAs wurden reproduzierbar kompiliert; die acht bisherigen Programme
+blieben bytegleich. Strikte Auswertung des tatsächlich erzeugten NIR mit echten
+Produkt-Uploadpaketen bestätigt35004 Bytewerte in zwölf Fällen. Sie ersetzt
+weder Ausführung des Maschinencodes noch die physische NVENC-Layoutabnahme.
+
+R4ENC übernimmt Eingaben als begrenzte VA-Leihen über bereits gehaltenen BOs.
+GR und NVENC nutzen unterschiedliche VAs desselben vorbereiteten Zielpuffers.
+Nur kleine Steuerdaten und komprimierte Ausgabe sind CPU-gemappt. GR-Aufträge
+sind auf16 Slices mit je65536 Ausgabebytes pro Übergabe begrenzt. Vor Wiederverwendung wird der
+physische Abschluss abgewartet. Öffentliche Create/Caps/Worker wählen passende
+Ampere-/Ada-Klassen; GPU-Anlage erfolgt erst beim ersten angenommenen Bild.
+Ein gemeinsames Zeitlimit umfasst Vorbereitung und Kodierung. Fehler/Close
+retirieren beide Engines vor Eingabefreigabe; Abort setzt die Referenzkette zurück.
+Das native Erstprofil ist CQP/8Bit/BT.709 Limited, Transfer1 oder sRGB-Transfer13,
+Standard-/Left-Chroma und
+GOP<=65535. Andere Metadaten, Layouts und nicht verfügbare Kanäle werden explizit
+abgelehnt. Ein NVIDIA-Auftrag wechselt nicht still in den Softwareencoder.
+
+Bestehende Besitzerfälle prüfen NV12/I420, aufgefüllte Texturgrößen, wiederholte
+Frames, GR-Slices, fehlende GR-Klasse, IDR/P/Reset, gemeinsames Deadline und
+Freigabe nach GR-/NVENC-Timeout. Keine neue Testgruppe. Ressourcen ohne eigene
+Allokation geben weder das Budget noch die Referenz ihres Ursprungsbesitzers frei.
+R4NV0.1.11/NVIDIA0.1.143 enthalten den neuen Shader; R4VIDEO0.1.2 übernimmt den
+gemeinsamen Ressourcenbesitzer. R4ENC bleibt vor Erstveröffentlichung0.1.0.
+Der fertig gebaute öffentliche Encoder wurde erneut kurz in SMP4 geprüft:
+24 Frames, gleiche unabhängige Dekodierung/Qualität wie zuvor, Backpressure,
+Leihen, Abort/IDR, Close/Join und vollständige BO-Freigabe. Adapter0 bei expliziter
+NVIDIA-Abfrage liefert weiterhin Unsupported. Der native Produktpfad ist gebaut;
+seine GPU-Ausführung bleibt modelliert. Belege: Evidence/NativeGpuInput.
+
+Besitzer und Integration
+------------------------
+- Libraries/R4ENC: eigener Encodervertrag, Stream-/Bitstreamleihen, Zeitstempel,
+  Rate Control, Drain/Abort und begrenzte Worker. Keine Decoder-API umdeuten.
+- Libraries/R4NV: reine Parameter-/Methodenkodierung ohne Ressourcenbesitz.
+- Drivers/NVIDIA: separater NVENC-Kanal, RM-Allokation und physischer Abschluss
+  innerhalb der vorhandenen FIFO-/VA-/Resetbesitzer.
+- R4GFX und bestehende Capturebesitzer: Bild-/YUV-Bereitstellung über kanonische
+  BOs und Fences. Native Eingaben verlangen keinen CPU-Vollbildreadback.
+- Aufnahme-/Remoteverbraucher: expliziter Bedarf, begrenzte Zustellung, neuestes
+  Bild statt unbegrenzter Rückstau; Netzwerk darf den Desktop nicht blockieren.
+
+Der vorhandene RDPSVC überträgt NSCodec/RLE/Raw und besitzt noch keinen
+RDPGFX-AVC-Vertrag. Ein H.264-Bitstream darf dort nicht als bestehender Bitmapcodec
+ausgegeben werden. Die normale Aufnahmequelle aus 0.79.32 ist derzeit ein
+CPU-Snapshot; ein zusätzlicher GPU-Verbraucherpfad braucht explizite Lebensdauer
+und Freigabe, ohne Scanout bis zum Netzwerkabschluss festzuhalten.
+
+Desktopaufnahme
+----------------
+Apps/Desktop0.1.67 bindet R4ENC optional ein. Strg+Druck startet/stoppt die
+Aufnahme; Taskleistenrand und REC/Saving zeigen ihren Zustand. Fertige Videoteile
+liegen unter C:\RECORDINGS als H.264 in Matroska, ohne Audio. Teilnamen enthalten
+Startzeit und laufende Nummer; vorhandene Dateien werden nicht überschrieben.
+Der Worker schreibt zuerst .PART, bestätigt Finish und benennt erst dann um.
+Quellgröße/-epoche und Encoderwechsel beginnen neue, unabhängig dekodierbare
+Teile. Schon veröffentlichte Teile bleiben bei späterem Fehler erhalten.
+
+Der Verbraucher bevorzugt NVIDIA, versucht nach bestätigter physischer Freigabe
+einmal Software und behält diese Wahl für die laufende Aufnahme. Die nächste
+manuell gestartete Aufnahme darf NVIDIA erneut prüfen. Öffentliche NVIDIA-
+Aufträge selbst wechseln weiterhin nicht still ihren Encoder.
+
+Ein Worker außerhalb der Ereignis-/Kompositionsschleife konvertiert die bestehende
+CPU-sRGB-Aufnahme in NV12: BT.709-Primärfarben/Matrix, Limited, CICP13 und linke
+Chroma-Position. Es findet keine approximierte Gammaumrechnung statt. Die
+Chromaabtastung verwendet horizontal1:2:1 und vertikal1:1, mit repliziertem Rand.
+CPU-Schreibmapping und Snapshot enden vor Send; ein wiederverwendetes Eingabe-BO
+wird erst nach Receive oder bestätigtem Close erneut beschrieben/freigegeben.
+Direkte GPU-YUV-Produzenten umgehen diesen CPU-Pfad über ENCODE_V1.
+
+Die Aufnahme hat maximal ein angenommenes Eingabebild und zwei Bitstreamleihen
+zu je höchstens8MB. Der Encoder hat ein256MB-Budget und2s-Arbeitslimit; native
+physische Freigabe bleibt auch nach Zeitüberschreitung erforderlich. Der
+Verbraucher nimmt bei Verfügbarkeit die neueste Revision mit höchstens30Hz;
+verpasste Zeitintervalle werden nicht nachgeholt. Eine zurückgehaltene komprimierte
+Bildleihgabe erhält ihre Dauer beim nächsten Bild beziehungsweise beim Stopp.
+Damit verschwinden unveränderte Zeitabschnitte nicht aus der Aufnahme.
+
+Der begrenzte Writer in R4ENC/Bindings/Zig/recording_mux.zig wandelt AnnexB-NALs
+in AVC-Pakete mit CodecPrivate um. Matroska enthält explizite BlockDuration,
+1ms-Zeitbasis und bei P-Bildern einen Verweis auf das vorige Bild. Keine Suche,
+unbegrenzte Bildliste oder dritte Codec-Laufzeit. Referenzen und Hashes:
+GFX/0.79.41/Matroska, insbesondere RFC9559 und Matroska Codec Specifications.
+
+Der Prozess besitzt genau eine Encoderlaufzeit über mehrere Aufnahmen hinweg.
+Stopp beendet den Capturebedarf, Drain bestätigt angenommene Bilder, Close/Destroy
+bestätigen Freigaben und exakte Worker-Joins. Desktop-Shutdown behält einen noch
+laufenden Besitzer bis zum Programmabbau, statt unter ihm Speicher freizugeben.
+Ohne Aufnahme bleibt die Laufzeit ungeöffnet; weder GPU- noch Capturearbeit.
+
+Verbraucherprüfung: Der unveränderte produktive Aufnahmebesitzer lief in SMP4
+mit echten Capture-Snapshots, BOs, OpenH264-Workern und Dateistreams. Ein privater
+Testadapter wählte Software für den angeforderten NVIDIA-Encoder und meldete
+DeviceLost beim vierten Send; eine zweite Hülle verzögerte den ersten echten
+Dateischreibaufruf um800ms und prüfte dabei null Captureleihen. Das ist ein
+Fehlermodell, keine NVENC-Hardwareausführung und kein Desktop-FPS-Benchmark.
+Während der Schreibpause machte der unabhängige Publisher390 weitere Updates;
+maximale gemessene Workerzeit einschließlich dieser Pause:841,8ms.
+
+Fallback und Quellwechsel320→318 Pixel erzeugten drei gültige Teile mit50 Bildern.
+Eine zweite Aufnahme im selben Prozess erzeugte12 weitere Bilder, einschließlich
+699ms unveränderter Schlussdauer. Ein Schreibfehler veröffentlichte keinen Teil.
+Nach jedem Lauf standen BOs, Referenzen, Maps und Capturebedarf wieder auf dem
+Ausgangsstand; fünf Encoder wurden exakt geschlossen und zerstört. Im Leerlauf
+wurde kein Encoder angelegt. Unabhängiges FFmpeg bestätigt alle62 Bilder, Größen,
+IDR-Start, monotone PTS/Dauern und BT.709-Limited/sRGB13/Left-Metadaten.
+
+Die bestehende R4ENC-Besitzerprüfung enthält zusätzlich begrenzte Matroska-
+Schreibfehler-/Format-/Zeitfälle und Farbwerte gegen unabhängige Fließkomma-
+BT.709-Gleichungen. Keine neue dauerhafte Testgruppe. Belege:
+GFX/0.79.41/Evidence/Recording. Die ersten privaten Hilfsläufe bleiben mit ihren
+Fehlern erhalten: falscher Statistik-Erfolgswert sowie zu frühe Zeiterwartung,
+weil die Dateiauswertung zunächst selbst im Aufnahme-Worker lief. Der finale
+Helfer liest Dateien erst nach den Aufnahmen und wartet auf bestätigte Bilder.
+Physische NVENC-Ausgabe/Qualität bleiben separat in OssiGPU.txt.

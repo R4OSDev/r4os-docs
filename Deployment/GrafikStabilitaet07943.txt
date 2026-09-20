@@ -1,0 +1,100 @@
+﻿Grafikstabilitaet – 0.79.43
+==========================
+
+Stand: 21.09.2026. Softwareabschluss; physische NVIDIA-Freigabe bleibt offen
+in ExFiles/Reports/OssiGPU.txt / 0.79.43. OssiPC wurde nicht kontaktiert.
+
+Aenderungen und Besitzer
+-----------------------
+Kernel: zwei bestehende Besitzerfaelle kombinieren Produzenten-/Capture-Ende
+mit Scanout und vollem Budget sowie Queue-Timeout, DeviceLost und Produzenten-
+ende vor physischem Abschluss. Vollstaendige BO-Statistik und leere Queue- /
+Ressourcentabellen sind Abschlussbedingungen. Keine Kernelartefaktaenderung.
+R4GFX: bestehender Providerfall verweigert Resize bei zwei laufenden Ausgaben
+atomar, trennt Hotplug von fremdem Abschluss und bilanziert alle Modellhandles,
+Maps, Queues und Referenzen. Keine Libraryartefaktaenderung.
+DISPLAYD 0.1.37: /BUFFERS, /QUEUES, /OUTPUTS und normale /VIRTIO-Ausgabe vergleichen
+alle aktuellen GfxBufferStats-Felder ausser dem reservierten Feld. Fehler nennen
+Feld und Soll/Ist. /QUEUES vergleicht ausserdem IRQ-Registrierungen, aktuelle
+Work-/Deadline-Slots und Waiter, mit maximal 1000 ms fuer den nachgelagerten
+Workerabbau. Virtio-Timeout verlangt genau den Abbau seines einen Quell-BOs:
+1 Objekt, 2 Referenzen, 1 Mappinglease und seitenaufgerundete System-/Backing-/
+Pin-/Mappingbytes; alle anderen BO-Zaehler muessen unveraendert bleiben.
+
+Pruefplan und Ergebnis
+---------------------
+1. Kernel: zwei gezielte display-test-Filter, beide Exit 0. Keine breite Suite.
+2. R4GFX: ein bestehender Provider-Testblock, Exit 0.
+3. NVIDIA: zwei bestehende Storage-Gruppen, je 1/1 Test erfolgreich. Firmware-
+   Verlust/ShortRead/Timeout und Teilfreigaben; der vorhandene vollstaendige
+   native Besitzerfall prueft fehlende IRQ/Notifier, defekte EDID, VRAM-Budget,
+   Reset/Hotplug sowie CPU-/DMA-/RM-/GPU-Lebensdauer. Modelllauf 7 Sekunden.
+4. SMP4 bootfb: Software-BOs, echter verzogerter EXAMPLE-Timer-IRQ, Sticky Cancel,
+   drei blockierte Aufgaben, Produzententod, alter Reset und physische Freigabe;
+   Eingabe bleibt waehrend aktiver Ausgabe bedienbar. IRQ/Work/Deadline/Waiter
+   und BO-Bilanzen stimmen. Compiler: OOM/Retry, Deadline, kaputte Eingaben,
+   Cache-Identitaet/Integritaet/Trunkierung und Datei-Verwerfen bestehen;
+   live compiler bytes=0. Unveraendertes Paket wird akzeptiert, gezielt am
+   letzten Byte beschaedigtes Paket mit component-artifact-metadata abgewiesen.
+5. SMP4 Virtio: 32 sparse Frames, zwei Host-Aenderungen 1600x900 / 1280x720,
+   neue Empfaengergeneration, alte EDID abgewiesen, feste aktive Flaeche bleibt.
+   Zwei QMP-Bildabzuege belegen zusammen 32768 Pixel; BO-Zaehler unveraendert.
+6. SMP4 Virtio-Timeout: dritter Frame scheitert absichtlich; bestaetigter Reset
+   stellt bootfb wieder her, kompletter Quell-BO-Abbau stimmt exakt. Danach
+   arbeitet /BUFFERS erneut erfolgreich. Alle drei Gaeste fahren normal herunter.
+
+Der Software-Freigabelauf ist auf diese Besitzerfaelle und drei angenommene
+SMP4-Szenarien begrenzt; je Gast maximal 120 Sekunden, kein Dauerlauf. Der erste
+bootfb-Versuch hatte ausschliesslich Runnerfehler (fehlendes g, falscher
+Paketeingang). Nach Korrektur einmal wiederholt; die falsche Erwartung Code 2
+statt 1 fuer Metadatenfehler wurde am vollstaendigen Log berichtigt, ohne
+weiteren Gaststart. Erfolgsmarker und alle sechs Exitcodes sind erneut validiert.
+
+Ressourcenbegriff und Grenzen
+----------------------------
+Pins sind seitenaufgerundete Bytes aus dem BO-Besitzer; die Teilmengen duerfen
+sich ueberlappen. Referenzen des R4GFX-Providers werden beim Library-Besitzer
+gezahlt. R4Ls bleiben regulaer resident; kein behaupteter dynamischer Unload.
+Queue-Tabellen und Geraetedeadlines werden im jeweiligen Besitzer geprueft;
+IRQ-Registrierungen und aktuelle Kernel-Deadline-Slots zusaetzlich im Gast.
+Diese Zaehler sind keine Zahl aller Systemtimer oder historische IRQ-Samples.
+Der regelmaessige Systemtick bleibt aktiv. Quieszenz darf weder aus Timeout noch
+aus Produzentenende abgeleitet werden: absichtlich unsichere Hardwarefaelle
+behalten nachweisbar Ressourcen bis zum passenden Abschluss-/Resetbeleg.
+Der Hostfall prueft auch diese notwendige Retention, keine erzwungene Freigabe.
+
+Builds und Reproduktion
+-----------------------
+DISPLAYD wurde regulaer ueber seinen Buildstarter gebaut. Kernel 0.1.199,
+NVIDIA 0.1.144, R4GFX 0.1.18, R4NV 0.1.11, R4NAK 0.1.2, VIRTGPU 0.1.6,
+EXAMPLE 0.1.19 und SYSUPD 0.1.18 bleiben unveraendert. RELEASE_VERSION=0.79.43.
+Die Gastlogs zeigen noch den alten Releasewert des technischen Basismediums;
+StagedFiles.json belegt die tatsaechlich eingesetzten Artefakte. Der abschliessende
+DISPLAYD-Build ergaenzt nur die Timeout-Bilanz; die vorherigen Standardpfade
+wurden mit demselben Quellstand dieser Pfade geprueft. Hashes je Gast stehen
+im JSON-Beleg. Kein ISO-/Recovery-Release und keine NVIDIA-Hardwareabnahme.
+
+Besitzerbefehle ab Workspace-Root:
+  ./Repositories/Kernel/Build.sh display-test '-Ddisplay-test-filter=producer exit preserves'
+  ./Repositories/Kernel/Build.sh display-test '-Ddisplay-test-filter=queued dependencies reserve'
+  ./Repositories/Libraries/Build.sh R4GFX test '-Dprovider-test-filter=layout overflow'
+  ./Repositories/Drivers/NVIDIA/Build.sh unit-test '-Dstorage-test-filter=retains private and public failures' --summary all
+  ./Repositories/Drivers/NVIDIA/Build.sh unit-test '-Dstorage-test-filter=complete run lease' --summary all
+  ./Repositories/Diagnostics/DisplayDiag/Build.sh
+Windows verwendet die jeweiligen .bat-Starter mit gleichen Argumenten.
+Die langen NVIDIA-Aufrufe sind jeweils eine Zeile. Die Filter erweitern vorhandene
+Steps; weder zusaetzliche Testgruppe noch regelmaessiges Dauer-Gate.
+
+Ownerlogs und kurze Wiederholungsschritte liegen bei Kernel, R4GFX und NVIDIA
+unter Tests/Reports/0.79.43; die drei Gastlogs beim Distribution-Besitzer ebendort.
+Private genaue Konfigurationen, Hashes, zwei Bilder und der einmalige Runner:
+ExFiles/Reference/GFX/0.79.43/software-20260921. Der Runner wird zum Wiederholen
+nach Temp/gfx-stability07943 kopiert; der vorhandene technische Basispfad muss
+vorliegen. Normale portable Virtio-Pruefung bleibt Distribution/Tools/Test-VirtioGpu.ps1.
+
+Offen
+-----
+Keine ungeloesten Fehler der oben geprueften Softwarefolgen. Offen bleiben die
+physische Stabilitaet, reales IRQ-/Reset-/Firmwareverhalten, Bild/Ton und
+NVIDIA-Hardwarebelastung. Das zugehoerige kurze Vorgehen steht in OssiGPU.txt.
+Modell-/QEMU-Ergebnisse sind keine Aussagen ueber verlustfreie echte GPU-Resets.

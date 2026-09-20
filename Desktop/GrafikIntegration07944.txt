@@ -1,0 +1,156 @@
+﻿Grafikintegration und Softwarekosten 0.79.44
+==========================================
+Stand 21.09.2026. Softwareprüfung ohne OssiPC; native Hardwarefreigabe OFFEN.
+Rohwerte, Artefaktversionen und Abgrenzung: GrafikIntegration07944.json.
+Quellbelege und Prüflogs: ExFiles/Reference/GFX/0.79.44/software-20260921.
+
+Messverfahren und Ergebnis
+-------------------------
+DISPLAYD /BASELINE /PRESENT /TRACE /SAMPLES=8 auf bootfb und Virtio native:
+1280x720, 1024 MB, SMP4, KVM, kein Netzwerk. Je aktive Szene ein Aufwärmbild
+und acht Proben; unveränderte Geometrie/Backend und alle Proben angenommen.
+15 Sekunden begrenzen die gesamte Messung. Berichte entstehen außerhalb der
+Messspannen. Dies ist die gezielte Grafikdiagnose aus 0.79.2, kein PERFDIAG-
+Benchmark im festen TCG-Profil; keine Einträge in dessen Ergebnishistorie.
+
+P50 in Millisekunden (synthetische CPU-Szenen, keine Desktop-FPS):
+Szene                 bootfb Render  Komposition  Submit   Virtio Submit
+Kleine Änderung          0,00045       0,00068     0,00089     0,20772
+Fensterbereich           0,02809       0,05387     0,01009     0,22914
+Vollbild                 1,05030       2,14141     0,39605     0,98377
+Skalierung               4,69149       2,14589     0,39212     siehe JSON
+Text, Alpha und vier serialisierte Regionen stehen vollständig im JSON.
+Kleine Änderung: 1024 übertragene logische Bytes/Bild; Fensterbereich 98304;
+Vollbild 3686400. Die acht Szenen umfassen auch explizit keine Arbeit im Idle.
+
+CPU-Spannen sind monotone Wandzeit einschließlich möglicher Präemption, keine
+exakte CPU-Ausführungszeit. Scheduler-Run-Ticks sind grob und enthalten
+Aufwärmen/Instrumentierung. Kopierbytes sind logische Modelle bzw. vom Present
+zurückgegebene Pixelbytes, keine DRAM-/PCIe-Messung. Der synchrone Aufrufer hat
+höchstens einen Auftrag; der native Legacy-Bridge verwendet Queuekapazität 1.
+Die globale Geräte-Queuetiefe ist nicht daraus ableitbar. bootfb bestätigt
+CPU-Stores; Virtio seinen Geräteabschluss. Beides misst keine sichtbare
+VBlank-Flanke. Upload/Queuewait sind nicht separat aufgeschlüsselt. Mit acht
+Proben sind p95 und p99 die größte Probe, keine belastbare Langzeitverteilung.
+
+Der komplette Desktop mit AppDefaults und MemView ergänzt die synthetischen
+Szenen: echtes Fenster/Resize, statischer und Timer-Produzent gleichzeitig,
+Text, Diagramm, Bilder/Skalierung/Farbe, Dienstneustart und Close. Sein normaler
+CPU-Pfad benötigte vor der Optimierung 339,99 ms für das erste Vollbild und
+125,85 ms für den zuletzt gemessenen Bereich mit zwei Fenstern. Danach:
+122,15 ms bzw. 52,73 ms. Das sind einzelne vergleichbare Wandzeit-Spannen,
+keine FPS-Zusage. Im leeren Desktop-Intervall keine neuen Frames/Kopierbytes.
+Der abschließende Virtio-Lauf entspricht dem finalen Desktop-Artefakt:
+sechs eingereichte und abgeschlossene Bilder, kein Fehler, kein neues Bild
+im Idle. CPU bis Submit: erstes Bild 123,04 ms, Maximum 143,15 ms.
+visible=0 ist kein Sichtbarkeitsnachweis. Der direkte PNG-Pixelvergleich des
+Symbolbereichs (158720 Pixel) stimmt zwischen bootfb und Virtio exakt überein.
+Die zunächst aus der Vorschau vermutete Symbolabweichung war unbegründet.
+Das wiederverwendete technische Testimage trägt noch die historische
+Releaseanzeige 0.79.38; die tatsächlich eingesetzten Artefakte sind einzeln
+gehasht. Dieser Lauf behauptet keine Neuinstallation eines Releaseimages.
+
+Optimierung und verbliebene Kosten
+---------------------------------
+Vollständig deckende interne SDR-Kacheln kopieren ihre endgültigen RGB-Werte
+direkt. Überdeckte Ebenen und der alte Zielinhalt werden nicht gelesen, die
+sRGB/FP16/sRGB-Rundreise entfällt. Erst die komplette Kachel auf Alpha=255
+prüfen, dann schreiben. Teildeckung, Transparenz und externe Farbformate
+verwenden weiterhin COLOR_V1; Ausgabeprofile folgen danach unverändert.
+Die bestehende Pixelprüfung vergleicht eine 256-Werte-Palette mit der vollen
+Farbberechnung. Teil-Damage, linearer Alpha-Anker, ICC und externe Fenster
+bleiben geprüft. Cache/Scratch werden weiterverwendet, keine neue Allokation
+oder Shaderkompilierung im Frame, kein zusätzlicher globaler Wait.
+
+Die warmen nativen Besitzerprüfungen belegen wiederverwendete Primitive/
+Texturen, Upload=0 für unveränderte Assets und importierte Fenster-BOs ohne
+private Vollbildkopie. Reale NVIDIA-Ausführung bleibt ungemessen. Der normale
+Virtio-CPU-Ausgang zeichnet bei 100 Prozent/0 Grad/ohne ICC direkt in seinen
+akquirierten BO; scratch-bytes=0. Bei Rotation, Skalierung oder Ausgabe-ICC
+bleibt eine fachlich erforderliche Transformationsstufe. Pro Ausgang gilt
+eigene Queue-/Bildlebensdauer. Alte globale Desktop-Zähler erfassen diesen
+Pfad nicht; dafür gelten die Zeilen 'DESKTOP output render'.
+
+Der Softwarefallback ist weiterhin CPU-begrenzt. Schon 122 ms überschreiten
+16,67 ms bei 60 Hz deutlich. Aus der Verbesserung folgt weder ruckelfreies
+Vollbild bei 60/100 Hz noch eine native GPU-Leistungszusage. Die Kopie zum
+bootfb ist in dieser Szene nicht der dominierende Engpass. Andere Auflösungen,
+physische Speicherpfade, Takte, HDMI und sichtbare Eingabelatenz sind ungemessen.
+
+Implementierte Budgets
+----------------------
+Ein XRGB-Bild belegt mindestens Breite*Höhe*4 Bytes; Pitch/Ausrichtung kommen
+hinzu. Die folgende Rechnung ist keine Leistungsmessung anderer Modi:
+Modus       XRGB/Bild MB   60 Hz Schreib-MB/s  100 Hz Schreib-MB/s
+1280x720       3,516             210,938              351,563
+1920x1080      7,910             474,609              791,016
+2560x1440     14,063             843,750             1406,250
+3840x2160     31,641            1898,438             3164,063
+Eine zusätzliche RAM-Kopie liest dieselbe Menge nochmals. Drei native XRGB+
+FP16-Bildpaare benötigen vor Ausrichtung/Assets 31,64/71,19/126,56/284,77 MB.
+Der GPU-Kompositor besitzt 256 MB Budget: drei 4K-Paare passen deshalb nicht;
+zwei brauchen rund 189,84 MB plus Assets/Ausrichtung. Admission muss den
+realen Bildbedarf prüfen und bei Limit den vollständigen Softwarepfad wählen.
+Keine unbegrenzte Erweiterung allein aufgrund der Monitorauflösung.
+
+CPU-Layercache: 128 MB pro Besitzer, 64 Ebenen, begrenzter wiederverwendeter
+64x64-FP16-Arbeitsbereich. Transformationsscratch im CPU-Ausgang maximal 64 MB.
+R4GFX: 256 Ressourcen, 16 Jobs pro Device, maximal 1024 Draw-Kommandos und
+16777216 Pixel Arbeit pro Renderbatch. Swapchain: 2–3 Bilder und Backpressure;
+beschäftigte/haltende Bilder werden nicht überschrieben. GPU-Vorbereitung hat
+eine endliche 5-Sekunden-Fehlergrenze, kein 5-Sekunden-Frameziel.
+
+Bei bestätigter Scanout-Phase/Periode plant der gemeinsame Swapchain-Owner
+mit geglätteter Producer-Zeit (3/4 alt + 1/4 Probe, Probe auf 1 s begrenzt)
+und 1 ms Vorlauf, höchstens einer Bildperiode. Bei 60/100 Hz entspricht die
+Periode 16,67/10 ms. Ohne bestätigte Phase gibt es keine erfundene VSync-Zeit.
+Auch eine berechnete Gelegenheit ist kein Sichtbarkeitsbeleg. Siehe
+R4GFX/Source/swapchain_state.zig und device_swapchain.zig.
+
+Gemeinsame Verbraucher und Beispiele
+-----------------------------------
+Normale GUI-Apps: SDK PaintContext/FrameCanvas -> R4DRAW -> WINSVC -> Desktop.
+Terminal: Console-Snapshots und inkrementeller Text-Replay desselben Desktop-
+Kompositors. Medien: R4IMG ColorDecoder sowie R4VIDEO/R4ENC und derselbe
+Fenster-/Capturetransport. Subsysteme: SDK subsystem_host mit höchstens
+128x128-Rasterblöcken, vollständigen Clientmaßen und Damage; Zeit/Audio bleiben
+beim gemeinsamen subsystem_runtime/AUDSVC. Kein R4SNES-NVIDIA-Sonderweg.
+Die aktuellen Renderprüfungen decken unter anderem Text/Alpha/Skalierung,
+externe CPU-/HDR-Fenster, Transport und Wiederherstellung ab. Keine neuen
+Browser-/Emulator-Langläufe für diese Unterversion.
+
+Quellbeispiele, jeweils mit Lebensdauer- und Fehleranleitung:
+- SDK/Examples/Canvas.zig: vollständiges ereignisgesteuertes R4DRAW-Fenster.
+- Libraries/R4GFX/Examples/Images.zig: Systembild und kanonischer BO-Import.
+- Libraries/R4GFX/Examples/Output.zig: kooperative Ausgabe-Swapchain für den
+  Kompositor; normale Apps erhalten keine physische Head-Kontrolle.
+- Libraries/R4VK/Examples/Enumerate.zig: ICD/Instanz/Inventar; null Geräte ist
+  eine gültige Fähigkeitssicht, kein emulierter Vulkan-Renderer.
+- Libraries/R4GL/Examples/Triangle.zig: vollständiges OpenGL-Fenster mit
+  Resize/Fullscreen; Software standardmäßig, /ZINK ausdrücklich nativ.
+Alle fünf wurden gegen aktuelle öffentliche Bindings freestanding kompiliert.
+Der neue Beispielnachweis ist eine Kompilierung, keine native Laufzeitabnahme.
+
+Gefundener Integrationsfehler: Desktop und Appearance deklarierten COLOR_V1:2,
+obwohl die aktuellen Bindings Revision 4 verlangen. Manifest und Testfixtures
+sind abgeglichen; frühe Desktop-Initialisierungsfehler nennen ihren Baustein.
+Aktuelle DEVICE_V1-Bindings verlangen Revision 10. Der Loader darf diese
+Versionsgrenze nicht aufweichen, selbst wenn ein neuer Provider geladen ist.
+
+Dokumentation und Herkunft
+-------------------------
+Aktuelle Unterstützung: Docs/SupportedHardware.txt; Architektur:
+DisplayArchitektur.txt; Fenster/WSI: GrafikFenstertransport07937.txt sowie
+Libraries/R4VK und R4GL README/API. Ausgabe, Farbe und Swapchain:
+GrafikMehrschirm07924, GrafikFarbe07925 und GrafikSwapchains07922.
+Firmware/Pakete/Rollback: Docs/Deployment/GrafikPakete07942; Stabilität:
+GrafikStabilitaet07943. Vulkanprofil: Docs/Drivers/GrafikVulkan07938;
+Medien: Videodekodierung07940 und Videoencoding07941.
+
+Kanonische API- und Bibliotheksverträge bleiben bei Contract und den Libraries.
+Originale Beispiele und Desktopänderungen sind R4OS-Code. Keine neue fremde
+Quelle wurde importiert. Der Vulkan-Beispielheader stammt aus dem bereits
+festgehaltenen Mesa-26.2.2-Bestand; Bibliotheken führen eigene Provenienz,
+Hashes und Notices. Docs/Drivers/GrafikReferenzen079.txt ordnet die historischen
+Referenzmanifeste ein. Modelle/CTS-Teilprüfungen bedeuten keine Zertifizierung.
+Alle physischen Nacharbeiten bleiben in ExFiles/Reports/OssiGPU.txt /0.79.44.

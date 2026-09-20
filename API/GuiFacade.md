@@ -121,3 +121,11 @@ immutable bytes until the final frame or lease reference disappears.
 
 The complete function tables are in `R4DESK.md` and `R4DRAW.md`; frame shape
 serialization is summarized in `GuiShapeContract.txt`.
+
+
+Grafikintegration 0.79.44
+-----------------------
+Der gemeinsame Fensterweg bleibt R4DRAW/PaintContext mit begrenzter FrameCanvas,
+WINSVC und Desktop. SDK/Examples/Canvas.zig zeigt einen vollständigen Einstieg.
+Native Fensterbilder, EGL/Vulkan, Ressourcenbesitz, Fehlerbehandlung und aktuelle
+Softwarekosten sind in ../Desktop/GrafikIntegration07944.txt zusammengeführt.

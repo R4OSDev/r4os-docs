@@ -1,0 +1,119 @@
+﻿AMD-Interrupts, Ringe und Fence-Abschlüsse 0.80.8
+================================================
+
+Stand: 21.09.2026. AMDGPU.R4D 0.1.5, Release0.80.8.
+Besitzer: ausschließlich der externe AMDGPU-Treiber. Kernel0.1.201,
+Contract, SDK, R4AMD, R4GFX und die Services bleiben unverändert.
+
+Speicher und Register
+--------------------
+queue_storage unterteilt die vorhandene 1-MB-Ringarena: 64KB IH bei Offset0,
+4KB Writeback bei 0x10000, drei 64KB SDMA-/GFX-/Compute-Ringe ab 0x20000,
+64 IB-Slots mit je 8KB ab 0x80000. Die verbleibenden Lücken sind reserviert.
+1MB = 1024KB. CPU-WC-Sicht und GPU-MC-Adresse der Arena bleiben getrennt.
+Ein eigenes UC-Fenster deckt das benötigte 4KB-Präfix der BAR2-Doorbells ab;
+wie bei BAR5 ist ein benötigtes Präfix keine nachträgliche BAR-Größenmessung.
+
+NBIO INTERRUPT_CNTL2 erwartet eine direkte DMA-Adresse. Deshalb wird ein
+separater kanonischer 4KB-System-BO über den CPU-WB-Pfad genullt und nach
+CPU-Unmap per direkter DMA-Lease gepinnt. Der tatsächliche DMA-Segmentwert
+muss vollständig in 40Bit passen. Ein VRAM-MC-Alias oder CPU-Zeiger wird
+nicht dafür eingesetzt. Dieser prepareDma-Pfad legt keine GPU-VA/PTE an;
+GPU-Publish wird dafür ausdrücklich abgewiesen. Der BO zählt im gemeinsamen
+Systembudget, die UMA-Arena ist bereits im Speicherplan reserviert.
+Beide blockieren den Abbau ihres Speicherbesitzers bis zur Freigabe.
+
+queue_ring verwaltet begrenzte Dword-Ringe, engineabhängige NOP-/Alignment-
+Vorgaben, Stagingtickets und monotone Schreib-/Lesecursor. Es bleibt immer
+mindestens ein Dword frei. Nur ein geprüfter tatsächlicher Hardware-RPTR
+gibt verbrauchte Ringplätze frei. Unveröffentlichte Pakete sind abbrechbar;
+nach Commit vor dem Doorbell-Schreiben ist ein Fehler möglicherweise bereits
+für die GPU sichtbar und benötigt Stillstandsnachweis. Enginepakete,
+Basisregister und Start von SDMA/GFX/Compute folgen in /10 und /11.
+
+queue_ih implementiert die reale Vega10-IH-/NBIO7-Sequenz aus den gepinnten
+AMD-Quellen: MC_SPACE4 für die vorhandene UMA-Arena, 64KB Ring, Writeback,
+GPU-Zeitstempel, Overflowmeldung, MSI-Rearm und IH-Doorbell0x1e8 in Dwords.
+Engine-Doorbells: SDMA0x1e0, GFX0x116, Compute0x6. 64Bit-Doorbells werden als
+ein ausgerichteter 64Bit-MMIO-Store geschrieben. Registerfelder und IDs
+werden bei jedem normalen Build aus 56 unveränderten MIT-Originalen geprüft.
+
+IRQ und Worker
+--------------
+Der native Besitzer muss zuvor GMC, PCI-Busmaster und den gehaltenen
+Bootdisplay-Kontext bestätigen. Eine laufende fremde IH-Konfiguration wird
+abgewiesen. Die gemeinsame PCI-API liefert bevorzugt MSI; ausschließlich
+bekannte Fehler vor einer MSI-Mutation erlauben einen validierten gemeinsamen
+INTx-Level-Low-Pfad. Unklare Teilfehler des Routings behalten den Besitzer
+und blockieren Entladen, bis ein äußerer Recovery-Pfad den Zustand klärt.
+
+Ein atomarer Eintrittsschutz serialisiert nur begrenzte MMIO-/Metadaten-
+Schritte zwischen IRQ und Nachprüfung. Pro Eintritt werden höchstens32
+32Byte-IVs in ein residentes SPSC-Postfach mit 128 Einträgen übernommen.
+Volles Postfach lässt weitere IVs samt RPTR auf dem GPU-Ring liegen.
+GPU-Ringoverflow dagegen ist ein sichtbarer Fehler; verlorene Vektoren
+werden nicht als erfolgreicher Fortschritt ausgegeben. Die Dekodierung
+bewahrt Client/Source/Ring, VMID/PASID/Node, 48Bit-Zeitstempel und Nutzdaten.
+Die Queue-/Resetgeneration stammt aus dem zugehörigen IH-Besitzer. Ein neuer
+Besitzer verlangt Stillstand und Neuaufbau, nicht nur einen neuen Stempel.
+
+Der IRQ löst nach Freigabe des Eintrittsschutzes höchstens einen Worker-Wake
+aus. Ein zusätzlicher Inflight-Zähler hält Callback und Semaphore bis nach
+dem Wake fest. Kein BO, PTE, Fence oder App-Waiter wird im IRQ freigegeben.
+Der dedizierte gemeinsame Driver-Thread konsumiert Ereignisse, fragt etwa
+alle10ms einschließlich Tickrundung nach und führt alle fachlichen Callbacks
+außerhalb des IRQ-Eintrittsschutzes aus. Daher bleiben fehlende Interrupts
+und Postfach-Gegendruck beherrschbar. Es entsteht kein neuer Grafikdienst.
+Ein separates atomar geschlossenes Notify-Gate schützt den kanonischen
+Queuecallback bei gleichzeitigem Shutdown. Der geschlossene Besitzer bleibt
+bis zur Backend-Abmeldung resident; erst danach ist Reinitialisierung oder
+Modulentladen erlaubt.
+
+Fence- und Abbruchvertrag
+------------------------
+queue_timeline enthält höchstens64 Jobs mit eigenem IB-/Writeback-Slot.
+Jeder Job hat eine exakte kanonische Fence-Identität und ein innerhalb dieses
+Besitzers nie wiederverwendetes 64Bit-Token. Vor Arm muss der Writeback noch
+den Poisonwert enthalten. Ein IRQ, RPTR-Fortschritt oder Hostmodell ist kein
+Auftragserfolg. Nur zwei konsistente Reads des passenden GPU-Writebacks für
+einen veröffentlichten Job leiten den erfolgreichen Abschluss ein. Der
+spätere Engineencoder muss den Fence erst nach seinen Speicher-/Cacheeffekten
+schreiben. Speicher-, Device- und Resetgenerationen werden nicht vermischt.
+
+Alte/unpassende Werte schließen keinen Job ab. Deadlines, rückläufige Uhren,
+IH-/Enginefehler und Worker-Waitfehler sperren neue Einreichungen. Ein Timeout
+behält den Job samt IB und Ressourcen, bis der tatsächliche Enginebesitzer
+Stillstand/Reset der richtigen Generation bestätigt. Ein fristüberschrittener
+Job bleibt bei diesem Abbau timeout; weitere betroffene Jobs erhalten den
+passenden Fehler-/Abbruchstatus. Ohne Nachweis gibt es keine Freigabe.
+
+Retirement-Callback und kanonisches queue.complete erfolgen im Worker:
+Fence-Holds/PTE-/TLB-/DMA-/BO-Abbau zuerst, erst danach Ergebnisveröffentlichung.
+Fehlgeschlagene Teilschritte werden ohne doppelte Freigabe erneut versucht.
+Beim Shutdown folgen kooperatives Stop/Join/Release des Threads, belegter
+Engineabschluss, IH-Disable/Readback und mindestens1ms Drainzeit, IRQ-Abmeldung,
+MSI-Rückbau, Semaphore, Dummy-DMA und MMIO-Arenen. Drain/Join sind hier
+nichtblockierende Wiederholungen; kein No-Sleep-Lock liegt über einem Wait.
+
+Integration und Abnahme
+----------------------
+Der residente Queuebesitzer ist mit dem Treiber-Shutdown und dem bestehenden
+Memoryowner verbunden. /9 verdrahtet seinen Start mit PSP/SMU/GMC und den
+bestätigten Enginezuständen. Passive/auto-Aufnahme führt weiterhin keine
+Queue-/Firmwareausführung aus, mode=native bleibt gesperrt, Capabilities0
+und IMAGE_SCOPE=none bleiben erhalten. Physische GPU-Abnahmen nur in /39.
+
+Normaler Build: 14/14 Schritte,12/12 Tests einschließlich drei neuer gebündelter
+Queuefälle im bestehenden Treibertest. Geprüft werden Wrap/Überlauf, Alignment,
+Staging/Commit, Direct-DMA statt MC-Alias, MSI/INTx, reale Controllerregister
+in RAM-Fixtures, vollständige IV-Dekodierung, begrenzte Aufnahme und Postfach-
+Gegendruck, Counterwrap, echte Worker-Einstiegsfunktion, fehlende IRQs, alte
+Tokens/Generationen, Timeouts, fehlerhafte Uhren, Notify-Rennen sowie behaltene
+Thread-/IRQ-/MSI-/Semaphore-/DMA-/MMIO-Freigaben. Die Fixture schreibt GPU-Werte
+selbst; das ist ausdrücklich keine physische GPU-Ausführung.
+
+Distributions-Lizenzstaging wird gegen unveränderte Originaldateien geprüft;
+Docs-/Modul-/Testinventare sind fortgeschrieben. Keine zusätzlichen globalen
+Gates, keine neuen Kernel-/ABI-Änderungen und kein Gastlauf in dieser Etappe.
+Der SMP4-Nachweis aus /7 gehört zum unveränderten gemeinsamen Kernelstand.
+Quell-/Artefakthashes und Prüfprotokolle: AMDQueues08008.json.

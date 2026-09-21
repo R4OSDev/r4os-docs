@@ -1,0 +1,190 @@
+﻿AMD-Boarddaten, Firmwarezugang und Bootzustand 0.80.5
+====================================================
+
+Stand: 21.09.2026. AMDGPU.R4D 0.1.2, Kernel 0.1.200.
+Besitzer: AMDGPU für VFCT/ATOMBIOS und Snapshot-Lebensdauer, Kernel für den
+allgemeinen ACPI-Quellenzugang, Contract/SDK für den größenverhandelten ABI.
+Kein physischer Lenovo-Test; dieser bleibt ausschließlich 0.80.39.
+
+Firmwarequellen und Identität
+------------------------------
+Nach der eindeutigen PCI/ASIC/UMA-Bootzuordnung aus 0.80.4 liest AMDGPU
+VFCT über DriverResourceApi. Vier Zustände werden getrennt erfasst:
+ACPI-Tail fehlt, VFCT fehlt, VFCT enthält kein passendes Bild, VFCT vorhanden.
+Ein Katalog-/Quellenfehler, beschädigte Prüfsumme, unbekannte Revision,
+Lesefehler, Fristüberschreitung oder veränderte Quelle bricht den Bind ab.
+Solche Fehler erlauben keinen stillen Wechsel zu einer anderen Quelle.
+
+VFCT muss Revision 1, eine korrekte SDT-Prüfsumme und höchstens 1 MB haben.
+Maximal 64 Image-/LIB1-Einträge werden vollständig längengeprüft. VBIOS und
+LIB1 dürfen nicht überlappen; auch Einträge nach einem Treffer werden geprüft.
+Mehrere passende Bilder oder mehrere VFCT-Tabellen gelten als mehrdeutig.
+BDF, Vendor, Device und Subsystem müssen exakt zum kanonischen PCI-Snapshot
+passen. R4OS nummeriert hier keine PCI-Busse um; die Linux-Heuristik für
+abweichende POST-Busnummern wird daher nicht übernommen. Die VFCT-Image-
+Revision wird nicht mit der PCI-Revision oder ASIC-Revision verwechselt.
+
+Nur bei fehlendem ACPI-Tail, fehlender VFCT oder fehlendem passenden Bild
+ist der APU-ROM-Shadow aus amdgpu_bios.c verfügbar. Er liest zweimal die
+ersten 256 KB von BAR0, ausschließlich bei gemessenem aktuellem Umfang,
+passendem Memory-/Prefetch-Typ und gültiger Spanne. Das vorhandene MMIO-
+Mapping besitzt die WC-Cacheprüfung. Eine BAR-Basis ohne Größenbeleg reicht
+nicht; es wird kein direkter UMA-Cachealias erfunden. Fehlende ROM-Signatur
+und fehlender gemessener Shadow sind eigene Fehler. Kein PCI-ROM-Enable,
+BAR-Sizing, ACPI-ATRM, AML, fremde x86-Routine oder ATOM-Befehl wird ausgeführt.
+Nach dem Lesen wird die komplette PCI-/Power-/BAR-Identität erneut geprüft.
+
+ROM- und Boardparser
+--------------------
+Acht zusätzliche bytegleiche MIT-Originaldateien aus dem bereits gesicherten
+Linux-7.2.4-Stand gehören zum Treiber: atomfirmware.h, atomfirmwareid.h,
+atombios.h, pptable.h, amdgpu_bios.c, amdgpu_atomfirmware.c, ObjectID.h und
+bios_parser2.c. Sources.json enthält Pfade, Hashes, Rollen und Lizenz.
+Die Header liefern mittels @cImport die gepackten Feldpositionen und Größen.
+ULONG wird ausdrücklich als 32 Bit abgebildet, auch auf einem LP64-Linuxhost.
+Die Linux-Annotation __counted_by wird nur bei dieser Datenübersetzung
+entfernt; Parsergrenzen werden ausdrücklich geprüft, Linuxcode nicht gelinkt.
+
+55AA, PCIR, Vendor/Device, PCIR-Länge/Revision und Bildlänge in 512-Byte-
+Einheiten begrenzen das verbrauchte Legacy-ATOM-Bild. Der gesamte VFCT-
+Transport ist prüfsummengeschützt; es wird keine zusätzliche globale ROM-
+Prüfsumme verlangt, die durch aktualisierte ATOM-Reservierungsdaten ungültig
+werden könnte. Nachfolgende ausführbare UEFI-Bilder werden nicht interpretiert.
+PCIR-Feldreferenz: Tianocore EDK2 MdePkg/Include/IndustryStandard/Pci22.h,
+https://github.com/tianocore/edk2/blob/master/MdePkg/Include/IndustryStandard/Pci22.h
+(21.09.2026 gelesen; keine EDK2-Implementierung übernommen). Bytegleiche
+Referenz und Herkunftshash: ExFiles/Reference/AMD/Specifications/PCI/
+Pci22.h und Source.json.
+
+Verbrauchte Layouts:
+- ATOM-ROM-Header 2.2 und Master-Data 2.1 (35 Slots).
+- DisplayObjectInfo 1.4/1.5, höchstens 16 Pfade.
+- GPIO-Pin-LUT 2.1, höchstens 128 eindeutige Pins.
+- IntegratedSystemInfo 1.11/1.12; eingebettete ExternalConnectionInfo 1.1,
+  sofern vorhanden, mit eigener Längen-/Prüfsummenprüfung und sieben Pfaden.
+- LCD-Info 2.1, FirmwareInfo 3.1/3.2, VRAM-UsageByFirmware 2.1.
+
+Alle belegten Master-Data-Einträge besitzen geprüfte Common-Header und
+nicht überlappende ROM-Spannen. Nicht verbrauchte Daten bleiben opak.
+Die Command-Mastertabelle 2.1 und ihre begrenzten Funktionsspannen werden
+nur auf gültige Ausdehnung geprüft; identische gemeinsam genutzte
+Funktionskörper sind erlaubt. Es gibt keinen ATOM-Interpreter.
+
+Connector-/Encoder-/Device-IDs, I²C-Hardwarebit, Engine, AUX/DDC-Line,
+GPIO-Register/Bitposition, HPD-Pin/Aktivpegel und optionale 8er-AUX-/HPD-LUTs
+werden erhalten. Recordketten haben Längen-, Fortschritts-, Terminator-
+und Überlappungsgrenzen; identische geteilte Recordketten sind erlaubt.
+Fehlende GPIO-Auflösung bleibt optional und wird nicht erfunden.
+Externe Connector-/Encoder-/ACPI-IDs, LUT-Indizes und Lanezuordnung sind
+separat dekodiert. Ein ungültiger Index ist keine verwendbare Verbindung.
+
+Paneldaten enthalten Pixeltakt, aktive Fläche, Blank-/Sync-Geometrie,
+Polaritäts-/Miscbits, Farbtiefe, PWM und Backlightdaten. Syncbereiche müssen
+in ihre Blankingbereiche passen. Sequenzwerte werden aus 4-ms-Einheiten
+umgerechnet. Integrierte Angaben enthalten Speichertyp, UMA-Kanalzahl,
+System-/GPU-Capabilities und weitere Panelwerte. FirmwareInfo liefert
+nominelle Bootclocks und Scratchregisterdaten, keine aktuell gemessene
+GPU-Frequenz. Firmware-/Treiberreservierungen werden in Bytes umgerechnet
+und gegen die bereits gemessene UMA-Spanne geprüft. Noch kein Allokator.
+
+Fehlende optionale Tabellen bleiben als fehlend sichtbar. Unbekannte
+Revisionen verbrauchter Tabellen werden abgewiesen. Dies belegt unterstützte
+Datenformate; weder die tatsächliche Lenovo-Topologie noch die Kompatibilität
+seines noch ungelesenen ROMs wird damit behauptet.
+
+Boot-Hold und Ressourcenbesitz
+------------------------------
+AMDGPU verwendet die vorhandenen generischen Display-Holds aus 0.79.X.
+Vor dem Hold muss der Bootsnapshot vollständig mit der gespeicherten
+Zuordnung übereinstimmen. Der Kernel schließt alle CPU-Bootwriter aus,
+kopiert komplette Pixelzeilen einschließlich Pitch-Padding in einen BO
+und hält ihn lesbar unveränderlich. Der Treiber prüft den gehaltenen Zustand
+und bildet SHA256 über den BO. Aktive Bootgeneration und neu vergebener
+Hold-Token bleiben getrennt, wie im bestehenden DisplayManager-Vertrag.
+
+Operation 0 beendet den Hold ohne mögliche Hardwareeffekte und lässt die
+Bootwriter wieder zu. Der Treiber behält BO und Read-Lease bis zum Shutdown;
+damit bleibt die konsistente CPU-Kopie erhalten. Native Registerzustände,
+Paneltraining und DCN-Head-/Plane-Wiederherstellung gehören zu 0.80.15 ff.
+Vor solchen Effekten ist ein neuer Hold mit echter Recovery-Routine nötig.
+Der jetzige unerwartete Recovery-Aufruf behauptet keinen Erfolg.
+
+Fehlgeschlagene Init-/Close-Schritte behalten ihre tatsächlichen Handles.
+Shutdown versucht Read-Lease, Hold, BO, ROM-Map/Collect und Heap nacheinander
+freizugeben. Fehlgeschlagenes Unmap, Finish, Collect oder Release verhindert
+Modulfreigabe und erneutes Init; erfolgreicher Shutdown ist idempotent.
+Softwarepolicy einschließlich Einmalboot wird vor sämtlichen dieser Schritte
+geprüft. IMAGE_SCOPE=none und fehlende native GPU-Capabilities bleiben korrekt.
+
+Allgemeiner Kernel-/SDK-Vertrag
+-------------------------------
+DriverResourceApi v1 wächst von 32 auf 48 Bytes durch acpi_stat@32 und
+acpi_read_at@40. Die bisherigen Felder, äußere DriverApi v35/648 Bytes und
+R4DEV-Layout bleiben unverändert. Query kopiert nur vollständige Felder in
+die angebotene Kapazität (32, 40 oder 48 Bytes); ein alter 32-Byte-Aufrufer
+wird nicht überschrieben. Neue SDK-Verbraucher arbeiten weiterhin mit alten
+32-Byte-Providern und prüfen den optionalen ACPI-Tail vor Verwendung.
+DriverFirmwareTableInfo ist 48 Bytes groß und besitzt Version/Größe,
+Handle, Bytelänge, Kataloggeneration, Signatur, Revision und reservierte Nullen.
+
+Der ACPI-Bootbesitzer versiegelt maximal 256 Root-SDT-Quellen vor dem
+Treiber-/Taskbetrieb. Vor der Veröffentlichung muss jede
+Quellspanne lückenlos in reserviertem, ACPI-Reclaim- oder ACPI-NVS-Speicher
+liegen. Nur solche Bereiche bleiben beim PMM geschützt und werden in das
+eigene Kernel-HHDM übernommen; freie, Bootloader-Reclaim- oder außerhalb
+der Memorymap liegende Quellen machen den Katalog unverfügbar.
+Ihre gemappten Bytes bleiben so reserviert. Länge und
+SDT-Prüfsumme werden geprüft, SHA256 erkennt auch prüfsummenneutrale Änderungen.
+Ein beschädigter bekannter Eintrag bleibt von einer fehlenden Signatur
+unterscheidbar. Unvollständige Root-Erfassung oder Kapazitätsüberschreitung
+erzeugt keinen vermeintlich leeren Katalog. DSDT/AML werden nicht ausgeführt;
+der Zugang ist auf die erfassten Root-SDTs begrenzt.
+
+Stat/Read authentifizieren den tatsächlichen gebundenen R4D-Besitzer über
+die vorhandene Lifecycle-Serialisierung. IRQ-/Storage-Callbacks sind nicht
+zugelassen. ACPI-Handles gehören zum unveränderlichen Bootkatalog und sind
+von Moduldatei-Ressourcen getrennt; kein Close oder zusätzlicher Mount-Lease.
+Reads haben 1..65536 Bytes, geprüfte Spannen und absolute monotone Deadline.
+Quelle und Hash werden vor/nach dem Kopieren geprüft. Ausgaben dürfen weder
+Katalog noch Quelltabellen überschreiben. Stat lässt die Ausgabe bei Fehlern
+unverändert; ein fehlgeschlagener Read muss vollständig verworfen werden.
+
+Der Contractgenerator wurde regulär ausgeführt. Seine alte feste R4DEV-
+Funktionszählung 41 wurde auf den schon seit 0.79.42 veröffentlichten Stand
+42 korrigiert (driver_module_info in Slot 43). Der kontrollierte Baseline-
+Refresh nimmt diesen bestehenden Append mit auf; 0.80.5 fügt keinen R4DEV-
+Slot hinzu. Die generierten Zig-/C-/Dokumentations-/Conformanceartefakte und
+die Baseline stammen aus dem Generator, nicht aus manuellen Feldkopien.
+
+R4MF erlaubt jetzt C_INCLUDE/C_DEFINE auch für reine Zig-R4D/R4L mit
+@cImport, ohne künstliche C-Quelldatei oder Native-Archive. C_FLAG erfordert
+weiterhin eine wirkliche C-Compilationseinheit. Der normale AMDGPU-Build
+belegt die Headerübersetzung sowohl für Hosttests als auch freestanding.
+
+Prüfungen
+----------
+Der reguläre AMDGPU-Build führt die tatsächlichen Init-/Shutdown-Fälle und
+den Formatparser aus: alle Kürzungsgrenzen, übergroße/überlappende Tabellen,
+fremde/mehrdeutige Identität, unbekannte Revision, GPIO-/Record-/Timingfehler,
+fehlende Quellen, beschädigte Daten, Fristen-/Generationswechsel, gemessener
+ROM-Shadow sowie behaltene Heap-/Map-/BO-/Hold-Ressourcen. Synthetische Daten
+sind ausdrücklich Formatfixtures und keine Lenovo-ROM-Referenz.
+
+Contract-, SDK- und gezielte Kerneltests sowie Kernel-/AMDGPU-Artefaktbuild
+werden durch die danebenliegende AMDBoard08005.json mit Hashes belegt.
+Der kurze SMP4-Gast verwendet eine temporäre ACPIPROBE-R4D aus Temp/AMD08005:
+32-Byte-Query mit Canaries, reale APIC-Roottabelle mit vollständigem Read und
+Prüfsumme, Grenzen, alte Generation, abgelaufene Frist und fehlende Signatur.
+Derselbe AMD-Bootsnapshotcode wird außerdem über den tatsächlichen Kernel-
+Hold ausgeführt und vollständig freigegeben; danach läuft der bestehende
+Desktop-Window-Idle-Smoke weiter. Der eindeutige serielle Nachweis ist
+[R4D] runtime load ACPIPROBE [OK]: Init gibt erst nach sämtlichen Prüfungen
+Erfolg zurück. Driver-Detailmeldungen gehen in strukturierte Logevents,
+nicht unmittelbar an COM1. Kein permanenter Diagnosetreiber und kein
+zusätzliches globales Gate. Testinventar ergänzt nur die Besitzerfälle.
+
+Der Gast enthält keine emulierte Picasso-GPU. Er bestätigt die allgemeinen
+ACPI-/Hold-Verträge, keinen physischen ATOM-ROM-Read oder AMD-Moduswechsel.
+Windows-Hostlauf und echte Hardware bleiben ungeprüft. Das erste echte
+Boardabbild und sein konkretes Panel-/HDMI-Mapping werden nur in 0.80.39
+gesichert und mit den tatsächlichen Gerätekennungen geprüft.

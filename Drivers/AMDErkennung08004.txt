@@ -1,0 +1,89 @@
+﻿AMD-Erkennung und Bootdisplay-Zuordnung 0.80.4
+=============================================
+
+Stand: 21.09.2026. AMDGPU.R4D 0.1.1. Kernel/Contract/SDK unverändert.
+Kein Test am Lenovo und keine bestätigte Revision dieses physischen Boards.
+
+Begrenzte Identität und Registerquellen
+---------------------------------------
+Nur PCI-Vendor 1002 / Device 15d8 / Displayklasse 03 (VGA oder 3D) wird über
+das vorhandene kanonische PCI-Inventar betrachtet. Maximal 4096 Inventar-
+einträge und acht Zieladapter; unvollständiges Inventar wird abgelehnt.
+Header, PCI-Revision, Subsystem, Command/Memorydecode, BARs und D0-Zustand
+werden nur gelesen. Standard- und ECAM-Capabilityketten besitzen Grenzen
+und Zyklenerkennung. Kein BAR-Sizing, Powerwechsel oder Busmaster-Enable.
+
+PCI-Revision und ASIC-Revision bleiben getrennt. RCC_DEV0_EPF0_STRAP0
+liefert die vier ATI-Revisionsbits. 15d8 mit ASIC-Revision <8 wird als
+Picasso eingeordnet, ab 8 als Raven2. Raven/15dd wird im reinen Modell
+unterschieden, aber niemals produktiv geprobt. Raven2 erhält GC9.2.2,
+SDMA4.1.1, DCN1.0.1, NBIO7.0.1, PSP/SMU10.0.1, VCN1.0.1 und gfx909;
+der anschließende Picasso-Zugriff und Bootbind bleiben dafür gesperrt.
+Picasso: GC9.1, SDMA4.1, DCN1.0, NBIO7.0, PSP/SMU10.0, VCN1.0, gfx902.
+Dies benennt Referenzprofile, keine ausgeführten oder verifizierten Engines.
+
+Zehn zusätzliche bytegleiche MIT-Referenzdateien aus Linux 7.2.4 liegen im
+Treiberbesitzer. Sources.json enthält Originalpfad, Hash und Lizenz.
+VerifyIdentity.ps1 erzeugt/prüft die Registerkonstanten unmittelbar aus den
+Originalheadern. Quellen sind nbio_v7_0.c, gfxhub_v1_0.c, gmc_v9_0.c,
+soc15.c, amdgpu_device.c, amdgpu_discovery.c und die zugehörigen Header.
+Die fremden Translation Units werden nicht als Linux-Treiber eingebunden.
+
+MMIO, UMA und Bootdisplay
+-------------------------
+BAR5 ist das Registerfenster. Zwei verschiedene 4-KB-Seiten werden in drei
+begrenzten Mappingvorgängen über den bestehenden GfxDriverMemoryApi-Owner
+UC-gemappt: NBIO-Seite 0x3000, GC-Seite 0xa000, erneut NBIO zur Bestätigung.
+Registerbytes: Strap 0x34bc, RCC_CONFIG_MEMSIZE 0x378c, MC_VM_FB_OFFSET
+0xa5ac. 0xb000 ist der erforderliche Registerpräfix, keine erfundene
+vollständige BAR-Größe. Ein vorhandener gemessener BAR5-Umfang wird geprüft.
+Raven2 endet bereits nach der ersten NBIO-Seite.
+
+Die CPU-UMA-Basis folgt MC_VM_FB_OFFSET <<24, die reservierte Größe
+RCC_CONFIG_MEMSIZE *1024*1024. Das entspricht dem APU-Pfad in gmc_v9_0.c.
+Null/all-ones, Überlauf, unmögliche physische Spannen, unstabile Register,
+PCI-/Power-/BAR-Größenwechsel oder ein veränderter Bootsnapshot verhindern
+eine Zuordnung. Es gibt hier noch keinen UMA-Allokator oder Budgetclaim.
+
+Der komplette Bootframebuffer einschließlich Pitch, Höhe und Bytelänge
+muss eindeutig in diesem UMA-Bereich liegen. Die Alternative BAR0 wird
+nur mit gemessenem aktuellem PCIe-ReBAR-Umfang und passendem UMA-Offset
+akzeptiert. Eine BAR-Basis ohne belegten Umfang genügt nicht. Kein passender
+oder mehr als ein passender Adapter ergibt eine nachvollziehbare Ablehnung.
+Die gespeicherte Zuordnung enthält Adapter-ID, Bootgeneration, Adresspfad
+und UMA-Offset. Vor späteren Mutationen muss sie erneut bestätigt werden;
+aktive DCN-Head-/Plane-Snapshots gehören zu den nachfolgenden Displaystufen.
+
+Policy und Lebensdauer
+-----------------------
+Die effektive Kernelpolicy aus GfxNativeBootInfo gilt einschließlich des
+einmaligen Softwareboots vor PCI-/MMIO-Zugriffen. Fehlende Policy wird nicht
+durch eine lokale Konfigurationsannahme ersetzt. mode=auto und passive
+führen ausschließlich den beschriebenen Probe aus. mode=native meldet
+fehlende Runtime ausdrücklich. IMAGE_SCOPE=none bleibt bestehen.
+
+Kein Firmwarestart, keine IRQs/DMA/Queues, keine Display-Holds und keine
+Entziehung der Bootwriter. Alle gültigen Maps werden nach synchronen Reads
+freigegeben. Auch ein fehlgeschlagener Map kann interne Teilmappings
+hinterlassen; collect muss sie erfolgreich schließen. Unmap-/Collect-Fehler
+behalten den Besitzer und verhindern Modulfreigabe sowie erneutes Init.
+Ein späterer Shutdown darf die Freigabe wiederholen; Erfolg ist idempotent.
+
+Abnahme
+--------
+Der reguläre Modulbuild prüft Originalhashes und Registergenerierung,
+kompiliert die originale DCN1-Math-Abhängigkeit und führt einen gruppierten
+Hosttest mit den tatsächlichen Init-/Shutdown-Einstiegen aus. Fälle:
+Picasso trotz PCI-C8, getrennte Raven/Raven2-Profile, fremde IDs, Software-
+und Einmalpolicy ohne Hardwarezugriff, fehlende Bootquelle, ungültiger Mode,
+Inventarfehler/-limit, D3/decode-off, Capabilityzyklen, ungültige BARs,
+UMA-Grenzen, fehlende/mehrdeutige Bootzuordnung, gemessener ReBAR-Alias,
+PCI-/Power-/BAR-/Bootwechsel, all-ones/unstabile Register, Mapfehler in
+jedem Schritt, falscher Mappingvertrag, behaltenes Unmap/Collect sowie
+idempotenter Cleanup und Rebind-Sperre.
+
+Build 9/9 Schritte, 1/1 gruppierter Hosttest und R4M0-Inspektion erfolgreich;
+Hashbelege in AMDErkennung08004.json. Keine zusätzlichen globalen Gates.
+Kein Gastlauf mit emulierter AMD-Hardware, kein Windows-Hostlauf und keine
+physische Probe behauptet. Die vorherigen Software-/Virtio-SMP4-Belege
+bleiben 0.80.3 zugeordnet. Physische Hardwareprüfung weiterhin nur 0.80.39.

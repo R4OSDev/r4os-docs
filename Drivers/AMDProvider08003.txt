@@ -1,0 +1,97 @@
+﻿Herstellerneutrale Grafikprovider 0.80.3
+======================================
+
+Stand: 21.09.2026. R4GFX 0.1.19, R4AMD 0.1.1, R4DESK 0.1.69,
+APPEARANCE 0.1.15, DISPLAYD 0.1.39. Kernel und zentrale Platform-ABI unverändert.
+
+Providerwahl und belegte Grenzen
+-------------------------------
+R4GFX verhandelt getrennte optionale R4NV:BACKEND_V1:3 und
+R4AMD:BACKEND_V1:1. Hersteller, Interface-ID, Profilrevision, Datengröße,
+Reserviertfelder und Ergebnis werden vor Auswahl geprüft. Ein AMD-Payload
+mit NVIDIA-Interfacekennung wird vor Eintritt in NVIDIA-Code verworfen.
+Software=1 und NVIDIA=2 bleiben unverändert; AMD=3 ist append-only ergänzt.
+Bestehende DEVICE_V1-Tabellengröße und Revision 10 bleiben ABI-kompatibel.
+
+R4AMD trägt jetzt einen eigenen versionierten AMD-Protokollvertrag:
+32 Byte DriverProfile, 56 Byte DeviceProfile, 32 Byte Features. Profil 1
+benennt PCI-Vendor 1002, Device-ID, GC9.1, SDMA4.1 und Command-ABI1. Dazu
+kommen exakte Adapter-/Device-/Resetidentitäten. Die echte Implementierung
+meldet features=0. Eine erkannte IP-Version ist keine Implementierung eines
+Encoders und keine Freigabe des Lenovo. Copy/Layout/Render folgen weiter der
+Roadmap; die Hosttests kennzeichnen ihren künftigen Copy-Provider ausdrücklich
+als Modell. Kein Testdummy ist Teil der produktiven Providerwahl.
+
+Zuerst zählen wirksam ausgehandelte Renderfähigkeiten, danach der aktive
+Displayadapter, zuletzt die stabile Adapter-ID. Registrierungsreihenfolge
+ist unerheblich. Eine explizite Adapterwahl weicht niemals auf einen anderen
+Adapter aus. Fehlende/inkompatible Libraries, falsche Profile, fehlende
+Memory-Generation oder ein Rennen beim Queue-Öffnen führen zum Softwarepfad.
+GRAPHICS=SOFTWARE überspringt die native Inventarsuche weiterhin vollständig.
+
+Ressourcen-, Queue- und Resetvertrag
+-----------------------------------
+Die vorhandenen gemeinsamen Typen reichen für die herstellerneutrale
+Identität aus; deshalb keine künstliche neue Kernel-ABI:
+- GfxBackendProfile besitzt einen getrennten Interface-/Revisionsumschlag
+  mit 64 Byte opakem Payload. Gleich große AMD/NVIDIA-Payloads sind nicht
+  austauschbar. GfxBackendProperties bleibt ebenfalls herstellerspezifisch.
+- GfxBufferDescriptor trägt Adapter, driver_owner, Memory-Generation,
+  opaken Modifier, Plane-Offsets/-Pitches und reale Größe. Ein device_local-
+  BO ist treiberbesessen; das behauptet keine dedizierte VRAM-Hardware.
+- GfxBackendBinding identifiziert Queue-Device-/Resetepoch. AMD muss die
+  zusätzliche Memory-Generation explizit liefern; nur der alte NVIDIA-
+  Vertrag behält seinen historischen Device-Generation-Fallback.
+- GfxDeviceBudgetState besitzt getrennte begrenzte native/shared Beträge und
+  Belastungen mit Memory-Generation. Das genügt für den späteren UMA-Owner;
+  0.80.7 muss reale Systemseiten korrekt belasten und Doppelzählung verhindern.
+  Hier werden weder UMA-Limits noch VRAM-Größen erfunden.
+- Queues und Fences bleiben an Adapter/Device/Reset, Timeline und Point
+  gebunden. Alte Jobs behalten ihre Backendkennung auch nach Geräteverlust.
+  Freigabe wartet auf den tatsächlichen Abschluss; keine vorzeitige Queue-
+  Schließung nur wegen einer anderen aktuellen Providerauswahl.
+
+Auch eine Änderung des Herstellerprofils bei unveränderten numerischen
+Generationen verwirft die alte Ressourceninterpretation und öffnet eine neue
+Queue. Reine Capability-Änderungen desselben Profils erhalten Ressourcen.
+Copy-Zähler erfassen abgeschlossene AMD-Jobs als GPU-Traffic. Bei einer
+unvollständigen Auswahl wird nicht vorzeitig die Fähigkeitssicht umgestellt.
+
+NVIDIA-Layout-, YUV-Encoder- und VA-Helfer prüfen ausdrücklich den NVIDIA-
+Provider. AMD-Objekte werden dort abgewiesen. AMD kann nicht durch zusätzliche
+Treiber-Operationsbits NVIDIA-Rendering vortäuschen. Die spätere AMD-
+Bildlayoutverhandlung in 0.80.12 muss eigenes Tiling/Modifier-Material nutzen;
+bestehende NVIDIA-Blocklinearwerte dürfen nicht umgedeutet werden.
+R4VK/NVK prüft bereits NVIDIA-Interfacekennung und Vendor 10de in
+Port/nvk_device.c; AMD wird dort als inkompatibel abgelehnt. RADV folgt in
+0.80.23-25. Es wurde keine zweite Vulkanfassade oder Kernel-Grafiklogik angelegt.
+
+Anwendungen und Konfiguration
+-----------------------------
+Desktop und DISPLAYD importieren R4AMD:BACKEND_V1:1 optional. DEVICE_V1 bleibt
+ihr gemeinsamer Zugang; WINSVC und gewöhnliche Anwendungen brauchen keine
+Herstellerlogik. DISPLAYD ordnet AMD-Receipts korrekt dem GPU-Bytezähler zu.
+Appearance bearbeitet beim Wechsel auf automatisch die mode-Optionen beider
+Grafiktreiber NVIDIA/AMDGPU; andere Treiberoptionen, Kommentare, BOM und
+Zeilenenden bleiben erhalten. Software bleibt eine gemeinsame Policy.
+Recording/Video erhalten hier keine AMD-Codec-Freigabe; deren eigene
+Providerintegration bleibt den VCN-/Medienstufen vorbehalten.
+
+Prüfungen und Reproduzierbarkeit
+-------------------------------
+Gezielte R4GFX-Prüfung erweitert den bestehenden Besitzerfall: fehlende und
+inkompatible Imports, echte AMD-Verhandlung ohne Encoder, ausdrücklich
+modellierter AMD-Copy-Provider, vertauschte Herstellerprofile, Software-/
+Virtio-Unbekanntpfad, wechselnde Reihenfolge, Memory-Epoch, Profilwechsel bei
+gleicher Epoch, Queue-open-Loss und pending AMD-Fence mit späterer Freigabe.
+Das tatsächliche NVIDIA-Backend und dessen Encoder bleiben in denselben
+vorhandenen Prüfungen aktiv. Kein zusätzlicher globaler Grafiktest.
+
+R4AMD regulär: 12/12 Schritte, 2/2 Fälle. R4GFX regulär: 13/13 Schritte,
+8/8 Fälle. Appearance: 6/6 Modell-/Policyfälle. Desktop render-test: 79/79
+vorhandene Fälle. Alle fünf betroffenen Module wurden regulär gebaut und
+als R4M0 geprüft. Host: Debian Linux; kein Windows-Hostlauf behauptet.
+Die JSON-Beilage hält Artefakthashes und die separat belegten kurzen SMP4-
+Software-/Virtio-Gastresultate fest. Der technische Imageplan enthält R4AMD
+explizit; normale Profile behalten IMAGE_SCOPE=none, bis die Implementierung
+bereit ist. Kein physischer Hardwarezugriff; Hardwareabnahme nur 0.80.39.

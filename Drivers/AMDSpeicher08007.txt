@@ -1,0 +1,135 @@
+﻿AMD-Speicher und GPU-VM 0.80.7
+=============================
+
+Stand: 21.09.2026. AMDGPU.R4D 0.1.4, Kernel 0.1.201, Release 0.80.7.
+Besitzer: AMDGPU für APU-Zuteilung, PTE/PDE und GMC9-Hubs; Kernel für den
+allgemeinen Nachweis reservierter physischer Bereiche; Contract/SDK für ABI.
+R4AMD, R4GFX und WINSVC benötigen dafür keine neue Modulversion.
+
+Produktiver Stand und Adressen
+------------------------------
+Der passive Start liest zusätzlich GFXHUB/MMHUB FB_LOCATION_BASE/TOP und
+verlangt übereinstimmende, stabile Werte. CPU-physische UMA-Basis stammt
+weiter aus MC_VM_FB_OFFSET, Kapazität aus RCC_CONFIG_MEMSIZE. Die MC-Apertur
+ist eine eigene Adresse; ihre Größe muss die gemessene UMA-Kapazität decken.
+Bekannte zu kleine BAR5-Ressourcen werden abgewiesen. Mindestpräfix für die
+benötigten Register: 0x6b000; das ist keine Messung der kompletten BAR-Größe.
+
+Vor der Zuteilung verlangt AMDGPU reserved_span für den vollständigen UMA-
+Bereich. Abgeschnittene oder insgesamt fehlerhafte Boot-Speicherlisten werden
+abgewiesen. Der Kernel prüft vollständige, lückenlose Boot-Map-Abdeckung durch
+reserved/framebuffer und lehnt jede überlappende freie, reclaimable, ACPI-,
+Kernel-, unbekannte oder fehlerhafte Beschreibung ab. Es gibt weder neue
+PMM-Seiten noch eine Erhöhung der physischen RAM-Menge. MMIO-/CPU-Mapping
+prüft davon getrennt Cacheattribute und verhindert widersprüchliche Aliase.
+
+memory_layout bildet die Vereinigung der seitenaufgerundeten Reservierungen
+für ROM/VGA-Schatten (256 KB), kompletten Bootscanout und deklarierte Firmware.
+Überlappungen werden nur einmal berechnet. ATOM v2.1 used_by_driver_in_kb ist
+laut amdgpu_atomfirmware.c CPU-Scratch für einen ATOM-Interpreter; daraus
+wird keine erfundene VRAM-Region vor der Firmware abgeleitet. R4OS führt
+keine ATOM-Kommandos aus und benötigt deshalb diesen CPU-Scratch nicht.
+
+Weitere voneinander getrennte Arenen: Firmware 16 MB, GART-Tabelle 2 MB,
+Ringe/Writeback 1 MB, Kontext-/VM-Tabellen 2 MB. Die IP-Besitzer unterteilen
+diese festen Grenzen später; eine Vergrößerung verlangt Neuaufbau mit neuer
+Memoryepoch. Native BOs nutzen exakt den verbleibenden UMA-Rest. System-BOs
+bleiben im bereits vorhandenen gemeinsamen RAM-Budget. 1 MB = 1024 KB.
+Keine Queueepoch ersetzt die Memoryepoch.
+
+Seitentabellen und Register
+--------------------------
+memory_pages implementiert die GMC9-PTE-/PDE-Formate ohne translate-further:
+4-KB-Seiten, 48-Bit-Adressen, System/Snoop, Lesen/Schreiben/Ausführen und
+expliziten MTYPE_UC. VRAM-PTEs/PDEs enthalten die GPU-physische UMA-Adresse,
+nicht den MC-Alias. System-PTEs nutzen wirkliche gepinnte DMA-Segmente.
+Sparse-Lücken, Nullseiten, Überläufe, falsche Ausrichtung und vorhandene
+Mappings werden abgewiesen. Ein Mapping publiziert keine Teilmenge von
+Datenseiten. Leere Zwischenverzeichnisse bleiben bis zum VM-Abbau reserviert.
+
+VMID0 erhält eine flache 1-GB-GART außerhalb der MC-Apertur. VMID1 verwendet
+vier Ebenen mit je 9 Indexbits und 4-KB-Blättern; der begrenzte reservierte
+Tabellenpool enthält höchstens 511 nutzbare Seiten, die letzte Kontextseite
+ist ein separater Null-/Fault-Scratch. Ressourcenerschöpfung bleibt sichtbar.
+Andere VMIDs bleiben deaktiviert. Die VA-Breite ist kein Versprechen, die
+gesamte VA gleichzeitig mit Speicher hinterlegen zu können.
+
+memory_hubs verwendet erzeugte Registeradressen/-masken der unveränderten
+AMD-MIT-Originale: GFXHUB/MMHUB-Aperturen, L1/L2, VM-Kontexte, ATHUB ohne
+PASID/SVM-Zuordnung, HDP-Kohärenz und Engine-17-Invalidierung. Ein CPU-MFENCE
+ersetzt keine HDP-/TLB-Bestätigung. Beide Hubs müssen bestätigen; GFX9 bekommt
+den erforderlichen Request-Readback gegen stale ACK. Picasso verwendet hier
+keinen MMHUB-Invalidierungssemaphore. Polling ist durch Zeit und Iterationen
+begrenzt, erkennt rückläufige Uhren und verschwundene Register. Fehlerhafte
+Mappings werden nicht still auf Dummy-Seiten umgelenkt.
+
+Lebensdauer und Integration
+--------------------------
+memory_owner hält Register- und WC-Tabellenfenster, native BO-Reservierungen,
+Zuteilung, Budget und Memoryepoch. bufferReserve/Commit bleiben beim
+kanonischen BO-Besitzer, die physische Zuteilung bleibt beim AMD-Treiber.
+Native BOs sind derzeit linear, ohne CPU-Usage und ohne direkte App-CPU-Maps.
+Ihr deklarierter Backingumfang muss vollständig auf mindestens 4 KB sowie
+die angeforderte Ausrichtung gerundet sein; unzugängliches logisches
+Padding wird nicht durch eine normale Referenz gemappt.
+Transfer/Staging folgt dem gemeinsamen System-BO-Pfad; SDMA folgt in /10.
+WINSVC graphics_broker.validImage prüft weiter location_device_local, Adapter
+und memory_generation: Das beschreibt die treibereigene APU-Reservierung
+korrekt und wird nicht pauschal auf beliebige System-BOs erweitert.
+
+memory_mapping importiert echte Referenzen, prüft Beschreibungen und hält
+CPU-Map, direkte SG-DMA-Lease und GPU-VA-Lease getrennt. Systempuffer werden
+bei Neuanlage über den WB-CPU-Pfad genullt; native BO-Inhalte muss der spätere
+Render-/Transferbesitzer initialisieren. Native GPU-Mappings lösen ihre
+physische UMA-Zuteilung über den selben kanonischen BO auf. Hardwarezugang
+erfordert bereits bestätigte Hubs. Exakte Fence-Identitäten halten Mappings
+über mehrere Queues; Queue-/Reset- und Memoryepoch sind eigenständige Werte.
+
+Abbau: Fence-Abschluss, PTE-Löschung, beide Hub-ACKs, GPU-Lease, DMA-Lease,
+CPU-Map, BO-Referenz, Collection. Timeout oder fehlgeschlagene Freigabe
+behält Handles und Zuteilung für Wiederholung. Auch ein Mapping mit schon
+gelöschten PTEs blockiert den Arenaabbau bis zum erfolgreichen Abschluss.
+Native Poolbereiche werden erst nach dem kanonischen OwnedRelease-Ticket
+und erfolgreichem FinishRelease erneut verfügbar. Fremde/stale Tickets,
+Selbstkopien und unbestätigte Engine-Quieszenz werden nicht akzeptiert.
+
+Die Bootroutine bleibt passiv: Quellen, Firmwarepaket, Reservierungsplan
+und Snapshot werden zugelassen; sie aktiviert keine Ringe/Engines. Native
+Start-/Abbruchsequenz und Aufruf der vorbereiteten Controller gehören /9;
+IH, Ringe und Completion-Worker /8. Diese Grenzen sind nicht GPU-ready.
+AMDGPU mode=native bleibt gesperrt, IMAGE_SCOPE=none und Capability-Bits=0.
+Ausschließlich /39 darf echte Picasso-Hardware testen.
+
+ABI und Softwarebelege
+----------------------
+GfxDriverMemoryApi bleibt Wireversion1. reserved_span steht bei Offset240,
+die volle Tabelle hat 248 Bytes; Schematyp-Evolution 6 -> 7. Alle vorhandenen
+112..240-Byte-Präfixe, Slots und äußere DriverApi35/648 bleiben unverändert.
+Zig-/C-Fassaden prüfen Version, vollständigen Slot und Nullpointer. Die
+kontrolliert fortgeschriebene Baseline betrifft ausschließlich diesen Typ.
+
+Regulärer AMDGPU-Build: 13/13 Schritte, 9/9 bestehend integrierte Komponententests.
+Kernel gebaut; gezielter bestehender loader-test: 2/2 Prüfungen.
+Contract: 13/13 Schritte, 1/1 Test. SDK: 71/71 Schritte, 90/90 Tests.
+Zusätzlicher gezielter bestehender GUI-Fassadenlauf: Zig 8/8, C mit aktiven
+Assertions (-O2 -UNDEBUG) erfolgreich. Keine neuen globalen Gates.
+
+Der frische SMP4-Softwaregast verwendet Kernel0.1.201 und eine nur unter Temp
+gebaute MEMPROBE: alte Tabellenpräfixe mit Canary, neuer 248-Byte-Slot,
+positiver Framebuffer-Nachweis, ungültige/fehlende Bereiche, echte System-BOs,
+WB-CPU-Map, echte gepinnte DMA-Seiten und Quieszenzpflicht. Zugewiesene RAM-
+Seiten werden als reservierter Gerätespeicher ausdrücklich abgelehnt.
+Danach Desktop window-idle samt Geometrie/Neustart/Softwarekomposition PASS.
+Das ist keine AMD-GPU-Emulation und keine physische Firmware-/GPU-Ausführung.
+
+Die RAM-Registerfixtures prüfen echte Controller-/SDK-Pfade, Eingaben,
+Timeout, beide ACKs, Fehler und Retention; sie beweisen keine elektrischen
+oder boardspezifischen Eigenschaften. Lenovo-ROM/UMA/Panel bleiben ungemessen.
+Hashbelege, Quellstand, Präfixvergleich und Gastmarker: AMDSpeicher08007.json.
+
+Referenzen: ExFiles/Reference/AMD/Implementations/Linux; im AMDGPU-Repository
+46 unveränderte MIT-Dateien in ThirdParty/Sources.json. Registerkonstanten
+werden aus den Originalen geprüft. Quelle für Speicherdomänen und Hubs:
+https://docs.kernel.org/gpu/amdgpu/driver-core.html
+Die Firmware bleibt Commit2b8daaf611fbade74f26a5b58ec1defe6a02f5e0; ihr neuer
+kurzer firmware.version-Anzeigetext ergänzt die vorhandene Vollrevision.

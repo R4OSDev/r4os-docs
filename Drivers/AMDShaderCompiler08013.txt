@@ -1,0 +1,167 @@
+﻿AMD-Shadercompiler und Cache 0.80.13
+==================================
+
+R4ACO 0.1.1 bindet den echten SPIR-V-/NIR-/ACO-Compiler aus Mesa 26.2.2
+in R4ACO.R4L ein. DISPLAYD 0.1.41 ruft ihn als geladenes Modul auf.
+Kernel 0.1.202, SDK, Contract, AMDGPU, R4AMD und R4GFX bleiben unverändert.
+Diese Unterversion prüft CPU-Kompilierung. Die physische Lenovo-Abnahme
+bleibt ausschließlich Aufgabe von 0.80.39.
+
+Quellen und Build
+-----------------
+620 unveränderte Mesa-Dateien bilden die vollständige benötigte Quellmenge.
+373 Compiler-Übersetzungseinheiten umfassen den SPIR-V-Frontend, NIR,
+AMD-Hilfsfunktionen, Format-/Utilitytabellen und alle benötigten ACO-Pässe.
+Hinzu kommen sechs echte libc++-Einheiten, gemeinsame C-/C++-Laufzeit,
+vier private C-Adapter, die NIR-/ACO-Brücke und eine Buildidentität:
+insgesamt 391 Objekte im Compilerarchiv. Native Math enthält zusätzlich
+18 originale C-Einheiten, Native Scan vier originale und drei Adapter.
+
+Tools/Build.ps1 ist die gemeinsame PowerShell-7-Implementierung für Linux
+und Windows. Alle Pfade folgen Settings.R4S. Clang/LLVM 19.1.7, Zig 0.16.0
+mit seinen libc++-Quellen sowie Python/Mako/PyYAML sind festgehalten.
+Quellen, Patchreihen, Header, Generatoren, Werkzeuge und Archive sind gehasht.
+Ein exklusiver Cachelock schützt den nach Besitzer/Host/Version getrennten
+Build. Die Originale bleiben unverändert; Patches wirken auf Arbeitskopien.
+Keine vorbereitete NVK-/NAK-Quellkopie oder deren Buildcache wird verändert.
+
+Der vollständige benötigte libc++-Anteil umfasst hash, functional, mutex,
+mutex_destructor, new und new_helpers. functional.cpp liefert den tatsächlich
+benötigten Hashpfad. Die lokale new.cpp-Headeranpassung unterbindet nur die
+für R4M ungeeignete ELF-Symbolinterposition. Exceptions und RTTI sind aus.
+Die generierte ACO-Opcode-Tabelle verwendet C++23-constexpr; dynamische
+ELF-Startkonstruktoren werden beim Bau ausdrücklich zurückgewiesen.
+Originale Compilerübersetzungseinheiten bleiben bei C++17 beziehungsweise C11.
+
+Port/Jobs.patch isoliert die allokierenden GLSL-/Printf-Globale, entfernt
+Umgebungsvariablen und externe Shader-/Disassemblerprogramme und fügt
+Abbruchprüfungen zwischen ACO-Phasen ein. Assertions und libc++-Abbrüche
+melden einen wirklichen Compilerfehler. Dateilesen für Speicherstreams ist
+implementiert; fopen für externe Shaderdateien meldet ENOSYS. Es gibt keine
+erfolgreichen Platzhalter für fehlende Compiler- oder Betriebssystemarbeit.
+
+Tools/ExportLegal.ps1 sammelt vollständige Originalhinweise und Lizenztexte
+für Mesa, BLAKE3, libc++, stb sowie gemeinsame Math-/Scan-Quellen.
+Die Distribution führt R4ACO-NOTICES.txt als verpflichtendes Rechtsdokument.
+GPL-Lizenztexte im Mesa-Referenzarchiv bedeuten keine Einbindung von GPL-Code.
+Linux DRM, ein LLVM-JIT und GPU-Firmware sind keine Bestandteile von R4ACO.
+
+Öffentliche Schnittstelle und Ressourcenprofil
+---------------------------------------------
+INFO_V1:1 behält seinen bisherigen Typ und Funktionsslot. implementation_stage
+ist 13; capability_flags Bit0 bedeutet ausschließlich CPU-Shaderkompilierung.
+COMPILER_V1:1 ergänzt compile, cache_write und cache_read. C++-/NIR-/ACO-Typen
+überschreiten die privaten Brücken nicht. Öffentliche Größen in Bytes:
+Runtime 72, Request 88, Binary 424, CacheKey 136, Digest 32 und Symbols 256.
+Fehler unterscheiden ungültig -1, nicht unterstützt -2, belegt -3, Speicher
+-4, abgebrochen -5, Compilerfehler -6, Kapazität -7 und Cachemiss -8.
+
+Das feste Ziel ist Picasso 1002:15D8, externe ASIC-Revision 0x41..0x48,
+GC9.1 mit GFX9-Wave64-Codeprofil 902. PCI- und externe ASIC-Revision sind
+verschiedene Angaben. Die Bestätigung am tatsächlichen Laptop folgt /39.
+Raven-/Picasso-Quirks und Ressourcenlimits stammen aus den originalen
+AMD-Compilerstrukturen; eine kompilierte GPU-Familie ist keine Gerätefreigabe.
+
+Native Ressourcen-ABI 1 unterstützt Vertex 0, Fragment 4 und Compute 5.
+Ein Deskriptorset besitzt 16 Bufferbindungen mit je 16 Byte. Dynamische
+Deskriptorarrays und andere Sets werden abgelehnt. Pushkonstanten sind
+32-Bit-Werte mit konstantem Offset innerhalb von 256 Byte. Vertexdaten kommen
+per Buffer-Pulling; gewöhnliche Vertexattribute sind noch nicht angebunden.
+Fragmentshader liefern MRT0 in 32_ABGR und können generische Varyings nutzen;
+der derzeitige Referenzshader liest eine Pushkonstantenfarbe. Compute erlaubt
+statische Gruppen mit 1..1024 Invocations und höchstens 64 KB LDS.
+Texturen, Images und breitere Vulkan-Semantik folgen mit Renderer/RADV.
+
+SGPR0/1 sind für Rings/Scratch reserviert, SGPR2/3 enthalten die Buffertabelle,
+SGPR4/5 den Pushkonstantenpointer. Compute erhält Gruppenzahlen in User-SGPR6..8,
+System-Gruppen-IDs in 9..11, TG in 12 und Scratchoffset in 13; VGPR0..2 tragen
+lokale IDs. Vertex ergänzt base_vertex/start_instance/draw_id in 6..8,
+Scratchoffset9 und vier Eingabe-VGPRs. Fragment hat sechs User-SGPRs,
+Primitivmaske6/Scratch7 und das volle originale Layout mit 24 Eingabe-VGPRs;
+SPI_PS_INPUT_ENA/ADDR sind konservativ 0xffff. Einheiten und Belegung sind
+ausdrücklich Teil des Ressourcenvertrags, keine erratenen PM4-Registerwerte.
+
+Binary enthält tatsächlichen Code, Executable-Länge, SGPR-/VGPR-Belegung,
+LDS-Bytes, Scratchbedarf pro Wave und Float-/PS-Konfiguration. Logische
+Ein-/Ausgangsmasken werden vor der Hardwareexport-Transformation bewahrt.
+R4AMD bildet daraus später echte Shaderregister. Originale ACO-Symbole sind
+als Kind in low32 und DWORD-Codeoffset in high32 gespeichert, maximal 32.
+Kind1/2 bezeichnet gegebenenfalls Scratchadresswörter. Kind3 ist lediglich
+die Annotation eines bereits durch fix_constaddrs aufgelösten PC-relativen
+Konstantenoffsets: Die GPU-Ladeadresse darf nicht nochmals addiert werden.
+
+Jobs, Abbruch und Cache
+----------------------
+Genau ein Compilerjob erhält den residenten Library-Owner. Ein neuer Aufrufer
+darf einen verlassenen Owner erst nach bestätigtem Ende seiner konkreten
+Programmgeneration übernehmen. Die Jobepoche schützt private Once-/Mutex-
+Zustände; deren Transport ist ausschließlich für diesen seriellen Compiler.
+Er ist keine allgemeine C11-Threadimplementierung. Allokationen, emuliertes
+TLS, Mesa-Caches und C++-Finalizer gehören dem jeweiligen Job.
+
+Maximal 16384 SPIR-V-Wörter/IDs, 63 Byte Einstiegspunkt, 256 MB Budget,
+16 MB Code und 1 MB Diagnoseausgabe sind zulässig. Ein 64-MB-Standardbudget
+ist eine Obergrenze, keine Voraballokation. Alle Ein-/Ausgabespannen werden
+vor Aufruf auf Größe, Ausrichtung und Überlappung geprüft. Quell- und
+Cacheausgaben werden bei Fehlern nicht als gültiger Maschinencode publiziert.
+
+Allokationsgrenzen, Cancellation und monotone Deadline werden im Frontend,
+Optimierer und zwischen ACO-Phasen geprüft. Abbruch verwirft den vollständigen
+Allokationsgraphen und beendet den eigenen Worker ohne C++-Unwinding oder
+longjmp. Der Aufrufer hält sämtliche Eingaben/Ausgaben bis zum echten Join.
+Normaler Abschluss führt begrenzte Finalizer aus und räumt denselben Graphen
+auf. Der Worker nutzt den vorhandenen SIMD-Kontext; FPU-Rundungszustand wird
+für den Compiler gesetzt und bei normalem Return wiederhergestellt.
+
+Bindings/Zig/worker.zig verwendet die vorhandenen R4SYS-Thread-, Zeit- und
+Allocatorverträge mit 2 MB Workerstack. Kompilierung und Join gehören in die
+Vorbereitung. Der normale Framepfad ruft den Compiler nicht auf.
+
+Der Cache kodiert Skalare ausdrücklich little-endian. Vor dem Code liegen
+64 Byte Header, 136 Byte Identität, 424 Byte Metadaten und ein SHA256-Digest;
+Codeoffset ist 656. Die einkompilierte Identität umfasst Quellen/Port und
+Werkzeugkette. SPIR-V samt Einstiegspunkt, ASIC, Shaderstage, Ressourcen-/
+Command-/Treiber-ABI, Bildformat, Pipeline und Geräte-/Resetepochen müssen
+genau übereinstimmen. Laufzeitmessungen und Logs werden nicht persistiert.
+Beschädigte oder unpassende Dateien werden verworfen. Atomarer Dateiersatz
+verwendet den vorhandenen R4SYS-Vertrag mit Staging und Backup auf demselben
+Volume; die Bibliothek selbst besitzt keine Dateisystemabhängigkeit.
+
+Nachweise und Grenzen
+--------------------
+Die regulären Linux-Prüfungen verwenden dieselben freestanding Native-Archive
+wie das R4L. Drei zusammengefasste Compiler-/Cachefälle und ein C-/Zig-
+Konformanzfall decken echte Kompilierung, Budget-/Allocatorfreigabe, Abbruch,
+Deadline, Reentranz, Wiederanlauf, reproduzierbaren Code, Cacheidentitäten,
+Korruption und Aliase ab. Der Hostclock-Doppel isoliert Deadlineübergänge;
+DISPLAYD /AMDCOMPILER verwendet dagegen die tatsächliche R4SYS-Uhr.
+
+Fünf eigene GLSL-/SPIR-V-Fixtures sind mit glslangValidator 15.2.0 erzeugt und
+gehasht: Fullscreen-Vertex, Pushfarbe, Bufferkopie, Bufferfüllung und ein
+Shared-Memory-Shader mit 128 Invocations, zwei Wavefronts und 512 Byte LDS.
+LLVM 19.1.7 disassembliert den tatsächlichen Output unabhängig als gfx902.
+Laden/Speichern, bedingte Ausführung, Positions-/Farbexport und S_BARRIER
+werden gegen AMDs Vega-ISA und die tatsächlichen Ressourcenargumente geprüft.
+Maschinencode, Metadaten, SHA256 und genaue Befehle stehen in der JSON-Beilage.
+
+Der SMP4-Testgast lädt R4ACO.R4L einschließlich echter Relokationen und
+Compilerobjekte. Er erzeugt dieselben Shader, prüft OOM/Deadline/Wiederanlauf
+und schreibt/liest/beschädigt echte Cachedateien. Gast- und Host-Codehashes
+werden direkt verglichen. Der Lauf verwendet ausschließlich TestInjection
+mit gesichertem und wiederhergestelltem AUTOEXEC. Keine zusätzliche globale
+Build-Gate und kein Langlauf sind erforderlich.
+
+Windows nutzt dieselbe PowerShell-Logik und baut das ELF-R4L sowie den
+hostseitigen ABI-Test. Der Linux-Threadtest wird dort nicht ausgeführt;
+der CPU-Laufzeitnachweis erfolgt im SMP4-Gast. Ein Windows-Hostlauf wurde
+bisher nicht durchgeführt. R4ACO bleibt bis zur Paketintegration bei
+IMAGE_SCOPE=none. GPU-Dispatch, sichtbare Pixel, Texturen und Vulkan-Freigabe
+werden durch diese CPU-Nachweise nicht behauptet.
+
+Primärreferenzen:
+https://www.amd.com/content/dam/amd/en/documents/radeon-tech-docs/instruction-set-architectures/vega-shader-instruction-set-architecture.pdf
+https://llvm.org/docs/CommandGuide/llvm-mc.html
+https://llvm.org/docs/AMDGPUUsage.html
+Die verwendeten Mesa-Originale, Archivhashes und geordneten Patches liegen
+beim R4ACO-Besitzer unter ThirdParty/Sources.json; die ursprünglichen
+Referenzen bleiben unter ExFiles/Reference/AMD/ erhalten.

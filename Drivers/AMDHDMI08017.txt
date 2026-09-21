@@ -1,0 +1,114 @@
+﻿AMD HDMI, Empfaenger und Hotplug - 0.80.17
+========================================
+
+Stand und Besitz
+----------------
+AMDGPU 0.1.13 erweitert den vorhandenen DCN1-Displaytask um den direkten
+HDMI-Anschluss. DDC, MMIO, ATOM, Encoder und Verbindungszustand gehoeren
+weiter dem externen Treiber. Kernel und DISPLAYD behalten ihre vorhandenen
+herstellerneutralen Vertraege; dafuer ist keine weitere ABI-Erweiterung noetig.
+Der Release ist 0.80.17. Kernel und andere Modulartefakte bleiben unveraendert.
+
+Das Zielprofil bleibt Lenovo IdeaPad L340-15API, Ryzen 5 3500U/Picasso,
+HDMI 1.4b und USB-C ausschliesslich fuer Daten. Die wirkliche Boardverdrahtung,
+ATOM-Version, Empfaengeridentitaet und Signalqualitaet sind nicht gemessen.
+Alle Nachweise verwenden synthetische Softwareantworten. Kein physischer
+Probe, Laptopupdate oder Hardwaretest wurde ausgefuehrt; diese bleiben /39.
+
+Originaler nativer Pfad
+----------------------
+308 unveraenderte und gehashte Linux-7.2.4-Originaldateien bilden die Closure.
+28 originale C-Uebersetzungseinheiten und fuenf private Bruecken werden fuer
+R4D und Host archiviert. Neu sind dce_i2c_hw.c, dcn10_stream_encoder.c sowie
+dcn_hdmi.c. Die bisherigen zwei dokumentierten Patches bleiben unveraendert.
+Originale AMD-MIT-Notices und die Firmwarelizenzen werden vollstaendig exportiert.
+
+Die Route verlangt genau einen direkten HDMI-A-ATOM-Pfad, bekannte UNIPHY-,
+DDC- und HPD-Zuordnung, Hardware-I2C und Identitaetsverdrahtung. Externe
+Encoder, unbekannte Permutation/Inversion und mehrdeutige Routen bleiben
+unsupported. Der echte DCE-Referenztakt kommt aus ATOM DCE-info 4.1;
+fehlende oder ungueltige Werte werden nicht durch einen geratenen Takt ersetzt.
+Transmitterrevision 1.6 und Encoderrevision 1.5 muessen vorhanden sein.
+
+Die originale Hardware-I2C-Routine verwaltet Arbitrierung, FIFO, kombinierte
+Transaktionen, STOP/NACK, Geschwindigkeit und Release. Die eingebettete
+GPIO-Bruecke liest, sichert, programmiert und restauriert den realen Padmask-
+Registerwert. Es gibt keine vorgetaeuschte Linux-GPIO-Operation. Auch der
+Upstream-Pfad mit fehlgeschlagener Engine-Akquisition schliesst seinen Pin.
+Normale Busfehler loesen keinen globalen MMIO-Fault aus; unsichere Register-
+oder Taskfehler behalten den Besitzer und seine Allokationen.
+
+EDID wird in bis zu 32 vollstaendigen 128-Byte-Bloecken gelesen; ab Segment 1
+werden Segmentzeiger, Offset und Read in einer E-DDC-Transaktion verbunden.
+Je Block hoechstens drei Versuche, insgesamt hoechstens zwei Sekunden.
+HPD wird vor und nach jedem Block kontrolliert; der Basisblock wird am Ende
+verglichen. SHA256 ueber den vollstaendigen Inhalt erkennt Empfaengerwechsel
+auch bei gleicher Basisidentitaet. Der gemeinsame R4GFX-Parser prueft EDID/CTA.
+
+Modi, Farbformat und Pakete
+--------------------------
+Der Quellenhoechstwert bleibt 340 MHz TMDS. Ein hoeherer EDID-/FRL-/ASIC-Wert
+kann ihn nicht erweitern. Ein Empfaengermaximum begrenzt ihn weiter; ohne
+explizites Maximum werden hoechstens 165 MHz angenommen. Nur bestaetigte,
+vollstaendige progressive RGB8-Timings kommen in die Auswahl. Interlace,
+reines 4:2:0, unvollstaendige Synchronisation und erfundene Timings fehlen.
+Native DCN1-Frontendgrenzen gelten zusaetzlich. Die Ausgabe liefert dieselben
+zugelassenen Timings und originalen EDID-Bloecke im GfxReceiverInfo-Format
+fuer die gemeinsame /18-Publikation und die vorhandene DISPLAYD-Diagnose.
+
+Dieser Schritt verwendet Vollbereich-RGB mit 8 Bit pro Farbe. CTA-Modi, die
+eine noch nicht implementierte Limited-Range-Umrechnung verlangen, bleiben
+bis zum vorgesehenen Farbschritt /21 ausgeschlossen. Kein HDR, FRL, DSC,
+Deep Color, SCDC oder DisplayPort ueber den USB-C-Datenport wird angeboten.
+
+Originale Streamencoder-Routinen programmieren den Stream und AVI-InfoFrame
+mit korrekter Pruefsumme. ATOM1.5 erhaelt DIG, vier Lanes, Pixelclock und RGB8;
+ATOM1.6 uebernimmt den PHY. Der HDMI1.4-Scrambler bleibt auch an der exakten
+340-MHz-Grenze aus. Audiopakete und Audio-InfoFrame bleiben fuer /22 stumm.
+Die Konfiguration verlangt einen noch gestoppten Encoder/Timinggenerator.
+Entmuten verlangt einen wirklich aktiven DIG und Timinggenerator. Die
+vollstaendige Pixelclock-/Frontend-/Aktivierungsreihenfolge ist /18-Aufgabe.
+
+HPD und Ressourcen
+------------------
+Ein neuer Anschluss wird nach 100 ms stabilem HPD zugelassen. Auch eine
+kurz beobachtete Trennung entwertet eine laufende Empfaengeraufnahme; eine
+neue Generation wird niemals ueber noch laufende alte Ressourcen gelegt.
+Der lokale Verbindungszaehler und die vom gemeinsamen Outputbesitzer
+vergebene GfxOutputId bleiben getrennte, exakt verglichene Identitaeten.
+
+Bei einer publizierten Verbindung gilt diese Reihenfolge:
+  Pause neuer Arbeit -> Drain vorhandener Auftraege/Clientleases ->
+  physisch bestaetigter Stopp -> alle Abschluesse zustellen ->
+  gemeinsamen Ausgang zurueckziehen -> gehaltenes Backing freigeben.
+Der native Runtimeadapter verwendet die vorhandenen pauseOutput/withdraw-
+Aufrufe. Der /18-Modesetbesitzer liefert die echte Auftrags-/Leaseabrechnung
+und den Stopp; der HDMI-Besitzer prueft DIG und Timinggenerator zusaetzlich.
+Kein leerer ACK ersetzt diesen Nachweis. Ein falsches Token, aktive Jobs,
+fehlender Stopp, ruecklaeufige Uhr oder Ablauf von 5 s behaelt die Ressourcen.
+Busy darf denselben noch nicht abgeschlossenen Schritt wiederholen.
+
+Bereits ein fehlgeschlagener erster Aktivierungsversuch behaelt moegliche
+Hardwareeffekte. Abziehen vor gemeinsamer Publikation erreicht retained;
+der /18-Transaktionsbesitzer muss vollstaendig restaurieren. HDMI-ATOM und
+Scratch liegen in einer eigenen Heapallokation, die nach Task-Join und
+Restore vor dem DC-Kontext freigegeben wird. Teilallokationen mit lebendem
+Handle und ungueltiger CPU-Adresse werden ohne Dereferenzierung abgebaut.
+
+Nachweis und verbleibende Integration
+-------------------------------------
+Die vorhandene obligatorische AMDGPU-Komponentensuite wurde um drei
+gebuendelte HDMI-Gruppen erweitert. Sie prueft echte C-I2C-/Streamfunktionen,
+FIFO und Parameter, normale Busfehler und Wiederverwendung, EDID/Modus-/AVI-
+Grenzen, Boardrouting, Debounce, Generationswechsel, verspätete/unsichere
+Retirementantworten und Abbruchgrenzen. Der native Runtimefall fuehrt den
+echten C-Encoderaufruf durch die begrenzte ATOM-VM aus. Eine echte SDK-
+Fassadenkopplung prueft Busy-Pause, exakte Outputidentitaet, Stopppruefung,
+Withdraw und Wiederanstecken. Die Displaytask-Tests pruefen die zusaetzliche
+Heapallokation und Teilfehler mit erhaltenem Handle.
+
+Exakte Testzahlen, SHA256-Werte und Artefakte stehen in AMDHDMI08017.json.
+Linux wurde ausgefuehrt; Windows, Gast und physische GPU nicht. Die normale
+Treiberbindung bleibt bis /18 passiv. Es existiert kein behaupteter sichtbarer
+HDMI-Betrieb. Native Laufzeit-/Modesetaktivierung und komplette Bootrestaurierung
+folgen /18, Mehrschirm /20, erweiterte Farbe /21, HDMI-Audio /22, Hardware /39.

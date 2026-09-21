@@ -1,0 +1,204 @@
+﻿AMD-Grafik: Bestandsaufnahme und Architekturentscheidung 0.80.1
+==============================================================
+Stand: 21. September 2026
+Maschinenlesbare Funktions-/Lückenmatrix und Quellbelege:
+    Docs/Drivers/AMDArchitektur08001.json
+Referenzen:
+    ExFiles/Reference/AMD/README.md
+    Docs/Drivers/AMDReferenzKatalog08001.json
+Folgeplanung:
+    Docs/Desktop/AMDRoadmap080.txt/.json
+
+Ergebnis und Zielprofil
+----------------------
+0.80.1 beschafft und erschließt die Grundlagen und plant die Umsetzung.
+Es implementiert noch keinen AMD-Treiber und verändert kein Kernel- oder
+Modulartefakt. Die native AMD-Hardwarefreigabe bleibt vollständig offen.
+
+Primärziel ist der historisch dokumentierte Lenovo IdeaPad L340-15API mit
+Ryzen 5 3500U, Picasso, integrierter Radeon Vega 8 und PCI 1002:15D8
+(Docs/Changelogs/V0.13.txt). Der OEM-PSREF bestätigt die Modellkombination,
+HDMI 1.4b und einen USB-C-Port ausschließlich für Daten. Er nennt mehrere
+Panelvarianten und identifiziert nicht das tatsächlich eingebaute Panel.
+
+PCI-ID und Marketingname reichen nicht als Treiberprofil. Linux behandelt
+15D8 als CHIP_RAVEN/Picasso; Revisionen unterscheiden Raven2 und besondere
+RLC-Pfade. Erwartet werden GC9.1, DCN1, SDMA4.1, PSP/SMU10 und VCN1.
+Der Mesa-Compilerfamilienname ist für Raven gfx902, für Raven2 gfx909.
+Die physische Revision und alle Board-/Empfängerwerte werden erst in
+0.80.39 erfasst. Ein Quellprofil ist kein Hardwarebefund.
+
+Das verbindliche Ziel umfasst native Anzeige, einen beschleunigten
+R4OS-Desktop, 2D/3D/Compute, Vulkan 1.3, OpenGL 4.6 Core/GLSL4.60 und
+EGL 1.5, die passenden ungeschützten VCN-Medienfunktionen, Panelhelligkeit,
+HDMI/Mehrschirm/Audio, Energieverwaltung, Diagnose und Wiederherstellung.
+GL3.3 ist ein Zwischenstand in /26; /27 schließt das geplante GL4.6-Profil.
+Es gibt keine automatische Khronos-Konformitätsbehauptung und keine
+pauschale Übernahme aller Upstream-Erweiterungen.
+
+Was 0.79.X bereits liefert
+--------------------------
+Die Bestandsaufnahme verfolgt Quellen und module.R4MF, nicht nur Namen.
+Die JSON-Belege enthalten Besitzercommit, Dateihash und Einstiegslinie.
+
+- Contract/SDK und Kernel besitzen gemeinsame BO-/VA-/DMA-Ressourcen,
+  Generationen, Queue-/Fence-/Wait-Verträge, Speicherbudgets, Ausgabe-
+  und Resetlebensdauer. AMD muss seine tatsächlichen UMA-/IP-Operationen
+  anbinden. Kernel-Code nimmt keine ASIC-Programmierung auf.
+- WINSVC transportiert Fenster-/BO-/Fencezustand über gemeinsame APIs.
+  Seine validImage-Prüfung verlangt bei nativen Produzenten device_local:
+  Die APU-Abbildung muss deshalb ausdrücklich gegen den UMA-Vertrag
+  geprüft werden. WINSVC darf keine GPU-Waits oder MMIO übernehmen.
+- AUDSVC besitzt einen generischen Ausgabekatalog, Auswahl, Lautstärke und
+  Mute. HDA und Displayowner haben ELD-/Routenverträge. Die frühere Lenovo-
+  Analogabnahme (1022:15E3/Realtek 10EC:0257) belegt keine HDMI-Audioausgabe.
+- RDPSVC nutzt R4DESK-Remote-Frames und Eingabe; Capture-/Readbacklebensdauer
+  ist wiederverwendbar. Ein AMD-Encoder allein fügt keinen RDP-Codec hinzu.
+- UPDSVC und SYSUPD mit der SDK-Updateengine besitzen Paket-/Rollbackwege.
+  Der Grafikpaketbauer und Firmwareprüfer sind dagegen NVIDIA-spezifisch.
+- Desktop, Appearance und DeviceManager haben Fenster-, Ausgabe-, Farb-,
+  Policy- und Diagnosesichten. DISPLAYD ist eine Diagnose, kein Dienst.
+  Ihre vorhandenen generischen Teile bleiben die Integrationsbesitzer.
+
+Konkrete NVIDIA-Bindungen und noch fehlende AMD-Pfade
+----------------------------------------------------
+R4GFX/Source/device.zig importiert r4nv_binding, wählt einen R4NV-Backend-
+Client und kennzeichnet native Geräte als NVIDIA. Native Ressourcen,
+Bilder, YUV und Rendering hängen ebenfalls am R4NV-Vertrag.
+
+R4VK/Port/nvk_device.c verlangt den NVIDIA-Vendor 0x10de und R4NV-Profile;
+die Enumeration konstruiert NVK-Geräte. VRAM-/dGPU-Annahmen müssen für UMA
+überprüft werden. R4GL besitzt eine nutzbare Software-/EGL-/Zink-Grundlage,
+der aktuelle native Vulkanpfad ist jedoch NVK.
+
+R4VIDEO und R4ENC importieren R4NV-Video-/Encode-/Renderbindungen. Gemeinsame
+Sessionnamen bedeuten deshalb noch keine AMD-Medienunterstützung.
+Desktop und DISPLAYD besitzen explizite R4NV-Imports. Appearance bearbeitet
+bei der automatischen Bootpolicy ausdrücklich OPTION NVIDIA mode=auto.
+
+Distribution/Tools/GraphicsPackages.ps1 führt feste NVIDIA/R4NV-Gruppen.
+GraphicsPackageResources.ps1 prüft NVFW/GSP/RM. Ein einzelnes neues R4D
+würde somit weder Grafik-APIs noch Medien, Konfiguration oder Updates
+vollständig nutzbar machen.
+
+Gewählter Portierungsweg
+------------------------
+AMDGPU.R4D:
+    Neuer externer Treiber in Repositories/Drivers/AMDGPU, eigenes öffentliches
+    R4OSDev/r4os-driver-amdgpu ab 0.80.2. Zuständig für PCI/MMIO, ASIC-/IP-
+    Erkennung, Firmware, UMA/GPU-VM, Interrupts/Ringe, Display/SMU und Reset.
+    Zig integriert die R4OS-Besitzer. Ausgewählte originale AMD-DCN1-C-
+    Quellen und IP-Helfer erhalten eine begrenzte R4OS-Anbindung.
+
+R4AMD.R4L:
+    Neue Einheit im vorhandenen Libraries-Repository. AMD-Kommandopakete,
+    Ressourcen-/Bildlayouts, AddrLib, Grafik-/Transfer-/Medienprovider.
+    Eigener Libraryvertrag; R4GFX bleibt die gemeinsame Renderingfassade.
+
+R4ACO.R4L:
+    Neue Library für die begrenzte CPU-Kompilierung mit Mesa-NIR/ACO.
+    Keine Übertragung des NVIDIA-Maschinencodes oder NAK-Zielprofils.
+    Compilerjobs, Abbruch, Allokation, Cache und ASIC-/ABI-Identität müssen
+    tatsächlich integriert sein.
+
+R4VK/R4GL:
+    RADV wird als AMD-Provider in die vorhandene Vulkanfassade aufgenommen.
+    Ein eigener R4OS-Winsys ersetzt Linux-libdrm-/ioctl-/Syncobj-Aufrufe
+    durch kanonische BO-/VA-/Queue-/Fencebesitzer. Gemeinsame Vulkan-Runtime
+    und Fenster-WSI werden weitergenutzt; NVK bleibt getrennt erhalten.
+    R4GL verwendet Zink über RADV. RadeonSI bleibt Medien-/Vergleichsquelle,
+    ein zweiter vollständiger GL-Stack samt LLVM-JIT wird nicht eingeführt.
+
+Medien und Dienste:
+    R4VIDEO/R4ENC erweitern ihre nativen Backend-/Codecverträge kompatibel.
+    R4IMG und R4GFX übernehmen tatsächliche JPEG-/YUV-Fähigkeiten.
+    WINSVC/AUDSVC/RDPSVC/UPDSVC bleiben die vorhandenen Dienstbesitzer.
+    Es gibt keinen pauschalen neuen AMD-Dienst. Nötige Fn-/EC-Unterstützung
+    erhält in /35 eine eigene externe Plattform-/Eingaberolle.
+
+Kernel und Verträge:
+    Nur technisch notwendige gemeinsame Ressourcen-, IRQ-/Worker-,
+    VFCT-/Firmwaretabellen- und Backlight-Verträge erweitern.
+    Öffentliche APIs kompatibel/append-only; keinen fremden Kernel,
+    Linux-DRM/TTM-Scheduler oder pauschale Linux-Kompatibilitätsschicht
+    als zweiten Besitzer einführen. R4SYS/R4DRAW/R4DESK/R4DEV/R4AUDIO bleiben
+    ihre eingebauten Plattformgruppen.
+
+Abhängigkeiten, Portierbarkeit und Lizenzen
+-----------------------------------------
+Linux 7.2.4 und Mesa 26.2.2 sind die gepinnten Codegrundlagen; Mesa passt
+zum bestehenden NVK/NAK/Zink-Stand. Private Mesa-Strukturen dürfen nicht
+zwischen unterschiedlich generierten oder gepatchten Ständen wandern.
+
+DCN1 ist trotz weitgehend permissiver AMD-Dateien kein freestanding Paket:
+dc/os_types.h importiert Linux-/DRM-Header. Allokation, MMIO, Zeit,
+Workqueues, BIOS-/AUX-Zugriff und FPU-Bandbreitenberechnung benötigen
+konkrete R4OS-Grenzen. Für ACO/AddrLib sind C++-Runtime, Atomics, Math und
+Generatoren nötig; -fno-exceptions/-fno-rtti beseitigt diese Arbeit nicht.
+R4OS-Kernel-/Treiber-FPU-Nutzung muss dem vorhandenen Kontextvertrag folgen.
+
+ACO wurde als Compiler gewählt; LLVM-JIT gehört nicht zum Laufzeitplan.
+Bestehende Hosttool-/Mesa-Generatorinfrastruktur lässt sich nutzen
+(Python/Mako/PyYAML, Meson/Ninja und vorhandene C/C++-Toolchain).
+Rust aus NAK ist keine automatische ACO-Abhängigkeit. 0.80.2 muss echte
+repräsentative ACO/AddrLib/DCN1-Übersetzungseinheiten kompilieren und offene
+Symbole einem Folgeschritt zuordnen. Leere Modulgerüste reichen nicht.
+Gemeinsame Logik bleibt PS7 mit dünnen Linux-/Windows-Startern. In 0.80.1
+wurden Referenzen unter Debian mit PS7 7.6.5 geprüft; kein Windows-Build
+und keine fertige Portierbarkeit werden daraus abgeleitet.
+
+Originale Lizenztexte und SPDX-/Dateihinweise sind lokal erhalten.
+Linux als Gesamtarchiv ist keine pauschale MIT-Freigabe; übernommene oder
+abgeleitete Dateien behalten ihre jeweiligen Bedingungen. Jedes echte
+Portmodul muss Provenienz, Änderungen, THIRD_PARTY_NOTICES und erforderliche
+Distributionsquellen pflegen. Firmware bleibt unverändertes Fremdmaterial
+unter LICENSES/LICENSE.amdgpu/WHENCE. Originaldokumente bleiben Referenzen.
+
+Medien- und Plattformgrenzen
+---------------------------
+VCN1: H.264, HEVC Main/Main10 und VP9 8/10-Bit dekodieren; MPEG2/VC1 sowie
+JPEG nach den konkreten Profil-/Formatgrenzen. Native H.264-/HEVC-Main-
+8-Bit-Encoder mit CQP/CBR/VBR sind geplant. HEVC-Main10-Encoding und AV1
+gehören nicht zur VCN1-Fähigkeit des gesicherten Quellprofils.
+MPEG4 Part 2 ist im gewählten Mesa-Capabilitypfad nicht belegt und wird
+nicht als native Funktion zugesagt; MPEG4_AVC bezeichnet hier H.264.
+
+SDR/sRGB/ICC gehören zum Pflichtumfang. 10-Bit/HDR/VRR erfordern gemeinsam
+geeignete IP-, Link-, Board- und Empfängereigenschaften. Der OEM-Beleg
+rechtfertigt kein pauschales HDR-/FreeSync-Versprechen. Kein DisplayPort
+über den reinen USB-C-Datenport; FRL/DP-MST/DSC sind kein Lenovo-Ziel.
+
+R4OS besitzt ausdrücklich keinen vollständigen S3-/S4-/S0ix-Systempfad
+(Kernel/arch/x86_64/power.zig). Der statische ACPI-/S5-Unterbau ersetzt
+keinen allgemeinen AML-/EC-/Wake-/System-Resume-Stack. 0.80.35 implementiert
+Bildschirmruhe, Helligkeit, benötigte Laptopereignisse und Treiberquieszenz.
+System-Suspend bleibt eine sichtbare Plattformlücke für ein eigenständiges
+Vorhaben. Er wird weder stillschweigend als erledigt noch als Hardwaregrenze
+der APU geführt.
+
+OpenCL/HIP/ROCm sind zusätzliche Laufzeiten außerhalb des Grafikprofils;
+HDCP/DRM benötigt weitere Protokolle/Schlüssel. Multi-GPU/Hybrid, andere
+AMD-Generationen und hardwarebeschleunigtes Raytracing sind nicht zugesagt.
+Diese expliziten Grenzen ersetzen keine der geplanten Desktop-/API-/
+Medien-/Energiefunktionen des Zielprofils.
+
+Prüfung und Abschlussregel
+--------------------------
+Die Funktionsmatrix führt 35 Bereiche mit Status, Besitzer, Wiederverwendung,
+Lücke, Zielprofil, Abhängigkeiten, Quellen und konkreten Unterversionen.
+Jede spätere Unterversion ist mindestens einer Matrixzeile zugeordnet.
+
+0.80.2 bis 0.80.38 implementieren die tatsächlichen produktiven Pfade.
+Bestehende Besitzerprüfungen bevorzugen, neue Gates nur bei konkretem Bedarf;
+nötige QEMU-Gastläufe kurz und ausschließlich SMP4. Kein Emulatorlauf
+simuliert die physische Picasso-GPU. Vorbereitete Referenzbitstreams,
+Compileroutput, Registermodelle und Parserfixtures sind Softwarebelege.
+
+Ausschließlich 0.80.39 greift auf den Laptop zu, erfasst unbekannte Werte,
+installiert das geprüfte Paket und führt physische Firmware-, Sicht-/Hör-,
+Funktions-, Leistungs-, Energie-, Reset- und Rollbackprüfungen durch.
+Dort gefundene Hardwarekorrekturen und nötige Wiederholungen bleiben in /39.
+Laptop, HDMI-Kabel und eingeschalteten geeigneten Audio-/Displayempfänger
+mit dem User abstimmen. Fehlende erforderliche Hardware bleibt offen.
+Der Abschluss erfordert Artefakt-/Firmwarehashes und Befunde je Funktion,
+keine Umdeutung eines Software-PASS zur Hardwarefreigabe.

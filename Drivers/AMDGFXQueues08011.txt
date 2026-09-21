@@ -1,0 +1,138 @@
+﻿AMD GFX9-Kontexte und Ausführungsqueues 0.80.11
+==============================================
+
+Stand: 21.09.2026. AMDGPU 0.1.8, R4AMD 0.1.3, R4GFX 0.1.21.
+Besitzer: externer AMDGPU-Treiber und bestehendes Libraries-Repository.
+Kernelartefakt 0.1.202, zentraler Contract und SDK bleiben unverändert.
+Physische Laptopabnahme ausschließlich in 0.80.39.
+
+Quellen und Zielprofil
+---------------------
+Picasso 1002:15D8 / GC9.1 nutzt die in gfx_v9_0.c tatsächlich eingebundenen
+GC9.0-Registerdefinitionen und SOC15-Laufzeitbasen. VerifyGC.ps1 erzeugt die
+verwendeten Offsets/Felder sowie die Tabellen gc_9_1, gc_9_1_rv1 und
+GC9-common aus gehashten Originalen. Die Quellenlage umfasst 81 Linux- und
+59 Mesa-Dateien in den jeweiligen Eigentümern. Fremdmaterial bleibt
+byteidentisch. Vollständige Originalnotices werden mit der Distribution
+exportiert; der gemeinsame PM4-Port bewahrt AMD-/Valve-MIT-Angaben.
+
+Die maximale Topologie des gepinnten gpu_info ist ein Shader-Engine mit
+einem Shader-Array, elf möglichen CUs und zwei Renderbackends. Tatsächlich
+aktive CUs/RBs werden aus den beiden Hardware-/User-Disable-Masken gelesen.
+Die Bezeichnung Vega 8 ersetzt diese Messung nicht. Picasso hat 4 KB GDS;
+64 KB betreffen LDS pro Workgroup beziehungsweise den separaten RLC-
+GDS-Sicherungsbereich. GWS/Ordered-Append bleiben hier deaktiviert.
+
+Native Startkomposition
+-----------------------
+Die vorhandene PSP/SMU-Folge bestätigt zuerst die einzelnen Firmware-
+Antworten, beide MEC-Images samt Sprungtabellen, PFP/ME/CE/RLC und SDMA.
+Danach folgen GMC/VMID1 und der echte SDMA-Fill-/Copy-/Fence-Selbsttest.
+Erst dann beginnt der neue GC-Eigentümer; der gemeinsame Queue-Worker ist
+zu diesem Zeitpunkt noch nicht gestartet.
+
+GC führt die ursprünglichen Golden-Sequenzen mit expliziter Registerbank
+und Broadcast-Auswahl aus, misst CU/RB-Masken und richtet SH_MEM/LDS/
+Scratch-Aperturen ein. VMID0 besitzt Ring/MQD/Fence-Speicher; VMID1 trägt
+IBs und Ressourcen. Der gesamte 4-KB-GDS wird über getrennte reservierte
+Kontextbereiche verwaltet. Überlappende GDS-/Scratch-Kontexte sind unzulässig.
+
+RLC erhält den vollständigen ursprünglichen 904-Dword-Clear-State-Puffer,
+SRM und einen 0x10800-Byte-Sicherungsbereich. GFXOFF, CG/PG und RLC Load
+Balancing bleiben während dieser Ausführungsgrundlage gezielt aus; der
+Energie-Eigentümer folgt in /29. RLC-Start wartet mindestens 50 µs, der
+CP-Ringwechsel mindestens 1 ms, jeweils mit nichtblockierendem Zeitlimit.
+
+Die 1-MB-Queuearena enthält zusätzlich einen 64-KB-KIQ-Ring, zwei MQD-
+Seiten, zwei 4-KB-EOP-Seiten und den RLC-Bereich. v9_mqd hat 2048 Bytes,
+v9_mqd_allocation mit dynamischen Masken 2064 Bytes. KIQ nutzt MEC2/Pipe1/
+Queue0; die normale Compute-Queue MEC1/Pipe0/Queue0. KIQ SET_RESOURCES und
+MAP_QUEUES programmieren diese normale Queue. Der Treiber verlangt ihren
+wirklichen ACTIVE-Zustand und das exakte KIQ-Fence, bevor IB-Proben folgen.
+
+Grafik und Compute verwenden jeweils eigene 64-KB-Ringe. Zwei aufeinander
+folgende Kontext-Proben setzen unterschiedliche Context-/SH-Registerwerte,
+lesen diese in GPU-Speicher zurück und verlangen jeweils das passende
+64-Bit-Fence plus Ringverbrauch. Diese implementierten Proben sind Teil
+des späteren nativen Starts; auf dem Host werden ihre Antworten kontrolliert
+vorgegeben. In 0.80.11 fand keine Ausführung auf einer AMD-GPU statt.
+
+PM4 und Kontext-/Ressourcenbesitz
+--------------------------------
+R4AMD BACKEND_V1 wächst append-only auf Revision 3: encode_pm4_frame ergänzt
+Slot 3; die vorherigen Typen und Slots bleiben stabil. R4AmdPm4Frame ist
+64 Bytes groß. Eingabe, Ausgabepuffer und Written-Zähler müssen getrennt
+sein; ungültige Größe, Flags, Bereiche, Ausrichtung oder Kapazität verändern
+keine Ausgabe. Der Encoder erzeugt 48 Grafik- oder 32 Compute-Dwords.
+Encoderfeatures 27 sind ausdrücklich keine aktiven GPU-/Vulkan-Fähigkeiten.
+
+Frames enthalten NBIO-HDP-Wait, passende Pipeline-/Cachepakete, den VMID1-
+IB und ein exaktes 64-Bit-RELEASE_MEM-Fence. Grafik stellt Context-Control,
+Clear-State und PFP/ME-Synchronisation her. Vor jedem Grafik-Zeitstempel
+steht der dokumentierte GFX9-ZPASS_DONE-Workaround mit eigenem 256-Byte-
+Puffer. Compute-IBs setzen VALID. CP-Zeiger/Doorbells zählen Dwords; der
+unabhängige SDMA-Pfad zählt Bytes. RPTR wird auf die Ringgröße reduziert;
+zulässiger Fortschritt bleibt durch tatsächlich veröffentlichte Arbeit
+begrenzt. RPTR und IRQ sind kein Beweis für Daten- oder Fence-Abschluss.
+
+Der resident arbeitende Kontext-Eigentümer besitzt acht Kontexte und acht
+IB-Aufträge. Jeder Handle enthält Slot, Generation und Queue-/Reset-Epoche.
+Ein Kontext kann erst nach Ressourcenruhestand zerstört werden. Recycelte
+Slots akzeptieren keinen alten Handle. Scratch-Wellen benutzen 1-KB-Einheiten,
+LDS 512-Byte-Einheiten; Bereiche und echte Speichergröße werden begrenzt.
+GFX9-Compute erhält seinen Scratch-Deskriptor über User-SGPR0/1 und
+COMPUTE_TMPRING_SIZE, nicht über GFX11-Scratch-Basisregister. Bei GDS-Arbeit
+wird der Picasso-Wave-ID-Zähler 0x15f verwendet. Compiler-/Shader-Ressourcen
+müssen diese ABI und den vollständigen Kontextzustand in /13 liefern.
+
+Nach erfolgreichem Enqueue übernimmt der Treiber den bereits vom Provider
+gepinnten Ressourcen-Eigentümer und das exakte kanonische Fence. Höchstens
+ein IB je Grafik-/Compute-Engine wird pro Worker-Schritt eingereiht. High,
+Normal und Low werden berücksichtigt; spätestens nach acht anderen
+Dispatches erhält alte Arbeit Vorrang. IBs sind auf 2048 Dwords und maximal
+zwei Sekunden Auftragszeit begrenzt. Bereits laufende Shader werden dadurch
+nicht als präemptiert ausgegeben; Timeout setzt den Fehlerpfad in Gang.
+Der CPU-Worker wartet nicht unter einer globalen Grafik-Sperre auf die GPU.
+
+Die gemeinsame Timeline wird vor dem Doorbell armiert. Nach einem unsicheren
+Publish bleiben IB, PTE/TLB/DMA/BO und Kontext belegt. Ressourcenretirement
+wird bei API-Fehlern wiederholt, bereits erfolgreiche Teilfreigaben werden
+nicht erneut ausgeführt. Der gemeinsame Fence-Abschluss folgt erst danach.
+IRQ-Code sammelt weiterhin nur Metadaten; Queue-Arbeit bleibt beim Worker.
+
+Abbau und Fehler
+----------------
+Äußerer Shutdown beendet zuerst den Worker. GC fordert Compute-Unmap über
+KIQ und KIQ-Dequeue an, parkt CP/MEC/RLC und verlangt den tatsächlichen
+Halt-/Idle-Zustand. Ein Startabbruch vor MEC-Unhalt kann aus dem bestätigten
+HALT-Zustand abbauen. GC-Quieszenz betrifft nur Grafik/Compute und lässt die
+SDMA-Register beim SDMA-Eigentümer. Bestätigter Stillstand bleibt gültig,
+wenn spätere Ressourcen-/API-Freigaben weitere Aufrufe benötigen.
+
+Erst danach werden Queue-Adressen deaktiviert, Context-/Timeline-Ressourcen
+abgeschlossen und die Arena über den äußeren SDMA/Queue-Eigentümer freigegeben.
+Ein Timeout oder eine alte Epoche ist keine Quieszenz. Unklare Zustände
+behalten den Besitzer; der Reset-Eigentümer folgt in /30. Ursprüngliche
+BIOS-Command-Queues werden nach Firmwarewechsel nicht wieder gestartet.
+
+Nachweis und verbleibender Umfang
+--------------------------------
+AMDGPU: 16/16 Buildschritte, 22/22 Tests. Drei gebündelte neue Komponenten-
+fälle prüfen Originalpakete/MQD/Clear-State, tatsächliche Start-/Stop-
+Eigentümer mit kontrollierten Antworten sowie Kontext-/Prioritäts-/Fence-
+Fehler. R4AMD: 12/12 Schritte, 4/4 Tests einschließlich C/Zig-ABI und
+unveränderter Fehlerausgaben. R4GFX: 13/13 Schritte, 8/8 Tests; der gemeinsame
+Provider nutzt weiterhin die tatsächliche R4AMD-Aushandlung.
+
+Die Prüfung läuft im normalen Komponentenbuild, ohne neues globales Gate.
+Kein neuer Gastlauf ist erforderlich: Kernel/SDK bleiben unverändert;
+die normalen Treiber-/Profilpfade aktivieren die AMD-Hardware weiterhin
+nicht. Windows verwendet dieselben PowerShell-Skripte, wurde hier aber nicht
+ausgeführt. Hashes, Buildlogs und Grenzen stehen in der JSON-Begleitdatei.
+
+Diese Unterversion liefert die Ausführungsgrundlage für Rendering und das
+geplante Vulkan-Compute. AddrLib-/Flächenintegration folgt in /12, Compiler
+in /13, echte Renderarbeit in /14 und Grafik-API-/Desktop-Anbindung danach.
+Ein Shadercompiler, eine Vulkan-Implementation oder OpenCL/HIP/ROCm wird aus
+PM4-Compute nicht abgeleitet. Normaler Bind bleibt passiv und mode=native
+bis zur Displayintegration gesperrt. Nur /39 sieht den echten Laptoptest vor.

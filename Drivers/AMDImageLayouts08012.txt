@@ -1,0 +1,134 @@
+﻿AMD-Bildlayouts und Renderingprovider 0.80.12
+============================================
+
+Stand: 21.09.2026. AMDGPU 0.1.9, R4AMD 0.1.4, R4GFX 0.1.22,
+R4DESK 0.1.70, DISPLAYD 0.1.40. Kernel 0.1.202, Contract und SDK unverändert.
+Die physische Laptopabnahme bleibt ausschließlich Aufgabe von 0.80.39.
+
+Echte AddrLib und feste Schnittstelle
+-------------------------------------
+R4AMD.R4L bindet alle 16 originalen AddrLib-C++-Übersetzungseinheiten aus
+Mesa 26.2.2 ein. Das schließt die von der ursprünglichen Factory referenzierten
+älteren/neuen Familien ein; die öffentliche Laufzeit lässt ausschließlich
+Picasso 1002:15D8, GC9.1 und die bereits bestätigte externe ASIC-Revision
+0x41..0x48 zu. Andere kompilierte Familien sind keine freigegebenen Geräte.
+69 Mesa-Originale und 81 Linux-Originale bleiben bei ihren Besitzern gehasht
+und byteidentisch; ExportLegal enthält alle benötigten MIT-Notices.
+
+Zwei private C++-Adapter verbinden AddrCreate/Destroy, Addr2-Surface,
+Coordinate, DCC und HTILE mit festen Zig/C-Datensätzen. Jede Berechnung
+konstruiert und zerstört AddrLib in höchstens 64 KB caller-eigenem,
+16-Byte-ausgerichtetem Scratch. Eingaben, Ausgaben, Mips und Scratch müssen
+vollständig getrennt sein. Callback-Allokationen und exakte Freigaben werden
+begrenzt verfolgt. OOM, falsche Bereiche und unbekannte Formate/Modifier
+verändern keine Ausgaben. Es gibt keine gespeicherten Caller-Pointer,
+Heap-/TLS-/OS-Abhängigkeit, Exceptions oder RTTI. __cxa_pure_virtual ist ein
+Fehler-Trap; memcpy/memset/memcmp liefert die Compiler-Laufzeit.
+
+INFO_V1:1 und BACKEND_V1:3 behalten die bisherigen Typen, Konstanten und
+Funktionsslots. IMAGE_V1:1 ergänzt calculate, address, metadata, import_image
+und descriptors. Öffentliche Größen: Request 80, Layout 104, Mip 64,
+Coordinate 32, Address 24, Metadata 72, Import 80, View 96, Descriptors 120,
+Architecture 64 Bytes. AddrLib/C++-Typen verlassen den Adapter nicht.
+
+Geometrie, Formate und Einheiten
+-------------------------------
+Request resource_type: 0=1D, 1=2D, 2=3D. usage-Bits: Textur1, Farbe2,
+Storage4, Scanout8, Tiefe16. Maximal 16384x16384 Pixel, 2048 Slices,
+15 Mips, 1/2/4/8 Samples und 64 MB tatsächlich gepaddete Bilddaten.
+MSAA hat genau einen Mip; Volumen und 1D verwenden ein Sample.
+Pitch wird öffentlich in Bytes übergeben, Mip-Pitch in Elementen ausgegeben.
+Für BC werden Koordinaten in komprimierten Blöcken statt Pixeln angegeben.
+
+Unterstützt sind DRM XRGB/ARGB8888, XRGB/ARGB2101010, ABGR16161616
+Float/UNORM und R8. Private Format-IDs: D32_FLOAT=0x01000001,
+D16_UNORM=0x01000002, BC1/3/5/7=0x01000101/103/105/107. BC ist reine
+Textur; Tiefenbilder sind keine Farb-, Storage- oder Scanoutbilder.
+Mips, Arrays, Volumen, Alignment, Blockmaße, Mip-Tail und EPITCH kommen aus
+der echten AddrLib; die Bildgröße wird einschließlich Padding begrenzt.
+
+Modifier0 ist linear. GFX9-Modifikatoren für 64K_S/D und zulässige XOR-
+Varianten enthalten die aus GB_ADDR_CONFIG abgeleiteten Pipe-/Bankbits.
+Abweichende Topologie, unbekannte Bits und DCC-Modifikatoren werden abgelehnt.
+Weitere intern berechenbare Swizzles tragen UINT64_MAX als ausdrücklich
+nicht importierbaren Marker. Pipe-XOR ist in dieser Schnittstelle noch0.
+
+Picassos DCN1 verlangt für 32-Bit-Scanout Standard-Swizzles: Freigegeben sind
+linear, 64K_S und 64K_S_X, jeweils XRGB8888/XRGB2101010, ein Layer, ein Mip
+und ein Sample. Render-D-Swizzles sind hier keine Scanoutfreigabe. Das
+entspricht Dcn1NonBpp64SwModeMask im originalen gfx9addrlib.h. Die
+Scanout-Eignung des Layouts ersetzt noch keine aktive Display-Pipeline.
+
+DCC/HTILE liefern ausschließlich Metadatengröße, Alignment und Blockmaße.
+flags=0 bedeutet keine aktivierte Kompression. Für HTILE ist slice_bytes
+die echte Slicegröße; für GFX9-DCC bleibt es0. DCC fast_clear_bytes ist ein
+separater 64-Bit-Wert und darf nicht als ganze DCC-Slicegröße gelten.
+Metadaten werden weder alloziert noch programmiert; sämtliche DCC/CMASK/
+FMASK-Adressen und Kompressionsbits in ausgegebenen Deskriptoren sind0.
+
+Textur-, Sampler- und Farbzustand
+--------------------------------
+Die Spezialisierung folgt Mesa ac_descriptors.c/ac_formats.c; originale
+makeregheader.py/regdb.py erzeugen die verwendeten GFX9-Registermasken.
+Textur0..7, Sampler0..3 und Farbe0..15 sind feste DWORD-Felder. Farbe0..14
+entsprechen CB_COLOR0_BASE bis DCC_BASE_EXT; Farbe15 enthält den separaten
+EPITCH-Wert. Pixel-/Array-/Mipmaße, BGRA-Kanaltausch, XRGB-Alpha1,
+Format-/Zahltyp und 48-Bit-VA werden korrekt getrennt beschrieben.
+
+View first/last_layer und first/last_mip sind inklusive Grenzen.
+min/max_lod sind unsigned Festkomma mit 8 Nachkommabits, lod_bias signed
+mit 8 Nachkommabits. Sampler0/1 wählt nearest/bilinear; wrap0/1/2 wählt
+wrap/mirror/clamp; compare0..7 folgt der GPU-Funktionsnummer; aniso0..4
+ist log2 des Verhältnisses. Border0..2 sind vordefinierte Farben; eine
+Register-Border-Tabelle wird abgelehnt. Flags/reserved müssen0 sein.
+Ein 3D-View umfasst das ganze Volumen; geslicete 2D-Views und 3D-Farbviews
+mit anderem Basismip werden mangels separater Slice-Zustandsdaten abgelehnt.
+
+Vorhandene BACKEND_V1-Kopie/Füllung/PM4 werden weiterverwendet. Featurebits27
+bedeuten keine Tiled-SDMA-Kopie, keinen Shaderdispatch und keine Vulkan-
+Freigabe. IMAGE_V1 liefert die Bild-/Renderbeschreibungen für den in0.80.14
+folgenden vollständigen Renderer. INFO meldet Stage12 und Hardwarecaps0.
+
+Integration und Ressourcenbesitz
+--------------------------------
+AMDGPU bewahrt die bestätigte ASIC-Revision und liest GB_ADDR_CONFIG nach
+Golden-Initialisierung; der Vergleich mit GB_ADDR_CONFIG_READ berücksichtigt
+die reservierten Bits des originalen Raven-Golden-Masks. Vor Queueaktivierung
+meldet der Treiber Architecture über den gemeinsamen Backend-Properties-
+Vertrag: Vendor/Device/GC/SDMA, echte Adressgeometrie, 4-KB-Bindungsalignment,
+64-MB-Limit und Speicher-Epoche. Es gibt keine neue Kernel-API.
+
+R4GFX fragt die optionale IMAGE_V1 auf; Import, Erstellung und Residency-
+Wechsel nativer AMD-Bilder verlangen passende Architektur, Treiberprofil,
+Adapter/Speichergeneration, einzelne Plane, Pitch, Alignment und Größe.
+Die Layoutberechnung erfolgt im ausgerichteten eigenen Scratch, ohne die
+öffentliche Storage-Ausrichtung8 zu verändern. Nichtlineare AMD-Bilder
+fallen nicht in NVIDIA- oder CPU-Linearpfade zurück. CPU-Systembilder bleiben
+beim gemeinsamen Softwarepfad. R4DESK und DISPLAYD deklarieren IMAGE_V1
+optional; fehlende AMD-Module bleiben beim vorhandenen Softwarefallback.
+Normale AMDGPU-Bindung ist weiterhin passiv; mode=native bleibt bis zur
+Displayintegration gesperrt. Die CPU-Bibliothek allein aktiviert keine GPU.
+
+Prüfung und praktische Grenzen
+-----------------------------
+R4AMD-Normalbuild: 14/14 Schritte, 7/7 Tests, darunter drei zusammengefasste
+Fälle mit echten Addr2-Aufrufen. Geprüft sind unter anderem lineare/tiled
+Referenzmaße, Arrays, Volumen, Mips, MSAA-Sampleadressen, BC/HTILE,
+Registerfelder, OOM einschließlich Teilkonstruktion, Alias-/Bereichsfehler
+und unveränderte Fehlerausgaben. R4GFX: 14/14 Schritte,8/8 Tests; bestehender
+Providerfall prüft echte IMAGE_V1, fehlenden Import, DCC und stale Epochen.
+AMDGPU:16/16 Schritte,22/22 Tests. Desktop/DISPLAYD jeweils6/6 Buildschritte.
+
+Der kurze SMP4-Gast führt DISPLAYD /AMDIMAGE in der geladenen R4AMD.R4L aus
+und prüft damit tatsächliche Relokationen, C++-VTables und Callback-Nutzung.
+Referenzprofil0x24000042 ist dabei ausdrücklich synthetisch, kein gemessener
+Laptopwert. Ein zweiter kurzer SMP4-Boot startet den vorhandenen Desktop-
+Window-Idle-Smoke über seine eigene Shell-Konfiguration. Terminal Mode
+erlaubt den direkten R4DESK-Start mit Smoke-Argumenten bewusst nicht.
+Ergebnis und Artefakt-/Quell-/Loghashes stehen in AMDImageLayouts08012.json.
+Keine physischen Probes, kein neuer globaler Build-Gate, kein Langlauf.
+
+Beide Hoststarter benutzen gemeinsame PowerShell-7-Logik; das echte
+freestanding Archiv ist ELF, Windows-Hosttests erhalten COFF. Linux ist
+geprüft, Windows noch nicht ausgeführt. Dieser Softwarestand belegt keine
+Ausführung auf Picasso, keine aktivierte Kompression oder Displayausgabe.

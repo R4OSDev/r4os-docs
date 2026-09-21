@@ -1,0 +1,97 @@
+﻿AMD: Display Core und DCN1 - 0.80.15
+===================================
+
+AMDGPU 0.1.11 bindet den echten DCN1-Frontend- und Bandbreitenpfad in
+AMDGPU.R4D ein. Der Kernel bleibt bei 0.1.202. Normale Treiberbindung bleibt
+passiv; die Ausgabeübergabe folgt nach Panel und HDMI in 0.80.18. Dieser
+Schritt führt keinen physischen Test aus. Der Laptop bleibt ausschließlich
+Gegenstand der Schlussabnahme 0.80.39.
+
+Quellumfang und Anbindung
+------------------------
+Der bisherige einzelne Mathematik-Port wird durch ein natives Archiv mit
+23 unveränderten AMD-Übersetzungseinheiten aus Linux 7.2.4 und drei privaten
+R4OS-Brücken ersetzt. Enthalten sind DCN1 HUBP, HUBBUB, DPP, OPP, MPC, IPP,
+Timinggenerator, ursprüngliche DML-/Bandbreiten-/Request-/Deadline-Rechnung,
+Fixpunktkonvertierung, Ressourcen- und Skalierungshelfer. Registertabellen
+verwenden die originalen Offsets, Segmentbasen, Masken und Shiftwerte.
+
+270 unterschiedliche Originaldateien einschließlich BIOS-/Linktypen und
+Protokollkonstanten sind mit Hash und Lizenz katalogisiert. Neuere IP-Typen
+sind teilweise transitive Headerabhängigkeiten; ihre Konstruktoren werden
+nicht eingebunden. Genau ein dokumentierter Patch wählt im Buildbaum den
+ursprünglichen DCN1-DPP-Skalierer statt des neueren SPL-Zweiges. Unveränderte
+Originale bleiben erhalten. Kein Linux-Scheduler, DRM-Laufzeitpfad, TTM,
+Kernelallocator oder Linux-FPU-Wechsler wird eingebunden.
+
+Die private C-Grenze enthält ausschließlich feste Ganzzahltypen und
+R4OS-Callbacks. Eine zusammenhängende Heapallokation besitzt den großen
+DC-Zustand und alle eingebetteten Frontendobjekte; deren Größe wird direkt
+aus dem kompilierten C-Typ ermittelt und auf 8 MB begrenzt. Ungeplante
+Upstream-Allokationen oder Freigaben eingebetteter Objekte sind fatale
+Programmierfehler. MMIO, monotone Zeit und begrenzte Wartezeiten kommen aus
+dem bereits vorhandenen Treibervertrag.
+
+Genau eine dedizierte SIMD-fähige, abbrechbare Treiber-Task führt jeweils
+Prepare, Commit oder Abort aus. Jeder C-Aufruf prüft den tatsächlichen
+Taskauftrag und seinen Besitzer. Kein FPU-Code läuft in IRQ oder Kernel.
+Ein fataler ASSERT entfernt zuerst den dynamischen C-Kontext und bricht
+die eigene Task ab; ein Hardwaretimeout behält den Zustand zur Diagnose
+und Wiederherstellung. Nach einem MMIO-Fehler folgen keine weiteren Writes.
+
+Planung und Lebensdauer
+----------------------
+Die C-Planung unterstützt bis zu vier unskalierte lineare ARGB8888-Planes,
+je eine pro Pipe. Sie prüft Timings, Pitch, 48-Bit-Adresse und Ausdehnung,
+führt erst die reine Bandbreitenvalidierung aus und lehnt Pipesplitting ab.
+Erst der zweite originale DML-Durchlauf berechnet Request-/DLG-/TTU-Register,
+DISP-/DPP-Takte und Watermarks. Prepare führt keinen Registerzugriff aus.
+Die tatsächliche GB_ADDR_CONFIG kommt aus dem bereits verifizierten GC-Owner;
+die Kanalzahl stammt aus dem ATOM-Boarddatensatz.
+
+DCF-, Fabric- und SOC-Takt müssen zum bestätigten Betriebspunkt passen.
+DISP-/DPP-Werte der Eingabe sind Grenzen; der spätere Clock-/Linkbesitzer
+muss die geplanten tatsächlichen Takte und den DPP-Teiler bestätigen.
+Referenzwerte allein sind kein Nachweis eines laufenden Hardwaretakts.
+
+Der erste R4D-Auftrag bindet ausschließlich die gehaltene ursprüngliche
+Bootplane ein. Er hält einen zusätzlichen Engine-Besitz an GMC/MMIO/UMA.
+Commit setzt seine Wirkung bereits vor dem ersten Clock-/Link-Callback.
+Alle vier Frontends müssen angefordert und tatsächlich stillstehen und
+HUBP muss Blank bestätigen, bevor gemeinsame MPC-/Watermarkwerte geändert
+werden. MPC-Idle und Clock-On werden mit Frist abgefragt. Danach folgen
+Timing, RQ/DLG/TTU, Surface/Viewport, DPP-Takt und -Bypass, MPC-Verbindung,
+RGB-Format und Planeadresse. Die Ausgabe bleibt deaktiviert.
+
+Abort prüft Stillstand und verlangt eine ausdrückliche vollständige
+Wiederherstellung durch den Clock-/Linkbesitzer, einschließlich HUBBUB.
+Der vorhandene Bootregistervergleich ist eine zusätzliche Prüfung und
+ersetzt dieses ACK nicht. Bei partiell fehlgeschlagenem Prepare gilt
+dieselbe Wiederherstellungspflicht, auch ohne Frontendprogrammierung.
+Ausstehende Task-Joins, Taskfreigaben, Restore- oder Heapfreigaben halten
+die zugehörigen Ressourcen. Der normale Shutdown schließt diesen Besitzer
+vor SDMA, GMC und dem Boot-Hold. Produktive Umschalthooks folgen in /18.
+
+Nachweis und Grenzen
+-------------------
+Der normale AMDGPU-Build prüft Quellen, Patch, Firmware und Register,
+kompiliert das gesamte Archiv und bindet es in den R4M0-Treiber ein.
+Zwei zusammengefasste Hostfälle verwenden exakt dieses Archiv sowie den
+produktiven Zig-Besitzer. Sie prüfen Planung, ungültige und zu große Modi,
+falsche Task, eine aktive fremde Pipe, verspäteten Stillstand, Clocktimeout,
+MMIO-Fehler, echte Timing-/MPC-Programmierung, partielle Heapallokation und
+verzögerte Join-/Release-/Restore-Antworten. Die RAM-/Taskantworten sind
+ausdrücklich modelliert; sie beweisen keine GPU-Ausgabe oder Kernel-Task.
+
+Artefakt-, Quell-, Lizenz- und Loghashes sowie die gemessenen Buildresultate
+stehen in AMDDisplayCore08015.json. Es entsteht keine zusätzliche globale
+Testsuite. Dieser CPU-/Treiberport benötigt keinen weiteren QEMU-Gastlauf;
+physische IRQ-, Link-, Takt- und Displaywirkung bleibt unbelegt. Der
+Linux-Pfad wird ausgeführt, der gemeinsame Windows-Pfad bleibt ungetestet.
+Panel/AUX/Training/PWM, HDMI, Ausgabeaktivierung/Present, Mehrschirm und
+Farbverwaltung behalten ihre geplanten Folgeschritte.
+
+Alle AMD-MIT-Hinweise, SPDX-MIT-Kurznotizen mit vollständigem Originaltext
+und Keith Packards ursprüngliche drm_dp.h-Lizenz werden geprüft und als
+AMDGPU-SOURCE-NOTICES.txt für die Distribution exportiert. Fremdmaterial
+wird nicht umlizenziert; originale R4OS-Anbindung bleibt Apache-2.0.

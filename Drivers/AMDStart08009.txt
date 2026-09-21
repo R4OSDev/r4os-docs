@@ -1,0 +1,146 @@
+﻿AMD PSP10/SMU10 und kontrollierter Start 0.80.9
+==============================================
+
+Stand: 21.09.2026. AMDGPU.R4D0.1.6, Release0.80.9.
+Besitzer: externer AMDGPU-Treiber. Keine Kernel-/SDK-/ABI-Änderung.
+Kernel0.1.201 bleibt unverändert. Physische Ausführung nur in0.80.39.
+
+Start und belegter Funktionsumfang
+---------------------------------
+main.beginNative bereitet den vorhandenen Memoryowner vor und bindet den
+residenten start_runtime.Owner an das unverändert zugelassene Picasso-Profil.
+Der Aufruf ist ein interner Einstieg für den folgenden Engine-/Displayworker.
+Der normale Bindpfad bleibt passiv; mode=native wird weiterhin abgewiesen,
+IMAGE_SCOPE=none und native Capabilities=0. Das ist eine implementierte
+Firmware-Startstufe, noch keine vollständige Grafikausgabe oder Device-ready.
+
+Reihenfolge: eigenes UMA-Arbeitsfenster, frischer kanonischer Boot-Hold,
+gemessener DCN-Guard, erneuter PCI-/Firmwareprofilvergleich, Effektsperre,
+PCI Memory/Busmaster, SMU-Version und Driver-Interface, DisableGfxOff,
+Bestätigung PWR_GFXOFF_STATUS=2, PowerUpSdma, CP/MEC/SDMA/RLC-Halt samt
+Readback/Idle/SERDES, PSP-Ring, TMR, zwölf Core-Firmwareabschnitte, ASD.
+Displayclocks, Paneltraining, DMCU, VCN und optionale TAs werden hier nicht
+umprogrammiert. Ihre Besitzer folgen in den bereits geplanten Schritten.
+SOS/SMU stammen bei PSP10 aus der Plattformfirmware; weder moderne
+RLC-Autoload-Kommandos noch ein nicht unterstützter PSP10-Mode1-Reset werden
+angenommen. GFX/SDMA werden aufgeweckt, ihre Befehlsprozessoren bleiben bis
+zur Einrichtung der tatsächlichen Ringe durch /10–11 kontrolliert angehalten.
+GMC/IH-Aktivierung wird dabei mit den vorhandenen Besitzern zusammengesetzt.
+
+firmwareReady verlangt die passende Phase, fehlerfreie SMU-Version/Interface,
+bestätigte Engine-Parkzustände, Ring/TMR/ASD und jede einzelne Firmwareantwort.
+Ein Firmwarestatus ersetzt weder Ring-Selbsttest, GMC/IH-Bereitschaft noch
+Displayübernahme. Bis diese Voraussetzungen erfüllt sind, wird keine
+Device-ready-Meldung oder zusätzliche Grafikfähigkeit publiziert.
+
+Originalverträge und Speicher
+----------------------------
+73 unveränderte, hashgesicherte AMD-MIT-Originaldateien; 17 Ergänzungen zu/8.
+VerifyStart.ps1 ist Teil des normalen Builds. Entscheidend ist die tatsächlich
+von vega10_reg_base_init benutzte IP_BASE.instance-Tabelle: MP1 Segment0 ist
+0x16000 Dwords. Das ähnlich benannte Makro enthält0x16200 und wäre hier falsch.
+MP1 C2PMSG66 liegt deshalb bei Byteoffset0x58a08. Der Abgleich der früheren
+Speicher-/IH-Basen ergab keine entsprechende Abweichung. Sämtliche neuen
+Register liegen im bereits zugelassenen BAR5-Präfix0x6b000.
+
+Der vorhandene 16-MB-UMA-Bereich enthält eine natürlich auf4MB ausgerichtete
+4-MB-TMR. Ab Offset8MB folgen 4KB GPCOM-Ring, 4KB Kommandoseite, 4KB Fence
+und 512KB wiederverwendbares Staging. TMR, Ring und Staging bleiben disjunkt;
+CPU-physische UMA- und MC-Adressen werden getrennt berechnet. Beide TMR-
+Adressen sind tatsächlich ausgerichtet. 1MB=1024KB. TMR wird ausschließlich
+vor SETUP_TMR CPU-seitig genullt, nicht während PSP-Eigentum oder unklarem
+Abbau. Firmware-/Startbesitzer blockieren den übergeordneten Speicherabbau.
+
+start_wire.h prüft die Originalstrukturen per C-Static-Assert: 1024Byte
+Kommando, Argumente bei28, Antwort bei864/96Byte, 64Byte Ringframe,
+Fenceadresse bei12, Token bei20, TMR-Flags bei12 und Systemadresse bei16.
+GPCOM lässt wie die Referenz BufSize/BufVersion/Frame-CmdSize und RBI-Felder
+null. Alle Werte sind Little Endian. SETUP_TMR übergibt MC-Adresse,4MB,
+virt_phy_addr-Bit1 und die davon verschiedene physische UMA-Adresse.
+
+Uploads: SDMA0, CE, PFP, ME, MEC1-Code/JT1, MEC2-Code/JT2, ausgewählte
+FP5-/AM4-RLC-CNTL/GPM/SRM und RLC-G. MEC-Code enthält die separate Sprungtabelle
+nicht nochmals. Nichtleere zurückgelieferte Firmwareadressen müssen in der
+wirklichen TMR liegen; MEC-Instruktionsadressen müssen vorhanden sein. ASD
+folgt mit SharedBuffer=0 entsprechend PSP10. VCN-/DMCU-/TA-Dateien bleiben
+vollständig im zugelassenen CPU-Paket für die späteren IP-Besitzer erhalten.
+Originale SHA256, Header, Bereiche und Profilentscheidung aus/6 bleiben
+maßgeblich; ein Dateiname alleine genügt nicht.
+
+Warten und Fehler
+-----------------
+Jeder Schritt führt begrenzte Registerarbeit aus und gibt an seinen
+präemptiblen Aufrufer zurück; kein Schlaf/Spin unter einem No-Sleep-Owner.
+SMU prüft vorherige Antwort, löscht sie, schreibt Argument/Message und
+akzeptiert ausschließlich PPSMC_Result_OK=1. FehlerFF/FE/FD/FC bleiben
+sichtbar. Firmwareversion wird wie im Original um8Bit verschoben;
+Driver-Interface6 oder7 wird zugelassen. SMU-Frist500ms, PSP-Ring500ms mit
+mindestens20ms Handshakeabstand, jedes PSP-Kommando2s, gesamte Startfolge35s,
+Abbauversuch8s; zusätzlich höchstens1.000.000 Pollschritte pro Frist.
+Rückläufige oder überlaufende Uhren und verschwundene Register schlagen fehl.
+
+PSP schreibt in GPCOM-Dwordeinheiten und benutzt einmalige monotone Tokens.
+Vor Wiederverwendung werden Kommando/Frame und Fence genullt beziehungsweise
+vergiftet. HDP-Flush und Readback stehen vor Publish; HDP-Cache-Invalidate
+und doppelte exakte volatile Fenceprüfung vor dem Lesen der PSP-Antwort.
+Ein alter Token oder ein IRQ ist kein Abschluss. Nichtnull-Antwortstatus
+meldet Fehler. Ein Timeout löscht weder Auftrag noch mögliche TMR-Wirkung.
+Späte Antworten dürfen nur zum Abbau beobachtet werden. retryCleanup beginnt
+einen weiteren begrenzten Abbauversuch ohne Resetbehauptung/Neuübermittlung.
+
+Jeder Teilfehler führt in dieselbe Drain-/Abbruchfolge: ausstehende SMU/PSP-
+Antworten klären, GC/SDMA/RLC erneut parken, ASD entladen, TMR zerstören,
+PSP-Ring mit bestätigter Handshakefrist stoppen, PCI-Command zurückstellen,
+UMA-Mapping abbauen und Boot-Hold nach Scanoutbeweis beenden. Statushälfte
+von PCI-Command/Status wird wegen W1C mit0 geschrieben. Unklare Hardware,
+fehlender Stillstand, verlorenes Gerät oder fehlgeschlagene API-Freigabe
+behält den betreffenden Besitzer und verhindert Entladen. Neue Engine-/VM-
+Besitzer müssen zuerst ihren DMA-/GMC-Abbau abschließen; der Firmwareowner
+überspringt deren Retention nicht. Alte BIOS-Ringe werden nicht mit neuer
+Firmware wieder eingeschaltet; GFXOFF bleibt bis zur späteren Powerpolitik
+unter Treiberkontrolle. Der softwarebasierte Bootscanout bleibt unabhängig.
+
+Bootdisplay und Rückgabe
+------------------------
+Der Guard liest vier DCN1-HUBP/HUBPREQ-, MPCC- und OTG-Sätze. Mindestens eine
+aktive lineare, unkomprimierte32Bit-Fläche muss Primär- und InUse-Adresse des
+ermittelten Boot-MC-Bereichs mit richtigem Pitch und aktivem OTG zeigen.
+Ausstehende Flips, fremde Formate oder unbestätigte Zuordnung werden vor
+Effekten abgewiesen. Spätere Vergleiche umfassen Adressen, Format, Pitch,
+Tiling, Flips, Routing, OTG-Steuerung und Timings; flüchtige Vblank-/Request-
+Statusbits in HUBP_CNTL werden gezielt ausgeblendet. Dieser Guard schreibt
+keine DCN-Register und ersetzt keinen späteren Modeset-/Trainingsbesitzer.
+
+bootFinish(1) wird vor möglichen Effekten gelatcht. bootFinish(2) bekommt
+den echten residenten Restorecallback. Der Kernel beschreibt dort die
+pending Holdgeneration und den Preparing-Zustand, nicht die frühere
+Bootgeneration. Callbackgeneration und unveränderte Geometrie/Mapping werden
+getrennt geprüft. Erst bei bestätigtem Firmware-/DMA-Abbau, zurückgestelltem
+PCI-Command und unverändertem hardwaregelesenem Scanout bestätigt der
+Callback die Rückgabe; der gemeinsame Besitzer kopiert die unveränderliche
+Pixelsicherung zurück. Bei verändertem Display bleibt der Hold bestehen.
+Ein nach erfolgreicher Holdrückgabe fehlgeschlagenes BO-Release wiederholt
+die Hardwarewiederherstellung nicht. Startbesitz bleibt bis zur letzten
+Freigabe resident und hält auch Register/Memoryowner verfügbar.
+
+Prüfung und Grenzen
+-------------------
+Vier neue gebündelte Fälle in der bestehenden AMDGPU-Komponentenabnahme:
+- Originale Firmwarebytes/-abschnitte, C-Drahtformat, echte Register und
+  Startfolge; expliziter Abbruch an jeder Vorwärtsphase, beide SMU-Interfaces.
+- SMU-Fehler, fremdes Interface, PSP-Ablehnung, ungültige TMR-Adresse, alte
+  Fencewerte, Timeout/Spätantwort, Clockrücklauf und Geräteverlust mit Retention.
+- Gelesener DCN-Guard ohne Schreibzugriff; Vblank, veränderte Adresse/Routing,
+  ausstehender Flip und DCC-Fläche.
+- Reale SDK/MMIO-Adapter, kanonischer Boot-Hold mit tatsächlicher Recovery-ABI,
+  PCI-Busmaster, Storage-/BO-Retention, fehlgeschlagene Freigaben und partieller
+  PCI-Schreibfehler. Hier sind Hardwareantworten RAM-Fixtures, kein GPU-Lauf.
+
+Normalbuild einschließlich aller16 AMDGPU-Fälle, Container-/Ressourcen-/Hash-
+und Originalquellenprüfung. Bytegleiche Lizenz-/WHENCE-Stage und vollständige
+Source-Notices. Keine neue globale Gatekette, kein unnötiger Kernel-/SDK-Build
+und kein zusätzlicher Gastlauf bei unveränderter ABI. Der frühere SMP4-Beleg
+für die generischen Speicherverträge aus/7 bleibt getrennt dokumentiert.
+Keine Aussage über tatsächliche Picasso-Firmwareausführung oder Laptop-
+Stabilität; genau diese physische Abnahme ist weiterhin ausschließlich/39.
+Artefakthashes, Quelldateien und genaue Prüfergebnisse stehen in AMDStart08009.json.

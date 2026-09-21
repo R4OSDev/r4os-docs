@@ -1,0 +1,112 @@
+﻿AMD SDMA und Ressourcenkopien 0.80.10
+====================================
+
+Stand: 21.09.2026. AMDGPU 0.1.7, R4AMD 0.1.2, R4GFX 0.1.20,
+Kernel 0.1.202. Besitzer: externer Treiber und bestehende Libraries.
+Die zentrale ABI und das SDK bleiben unverändert. Physischer Test nur /39.
+
+Implementierter Pfad
+-------------------
+R4AMD Source/copy.zig ist der gemeinsame, allokationsfreie SDMA4.1-Encoder
+für R4AMD.R4L und AMDGPU.R4D. BACKEND_V1 wächst append-only auf Revision 2:
+Aushandlung bleibt in Slot 0; encode_copy und encode_fill folgen in 1/2.
+Alle früheren Typen, Slots und Zahlen bleiben stabil. Die neue Bibliothek
+meldet reine Encoderfähigkeiten für lineare/zeilenweise Kopien und 32-Bit-Fills,
+48-Bit-GPU-Adressen und höchstens 2048 Dwords. Tiled/Layout-/Render-/Media-
+Fähigkeiten werden daraus nicht abgeleitet. Der tatsächliche Treiber muss
+die passenden Operationen zusätzlich über den gemeinsamen Vertrag anbieten.
+
+Lineare COPY-Pakete enthalten sieben Dwords und höchstens 4 MB Nutzdaten
+(1 MB = 1024 KB). FILL32 verwendet fünf Dwords und höchstens 4 MB minus 4
+Bytes je Paket. Rechteckige Linear-Subwindow-Kopien brauchen 13 Dwords;
+32-Bit-Elemente werden bei passender Ausrichtung benutzt, sonst Byteelemente.
+Konservative Grenzen: 16384 Elemente pro Pitch/Breite und 16384 Zeilen.
+Ungeeignete Pitches benutzen begrenzte lineare Zeilenpakete; Überschreiten der
+Kommandokapazität wird vor Ausgabe erkannt. Zusammenhängende Zeilen werden
+zusammengefasst. Überlappende GPU-Spannen, Null-/Überlaufbereiche und Modifier
+ungleich null schlagen fehl. Auch ABI-Ein-/Ausgabepointer müssen disjunkt sein.
+Ein Fehler verändert weder Kommandopuffer noch geschriebenen Längenzähler.
+
+Der interne native Startpump setzt nach bestätigtem PSP/SMU-Start GMC, die
+explizite VMID1-Abbildung der IB-Arena und SDMA zusammen. Der Ring selbst
+verwendet die reale MC-Adresse in VMID0. SDMA0 erhält einen 64-KB-Ring,
+Read-/Writebackadressen, NBIO-Doorbellbereich und tatsächliche SDMA4.1-Felder.
+Doorbell und Readpointer sind monotone 64-Bit-Bytezähler, nicht modulo
+Dwordwerte. Indirect-Pakete enden auf einer Acht-Dword-Grenze. HDP-Flush,
+NOP-Drain, 64-Bit-Fence und optionaler Trap sind vollständig eingebunden.
+
+Vor Backendregistrierung muss ein eigener IB-Test echte Fill- und Kopierdaten,
+den exakten vergifteten Fence und vollständigen Ringverbrauch nachweisen.
+Ein IRQ oder allein ein Readpointer genügt nicht. Erst danach wird der
+kanonische Copy-/Copy-rows-Backend registriert und der vorhandene IH-/Worker-
+Besitzer gestartet. Der Selbsttest löst vor IH-Registrierung keinen Trap aus.
+Private native Start-/Pump-Einstiege sind im R4D enthalten, kein App-API.
+
+Der normale Bindpfad bleibt passiv, IMAGE_SCOPE=none und mode=native gesperrt,
+bis die nachfolgenden Display-Unterversionen die vollständige Übernahme
+integrieren. Diese Unterversion behauptet keinen auf Hardware ausgeführten
+SDMA-Test oder fertigen Desktop. Der Shader-/GFX9-Besitzer folgt in /11.
+
+BOs, Synchronisation und Abbruch
+-------------------------------
+Der bestehende gemeinsame Queuevertrag hält die Ausführungsleases. AMDGPU
+übernimmt seine zusätzlich erhaltenen backing-only Referenzen direkt; er
+importiert sie nicht nochmals und benutzt sie nicht für CPU-Mapping oder
+weitere Ausführungsrechte. Acht residente Transferplätze halten höchstens
+64 MB pro BO, Quell-/Ziel-PTEs und die genaue Fenceidentität. Identische BOs
+werden auch bei verschiedenen Offsets konservativ abgewiesen. Native UMA-
+Referenzen müssen zum tatsächlichen Adapter und separaten Memoryepoch passen.
+
+System-BOs dürfen eine letzte Teilseite besitzen. Das bisher strengere
+Kernel-Mapping nimmt nun diese letzte logische Teilseite an: Offset und GPU-VA
+bleiben seitenweise ausgerichtet; eine nicht volle Länge darf nur am BO-Ende
+liegen. Die Lease bleibt beispielsweise exakt 5001 Bytes, niemals erfundene
+8192 Bytes. Der vorhandene BO-Allocator besitzt weiterhin beide ganzen
+physischen Seiten; die reale DMA-Segmentabfrage liefert zuletzt 905 Bytes.
+Innen liegende Teilseiten, Überschreitungen und veränderte Ausrichtungen werden
+abgewiesen. Es gibt weder eine neue ABI-Struktur noch einen zweiten RAM-Pool.
+
+PTE-Publish und beide GMC-TLB-ACKs gehen der GPU-Residency-Lease voraus.
+Der Worker behält Quelle und Ziel bis zum genauen Timeline-/Point-/Device-/
+Reset-Fence. Vor Doorbell wird der Job scharfgestellt; ein danach unklarer
+Schreibzugriff ist nicht lokal rückgängig zu machen. Aufgelaufene Fristen und
+alte Tokens geben nichts frei. Abschluss passiert ausschließlich außerhalb
+IRQ und in der Reihenfolge Fence, PTE-Entfernung, beide TLB-ACKs, GPU-Lease,
+DMA-Pin, BO-Referenz, gemeinsame Jobfertigmeldung. Fehlgeschlagene Teilschritte
+bleiben wiederholbar; bereits erfolgreiche Freigaben werden nicht wiederholt.
+
+Shutdown schließt Benachrichtigungen und stoppt zuerst den Worker und wartet auf dessen Ende.
+SDMA-Halt muss Readback sowie Core-/MC-Read-/MC-Write-Idle nachweisen; zusätzlich
+werden die getrennten GC/MEC/RLC-Parkzustände bestätigt. Danach folgen Job-,
+IRQ/IH-, Arena- und Backendabbau. Die gemeinsame Doorbellapertur wird erst nach
+IH-Freigabe zurückgesetzt. Ein begrenztes Journal sichert die vom GMC-Start
+wirklich geänderten Register. Kommandoregister werden nicht zurückgespielt;
+ursprüngliche Aperturen/Pagetables werden vor den VM-Enablefeldern restauriert
+und zurückgelesen. Bereits bestätigte Parkzustände bleiben bei späteren
+API-Freigabefehlern gültig; der Ressourcenabbau wiederholt keine abgelaufene
+Hardwarewartefrist. Erst danach darf der bestehende PSP-/Boot-Hold-Besitzer
+weiter abbauen. Unbestätigter Stop oder Restore hält Modul und Ressourcen fest.
+
+Quellen und Nachweise
+---------------------
+AMDGPU pinnt jetzt 74 unveränderte Linux-AMD-MIT-Originale. VerifyStart.ps1
+prüft zusätzlich die Ring-/NBIO-/HDP-Felder in den ursprünglichen Headers.
+Die Paketprüfung benutzt Original-C-Makros. R4AMD ergänzt die drei Mesa-
+Originale ac_cmdbuf_sdma.c/.h und sid.h. SHA256, Originalnotices und vollständige
+MIT-Texte bleiben erhalten; R4AMD-NOTICES.txt ist neu im Distributionsplan.
+
+Gebündelte bestehende Builds prüfen Originalpakete, Copy-/Fill-Grenzen,
+Pitches, Overlap, Alias-Ausgaben, Ringwrap/Byteeinheiten, fehlgeschlagene
+Doorbells, Teilseiten, alte Generationen, verspätete Fences, TLB-Timeouts,
+fehlgeschlagene API-Freigaben und die Start-Selbsttestbedingungen. Diese
+GPU-Antworten stammen aus RAM-Fixtures; sie sind kein Picasso-Emulator.
+R4GFX verwendet die tatsächliche R4AMD-Aushandlung im vorhandenen Provider-
+Integrationstest, einschließlich fehlender Treiberfähigkeiten und gemeinsamem
+Upload-/Readback-/Ressourcenbesitz. Eine neue globale Gatekette entfällt.
+
+Der gezielte SMP4-Gast prüft den tatsächlich gebauten Kernel mit realen
+kanonischen BOs: 5001-Byte-Länge, 905-Byte-DMA-Endstück, GPU-Residency-Metadaten,
+Abweisung innerer Teilseiten und Freigabe erst mit Quieszenznachweis. Der Probe
+programmiert keine GPU-PTEs und reicht keine GPU-Kommandos ein. Zusätzlich läuft
+der kurze Software-Desktop-Smoke. Der private Probe bleibt unter Temp/.
+Genaue Ergebnisse, Quellen-/Artefakthashes und Grenzen: AMDSDMA08010.json.

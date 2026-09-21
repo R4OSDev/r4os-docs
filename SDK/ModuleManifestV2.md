@@ -29,7 +29,7 @@ library tables.
 `size`/ReleaseSmall. A measured module-local hot path may select
 `speed`/ReleaseFast; the choice does not alter ABI, imports or image scope.
 
-`NATIVE_ARCHIVE=NAME` declares an ordered native archive for a Zig R4L.
+`NATIVE_ARCHIVE=NAME` declares an ordered native archive for a Zig R4L or R4D.
 Names are unique without regard to case and use the module name syntax.
 The owning build maps each declaration to one tracked `LazyPath` with
 `addR4MFWithOptions(..., .{ .native_archives = &.{archive} })`. Missing or
@@ -37,6 +37,9 @@ extra mappings fail. Archives must be freestanding ELF with R4OS-supported
 relocations; no host library search is implied. R4NAK uses this for its
 pinned C/Rust compiler. Its common PS7 builder produces the archive on
 Windows or Linux; ordinary applications do not acquire these toolchains.
+AMDGPU uses the same mapping for R4AMD's freestanding AddrLib/render archive
+from 0.80.14. Rebuild the SDK host tools after changing manifest admission
+before invoking an image plan with the installed ModuleCatalog.
 
 For optional native weak entrypoints, R4XBuilder preserves an already linked
 NULL pointer only when the ELF still identifies a weak undefined symbol and

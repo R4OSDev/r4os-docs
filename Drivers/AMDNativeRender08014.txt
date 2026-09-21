@@ -1,0 +1,146 @@
+﻿AMD: native Renderarbeit - 0.80.14
+=================================
+
+Stand und Besitzer
+------------------
+R4AMD 0.1.5 stellt echte GFX9-Pipeline-/Drawencoder und sechs mit R4ACO
+kompilierte Shader bereit. AMDGPU 0.1.10 bindet dieselbe AddrLib-/Render-
+Implementierung statisch ein und führt normale Renderaufträge über seinen
+GC-Worker aus. R4GFX 0.1.23 vermittelt gemeinsame Operationen und native
+YUV-Ressourcen. R4ACO 0.1.2 ergänzt den begrenzten 2D-Texturvertrag.
+DISPLAYD 0.1.42 prüft die tatsächlich geladenen CPU-Bibliotheken.
+
+Der Stand ist durch Hostprüfungen und einen kurzen SMP4-Gastlauf belegt.
+Es gibt noch keinen Nachweis gerenderter Pixel auf Picasso. Native Bindung
+bleibt bis zur Displayintegration gesperrt; AMDGPU/R4AMD/R4ACO behalten
+IMAGE_SCOPE=none. Ausschließlich 0.80.39 enthält den echten Laptoptest.
+Der Kernel bleibt unverändert bei 0.1.202. WINSVC, Desktop und gemeinsame
+BO-/Queue-/Fence-Verträge behalten ihre bisherigen Besitzer.
+
+Echte Shader und Registerarbeit
+------------------------------
+R4ACO nutzt die originalen Mesa-26.2.2-SPIR-V-/NIR-/ACO-Passes. Resource-ABI1
+behält sechzehn Bufferdeskriptoren in Set0 und die Push-Konstanten. Flag
+request_textures wählt ABI2: vier 64-Byte-Einträge ab Byte256 für Set1,
+je acht Image- und vier Sampler-DWORDs plus reservierter Bereich. Direkte
+2D-Bindings unterstützen Sampling, explizites LOD und Texelfetch. Arrays,
+Shadow, MSAA, nonuniform Bindings und Storage Images werden abgewiesen.
+Die Passfolge senkt auch Divisionen, Interpolation und späte Algebraik real
+ab. Diese begrenzte native ABI ist noch kein allgemeiner Vulkan-Vertrag.
+
+R4AMD bewahrt sechs eigene GLSL-/SPIR-V-/GFX902-Programme samt Metadaten:
+
+  Profil  Shader                     Codebytes  SGPR  VGPR
+       0  Fullscreen-Vertex                  84    16     4
+       1  Vertex-Pulling                     68    16     4
+       2  Füllung                            60    16    24
+       3  Sampling/Text/Alpha/Skalierung    1268    32    24
+       4  Farbtransformation               4124    32    24
+       5  NV12/P010/YUV420P                 4828    48    48
+
+Tools/Shaders.ps1 kompiliert beim expliziten Regenerieren jedes Programm
+zweimal mit glslang15.2.0 und dem echten R4ACO-Worker. Code und normalisierte
+Metadaten müssen identisch sein; normale Builds prüfen alle Hashes. Die
+Programme benötigen weder Scratch noch LDS noch ungelöste ACO-Symbole.
+Kein Frame startet den Compiler. LLVM19/GFX902 disassembliert die echten
+Programme unabhängig; Hashes und beobachtete Befehle stehen im JSON-Beleg.
+
+RENDER_V1:1 ergänzt INFO/BACKEND/IMAGE ohne Änderung ihrer bisherigen Slots.
+Die Tabelle liefert Shaderbytes und erzeugt vollständigen GFX9-Zustand für
+ein Farbbild, VS/PS, Sampling, Blend/ROP, Depth/Stencil, Raster, Viewport und
+Scissor. Vertex-Pulling verwendet Set0/Binding2 mit vec4/Stride16. Draws
+setzen reale DRAW_INDEX_AUTO oder DRAW_INDEX_2 mit uint16/uint32-Indizes.
+Separate D16/D32- und S8-Flächen verwenden ihre AddrLib-Geometrie. Falsche
+Bereiche, Aliase und ungültiger Zustand verändern keine Ausgabe.
+Float-Farbziele mit logischer ROP, Dual-Source-Blend, MRT, MSAA-Rendering
+und komprimierte Attachments gehören nicht zu diesem Renderer.
+
+Gemeinsame Render- und YUV-Aufträge
+---------------------------------
+Der Batchencoder verarbeitet höchstens sechzehn kompatible Befehle und
+clippt ihren tatsächlichen Zielbereich. Leere Damage/Scissor-Schnitte
+erzeugen keinen Draw. Befehle eines Batches teilen Pipeline und Ressourcen;
+unterschiedlicher oder ungültiger Zustand wird vor Veröffentlichung
+verworfen. R8-Glyphmasken liefern premultiplizierte weiße Maskenwerte;
+XRGB erhält opake Alpha-Semantik. Nearest/Bilinear, Pixelzentren, Crop,
+Skalierung und affine Samplegrids nutzen gebundene Texturdeskriptoren.
+
+Das gemeinsame Farbprogramm enthält Matrix, sRGB/Linear/PQ/HLG/BT1886,
+Tone-/Gamut-Policy, Alpha und Dither. Source-over mit Farbtransformation
+verlangt ein lineares, premultipliziertes FP16-Ziel. NV12, P010 und YUV420P
+nutzen Integer-Planefetches; P010 verschiebt die oberen zehn Nutzbits um 6.
+Chroma-Position, Range/Matrix und Transfer gehen der RGB-Interpolation
+voraus. Video-Planes müssen hier linear, passend gepitcht und 256-Byte-
+adressierbar sein. Tiled Video folgt seiner späteren VCN-Integration.
+
+R4GFX übergibt eine begrenzte 504-Byte-Beschreibung mit Farbe/Matrix und
+deduplizierten kanonischen BO-/VA-Bindings. Die native Queue vergleicht
+die BACKEND_V1-Profilidentität mit Revision1; RENDER_V1 ist eine getrennte
+R4L-Schnittstelle. Der Treiber validiert zusätzlich die gesamten Bindings,
+Zugriffsrichtung, Generation und physische BO-Aliase zwischen Quelle/Ziel.
+Decoder- und Zielflächen bleiben zwischen Frames gemappt; ihre Pixel werden
+nicht auf die CPU geholt. Fehler und Abhängigkeiten erreichen den Aufrufer
+über die vorhandenen gemeinsamen Fence-Verträge.
+
+Treiberlebensdauer und Grenzen
+-----------------------------
+Ein eigener 64-KB-UMA-Bereich enthält immutable Programme und acht 4-KB-
+Parameterslots. Dieser Bereich ist von den bestehenden GPU-Seitentabellen
+getrennt. Programm-PTEs sind ausführbar und nur lesbar; CPU-Uploads laufen
+über den eigenen WC-View mit HDP/TLB-Bestätigung. Normale Bildjobs erhalten
+separate VA-Bereiche und behalten Mapping-only-BO-Referenzen. Der geladene
+R4L-Loader gehört nicht in den Treiberstart.
+
+Der native Allokationsprovider berechnet echte AddrLib-Geometrie, belastet
+das vorhandene UMA-Budget und publiziert erst das kanonisch bestätigte BO.
+Der VA-Provider verwaltet 32 Slots von jeweils maximal 64 MB in einer 2-GB-
+Apertur. Er akzeptiert vollständige BOs, eine Bindung pro Bereich und
+generationstreue Tokens. Allokations-/VA-Annahme, Ergebnis-ACK, GPU-Fence,
+Unmap/TLB-ACK und endgültige Ressourcenfreigabe sind getrennte Zustände.
+Nicht bestätigte Freigaben bleiben erhalten und werden im Worker erneut
+versucht. Alte oder falsche Fence-Tokens können keine Ressourcen freigeben.
+Das Kapazitätslimit erzeugt Backpressure; kein Erfolg ersetzt fehlende Arbeit.
+
+SDMA- und GC-Worker teilen die kanonische Queue und ihre Abhängigkeiten.
+Die tatsächlichen Renderbits werden erst nach GC/SDMA-Prerequisites und
+Shaderaufbereitung freigegeben. Present/Direct-Present bleiben bis DCN1
+gesperrt; ihre späteren Aufträge können dieselben Render-/Copy-Fences als
+Abhängigkeit übernehmen. Dieser Schritt behauptet kein sichtbares VBlank.
+IRQ erfasst weiterhin nur begrenzte Metadaten. Der SIMD-fähige Worker
+besitzt Encoder, Allokation und Freigabe; bestätigter Engine-Stillstand
+geht dem finalen Shader-/VA-/BO-Abbau voraus.
+
+Prüfung, Werkzeuge und Lizenzen
+------------------------------
+AMDGPU: 17/17 Buildschritte, 23/23 Tests. Der neue zusammengefasste Fall
+durchläuft echte Allokations-, Mapping-, PM4-, Ring- und Timeline-Besitzer
+mit expliziten RAM-/Kernelantworten: falscher Fence, verzögerte Freigabe,
+kanonisch noch nicht bestätigter Abschluss, VA-ACK-Retry und stale Token.
+Diese Antworten modellieren Lebensdauer und keine GPU-Pixel.
+R4AMD: 14/14 Schritte, 8/8 Tests. Bestehende AddrLib-Prüfungen werden um echte
+Pipeline-/Depth-/Stencil-/Index-/Batch-/Grid-/Mask-/Farb-/YUV-Encoder ergänzt.
+R4GFX: 14/14 Schritte, 8/8 Tests. Der bestehende Besitzerfall prüft AMD-YUV
+durch die öffentliche API, deduplizierte Planes, VA-Wiederverwendung,
+exakte Abhängigkeit, unveränderte BUSY-Ausgabe, Fehlerweitergabe und
+separates Retirement. Der NVIDIA-Fall besteht im selben Lauf weiter.
+R4ACO: 12/12 Schritte, 4/4 Tests; sechs echte Compilerfixtures. SDK:
+28/28 Manifest-/Katalogtests und erfolgreiche Hosttool-Installation.
+
+Der SMP4-Gast lädt die echten R4Ls, kompiliert alle sechs Compilerfixtures
+und prüft sechs Shaderhashes sowie native Pipeline-/Drawaufrufe. Beide
+DISPLAYD-Modi liefern ERRORLEVEL 0 und regulären Poweroff. Test-AUTOEXEC
+wird unverändert zurückgesetzt. Keine zusätzliche globale Testsuite,
+kein Browser-/Langlauf, keine physische Probe. Linux wurde ausgeführt;
+die gemeinsamen Windows-/PowerShell-Pfade wurden nicht unter Windows getestet.
+
+Das SDK erlaubt NATIVE_ARCHIVE auch für Zig-R4D; Besitzerzuordnung,
+genau ein Archive-Mapping je Manifestdeklaration und ELF/Relocation-Prüfung
+bleiben erhalten. Nach dieser Manifeständerung war die installierte alte
+ModuleCatalog-Binärdatei einmal neu zu bauen. Der folgende Imageplan besteht.
+
+R4ACO katalogisiert 621 unveränderte Mesa-Dateien, R4AMD 73. Die drei nativen
+R4AMD-Brücken behalten die Originalhinweise ihrer AMD-/Valve-Quellen.
+R4AMD-NOTICES.txt und R4ACO-NOTICES.txt enthalten die zusätzlichen RADV-
+Notices und vollständigen Lizenztexte. Originales R4OS-Material bleibt
+Apache-2.0; Fremdmaterial wird nicht umlizenziert. Belege, Grenzen,
+Artefakt-/Quell-/Loghashes: AMDNativeRender08014.json.

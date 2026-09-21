@@ -5,9 +5,9 @@ Diese Datei wird deterministisch aus `API/ApiContract.json` erzeugt. Manuelle Ä
 Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenzen und Conformance-Fixtures werden produktiv aus diesem Schema erzeugt; handgeschriebene Dateien bleiben nur Fassaden oder erklaerende Texte.
 
 - Schema: v11, Baseline `standalone-contract-0.64.11`
-- Reachability: 299 von 299 Typen aufgelöst oder explizit klassifiziert
+- Reachability: 301 von 301 Typen aufgelöst oder explizit klassifiziert
 - Zentrale SDK-only-Wurzeln: 0; Runtime-R4Ls besitzen libraryeigene Vertraege
-- Operationen: 0; Fehlerdomänen: 63; Konstanten: 1901; Limits: 109
+- Operationen: 0; Fehlerdomänen: 63; Konstanten: 1916; Limits: 109
 
 ## App-Profile
 
@@ -219,7 +219,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `GfxReceiverSource` | fixed_layout | extern_struct | 16/8 | 16/8 | 16/8 | 16/8 |
 | `GfxReceiverInfo` | fixed_layout | extern_struct | 8224/8 | 8224/8 | 8224/8 | 8224/8 |
 | `GfxReceiverUpdate` | fixed_layout | extern_struct | 48/8 | 48/8 | 48/8 | 48/8 |
-| `GfxDriverOutputApi` | extensible | extern_struct | 160/8 | 160/8 | 160/8 | 160/8 |
+| `GfxDriverOutputApi` | extensible | extern_struct | 176/8 | 176/8 | 176/8 | 176/8 |
 | `GfxNativeBootInfo` | extensible | extern_struct | 56/8 | 56/8 | 56/8 | 56/8 |
 | `GfxNativeRegistration` | extensible | extern_struct | 128/8 | 128/8 | 128/8 | 128/8 |
 | `GfxNativeState` | extensible | extern_struct | 32/8 | 32/8 | 32/8 | 32/8 |
@@ -320,6 +320,8 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `WindowModeReply` | fixed_layout | extern_struct | 96/8 | 96/8 | 96/8 | 96/8 |
 | `WindowModeExchange` | fixed_layout | extern_struct | 96/8 | 96/8 | 96/8 | 96/8 |
 | `DriverModuleInfo` | extensible | extern_struct | 128/8 | 128/8 | 128/8 | 128/8 |
+| `GfxOutputBrightness` | fixed_layout | extern_struct | 88/8 | 88/8 | 88/8 | 88/8 |
+| `GfxBrightnessRequest` | fixed_layout | extern_struct | 48/8 | 48/8 | 48/8 | 48/8 |
 
 ## Typdetails
 
@@ -6015,7 +6017,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 - Quelle: `API/ApiContract.json`
 - Klasse: `extensible`
 - Repräsentation: `extern_struct`
-- Version/Größe/Alignment: 9 / 160 / 8
+- Version/Größe/Alignment: 10 / 176 / 8
 
 | Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
 |---|---:|---:|---:|---|---|
@@ -6040,6 +6042,8 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `refresh_read` | 136 | 8 | 8 | `u64` | - |
 | `power_publish` | 144 | 8 | 8 | `u64` | - |
 | `power_read` | 152 | 8 | 8 | `u64` | - |
+| `brightness_publish` | 160 | 8 | 8 | `u64` | - |
+| `brightness_read` | 168 | 8 | 8 | `u64` | - |
 
 ### `GfxNativeBootInfo`
 
@@ -7991,6 +7995,46 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `driver_name` | 32 | 32 | 1 | `[32]u8` | - |
 | `module_version` | 64 | 32 | 1 | `[32]u8` | - |
 | `firmware_version` | 96 | 32 | 1 | `[32]u8` | - |
+
+### `GfxOutputBrightness`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 88 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `identity` | 8 | 24 | 8 | `GfxOutputId` | - |
+| `path` | 32 | 4 | 4 | `u32` | - |
+| `phase` | 36 | 4 | 4 | `u32` | - |
+| `minimum` | 40 | 4 | 4 | `u32` | - |
+| `maximum` | 44 | 4 | 4 | `u32` | - |
+| `current` | 48 | 4 | 4 | `u32` | - |
+| `flags` | 52 | 4 | 4 | `u32` | - |
+| `reason` | 56 | 4 | 4 | `u32` | - |
+| `reserved0` | 60 | 4 | 4 | `u32` | - |
+| `sequence` | 64 | 8 | 8 | `u64` | - |
+| `request_sequence` | 72 | 8 | 8 | `u64` | - |
+| `since_ns` | 80 | 8 | 8 | `u64` | - |
+
+### `GfxBrightnessRequest`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 48 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `identity` | 8 | 24 | 8 | `GfxOutputId` | - |
+| `level` | 32 | 4 | 4 | `u32` | - |
+| `reserved0` | 36 | 4 | 4 | `u32` | - |
+| `sequence` | 40 | 8 | 8 | `u64` | - |
 
 ## Fehlerdomänen
 
@@ -10632,6 +10676,21 @@ Geltung: `storage`, Einheit: `status_code`, Stabilität: `fixed_contract`.
 | `window_mode_op_exchange` | `1842` | `u16` | identity | number | `window_mode` | fixed_contract |
 | `gui_window_flag_fullscreen` | `16` | `u32` | identity | number | `window_mode` | fixed_contract |
 | `window_graphics_inspect` | `3` | `u32` | identity | number | `window_graphics` | fixed_contract |
+| `gfx_brightness_path_none` | `0` | `u32` | value | number | `gfx_output` | fixed_contract |
+| `gfx_brightness_path_pwm` | `1` | `u32` | value | number | `gfx_output` | fixed_contract |
+| `gfx_brightness_path_aux8` | `2` | `u32` | value | number | `gfx_output` | fixed_contract |
+| `gfx_brightness_path_aux16` | `3` | `u32` | value | number | `gfx_output` | fixed_contract |
+| `gfx_brightness_phase_unavailable` | `0` | `u32` | value | number | `gfx_output` | fixed_contract |
+| `gfx_brightness_phase_ready` | `1` | `u32` | value | number | `gfx_output` | fixed_contract |
+| `gfx_brightness_phase_failed` | `2` | `u32` | value | number | `gfx_output` | fixed_contract |
+| `gfx_brightness_reason_none` | `0` | `u32` | value | number | `gfx_output` | fixed_contract |
+| `gfx_brightness_reason_unsupported` | `1` | `u32` | value | number | `gfx_output` | fixed_contract |
+| `gfx_brightness_reason_firmware_owner` | `2` | `u32` | value | number | `gfx_output` | fixed_contract |
+| `gfx_brightness_reason_invalid_panel` | `3` | `u32` | value | number | `gfx_output` | fixed_contract |
+| `gfx_brightness_reason_timeout` | `4` | `u32` | value | number | `gfx_output` | fixed_contract |
+| `gfx_brightness_reason_io` | `5` | `u32` | value | number | `gfx_output` | fixed_contract |
+| `gfx_brightness_reason_inactive` | `6` | `u32` | value | number | `gfx_output` | fixed_contract |
+| `gfx_brightness_flag_current_known` | `1` | `u32` | value | number | `gfx_output` | fixed_contract |
 
 ## Limits
 

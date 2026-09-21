@@ -12,7 +12,7 @@ remain public ABI, but no group is built, installed or updated as an R4L file.
 
 - R4SYS: console, files, programs, services, memory and registry.
 - R4DESK: windows, input, desktop and remote frames.
-- R4DRAW: drawing, fonts, images, surfaces and frame commands.
+- R4DRAW: drawing, fonts, images, surfaces, frame commands and display control.
 - R4NET: adapters, sockets, DNS/DHCP and network service views.
 - R4AUDIO: PCM, synthesizers and audio status.
 - R4DEV: hardware, modules, boot and diagnostics.
@@ -41,3 +41,12 @@ sync for readers:
 Normal Contract builds check generated drift. Intentional schema changes use
 the explicit generator write workflow and update the compatibility baseline
 only when the ABI decision requires it.
+
+Brightness (0.80.16)
+-------------------
+Optional output brightness calls use normalized 0..65535 values and exact
+output generations. Admission and driver completion are separate; current
+means confirmed programmed intensity, not measured luminance. Hardware
+remains in the R4D owner, persistence in Desktop/Appearance. Missing APIs
+or panel control remain explicitly unavailable. AMDPanel08016.txt under
+Docs/Drivers records the first native backend and its validation boundary.

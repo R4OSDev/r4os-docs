@@ -55,7 +55,7 @@ v1/112-Prefix bleibt lesbar.
 <!-- R4OS-APIREF:BEGIN R4DRAW (generiert von ApiContractGen aus ApiContract.json - NICHT von Hand editieren) -->
 ## Tabellen-Referenz R4DRAW (generiert)
 
-Kernel-Gruppentabelle `R4XStartR4Draw` v37, 896 Bytes, 110 Funktionsfelder und 110 Slots insgesamt.
+Kernel-Gruppentabelle `R4XStartR4Draw` v38, 912 Bytes, 112 Funktionsfelder und 112 Slots insgesamt.
 Signatur-Wahrheit: `abi.R4DrawFns` (Feldname == Tabellenfeld).
 Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 
@@ -171,6 +171,8 @@ Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 | 107 | 872 | function | `gfx_queue_backend_properties` | `*const fn (*const GfxBackendBinding, *GfxBackendProperties) callconv(.c) i32` |
 | 108 | 880 | function | `gfx_queue_submit_native` | `*const fn (*const GfxQueueHandle, *const GfxSubmission, *const GfxNativeSubmission, *GfxFenceStatus) callconv(.c) i32` |
 | 109 | 888 | function | `gfx_queue_submit_render_color_grid_list` | `*const fn (*const GfxQueueHandle, *const GfxSubmission, *const GfxRenderColorGridList, *GfxFenceStatus) callconv(.c) i32` |
+| 110 | 896 | function | `gfx_output_brightness` | `*const fn (*const GfxOutputId, *GfxOutputBrightness) callconv(.c) i32` |
+| 111 | 904 | function | `gfx_brightness_request` | `*const fn (*const GfxBrightnessRequest, *GfxBrightnessRequest) callconv(.c) i32` |
 <!-- R4OS-APIREF:END R4DRAW -->
 
 

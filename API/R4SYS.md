@@ -37,7 +37,7 @@ die bisherigen Einzeloperationen bleiben binaer kompatibel.
 <!-- R4OS-APIREF:BEGIN R4SYS (generiert von ApiContractGen aus ApiContract.json - NICHT von Hand editieren) -->
 ## Tabellen-Referenz R4SYS (generiert)
 
-Kernel-Gruppentabelle `R4XStartR4Sys` v22, 1240 Bytes, 150 Funktionsfelder und 153 Slots insgesamt.
+Kernel-Gruppentabelle `R4XStartR4Sys` v23, 1248 Bytes, 151 Funktionsfelder und 154 Slots insgesamt.
 Signatur-Wahrheit: `abi.R4SysFns` (Feldname == Tabellenfeld).
 Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 
@@ -196,6 +196,7 @@ Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 | 150 | 1216 | function | `program_local_publish` | `*const fn (u64, u64, *u64) callconv(.c) i32` |
 | 151 | 1224 | function | `thread_current_handle` | `*const fn (*ProgramJoinHandle) callconv(.c) i32` |
 | 152 | 1232 | function | `cpu_capacity` | `*const fn (*CpuCapacity) callconv(.c) i32` |
+| 153 | 1240 | function | `program_exit` | `*const fn (i32, u32) callconv(.c) i32` |
 <!-- R4OS-APIREF:END R4SYS -->
 
 Physische Storageoperationen verwenden das generationierte Inventar und

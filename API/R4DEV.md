@@ -87,7 +87,7 @@ Pruefung der tatsaechlich gelieferten Tabelle.
 <!-- R4OS-APIREF:BEGIN R4DEV (generiert von ApiContractGen aus ApiContract.json - NICHT von Hand editieren) -->
 ## Tabellen-Referenz R4DEV (generiert)
 
-Kernel-Gruppentabelle `R4XStartR4Dev` v11, 360 Bytes, 41 Funktionsfelder und 43 Slots insgesamt.
+Kernel-Gruppentabelle `R4XStartR4Dev` v12, 368 Bytes, 42 Funktionsfelder und 44 Slots insgesamt.
 Signatur-Wahrheit: `abi.R4DevFns` (Feldname == Tabellenfeld).
 Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 
@@ -136,4 +136,5 @@ Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 | 40 | 336 | function | `performance_pci_inventory` | `*const fn (*ProgramPciInventoryPerformanceInfo) callconv(.c) i32` |
 | 41 | 344 | function | `performance_input` | `*const fn (*ProgramInputPerformanceInfo) callconv(.c) i32` |
 | 42 | 352 | function | `display_state` | `*const fn (*DisplayStateInfo) callconv(.c) i32` |
+| 43 | 360 | function | `driver_module_info` | `*const fn (u32, *DriverModuleInfo) callconv(.c) i32` |
 <!-- R4OS-APIREF:END R4DEV -->

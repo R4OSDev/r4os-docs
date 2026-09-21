@@ -1,0 +1,138 @@
+﻿AMD-Panel, AUX und Helligkeit - 0.80.16
+=====================================
+
+Stand und Besitzer
+------------------
+AMDGPU 0.1.12 ergaenzt den DCN1-Besitzer aus 0.80.15 um direkte eDP-
+Panelsteuerung. Der gemeinsame Kernelvertrag kopiert nur Auftraege und
+Treiberbestaetigungen; Hardwarezugriffe bleiben im AMDGPU-Displaytask.
+R4GFX liefert die gemeinsame Einstellungslogik, R4DESK 0.1.71 stellt
+Einstellungen wieder her, APPEARANCE 0.1.16 bietet die Bedienseite.
+Kernel 0.1.203 enthaelt die notwendige herstellerneutrale Transporterweiterung.
+
+Ziel bleibt der dokumentierte Lenovo IdeaPad mit Ryzen 5 3500U/Picasso,
+Radeon Vega 8, PCI 1002:15D8. Das konkrete Panel, sein EDID, die echte
+ATOM-Kommandorevision und seine elektrische Route sind noch nicht gemessen.
+Alle hier genannten Pruefungen verwenden Softwarefixtures. Es gab keinen
+physischen Probe, kein Laptopupdate und keinen Hardwaretest. Diese Arbeiten
+bleiben ausschliesslich 0.80.39 vorbehalten.
+
+Native Grundlage und Grenzen
+----------------------------
+301 unveraenderte, gehashte Linux-7.2.4-Originaldateien; 26 originale C-
+Uebersetzungseinheiten und vier private Bruecken bilden das DCN1-Archiv.
+Neu verlinkt sind dce_aux.c, dce_panel_cntl.c und dcn10_link_encoder.c.
+Originale und vollstaendige MIT-Lizenztexte bleiben erhalten. Die aktuelle
+Distribution exportiert alle Quellnotices und unveraenderte Firmwarelizenzen.
+
+Die zweite dokumentierte Quellpatchdatei betrifft einen normalen AUX-
+Antworttimeout. Der begrenzte Wait liefert TIMEOUT und laesst die originale
+Freigabe der AUX-Arbitrierung zu. Ein fehlerhafter MMIO-Zugriff bleibt ein
+behaltener Fehler. ACKs oder erfolgreiche Uebertragungen werden nicht erfunden.
+
+Der neue ATOM-Interpreter folgt AMDs MIT-Originalsemantik: 127 Opcodeeintraege,
+partielle Operanden, Parameterfenster, Untertabellen, Spruenge, Arithmetik,
+indirekte I/O-Methoden und Scratch. Grenzen: 32 Aufrufframes, 256 Parameter-
+DWORDs, maximal 64 KB Scratch, 200000 Instruktionen und 5 s pro Aufruf.
+Er fuehrt keine x86-ROM-Instruktionen aus. Der zugelassene Transmittervertrag
+ist ATOM 1.6; unpassende Revisionen und nicht vorhandene PLL/MC-I/O-Besitzer
+werden abgelehnt. VM und Scratch liegen in einer separaten Taskallokation.
+Der Abbau behaelt beide Allokationen bis Join, Restore und Freigabe.
+
+Panelroute und Protokoll
+-----------------------
+Die Auswahl verlangt genau eine direkte eDP-Route, passende UNIPHY-, AUX-
+und HPD-Register sowie Identitaetsverdrahtung. Externe Encoder, unbekannte
+Lanepermutation/Inversion und nicht nachgewiesene Pins bleiben unsupported.
+ATOM-Encoderfaehigkeiten begrenzen HBR2/HBR3; fehlende Informationen werden
+nicht durch die ASIC-Maximalleistung ersetzt. Source Spread Spectrum wird
+in diesem Stand nicht programmiert und nicht angeboten.
+
+AUX verwendet die originale Hardware-FIFO und Arbitrierung, 16-Byte-Pakete,
+begrenzte DEFER-/Timeoutwiederholungen, getrennte native/I2C-Antworten und
+I2C-Statusrequests. DDC liest vollstaendige EDID-Bloecke; STOP erfolgt auch
+im Fehlerpfad. Bis zu 32 Bloecke werden durch den gemeinsamen R4GFX-Parser
+geprueft. Native Board- und EDID-Timings muessen zusammenpassen; unvollstaendige,
+interlaced oder reine 4:2:0-Modi werden nicht als RGB-Panelmodus verwendet.
+
+DPCD-Basis/erweiterte Faehigkeiten, eDP-Ratentabelle, Lanezahl, Payload,
+Signalpegel und Trainingsmuster begrenzen das echte Linktraining. Clock
+Recovery und Equalization sind endlich; nur ein Trainingsfehler erlaubt
+den Versuch einer niedrigeren geeigneten Datenrate. I/O-Fehler brechen ab.
+Der Softwarefall 1080p faellt kontrolliert von HBR2 auf HBR zurueck.
+
+Die Reihenfolge verbindet Boarddelays, mindestens 500 ms Einschaltabstand,
+Panelstrom, HPD, Empfaenger-D0, Linktraining, bestaetigten Videostrom und
+Backlight. Ausschalten entfernt zuerst das Backlight, verlangt gestopptes
+Video und schaltet Empfaenger, PHY und Panel geordnet ab. Physische
+Restaurierung nach Teilfehlern bleibt Pflicht des umfassenden /18-Modesets.
+
+Helligkeit und gemeinsamer Vertrag
+---------------------------------
+Der Panelbesitzer verwendet nachgewiesene AUX8-/AUX16-Steuerung oder das
+originale PWM-Verfahren. Ungueltige PWM-Perioden und aktive DMCU-/ABM-
+Steuerung sperren direkte PWM. DMCU-Firmware, adaptive Helligkeit und ABM-
+Policy werden hier nicht vorgetaeuscht. Empfaenger-AUX bleibt moeglich,
+wenn dessen eigene Faehigkeiten diesen Pfad bestaetigen.
+
+Ein Schreibabschluss wird rueckgelesen. AUX vergleicht Modus und Level,
+PWM prueft den programmierten Duty-Wert und liest den normierten aktuellen
+Wert. Rundung auf die verfuegbare Hardwareaufloesung bleibt sichtbar.
+Ein ungewisser Teilfehler loescht current_known und behaelt den Owner.
+Der Wert beschreibt programmierte Intensitaet, keine gemessene Leuchtdichte.
+
+R4DRAW wird um Slots 110/111 (Offsets 896/904) erweitert:
+  gfx_output_brightness: GfxOutputId -> GfxOutputBrightness (88 Byte)
+  gfx_brightness_request: GfxBrightnessRequest -> Admission (48 Byte)
+GfxDriverOutputApi erhaelt brightness_publish/read an Offsets 160/168,
+Gesamtgroesse 176 Byte, weiterhin Wireversion 1. Alte 160-Byte-Praefixe,
+alle bisherigen Slots, Konstanten und Fixed-Layout-Payloads bleiben gleich.
+Die neue Defaultgroesse gilt fuer neu kompilierte Verbraucher. Ein bewusster
+Praefixvergleich liegt in AMDPanel08016.json; die kontrollierte Contract-
+Baseline wurde mit --write --baseline und anschliessender Conformance gepflegt.
+
+Auftrag und Abschluss haben getrennte Seriennummern. Der letzte zugelassene
+Auftrag bleibt bis zu einer neuen Anforderung oder Displaygeneration bestehen,
+auch nach Ende des anfordernden Programms. Nur der zugehoerige native Treiber
+darf den Abschluss melden oder den Auftrag lesen. Eine Publikation fuer eine
+alte Generation wird verworfen. Ein Fehler veraendert keine Caller-Ausgabe.
+Hardwarearbeit und Wake liegen ausserhalb des Kataloglocks.
+
+Der AMDGPU-Worker kopiert bestaetigte Werte in diesen Vertrag. Scheitert die
+Veroeffentlichung nach einer Hardwareaenderung, wird nur die Bestaetigung
+wiederholt. Die bereits ausgefuehrte Aenderung laeuft nicht noch einmal.
+
+Bedienung, Speicherung und Fn
+----------------------------
+C:\R4OS\CONFIG\BRIGHTNESS.R4S speichert bis zu 16 normierte Werte mit
+stabiler Adapter-/Connector-/Empfaengeridentitaet und Aenderungsserie.
+Parser und atomarer R4STD-Dokumentsave lehnen ungueltige/duplizierte Eintraege
+ab. Appearance zeigt den gewaehlten und den bestaetigten Wert getrennt.
+Fehlende Steuerung, Firmwarebesitz und fehlgeschlagene Aenderungen sind sichtbar.
+Der Desktop stellt eine gespeicherte Wahl einmal je Displaygeneration bzw.
+expliziter Aenderungsserie wieder her. Ein Hardwarefehler startet keine
+endlose Wiederholung; eine neue Benutzerwahl erlaubt einen neuen Auftrag.
+
+Die vorhandenen PS/2-/USB-Keyboard- und GUI-Ereignisse enthalten keinen
+Helligkeitsbefehl. Die USB-Reportbeschreibung kennt die Consumer Usage Page,
+uebersetzt sie jedoch nicht in Helligkeitsaktionen. ACPI besitzt in diesem
+Stand keinen allgemeinen EC-/Notify-Ereignispfad fuer Lenovo-Fn-Helligkeit.
+Die Seite meldet daher fehlende Helligkeitstasten ausdruecklich. Es gibt
+keine erfundene Fn-Scancodezuordnung. Tatsaechliche Fn-Ereignisse werden /39
+aufgenommen; notwendige ACPI/EC-Integration bleibt Teil der Laptoparbeit /35.
+
+Integration und Abnahmegrenze
+----------------------------
+AMDGPU bleibt im normalen auto/passive-Bind ohne native Displayaktivierung;
+IMAGE_SCOPE=none und die native Freigabesperre bleiben bestehen. Die private
+Paneloperation verlangt den echten SIMD-Worker und vollstaendige Restore-
+Hooks. Brightness-Vertragsarbeit verlangt ein publiziertes natives Display.
+Die Verbindung zum sichtbaren Modeset, Stream Enable, Pageflip und Boot-
+Handover folgt in /18; HDMI und Hotplug folgen in /17.
+
+Nachweise und SHA256 stehen in AMDPanel08016.json. Geprueft werden originale
+Registeraufrufe mit RAM-Antworten, der echte ATOM-VM-Aufruf aus der C-Bruecke,
+AUX-Arbitrierung/Timeout, EDID/Training, PWM/AUX-Level, Fehlererhalt und die
+Task-/Heapgrenze. Gemeinsame Tests decken API-Praefixe, Besitzer/Generationen,
+Speicherung, Wiederherstellung und Fehlerbestaetigungen ab. Linux-Builds und
+Hosttests sind ausgefuehrt; Windows und reale Hardware sind nicht ausgefuehrt.

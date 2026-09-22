@@ -1,0 +1,101 @@
+﻿AMD-Desktop, Fenster und Swapchains - 0.80.19
+===========================================
+
+Stand und Besitzer
+------------------
+R4GFX 0.1.24 uebernimmt die vom AMDGPU-Treiber bestaetigte Present-Operation
+in seine oeffentlichen Geraetefaehigkeiten. Damit benutzt der vorhandene
+Desktopkompositor nach nativer AMD-Aufnahme denselben Image-Present- und
+FIFO-Swapchainweg wie die anderen nativen Provider. Ohne die tatsaechliche
+Treiberoperation bleibt Present unavailable; eine geladene R4AMD-Library
+allein reicht nicht. Direct Scanout wird fuer AMD weiterhin nicht beworben.
+
+Die Artefaktaenderung gehoert zur externen Runtime-Library R4GFX. AMDGPU
+bleibt 0.1.14; Desktop 0.1.71, R4AMD 0.1.5, WINSVC 0.1.10 und Kernel 0.1.203
+bleiben unveraendert. Im AMDGPU-Repository wurde der vorhandene Display-
+Verbundtest um native Quell-BOs erweitert; sein R4D wurde nicht veraendert.
+RELEASE_VERSION ist 0.80.19. Es gibt keine Contract-/ABI-Erweiterung und
+keinen neuen Dienst oder Kernelpfad.
+
+Gemeinsame Bildkette
+-------------------
+R4GFX prueft AMD-Profil, GC/SDMA-Klasse, gemeinsame Geraete- und separate
+Speichergeneration sowie die echten Treiberoperationen. Native Geometrie
+kommt aus R4AMDs originaler AddrLib. Der Desktop rendert seine gewohnte
+Szene in die bestehenden linearen FP16-Arbeits- und XR24-Ausgabebilder.
+Text, Bilder, primitive Assets, Skalierung, Clipping, Alpha und Damage
+bleiben in derselben R4GFX-/Desktopkomposition. Kleine Aenderungen laden
+nur die geaenderten Zeilen; unveraenderte Szenen erzeugen keinen neuen Job.
+
+Fertige native XR24-Ausgabebilder gehen als gemeinsame BO-Referenz und
+Queuejob an AMDGPU. Der Treiber mappt dessen eigene UMA-Seiten ueber echte
+PTEs, kopiert per SDMA in seinen privaten inaktiven Scanout und bestaetigt
+den DCN-Adress-/Framezaehlerreceipt. Die Ausgabe braucht keinen abschliessenden
+CPU-Pixelreadback. Renderfence, Quellleihe, Presentjob, Sichtbarkeit und
+Wiedervergabe eines Swapchainslots behalten ihre getrennten Lebensdauern.
+
+Die Fensterintegration benutzt weiterhin WINSVC WindowGraphics, R4DRAW,
+R4DESK und die vorhandenen SDK-Fassaden. Eine Fensterquelle besitzt ihren
+Producerfence; der Desktop importiert die geliehene BO-Referenz und gibt
+sie erst nach seiner letzten Nutzung zurueck. Softwarefenster, normale
+GUI-Frames und Subsystembilder behalten ihre gemeinsamen Quellen. Es gibt
+keine AMD-Abzweigung in einzelnen Apps oder Emulatoren.
+
+Resize, Fullscreen, Verdeckung und Dienstwechsel benutzen die bestehenden
+Fenster- und Swapchainbesitzer. Physische Moduswechsel gehen an den in /18
+angebundenen Apply/Confirm/Rollback-Vertrag. Eine neue Geometrie oder ein
+verlorenes Geraet macht alte Ketten ungueltig, waehrend laufende Leihen
+weiter gehalten werden. Zwei Produzenten blockieren sich nicht durch einen
+neuen globalen Framebufferbesitzer. Bei fehlenden Faehigkeiten oder Fehlern
+rekonstruiert derselbe Desktop seine vollstaendige Software-Szene.
+
+Hostnachweise
+-------------
+R4GFX: normaler Linuxbuild mit 14/14 Schritten und 8/8 Tests. Der bestehende
+Providerfall fuehrt Image-Present und native Swapchains jetzt fuer AMD und
+NVIDIA aus. Er prueft fehlende Present-Faehigkeit, spaetere Aufnahme ohne
+neue Queue, echten AMD-AddrLib-Import linearer nativer Bilder, Abhaengigkeiten,
+Busy mit unveraendertem Ergebnis, Caller-Close, Abbruch und gehaltene
+Ressourcen. Renderabschluss allein liefert keinen sichtbaren Swapchainslot;
+der passende Sichtreceipt bleibt erforderlich. AMD- und NVIDIA-Identitaeten
+werden getrennt ausgehandelt.
+
+AMDGPU: bestehender Komponenten-Teststep mit 12/12 Schritten und 36/36
+Faellen. Der Displayverbund erhaelt einen nativen UMA-Quellpuffer. Er verwendet
+die wirklichen Speicher-, PTE-, SDMA-, Timeline- und DCN-Besitzer. Caller-Close
+vor DMA-Ende behaelt das Backing; nach DMA-Retirement sammelt der separate
+Allokationsbesitzer die Freigabe. Das bereits kopierte Bild wartet weiterhin
+auf seinen DCN-Receipt. Erste und letzte Pixelzeile stimmen; SYSTEM-SG-
+und CPU-Lesemappings werden fuer diese native Quelle nicht verwendet.
+Die eingespielten Renderpixel und Hardwareantworten sind Modellstimuli,
+keine auf einer AMD-GPU berechneten oder physisch gemessenen Pixel.
+
+Desktop: vorhandener render-test, 79/79 Faelle, einschliesslich geteilter
+Szene, Text-/Masken-/Bildassets, Damage, Skalierung, Fensterleihen, Software-
+und HDR-Fenstern, Swapchains, Busy, Abbruch und Idle. WINSVC: vorhandene
+Gruppe, 4/4 Faelle, einschliesslich des importierten Grafiktransports.
+Es wurde kein neuer globaler Gate oder doppelte Testsuite angelegt.
+
+Gastnachweis und Grenzen
+------------------------
+Der kurze bestehende /SMOKE-WINDOW-IDLE-Lauf verwendet vier vCPUs, den
+regulaeren R4DESK-Appzyklus, AppDefaults, MemView und WINSVC. Das private
+Testimage nimmt zusaetzlich R4AMD auf und verwendet Softwaregrafik.
+Ergebnis: Geometrie, zwei Produzenten, Dienstneustart, Close und gemeinsame
+Rekonstruktion bestanden; leere Szene mit null zusaetzlichen Redraws, Pixeln
+und Kopierbytes. R4AMD wurde tatsaechlich mit BACKEND_V1 (need1/have3) und
+IMAGE_V1 geladen. Log-/Artefakthashes stehen in AMDDesktop08019.json.
+Temp/AMD08019/Guest.ps1 benutzt die gemeinsame PowerShell-Orchestrierung
+und stellt die Test-AUTOEXEC bytegleich wieder her.
+
+Der Gastlauf prueft gemeinsame Fenster-/Dienstintegration; er fuehrt keinen
+nativen AMD-Treiber aus. Originale native Shader-/Renderencoder stammen
+weiter aus /14, native Display-/Modus-/Cursorbesitzer aus /18. Hier wird
+deren gemeinsame Desktopanbindung softwareseitig geschlossen. Eine sichtbare
+native Desktopausgabe, echte Beschleunigung oder reale VBlankmessung wird
+daraus nicht abgeleitet. Windows wurde nicht ausgefuehrt. Ausschliesslich
+/39 sieht physische Laptoptests vor. Aktives Panel plus HDMI folgt in /20.
+
+Weiterfuehrende Besitzervertraege: GrafikKomposition07920.txt,
+GrafikFenstertransport07937.txt, GrafikSwapchains07922.txt,
+Drivers/AMDNativeRender08014.txt und Drivers/AMDPresentation08018.txt.

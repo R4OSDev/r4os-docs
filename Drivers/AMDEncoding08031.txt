@@ -1,0 +1,109 @@
+﻿AMD H.264-/HEVC-Encoding – 0.80.31
+=================================
+Stand: 22.09.2026. Besitzer: R4ENC; gemeinsame Quellen: R4AMD.
+
+Implementierter Umfang
+----------------------
+R4ENC0.1.3 bietet ueber ENCODE_V1 Backend2 H.264 Baseline/Main/High8 und
+HEVC Main8, jeweils progressives4:2:0. CQP, CBR und peak-constrained VBR
+verwenden originale VCN1-Firmwarepakete. IDR/P, eine vorherige Referenz und
+zwei abwechselnde rekonstruierte Bilder; keine B-Frames, Main10 oder AV1.
+
+Der gemeinsame R4ENC-Worker uebernimmt Eingangswarteschlange, Zeitstempel,
+Backpressure, unveraenderliche Bitstream-Leases, Drain, Abort und Close.
+Abort startet die naechste Referenzkette mit IDR. Drain bestaetigt erst nach
+Freigabe gehaltener Ausgabe-Leases. Explizite AMD-Anfragen wechseln bei
+Fehlern nicht automatisch auf Software. NVIDIA/OpenH264 behalten ihr Profil.
+
+Konfiguration und Eingaben
+--------------------------
+Gerade Abmessungen: H264 ab128x128, HEVC ab130x128, bis4096x2304.
+H264-Level5.2 begrenzt zusaetzlich36864 Makrobloecke/Bild und2073600/s;
+HEVC Main-Level6.2 begrenzt4278190080 Lumasamples/s. Maximal240fps,
+positive rationale Bildrate, GOP1..65535, QP0..51. CBR verlangt Peak=Ziel;
+VBR Peak>=Ziel. Peak maximal200Mbit/s, positiver begrenzter VBV-Puffer.
+CQP verwendet keine Bitraten/VBV-Angabe. Profilgrenzen garantieren keine
+bestimmte Bildrate unter jedem Speicherbudget.
+
+BT.709-Primaries/Matrix, Limited Range, Transfer1 oder sRGB13, default/left
+Chroma. Eingabe ist ein einzelner kanonischer linearer NV12-BO mit zwei
+Ebenen, gleicher256-Byte-ausgerichteter Pitch und ausdruecklichem Chroma-
+Offset. Vollstaendig initialisierter/paddierter codierter Umfang: H264
+16-Zeilen-Bloecke, HEVC64. Getrennte Ebenen-BOs und gekachelte Bilder werden
+abgewiesen. Der Encoder leiht die GPU-Adresse und mappt keine Eingangspixel.
+Die Aufnahme-/Farbkonvertierung dieses Formats folgt in0.80.32.
+
+Paketkapazitaet8192..8MB. Davon bleiben1024 Bytes fuer SPS/PPS/VPS reserviert;
+reine Firmwareausgabe verwendet den verbleibenden begrenzten Bereich.
+Session128KB, zwei interne DPB-Bilder, begrenzter8KB-IB,4KB-Feedback.
+Alle Ressourcen unterliegen bestehenden Speicher- und Bindungsbudgets.
+
+Originalquellen und Firmwarevertrag
+----------------------------------
+Mesa26.2.2-Archiv und90 Originaldateien sind per SHA256 gesichert.
+R4AMD/Tools/VcnEncode.ps1 extrahiert unveraenderte originale Typen,
+Bitwriter, Header-, Slice- und VCN1-Paketfunktionen. Der normale Build
+verifiziert die Ableitungen. Der R4OS-Adapter gibt nur begrenzte, zueinander
+passende Parameter hinein und verwendet keine dynamische C-Allokation.
+Originale Copyright-/MIT-Texte bleiben mit den Quellbytes erhalten.
+
+Das gesicherte Picasso-Firmwareprofil0x0310f005 hat Encode1.15; die originale
+Mesa-Auswahl begrenzt VCN1 auf Session-ABI1.9 und nutzt die erweiterten
+per-picture-Ratenparameter. Die SPS/PPS/VPS kommen aus denselben originalen
+Schreibern wie die Slice-Schablonen. H264 verwendet POC-Schritte2; HEVC
+Schritte1 passend zur SPS-Referenz auf das unmittelbar vorherige Bild.
+
+Fehler und Lebensdauer
+---------------------
+Jedes Bild ueberschreibt das Feedback mit Canaries. Erst ein passender
+nativer Fence ohne gehaltene Ressourcen UND frisches Firmwarefeedback
+(ready1, Bitstreamoffset0, konsistente Start-/Endgroesse) geben Bytes frei.
+Die Annex-B-Pruefung kontrolliert die erlaubten IDR/P-NALs und Grenzen;
+sie validiert nicht die gesamte komprimierte Pixelsyntax. Referenzplaetze
+wechseln erst nach bestaetigtem Erfolg.
+
+Ein fehlgeschlagener Wait gibt keine BOs frei. Der Worker haelt Eingabe,
+Session und DPB bis zum nativen Retirement. Nach angenommener Initialisierung
+muss auch bei terminalem Fehler CloseSession bestaetigt werden. Alternativ
+belegt ein neuer Geraete-/Speicher-Epoch nach Retirement der alten Queue,
+dass die alte Firmwareinstanz beendet ist. Vor Annahme erzeugt ein Fehler
+keine Firmware-Session. Wiederholte Close-/Release-Versuche sind erlaubt;
+unbestaetigte Freigaben bleiben Busy.
+
+Nachweise
+---------
+- Bestehende R4ENC-ABI-/Besitzgruppe: echte SDK-Dispatches und produktiver
+  AMD-Besitzer, beide Codecs/alle drei Ratenarten, GOP/Reset, keine CPU-
+  Pixelmaps, Canaries/Groessen/NAL-Fehler, verspaetete Init/Bild/Close-ACKs.
+-216 C-Paketkombinationen mit GCC Address/Undefined Sanitizer: vier Profile,
+  drei Ratenarten, drei Groessen, Init/IDR/P/Close, ungueltige Eingaben ohne
+  Aenderung der Ausgabe. Kein dynamischer C-Zustand ausser Caller-Scratch.
+-FFmpeg liest36 produktive SPS/PPS/VPS-Vektoren unabhaengig: Profile, Level,
+ 130x130/320x192/4096x2304, Crop, rationale Bildrate30000/1001, Transfer13,
+  Referenzabstand und HEVC-Blockgroesse. Weitere24 IDR/P-Slice-Header werden
+  aus den originalen VCN-COPY-Schablonen mit festen First-Slice/First-MB-
+  und QP0-Werten zusammengesetzt und von FFmpeg gelesen. Einzelreferenz,
+  POC, QP und Deblocking stimmen mit den Parameter-Sets ueberein. Ein synthetischer VCL-Anhang dient
+  ausschliesslich dem Parserstart und ist kein gueltiges codiertes Bild.
+-Zwei mit Softwareencodern erzeugte Referenzclips werden unabhaengig zu je
+  drei I/P/P-Bildern dekodiert. Sechs extrahierte VCLs pruefen den Annex-B-
+  Vertrag; HEVC-IDR20 wird bewusst abgewiesen, da VCN1 hier IDR19 anfordert.
+-SMP4 mit produktiver R4ENC.R4L und echten neun ENCODE_V1-Aufrufen:
+ 13 Sitzungen/73 Eingaben, alle vier Profile und drei Ratenarten, Abort/IDR,
+  Drain mit gehaltener Paketlease, fehlendes Feedback, Close und Workerjoin.
+  GPU-BOs/VA/Queues/Feedback und VCL-Daten sind modelliert. Keine AMD-
+  Pixelausfuehrung, Geschwindigkeits-, Qualitaets- oder Bitratenmessung.
+
+Versionen und offene Hardwarequalifikation
+-----------------------------------------
+Release0.80.31, R4ENC0.1.3. R4AMD-Runtime bleibt bytegleich0.1.6 mit
+BACKEND_V1:4. AMDGPU0.1.21 und Kernel0.1.205 unveraendert; Engine3 und
+JPEG-Ausschluss aus28/30 reichen fuer diesen Schritt. Kein neuer API-Slot
+oder globales Gate. Der Medienpaketplan nimmt die bereits vorhandenen
+R4AMD-MIT-Notices zusaetzlich in das eigenstaendige Videopaket auf.
+
+Nur0.80.39 prueft echte VCN-Start-/Bild-/Close-Ausfuehrung, Hardware-
+Bitstreams mit unabhaengigem Decoder, CBR/VBR-Verhalten, Bildqualitaet,
+Wiederholungs-/Fehlerfaelle, Leistungsaufnahme und den benannten Laptop.
+Linux-Build und SMP4 sind nachgewiesen; Windows wurde nicht ausgefuehrt.
+Reproduktionsdateien/Hashes: AMDEncoding08031.json und Temp/AMD08031/.

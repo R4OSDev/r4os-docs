@@ -1,0 +1,93 @@
+﻿AMD-Geraeteverlust und Wiederanlauf 0.80.36
+=========================================
+AMDGPU0.1.24; unveraenderter gemeinsamer Kernel-/SDK-/Consumervertrag.
+Nachweise und Artefakthashes: AMDReset08036.json. Keine physische Abnahme;
+Lenovo-Reset, Bildrueckkehr und Fehlerlast gehoeren ausschliesslich0.80.39.
+
+Fehlerzustellung
+----------------
+Der Queue-Worker erfasst den ersten Fehler-IV mit Adapter-, Geraete- und
+Resetgeneration, IH-Client/Source, VMID, PASID und vier originalen Datenwoertern.
+Ohne IV protokolliert er die erste abgelaufene Fence-Identitaet und monotone
+Zeit; PSP/SMU-Start und DCN liefern zusaetzlich Fehler und urspruengliche Phase.
+Keine Registerdump-Schleife und kein PCI-Inventarscan im Fehlerkontext.
+
+VMC/UTCL2-, Engine-/Firmware-, IRQ-/Wake- und Deadlinefehler sperren die
+vollstaendige gemeinsame APU-Queuegeneration. GfxDriverQueueApi.reset(q0)
+meldet alle betroffenen Queues device-lost, entfernt Ausgaben aus dem aktiven
+Katalog und schliesst Neuaufnahme, BEVOR Quieszenz/Worker-Join gelingen muss.
+Busy ist hierbei die vertragliche Verlustquittung, keine DMA-Bestaetigung.
+Ein fehlgeschlagener Metadatenaufruf wird wiederholt. Ein fremder/staler IV
+kann die aktuelle Generation nicht treffen. DCN-Fehler und aeusserer Abbau
+verwenden dieselbe fruehe Sperre, auch bei nicht joinbarem Worker.
+
+GfxDriverMemoryApi.device_lost(q0) entwertet alle nativen BOs genau der
+Adapter-/Speichergeneration und schliesst ihr Budget. CPU-/Systemspeicher
+und fremde Adapter bleiben unabhaengig. Bestehende GPU-Leases und physische
+Pages bleiben erhalten. Der AMD-Worker nimmt keine weitere Arbeit an.
+Fuer q1 muessen alle Engine-, Firmware-, VM-/Mapping- und Startbesitzer
+abgebaut sowie GMC bestaetigt restauriert sein. Erst dann werden auch bei
+noch gehaltenen, bereits ungueltigen Anwendungsreferenzen Release-Tickets
+abgeholt; Close bleibt fuer solche Referenzen moeglich. Busy/Fehler behalten
+das genaue Ticket und die UMA-Reservierung fuer spaetere Abbauversuche.
+
+APU-Recovery
+------------
+Reihenfolge: logische Sperre; Queue-Join; gemeinsamer Display-Resetbeginn;
+Power-Wake/Stop; DCN-Bootrekonstruktion; VCN/GC/SDMA-Stillstand und IH-Abbau;
+Kontexte, BO-Mappings, weitere Heads, Cursor, Bildpuffer und Taktbesitzer;
+GMC-Restore; PSP-/SMU-DMA-Abschluss und urspruengliches PCI-Command-Wort;
+physischer Boot-Nachweis; gemeinsame Reset-Retirement; Boot-Writer-Freigabe;
+UMA-/Budgetabbau. Unterbesitzer behalten unbestaetigte Ressourcen.
+Die PCI-Operation betrifft nur die beim Init erfasste eigene Funktion.
+
+Es gibt keinen pauschalen ASIC-/PCI-FLR-/Secondary-Bus-Reset. Die APU nutzt
+die vorhandenen IP-Halt-/Drain-/Restorefolgen. Ein wirklich festhaengender
+Block, der diese Nachweise nicht mehr liefert, bleibt quarantiniert und
+benoetigt einen Neustart. Metadaten oder ein Timeout gelten nicht als Halt.
+
+Nach dem ersten Fehler einer vorher aktiven Ausgabe darf der native Worker
+GENAU EINMAL neu starten: erst nach vollstaendiger Recovery, bestaetigtem
+Bootfb, unveraendertem Originalbereich/Format/Pitch und neuer Generation.
+Er nimmt einen frischen Boot-Snapshot und durchlaeuft den produktiven Start
+mit neuer Speichergeneration, PSP/SMU, Engine-Selbstpruefungen und DCN-
+Bildquittung. Alte Kontexte werden nicht als neue ausgegeben. Der zweite
+Fehler, Startfehler, manuelle Softwarewechsel, Stop/Unload oder eine unklare
+Bootaufnahme loesen keinen weiteren automatischen Start aus. Abbruch waehrend
+der Recovery unterbindet den Wiederstart. Start120s, Recovery30s; interne
+IP-Fristen bleiben enger. Late Join/Release kann der normale Close erneut
+beobachten; es gibt keine automatische Neustart-/Endlosschleife.
+
+Verbraucher und Rueckfall
+------------------------
+Die bereits vorhandene gemeinsame Generationserkennung wird wiederverwendet:
+R4AMD ist der zustandsarme Profil-/Commandvertrag; R4GFX entwertet native
+Ressourcen, haelt alte Fence-/BO-Leases bis Retirement und kann mit CPU-
+Quellen einen neuen Backendkontext aufbauen. RADV/R4VK und der darauf laufende
+Zink/R4GL-Pfad melden den alten Geraetekontext verloren. Anwendungen muessen
+ihre Vulkan-/GL-Geraete neu anlegen. R4VIDEO/R4ENC stoppen die alte native
+Session; eine neue Session beginnt mit neuen Bindungen und Codec-Zustand.
+Das ist kein transparentes Weiterlaufen verlorener DPB-/API-Kontexte.
+
+Der Desktop verwirft verlorene Output-Worker und baut die komplette Szene
+aus seinen CPU-Quellen unter der neuen Ausgabeidentitaet auf. Software-
+Rendering darf nur auf eine weiterhin bestaetigte Ausgabe praesentieren.
+Bootfb wird erst nach Originaladresse/Geometrie, Link-/Frame-/Register-
+Nachweis sowie erfolgreichem Restore-Callback wieder beschreibbar. Bei
+unbestaetigtem Scanout bleiben Boot-Writer gesperrt; SSH/Serial koennen den
+Headlesszustand weiter diagnostizieren. Kein automatischer Reboot und keine
+Aenderung einer Benutzerkonfiguration. Fuer den naechsten Start existiert
+R4OS Software Graphics / Limine cmdline r4os.graphics=software; die einmalige
+Auswahl unterdrueckt AMD-Probes und native Writes auch bei AMDGPU mode=native.
+
+Pruefumfang
+-----------
+Erweitert werden bestehende AMDGPU-Ownergruppen, kein weiteres Sammelgate:
+Fehlerzustellung vor ausbleibender Quieszenz, Metadatenretry, exakte verlorene
+Generation, gehaltene UMA-Referenzen, q0/q1-Grenze, wiederholtes Close,
+Worker-Join/Release, ein Wiederanlauf/zweiter Fehler, Softwarewechsel,
+Stop waehrend Recovery, fehlgeschlagene Neuaufnahme und Boot-Identitaet.
+Bestehende Start-/Firmware-/GC-/VCN-/Displaygruppen decken die einzelnen
+Lebenszyklusphasen und deren retained-Fehler ab. Gemeinsame Kernel-Display-,
+R4GFX-/Medien- und Desktopbesitzer werden gezielt nachgeprueft.
+Modelle belegen Kontrollfluss und Eigentum, keine reale APU-Resetwirkung.

@@ -1,0 +1,116 @@
+﻿AMD-RADV-Geraete, Winsys und Speicher 0.80.23
+===========================================
+Stand: 22.09.2026. Softwareintegration fuer Picasso 1002:15D8.
+
+Ergebnis
+--------
+R4VK baut den originalen Mesa-26.2.2-RADV-Provider samt ACO, AddrLib und
+gemeinsamem Vulkan-/NIR-Unterbau. Die neue R4OS-Winsys verwendet vorhandene
+R4DRAW-BO-, VA-, Queue- und Fencebesitzer sowie R4DEV-Speicherdaten.
+AMDGPU bleibt alleiniger Hardwarebesitzer. Keine libdrm-/Linux-ioctls,
+fingierten Dateideskriptoren oder privaten Strukturen anderer Mesa-Binaries.
+Die Softwareabnahme verwendet einen ausdruecklich modellierten Grafiktreiber
+im SMP4-Gast. GPU-Befehle werden dort nicht ausgefuehrt. Hardwarepruefung,
+Pixelrichtigkeit und native Abschlussinterrupts bleiben 0.80.39 vorbehalten.
+
+Enumeration und Typgrenzen
+-------------------------
+Die gemeinsame Enumeration durchlaeuft alle Inventarplaetze einschliesslich
+Luecken. NVIDIA und AMD verwenden eigene Konstruktoren, Revalidierung und
+Destruktoren. Eine private, mit denselben Vulkan-Basisstrukturen gebaute
+RADV-Instanz gehoert zu jedem AMD-PhysicalDevice; sie uebernimmt Appdaten und
+Allokator des oeffentlichen Elternobjekts. NVK behaelt seinen Besitzer.
+Die komplette neue Geraeteliste wird erst nach erneuter Validierung aller
+Bindungen publiziert. Fehler beim zweiten Provider beseitigen auch bereits
+angelegte Objekte. Fehlende/inkompatible native Backends erzeugen kein
+AMD-Vulkan-Geraet. Fremde Profile und alte kurze AMD-Eigenschaften werden
+weiterhin von anderen Konsumenten verarbeitet, berechtigen aber nicht RADV.
+
+AMDGPU veroeffentlicht IMAGE_V1-Properties Revision 2 mit 240 Bytes. Die
+ersten 64 Bytes bleiben die unveraenderte R4AmdArchitecture. Darauf folgen
+PCI-/ASIC-Revision, wirkliche CU-/RB-Masken, gestartete Firmware-/Feature-
+Versionen, aus gepruefter gpu_info-Firmware gelesene Topologie, UMA-Budget,
+nativer VA-Bereich und die maximale Allokation. Publikation setzt gestartetes
+GC und passende Speicher-/Resetgenerationen voraus. R4GFX akzeptiert die
+genauen Paare Revision1/64 und Revision2/240 einschliesslich Nulltail.
+Die bisherigen R4AMD-Typen und Interfacefunktionen bleiben kompatibel;
+die reine Vertragsergaenzung aendert kein R4AMD-Runtimeverhalten.
+
+Speicher und Lebensdauer
+-----------------------
+SYSTEM-BOs verwenden den kanonischen Systempuffer. VRAM wird asynchron beim
+Treiber reserviert und erst nach geprueftem Abschluss uebernommen. Jede BO
+besitzt einen nativen VA-Bereich und dessen Bindung. Ergebnisform, Groesse,
+Alignment, Ursprung, Epochendaten und Rueckgabeidentitaeten werden geprueft;
+Fehler lassen den Caller-Ausgabewert unveraendert und bauen erworbene Handles
+ab. Die aktuelle Grenze sind 64 MB je Allokation und 32 residente Bindungen
+je Submit. Systemheapgroesse folgt dem tatsaechlichen R4DEV-RAM abzüglich
+Systemreserve; der lokale Heap folgt dem Treiberbudget, keiner APU-Schaetzung.
+Die von RADV fuer GFX9-SMEM verlangte Folgeseite wird als wirkliches Backing
+innerhalb derselben Bindung reserviert. Sie zaehlt bei Budget, Groessenlimit
+und Freigabe mit. Der native Port verwendet dafuer keine separate Linux-VA-
+Aliasabbildung; an der Anwendungsgrenze bleibt die angeforderte Laenge bestehen.
+
+CPU-Maps verwenden den vorhandenen persistenten Write-back-Vertrag und
+zaehlen Mehrfachmaps. VRAM ohne CPU-Zugang ist nicht mappbar. Ausgaben werden
+vollstaendig validiert; Fehler beim Map/Unmap oder widerspruechliche Receipts
+koennen den Winsys-Besitzer auf device-lost setzen. BO-/VA-Close fordert nur
+den logischen Abbau an: laufende Brokerleihgaben behalten den Speicher bis
+zur bestaetigten Pensionierung. Ressourcen-, Kontext- und Fencebesitzer
+ueberleben ihre oeffentlichen Vulkan-Handles nach ihren eigenen Referenzen.
+
+Queue und Synchronisation
+-------------------------
+Grafik und Compute benutzen gebundene native Queues. Ein neuer
+R4AmdNativeSubmit-Kopf plus bis zu 32 IBs beschreibt vorbereitete PM4-Puffer.
+Profil/Commandrevision bleibt 1; die Laenge unterscheidet dieses Paket
+eindeutig vom bestehenden 504-Byte-YUV-Auftrag. Vor dem ersten Paket prueft
+AMDGPU saemtliche IB-Bereiche, Laengen und Bindungen, behaelt deren Leihgaben
+und erzeugt erst danach die geschachtelten GFX9-IB-Pakete fuer VMID1.
+Ausfuehrbare PTEs und der vorhandene HDP-Abgleich decken Shader-/IB-Speicher ab.
+
+RADV ordnet Preambles, Commandstreams und Postambles; eine leere Uebergabe
+erzeugt einen echten NOP-Auftrag mit Fence. Geraeteuebergreifende oder
+unpassende Engineobjekte werden abgewiesen. Alle lebenden BOs werden aktuell
+resident gehalten; feinere Residency und Performance folgen in 0.80.33.
+Native Binaersyncs verwenden R4SYS-Mutex/Condition und kopierte echte
+Fenceidentitaeten. Mesa emuliert darauf Timeline-Semaphoren. Wartende und
+exportierte Punkte halten ihre eigene Referenz; ein logischer Close gilt
+niemals als vollendete GPU-Arbeit. Kapazitaetsfehler ohne noch laufenden
+Vorgaenger geben Speichermangel zurueck und setzen keine Erfolgssignale.
+
+Bau, Herkunft und Freigabegrenzen
+-------------------------------
+Ein gemeinsamer privater Mesa-Quellbaum versorgt NVK und RADV; weder R4GL-
+noch R4ACO-Archive mit anderen privaten Strukturdefinitionen werden gelinkt.
+Originalquellen und Hostgeneratoren sind SHA256-gepinnt. Die Pipelinecache-
+UUID verwendet die native Build-Identitaet samt Chipfamilie/Revision statt
+eines nicht vorhandenen Linux-/ELF-Dateizeitstempels. MesaRuntime.patch
+und MesaRADV.patch bleiben ausdrueckliche Portanpassungen. glslang 15.2.0
+generiert die benoetigten eingebetteten Shader; C++ verwendet die bereits
+gemeinsamen R4OS-Speicher-/Thread-/Prozessbesitzer und gepinnte libc++-Dateien.
+ASTC-Tabellen sind pro Prozess initialisiert und finalisiert. Linux-Tracing,
+DRIRC-Dateien und externe Disassembler sind nicht aktiviert. Vollstaendige
+AMD-/Mesa-/libc++-Hinweise sind in R4VK-NOTICES.txt der Distribution enthalten.
+
+Dies ist keine Vulkan-Konformitaetsfreigabe. conformanceVersion bleibt Null;
+AMD meldet vor 0.80.25 hoechstens API1.0. Sparse, Linux-FD-Interop, Video,
+Mesh/RT, Pstate-/Clock-/Temperaturtelemetrie, GPU-Timestamps, WSI und deren
+abhaengige Erweiterungen werden hier nicht freigegeben. Die begrenzte
+Commandaufzeichnung verwirft ueberlaufene Streams bei Finalize; ausserordentlich
+grosse einzelne Emit-Bloecke sind noch Teil der Fehlerhaertung in 0.80.24.
+Vollstaendige
+Grafik-/Compute-Arbeitslasten und Compilerfehlerisolation folgen in 0.80.24,
+Vulkan-1.3-Faehigkeiten und Fensterpraesentation in 0.80.25.
+
+Pruefbelege
+-----------
+AMDRADV08023.json erfasst die finalen Builds, vorhandenen AMDGPU-/R4GFX-
+Besitzerpruefungen und den kurzen SMP4-Gastlauf samt Quellen-/Artefakthashes.
+Der Gast laedt den echten R4VK-Quellstand in eine temporaere Pruefbibliothek
+und verbindet dessen RADV-Konstruktor mit den wirklichen R4OS-Brokern.
+Die Grafik-Hardwareantworten bleiben explizite Modellstimuli. Die Abnahme
+prueft gemischte NVK/RADV-Enumeration, fehlende/alte/fehlerhafte Eigenschaften,
+Callback-OOM, echte BO/VA/Maps, Reserve-/Bindefehler, Grafik-/Compute-NOPs,
+ausbleibende Signale bei Submitfehlern, Wait-Timeout und Ressourcenabbau.
+Keine neue globale Suite, kein Windowslauf und kein physisches Update.

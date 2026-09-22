@@ -1,0 +1,119 @@
+﻿AMD APU-Takte, Thermik und Energiesparen / 0.80.34
+=================================================
+Stand: 22.09.2026. Implementiert und softwaregeprueft; keine physische Probe.
+AMDGPU0.1.22, Kernel0.1.206, DISPLAYD0.1.45, DEVMGR0.1.6.
+
+Besitzer und gemeinsame Vorarbeit
+---------------------------------
+AMDGPU besitzt SMU10, RLC/GC9.1, SDMA4.1 und VCN1. Der vorhandene Kernel-
+Telemetriecache aus0.79.X bleibt alleiniger Katalog fuer Anbieter, Bedarf,
+Adapter-/Speichergeneration und Alterung. DISPLAYD /POWER und DeviceManager
+verwenden dieselbe SDK-Formatierung. Es entsteht kein zweiter Sensorservice,
+keine GPU-Policy im Kernel und kein Linux-Laufzeitbestandteil.
+
+Der einzige SMU-Treiberkanal wird zwischen Start-, Queue-, VCN- und DCN-
+Worker atomar vergeben. Die Vergabe dauert bis zur abgeholten Antwort,
+auch wenn die Firmware bereits geantwortet hat oder eine Frist ablief.
+Sie ist kein ueber I/O gehaltener Spinlock. Spaete Antworten koennen den
+Kanal freigeben; unklare Teilwrites halten ihn und die MMIO-Zuordnung fest.
+Display-Taktanforderungen warten auf einen freien Kanal. Der VBIOS-
+Displaytaktkanal bleibt ein getrenntes Hardwareprotokoll.
+
+DPM und Messwerte
+-----------------
+PSP-gepruefte Picasso-Firmware und der bestehende SMU10-Interfacevertrag
+bleiben Voraussetzung. start_flow behaelt jetzt sowohl die rohe SMU-Version
+als auch die bisherige, um acht Bit verschobene Anzeigeversion. Der originale
+Picasso-GfxBusy-Vergleich verwendet die rohe Version ab0x41e3b.
+
+Die Firmware liefert ihre GFX-Minimal-/Maximalfrequenz. Nur positive,
+geordnete Werte werden als bekannte Grenzen protokolliert; eine abgelehnte
+Abfrage bleibt unbekannt. Der bestaetigte SMU-DPM-Tabellenpfad liefert weiter
+die realen DCF/SOC/Fabric/Memory-Eintraege fuer die gemeinsame DCN1-Planung.
+Keine ersatzweise erfundene Frequenztabelle, kein GFX-Fix-Takt, keine
+Spannungs-, Overdrive-, PPT-/TDP- oder CPU-Leistungsgrenzen werden gesetzt.
+Das geteilte CPU-/APU-Budget bleibt bei Firmware und Boardkonfiguration.
+
+Bedarfsabhaengige Abfragen liefern aktuellen GFX- und Fabric-Takt in Hz sowie,
+wenn die Firmware es unterstuetzt, GFX-Last in Prozent. Fabric ist kein
+physisch gemessener DRAM-Takt. THM9 liefert APU-Temperatur in1/8 Grad;
+CUR_TEMP_RANGE_SEL wird im unverkuerzten Register ausgewertet, negative
+Temperaturen bleiben moeglich. Verbindungsverlust und unplausible Werte
+werden nicht zu Nullmessungen. Abfragen erfolgen hoechstens alle500ms,
+Bedarf laeuft nach maximal10s aus, einzelne Messwerte nach3s.
+
+Gemeinsamer Payload und alle Tabellenlayouts bleiben bytegleich.
+Fuenf additive Konstanten definieren SMU10 als Quelle und Teilwert-/Takt-
+Metadaten. Frische Metrik0/2 kennzeichnet gueltige Komponenten in Bits8..11;
+fehlende Werte muessen Null als Speicherinhalt tragen und werden unknown
+angezeigt. Die Flags unterscheiden angefragte Ziele, abgefragte Takte und
+Fabric. Die Kernelpruefung weist unbekannte Bits, leere Teilmasken und
+Werte in nicht vorhandenen Komponenten zurueck. Die kontrollierte Baseline-
+Aktualisierung aendert nur Beschreibungen/additive Konstanten; Typfelder,
+Offsets, Typversionen und alte Konstanten sind separat verglichen.
+
+DRAM-Takt, Video-/SM-Einzeltakte, Speicherlast/-temperatur, GPU-/Package-Watt,
+P-State, Boost-/Throttlegruende und GPU-Zeitstempel werden nicht erfunden.
+Sie bleiben unbekannt. Sensorfehler invalidieren den Cache; spaete SMU-
+Antworten werden weiter abgeholt. Ein dauerhaft unbeantworteter physischer
+SMU-Kanal bleibt fuer weitere Energieoperationen gesperrt.
+
+Clockgating, GFXOFF und Lebensdauer
+----------------------------------
+GC erhaelt die originalen Picasso-MGCG/MGLS/CP-LS/CGCG/CGLS-Einstellungen
+unter bestaetigtem RLC-Safe-Mode. RLC-LS und3D-CGCG werden fuer Picasso
+nicht zusaetzlich aktiviert. Die benoetigten SRM-/RLC-Zustaende muessen
+bereits aus dem geprueften Startpfad vorhanden sein. Fuer GFXOFF gilt die
+Originalquirk15d8/19e5:3e14/RevisionC2; nicht zugelassene ASICs werden dadurch
+nicht nachtraeglich freigegeben. MMHUB-Powergating bleibt deaktiviert.
+
+Zwei Sekunden ohne neue kanonische Arbeit, gehaltene Jobs, Retirement,
+Allokations-/VA-Auftraege, Displaytransaktion und unabgearbeitete Ringdaten
+erlauben GFXOFF. Ein neuer monotoner Benachrichtigungszaehler bleibt auch
+bei zusammengefassten Semaphore-Hinweisen sichtbar. Vor GC-/VM-/BO-/Ring-
+Arbeit sind DisableGfxOff-ACK, wirklicher PWR_GFXOFF_STATUS2 und die
+Picasso-Compute-Abschaltung von GC-Powergating noetig. Die Uebergaenge sind
+in begrenzte Workeraktionen geteilt; Timeout ist keine Aufwachquittung.
+
+DCN-Health, Helligkeits- und HDMI-Service laufen waehrenddessen weiter in
+ihrem eigenen Task. Ein begrenzter Schlaf-Pollpfad holt Modus-/Cursor-
+Auftraege ab und erkennt Connectoraenderungen, fuehrt aber keine GPU-BO/
+VM-Arbeit aus. Task-geschriebene HDMI-Retirementdaten werden erst nach Join
+gelesen. Der normale Displaypfad setzt erst nach bestaetigtem GC-Wake fort.
+
+VCN schaltet nach100ms ohne gehaltene Medienfences und bei gleichen
+Ringzeigern auf automatische Taktabschaltung. Nach2s folgt der vorhandene
+Ring-/Idle-/LMI-/UMC-/Reset-/SMU-PowerDown-Nachweis. Kontext-/DPB-Speicher
+bleibt resident. Neue Arbeit wartet waehrend Stop und PowerUp; Firmware-
+Bereitschaft und IRQ-Wiederaufnahme gehen Submission voraus. Es gibt
+keinen Fence- oder Epochwechsel allein wegen Idle. Ein abgelehntes
+PowerDown oder eine unbestaetigte Teiloperation darf keinen Speicher
+freigeben. JPEG-/Video-Ausschluss bleibt bis zum Ressourcenabschluss aktiv.
+
+SDMA verwendet Medium-Grain-Clockgating und Memory-Light-Sleep; der aktive
+Displaypfad behaelt diese Engine. Volles SDMA-PowerDown gehoert zum
+geordneten nativen Shutdown. Der gemeinsame Close drainiert SMU-Antworten,
+weckt/restauriert GC und stoppt VCN vor Callback-/PTE-/BO-Freigabe.
+Erst danach duerfen Display- und Speicherbesitzer Ressourcen abbauen.
+
+Konkrete Grenzen
+-----------------
+Die bisherigen gemeinsamen DML-Displayfloors fuer DCF/SOC/Fabric und der
+fixe DISP-/DPP-Takt bleiben erhalten. Sie werden bei laufenden Ausgaben
+nicht ohne eine neue gemeinsame Watermark-/Takttransaktion abgesenkt.
+Das kann die physische Idle-Ersparnis begrenzen. Bildschirm-Off/On folgt35;
+System-S3/S4/S0ix ist weiterhin kein verfuegbarer Plattformpfad.
+
+Die Quittungen in Hosttests sind explizite Modelle, kein Picasso-Emulator.
+Echte Firmwareantworten, erreichter GFXOFF-Zustand, VCN-Sessionfortbestand,
+Temperatur, Batterielaufzeit, Energiebedarf und stabile gleichzeitige
+Ausgaben muessen in0.80.39 am Laptop geprueft werden. Aus QEMU-Wandzeit
+entsteht keine Aussage ueber native Leistung oder Energieverbrauch.
+
+Nachweise
+---------
+AMDEnergie08034.json bindet Quellen, Artefakte, Logs, unveraenderte Layouts
+und den kurzen SMP4-Gast an SHA-256. Die bestehenden Startup-/VCN-/Display-
+Gruppen sind um Quittungsfehler, Boardquirk, spaete Antworten, endlichen
+Messbedarf, Teilwerte, Kontextretention und Display-Wake erweitert.
+Keine zusaetzlichen globalen Gates, kein Windowslauf, kein Hardwareupdate.

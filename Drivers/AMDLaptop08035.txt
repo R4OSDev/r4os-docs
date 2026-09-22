@@ -1,0 +1,149 @@
+﻿AMD Bildschirmruhe und Laptopbedienung / 0.80.35
+================================================
+Stand: 22.09.2026. Softwarestand; kein Test an echter Hardware.
+AMDGPU0.1.23, Kernel0.1.207, ACPIPLAT0.1.0, HIDREPORT0.1.2,
+R4DESK0.1.75 und APPEARANCE0.1.18.
+
+Gemeinsame Policy und Besitzer
+------------------------------
+Die vorhandene Desktop-Screen-Power-Policy aus0.79.X besitzt weiter den
+Inaktivitaetstimer, kurze Off-Leases und lokales/Remote-Wake. AMDGPU besitzt
+alle DCN1-, Panel-, Link-, Cursor- und Audio-Operationen. Der zentrale
+Outputkatalog bleibt die einzige Quelle fuer Verbindungsgeneration,
+angefragten Zustand und bestaetigte Hardwarequittung.
+
+Ein neuer externer Eingabetreiber ACPIPLAT (AcpiPlatform) besitzt uACPI6.1.0,
+AML-Namespace, EC-Operation-Regions, GPE/Notify und standardisierte Deckel-/
+Helligkeitsereignisse. Der Kernel interpretiert keine AML und enthaelt
+keine Fn-Policy. Er leiht bereits permanente Firmware-/UC-Abbildungen,
+authentifiziert den Treiber-/Taskbesitzer und kopiert begrenzte Eingabefakten.
+USB-HID-Transport bleibt beim vorhandenen xHCI/HID-Besitzer; Deskriptor- und
+Consumer-Dekodierung liegen im vorhandenen externen HIDREPORT.R4P.
+
+Bildschirm-Aus/Ein
+------------------
+Das eDP-Off sichert die bestaetigte Helligkeit, stoppt Video/TG und Backlight,
+schaltet Link/Empfaenger/Panel mit den bestehenden Delays ab und behaelt
+Scanout-, Cursor- und BO-Identitaeten. HDMI-Off stoppt zuerst den Audio-
+Endpoint, mutet und stoppt Video/Link. Der unabhaengige wache Kopf kann
+weiter praesentieren. Aktive Modusbestaetigungen blockieren den Off-Start.
+
+Wake prueft Empfaengeridentitaet und Timing neu, trainiert eDP oder richtet
+HDMI neu ein. Erst wirkliche Frame-/Adress-/Registerquittungen bestaetigen
+Scanout und Cursor. HDMI-Audio folgt seiner Videoquittung. Die gesicherte
+Panelhelligkeit und Health-Baseline werden wiederhergestellt. Displayinterne
+Sequenzen sind keine erfundenen GPU-Fences oder GPU-Zeitstempel.
+
+Publication-Busy und Unpause-Busy wiederholen nur ihre Metadatenoperation;
+physische Off-/Wake-Auftraege werden nicht erneut ausgefuehrt. Gegenlaeufiger
+Benutzerwunsch konvergiert nach Abschluss des bereits gestarteten Auftrags.
+Ungeklaerte Hardwarequittung meldet unavailable und behaelt Ressourcen.
+GC-Schlaf wird vor benoetigter BO-/VM-/Ringarbeit verlassen. Schlaf-Polls
+koennen neuen Powerbedarf und HDMI-HPD erkennen, ohne selbst GPU-VM-Arbeit
+zu beginnen. Neue HDMI-Verbindungen erben keine alte Off-Lease.
+
+Eingabevertrag und Desktop
+--------------------------
+R4SYS ABI24 ergaenzt Slot154 platform_input_snapshot (64 Bytes). Jeder Leser
+erhaelt eigene, nicht konsumierende Up-/Down-Zaehler, Gesamt-/Deckelsequenz,
+Deckel unknown/open/closed, Quellen und Faehigkeiten. Alte R4SYS-Slots bleiben
+unveraendert. Der Desktop baselinet historische Zaehler beim Start und nach
+Quellen-Neustart; identische Deckelmeldungen erneuern keinen Schlafwunsch.
+Deckel geschlossen fordert Bildschirmruhe an. Offen oder Verlust einer zuvor
+geschlossenen Quelle weckt. Lokale und Remote-Eingaben verwenden denselben
+bestehenden Wakepfad.
+
+Helligkeitstasten wecken und aendern in etwa5-Prozent-Schritten ausschliesslich
+das eindeutig verbundene interne eDP-Panel. Ein Auftrag wartet auf On und die
+bestaetigte aktuelle Helligkeit sowie die vorherige Requestquittung. Busy
+wird begrenzt nachgefragt; Fehler oder neue Verbindungsgeneration verwerfen
+den Auftrag. Kein Transfer auf ein anderes Panel, keine optimistische
+Ist-Helligkeit und kein Schreiben der gespeicherten Appearance-Praeferenz.
+Appearance zeigt die tatsaechlich registrierte Tastatur-/Firmwarequelle an.
+
+HIDREPORT-Operation3 ergaenzt einen64-Byte-HidConsumerOp. Die alte Summary und
+bestehenden Boot-Operationen bleiben unveraendert. Consumer-Page0x0c mit Usage
+0x6f/0x70 erzeugt Helligkeit; verschiedene Report-IDs behalten ihren eigenen
+Pressed-Zustand. Ein Flankenwechsel erzeugt genau einen Schritt, kein
+kuenstliches Hold-Repeat. Unterstuetzt sind absolute Variable-Bits und Arrays,
+getrennte Input-/Output-/Feature-Offsets und Global Push/Pop. Unvollstaendige,
+relative oder unpassende Reports erzeugen keine erfundenen Tasten.
+
+Der xHCI-Pfad bindet eine separate Non-Boot-Consumer-Schnittstelle mit ihrem
+Reportprotokoll. SET_PROTOCOL bleibt auf Boot-Interfaces beschraenkt. Eine
+bereits gesetzte Konfiguration desselben Composite-Geraets wird beim Binden
+des zusaetzlichen Interfaces nicht erneut gesetzt. Generationen und gehaltene
+Tasten werden beim Entfernen verworfen. Geteilte Boot-/Consumer-Collections
+und weitere gleichzeitig gebundene Consumer-Keyboards sind keine Zusage.
+
+Externe Firmwareintegration
+---------------------------
+DriverResourceApi waechst append-only48->56 Bytes bei Wireversion1. Die alten
+32-/48-Byte-Praefixe bleiben gueltig. platform_query liefert DriverPlatformApi
+mit RSDP, borrowed physical_view und input_submit. Resource-/Platform-Erfolg
+ist0; Snapshot-Erfolg ist1. DriverApi bleibt35. Die Firmwareansicht ist
+auf16 MB je Anfrage beschraenkt, erzeugt keine neue Abbildung, Cachealias,
+Allokation oder Unmap und verweigert nicht permanent erreichbare Seiten.
+PCI-Operation-Regions verwenden ausschliesslich validierte MCFG/ECAM-
+Abbildungen mit exakter Zugriffsbreite; kein CF8/CFC aus Firmwarearbeitern.
+Der bisherige Init-only-Vertrag der allgemeinen PCI-DriverApi bleibt bestehen.
+
+uACPI ist unveraendertes MIT-Material mit gepinntem Commit, Original-Lizenz und
+SHA256. Originale R4OS-Bruecken verwenden Heap-, Task- und Semaphore-Owner des
+R4D. Vier CPU0-Arbeiter trennen Hauptlauf, SCI-Statusabfrage, GPE und Notify.
+SCI wird alle10ms abgefragt; das ist kein installierter physischer IRQ.
+Callbacks, AML, Allokation und Wait laufen ausserhalb kurzer Queue-/Kernel-
+Input-Locks. Queueueberlauf oder Firmware-Fatal entzieht die Eingabequelle.
+
+EC-Ports stammen nur aus ECDT oder PNP0C09 _CRS; _GLK und _GPE werden
+respektiert. Read80/Write81/Query84 besitzen Fristen. Der Global Lock wird vor
+dem EC-Mutex genommen; _Qxx laeuft nach Freigabe beider. SCI_EVT wird nur vom
+EC-Besitzer gelesen. Timeout/unerwartetes OBF sperrt den Controller ohne
+Blindwiederholung. Maskierte GPEs werden erst nach der Query-Behandlung
+freigegeben. PNP0C0D/_LID, Notify80 und qualifizierte Video-Notify86/87 sind
+die standardisierten Quellen. _DOS(4) uebergibt die Policy dem OS; AMDGPU
+bleibt alleiniger PWM/AUX-Schreiber, ACPIPLAT ruft _BCM nicht auf.
+
+Shutdown sperrt neue Ereignisse, drainiert GPE/Notify/SCI, stellt _DOS auf den
+spezifizierten Standard1 zurueck und zerlegt den Namespace vor Freigabe der
+EC-Semaphoren. Nur gejointe Tasks duerfen freigegeben werden. Ein Timeout
+behaelt Modul und Callbackspeicher; er gilt nicht als Quiesce-Erfolg. Beim Unload/fehlgeschlagenen Init einer Input-Rolle folgt die generische
+Heap-/Semaphore-/Task-Aufnahmesperre erst ihrem Shutdown-Callback; AML muss
+beim Beenden noch allokieren koennen. Generisches Cleanup prueft weiterhin
+alle gejointen Arbeiter vor einer Freigabe. Ein fehlgeschlagenes _DOS-Restore bleibt ein unbestaetigter Firmwarehandoff
+und liefert auch bei vollstaendig drainierten Callbacks keinen Shutdown-Erfolg.
+Ein fehlerhafter Callback wird
+anschliessend geschlossen und quarantiniert. Die externe eigene Stopbarriere
+sperrt vorher neue Firmware-/Notifyarbeit. Der
+R4D-Transitionpfad vor einem Warm-Neustart stoppt jetzt auch externe
+Input-Treiber. Der bestehende direkte Poweroff-Pfad schaltet die Plattform
+aus und ist keine separate Treiber-Quiesce-Abnahme.
+
+Grenzen und verbleibende Hardwareabnahme
+----------------------------------------
+ACPIPLAT ist IMAGE_SCOPE=none und wird vor dem Releasepaket explizit eingebaut.
+Der Lenovo kann VPC2004/vendorabhaengige Fn-Meldungen verwenden. Deren reale
+AML-Methode, _Qxx-Zuordnung und Ereignisse sind unbekannt; keine Scancodes
+oder OEM-Register wurden geraten. Standardquellen sind softwareimplementiert;
+ob der konkrete Laptop sie liefert, ist ausschliesslich in0.80.39 zu pruefen.
+Ebenfalls nur39: Panelwirkung, physische Wake-/HPD-/Audiofolge, EC-Ports,
+Deckel und tatsaechliche Helligkeitstasten.
+
+System-S3, S4 und S0ix bleiben fehlende systemweite Plattformpfade. Bildschirm-
+Off ist kein Systemsuspend. Batterie-, Luefter-, Thermaltrip-/CPU-Power-Policy,
+Wake aus Systemschlaf und Vendor-Hotkeyadapter sind keine implementierten
+Nebenfunktionen dieses Eingabetreibers. Firmwarewerksgrenzen bleiben bestehen.
+
+Nachweise
+----------
+AMDLaptop08035.json bindet die konkreten Builds, Quellen und Prueflogs.
+Vorhandene AMDGPU-Gruppe: Off/On, zwei Ausgaben, Audio, Cursor/Helligkeit,
+Busy, Gegenwunsch, fehlende Framequittung, retained BOs und HPD-Generation.
+Vorhandene Desktop- und SDK-Gruppen: Benutzerpolicy, alte Tabellenpraefixe,
+64-Bit-Werte und Ausgabe-/Quellenverlust. HIDREPORT besitzt begrenzte
+Deskriptor-/Consumer-Hostfaelle. ACPIPLAT besitzt eine notwendige gemeinsame
+AML/EC/GPE/Notify-/Quiesce-Hostpruefung mit synthetischer Original-ASL; sie
+braucht im normalen Build kein iasl. Kein neues globales Grafikgate.
+Der kurze SMP4-Gast verwendet QEMU-ACPI und eine kleine synthetische SSDT.
+Er prueft reale R4D/Kernel-Ressourcen, R4SYS-Fakten und geordneten Shutdown;
+er qualifiziert weder Laptopfirmware noch AMD-Hardware.

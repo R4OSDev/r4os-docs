@@ -5,9 +5,9 @@ Diese Datei wird deterministisch aus `API/ApiContract.json` erzeugt. Manuelle Ä
 Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenzen und Conformance-Fixtures werden produktiv aus diesem Schema erzeugt; handgeschriebene Dateien bleiben nur Fassaden oder erklaerende Texte.
 
 - Schema: v11, Baseline `standalone-contract-0.64.11`
-- Reachability: 301 von 301 Typen aufgelöst oder explizit klassifiziert
+- Reachability: 304 von 304 Typen aufgelöst oder explizit klassifiziert
 - Zentrale SDK-only-Wurzeln: 0; Runtime-R4Ls besitzen libraryeigene Vertraege
-- Operationen: 0; Fehlerdomänen: 63; Konstanten: 1916; Limits: 109
+- Operationen: 0; Fehlerdomänen: 63; Konstanten: 1926; Limits: 109
 
 ## App-Profile
 
@@ -227,7 +227,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `GfxDriverDisplayApi` | extensible | extern_struct | 136/8 | 136/8 | 136/8 | 136/8 |
 | `DriverResourceInfo` | extensible | extern_struct | 32/8 | 32/8 | 32/8 | 32/8 |
 | `DriverFirmwareTableInfo` | extensible | extern_struct | 48/8 | 48/8 | 48/8 | 48/8 |
-| `DriverResourceApi` | extensible | extern_struct | 48/8 | 48/8 | 48/8 | 48/8 |
+| `DriverResourceApi` | extensible | extern_struct | 56/8 | 56/8 | 56/8 | 56/8 |
 | `DriverHeapAllocation` | extensible | extern_struct | 40/8 | 40/8 | 40/8 | 40/8 |
 | `DriverHeapStats` | extensible | extern_struct | 104/8 | 104/8 | 104/8 | 104/8 |
 | `DriverHeapApi` | extensible | extern_struct | 32/8 | 32/8 | 32/8 | 32/8 |
@@ -322,6 +322,9 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `DriverModuleInfo` | extensible | extern_struct | 128/8 | 128/8 | 128/8 | 128/8 |
 | `GfxOutputBrightness` | fixed_layout | extern_struct | 88/8 | 88/8 | 88/8 | 88/8 |
 | `GfxBrightnessRequest` | fixed_layout | extern_struct | 48/8 | 48/8 | 48/8 | 48/8 |
+| `PlatformInputSnapshot` | fixed_layout | extern_struct | 64/8 | 64/8 | 64/8 | 64/8 |
+| `DriverPlatformApi` | extensible | extern_struct | 32/8 | 32/8 | 32/8 | 32/8 |
+| `HidConsumerOp` | fixed_layout | extern_struct | 64/8 | 64/8 | 64/8 | 64/8 |
 
 ## Typdetails
 
@@ -6187,7 +6190,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 - Quelle: `API/ApiContract.json`
 - Klasse: `extensible`
 - Repräsentation: `extern_struct`
-- Version/Größe/Alignment: 1 / 48 / 8
+- Version/Größe/Alignment: 2 / 56 / 8
 
 | Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
 |---|---:|---:|---:|---|---|
@@ -6198,6 +6201,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `now_ns` | 24 | 8 | 8 | `u64` | - |
 | `acpi_stat` | 32 | 8 | 8 | `u64` | - |
 | `acpi_read_at` | 40 | 8 | 8 | `u64` | - |
+| `platform_query` | 48 | 8 | 8 | `u64` | - |
 
 ### `DriverHeapAllocation`
 
@@ -8035,6 +8039,60 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `level` | 32 | 4 | 4 | `u32` | - |
 | `reserved0` | 36 | 4 | 4 | `u32` | - |
 | `sequence` | 40 | 8 | 8 | `u64` | - |
+
+### `PlatformInputSnapshot`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 64 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `sequence` | 8 | 8 | 8 | `u64` | - |
+| `brightness_up` | 16 | 8 | 8 | `u64` | - |
+| `brightness_down` | 24 | 8 | 8 | `u64` | - |
+| `lid_sequence` | 32 | 8 | 8 | `u64` | - |
+| `lid_state` | 40 | 4 | 4 | `u32` | - |
+| `capabilities` | 44 | 4 | 4 | `u32` | - |
+| `sources` | 48 | 4 | 4 | `u32` | - |
+| `reserved` | 52 | 4 | 4 | `u32` | - |
+| `since_ns` | 56 | 8 | 8 | `u64` | - |
+
+### `DriverPlatformApi`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `extensible`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 32 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `rsdp` | 8 | 8 | 8 | `u64` | - |
+| `physical_view` | 16 | 8 | 8 | `u64` | - |
+| `input_submit` | 24 | 8 | 8 | `u64` | - |
+
+### `HidConsumerOp`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 64 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `summary_address` | 8 | 8 | 8 | `u64` | - |
+| `report_len` | 16 | 4 | 4 | `u32` | - |
+| `report_id` | 20 | 4 | 4 | `u32` | - |
+| `capabilities` | 24 | 4 | 4 | `u32` | - |
+| `pressed` | 28 | 4 | 4 | `u32` | - |
+| `report` | 32 | 32 | 1 | `[32]u8` | - |
 
 ## Fehlerdomänen
 
@@ -10691,6 +10749,16 @@ Geltung: `storage`, Einheit: `status_code`, Stabilität: `fixed_contract`.
 | `gfx_brightness_reason_io` | `5` | `u32` | value | number | `gfx_output` | fixed_contract |
 | `gfx_brightness_reason_inactive` | `6` | `u32` | value | number | `gfx_output` | fixed_contract |
 | `gfx_brightness_flag_current_known` | `1` | `u32` | value | number | `gfx_output` | fixed_contract |
+| `gfx_telemetry_source_smu10` | `2` | `u32` | value | enum_value | `gfx_telemetry` | fixed_contract |
+| `gfx_telemetry_partial_values` | `2` | `u32` | flag | bitmask | `gfx_telemetry` | fixed_contract |
+| `gfx_telemetry_current_clocks` | `4` | `u32` | flag | bitmask | `gfx_telemetry` | fixed_contract |
+| `gfx_telemetry_fabric_clock` | `8` | `u32` | flag | bitmask | `gfx_telemetry` | fixed_contract |
+| `gfx_telemetry_value_mask` | `3840` | `u32` | flag | bitmask | `gfx_telemetry` | fixed_contract |
+| `platform_input_kind_brightness_up` | `1` | `u32` | value | number | `input` | fixed_contract |
+| `platform_input_kind_brightness_down` | `2` | `u32` | value | number | `input` | fixed_contract |
+| `platform_input_kind_lid` | `3` | `u32` | value | number | `input` | fixed_contract |
+| `platform_input_kind_capabilities` | `4` | `u32` | value | number | `input` | fixed_contract |
+| `hid_report_op_consumer` | `3` | `u32` | value | number | `hid_report` | fixed_contract |
 
 ## Limits
 

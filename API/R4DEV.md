@@ -84,6 +84,13 @@ kein neuer Inventarkatalog. Details: `Docs/Drivers/GrafikFallback07904.txt`.
 Der Slot ist optional; die Mindestprefix-Konstanten ersetzen keine hasFn-
 Pruefung der tatsaechlich gelieferten Tabelle.
 
+Externe Firmwareeingabe verwendet seit0.80.35 den optionalen56-Byte-Tail
+DriverResourceApi.platform_query. DriverPlatformApi leiht bereits permanente
+Firmware-/UC-Seiten und veroeffentlicht authentifizierte Eingabefakten;
+AML, EC, Notify und Benutzerpolicy bleiben ausserhalb des Kernels. Es entsteht
+kein neuer Appzugriff auf Hardware. Der aeussere DriverApi-Vertrag bleibt35.
+Details: [AMD-Laptopbedienung](../Drivers/AMDLaptop08035.txt).
+
 <!-- R4OS-APIREF:BEGIN R4DEV (generiert von ApiContractGen aus ApiContract.json - NICHT von Hand editieren) -->
 ## Tabellen-Referenz R4DEV (generiert)
 

@@ -1,0 +1,98 @@
+﻿AMD H.264 und Wiedergabe – 0.80.29
+=================================
+Stand: 22.09.2026. Besitzer: R4VIDEO; reiner VCN-Encoder unter R4AMD.
+
+Ergebnis und Abgrenzung
+----------------------
+R4VIDEO0.1.4 erweitert den vorhandenen progressiven H.264-Pfad um explizites
+AMD-Backend2: Baseline/Main/High, 8 Bit, 4:2:0, eine Slice-Gruppe, Level bis5.1,
+64..4096 codierte Pixel pro Achse und maximal36864 Makrobloecke pro Bild.
+Mehrere Slices, P-/B-Referenzen, CABAC, gewichtete Vorhersage, POC und
+Langzeitreferenzen werden aus dem echten FFmpeg9.0.1-Parser uebernommen.
+Interlace/MBAFF, FMO, hoehere Bittiefen, andere Chromaformate und weitere
+AMD-Codecs bleiben ausdruecklich Unsupported. HEVC/VP9/MPEG2/VC1/JPEG folgen30.
+
+Die Zulassung prueft den wirklichen Picasso-Provider, Geraete-/Reset-/Speicher-
+Epoche, kohaerente System-BOs und VCN-ready aus28. R4AMDs Quellenprofil allein
+reicht nicht. Hardwarewahl startet die VCN-Callbacks; dabei wird kein Software-
+Decoder ausgefuehrt. Die bestehende Player-Policy kann vor der Auswahl
+Software explizit erlauben. Decoderfehler schalten niemals heimlich um.
+
+R4AMD bleibt als R4L bytegleich bei0.1.6/BACKEND_V1:4: der neue reine
+Quellbaustein vcn_decode.zig wird in R4VIDEO kompiliert. AMDGPU0.1.20,
+R4GFX0.1.27, R4ENC0.1.1 und Kernel0.1.205 bleiben unveraendert. Release0.80.29.
+
+Firmware und Besitz
+-------------------
+Die Implementierung folgt den unveraenderten Mesa26.2.2-Dateien ac_vcn_dec.c/.h,
+ac_video_dec.h und si_video_dec.c. R4AMD/ThirdParty/Sources.json enthaelt79
+Originaldateien samt SHA256; MIT-Texte und Originalhinweise werden exportiert.
+Mesa-Referenz: https://archive.mesa3d.org/mesa-26.2.2.tar.xz
+
+VCN1 verwendet Tier0: externe Session mit128KB Firmwarezustand plus
+makroblockabhaengigem HW-Kontext und einen zusammenhaengenden internen DPB.
+Bis17 interne Referenzplaetze sind unabhaengig von ausgegebenen NV12-BOs.
+Die Sessionkennung ist die global eindeutige ID ihres lebenden kanonischen
+BOs. CPU-lesbare Session-/Nachrichten-/Slice-/Befehlspuffer und nativer DPB
+bleiben dem Decoder zugeordnet. GPU-Pixel werden nicht auf die CPU gemappt.
+
+Create/Decode-Nachrichten, SPS/PPS-Flags, Skalierungstabellen, Referenzplatz-
+und POC-Listen, lineare Zielgeometrie und VCN1-Registerbefehle werden begrenzt
+kodiert. Der Slice-Sammler erhaelt originale escapte NALs mit Header, fuegt
+Annex-B-Praefixe hinzu und fuellt auf128Bytes mit Null. Es gibt keinen
+NVIDIA-EOS-Block im AMD-Bitstream. Nicht-VCL-Daten verarbeitet FFmpeg.
+
+Ein nativer Auftrag leiht alle indirekten BO/VA-Ressourcen ueber den
+bestehenden Queuebesitzer. Der Zaehler jeder Decode-Rueckmeldung ist frisch;
+vorherige/fehlende Rueckmeldung oder Firmwarestatus/errorBits ungleich Null
+liefern kein Bild. Erst Ressourcenabschluss UND passende Firmwareantwort
+setzen den Bildzustand auf fertig. Exakte Rueckmeldewerte der gepinnten
+Firmware sowie Pixelqualitaet werden in39 physisch bestaetigt.
+
+FFmpeg haelt die Bilder ueber AVBuffer/AVFrame-Referenzen. Die R4VIDEO-
+Koordination bewahrt empfangene Frames bis zum Consumer-Fence UND dem
+Release-ACK. Seek/Flush leert den Referenzsatz und wechselt die Streamepoche;
+interne Plaetze duerfen wiederverwendet werden, ausgegebene BOs bleiben.
+Groessenwechsel ohne Referenzen erzeugt neue Session/DPB-Ressourcen und
+bewahrt alte Consumer-Bilder. Close/Timeout/Teilallokation verwenden denselben
+wiederholbaren Abbau. Der externe Sessionpfad hat wie Mesa keinen separaten
+Destroy-Befehl; Freigabe erst nach bestaetigtem Queue-/VA-Retirement.
+
+Wiedergabe und Ton
+-----------------
+Die bestehende Player-Fassade verwendet fuer AMD dieselben monotonen
+Zeit-/PTS-Regeln, Pause, Seek/Flush/Drain, Resize, YUV-R4GFX-Komposition und
+Fences. Audio bleibt bei App-Audio/AUDSVC: begrenzte einmalige Teilwrites,
+Vorlaufbegrenzung, Seek-Close-ACK und definierte Serviceausfallpolitik.
+Hierfuer ist keine neue Kernel- oder Audiodienstimplementierung erforderlich.
+Die bestehenden Playback-/Audiofaelle laufen unveraendert mit AMD-Auswahl.
+
+Nachweise
+---------
+- Regulaere R4AMD- und R4VIDEO-Builds mit bestehenden ABI-/Besitzfaellen.
+  Der R4AMD-Backendfall enthaelt zwei eng begrenzte VCN-H.264-Pruefungen;
+  der vorhandene R4VIDEO-Allokationsfall umfasst den neuen Decoderbesitzer.
+- Originale Mesa-C-Structs und unveraendertes build_avc_msg erzeugen fuer
+  Baseline/Main/High drei unabhaengige2048-Byte-Vektoren. Zig stimmt byteweise
+  ueberein. Originalfeldnamen pruefen auch das gemeinsame Nachrichtenlayout.
+  R4OS ergaenzt bewusst die frischen Feedback-Canaries.
+- Besitzerfaelle: Referenzreihenfolge, Langzeitplatz, Wiederverwendung,
+  Seek/Groessenwechsel/Close mit alten Leases, fehlende/alte/fehlerhafte
+  Antwort, Queue-Timeout samt spaetem Retirement und gescheiterter
+  Sessionallokation ohne verlorene Ressourcen/Budget.
+- SMP4-Gast mit produktiver R4VIDEO.R4L und echtem FFmpeg-Parser/VIDEO_V1:
+  36 Frames ueber drei Profile und drei weitere Groessenwechsel nach Seek,
+  mehrere Slices sowie P-/B-Bilder, korrekte Zeitstempel/Reihenfolge/Farbdaten,
+  alte Ausgabebilder ueber Flush/Resize/Close und drei abgewiesene Feedback-
+  Fehlerarten. Der Gast modelliert ausschliesslich GPU-BOs/Queues/Antworten.
+  Er liefert KEINEN Nachweis fuer echte VCN-Pixel oder physische Audiowiedergabe.
+- Die bestehenden Player-/Audiopruefungen, Providertrennung und explizite
+  Fallback-Policy bestehen. Keine neue globale Testsuite oder Langzeitprobe.
+- Vollstaendiges LGPL-Korrespondenzpaket mit R4AMD-Quellen und Ports wird
+  entpackt und mit dem bestehenden DevKit offline erneut gebaut. Keine
+  Zusage byteidentischer Artefakte bei anderen eingebetteten Quellpfaden.
+
+Maschinenlesbare Artefakt-, Quell-, Test-, Gast- und Paketidentitaeten stehen
+in AMDH26408029.json. Die physischen Firmware-/Pixel-/Ton-/Leistungsnachweise
+bleiben ausschliesslich0.80.39. Globale32Native-Bindungsplaetze und vorhandene
+Budgets gelten weiterhin; Kapazitaetsfehler sind begrenzt und werden gemeldet.

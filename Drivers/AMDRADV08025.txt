@@ -1,0 +1,109 @@
+﻿AMD Vulkan 1.3, WSI und gemeinsame Bilder 0.80.25
+================================================
+Stand: 22.09.2026. Softwareintegration fuer Picasso 1002:15D8.
+Besitzer: R4VK, AMDGPU, R4GFX, WINSVC und Desktop; der Kernel bleibt
+Besitzer der gemeinsamen physischen BO-Seiten und ihrer Leases.
+
+Profil und native Fakten
+-------------------------
+R4VK 0.1.20 meldet Vulkan 1.3 fuer den neuen, vollstaendigen AMD-Beleg.
+Die alte 240-Byte-Struktur R4AmdDeviceFacts und alle R4L-Tabellen bleiben
+unveraendert. R4AmdDeviceFactsV3 umfasst 256 Bytes: den alten Praefix sowie
+Timestamp-Takt in kHz, native Binding-Kapazitaet und maximale Backinggroesse.
+Backend-Properties tragen Revision 3; diese ist keine R4L-Tabellenrevision.
+R4GFX 0.1.26 akzeptiert weiterhin exakt Revision 1/64 und 2/240 sowie 3/256.
+R4AMD bleibt 0.1.5, weil nur additive Vertragstypen hinzukommen.
+
+AMDGPU 0.1.19 liest die Timestamp-Grundfrequenz aus bekannten ATOM-SMU-
+Tabellen 3.1, 3.2 und 3.3. Fuer Picasso/MP1 10.0.0 gilt der originale
+SOC15-Pfad: core_refclk_10khz / 4, danach Umrechnung in kHz. Null, unbekannte,
+verkuerzte oder unplausible Tabellen erzeugen keinen erfundenen Takt.
+Ohne belastbaren Takt oder mit altem Speicherbeleg bleibt die API bei 1.0.
+Der Modellbeleg fuer die Vulkan-Pruefung verwendet 25000 kHz/40 ns;
+dies ist keine Messung des Laptop-VBIOS. CPU-Zeit ersetzt keine GPU-Zeit.
+
+Timeline-Semaphoren verwenden Mesas vorhandene Timeline-Implementierung
+ueber die echten nativen binaeren Synchronisationspunkte. Linux-syncobj-
+Unterstuetzung wird weiterhin nicht behauptet. Host-Signale, Counter,
+Timeouts und QueueSubmit2 verwenden denselben Mesa-Lebenszyklus. Dynamisches
+Rendering, Synchronization2, klassische Renderpaesse und binaere
+Queue-Abhaengigkeiten teilen den normalen RADV/GFX9-Pfad.
+
+Speicher statt ausschliesslicher Limitmeldungen
+-----------------------------------------------
+Der native VA-Bereich bleibt 2 GB gross und hat 32 residente Root-Bindings.
+Variable, ausgerichtete Bereiche ersetzen die frueheren 64-MB-Festplaetze.
+Reservierte und noch nicht bestaetigt freigegebene Bereiche belegen weiter
+VA; ein Fehler oder logisches Close ist kein TLB-/GPU-Abschluss.
+Ein Backing darf jetzt 1 GB plus eine echte 4-KB-SMEM-Nachlaufseite umfassen.
+Vulkan meldet entsprechend maxMemoryAllocationSize und maxBufferSize 1 GB.
+Der native Bild-/Scanout-Vertrag behaelt seine gesonderte 64-MB-Grenze.
+
+Kleine oeffentliche Vulkan-Speicherobjekte belegen getrennte, gepolsterte
+Bereiche gemeinsamer 64-MB-BOs. Nur die Root-BOs benoetigen native Bindings;
+jedes Kind hat eigene VA, Groesse und Map-Zaehler. CPU-Maps referenzieren den
+Root-Map plus Offset; der letzte Kindabbau gibt dessen Ressourcen frei.
+Interne Shader-/Command-Arenen behalten ihren bisherigen Allokationspfad.
+4096 kleine Allokationen, gleichzeitiges Mapping, unterschiedliche Canaries,
+Freigabe jeder zweiten Allokation, Lueckenwiederverwendung und vollstaendiger
+Rueckbau sind im Gast mit realen Kernel-BOs geprueft. Ein echter 1-GB-Puffer
+wird angelegt, gebunden, voll gemappt und bis zum letzten Wort beschrieben;
+die zusaetzliche SMEM-Seite gehoert zum bestaetigten Backing.
+
+Der AMD-Seitentabellenpool umfasst 8 MB. SG-Metadaten werden passend zur
+wirklichen Bereichsgroesse im Driver-Heap gehalten. Duplikatpruefung sortiert
+eine temporaere Kopie, statt quadratisch zu suchen; die Originalreihenfolge
+bleibt erhalten. Fehlgeschlagene Heap-Freigaben und Bind-Abschluesse bleiben
+im zuständigen Besitzer. Bestehende Hosttests pruefen 1-GB-PTEs, grosse SG-
+Listen, Duplikate, OOM, Freigabefehler und belegte VA-Luecken.
+Kernel 0.1.205 erhoeht ausschliesslich die endlichen BO-Budgets auf 4 GB
+global und 2 GB je Produzent; die reale physische Reserve und alle
+Retire-/Lease-Regeln bleiben bestehen. Diese Budgets garantieren keinen RAM.
+
+Fenster und Bilder
+-------------------
+Die gemeinsame WSI waehlt typisierte Operationen anhand des unveraenderlichen
+NVK- oder RADV-Providers. Surface-Generationen, WINSVC-Transport,
+Acquire/Present, FIFO/MAILBOX, Fullscreen und asynchroner Bildrueckbau
+verwenden denselben bestehenden Besitzer. Der Worker behaelt die passende
+statische Operationstabelle auch nach Ende des VkDevice.
+
+RADV importiert denselben kanonischen BO unabhaengig vom Produzentenhandle.
+Es prueft Generation, Format, Pitch, Extent, Usage und modifier=0 und erzeugt
+ein normales VkImage/VkDeviceMemory-Paar. Der lineare GFX9-AddrLib-Aufbau
+muss den tatsaechlichen Descriptor exakt abdecken; Kompression ist dabei
+ausgeschlossen. Producer-Close beendet keine bereits uebernommene Referenz.
+Ungueltige Caller-Handles liefern INVALID_EXTERNAL_HANDLE ohne das Geraet
+zu verlieren. UNORM/sRGB-Views und Swapchain-Bildaliases teilen das Backing.
+Keine private Vollbildkopie wird beim Import angelegt.
+
+Oeffentliche Vulkan-Fenster durchlaufen WINSVC, den aktuellen Desktop-
+Kompositionsbesitzer, R4GFX-Ausgabe und Capture. Geprueft werden UNORM8,
+scRGB/FP16 und HDR10, Skalierung/Rotation, Hide/Restore, Resize und
+Ausgabeersatz mit OUT_OF_DATE sowie Reset mit DEVICE_LOST bei noch lebender
+Desktop-Lease. Desktop 0.1.73 und DisplayDiag 0.1.43 importieren die aktuelle
+BACKEND_V1:3-Tabelle. Alle Referenz-/BO-Budgets kehren zum Ausgangswert zurueck.
+
+Nachweise und Grenzen
+----------------------
+AMDRADV08025.json verknuepft Quellen, Build-Artefakte, Gastabbilder und Logs.
+Die temporaeren Gastprogramme verwenden die exakten produktiven nativen
+Archive und vier vCPUs. Eine separate NVK-Fensterprobe prueft den gemeinsam
+geaenderten WSI-Pfad. Es wird kein dauerhaftes globales Gate hinzugefuegt.
+
+Die oeffentliche Picasso-Abfrage wird mit unveraenderten ausgewaehlten
+VK-GL-CTS-1.4.6.2-Praedikaten verglichen: Pflichtfeatures, Vulkan-1.2-Limits,
+Maintenance4-Maximalpuffer, Inline-Uniform/Robustness2, Basis-/Bufferformate
+und Samplezahlen. 115 Strukturbelege, 297 Formate inklusive aller 184
+Coreformate und 217 unterstuetzte Coreformat-/Usage-Paare werden ausgewertet.
+Timestamp-Query/Reset/Copy und nicht verfuegbare Ergebnisse sind geprueft;
+modellierte GPU-Ausfuehrung schreibt ausdruecklich keine Timestampwerte.
+
+GPU-Abschluesse und Geraetereaktionen stammen in diesen Gastproben aus
+kontrollierten Modelltreibern. Shader werden wirklich mit RADV/NIR/ACO
+uebersetzt und echte GFX9-Streams erzeugt; weder Pixelwerte noch Rechen- oder
+Timingresultate physischer AMD-Hardware sind damit abgenommen. Es gibt
+keine offizielle Vulkan-Konformitaetsbehauptung. Sparse, FD-Interop,
+ShaderObject/GPL, Performancequeries, Raytracing und Vulkan Video sind
+nicht Teil dieses Profils. Windows-Hostlaeufe sind nicht durchgefuehrt.
+Echte Hardwaretests bleiben ausschliesslich 0.80.39 vorbehalten.

@@ -1,0 +1,118 @@
+﻿AMD HEVC, VP9, MPEG2, VC1 und JPEG – 0.80.30
+==========================================
+Stand: 22.09.2026. Besitzer: R4VIDEO, R4AMD, AMDGPU; Verbraucher: R4IMG.
+
+Implementierter Umfang
+----------------------
+R4VIDEO0.1.5 erweitert den expliziten AMD-Backend2 um progressive4:2:0:
+- HEVC Main8 und Main10, Level bis186, native NV12/P010-Ausgabe.
+- VP9 Profil0/8Bit und Profil2/10Bit, Level bis62, native NV12/P010.
+- MPEG2 Main/Simple8, native NV12. MPEG2-Levelcodes sind nicht numerisch
+  geordnet; max_level bleibt0 statt einer falschen numerischen Obergrenze.
+- VC1 Advanced8, Level bis4, progressive Frame-Coding, native NV12.
+- JPEG Baseline8, ein vollstaendiger interleaved4:2:0-Scan, native NV12.
+
+Gerade codierte Abmessungen64..4096 pro Achse (VP9:16..4096). Diese Grenzen
+sind keine Zusage gleichzeitiger Maximalbilder unter jedem Speicherbudget.
+Die vorhandenen32 nativen Bindungsplaetze, BO-/Workerbudgets und begrenzte
+8MB-Zugriffseinheiten gelten weiter. H264 behaelt seinen Stand aus0.80.29.
+NVIDIA- und Softwarebackend behalten ihre vorhandenen H264-Grenzen.
+
+Interlace, MPEG4 Part2, AV1, VC1 Simple/Main, HEVC SCC/Range-Extensions,
+andere Chromaformate und progressives/lossless/multiscan JPEG werden nicht
+angeboten. Unbekannte Profile, Bittiefen oder fehlende Transportmerkmale
+liefern Unsupported. Keine automatische Softwaredekodierung nach Fehlern.
+Der echte Geraete-/Reset-/Speicherzustand begrenzt die Quellen-Capabilities.
+
+Parser, Nachrichten und Referenzen
+---------------------------------
+FFmpeg9.0.1 laeuft mit echten Parsern, Referenzhaltung und Ausgabereihenfolge.
+Port/vcn.c uebertraegt HEVC-SPS/PPS/Skalierung/RPS, VP9-Segmentierung/Filter/
+Referenzen, MPEG2-Quantisierung/f_codes und VC1-Advanced-Parameter in die
+originalen Mesa26.2.2-Strukturen. HEVC verwendet den internen Tier0-DPB;
+VP9 den linearen Tier1-NV12/P010-DPB plus originale Wahrscheinlichkeiten.
+MPEG2/VC1 lassen die Firmware ihre Tier0-Bildreferenzen verwalten.
+VC1 oeffnet FFmpeg erst mit den begrenzt gesammelten Sequence-/Entry-Headern
+vor dem ersten Frame der ersten Zugriffseinheit; ohne sie gibt es keinen
+scheinbar erfolgreichen Decoderstart.
+
+R4AMD/Port/Generated enthaelt unveraenderte Original-Payloadbuilder,
+Metadaten und Wire-Strukturen. Der Katalog enthaelt80 Originaldateien.
+VcnCodecs.ps1 verifiziert die fuer die Generierung verwendeten Originale
+und die abgeleiteten Dateien. Begrenzte Adapter planen Session/DPB/Kontext,
+ordnen logische Referenzen physischen Plaetzen zu und beschreiben Ziele.
+HEVC nutzt den ITS-Befehl0x204, VP9 den Probability-Befehl4. Neue Feedback-
+Zaehler und Canaries verhindern die Annahme alter oder fehlender Ergebnisse.
+Fuer Video ist native Ressourcenfreigabe UND fehlerfreies passendes
+Firmwarefeedback notwendig. Die konkreten Firmwareantworten werden in39
+an der echten GPU bestaetigt.
+
+JPEG und Besitzuebergabe
+-----------------------
+Ein JPEG-Paket enthaelt genau ein SOI..EOI-Bild. Eine vorangestellte Pruefung
+begrenzt SOF0,8Bit,4:2:0 und einen gemeinsamen Scan. FFmpegs Callback beginnt
+nach SOI; der Adapter ergaenzt diesen Marker einmal und uebergibt den vollen
+Bitstream ohne verdoppelte Scans. JPEG benoetigt keinen VCN-Session-DPB und
+kein Video-Feedback; Hardwarefence und Fehler-IRQ sind sein Abschlussweg.
+
+AMDGPU0.1.21 bietet Engine4 und DeviceFacts-Bit3 fuer diesen Transport.
+JPEGs IB laeuft mit VMID0: Der Treiber kopiert den begrenzten System-IB in
+seinen eigenen8KB-Slot. R4VIDEO gibt dafuer seine schreibende CPU-Lease
+bestaetigt frei; ein ordinary CPU-Read des Treibers duerfte sonst nicht
+parallel zugreifen. Vor dem naechsten Bild wird erst nach Retirement erneut
+gemappt. Fehlende/fehlerhafte Map-Antworten bleiben bis zum Abbau gesperrt.
+
+Der VCN1-Workaround schliesst JPEG gegen Decode/Encode aus, einschliesslich
+noch nicht bestaetigter Ressourcenfreigaben. Decode und Encode koennen
+parallel bleiben. Wartende Auftraege behalten Reihenfolge und urspruengliche
+Frist, ohne vorzeitig zusaetzliche Bindungen zu halten. Kopierter IB und
+kanonische BO/VA-Leihen bleiben auch bei Timeout bis zum tatsaechlichen
+Retirement erhalten. Diese Abfolge folgt dem gesicherten Linux/Mesa-Profil.
+
+Verbraucher und Kompatibilitaet
+------------------------------
+R4IMG exportiert die einkompilierte Fassade NativeJpeg.Consumer(video).
+Sie fragt den wirklichen VIDEO_V1-Provider ab, leiht kodierte Daten bis zum
+Send-ACK, liefert eine kanonische NV12-Bildlease und wartet beim Close auf
+den exakten Consumer-Fence/Release-ACK. Ein freier zweiter Empfangsslot
+erlaubt EOS trotz gehaltenem Bild. ICC/Exif, Orientierung und R4GFX-Farbwahl
+bleiben beim Verbraucher; die Fassade mappt keine GPU-Pixel auf die CPU.
+R4IMG-Artefakt und API bleiben unveraendert. Der bestehende Player behaelt
+Zeit, Pause, Seek, Audio und Consumer-Lebensdauer.
+
+R4VK0.1.23 akzeptiert das neue optionale JPEG-Faktbit; sein strenger alter
+Maskenvergleich haette den funktionsfaehigen AMD-Provider abgewiesen.
+R4ENC0.1.2 uebernimmt dieselbe kompatible gemeinsame GPU-Abfrage. R4AMD-R4L
+bleibt bytegleich0.1.6/BACKEND_V1:4; die Codec-Quellen werden in R4VIDEO
+kompiliert. Keine neuen API-Slots oder Kernelartefakte. Kernel0.1.205,
+R4GFX0.1.27 und R4GL0.1.16 bleiben unveraendert. Release0.80.30.
+
+Nachweise und Grenzen
+--------------------
+- Bestehende Build-/ABI-/Besitzgruppen fuer R4VIDEO, AMDGPU, R4ENC und R4VK.
+  Der AMD-Medienfall prueft zusaetzlich JPEG-CPU-Lease-ACK, wiederholte
+  Uebergabe, ungueltige Map-Antwort und alle drei Engine-Timeout-Abbauten.
+  Der bestehende VCN-Fall prueft echte Runtime-/Ringlogik in RAM: unabhaengige
+  IB-Kopie, JPEG-Ausschluss bis zum ACK und Aufbewahrung nach Timeout.
+- Der unveraenderte originale Mesa-JPEG-Befehlsencoder liefert vier
+  byteweise verglichene Groessenvektoren. HEVC/VP9-Pruefungen kontrollieren
+  Referenzplatzzuordnung und NV12/P010-Geometrie; H264-Originalvektoren bleiben.
+- Der SMP4-Gast fuehrt die produktive R4VIDEO.R4L, FFmpeg und VIDEO_V1 aus:
+  99 Frames ueber alle acht neuen Profile, Referenzen/Reorder/PTS/Farbdaten,
+  alte Bilder ueber Flush/Close, anschliessend R4IMG-JPEG mit gehaltenem
+  Close und drei abgewiesene H264-Feedbackfehler. Die GPU-BOs, Queues und
+  Rueckmeldungen sind modelliert. Es werden keine AMD-Pixel dekodiert.
+- Synthetische Testclips stammen aus FFmpeg7.1.5; der VC1-Advanced-Clip aus
+  https://fate-suite.ffmpeg.org/vc1/SA00040.vc1. Er bleibt temporaerer
+  Testeingang und wird nicht weiterverteilt. Herkunft und Hashes sind erfasst.
+- Das vollstaendige entsprechende Quellpaket enthaelt originale Archive,
+  saemtliche Ports, generierte Tabellen und SDK-/Contract-Abhaengigkeiten.
+  Das entpackte Paket wird offline mit dem bestehenden DevKit gebaut.
+  Kein Anspruch auf Byteidentitaet bei anderen eingebetteten Quellpfaden.
+- Linux-Ausfuehrung belegt; die gemeinsame PowerShell-Logik bleibt fuer
+  Windows vorgesehen. Kein neuer Windows-Gesamtlauf in dieser Unterversion.
+
+AMDCodecs08030.json haelt Artefakt-, Quell-, Build-, Gast- und Paketidentitaeten.
+MIT/LGPL-Originalhinweise und vollstaendige Lizenzen sind aktualisiert. Keine
+neue globale Testsuite, kein Browser-/Langzeitlauf. Physische Firmware,
+Bildqualitaet, Farbdarstellung, Leistung und Laptopabnahme ausschliesslich39.

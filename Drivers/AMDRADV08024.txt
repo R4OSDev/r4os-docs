@@ -1,0 +1,76 @@
+﻿AMD Vulkan-Grafik und Compute 0.80.24
+===================================
+Stand: 22.09.2026. Softwareintegration fuer Picasso 1002:15D8.
+
+Umsetzung
+---------
+R4VK verwendet den originalen RADV-Pipeline- und Commandaufbau mit ACO aus
+dem gemeinsamen gepinnten Mesa-26.2.2-Quellbaum. Oeffentliche Vulkan-Aufrufe
+erzeugen SPIR-V/NIR/AMD-Maschinencode, Deskriptoren, Pushkonstanten, Grafik-
+und Compute-Kommandos. Optimal getilte Images, Views, Renderpasses,
+Framebuffer, Transfers und GFX9-Metadaten folgen den originalen RADV- und
+AddrLib-Besitzern. Die vorhandene native Winsys uebergibt Grafik-/Compute-
+IBs und ihre BO-/VA-Leihgaben an R4DRAW und AMDGPU.
+
+Interne Shader- und Deskriptorspeicher mit CPU-Zugriff verwenden kohärentes
+GTT-Systembacking. Fuer Anwendungen als device-local angebotener Speicher
+ohne CPU-Zugang bleibt im nativen VRAM-Besitzer. Ein CPU-Schreibzugriff auf
+einen nicht mappbaren VRAM-Puffer wird nicht vorgetaeuscht. HDP-Abgleich und
+ausfuehrbare GFX9-PTEs stammen aus dem bereits integrierten Treiberpfad.
+
+Compiler und Fehler
+------------------
+Reiner NIR-/ACO-Bau laeuft in einem kurzlebigen R4SYS-Thread mit eigener
+Speicherarena. Vorhandene NIR-Eingaben werden serialisiert und im eigenen
+GLSL-Typkontext wieder eingelesen. Erst nach dem tatsaechlichen Join werden
+vollstaendige Binaries, benoetigte Debugtexte und Stage-Metadaten kopiert.
+Vulkanobjekte, GPU-Speicher und gemeinsame Caches werden beim Aufrufer
+angelegt. VS-Prologe und PS-Epiloge verwenden denselben Compilerabschluss.
+
+Ungueltiges SPIR-V liefert einen Compilerfehler ohne CPU-Breakpoint.
+Compiler-/Allokatorfehler koennen keine halbe Pipeline veroeffentlichen.
+Shaderarena-Eintraege werden erst nach erfolgreicher BO-Erzeugung und Map
+in die Freiliste gestellt. Fehler bei Blockteilung oder Upload haben einen
+einzigen Abbaupfad; bereits gemeldete Fehler bleiben beim Vulkan-Aufrufer.
+Die Fehlerzuordnung ist threadgebunden. Ein staler nativer Fence liefert
+DEVICE_LOST und verhindert weitere erfolgreiche Submits desselben Geraets.
+Bei unklarem teilweisen Submit behaelt RADV seinen Device-Lost-Vertrag bei.
+
+Der Pipelinecache verwendet weiter die native Build-/ASIC-Identitaet.
+Cachebinaries werden vor dem Anlegen eines Shaders auf Header, Laengen,
+Code-/Statistikbereiche und abgeschlossene Debugtexte geprueft. Native
+Source-Location-Debugdaten werden nicht freigegeben: deren Upstreamformat
+enthaelt Prozesszeiger auf Dateinamen und darf die Compilerarena nicht
+verlassen. EXT_shader_object und EXT_graphics_pipeline_library bleiben bis
+zu einer eigenen Integration deaktiviert; regulaere Pipelines sind angebunden.
+
+Commandaufzeichnung und Synchronisation
+--------------------------------------
+Die native Aufzeichnung bleibt auf 4 MB pro Stream begrenzt. Ueberlauf setzt
+einen dauerhaften Fehler und verwirft weitere Emit-Schreibzugriffe, bis der
+Caller den Stream zuruecksetzt. Auch ein einzelner uebergrosser Emit-Block
+liest oder schreibt dann keine Nutzdaten. Finalize gibt Speichermangel
+zurueck. Sekundaere Streams werden begrenzt uebernommen; explizite IBs
+muessen vollstaendig in einer lebenden Bindung des gleichen Besitzers liegen.
+
+RADV erzeugt Cache-/Barrierepakete selbst. Binaersemaphoren verbinden die
+Grafik- und Compute-Queues mit echten nativen Fenceabhaengigkeiten. Die
+gegenwaertige Winsys serialisiert zusaetzlich geraeteweit; feinere Parallelitaet
+und Residency gehoeren zu 0.80.33. Ein CPU-Wait, Handle-Close oder modelliertes
+Receipt ersetzt keinen Nachweis realer AMD-GPU-Ausfuehrung.
+
+Abnahme und Grenzen
+------------------
+Die konkreten Builds, Gastmarker, Quell-/Artefakthashes und erkannten Grenzen
+stehen in AMDRADV08024.json. Der gezielte SMP4-Gast verbindet das exakte
+Produktionsarchiv mit den realen R4OS-Brokern und einem ausdruecklichen
+Hardwaremodell. Es werden keine vorbereiteten Pixelbilder oder Compute-
+Ergebnisse als GPU-Ausgabe ausgegeben. Das temporaere AUTOEXEC-Overlay wird
+anschliessend bytegleich restauriert. Keine neue globale Testsuite.
+
+AMD bleibt vor 0.80.25 bei API1.0 ohne Konformitaetsbehauptung. API1.3,
+dynamisches Rendering/Synchronization2, native WSI und Desktop-Interop sind
+der folgende Schritt. 64 MB je Backingallokation und 32 residente Bindungen
+gelten weiter. Physische GPU-Ausfuehrung, Pixel-/Rechenergebnisse, VBlank und
+echte Interrupts werden ausschliesslich in 0.80.39 abgenommen. Windows wurde
+in diesem Schritt nicht ausgefuehrt; die gemeinsame PS7-Baukette bleibt bestehen.

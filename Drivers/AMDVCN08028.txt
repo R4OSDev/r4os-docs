@@ -1,0 +1,108 @@
+﻿AMD VCN1 und gemeinsame Medienprovider 0.80.28
+==============================================
+Stand: 22.09.2026. Besitzer: AMDGPU, R4AMD, R4VIDEO, R4ENC und R4GFX.
+Ziel: Picasso 1002:15D8, GC9.1, VCN1.0; echte Hardware ausschliesslich /39.
+
+Firmware, Ringe und Energie
+----------------------------
+Der vorhandene PSP10-Startplan authentifiziert zusaetzlich picasso_vcn.bin
+mit der gepinnten Firmwareversion 51441669. Der PSP-Code bleibt im TMR;
+ein eigener, vorab budgetierter 1-MB-UMA-Bereich enthaelt 128 KB Stack,
+512 KB Kontext und die Decode-/Encode-/JPEG-Ringe. Der zweite vom VCN-
+Firmwarevertrag erwartete Encode-Ring wird ebenfalls angelegt und geparkt.
+Keine Ueberlagerung mit KIQ/MQD/EOP/CP-Tabellen im bisherigen GC-Bereich.
+
+Der startende Treiber holt PowerUpVcn beim SMU ab, schaltet die elf Tiles
+und statischen Taktdomaenen ein, programmiert Cachefenster/Adresslayout
+und wartet begrenzt auf Firmwarebereitschaft. Alle drei aktiven Ringe
+muessen eigene Fence-only-Kommandos und wirklichen Lesefortschritt bestaetigen.
+Erst dann erscheint VCN-ready als Bit2 der bestehenden DeviceFacts. Die
+Interruptquelle liefert nur Hinweise; der Worker prueft GPU-Writeback.
+
+Decode/Encode verwenden 32-Bit-Fences. Der gemeinsame monotone Token darf
+fuer VCN im selben Epoch nie umlaufen; GC kann seine 64-Bit-Folge weiter
+nutzen. Die JPEG-Ringbefehle und der 64-Dword-Wrap-Tail folgen der originalen
+VMID0-IB-Sonderregel. Der sichere Anwendungs-IB-Pfad fuer JPEG folgt in /30.
+
+Der Abbau wartet auf leere Ringe, saubere LMI-/UMC-Transaktionen, wirksamen
+Reset sowie Tile- und PowerDownVcn-Bestaetigung. Fehler und fehlende Antworten
+halten Speicher/Objekte weiter fest. VCN wird vor dem gemeinsamen Renderer
+abgebaut, der seine nativen Bindungen besitzt. Dies ist der Start-/Stopp-
+Energielebenszyklus; adaptive Leerlauf-/Taktpolitik folgt in /34 und Recovery
+nach einem nicht mehr antwortenden IP in /36.
+
+Vertraege und ehrliche Faehigkeiten
+-----------------------------------
+VIDEO_V1 und ENCODE_V1 behalten ihre bisherigen Typen, Slots und Werte.
+AMD erhaelt Backend-ID2. H.264 bleibt Codec1; HEVC2, VP9 3, MPEG2 4,
+VC1 5, JPEG6, AV1 7 und MPEG4 Part2 8 sowie codecbezogene Profilkennungen
+werden additiv definiert. Eine Konstante allein sagt keine Unterstuetzung zu.
+
+R4AMD BACKEND_V1 Revision4 fuegt genau einen media_caps-Slot nach den vier
+bestehenden Funktionen an. Query und Antwort sind je64Byte. Das strenge
+Quellenprofil bindet PCI/GC/VCN und die exakte Firmware. Es beschreibt
+H.264 Baseline/Main/High8, HEVC Main8/Main10, VP9 Profile0/2, MPEG2,
+VC1 und JPEG-Baseline-Decode sowie H.264/HEVC8-Encode. Grenzen stammen aus
+dem gepinnten Mesa26.2.2 ac_video.c. Keine AV1-/MPEG4-Part2-Zusage,
+kein HEVC-Main10-Encoding und keine pauschale B-Frame-Freigabe.
+
+Die Antwort traegt ausdruecklich das Quellenprofil-Flag. R4VIDEO/R4ENC
+pruefen zusaetzlich die echte native Adapteridentitaet, Kohaerenz, Generation
+und VCN-Bereitschaft. Ihre AMD-Codecabfrage bleibt in /28 Unsupported:
+H.264-Decoder folgt /29, weitere Decoder /30, Encoder /31. Funktionierende
+Ringe werden nicht als bereits implementierte Codec-Sessions ausgegeben.
+NVIDIA-Anfragen koennen nicht versehentlich einen AMD-Adapter uebernehmen.
+Die explizite Software-Fallback-Einstellung der Wiedergabe gilt auch fuer AMD.
+
+YUV-, DPB- und Bildbesitz
+------------------------
+Der bestehende native Allokationsprovider erzeugt lineares NV12/P010 in
+einem BO mit zwei Ebenen. Pitch ist auf256Byte, Ebenen und Gesamtbereich
+auf64KB ausgerichtet; P010 speichert10Bit in16Bit-Komponenten. Pixel-BOs
+werden nicht auf die CPU gemappt. R4GFX uebernimmt denselben Referenz- und
+Ebenenvertrag und komponiert mit dem vorhandenen AMD-YUV-Pfad.
+
+Die gemeinsame Medienressourcenverwaltung verwendet kanonische BO-, VA-,
+Queue- und Fence-Fassaden. Jeder indirekte Zugriff wird als Ressourcenleihe
+angemeldet; doppelte Referenzen werden vereinigt. Ein IB ist auf2048Dwords
+begrenzt und auf16Dwords gepolstert. Ungeeignete Befehle scheitern vor dem
+Oeffnen einer Queue. Ein aktiver oder unklar abgeschlossener Auftrag sperrt
+Wiederverwendung und Freigabe bis zum bestaetigten Ressourcenabbau.
+
+Der begrenzte ImagePool trennt Codec-, DPB- und Consumer-Holds. Ein neues
+Format/Stream-Epoch entwertet Referenzen, ohne ausgegebene alte Bilder zu
+ueberschreiben. Slot-Serien verhindern ABA-Verwechslungen. Ein Fence allein
+macht kein Bild gueltig: finish verlangt zusaetzlich das Codecfeedback.
+Die tatsaechlichen Parser/Decoder liefern diesen Nachweis erst in /29-/30.
+Der globale Treiberpool bleibt bei32 nativen Bindungen; weitere Sessions,
+Referenzen oder gehaltene Ausgaben erhalten begrenzten Rueckdruck statt
+unbelegter Kapazitaetszusagen. Residenz-/Wiederverwendungspolitik folgt /33.
+
+Pruefungen und Grenzen
+-----------------------
+Die vorhandenen Besitzerpruefungen decken Firmwareplan, quellengenau
+gepruefte Register, Ringbytes, kontrollierte Registerantworten, Ringdrain,
+fehlende LMI-/UMC-Antworten, IRQ/Fence-Trennung und Tokenerschoepfung ab.
+Ein temporaerer C-Oracle kompiliert unveraenderte gepinnte Linux-Ringfunktionen;
+sieben Bytefolgen stimmen mit den Zig-Decodier-/Encodier-/JPEG-Befehlen
+ueberein. Dies ist ein unabhaengiger Quellvergleich, keine GPU-Ausfuehrung.
+
+Bestehende Medienfaelle pruefen die echten SDK-Fassaden mit modellierten
+Kernelantworten: NV12/P010, Referenzwechsel, gehaltene Ausgaben, Epoch-/Slot-
+Ablehnung, Fehler waehrend der Allokation sowie Decode-/Encode-Timeout und
+separate VA-Retirement-ACKs. Der Treibertest geht durch die wirkliche native
+YUV-Allokation/UMA-Buchung. R4GFX prueft beide Formate ohne Pixelmaps,
+mit deduplizierten Ebenen, gecachten Bindungen und gehaltenen Fences.
+
+Regulaere Modulbuilds und C/Zig-ABI-Pruefungen; gezielter SMP4-Lauf mit den
+produktiven R4AMD/R4VIDEO/R4ENC-Modulen fuer Faehigkeitsabfrage, unveraenderte
+Fehlerausgabe und Laufzeitabbau. Die gleiche Probe verwendet produktives
+R4GL/R4VK fuer OpenGL4.6Core auf Zink/RADV mit DeviceFacts.flags=7.
+Der Grafikabschluss ist dabei weiterhin eine kontrollierte Modellantwort.
+
+Keine Hardware-, VCN-Pixel-, Codecqualitaets-, Energie- oder Leistungsabnahme,
+kein Windows-Lauf. Kein neues permanentes Workspace-Gate. Exakte Quellen,
+Prueflogs, Module, Quellpaket und Gastbelege stehen in AMDVCN08028.json.
+Originale AMD/Mesa-MIT-Hinweise werden mit der Distribution exportiert;
+der unveraenderte Firmwarelizenztext bleibt erhalten. R4VIDEO liefert seine
+neue AMD-Quellabhaengigkeit im entsprechenden SOURCE.TGZ mit.

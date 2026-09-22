@@ -1,0 +1,163 @@
+﻿AMD native Praesentation - 0.80.18
+=================================
+
+Stand und Besitz
+----------------
+AMDGPU 0.1.14 verbindet die nativen Firmware-, Speicher-, SDMA-, GC- und
+DCN1-Besitzer mit dem vorhandenen R4OS-Displayvertrag. Release 0.80.18,
+Kernel unveraendert 0.1.203. Der externe R4D besitzt weiterhin alle
+AMD-Register, ATOM-Befehle, Displaytasks und nativen Ressourcen. Gemeinsame
+Display-, Modus-, Cursor-, Queue- und BO-Vertraege werden wiederverwendet;
+Kernel, SDK, R4GFX, Desktop und DISPLAYD erhalten hier keine Artefaktaenderung.
+
+Das Ziel bleibt Lenovo IdeaPad L340-15API, Picasso/Vega 8, PCI 1002:15D8.
+Alle Nachweise dieses Schritts stammen von Linux-Hostmodellen mit expliziten
+MMIO-, Empfaenger-, Task- und Kernelantworten. Es gab keinen Laptopzugriff,
+keinen physischen Probe und keinen Hardwareupdate. Echte Tests bleiben /39.
+Auch ein sichtbarer QEMU-Desktop ist kein Nachweis fuer diesen AMD-Signalpfad.
+
+Normaler auto/passive-Bind bleibt eine Bestandsaufnahme. mode=native startet
+jetzt einen echten parallelen Treibertask: Firmware und Enginevoraussetzungen,
+Displayuebernahme, danach Betrieb mit Verlustueberwachung. IMAGE_SCOPE=none
+bleibt bis zur vorgesehenen Paketintegration bestehen. Kein unverknuepfter
+Callback oder simuliertes Erfolgsflag ersetzt die native Aufnahme.
+
+Uebernahme und Wiederherstellung
+-------------------------------
+Die Aufnahme verlangt ein eindeutiges direktes eDP-Boardprofil, vollstaendige
+ATOM-/EDID-Timings, RGB6/8 und die zum Bootframebuffer passende Panelgeometrie.
+Ein unveraenderlicher Boot-Hold bewahrt die Originalpixel. Zwei private,
+linear ausgerichtete UMA-BOs erhalten die Anfangspixel; ein gemeinsamer
+SYSTEM-Shadow dient der bestehenden Bootdisplay-Bruecke.
+
+Der SIMD-faehige DCN-Task prueft DML, unveraenderte Bootroute und unbenutzte
+Pipes vor den ersten Wirkungen. Danach werden Backlight/Stream/Frontend
+geordnet angehalten, Link und EDID erneut geprueft, die erforderlichen
+Clocks bestaetigt und HUBP/DPP/MPC/OPTC mit dem originalen DC-Code programmiert.
+Der originale DCE-Pixelclockpfad nutzt ATOM1.7; eDP nutzt den originalen
+SST-Streamencoder mit MSA und M/N fuer 6 oder 8 Bit je Kanal.
+
+SMU10 liefert die originale 160-Byte-DPM-Tabelle. FCLK, SOC, DCF, tiefer DCF
+und DISP werden nur bei gestoppten TGs mit exakten ACKs angefordert.
+Treiber- und RV1-VBIOS-Mailboxkanaele bleiben getrennt. Der DPREF-Takt stammt
+aus dem bestaetigten Referenztaktpfad und ist nicht der Kristalltakt.
+Ein Timeout oder unbekannter Wert wird weder als ACK noch als Maximalwert
+umgedeutet. SoC-/APU-Grenzen und DML begrenzen die angebotenen Modi gemeinsam.
+
+Common Commit folgt erst nach beobachteter Frontendadresse, fortgeschrittenem
+Framezaehler, laufendem Stream und Linkstatus. Abort/Restore rekonstruiert
+die kompatible Bootgeometrie und die gesicherten Pixel mit erneutem
+Clock-/Link-/Scanoutnachweis. Es gibt kein blindes Registerjournal fuer
+laufende BIOS-Queues. Ungewisser Stop oder Restore behaelt Speicher und Hold.
+
+Der aeussere Besitzer stoppt und joint zuerst den Queueworker. Ein echter
+common deviceReset sperrt Modus-/Cursor-/Outputkonsumenten und erzeugt die
+neue Recoverygeneration. Danach folgen DCN-Stop/Bootrekonstruktion,
+GC-/SDMA-Retirement, BOs, Clock-DMA, GMC-Wiederherstellung und nativer
+Firmware-/PCI-Abbau. Erst dessen bestaetigte Ruhe erlaubt das kanonische
+Retirement und das Freigeben der geliehenen Quellen. Boot-Restore verwendet
+die neue Recoverygeneration bei unveraenderten Originalpixeln.
+Start ist auf 120 Sekunden, der aeussere Wiederherstellungsversuch auf
+30 Sekunden begrenzt. Nach erfolglosem Ablauf bleiben unsichere Besitzer
+resident und werden als Fehler gemeldet; sie werden nicht wiederverwendet.
+
+Frames, Cursor und Sichtbarkeit
+-------------------------------
+Die gemeinsame Upload-/Presentqueue kopiert SYSTEM-XR24-Quellen mit echten
+PTEs und SDMA-IBs in private Front-/Back-BOs. Teil-Damage erhaelt zuerst den
+vorherigen Vollframe und aendert nur das geliehene Rechteck. GPU-Abschluss,
+PTE-/DMA-Retirement, DCN-Flip und gemeinsame Completion sind getrennte
+Schritte. Interne Moduskopien verwenden eigene Timeline-Tokens und erzeugen
+keine erfundenen kanonischen App-Fences.
+
+Flip nutzt den originalen synchronen DCN1-Adresswechsel. Drei begrenzte
+cohaerente Abtastversuche kontrollieren Framezaehler, High/Low-Inuseadresse,
+Lock/Pending, Blank und Underflow. Nur die erwartete Adresse plus echter
+Zaehlerfortschritt liefert ein Receipt. Eine verstrichene Frist oder die
+angenommene Bildrate belegt keine Sichtbarkeit. Auch Backend-, Output-,
+Memory-, Display- und Modusgeneration muessen stimmen.
+
+Der Hardwarecursor nutzt 64x64 premultipliziertes ARGB, getrennte private BOs,
+begrenzte signierte Positionen und Clipping. Show wartet auf den tatsaechlichen
+Present-Barrier-Receipt. Im VUPDATE-Schutzintervall wird vor Registerwrites
+Busy geliefert. Quellreferenz, CPU-Mapping, Cursorbild und Completion
+bleiben bis zu ihren jeweiligen Bestaetigungen erhalten.
+
+PresentationInfo/Stats publizieren vorhandene Adress-/Zaehlerreceipts,
+monotone Beobachtungszeit und echte Pipelinezaehler. Unveraenderte Werte
+werden nicht neu publiziert. Bildperioden bleiben Schaetzungen; es gibt
+keine erfundenen GPU-Timestamps, IRQs oder gemessene VBlankphase. Ein Fehler
+im optionalen Reportingkanal beendet nur dieses Reporting.
+
+Transaktionale Modi
+-------------------
+Nur vollstaendige EDID-Modi mit passenden Linkgrenzen und eigenem erfolgreichen
+DML-Plan erscheinen im Katalog. Ein separater Planungscontext schreibt keine
+Register der laufenden Ausgabe. Der neue gemeinsame Katalog erhaelt eine
+frische Verbindungsgeneration; alte Receipts werden nicht rueckwirkend
+umetikettiert.
+
+Apply prueft Identitaet, Geometrie, Head/Plane/PLL, BPC und exaktes Timing,
+legt ein zweites privates BO-Paar an und kopiert die geliehene Quelle ueber
+SDMA. Danach folgen neues Clocks/Link/Frontend-Programming und ein neuer
+sichtbarer Receipt. Das alte BO-Paar bleibt waehrend der Benutzerentscheidung
+erhalten. Normale Presents koennen bereits den neuen Modus bedienen.
+Confirm gibt nur das inaktive Paar frei. Rollback schaltet mit frischer
+Modusgeneration und erneutem Receipt auf den tatsaechlichen alten Frontbuffer.
+Busy-Completion und fehlgeschlagene Freigaben behalten Job und Ressourcen.
+
+Fehler vor Hardware-/DMA-Wirkungen koennen OLD_PRESERVED liefern. Unsichere
+Wirkungen, verlorene Outputs, gestallte Zaehler oder abgelaufene Jobs gehen
+ueber den gemeinsamen Reset-/Restoreweg. Ein alter Output oder ein spaeter
+Receipt darf keine neuere Transaktion abschliessen. Fullscreen/Resize benutzt
+denselben Modus- und Praesentationsvertrag; Fensterpolicy folgt in /19.
+
+HDMI, HPD und Betriebsueberwachung
+---------------------------------
+Die HDMI-Runtime aus /17 ist jetzt an reale gemeinsame OutputIds, periodische
+HPD-Abfragen und vollstaendige Empfaengerprobes angeschlossen. HPD wird alle
+100 ms, EDID alle zwei Sekunden bedient, soweit keine Modusentscheidung den
+Katalog haelt. Ein Empfaengerwechsel ohne HPD-Puls wird durch den Hash aller
+EDID-Bloecke erkannt. Busy beim Withdrawal behaelt die alte Identitaet.
+DCN1-HPD-Pins verwenden die originalen Registershifts 0/8/16/24; die vorherige
+Viererzuordnung wurde fuer eDP und HDMI korrigiert.
+
+In /18 ist eDP die aktive native Ausgabe; HDMI wird als Empfaenger mit
+gemeinsamer Identitaet gefuehrt. Die Retirement-Bruecke beweist deshalb
+explizit den inaktiven DIG-Zustand und lehnt aktivierte HDMI-Jobs ab.
+Aktiver HDMI-Scanout und zwei gleichzeitige Ausgaben mit getrennten BOs,
+Takten und Timelines folgen in /20. Diese Grenze ersetzt die fruehere
+pauschale /17-Uebergabe zu /18 durch den konkreten Stand.
+
+Panelstatus wird alle 250 ms ueber HPD, Video, DPCD-Lanes und nativen
+Scanoutstatus geprueft. Ausbleibender Zaehlerfortschritt ist auf zwei Sekunden
+begrenzt. HDMI, Panelgesundheit, Helligkeit, Modus und Cursor teilen den
+serialisierten DCN-Task; gestartete Arbeit wird zuerst gejoint. Keine dieser
+Abfragen erzeugt fuer einen unveraenderten Desktop einen neuen Frame.
+
+Nachweise und Grenzen
+---------------------
+Der normale Linux-Komponentenbuild fuehrt 36 vorhandene/gruppierte AMDGPU-
+Testfaelle aus und baut das R4D samt Firmwareaudit. Sechs Displaygruppen
+verwenden den wirklichen C/Zig-Code. Der Verbund deckt Bootuebernahme,
+1080p/720p-Apply/Rollback/Confirm, Teil-Damage, Cursorbarrier, HPD2,
+Empfaengerwechsel, gleichzeitige HDMI-/Panelarbeit und Reset nach unsicherem
+Moduswechsel ab. Busy bei Publication, Release und Reset prueft den Erhalt
+von Frames, Referenzen, Leases und Generationen. Kein neuer globaler Gate.
+
+Die Firmware-/Engine-Endruhe im zusammengesetzten Displaymodell wird als
+explizite Antwort eingespeist; die einzelnen realen Stop-/Retirementprotokolle
+werden in ihren bestehenden Besitzergruppen geprueft. Dies ist keine
+Simulation der kompletten APU und kein Nachweis fuer GPU-Pixel.
+
+316 unveraenderte Linux-7.2.4-Originaldateien, 29 originale C-Einheiten und
+acht private Bruecken werden gehasht/archiviert. Zwei bestehende Patches
+betreffen nur die erzeugte Buildkopie. Vollstaendige AMD-MIT-Notices,
+WHENCE und Firmwarelizenz stehen im Distributionsexport. Konkrete Logs,
+Artefakthashes und verknuepfte Symbole stehen in AMDPresentation08018.json.
+
+Windows wurde nicht ausgefuehrt; der Hostweg bleibt die gemeinsame
+PowerShell-Logik. Native Desktopkomposition ist /19, Mehrschirm /20,
+erweiterte Farbe /21, HDMI-Audio /22, weitere Energie-/Recoverypolicy spaeter.
+Reale Panelpixel, VBlank, Linkqualitaet, Bootkompatibilitaet und Laptopbetrieb
+sind offen bis zur ausschliesslichen Hardwareabnahme /39.

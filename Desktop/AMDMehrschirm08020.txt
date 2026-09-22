@@ -1,0 +1,102 @@
+﻿AMD-Mehrschirm und Ausgabepolicy - 0.80.20
+========================================
+
+Besitzer und Integration
+------------------------
+AMDGPU 0.1.15 betreibt das interne eDP-Panel und den direkten HDMI-Anschluss
+des Picasso-Zielprofils mit zwei nativen DCN1-Heads. HDMI erhaelt nach
+vollstaendiger Empfaengererfassung einen eigenen Moduskatalog, private
+Scanoutbilder und eine eigene gemeinsame GfxOutputTarget-Identitaet. Die
+Aktivierung verlangt den tatsaechlichen Adress-/Framezaehlerreceipt sowie
+aktive TG-, Encoder- und Videowege. Eine reine EDID-Publikation reicht nicht.
+
+Desktop, R4GFX, WINSVC und Appearance verwenden die vorhandenen Vertraege
+aus 0.79.24. Extended/Clone, primaere Arbeitsflaeche, vorzeichenbehaftete
+Anordnung, Skalierung in 120steln, Rotation, Ausgabeauswahl und Fensterrettung
+bleiben dort. Persistente Einstellungen verwenden DISPLAYS.R4S und den
+vorhandenen Testen/Behalten/Rueckkehr-Dialog. Apps und Subsysteme bekommen
+keinen AMD-Sonderweg. Kernel, Contract und SDK bleiben unveraendert.
+
+Der primaere Head verwendet den vorhandenen DCN-Cursor. HDMI verwendet
+den gemeinsamen Softwarecursor mit den normalen Ausgabe-/Zeigertransformationen.
+Clone zeichnet dieselbe logische Szene je Ausgang in dessen eigenem Takt;
+Extended behaelt getrennte logische Bereiche und Bildpools. Softwarefallback
+bleibt im vorhandenen Kompositor. Direct Scanout wird fuer AMD nicht beworben.
+
+Gemeinsame Hardware, getrennte Lebensdauer
+-----------------------------------------
+Ein serialisierter Queueworker und ein SIMD-faehiger DCN-Task besitzen die
+Hardware. Jeder Head hat eine eigene Scanout-Lebensdauer, Framepaare,
+Modustransaktion, Present-Quelle, Timelinezuordnung und Sichtstatistik.
+Getrennte begrenzte GPU-VA-Slots verhindern Aliasueberlappung. Eine begrenzte
+Eingangsqueue laesst Auftraege anderer Ausgaenge an einem wartenden Head
+vorbeilaufen. Ein Verbraucher darf nur seinen eigenen Taskabschluss abholen.
+
+Nach SDMA-Ende koennen Quellmapping und Quellleihe bereits freigegeben sein,
+waehrend das private Bild noch auf seinen DCN-Receipt wartet. Getrennte
+Flip-/Sample-/ACK-Schritte geben zwischen Hardwaretasks den Worker frei.
+Unterschiedliche Bildraten erzwingen keinen gemeinsamen Frameabschluss.
+Moduswechsel behalten alte und neue Bilder bis Confirm oder einem neu
+bestaetigten Rollback. Kandidaten werden zuerst per echtem SDMA initialisiert.
+
+Originale DCN1-DML/RQ/DLG berechnen jeden Kandidaten zusammen mit seinem
+unveraenderten Peer. Der erste Kaltaufbau reserviert mindestens 600 MHz
+DISPCLK bei voller DPP-Rate; SMU/ATOM muessen den tatsaechlich eingestellten
+Wert bestaetigen. ASIC- und gemeinsame Taktgrenzen bleiben bindend. Zu hohe
+gemeinsame Anforderungen werden vor MMIO abgewiesen. Der HDMI-Quellpfad
+bleibt auf HDMI1.4/RGB8 und 340 MHz begrenzt.
+
+Beim Hinzufuegen oder Aendern eines Heads bleibt der andere aktiv. Es gibt
+keinen globalen MPC-Reset oder gemeinsamen Taktwechsel. Nur der betroffene
+MPC-Pfad wird ersetzt; globale Wasserzeichen duerfen dabei nur steigen.
+Die berechneten Request-/Deadlinewerte aktiver Peers werden unter deren
+Original-TG-Update-Lock angepasst, ohne Adresse, Timing oder Cursor zu ersetzen.
+Die konservative Taktreserve ist keine Leistungs- oder Verbrauchsmessung;
+dynamische Absenkung gehoert zu /34.
+
+Ausgangsverlust und Rueckkehr
+----------------------------
+HDMI-Abziehen oder EDID-Wechsel pausiert die genau bezeichnete Ausgabe.
+Bereits angenommene DMA-Arbeit muss physisch abschliessen; ausstehende
+Present-/Modusjobs werden mit ihrem kanonischen Token beantwortet. HDMI-Mute,
+TG/HUBP-Stillstand und MPC-Entfernung gehen der gemeinsamen Targetentfernung,
+Connectorentfernung und BO-Freigabe voraus. Busy behaelt dieselben Ressourcen.
+Ein neuer Empfaenger erfordert frische EDID/DML/Linkbelege und neue gemeinsame
+Verbindungs- und Displaygenerationen.
+
+Gewoehnlicher Panelverlust bei aktivem HDMI isoliert das Panel. Ein begrenzter
+Stoppversuch behaelt die primaeren Bilder auch bei fehlendem Stillstandsbeleg;
+HDMI bleibt bedienbar. Der Worker wiederholt einen gescheiterten Stopp nicht
+endlos auf Kosten des Peers. Die spaetere Wiederaufnahme eines verlorenen
+Panels gehoert zum Recovery-Schritt /36. Ohne gesunden Peer bleibt der
+vorhandene Weg zur Bootrekonstruktion erhalten. Ein unklarer gemeinsamer
+MMIO-/Enginezustand darf weiterhin das gesamte Geraet verlieren.
+
+Deaktivierte Ausgaenge verwenden die vorhandene schwarze Desktopausgabe und
+erzeugen danach keine staendige neue Arbeit. Ein ruhender oder nicht mehr
+rueckmeldender Empfaenger blockiert den Peer nicht. Physisches DPMS-Aus/Ein,
+Deckel-, Fn- und Schlafpolicy werden in /35 angebunden; logisches Deaktivieren
+ist hier kein behaupteter elektrischer Energiesparzustand.
+
+Nachweise und Grenzen
+--------------------
+Die vorhandene AMDGPU-Displaygruppe fuehrt den wirklichen C/Zig-Verbund aus:
+zwei native Heads, gemeinsame DML-Zulassung, getrennte 60/30-Hz-Stimuli,
+zurueckgehaltener HDMI-Receipt bei fortlaufenden Panel-Presents, native
+Quellpixel, Modus-Apply/Rollback/Confirm, Hotplug, blockierte Entfernung,
+frische Identitaeten und isolierter Panelstopp. Register-, Speicher-, Task-,
+DMA- und Frameantworten sind ausdrueckliche Modellstimuli.
+
+Der bestehende /SMOKE-WINDOW-IDLE /OUTPUTS-Gast benutzt vier vCPUs und zwei
+Virtio-Ausgaben. Er prueft gemeinsame Anzeige-UI, Geometrie, Fensteruebertritt,
+Eingabekoordinaten, getrennte Queues, gespeicherte Skalierung/Rotation,
+Deaktivierung und Rueckkehr sowie WINSVC-Neustart. Der Gast startet keinen
+nativen AMD-Treiber. Das konkrete Ergebnis, Versionen und Hashes stehen in
+AMDMehrschirm08020.json; es gibt keine neue globale Testgruppe.
+
+AMDGPU bleibt IMAGE_SCOPE=none; normale auto/passive-Bindung fuehrt keinen
+nativen Start aus. Windows wurde nicht ausgefuehrt. Sichtbare AMD-Pixel,
+wirklicher Mehrschirmbetrieb, elektrische Signale, Performance und Verbrauch
+werden ausschliesslich auf der letzten Unterversion /39 physisch geprueft.
+Verwandte Vertraege: GrafikMehrschirm07924.txt, AMDDesktop08019.txt und
+Drivers/AMDPresentation08018.txt.

@@ -1,0 +1,114 @@
+﻿AMD EGL und OpenGL ueber Zink/RADV 0.80.26
+=========================================
+Stand: 22.09.2026. Softwareintegration fuer Picasso 1002:15D8.
+Besitzer: R4GL und R4VK. WINSVC, R4GFX, Desktop, AMDGPU und der gemeinsame
+Kernel-BO-/Queue-Besitzer werden ueber ihre bestehenden Vertraege verwendet.
+
+Nativer OpenGL-Pfad
+-------------------
+R4GL 0.1.15 bindet Zink an den vorhandenen RADV-Provider in R4VK 0.1.21.
+EGL 1.5 und OpenGL 3.3 Core / GLSL 3.30 verwenden die wirkliche Mesa-
+Kompilierkette: GL/GLSL, Zink/NIR/SPIR-V, RADV/NIR/ACO und GFX9-Streams.
+Es gibt keine separate AMD-EGL-Fassade. Profil 0 bleibt bewusst gewaehltes
+Softpipe; Profil 1 bleibt nativ und wechselt bei Fehlern nicht die Renderart.
+Die ausgewaehlte Renderart wird durch die normalen GL-Abfragen sichtbar.
+
+Picasso meldet nicht alle nativen gestrichelten Vulkan-Linienmodi. Zink
+waehlt deshalb seine vorhandene Geometry-/Fragmentshader-Umsetzung, wenn
+die wirklichen Geometry- und Sample-Shading-Faehigkeiten diese tragen.
+Die Vulkan-Featurebits werden dafuer nicht nachtraeglich gesetzt.
+
+GFX9 bietet im gewaehlten RADV-Quellprofil kein EXT_border_color_swizzle.
+R4GL haelt daher die Vulkan-Bildansicht bei der identischen RGBA-Zuordnung
+und wendet die endgueltige GL-Kanalzuordnung im Shader an. Die Zuordnung
+gehoert zu Shaderstufe und Samplerbindung; Aenderungen invalidieren den
+Shader-Schluessel. Float-/Integer-Konstanten, Sampler-Arrays und Gather-
+Komponenten behalten Typ und Texelreihenfolge. Abfragen werden nicht wie
+Farbwerte umgeordnet. Bestehende Tiefen-/Shadow-Behandlung bleibt erhalten.
+Bindless-Texturen werden auf diesem Pfad nicht angeboten, weil deren
+Handles keinen festen Bindungsschluessel tragen. GL 3.3 Core benoetigt sie
+nicht. Auch hier wird keine fehlende Vulkan-Erweiterung behauptet.
+
+Endliche native Speicherbindungen
+---------------------------------
+Kleine private Shader-, Upload-, Kommando- und Anwendungsallokationen teilen
+ausgerichtete Teilbereiche der vorhandenen 64-MB-Root-BOs. Eigene Padding-
+Seiten und gleichzeitige Maps bleiben je Allokation getrennt. Die native
+Grenze von 32 Roots und der 2-GB-VA-Bereich werden nicht angehoben.
+
+Ein Submit haelt alle tatsaechlich eingereichten Roots. Wird ein Kind
+geschlossen, bleibt dessen Teilbereich belegt, solange ein Submit den Root
+haelt. Der letzte Abschluss gibt aufgeschobene Kinder frei. So koennen
+Kommandostorage, Shader oder Uploads logisch enden, ohne laufende GPU-
+Zugriffe durch Wiederverwendung ihrer Bytes zu verletzen. Auch der NOP
+eines leeren Submits gehoert bis zum Abschluss dazu. Root-Referenzen werden
+nicht von Null wiederbelebt; Queue-Abbau mit unklarem Abschluss sperrt
+weitere Winsys-Nutzung. Kernel-/Treiber-Leases schuetzen weiter die Seiten.
+
+Punktmetadaten werden vor Pool-/Heap-/Broker-Freigaben entriegelt. Die
+Residenzgrenze serialisiert Root-Haltung und freie Teilbereiche; mehrere
+Queues teilen denselben Zaehler. Der Speichernachweis verzogert beobachtete
+Abschluesse, schliesst Kommandostorage und prueft, dass seine Adresse weder
+vor dem ersten noch vor dem zweiten Queue-Abschluss wiederverwendet wird.
+Nach Abschluss ist Wiederverwendung moeglich. Speicher-/Sync-Fehler bleiben
+Fehler; keine Quieszenz wird aus einem blossen Close abgeleitet.
+
+Fenster, Synchronisation und Fehler
+-----------------------------------
+EGL-Fenster nutzen die vorhandenen R4VK-Surfaces und WINSVC-Ketten. Native
+Fenster-IDs, aktuelle Ausgabe-Generationen, sRGB-Bilder, Acquire/Present,
+Resize und Close verwenden dieselben BOs und Fences wie Vulkan.
+Ein Consumer darf sein Bild ueber die EGL-Zerstoerung hinaus halten.
+
+Intervall 1 setzt eine wirklich gemeldete Synchronisationsfaehigkeit voraus
+und nutzt FIFO. Intervall 0 waehlt MAILBOX, soweit verfuegbar. Ein Timeout
+beim Wechsel behaelt bereits eingereihte FIFO-Bilder und ihre Reihenfolge;
+der Wechsel kann nach dem Leeren wiederholt werden. Geht die Ausgabe-
+Synchronisationsfaehigkeit verloren, wird synchrones Posting abgewiesen;
+Intervall 0 kann das noch gehaltene Bild weiterverwenden. Die Software-
+Pruefung erzeugt keinen physischen VBlank-Nachweis.
+
+Der gezielte Reset bei lebendem GL-Kontext, ausstehender Zeichnung und
+Consumer-Lease fuehrt wiederholt zu EGL_CONTEXT_LOST. Normaler Abbau und
+Rueckgabe des gehaltenen Bildes erreichen danach den Ausgangsbestand.
+Ohne nativen Adapter scheitert EGL-Initialisierung wiederholbar mit
+EGL_NOT_INITIALIZED; der Caller muss Softpipe bewusst separat waehlen.
+Optionale robuste EGL-Kontexte sind weiterhin nicht freigegeben.
+
+Nachweise und Grenzen
+---------------------
+AMDEGL08026.json verknuepft Build-/Artefakthashes, Quellstand und gezielte
+SMP4-Proben. Es wird kein zusaetzliches permanentes Gate angelegt.
+Die vorhandenen R4GL-/R4VK-C/Zig-Bootstrappruefungen bleiben massgeblich.
+
+Der native Pbuffer-Nachweis umfasst GLSL330, Texturen/FBO, benutzerdefinierte
+Randfarbe, unterschiedliche Kanalzuordnungen, Rebind, EGL-Fences und
+zusaetzliche gestrichelte Linien im Kompatibilitaetskontext. Shader, native
+Einreichungen und vollstaendiger BO-/Referenz-/Lease-/Byte-Abbau werden
+geprueft. Der Fensterlauf ergaenzt drei Bilder, Resize und Consumer-Haltung.
+
+Die direkte NIR-Pruefung verwendet die aus dem vorbereiteten Produktions-
+quelltext entnommene Umordnung und echte Mesa-NIR-Konstantenfaltung. 6120
+Faelle vergleichen gegen unabhaengig festgelegte Kanalwerte: alle 1296
+Kanalzuordnungen fuer Float/Int/Uint-Sampling sowie ausgewaehlte Gather-
+Zuordnungen fuer jede Komponente und dynamische Sampler-Array-Indizes.
+Texturwerte werden dabei als Eingangswerte eingesetzt; GPU-Pixel werden
+daraus nicht abgeleitet. Der exakte R4GL-Produktionsarchivhash ist erfasst.
+
+Die bestehende RADV-Probe bestaetigt weiterhin Compute/Grafik, dynamisches
+Rendering, Timeline/Binaer-Sync, WSI-BO-Import, Fehlerisolation, 4096 echte
+gleichzeitige Allokations-Maps und einen gebundenen/gemappten 1-GB-Puffer.
+Softpipe liefert echte berechnete GL-Pixel im Gast. Die nativen AMD-Proben
+verwenden echte Bibliotheken und Kernel-Besitzer, aber modellierte GPU-
+Abschluesse. Physische AMD-Pixel, Scanout/VSync und Reset sind ausschliesslich
+0.80.39 vorbehalten. Kein Windows-Hostlauf und keine offizielle GL-/EGL-CTS-
+Konformitaet werden behauptet. OpenGL 4.6 folgt in der naechsten Unterversion.
+
+Primaerquellen
+---------------
+Gepinntes Mesa 26.2.2: docs/drivers/zink.rst, Zink screen/context/compiler,
+RADV physisches Profil, NIR und Zink-Linienumsetzung. Originale und Lizenzen
+liegen im bestehenden Mesa-/AMD-Referenzbestand.
+https://docs.vulkan.org/refpages/latest/refpages/source/VK_EXT_border_color_swizzle.html
+https://docs.vulkan.org/spec/latest/chapters/textures.html
+https://docs.mesa3d.org/drivers/zink.html

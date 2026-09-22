@@ -1,0 +1,136 @@
+﻿AMD-Farbe, HDMI-Tiefe und erweiterte Ausgabefaehigkeiten - 0.80.21
+===============================================================
+
+Besitzer und vorhandene Farbverarbeitung
+---------------------------------------
+AMDGPU 0.1.16 verbindet bestaetigte DCN1-Ausgabebilder mit dem gemeinsamen
+Farbvertrag. Desktop 0.1.72 und Appearance 0.1.17 benutzen dessen Ausgabe-
+encoding und erlauben Monitorprofile auch auf SDR-RGB8 mit Limited-Range.
+R4GFX 0.1.24 und R4AMD 0.1.5 bleiben als R4L-Artefakte unveraendert. Die
+eingekompilierten R4GFX-Helfer fuer EDID, Profilzulassung und Quantisierung
+wurden erweitert. Kernel, ABI, Dienste und Dateiformate bleiben unveraendert.
+
+Der vorhandene R4GFX/COLOR_V1-Pfad besitzt sRGB/BT.709, lineare FP16-
+Komposition, BT.2020, PQ/HLG, Tone/Gamut Mapping und getrennte SDR-Aufnahmen.
+R4AMD besitzt bereits reale GFX902-Shader, XR24/XR30-Deskriptoren und
+NV12/P010-/YUV420P-Konvertierung. AMDGPU praesentiert nun auch XR30 mit
+derselben BO-, SDMA-, Fence- und Sichtbarkeitslebensdauer. Ein FP16-
+Arbeitsbild ist weiterhin kein unmittelbar praesentierbares Scanoutformat.
+
+ICC und Gamma/VCGT laufen ueber den bestehenden LittleCMS/COLOR_V1-CPU-Pfad.
+AMDGPU meldet die tatsaechlich unterstuetzten SYSTEM-Quellpuffer jetzt mit
+display_presentation_info_system_source. Dadurch kann Desktop diesen Pfad
+auswaehlen. Hardware-Gamma/DeGamma-LUTs und CTM melden weiterhin null;
+es wird kein programmierbarer DCN-LUT-Besitz behauptet. Allgemeine Profile
+sind auf SDR/sRGB RGB8 mit 100-nit-Referenzweiss begrenzt; HDR/10-Bit plus
+ICC ist nicht implementiert. GPU-Komposition ohne Profil bleibt nativ.
+
+Full/Limited, EDID und unabhaengige Aufnahmen
+--------------------------------------------
+Die EDID-Zusammenfuehrung behaelt jetzt die erste explizite CTA-VIC, wenn
+zuvor ein identischer Basis-DTD aufgenommen wurde. Geometrie-Deduplizierung
+darf eine CTA-Ausgabe nicht in ein vermeintliches Full-Range-PC-Timing
+verwandeln. Ohne RGB-Quantization-Selectable gilt fuer VIC > 1 Limited;
+VIC 0/1 bleibt Full. Mit QS sind passende ausdrueckliche Wahlen moeglich.
+
+Der erste HDMI-Schwarzpuffer enthaelt bei Limited den Code 16. Ein normaler
+Modusauftrag besitzt einen kanonischen SYSTEM/XR24-Pruefpuffer: Fuer einen
+impliziten Limited-Modus wird dieser einmal vor der privaten BO-Publikation
+in hoechstens 256 KB Zeilenarbeit je Worker-Schritt auf 16..235 umgesetzt.
+Der gemeinsame Moduserzeuger kennzeichnet diesen Puffer ausdruecklich
+als CPU-lesbar; der Treiber prueft die Verwendungsbits vor dem Mapping.
+Lesemapping und Referenz bleiben bis zum Abschluss gehalten. Explizite
+Farbauftraege besitzen bereits codierte Pixel und werden ohne zweite
+Quantisierung durch SDMA kopiert. Normale Frames kommen entsprechend dem
+publizierten Encoding aus dem gemeinsamen GPU- oder CPU-Kompositor.
+
+Im CPU-Desktop folgen auf lineare Komposition und ICC/VCGT die gemeinsame
+RGB8-Quantisierung und Present. Der Aufnahmezweig wird davor aus der
+kanonischen sRGB-Szene gebildet, auch ohne ICC bei Limited-Ausgabe.
+Monitorprofile und begrenzte Drahtpegel veraendern damit weder Screenshot-
+noch Remote-/Aufnahmekennzeichnung. Appearance akzeptiert solche SDR-
+Profile, und Geometriewechsel koennen deren Encoding erhalten.
+
+RGB10, HDMI-Metadaten und transaktionaler Wechsel
+------------------------------------------------
+Der direkte Lenovo-HDMI-Quellpfad bleibt unkomprimiertes RGB-TMDS mit
+340 MHz Obergrenze. Zehn Bit erhoehen den TMDS-Takt auf 5/4 des Pixeltakts:
+1080p60 mit 148,5 MHz benoetigt 185,625 MHz; 297 MHz bei zehn Bit werden
+abgewiesen. Ein Empfaengermaximum ersetzt diese Quellgrenze nicht.
+
+Gemeinsam geprueft werden aktuelle Verbindung/EDID, exakter Katalogmodus,
+RGB-Deep-Color, BT.2020-RGB, EOTF, statische Metadaten, Pegelwahl und
+Linkbudget. DML bewertet weiterhin beide aktiven Heads gemeinsam.
+HUBP und CNVC erhalten tatsaechlich ARGB2101010; der originale Full-Bypass
+allein wuerde ARGB8888 einstellen. OPP vermeidet Acht-Bit-Trunkierung.
+Die originale dce112-Taktquelle programmiert den 5:4-DTO direkt in
+PHYPLL*_PIXCLK_RESYNC_CNTL. ATOM erhaelt den erhoehten physikalischen Takt,
+sein Deep-Color-Ratiofeld bleibt wie im Original deaktiviert. Streamencoder
+und Transmitter bekommen ebenfalls den physikalischen TMDS-Takt.
+
+AVI enthaelt VIC, Full/Limited und gegebenenfalls BT.2020-RGB. Der originale
+DCN1-Streamencoder schreibt GCP/Deep-Color sowie statische PQ-/HLG-
+InfoFrames. HDR-Metadaten kommen aus dem geprueften Auftrag; EDID-Helligkeit
+wird nicht als Inhalts-Mastering erfunden. Ein Wechsel oder Rollback nach
+SDR sendet ein ausdrueckliches SDR-Metadatenpaket.
+
+GfxDriverModeColor bindet Signal und gesonderten codierten BO an Ticket und
+Sequenz. Confirm/Rollback muessen exakt denselben Farbauftrag referenzieren.
+Das vorherige Signal und die alten privaten Bilder bleiben bis zur
+bestaetigten Entscheidung erhalten. Publikation des neuen Farbstates folgt
+erst auf echte Adress-/Frame- und Link-Receipts. Die Bilder des anderen
+Heads bleiben dabei unveraendert. Fehler behalten die bestehenden
+Ressourcen- und Recoveryregeln; es gibt keinen Erfolg durch Timer allein.
+
+Explizite Grenzen des Quellprofils
+----------------------------------
+- eDP: vorhandener RGB6/8-SDR-Link; kein implementierter eDP-HDR-/RGB10-
+  oder HDR-SDP-Pfad. Fuer bestaetigte RGB8-Ausgabe werden SDR-Farbfakten
+  publiziert. Ein RGB6-Panel bleibt normale SDR-Ausgabe, ohne sich als
+  Acht-Bit-Link oder profilfaehige COLOR-Ausgabe auszugeben.
+- HDMI: RGB8/10, Full/Limited, SDR/PQ/HLG und statische Metadaten nur nach
+  gemeinsamer Quell-/Empfaengerzulassung. Keine native YCbCr-Ausgabe;
+  NV12/P010 werden durch R4AMD in das gewaehlte RGB-Encoding konvertiert.
+- VRR: DCN1 besitzt DRR-Register. Das aktuelle Quellprofil implementiert
+  weder einen qualifizierten adaptiven eDP-Link noch HDMI-Forum-EMP oder
+  AMD-FreeSync-VSIF mit zugehoeriger Frame-/Timeoutsteuerung. Beide Heads
+  melden deshalb known/fixed mit reason=unavailable und ohne capable/LFC.
+  Das ist eine Implementierungsgrenze, keine Messung fehlender
+  GPU-Faehigkeiten. Ein EDID-Refreshbereich allein schaltet VRR nicht frei.
+- DP-MST, DSC, FRL und SCDC werden fuer diesen direkten HDMI1.4-/eDP-
+  Quellpfad nicht angeboten. Der Daten-USB-C-Port wird nicht zu DP erklaert.
+
+Nachweise und verbleibende physische Freigabe
+-------------------------------------------
+AMDFarbe08021.json bindet die Builds, Originalquellen, Artefakte und Logs
+an SHA256. Bestehende HDMI-/DCN-Verbundfaelle pruefen RGB10-Puffer, reale
+C-Registerprogrammierung, SDMA-Pixel, PQ-Rollback, HLG-Confirm, SDR-Rueckkehr,
+CTA-Limited-Schwarz/Weiss und separate Ausgabefaehigkeiten. R4GFX prueft
+weiterhin gemeinsame Farbe/ICC/YUV sowie native AMD- und NVIDIA-Fassaden.
+Ein kurzer SMP4-Gast mit zwei Virtio-Ausgaben prueft geladene Desktop-
+und Farbmodule, Bild-/Fensterverwaltung, Appearance und Dienstneustart.
+Die vorhandene Farbprobe vergleicht Limited-Quantisierung mit COLOR_V1
+nach echter ICC-BMP-Konvertierung und prueft unveraenderte SDR-Quellpixel.
+
+MMIO-, DMA-, EDID-, ATOM- und Frameantworten der AMD-Tests sind explizite
+Modellreize. Der Virtio-Gast fuehrt keine AMD-GPU aus. Es wurden keine
+physischen Probes, Laptopupdates, Linkmessungen oder Windowslaeufe
+ausgefuehrt. Sichtbare Panel-/HDMI-Farbe, zehn Bit, HDR-Metadaten am
+Empfaenger und elektrische Linkqualitaet bleiben ausschliesslich /39.
+Ohne geeigneten Zusatzempfaenger bleibt seine physische Freigabe offen.
+AMDGPU bleibt IMAGE_SCOPE=none bis /37; auto/passive aktiviert keine GPU.
+Es wurde keine weitere globale Testgruppe angelegt.
+
+Primaerquellen
+---------------
+Gepinnte AMD/Linux-7.2.4-Originale und Hashkatalog unter
+Repositories/Drivers/AMDGPU/ThirdParty/Sources.json sowie
+ExFiles/Reference/AMD/Implementations/Linux/:
+dc/dpp/dcn10/dcn10_dpp.c und dcn10_dpp_cm.c, dcn10_opp.c,
+dc/dio/dcn10/dcn10_stream_encoder.c und dcn10_link_encoder.c,
+dc/dce/dce_clock_source.c, dc/link/link_dpms.c,
+dc/link/hwss/link_hwss_dio.c, dc/bios/command_table2.c und atomfirmware.h.
+Gemeinsame Protokoll-/Farbgrundlagen: Docs/Desktop/GrafikFarbe07925.txt
+und dessen Referenzkatalog; heutige DC-Einordnung:
+https://docs.kernel.org/gpu/amdgpu/display/display-manager.html
+https://docs.kernel.org/gpu/amdgpu/display/dcn-overview.html

@@ -1,0 +1,122 @@
+﻿AMD-HDMI-Audio 0.80.22
+=====================
+Stand: 22.09.2026. AMDGPU 0.1.17, HDA 0.3.20, Kernel 0.1.204.
+
+Ergebnis und Grenze
+------------------
+Die direkte HDMI-Verbindung des Picasso/DCN1-Treibers ist mit dem bestehenden
+HDA-/AUDSVC-Ausgabekatalog verbunden. Das derzeit zugelassene Drahtformat ist
+LPCM, 48 kHz, zwei Kanaele, S16. Keine neue Audio-API, kein eigener Mixer und
+kein neuer Audiovertrag oder geaenderter AUDSVC sind erforderlich.
+Kernel 0.1.204 korrigiert die bestehende Metadatenvalidierung: Beide
+kanonischen PCI-Zugriffsarten sind zulaessig (Legacy=1, ECAM=2), unveraendert
+in hda_location codiert. Die bisherige Nur-Legacy-Zulassung haette reale
+ECAM-erfasste AMD- und NVIDIA-Audiorouten abgewiesen. Unbekannte Busarten
+bleiben ungueltig; Quelle, BDF, Port und Revision bleiben streng gebunden. Softwaremodelle und
+kurzer SMP4-Systemlauf liefern die unten abgegrenzten Belege. Ein hoerbarer
+Ton, echte HDMI-Presence, Audioclock und das reale Codec-Revisionsergebnis des
+Lenovo sind weiterhin ausschliesslich Gegenstand von 0.80.39.
+
+Besitz und Zuordnung
+-------------------
+AMDGPU erfasst nur beim Init die tatsaechliche PCI-Funktion 1 desselben
+Bus/Geraets wie die GPU-Funktion 0: 1002:15DE, Klasse 04/03. Vendor-/Device-
+und Klassenwerte werden nochmals gelesen; fehlende oder doppelte Belege
+lassen Displayaudio unangeboten. Die PCI-Zugriffsart wird aus dem Inventar
+beibehalten und muss der GPU entsprechen; Legacy und ECAM werden geprueft. Kein fester Bus und kein aus dem Head
+abgeleiteter HDA-Pin. Native Aktivierung bleibt ausdruecklich mode=native;
+Auto/passive und IMAGE_SCOPE=none werden hier nicht umgestellt.
+
+Der DCN-Task sucht einen laut AZALIA-Defaultconfiguration verbundenen
+Hardware-Endpunkt unter vier Instanzen. HDA findet seinen NID spaeter durch
+den vollstaendigen Protokollabgleich. Ein Kopierquellenhandle des bestehenden
+GfxReceiverSource-Vertrags bindet Adapter, Connector, Receiversequenz,
+Revision und PortID an die erfasste HDA-Funktion. Ein leeres Receiverbatch
+verwaltet nur die Audiogeneration; die native Videogeometrie bleibt beim
+bestehenden Output-Publisher. Uebereinstimmende Monitornamen reichen nicht.
+
+Originale AMD-Programmierung
+---------------------------
+318 unveraenderte Originaldateien sind im SHA256-Katalog erfasst, darunter
+neu dce_audio.c/h. Der Archivlink enthaelt 30 originale C-Uebersetzungseinheiten
+und neun private Anpassungen; zwei bestehende Patches betreffen weiterhin
+nur die generierte Baukopie. Vollstaendige MIT-/Firmwarehinweise werden vom
+bestehenden ExportLegal.ps1 in die Distribution exportiert.
+
+dce_aud_hw_init, az_configure, az_enable/disable und wall_dto_setup sowie die
+originalen DCN1-HDMI-Audiofunktionen setzen Descriptor, Speaker, PortID,
+Hersteller/Produkt/Name, Lip-Sync, DTO, ACR, Kanalmaske und InfoFrame-Sendung.
+Die vollstaendig gepruefte EDID muss Stereo-48k-S16 bestaetigen. ELD meldet
+nur dieses gemeinsame Profil, niemals die Menge weiterer unimplementierter
+Sinkformate. 8-Bit-RGB verwendet den Pixeltakt; RGB10 den 5:4-TMDS-Takt.
+Ein 148,5-MHz-Testmodus ergibt modelliert CTS=148500 bzw. 185625 und N=6144.
+Originale Bandbreitenanpassung darf das zugelassene Descriptorprofil nicht
+wegnehmen; andernfalls bleibt Ton unsupported bei weiterlaufendem Bild.
+
+Lebensdauer
+-----------
+Ready wird erst nach dem bestaetigten Videolink und einem konkreten
+Framebuffer-/Framezaehlerbeleg publiziert. Vor Moduswechsel und Rollback
+wechselt die Route auf pending, vor Trennung auf absent; danach folgen
+Mute, Clock-/InfoFrame-Abschaltung und die gepruefte AZALIA-Deaktivierung.
+Ein neuer Anschluss verwendet eine neue Receiversequenz und Revision.
+HDA vergleicht den physischen Stand mit zwei identischen Routensnapshots
+und verwirft veraltete Streams. Auch ein ganz zwischen HDA-Polls vollzogener
+Moduswechsel wird durch die erhoehte Revision erkannt.
+
+Reset schliesst die kopierte Quelle nach dem Task-Join, bevor physische
+Freigabe versucht wird. Ein nicht bestaetigter Transportstopp behaelt alle
+Hardware-/Speicherbesitzer, entfernt aber die Routenfreigabe. Metadaten-Busy
+wird als Fehler behandelt; es gilt niemals als bestaetigter Stopp. Der
+vorhandene Stopppfad ist auch die Grenze fuer physische Bildschirmruhe;
+DPMS-/Fn-/Laptoprichtlinien selbst werden in 0.80.35 integriert. Logisches
+Schwarz/Idle aus der Mehrschirmverwaltung ist kein physischer Sleepbeleg.
+
+HDA und AUDSVC
+--------------
+1002:15DE benoetigt einen tatsaechlich erkannten Codec 1002:AA01 mit Revision
+mindestens 3; fuer aeltere Pair-Mapping-Varianten wird keine Faehigkeit
+behauptet. AMD besitzt hier keinen generischen ELD-RAM-Lesepfad. Der originale
+R4OS-Pruefer verlangt Presence und ELDV, genaue Hersteller-/Produkt-/Namens-
+und PortID-Werte, HDMI-Speakerkennung, PCM-Descriptor und Lip-Sync-Daten.
+Zeitlimit, fehlende Antwort, widerspruechlicher Pin oder wechselnde Kopie
+verhindern die Freigabe. Der Plan bestaetigt Allocation, Downmix, Einzel-
+Slotmapping, Ramp und HBR-off per Vendor-GET vor der Streamzuweisung.
+
+AUDSVC 0.1.12 behaelt Auswahl/Auto-Fallback, Volume, Mute und die vorhandene
+Stream-Neueroeffnung; Desktop verwendet weiterhin den gemeinsamen Katalog.
+Die analoge Lenovo-Route 1022:15E3 mit Realtek 10EC:0257 bleibt getrennt.
+Ihre frueheren physischen Ergebnisse werden nicht als neue AMD-HDMI-Abnahme
+gewertet. Standard-HDMI/DP, NVIDIA und generische Analogplaene bleiben erhalten.
+
+Pruefbelege
+-----------
+Docs/Drivers/AMDHDMIAudio08022.json bindet Quell- und Artefakthashes, genaue
+Buildprotokolle und den SMP4-Gastlauf. Bestehende AMDGPU-Verbundfaelle umfassen
+originale C-AZALIA-Registerzugriffe fuer Endpunkt 2 bei Head 1, ACR/DTO,
+Freigabe erst nach Videoreceipt, 8-/10-Bit-Apply/Confirm/Rollback, Wiederanschluss,
+fehlendes Audioformat, Metadatenfehler sowie unbestaetigten Stopp mit
+Quellenschliessung und erhaltenem Hardwarebesitz. Bestehende HDA-Faelle
+pruefen falsche Vendorwerte, jede Identitaetskomponente, Timeout, Truncation,
+Revision, verfehlte SET/GET-Bestaetigung und den separaten AMD-Kanalplan.
+
+Der Gast besitzt vier vCPUs und zwei emulierte Intel-HDA-Controller. Geprueft
+werden real geladener HDA-Treiber, AUDSVC-Routenauswahl, Ablehnung einer
+unbekannten Auswahl ohne Verlust der alten Route, Lautstaerke/Mute,
+PCM-Schreiben und sauberer Close. Dieser Gast emuliert keinen Picasso,
+keinen AMD-Codec und keinen HDMI-Empfaenger. Alle AMD-MMIO-/Videoantworten in
+Hosttests sind explizite Modellstimuli; kein Windows- oder Hardwarelauf.
+Ein zusaetzlicher Lauf des vorhandenen Kernel-Receiver-Audio-Falls prueft
+Legacy und ECAM sowie unbekannte Busarten; der finale SMP4-Gast verwendet
+den korrigierten Kernel 0.1.204. Es wurde keine neue globale Testsuite angelegt.
+
+Quellen und Anschlussarbeiten
+----------------------------
+Repositories/Drivers/AMDGPU/Port/dcn_audio.c und src/display_audio.zig;
+Repositories/Drivers/HDA/src/amd_hdmi.zig, codec_program.zig und main.zig.
+Fremdmaterial: lokale Originale aus Linux 7.2.4, dce_audio.c/h mit AMD-MIT-
+Lizenz; atihdmi.c unter ExFiles/Reference/AMD/Implementations/Linux ist eine
+GPL-Referenz fuer Protokollfakten, wird weder kopiert noch gelinkt.
+Gemeinsame Besitzervertraege: Docs/Drivers/GrafikAudio07915.txt und
+Docs/Drivers/HdaStreamContract.txt. Weitere Audioformate, DP/MST/USB-C-
+Audio und hoerbare Hardwarefreigabe werden hier nicht behauptet.

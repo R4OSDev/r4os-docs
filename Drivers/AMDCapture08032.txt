@@ -1,0 +1,121 @@
+﻿AMD Capture, Screenshots und Remote-Desktop – 0.80.32
+====================================================
+Stand22.09.2026. R4DESK0.1.74; R4AUTH0.1.4; RDPSVC0.1.10; R4ENC-Runtime bytegleich0.1.3.
+
+Gemeinsamer Capturepfad
+----------------------
+R4GFX/Display/readback.zig besitzt begrenzte regionenbasierte Copyjobs,
+wiederverwendeten RAM-Stagingpuffer und SDR-Schatten. Ohne Verbraucher wird
+keine Kopie eingereicht. Der erste Frame, Quellwechsel oder eine Luecke in
+der bestaetigten Framefolge erzwingen ein Vollbild; danach reichen die
+geaenderten Bereiche. Der Desktop haelt die Quellressource bis zum exakten
+Copyabschluss ohne aktive/gehaltene Ressourcen und gibt sie vor CPU-
+Farbumrechnung, Snapshotpublikation und Netzwerktransport frei.
+
+Cancel, Resize und Device-Lost widerrufen den laufenden Inhalt. Ein Timeout
+beweist keine Freigabe; ausstehende Copyjobs halten ihre Quelle bis zum
+Retirement. Capture nutzt DEVICE_V1 und dessen bereits implementierten
+AMD-Copyprovider. Es gibt keinen AMD-Sonderweg um diesen Besitzer herum.
+Screenshots verwenden dieselben unveraenderlichen CPU-Snapshots.
+
+Optionale Aufnahme
+------------------
+Strg+Druck aktiviert den bestehenden begrenzten Recordingworker. QueryCaps
+und Create waehlen AMD, NVIDIA oder Software passend zum Adapter. AMD AVC
+erhaelt lineares NV12 mit256-Byte-Pitch und16-Zeilen-Coded-Ausdehnung; die
+sichtbare Groesse bleibt separat erhalten. Horizontales und unteres Padding
+werden mit Y16/UV128 initialisiert. Jeder Groessen-/Quellwechsel beginnt
+nach bestaetigtem Abbau einen neuen Matroskateil. Das profilgebundene Layout
+verhindert irrtuemliche Rotation bei jedem AMD-Frame.
+
+Die CPU-Konvertierung gibt die Snapshotlease vor Encode-/Dateiwarten frei.
+Der System-BO wird vor Send CPU-unmappt und bis zum Encoderabschluss
+behalten. Langsame Ausgaben ueberspringen Zwischenrevisionen. Nach einem
+nativen Fehler folgen bestaetigter Encoderabbau, neuer Dateiteil und die
+sichtbare Softwareumschaltung. Ohne Aufnahme entstehen weder Capturebedarf
+noch Encodearbeit. Diese Aufnahme verwendet CPU-Snapshots und beansprucht
+keinen durchgaengigen GPU-Zero-Copy-Pfad. Native YUV-Produzenten koennen
+R4ENC direkt aufrufen.
+
+Remote, Geometrie und Bildschirmruhe
+-----------------------------------
+RDPSVC transportiert den kohärenten CPU-Snapshot. Seine Lease haelt keine
+GPU-Ressource. Eingaben gelangen ueber den gemeinsamen Desktop-Dispatcher
+auch in die Screen-Power-Policy; das erste Wake-Ereignis aktiviert keine
+verdeckte Schaltflaeche. Quell-/Geraetegenerationen und neue Ausgabegroessen
+invalidieren den Captureinhalt. Ein RDP-Geometriewechsel beendet die alte
+Sitzung geordnet; Neuverbindung handelt die aktuelle Groesse aus. Dynamische
+RDP-Aufloesung innerhalb einer Sitzung ist nicht implementiert.
+
+Angeboten werden nur der bestehende Bitmap/RLE- und NSCodec-Transport.
+VCN-Encoding fuer Aufnahmen schaltet kein H.264-/AVC-RDP-Angebot frei.
+Der FreeRDP-Lauf deckte eine bestehende CredSSP-Interoperabilitaetsluecke
+auf: Eine direkte NTLM-Anfrage erhielt faelschlich einen SPNEGO-Wrapper.
+R4AUTH0.1.4 behaelt jetzt die angebotene Huellenform bei. Beide Wege
+verwenden unveraenderte NTLM-Transkripte, Proof/MIC, TLS-Bindung und
+Credentialpruefung; der R4C3-Sitzungsvertrag bleibt unveraendert.
+Ausserdem akzeptiert der begrenzte NTLMv2-Parser Nullpadding nach dem
+AV-Listenende, wie FreeRDP es sendet. NTProof/MIC umfassen weiterhin alle
+empfangenen Bytes; nichtnull Anhaenge werden abgelehnt.
+Die bestehende Protokollselbstpruefung enthaelt beide Huellen und Padding; der gezielte
+Hostlauf behaelt auch die alten positiven und negativen Sitzungsfaelle.
+Primärquelle MS-CSSP TSRequest:
+https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-cssp/6aac4dea-08ef-47a6-8747-22ea7f6d8685
+
+Primaerquelle MS-NLMP NTLMv2_CLIENT_CHALLENGE:
+https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-nlmp/aee311d6-21a7-4470-92a5-c4ecb022a87b
+
+Die physische AMD-Off/On-Folge wird in35 an die vorhandene Policy gebunden;
+ihre Panelwirkung, echte Remote-Wake-Rueckkehr und Geraeteverlustwirkung
+werden ausschliesslich39 qualifiziert.
+
+Gezielte Nachweise
+-----------------
+Bestehende R4ENC-Faelle pruefen AMD-Padding und130x130-System-NV12 nach
+CPU-Unmap fuer AVC/HEVC, native Referenzhaltung und keine Encoder-Pixelmaps.
+Das Runtimeartefakt bleibt bytegleich. Desktop-Compositorpruefungen belegen
+256Byte Erstkopie,4Byte Schadenskopie, Quellenpin bis ACK, Cancel/Timeout,
+Epochwechsel, Rotationen/Skalierung, SDR-Farben und Ende des letzten Bedarfs.
+Die vorhandenen Desktop-Tests pruefen auch Screen-Power-Abbruch/Wake und
+verlorene Ausgangsidentitaeten.
+
+SMP4 mit zwei Virtio-Ausgaengen prueft den echten Desktop, BMP-Screenshot,
+Snapshot-/Resize-/Quellwechsel, Prozessende und Ende des Capturebedarfs.
+Ein weiterer kurzer SMP4-Lauf verwendet den produktiven Recordingworker
+und realen OpenH264-Codec; nur AMD-Auswahl und DeviceLost werden am
+ENCODE_V1-Eingang modelliert. Vier echte MKV-Teile werden unabhaengig durch
+FFmpeg dekodiert.800ms Dateiverzoegerung, Schreibfehler, Wiederholung,
+Groessenwechsel, exakte Workerjoins und BO-/Capturebaseline bestehen.
+
+Der lokale FreeRDP-Nachweis und seine tatsaechlich beobachteten Transport-
+und Eingabedaten stehen im gehashten Begleitnachweis AMDCapture08032.json.
+Kein neuer globaler Test, kein Browser-/Emulatorlanglauf, kein physischer
+GPUzugriff. Linux wurde ausgefuehrt; Windows wurde nicht ausgefuehrt.
+
+FreeRDP darf clientNonce im abschliessenden Credentialpaket wiederholen.
+R4AUTH akzeptiert nur die zuvor in der TLS-Bindung gepruefte Nonce; ein
+abweichender Wert scheitert. Der private opake Zustand waechst um32 Bytes;
+die R4C3-Huelle bleibt unveraendert. Der unabhaengige Hostlauf prueft den
+vollstaendigen FreeRDP-Ablauf und eine abweichende wiederholte Nonce.
+
+Der unabhaengige Bildvergleich deckte zusaetzlich einen alten NSCodec-
+Zeilenfehler auf. RDPSVC0.1.10 serialisiert die Ebenen jetzt Bottom-up.
+Capture und der diagnostische Decoder bleiben Top-down. Die vorhandene
+Codecpruefung enthaelt eine unabhaengige asymmetrische Literalfolge.
+Reine Eingabesynchronisation gilt nicht mehr irrtuemlich als Eingabefehler.
+Primaerquelle zur Drahtorientierung:
+https://github.com/FreeRDP/FreeRDP/blob/3.15.0/libfreerdp/codec/nsc_encode.c
+
+Die lokale Mausabfrage verarbeitet nur echte Bewegung, Rad- oder
+Tastenzustandsaenderung. Ein unveraenderter lokaler Mauszustand darf weder
+Remote-Klicks ueberschreiben noch den Bildschirmruhe-Timer erneuern.
+Kumulative Bewegung, latched Press/Release, Paketzaehlerwechsel und
+unveraenderte Hardwaremeldungen sind in der vorhandenen Eingabegruppe
+geprueft. Lokale und entfernte Tastenzustaende bleiben getrennt.
+
+FreeRDP: 1280x720, Desktop und Startmenue ohne Pixelabweichung oberhalb
+der Farbtoleranz gegen QEMU-Screendump; Mausklick oeffnet das Menue, Escape
+schliesst es. Keine Bitmap-, Eingabe- oder Cleanupfehler. Die clientseitige
+Beendigung wird als client-disconnect verbucht; der bestehende TLS-
+Diagnosepfad zaehlt dabei den Close-Record als tls-read-type (ein Zaehler),
+obwohl Sitzung und Worker vollstaendig geschlossen werden.

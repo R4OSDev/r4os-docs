@@ -1,0 +1,92 @@
+﻿AMD Residenz, Scheduling und Leistungsdiagnose / 0.80.33
+=======================================================
+Stand: 22.09.2026. Softwarequalifikation; reale GPU-/Laptopmessungen nur0.80.39.
+
+Gemeinsame Besitzer
+------------------
+R4GFX verwaltet logische Bilder und deren Prioritaet. AMDGPU besitzt die
+physischen UMA-BOs, Seitentabellen, Submission und Retirement. Der bestehende
+DEVICE_V1-Vertrag memory_info/memory_trim/resource_priority/resource_resident
+wird ohne zweite Speicherverwaltung verwendet. Eine Transaktion pro Device
+liest ein veraenderliches Bild ueber COPY_ROWS in einen kompakten RAM-Schatten
+zurueck. Erst ein terminaler Fence mit flags=0 erlaubt den BO-Austausch; der
+logische Handle bleibt stabil. Reupload verwendet aktuelle Backend- und
+Speichergenerationen und bestaetigt wiederum die wirkliche Kopie.
+
+Importe, Aliase, gemappte/aktive Ressourcen, Scanout und gepinnte Bilder sind
+nicht verdraengbar. Geringere Prioritaet und aeltere Nutzung bestimmen das
+Opfer. Angeforderte Bilder werden priorisiert wiederhergestellt; eine noch
+nicht eingereichte Hintergrundkopie kann zugunsten der Anforderung abbrechen.
+Allokationsfehler starten begrenztes Reclaim; ein wartender Close haelt beide
+Endpunkte bis zum bestaetigten physischen Abschluss. Nach Reset bleiben
+RAM-Schatten verwendbar, alte native Generationen werden ungueltig.
+
+Der AMD-Test verwendet echte R4AMD-Formatberechnung mit4-KB-BO und256-Byte-
+Pitch; der bestehende NVIDIA-Fall weiterhin64-KB-BO. Beide pruefen dieselben
+Alias-, Pin-, Prioritaets-, Pixel-, Reset-, Budgetfehler- und Close-Grenzen.
+Kein GPU-Emulator: die physische COPY_ROWS-Antwort ist bewusst modelliert.
+
+AMDGPU memory_layout zieht die Vereinigungsmenge reservierter UMA-Bereiche
+sowie Kontrollpuffer vom nativen Budget ab. Bereits reservierter UMA-RAM ist
+kein zusaetzlicher Systemspeicher. Native Rendering-, Video- und mehrere
+Scanout-BOs werden im gemeinsamen kanonischen Budget belastet; VCN-/Scanout-
+Pins koennen nicht durch R4GFX-Reclaim freigegeben werden. Ein dauerhaft
+voller Pool liefert Rueckstau/Allokationsfehler statt Ueberbuchung. Ein
+prozessuebergreifender Eviction-Daemon wird nicht behauptet: Reclaim gilt fuer
+die vom jeweiligen R4GFX-Device besessenen, wiederherstellbaren Bilder.
+
+Scheduling und Idle
+-------------------
+Die gemeinsame Kernelqueue teilt Arbeit nach Produzent und dessen Queues;
+mehr Queues erzeugen kein zusaetzliches Produzentenbudget. AMDGPU nimmt
+hoechstens einen kanonischen Job pro Workerpass auf. GFX/Compute verfuegen
+ueber getrennte Ringe; gc_contexts reicht pro Engine/Pass hoechstens ein IB
+ein. Acht Kontext-/Jobplaetze und Alterung nach acht Dispatches verhindern
+unbegrenzte Prioritaetsverdraengung. SDMA-, PM4- und VCN-Pakete/IBs sind
+begrenzt; Renderlisten enthalten maximal16 Draws. Das ist eine Befehlsgrenze,
+keine garantierte GPU-Laufzeit und keine Praeemption eines laufenden IB.
+
+Die vorhandene Fairnessgruppe prueft eine fortlaufend erneuerte hohe Last
+gegen einen alten Low-Priority-Job. Nach vollstaendigem Drain pruefen32 leere
+Workerpaesse unveraenderte Dispatchzaehler, Ringzeiger und Doorbells.
+Periodische10-ms-Zustandsabfragen bleiben bestehen; Idle bedeutet hier keine
+neuen GPU-Kommandos, nicht null CPU-/MMIO-Arbeit. Dynamic Power folgt0.80.34.
+Der Desktop verwendet bestehende Schadensregionen, wiederverwendete Bilder
+und Compiler-/Pipelinecaches; VCN, Capture und RDP arbeiten bedarfsabhaengig.
+
+Explizite Diagnose und Hardwarevergleich39
+-----------------------------------------
+DISPLAYD0.1.44 stellt /AMDPROFILE und /AMDPROFILE SOFTWARE bereit. Die feste
+Szene fill-copy-256x128-v1 haelt Bilder, Pipelines und Sampler ueber32 Fill-
+Iterationen. Upload, Render, Kopie und Readback melden getrennte Aufruf- und
+Warte-Wandzeiten; ein Aufwaerm-Fill und Allokationen liegen ausserhalb der
+Intervalle. Eine abschliessende CPU-Pruefung verlangt alle32768 Endpixel.
+Unbestaetigte Jobs halten Ressourcen; ein fehlgeschlagener Close ist FAILED.
+Ein fehlendes natives AMD-Backend wird nicht durch Software verborgen.
+
+Die Spannen enthalten Validierung, Praeemption und Polling. Sie sind keine
+GPU-Zeitstempel, kein GPU-Auslastungswert und keine FPS. Auch Taktziele sind
+keine GPU-Zeiten. CPU-Bytezaehler, GPU-Kopierbytes und Residenz werden separat
+gemeldet. Software-Upload/Readback bezeichnen logische Phasen im RAM.
+Present ist in dieser Szene nicht angefordert. DISPLAYD /STATS liefert die
+separaten Quittungen des aktiven Displaybesitzers, /STATE Budgets und Pins,
+/POWER gecachte Telemetrie mit Frische/unknown; DeviceManager nutzt denselben
+Statusbesitzer. Treiberfehler bleiben den Boot-/Treiberlogs zugeordnet.
+
+In39 bei gleichem Boot, Artefakthashes, Panelmodus und Stromversorgung jeweils
+Software- und AMD-Szene ausfuehren; Backend, Generationen, Energiezustand,
+Treiberfehler sowie /STATE /POWER /STATS vor/nachher sichern. Keine Werte
+zwischen unterschiedlichen Szenen, Bildgeometrien oder Bootgenerationen
+zusammenlegen. Anschliessend Desktop-Schaden/Idle, Video plus Rendering und
+zwei Ausgaben unter Druck beobachten; Rendermessung und Presentquittungen
+getrennt auswerten. Software-SMP4 qualifiziert nur Pfad/Pixelergebnis und
+Freigabe. Kein Eintrag in die Performancehistorie und keine Beschleunigungs-
+behauptung aus emulierten Zeitwerten.
+
+Nachweise
+---------
+AMDResidenz08033.json bindet die bestehenden Besitzerpruefungen, Produktbuild,
+privaten SMP4-Gast, Quellen, Artefakte und Image an SHA-256. Keine neuen
+globalen Gates, kein physischer Test und kein Windowslauf. R4GFX/AMDGPU-
+Artefakte bleiben unveraendert; nur Tests erweitert. Release0.80.33 und
+DISPLAYD0.1.44. Kernel- und Contractversionen bleiben unveraendert.

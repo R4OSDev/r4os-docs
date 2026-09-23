@@ -396,6 +396,23 @@ guard for both physical and runtime ownership, calls a 32-KB stack frame,
 requires growth before admission and no growth while held, and checks the
 real physical index. Its marker is STACKOWNER; no new recurring gate is added.
 
+Bootlog output into lazy VM (0.80.39)
+------------------------------------
+Kernel 0.1.210 copies bootlog bytes into resident kernel storage while the
+log owner is held, then copies to the program buffer after releasing it.
+Reads up to 4096 bytes use bounded resident stack headroom; larger reads use
+one kernel allocation bounded by the 64-KB ring. An unwind token protects
+that allocation across caller page faults until release. The information
+query likewise publishes its coherent snapshot outside the log owner.
+
+Kernel209 faulted on the Lenovo while a temporary diagnostic read into a
+fresh allocator buffer: the write to a logically committed but absent page
+occurred under program/log owners, where demand faults are forbidden.
+The same fault reproduced in SMP4. Kernel210 passes that exact diagnostic
+and the existing BOOTDIAG regression extended with untouched VM buffers,
+large/small reads and empty/out-of-range reads. /BOOTLOG selects this short
+case explicitly; no new regular gate is introduced.
+
 Graphics queue reservations (0.79.6)
 -----------------------------------
 Queue-read/write leases reserve the original BO backing before asynchronous
@@ -471,3 +488,20 @@ dropped under the runtime owner. After genuine callback/IRQ/work/task
 quiescence, semaphore cleanup precedes DMA/CPU heap. Three existing-loader
 host cases include real destruction, close races and 4096 allocated records;
 the explicit SMP4 NVIDIA diagnostic exercises actual waits and cleanup.
+
+Device storage omitted from the UEFI map (0.80.39)
+-------------------------------------------------
+Kernel0.1.211 adds the owner-bound unmanaged_span query to the driver memory
+table. It proves that an aligned, nonempty physical span overlaps no system
+memory in a complete valid boot map. Reserved/framebuffer entries and gaps
+are allowed; usable, reclaimable, kernel/module, ACPI, bad and unknown memory
+are rejected. The physical allocator only admits usable boot-map regions;
+this query adds no frames and changes no RAM accounting or ownership.
+The driver must independently establish the existence and extent of its
+device storage. CPU mappings retain their separate cache/lifetime checks.
+The original reserved_span query still requires complete reserved coverage.
+The optional slot at248 extends GfxDriverMemoryApi to256 bytes, wireversion1;
+the old248-byte prefix and outer DriverApi remain binary stable. Contract,
+loader/memory-owner and existing C/Zig facade checks pass, as does the SMP4
+Kernel211 boot with the untouched-VM bootlog regression. Physical UMA/native
+qualification remains part of the open0.80.39 hardware work.

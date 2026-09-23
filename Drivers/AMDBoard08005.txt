@@ -1,7 +1,8 @@
 ﻿AMD-Boarddaten, Firmwarezugang und Bootzustand 0.80.5
 ====================================================
 
-Stand: 21.09.2026. AMDGPU.R4D 0.1.2, Kernel 0.1.200.
+Historischer Stand: 21.09.2026. AMDGPU.R4D 0.1.2, Kernel 0.1.200.
+Nachtrag zur realen Raven2-Erfassung und Layoutkorrektur in 0.80.39 am Ende.
 Besitzer: AMDGPU für VFCT/ATOMBIOS und Snapshot-Lebensdauer, Kernel für den
 allgemeinen ACPI-Quellenzugang, Contract/SDK für den größenverhandelten ABI.
 Kein physischer Lenovo-Test; dieser bleibt ausschließlich 0.80.39.
@@ -40,7 +41,8 @@ Acht zusätzliche bytegleiche MIT-Originaldateien aus dem bereits gesicherten
 Linux-7.2.4-Stand gehören zum Treiber: atomfirmware.h, atomfirmwareid.h,
 atombios.h, pptable.h, amdgpu_bios.c, amdgpu_atomfirmware.c, ObjectID.h und
 bios_parser2.c. Sources.json enthält Pfade, Hashes, Rollen und Lizenz.
-Die Header liefern mittels @cImport die gepackten Feldpositionen und Größen.
+Die damalige direkte Verwendung von @sizeOf/@offsetOf auf @cImport-Typen
+war bei gepackten Strukturen fehlerhaft; korrigierter Vertrag im Nachtrag.
 ULONG wird ausdrücklich als 32 Bit abgebildet, auch auf einem LP64-Linuxhost.
 Die Linux-Annotation __counted_by wird nur bei dieser Datenübersetzung
 entfernt; Parsergrenzen werden ausdrücklich geprüft, Linuxcode nicht gelinkt.
@@ -79,7 +81,12 @@ Externe Connector-/Encoder-/ACPI-IDs, LUT-Indizes und Lanezuordnung sind
 separat dekodiert. Ein ungültiger Index ist keine verwendbare Verbindung.
 
 Paneldaten enthalten Pixeltakt, aktive Fläche, Blank-/Sync-Geometrie,
-Polaritäts-/Miscbits, Farbtiefe, PWM und Backlightdaten. Syncbereiche müssen
+Polaritäts-/Miscbits, Farbtiefe, PWM und Backlightdaten. Im Kandidaten0.1.59
+wird panel_bpc nach atom_panel_bit_per_color dekodiert: Codes1/2/3/4/5
+bedeuten6/8/10/12/16Bit pro Farbkanal, andere Codes bleiben unbekannt0.
+Die interne Farbtiefe ist eine Bitzahl; die native Panelzulassung akzeptiert
+weiterhin nur6/8Bit. Der bestehende ROM-Test deckt alle256Bytewerte am
+originalen Packed-Offset51 ab. Syncbereiche müssen
 in ihre Blankingbereiche passen. Sequenzwerte werden aus 4-ms-Einheiten
 umgerechnet. Integrierte Angaben enthalten Speichertyp, UMA-Kanalzahl,
 System-/GPU-Capabilities und weitere Panelwerte. FirmwareInfo liefert
@@ -188,3 +195,198 @@ ACPI-/Hold-Verträge, keinen physischen ATOM-ROM-Read oder AMD-Moduswechsel.
 Windows-Hostlauf und echte Hardware bleiben ungeprüft. Das erste echte
 Boardabbild und sein konkretes Panel-/HDMI-Mapping werden nur in 0.80.39
 gesichert und mit den tatsächlichen Gerätekennungen geprüft.
+
+
+Nachtrag 0.80.39: reale OEM-Varianten und gepackte ATOM-Layouts
+------------------------------------------------------------
+Stand 23.09.2026: Das Lenovo ist anhand CPUID und ASIC-Revision als Ryzen 3
+3200U/Raven2 bestimmt. Die VFCT enthält das exakt zugeordnete Bild für
+04:00.0, 1002:15D8, aber beide optionalen Subsystemfelder sind null.
+Leere VFCT-/LIB1-Deskriptoren werden als vollständige 28-Byte-Header
+übersprungen. Die gemeinsame ATOM-ROM-Kennung 1002:1002 ist bei exakter
+PCI-/Quellenzuordnung gültig; andere explizite Identitätskonflikte bleiben
+Fehler. Ein belegter, aber vollständig nullgesetzter PowerPlay-Header gilt
+als fehlende optionale Tabelle. Verbrauchte Tabellen bleiben längengeprüft.
+
+AMDGPU 0.1.30 hat physisch den Fehler Short an integratedsysteminfo,
+ROM-Offset 0x98d4, Revision 1.11 und Länge 1024 ermittelt. Die Original-
+C-Definition hat genau 1024 Byte. Zig übersetzt sie dagegen als natürlich
+ausgerichteten extern struct mit 1140 Byte; Revision 1.12 ergibt 1088 statt
+1024 Byte. Auch atom_encoder_caps_record ist im Original sechs Byte mit
+encodercaps bei Offset zwei; das übersetzte Zig-Layout fügt Padding ein.
+
+Ab AMDGPU 0.1.31 liefert src/atom_wire.h Größen und Feldpositionen der
+konsumierten ATOM-Strukturen als C-ausgewertete enum-Konstanten. Der Parser
+liest weiterhin begrenzte Byteausschnitte, ohne Cast auf einen C-/Zig-
+Struct. Vollständige Originaltabellen bleiben erforderlich. Die bestehende
+Parserabnahme verwendet unabhängig kodierte 1024-Byte-Tabellen beider
+Revisionen und einen 6-Byte-Encoderrecord; 1023-/5-Byte-Varianten werden
+abgewiesen. Die Größenprüfung wird nicht auf einen bloßen Prefix reduziert.
+DCE-Info 4.1 und 4.2 liefern den Referenztakt aus ihrem gemeinsamen Feld.
+
+Die passive Board-/Firmware-Erfassung führt keine ATOM-Kommandos und keine
+GPU-Firmware aus. Der inzwischen vorhandene native ATOM-Interpreter gehört
+dem getrennten, weiterhin gesperrten Raven2-Aktivierungspfad. Diese Korrektur
+ist keine native Grafik-, HDMI- oder Audioabnahme. Physische Diagnosebelege:
+Temp/AMD08039/TableDiagnostic/Proof.json; Reparaturstand: src/atom_wire.h.
+
+Der erweiterte physische Dump mit AMDGPU 0.1.32 zeigt anschließend eine
+belegte ExternalConnectionInfo mit nullgesetzter GUID und Prüfsummenbyte
+null, aber Gesamtsumme neun. Es handelt sich nicht um eine leere Tabelle:
+eDP 0x3114 und HDMI-A 0x310c besitzen direkte Lanezuordnung 0xe4, Inversion
+null und keinen externen Encoder. Diese Verdrahtung bleibt erhalten.
+Ab 0.1.33 ist ausschließlich für 1002:15D8/17AA:3808, IntegratedInfo 1.11,
+GUID null und Prüfsummenbyte null eine fehlende eingebettete Prüfsumme
+zulässig, wenn der aufrufende Quellenbesitzer vorher VFCT-Identität,
+Gesamtlänge, SDT-Prüfsumme und Quellenstabilität erfolgreich geprüft hat.
+Der Zustand heißt ausdrücklich oem_unavailable; er behauptet keine gültige
+eingebettete Prüfsumme. ROM-Shadow, andere Boards oder abweichende nichtleere
+GUID-/Checksum-Felder erhalten diese Ausnahme nicht. Alle Längen-, Index-
+und Topologieprüfungen werden auch im OEM-Fall ausgeführt.
+
+Die reale DisplayObjectInfo 1.4 umfasst 141 Byte: zwei belegte Connectoren,
+einen deaktivierten Connector mit ID null und den generischen MXM-OPM-
+Eintrag 0x7103 für globale AUX-/HPD-LUTs. Deaktivierte Slots werden inklusive
+ihrer Recordspannen geprüft, aber nicht als Anschluss ausgegeben. Globale
+und connectorlokale LUTs müssen bei doppelter Angabe übereinstimmen.
+Recordketten enden mit genau einem 0xff-Byte, auch am Tabellenende. Ein
+nachfolgendes Byte wird nicht als Teil dieses Endmarkers beansprucht.
+Die beiden Connectoren deklarieren HPD-Aktivpegel null; Panel-/HDMI-Routen
+geben beide gültigen Pegel unverändert an den bereits dafür ausgelegten
+nativen GPIO-Code weiter. Dies ist noch kein physischer HPD-/HDMI-Nachweis.
+
+Beleg: Temp/AMD08039/BoardChecksum/Proof.json und Fragments.json. Die drei
+binären Dateien dort sind erfasste Fragmente, kein vollständiges ROMabbild.
+
+Physischer Abschluss der passiven Erfassung mit AMDGPU 0.1.33/Kernel 0.1.211:
+Treiber AKTIV, vollständiges VFCT-/Boardparsing und alle zwölf ausgewählten
+Raven2-FP5-Firmwaredateien CPU-geprüft. Die gemessene 2-GB-UMA besteht die
+separate Systemspeicherausschlussprüfung. Der gesamte Boot-BO mit 8294400
+Byte wurde kopiert und gehasht; Bootwriter laufen wieder. Die ursprüngliche
+passive Erfassung aus 0.80.5 ist damit für dieses reale Board nachgewiesen.
+DISPLAYD bleibt bootfb, reason=none, owner=0. Firmware wurde nicht hochgeladen,
+Raven2-native Ausführung bleibt gesperrt. Nachweis:
+Temp/AMD08039/OemBoard/Proof.json. Dies schließt 0.80.39 nicht ab.
+
+Native59-Panelkorrektur 23.09.2026: AMDGPU0.1.59 uebersetzt den ATOM-Enum
+panel_bpc beim ROM-Lesen in die interne Bitzahl: 1/2/3/4/5 -> 6/8/10/12/16,
+undefinierte/reservierte Werte -> unbekannt0. Vorhandene Moduszulassung
+bleibt6/8Bit. Der vorhandene Test-ROM verwendet jetzt den echten Code2,
+und die bestehende Parser-Testgruppe prueft alle256rohen Bytewerte an
+originalem Packed-Offset51. Zuvor schlug der Test fehl, danach43/43Gruppen,
+17/17Buildschritte und27Ressourcen bestanden. Keine neue Testgruppe.
+Native58 hatte physisch bpc2 und den Fehler boot_mode gemessen; alle neun
+API-Faehigkeiten und beide GC-Runden bestanden. Native59 noch nicht physisch
+abgenommen. Kernel213,R4AMD8,Release0.80.38 unveraendert. Vollstaendige
+Quellen und passives CONFIG im Paket AMD39B059. Readiness-Proof.json.
+
+Native59-Hardwarebefund 23.09.2026: Installation70 nach manuellem Einschalten
+bestaetigt; nativer CONFIG71 installed und SSH automatisch zurueck. Der
+ATOM-Farbtiefenfehler ist physisch ueberwunden: Displayanforderung angenommen,
+SDMA-Queue aktiviert, beide Bildpuffer angelegt/kopiert/veroeffentlicht und
+DCN-Kern vorbereitet. Neuer Abbruch wait_panel/Unconfirmed: Panel-Bindtask
+meldet Fehler, dessen urspruengliche Ursache bisher pauschal verdeckt wird.
+GC-Fences erneut exakt, Marker4110/4111; GC-Abbau vollstaendig. Aeusseres
+Firmwarecleanup weiterhin Deadline cleanup_parked/rlc_busy, Ressourcen gehalten.
+Benutzer sieht Bootbild bei R4XStart, SSH erreichbar; keine native Ausgabe.
+Frueher Bootlog53267Bytes ohne Verlust plus spaeter65536Bytes/dropped1683:
+51584Bytes Ueberlappung exakt geprueft; zusammenhaengender Log67219Bytes
+ab Boot rekonstruiert, beide Originale behalten. Trial-Proof.json und
+merged-boot.log unter Temp/AMD08039/Native59. Naechster Schritt: urspruenglichen
+Panel-Bindfehler und Phase sichtbar machen. Alle39-Aufgaben bleiben offen,
+Release0.80.38 unveraendert; kein Shader-/Codec-/HDMI-Nachweis abgeleitet.
+
+Native60-Hardwarebefund 23.09.2026: Installation72 nach manuellem Einschalten
+bestaetigt, nativer CONFIG73 installed, SSH automatisch zurueck. Panel-Bind
+scheitert bereits in route mit Unsupported, vor ATOM-Initialisierung oder
+nativer Linkanbindung. Boardpfad: connector3114,encoder211e,external0,
+hardware1,slave0,aux0,hpd-active0,capsf. DDC-Register5d91 mit shift8/mask8,
+HPD5db5 mit0/0; dekodiertes Panel8Bit,1920x1080,141000kHz.
+Ursache: Panel-/HDMI-Routen verlangen faelschlich DDC-Shift0/0. ATOM kennzeichnet
+Hardware-I2C als Pinpaar; originale DCN1-Register haben Clockbit0 und Databit8.
+Die gemessene8/8-Beschreibung muss als Datenpin dieses Paares erkannt werden;
+exakte Register-/Lane-/HPD-Pruefungen bleiben erforderlich.
+GC-Runden und GC-Abbau erneut bestanden; aeusserer Firmwareabbau weiterhin
+Deadline cleanup_parked/rlc_busy mit gehaltenen Ressourcen. Bootlog65536Bytes,
+526Anfangsbytes verdraengt; relevante Diagnosen vorhanden, kein vollstaendiger
+Bootlog behauptet. Beleg Temp/AMD08039/Native60/Trial-Proof.json.
+Keine native Ausgabe/Shader/Codec/HDMI-Abnahme; alle39-Aufgaben offen,
+Release0.80.38 unveraendert.
+
+Native61-DDC-Korrektur 23.09.2026: AMDGPU0.1.61 erkennt in Panel und HDMI
+beide Mitglieder des ATOM-Hardware-I2C-Pinpaars: Clock0/0 oder Data8/8.
+Gemischte oder andere Bitpositionen bleiben abgewiesen; native C-Anbindung
+prueft weiterhin die exakten Register/Lanes/HPD-Felder. Native60 hatte am
+Lenovo DDC5d91/8/8 und HPD5db5/0/0 gemessen und route/Unsupported gemeldet.
+Beide bestehenden Routen-Testgruppen pruefen je1024Shift-/Maskkombinationen;
+keine neue Testgruppe. Alter Code scheitert, korrigiert43/43Hostgruppen,
+17/17Buildschritte und27Ressourcen bestanden. Zusaetzlich werden vorhandene
+Firmware-Parksamples bei Cleanup protokolliert, ohne weitere MMIO-Zugriffe.
+Physische61-Abnahme noch offen; Kernel213,R4AMD8,Release0.80.38 unveraendert.
+Paket AMD39G061 mit passivem CONFIG und vollstaendigen Quellen.
+Readiness-Proof.json; Firmwarecleanup und native Bildausgabe bleiben offen.
+
+Native61-Hardwarebefund 23.09.2026: Installation74 nach manuellem Einschalten
+bestaetigt, nativer CONFIG75 installed, SSH automatisch zurueck. DDC-Fix
+physisch wirksam: Panel-Bind ready, Route gueltig, DDC5d91/8/8, HPD5db5/0/0,
+Scratch20480, ATOM-Transmitter1/6, Command-/Datatabellen166/74. Naechster
+Abbruch wait_commit/Unconfirmed, Displaytask commit/retained result=-3.
+Originalursache innerhalb der Modevorbereitung/-programmierung noch offen.
+Beide GC-Runden und GC-Abbau bestanden. Aeusserer Firmwareabbau nach43Polls
+weiter Deadline/rlc_busy: Samplemaske1ff, CP15150000,MEC503f0000,RLC_CNTL0,
+SDMA1/4101c/10000/46deed57, GRBM3028,GRBM_STATUS2=01000008. Damit RLC_BUSY=1,
+RLC_RQ_PENDING=0; SERDES noch nicht gelesen, deren Nullwerte sind kein Nachweis.
+Ressourcen bleiben gehalten. Bootlog65536Bytes,2144Anfangsbytes verdraengt.
+Keine native Ausgabe-, Shader-, Codec- oder HDMI-Abnahme; keine neue visuelle
+Bestaetigung. Alle39-Aufgaben offen, Release0.80.38 unveraendert.
+Beleg Temp/AMD08039/Native61/Trial-Proof.json.
+
+Native62-Hardwarebefund 23.09.2026: Installation76 nach manuellem Einschalten
+bestaetigt, nativer CONFIG77 installed, SSH automatisch zurueck. Panel-Bind,
+ATOM-Befehlsrevisionen, Bootguard, vorhandenes eDP-Bildsignal und beide
+DCN-Modeplaene werden akzeptiert. Panel power1/lit1/pwm-valid1, Firmwarebusy0,
+PWM65536,period3809. Exakter Abbruch: inherited_admit/Unsupported,native=-6,
+touched0,ATOM-effects0. Die Uebernahme scheitert vor jeder Modusaenderung an
+der Pruefung ungenutzter Bildkanaele (OTG aus plus HUBP_IN_BLANK verlangt).
+Das vorhandene Bildsignal ist BIOS-Scanout, kein nativer Ausgabenachweis.
+GC-Runden und GC-Abbau bestanden; aeusseres Firmwarecleanup weiterhin
+Deadline/rlc_busy mit GRBM_STATUS2=01000008,RLC_CNTL0. SERDES nicht erreicht.
+Frueher Bootlog65536Bytes/dropped400, spaeter65536/dropped8714; beide Rohlogs
+erhalten, keine Vollstaendigkeit behauptet. Beleg Native62/Trial-Proof.json.
+Naechster Schritt: inaktive DCN1-Frontends einschliesslich bestaetigtem
+Power-Gating korrekt pruefen; PG-Zustand des Lenovo noch nicht gemessen.
+Alle39-Aufgaben offen, Release0.80.38 unveraendert.
+
+Native63-Hardwarebefund 23.09.2026: Installation78 nach manuellem Einschalten
+bestaetigt; nativer CONFIG79 installed, SSH automatisch zurueck. Abbruch
+weiterhin inherited_admit/Unsupported,native=-6,touched0. Readbacks zeigen
+checked=e,power-sampled=8,rejected=3: Pipe1/2 OTG80000110,HUBP100b sind
+bereits blank und werden akzeptiert; deren Powerstatus wurde nicht gelesen.
+Pipe3 liefert OTG0,HUBP0,Power0. Damit ist Power-off nicht als Ursache belegt.
+Original Linux dc_resource.c identifiziert Raven2 als DCN1.01;
+dcn10_resource.c rv2_res_cap hat drei Timinggeneratoren/Frontends. Unser
+Port initialisiert bisher vier und prueft damit einen nicht vorhandenen
+vierten Bildkanal. Naechste Korrektur: ASIC-abhaengige DCN-Ressourcenzahl.
+GC-Runden und GC-Abbau bestanden; aeusseres Firmwarecleanup weiterhin
+Deadline/rlc_busy,GRBM_STATUS2=01000008,RLC_CNTL0,45Polls,SERDES unerreicht.
+Bootlog65536Bytes/dropped3058,keine Vollstaendigkeit behauptet. Kein nativer
+Bildnachweis. Beleg Native63/Trial-Proof.json. Alle39-Aufgaben offen;
+Release0.80.38 unveraendert.
+
+Native64-Hardwarebefund 23.09.2026: Installation80 nach manuellem normalen
+Boot bestaetigt; nativer CONFIG81 installed, SSH automatisch zurueck.
+Raven2/DCN1.01-Korrektur physisch wirksam: inherited_admit besteht mit
+checked6,power-sampled0,keinem abgewiesenen Kanal. Pipe1/2 sind blank;
+der nicht vorhandene vierte Kanal wird nicht mehr geprueft. Panelbindung,
+Paneldaten und beide GC-Graphics/Compute-Fencerunden bestanden.
+Naechster Fehler: mode_prepare pixel_clock/Io,native0,touched1,
+ATOM-error none,effects1,panel-phase discovered. Der genaue Teilschritt
+(DPREFCLK oder Pixelclock) ist noch nicht erfasst. Hardware wurde bereits
+veraendert; unveraendertes BIOS-Bild wird nicht behauptet.
+Recovery stoppt bei display-close und quarantiniert Ressourcen; GC- und
+aeusserer Firmwareabbau sind in diesem Versuch nicht bestaetigt. Kein
+Uebertrag des RLC-Befunds aus63. DISPLAYD preparing,16588800Bytes device-BO
+retained. Spaeter Bootmitschnitt62190Bytes,dropped0,vollstaendig bis zum
+Erfassungszeitpunkt. Kein nativer Bildnachweis und keine Sichtbestaetigung.
+C:26MB frei; vor weiterem Vollpaket regulaere Updatearchivierung pruefen.
+Beleg Native64/Trial-Proof.json. Alle39-Aufgaben offen; Release0.80.38 bleibt.

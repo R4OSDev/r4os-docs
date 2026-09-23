@@ -87,7 +87,9 @@ oder unbestaetigte Zielplatte im vorbereiteten Ablauf fest eintragen.
 Die normale Image-Konfiguration wird nicht durch AMD-Auswahl umgeschrieben.
 In39 vorhandene CONFIG.R4S gezielt ergaenzen, doppelte/gesperrte Treiberzeilen
 bereinigen: DRIVER=AMDGPU, DRIVER=ACPIPLAT. Erst passiv mit
-OPTION AMDGPU mode=passive und Software-Grafik inventarisieren. Nach Sicherung
+OPTION AMDGPU mode=passive und GRAPHICS=AUTO inventarisieren: Die effektive
+Software-Policy beendet AMDGPU vor jeder PCI-/Board-Erfassung. Passiv behaelt
+der Treiber trotzdem den Firmware-Framebuffer ohne native Aktivierung. Nach Sicherung
 und Auswertung fuer den nativen Versuch GRAPHICS=AUTO und
 OPTION AMDGPU mode=native setzen. Keinen kompletten Beispiel-CONFIG ueber die
 Benutzerdatei kopieren. Der Limine-Eintrag R4OS Software Graphics uebersteuert
@@ -158,3 +160,822 @@ HEVC10-Bit-Encode, Hardware-Raytracing, HIP/OpenCL/ROCm, HDCP/DRM,
 Hybrid-/Multi-GPU oder fremde ASIC-Qualifikation. BIOS/Panel-/Empfaenger-
 abweichungen duerfen einzelne Faehigkeiten begrenzen; fehlende Empfaenger
 werden in39 weder als PASS noch als komplette Hardwarefreigabe abgeschlossen.
+
+0.80.39,23.09.2026: Raven2-Verbraucherkette hostseitig und im SMP4 geprueft.
+AMDGPU0.1.35, R4ACO0.1.3, R4AMD0.1.7, R4GFX0.1.28, R4VK0.1.24,
+R4VIDEO0.1.6 und R4ENC0.1.4 verwenden das echte Raven2-Profil.
+ACO kompiliert gfx909 mit CHIP_RAVEN2; Cache und Metadaten trennen902/909.
+Sechs feste Shader je Familie sind zweimal reproduzierbar erzeugt. Bild-,
+Render-, YUV- und Medienpfade waehlen GC9.2.2/SDMA4.1.1/VCN1.0.1;
+RADV erhaelt ASIC9/ext82, maximal3CU/1RB und die originale Mesa-Familie.
+Gemischte Profile und veraltete Generationen bleiben Fehler. ABI-Praefixe,
+Typgroessen und Function-Table-Revisionen bleiben unveraendert.
+
+GMC9s MMHUB-Invalidierung benoetigt auf Raven2 ein read-to-acquire-Semaphor.
+Der Speicherowner behaelt fehlgeschlagene Freigaben und wiederholt sie vor
+neuer Invalidierung/Ressourcenfreigabe. Journal, Mapping, SDMA und Renderer
+verwenden denselben Owner. Vorhandene Faelle pruefen busy, fehlendes ACK,
+fehlgeschlagene Freigabe und Rueckbau. Raven2 aktiviert zusaetzlich3D-CGCG.
+Die Sensorgrenze aus SMU10 gilt auch fuer15D8-Raven2: Linux setzt zunaechst
+PICASSO und danach zusaetzlich RAVEN2. Beide MP1-Versionen teilen Referenz/4.
+
+DCN10s Pollock-MPO- und Dali/Pollock-vmin-Ausnahmen betreffen PCI C4 nicht.
+DCN10 besitzt keinen init_sys_ctx-Pfad; der HIGH_ADDR+1-Fix liegt in beiden
+GMC-Hubs. Der Displayowner bestaetigt einen festen SMU-Taktpunkt und senkt
+ihn nicht ueber dynamische Watermark-Tabellen. Native Raven2-Zulassung bleibt
+auf die gemessene17AA:3808/C4/ASIC9-Kombination begrenzt; weitere Boards
+bleiben passiv. Dies ist die Zulassung zum Test, keine Hardwareabnahme.
+
+Alle betroffenen Builds/bestehenden Hostfaelle,43Treiberfaelle,27Ressourcen,
+direkte RADV/Mesa-Objektpruefung und kurzer SMP4-Lade-/Bild-/Shader-/Compiler-
+und Software-Rueckfalltest bestanden. Beleg:
+Temp/AMD08039/ConsumerProfiles/Proof.json. Physischer nativer Start, Panel,
+HDMI/Ton, Medien und Power bleiben offen. Releaseversion bleibt0.80.38.
+
+0.80.39,23.09.2026: Treiber-Kontextgrenze nach realem Startfehler korrigiert.
+AMDGPU0.1.35 scheiterte auf dem Lenovo vor der ersten Speicherzulassung,
+weil ein dedizierter DriverThread keine legacy BO/MMIO/Display-Aufrufe
+ausfuehren darf. Der Rueckweg zu bootfb war bestaetigt; kein nativer PASS.
+Kernel0.1.212/DriverApi36 ergaenzt driver_work_submit_owned bei648/656Byte,
+unveraenderter alter Praefix. Kurze Schritte laufen unter dem vorhandenen
+BSP-Lebenszyklusbesitzer. BUSY fuehrt keinen Callback aus; der gemeinsame
+Worker wartet nicht hinter Init/Shutdown. Direkte Thread-Zulassung bleibt
+gesperrt, schliessende Besitzer erhalten keine neue Zulassung.
+AMDGPU0.1.36 verwendet diesen Pfad fuer Start, Queue und Wiederherstellung.
+Die langsamen DCN-Ablaufe bleiben im eigenen Thread und uebergeben kopierte
+Helligkeits-, HDMI- und Audiometadaten. Timeout/Freigabefehler behalten den
+Callbackspeicher; verspaetete unzugestellte Audioquellen werden geschlossen.
+Queue-Dispatchfehler melden atomar Wiederherstellungsbedarf.
+Contract, SDK (11 bestehende Zigfaelle und C), Kernel-Loader,11Queue-/2Deadline-
+Faelle und43AMDGPU-Gruppen samt27Ressourcen bestanden. Der vorhandene
+EXAMPLE-Treiber0.1.20 prueft im SMP4 echte direkte/ordinary-Work-Ablehnung,
+BUSY waehrend Init und anschliessende Owner-Zulassung mit ausgeglichenem
+CPU-BO-Lebenszyklus. Keine GPU-/MMIO-Ausfuehrung im Gast.
+Beleg: Temp/AMD08039/OwnedWork/Proof.json. Lenovo bis zum Update weiterhin
+Kernel211/AMDGPU35 passiv; physische native Abnahme offen, Release0.80.38.
+
+0.80.39,23.09.2026: Kernel212/AMDGPU36 haben den dedizierten
+DriverThread-Zulassungsfehler ueberwunden. Die nachfolgende Unconfirmed-
+Ablehnung wurde mit AMDGPU37 vor Bereinigung lokalisiert: start-prepare,
+guard, memory=1, effects=0, PCI unveraendert, firmware=empty/upload=0.
+AMDGPU38 korrigiert die Registerquelle auf DCN1 EARLIEST_INUSE, wie AMDs
+hubp1_is_flip_pending/read_state und unser nativer Scanoutpfad. Vorhandener
+Test deckt ein leeres altes SURFACE_INUSE und eine veraltete echte Adresse ab.
+43/43 Testgruppen und27Ressourcen bestanden. Auf Lenovo native batch22
+stimmen primary und EARLIEST_INUSE jetzt bei0xF400000000 ueberein.
+Der verbleibende Guardfehler ist die Firmware-Zeilenlaenge: PITCH0x780=1920,
+GOP7680Bytes; hubp1_program_size programmiert pixel_pitch-1 (1919).
+Keine GPU-Firmware gestartet. Bootscanout automatisch bestaetigt restauriert;
+passive CONFIG mit batch23 installiert. DISPLAYD bootfb1920x1080 reason=none,
+retained=0. Sichtbestaetigung fuer das saubere Firmwarebild ist angefragt.
+Native39 wird nur als lokaler Kandidat fuer exakt diesen Board-/ROM-Hash
+und diese GOP-Geometrie vorbereitet; noch keine physische Qualifikation.
+Belege: Temp/AMD08039/Native36/Proof.json, Native37/Proof.json und
+Native38/Proof.json. Release bleibt0.80.38, Unterversion39 offen.
+
+AMDGPU0.1.39 Kandidat gebaut/gepackt; 43/43 bestehende Gruppen und27Ressourcen bestanden. Initiale GOP-Pitch-Ausnahme gebunden an Lenovo17AA:3808/C4/Raven2, exakten ROM-SHA256 und1920x1080 XRGB8888/7680Bytes. Negativfaelle: anderer Board/ROM/Geometrie/State, veraltete EARLIEST_INUSE-Adresse, PendingFlip, geaenderter Pitch. Native/restaurierte DCN-Plaene bleiben beim originalen Minus-eins. Kein physischer Versuch und kein Upload dieses Kandidaten; Laptop Kernel212/AMDGPU38 passiv. Sichtbestaetigung des Firmwarebilds steht noch aus. Beleg Temp/AMD08039/Native39/Candidate-Proof.json; Unterversion39 offen.
+
+0.80.39: Benutzer bestaetigt sauberes internes Firmwarebild. AMDGPU0.1.39
+nach vollstaendigem R4U-Rueckdownload/Hashabgleich per SYSUPD batch24
+installiert und passiv gebootet. Nativer Versuch batch25 passiert jetzt
+den Bootguard: lenovo_gop_1920, guard=1, firmware-pitch=1, effects=1.
+Die SMU-Version/Interface-/GFX-Wake-/SDMA-Wake-Schritte wurden durchlaufen;
+der neue Fehler ist Deadline in parked, noch vor PSP/Create und Upload0.
+Die Wiederherstellung bestaetigt keinen sicheren Enginestillstand und
+haelt Ressourcen in Quarantaene; DISPLAYD bleibt preparing. Kein nativer
+Bildnachweis, kein Firmware-Upload und keine erfolgreiche Same-Boot-Recovery.
+Passiver Rueckweg als batch26 gestagt und COMMIT angefordert. Danach nimmt
+SSH TCP an, schliesst aber vor dem Banner. Neustart und installierte passive
+CONFIG sind noch unbestaetigt; sichtbarer Laptopzustand ist beim Benutzer
+angefragt. AMDGPU40 zeichnet existierende Park-Registerabfragen/Abbruchstelle
+auf, ohne Masken/Schreibfolge/Timeout zu aendern; 43/43 Hostgruppen bestanden.
+Beleg Temp/AMD08039/Native39/Trial-Proof.json. Release0.80.38/Version39 offen.
+
+AMDGPU0.1.40 Diagnosekandidat: bestehende Parkabfragen speichern Registerwerte, Gültigkeitsmaske, Pollzahl und Wartebedingung; Fehlerprotokoll ergaenzt SMU-Version/Interface/Antwort. MMIO-Reihenfolge, Masken und Deadlines unveraendert. 43/43 bestehende Gruppen und27Ressourcen bestanden, R4U AMD39PARK SHA2566d12825f3a1d26f3d0a4cb13888b97857f5679c4b71b3d8a71827607f73b074a lokal bereit, nicht hochgeladen. Kernelcode systemReboot in program/r4sys.zig versucht bei unbestaetigtem Display-/Treiberstillstand poweroff statt Warmreset; das ist eine moegliche Erklaerung fuer den ausbleibenden Rueckstart, kein physischer Nachweis. Sichtbarer Laptopzustand/erneuter SSH-Zugang stehen aus. Native40/Candidate-Proof.json; 0.80.39 bleibt offen.
+
+0.80.39 Rueckkehr nach Native39: Benutzer bestaetigte ausgeschalteten Laptop und anschliessend Start mit Software Graphics. SSH, Kernel212/AMDGPU39, unveraenderte passive CONFIG und SYSUPD batch26 installed sind jetzt belegt. DISPLAYD bootfb/software-once/policy-disabled, BO0; vollstaendiger Bootlog ohne Drops gesichert. Dies belegt den manuellen Rueckweg, keinen erfolgreichen Warmreset und keine native Bildausgabe. Beleg Temp/AMD08039/Return26/Proof.json. AMDGPU40 Diagnosekandidat wird als naechster Schritt installiert; Roadmap39 bleibt offen.
+
+0.80.39 Native40: Kernel212/AMDGPU40 als batch27 installiert; nativer batch28 installiert. Guard erneut bestanden. Park scheitert nach42 Polls allein an CP: gelesen0x15150000, geschrieben/erwartet0x153f0150. Alle drei HALT-Bits0x15000000 sind gesetzt; Invalidate-/PIPE1-Reset-Bits fehlen im Readback. Samplemaske1: MEC und spaetere Idle-Pruefungen wurden nicht gelesen, deren Nullwerte sind keine Hardwarebefunde. SMU raw0x251f00, Interface7, Antwort1. PSP/Firmware Upload0, DISPLAYD preparing, kein nativer Bildnachweis. Passiver batch29 gestagt/COMMIT angefordert, SSH-Rueckkehr noch offen und Benutzer um Software-Graphics-Start gebeten. Native40/Trial-Proof.json. AMDGPU41 trennt jetzt HALT-Nachweis von unveraenderten Schreibmasken und behaelt alle unabhaengigen Idle-/Deadline-Pruefungen; bestehende Tests erweitert. Keine Abnahme geschlossen.
+
+AMDGPU0.1.41 lokal fertig: persistente CP-/MEC-HALT-Bits getrennt von unveraenderten Invalidate-/Reset-Schreibmasken. Poll50us/Deadline500ms sowie RLC-/SDMA-/GRBM-/SERDES-Idle-Pruefungen bleiben erhalten. GC-Eintritt und partieller Abbau verwenden denselben HALT-Vertrag. Bestehende Start-/GC-Fixtures bilden CP0x15150000 ab, pruefen jedes fehlende HALT-Bit, nichtpersistente MEC-Kommandobits und GUI-busy;43/43 Gruppen und27 Originalressourcen bestanden,17/17 Buildschritte. MEC-Readback ist noch nicht physisch bestaetigt. R4U AMD39HALT lokal bereit, SHA256 75842572c81d05c5681cd9f88a481972a7e83b04baa3b783e8e0f0e415d46d01. Noch nicht uebertragen; passiver Rueckweg batch29/Software-Graphics-Neustart steht aus. Native41/Candidate-Proof.json; keine native Abnahme und0.80.39 weiterhin offen.
+
+0.80.39 Rueckkehr nach Native40: Benutzer bestaetigte ausgeschalteten Laptop und anschliessend Start mit Software Graphics. SSH, Kernel212/AMDGPU40, unveraenderte passive CONFIG und SYSUPD batch29 installed sind jetzt belegt. DISPLAYD bootfb/software-once/policy-disabled, BO0; vollstaendiger Bootlog ohne Drops gesichert. Dies belegt den manuellen Rueckweg, keinen erfolgreichen Warmreset und keine native Bildausgabe. Beleg Temp/AMD08039/Return29/Proof.json. AMDGPU41 HALT-Korrektur wird als naechster Schritt installiert; Roadmap39 bleibt offen.
+
+0.80.39 Native41: AMDGPU41 batch30 installiert, Benutzer waehlte dabei Software Graphics; Install-Skript erwartete automatic, dessen letzte Policy-Annahme wurde deshalb abgewiesen. Modulversion, exakte passive CONFIG und SYSUPD installiert sind separat bestaetigt. Eigentlich nativer Versuch batch31 bootete automatic: Bootguard und kompletter Enginestillstand jetzt bestanden, Poll1/Samplemaske0x7ff. CP0x15150000/MEC0x503f0000 zeigen alle HALT-Bits; SDMA idle, GRBM/GRBM2 und SERDES bestanden. PSP-Ring/TMR und8 Firmware-Uploads bestaetigt, danach Response bei Index8/RLC_RESTORE_LIST_SRM_CNTL; Rohstatus noch nicht protokolliert. Same-Boot-Recovery bestaetigt Firmware-Scanout und gestoppten nativen Owner, DISPLAYD bootfb/automatic, ein Snapshot8294400Bytes. Visuelle Recovery-Bestaetigung angefragt; kein nativer Bildnachweis. Native41/Trial-Proof.json. AMDGPU42 ergaenzt ausschliesslich residente PSP-Antwort/Token/Adresse/Eintrag im Fehlerlog; noch kein neuer physischer Versuch.
+
+AMDGPU0.1.42 Diagnosekandidat gebaut: PSP-Rohantwort, Token, Adresse, Ring/TMR/ASD-Status und genauer Firmware-Eintrag werden aus residenten Metadaten vor Cleanup protokolliert. Keine zusaetzlichen MMIO-Zugriffe, unveraenderte Kommandos/Reihenfolge/Statuspruefung/Deadlines.43/43 bestehende Gruppen und27 Originalressourcen bestanden,17/17 Buildschritte. Paket AMD39PSPR SHA256 0e5a1a9ce6aff1c00a659a05d219dd48e153a16bcd765fa28bd9ef8bba26e307. Lokal bereit; physischer Versuch folgt erst nach verifiziertem passivem Rueckweg32. AMDGPU41 hat Halt/Idle, PSP/TMR und8 Uploads physisch bestanden; RLC-Status und native Bildausgabe offen. Native42/Candidate-Proof.json;0.80.39 offen.
+
+0.80.39 Native42: AMDGPU42 installiert (batch33), nativer Versuch34 bestaetigt komplettes Parken sowie PSP-Ring/TMR und8 Firmwareuploads. Index8/RLC_RESTORE_LIST_SRM_CNTL (Typ0x16=22, Offset13852,608Bytes,v73) liefert echte PSP-Antwort0xffff300f, Token10, Adresse0; kein unbeschriebener0xffffffff-Platzhalter. Gleicher Boot bestaetigt Wiederherstellung des Firmware-Scanouts und gestoppten nativen Owner. Anschliessend passiver batch35 installiert, CONFIG exakt, bootfb/automatic; visuelle Same-Boot-Abnahme weiterhin offen. Drei unveraenderte offizielle RLC-Staende mit Commit/WHENCE/Lizenz und SHA256/Gitblob-Abgleich unter ExFiles/Reference/AMD/Firmware/Raven2-RLC-History gesichert. Vorgesehen ist isolierter Vergleich mit v107 vom21.02.2019; weder Fehlerursache noch Erfolg dieses Vergleichs behauptet. Native42/Trial-Proof.json;0.80.39 bleibt offen.
+
+AMDGPU43 Vergleichskandidat: ausschliesslich Raven2-RLC-Binaerdatei durch unveraendertes Original v107 vom21.02.2019 (Commit07cb4ff48d204890e9c8384d2dae47318b5df268,SHA256839037ca670f0443ec6f13146f710dac214eefb8380028e676fc53a3a8cba496) ersetzt. Andere23 Firmwaredateien unveraendert. Schema3 bindet Revision pro Datei; beide originalen WHENCE/Lizenzpaare eingebettet und im Legal-Export. Gemischter Bundlename explizit. Keine Aenderung an PSP-Erfolgskriterien/Uploadreihenfolge/Cleanup.43/43 bestehende Testgruppen,17/17 Buildschritte und29 exakte R4M0-Ressourcen bestanden. R4U mit erforderlichem aktivem Kernel212 und Lizenzbegleitdateien: fb09193fd67f23c4275712a6217d4999a8d2ad74b66000f35d2e72e2635da7ce. Physischer Vergleich folgt; kein nativer Erfolg behauptet. Native43/Candidate-Proof.json.
+
+AMDGPU43 Vergleichskandidat: ausschliesslich Raven2-RLC-Binaerdatei durch unveraendertes Original v107 vom21.02.2019 (Commit07cb4ff48d204890e9c8384d2dae47318b5df268,SHA256839037ca670f0443ec6f13146f710dac214eefb8380028e676fc53a3a8cba496) ersetzt. Andere23 Firmwaredateien unveraendert. Schema3 bindet Revision pro Datei; beide originalen WHENCE/Lizenzpaare eingebettet und im Legal-Export. Gemischter Bundlename explizit. Keine Aenderung an PSP-Erfolgskriterien/Uploadreihenfolge/Cleanup.43/43 bestehende Testgruppen,17/17 Buildschritte und29 exakte R4M0-Ressourcen bestanden. R4U mit erforderlichem aktivem Kernel212 und Lizenzbegleitdateien: d8de2d7b934f57666996f46e30f11a8b96828579c756338f93da8be026945f40. Physischer Vergleich folgt; kein nativer Erfolg behauptet. Native43/Candidate-Proof.json.
+
+Native43: korrigiertes R4U AMD39RL107B mit kurzen neuen Lizenzzielen ARLC19.LIC/WHE verifiziert und als batch36 installiert. Erstes Paket nur bei VERIFY mit target-lfn-missing abgewiesen, keine Installation; Originale/Transportbelege unter TransferAttempt1 erhalten. Nativer batch37 weist auch unveraendertes RLC107 (SHA839037ca670f0443ec6f13146f710dac214eefb8380028e676fc53a3a8cba496) bei Index8/Typ0x16/608Bytes mit PSP0xffff300f ab. Vorher8 Uploads und kompletter Halt/Idle bestanden. Same-Boot-Recovery wieder bestaetigt, bootfb/automatic und SSH laufen. Kein Erfolg durch Firmware107, Fehler nicht auf Version73 beschraenkt. Visuelle Pruefung dieses konkreten Boots angefragt; noch kein Rueckwechsel. Native43/Trial-Proof.json.0.80.39 offen.
+
+Native43 visuell bestaetigt: Benutzer antwortet explizit nach Test43 "Bild sauber, Desktop reagiert". Seit nativen batch37 kein weiterer Reboot; damit Same-Boot-Firmware-Scanout-Rueckkehr und bedienbarer Desktop visuell belegt. Dies ist Recovery-Abnahme, keine native AMD-Bildausgabe. Native43/Visual-Proof.json.
+
+AMDGPU44 Vergleichskandidat: ausschliesslich Raven2-RLC-Binaerdatei durch unveraendertes Original v101 vom14.01.2019 (Commitbc656509a3cfb60fcdfc905d7e23c18873e4e7b9,SHA256cda2646409c1ea03dde6b6bf0c2aa3915913b9dd43fc5d1cc16e9c59d897b2e3) ersetzt. Andere23 Firmwaredateien unveraendert. Schema3 bindet Revision pro Datei; beide originalen WHENCE/Lizenzpaare eingebettet und im Legal-Export. Gemischter Bundlename explizit. Keine Aenderung an PSP-Erfolgskriterien/Uploadreihenfolge/Cleanup.43/43 bestehende Testgruppen,17/17 Buildschritte und29 exakte R4M0-Ressourcen bestanden. R4U mit erforderlichem aktivem Kernel212 und Lizenzbegleitdateien: 23f8e4d93876d4f81e9d01e51da7c7bb1ae9441d190f59614641e6140598f9e0. Physischer Vergleich folgt; kein nativer Erfolg behauptet. Native44/Candidate-Proof.json.
+
+Native44: Original RLC101 (SHA cda2646409c1ea03dde6b6bf0c2aa3915913b9dd43fc5d1cc16e9c59d897b2e3) als batch39 installiert. Nativer batch40 passiert Halt/Idle und8 Uploads, scheitert bei Index8/Typ0x16/Offset13844/608Bytes mit PSP0xffff000f. Dieser Status unterscheidet sich von0xffff300f fuer73 und107; keine ungesicherte AMD-spezifische Fehlerbedeutung behauptet. Alle3 veroeffentlichten Originalstaende damit ohne nativen Starterfolg verglichen. Same-Boot-Bootfb-Recovery protokolliert; nur der vorherige43-Boot ist zusaetzlich durch Benutzer "Bild sauber, Desktop reagiert" bestaetigt. Passiver batch41/CONFIG-Hash/Resume/bootfb belegt. Erste Hostpruefung101 erkannte veraltete107/73-Erwartungen: originale Registerliste hat9232 statt9240Bytes,2308 statt2310Worte; mit unabhaengiger Headerkontrolle angepasst, danach43/43 Gruppen und29 Ressourcen bestanden. Vergleichsoriginale/Belege bleiben erhalten, Kandidat45 stellt Baseline73 wieder her. Native44/Trial-Proof.json;0.80.39 offen.
+
+AMDGPU45 installiert und passiv bestaetigt: nach den erfolglosen historischen Vergleichen sind alle24 aktiven Firmwaredateien bytegleich zur bisherigen Baseline2b8daaf611fb, einschliesslich RLC73. Schema3 behaelt Revisionen pro Datei; wieder27 Ressourcen,43/43 vorhandene Gruppen und17/17 Buildschritte bestanden. Kernel212/Release0.80.38. RLC73/107 liefern0xffff300f,101 liefert0xffff000f, jeweils erster Restore-Eintrag nach8 erfolgreichen Uploads. Alle Originale/Hashes/Lizenzen und Versuchslogs erhalten. Native43-Recovery ist zusaetzlich visuell bestaetigt (sauberes Bild, Desktop reagiert). Kein PSP-Fehler wurde als Erfolg behandelt; native Ausgabe/Beschleunigung, Energie- und HDMI-Abnahme bleiben offen. Naechster fachlicher Punkt ist der Unterschied zur Linux-PSP-Statusbehandlung und die Rolle der drei Restore-Abschnitte versus CPU-programmierte Raven2-RLC-Listen; keine ungesicherte Quittung umgehen. Native45/Final-Proof.json;0.80.39 bleibt offen, keine Veroeffentlichung.
+
+Native46: begrenzte PSP-Folgediagnose auf Kernel212, unveraenderte Baseline RLC73. Treiber batch43 installiert; nativer batch44 bestaetigt8 Uploads. Restore-CNTL Index8/Typ0x16/608Bytes liefertFFFF300F; Restore-GPM Index9/Typ0x14/1312Bytes liefertFFFF000F, Token11, Adresse0. Damit kein einheitlicher Status fuer die Restore-Teile. Version46 setzt nur nach erster bekannterFFFF300F-Antwort fort und bricht bei zweiter ab; RLC_G/VCN noch nicht versucht. Keine Ablehnung als ACK markiert, kein ASD/Engine-/Displaystart. Same-Boot-Scanout-Recovery und anschliessender passiver batch45 per SSH/Bootlog/Hash bestaetigt, keine neue Sichtpruefung.43/43 vorhandene Hostgruppen,27 Originalressourcen. Folge47 erweitert ausschliesslich die begrenzte Restore-Diagnose auf den nun gemessenen zweiten Status, weiterhin keine native Freigabe mit fehlender Quittung. Beleg Temp/AMD08039/Native46/Trial-Proof.json;0.80.39 offen.
+
+Native47: Kernel212/AMDGPU47 batch46 installiert, nativer batch47 erfasst alle13 PSP-Firmwareantworten.10 echte Erfolge einschliesslich Haupt-RLC_G (16896Bytes) undVCN (369152Bytes, TMR0xF400900000). Nur drei Restore-Listen abgewiesen: CNTL608Bytes/FFFF300F, GPM1312Bytes/FFFF000F, SRM9752Bytes/FFFF000F. Die Firmware ist damit nicht insgesamt ungeladen; keine Behauptung zur AMD-internen Ursache der Statuswerte. Diagnose bricht absichtlich vorASD/Engines ab. Same-Boot-Scanout-Recovery und passiver batch48 bestaetigt.43/43 bestehende Gruppen,27 unveraenderte Originalressourcen. Folge48 qualifiziert einen exakt gebundenen Lenovo/ROM/SMU/RLC73-Pfad mit gesperrtemSRM undGC-Energiesparen; keine Wiederherstellungsquittung wird gefaelscht, Haupt-Firmware/ASD und alle Engine-Selbsttests bleiben zwingend. Noch kein nativer Hardwareerfolg. Beleg Temp/AMD08039/Native47/Trial-Proof.json;0.80.39 offen.
+
+AMDGPU48 Kandidat: exakt Lenovo17AA:3808/C4/ASIC9, ROM9de4aa4b..., SMU0x251f00/Interface7 undRLC73. Basierend auf physischem47-Nachweis werden nur bekannte, abgeschlossene Restore-Ablehnungen getrennt von zehn zwingend bestaetigten Haupt-Uploads behandelt. Restore-Eintraege bleiben unbestaetigt, ASD muss erfolgreich laden. SRM undGC-Energiesparen/GFXOFF bleiben bei fehlendem Restore aus; normale Engine-Selbsttests undDisplay-Commit bleiben unveraendert zwingend.43/43 bestehende Gruppen und27 Originalressourcen bestanden. PaketSHA256 b1a054cb9e4c05a5fa38fa024da2cdd61a6fadb215177cc835092b608d853acc. Physischer nativer Befund noch offen; keine volle Energie-/Hardwarefreigabe. Native48/Candidate-Proof.json.
+
+Native48: Treiber batch49 installiert, nativer batch50 bestaetigt zehn Haupt-Firmwareuploads undASD; drei Restore-Listen bleiben verworfen, exakte Lenovo-Ausnahme aktiv. Ablauf erreicht sdma-prepare/Busy nach zuvor abgeschlossenem DPM-Tabellenpfad undGMC-Enable (aus Schrittfolge abgeleitet). Keine SDMA-/GC-/VCN-Ausfuehrungsabnahme undkein nativer Scanout. Recovery endet resources quarantined; DISPLAYD preparing, SSH weiterhin erreichbar. Ursache des Start-Busy im Besitzervertrag: feste Queue-Arena verlangt engine_users0, DPM-Tabellenowner hielt zuvor bereits eine Referenz. Kandidat49 verschiebt DPM hinter Queue-Arena/SDMA-Selbsttest, bewahrt die Exklusivitaetspruefung, protokolliert wechselnde Cleanup-Wartestufen und meldet Restore-degradierte Telemetrie limited.43/43 Gruppen und27 exakte Originalressourcen bestanden. R4U 84968d2330194ffeaab7dc348d636634dce7409e934dce358c7cce67e99113e2 enthaelt Treiber49 plus exakt erfasste passiveCONFIG fuer den naechsten Start; Installation noch ausstehend. Native48/Trial-Proof.json undNative49/Candidate-Proof.json.0.80.39 offen.
+
+Native49: AMDGPU 0.1.49 und passive Konfiguration in Batch 51 installiert und bestaetigt; nativer Batch 52 installiert. Der vorherige Busy-Konflikt ist entfallen. SDMA-Vorbereitung endet mit Unconfirmed; die genaue Teilpruefung ist noch unbekannt. Hauptfirmware und ASD bestaetigt. Cleanup erreicht firmware-quiesce mit engine-users=0, mappings=0 und GMC touched/enabled=0/0, endet jedoch mit resources quarantined. Die letzte protokollierte Firmwarephase cleanup_park ist kein Beleg fuer die abschliessende Fehlerphase, da 49 nur aeussere Schrittwechsel meldet. Benutzer sieht den Bootscreen bei Desktop starten, R4Start aufrufen; SSH bleibt erreichbar, DISPLAYD preparing. Kein nativer Scanout und keine erfolgreiche Rueckgabe der Bildausgabe. Kandidat 50 erfasst vorhandene SDMA-Pruefreads und Firmware-Cleanup-Phasen, ohne Hardwarekriterien oder Schreibfolge zu aendern. Beleg: Temp/AMD08039/Native49/Trial-Proof.json. 0.80.39 bleibt offen.
+
+Native50: Treiber 0.1.50 in Batch 53 installiert; der Benutzer musste den ausgeschalteten Laptop einschalten und bestaetigte danach den passiven Desktop. Nativer Batch 54 kehrte per SSH zurueck. Der SDMA-Fehler ist jetzt genau belegt: prepare=engine, gate=halt, sampled=1, SDMA0_F32_CNTL=0; keine SDMA-Registerprogrammierung und kein Selbsttest gestartet. Der Park-Nachweis vor den PSP-Uploads ist danach nicht mehr aktuell. Hauptfirmware und ASD sind bestaetigt. Beim Cleanup gelingt der aeussere vollstaendige Engine-Stop, Queue/GMC werden freigegeben; die erneute Park-Sequenz danach endet mit Deadline in cleanup_parked, wait=rlc_busy. Ressourcen bleiben behalten, nativer Scanout ist nicht bestaetigt. Kandidat 51 setzt nach Firmware/ASD alle Engines erneut still, bevor GMC geaendert wird; beim Cleanup prueft er nach dem bereits bestaetigten aeusseren Stop alle Hardwarekriterien neu, ohne nochmals CP-Reset zu schreiben. Physische Wirksamkeit noch offen. Belege Native50/Trial-Proof.json und Manual-Start-Proof.json. 0.80.39 bleibt offen.
+
+Native51: Treiber 0.1.51 hostgeprueft (43/43 Gruppen, 17/17 Buildschritte, 27 originale Ressourcen). R4U 5996a9d0f5833125d0dd024df78ba8b27c3fcf8a553c1b6562451c77c4490f69 vollstaendig zurueckgeladen, geprueft und als Batch 55 gestagt. COMMIT angefordert; APPLY-Fortschritt bis 18874759 von 19354355 Nutzdatenbytes protokolliert, danach Verbindungsabbruch. Zehn Postboot-Proben ohne SSH-Rueckkehr. Damit weder Commit-Abschluss noch gestarteter/installierter Treiber 51 bestaetigt; kein nativer Test mit 51. Das Paket enthaelt passive CONFIG, deren Installation muss nach dem naechsten Start geprueft werden. Letzter bestaetigter Stand: Kernel 212, Treiber 50, nativer Batch 54 mit festgehaltener Ausgabe. Benutzer ist abwesend. Offline wurden Quellen/Owner-Reihenfolge, PowerShell-Syntax und Hostbuild geprueft; Referenzabgleich der UMA/PDE/PTE-Adressen ergab keinen weiteren belegten Fehler. Fortsetzung: manuell R4OS Software Graphics starten, Native51/Resume-Installed.ps1 -SoftwareBootConfirmed ausfuehren; erst nach positivem Installationsnachweis Transfer.ps1 und Activate.ps1 -Mode native. Beleg Native51/Pending-Boot-Proof.json. 0.80.39 bleibt offen, Release bleibt 0.80.38.
+
+Offline-Fortsetzung23.09.2026: Lenovo weiterhin per SSH nicht erreichbar; kein zusaetzlicher physischer Befund. Temporaere direkte Vulkan-Probe AMDVMATH0.1.0 ueber oeffentliches VULKAN_V1 vorbereitet, 41267 Bytes, SHA256 edc432d1704be29dc98a9fdec9155855b7995b938d24350c600bfa7b02eb7e82. Sie fordert auf R4OS 1002:15d8/RADV/Vulkan1.3 ohne Softwarefallback, berechnet16 Werte, zeichnet ein8x8-Dreieck, prueft64 Pixel und704 Schutzbytes, Fence-Frist5s; kein WSI/Present oder Poweroff. Drei SPIR-V-Shader validiert, nativer R4X-Build5/5. Derselbe Workload lokal auf Mesa-lavapipe ausgefuehrt: alle Orakel bestanden, Khronos1.4.309 samt Synchronisationspruefung ohne Warnungen/Fehler. Das ist eine Hostpruefung der Probe, kein R4OS-/RADV-/Lenovo-GPUNachweis. Noch nicht auf Lenovo uebertragen/gestartet; erst nach bestaetigter Installation und nativen Engine-/Display-Selbsttests einsetzen. Beleg Temp/AMD08039/VulkanPhysical/Readiness-Proof.json; Quellen/Artefakt in AMDVMATH-08039.zip. AMD51-Batch55 weiterhin unbestaetigt,0.80.39 offen,Release0.80.38.
+
+Offline-Fortsetzung 0.80.39: Software-Multislice-Korrektur (23.09.2026)
+-------------------------------------------------------------------
+R4VIDEO0.1.7 korrigiert einen beim Vorbereiten der physischen Pixelprobe
+reproduzierten Softwarefehler. Der Port setzte error_concealment immer auf0.
+FFmpeg9.0.1 pflegt dann die Error-Resilience-Tabelle nicht; seine sequentielle
+H.264-Multislice-Pruefung las diesen ungepflegten Zustand und markierte auch
+gueltige Bilder als FF_DECODE_ERROR_DECODE_SLICES (8). Port/codec.c laesst
+fuer Software FF_EC_GUESS_MVS|FF_EC_DEBLOCK aktiv, fuer Hardware weiter0.
+Strict-Error-Detection mit EXPLODE und die Ablehnung von decode_error_flags
+und CORRUPT bleiben erhalten. Fehlerhafte/reparierte Bilder erhalten kein PASS.
+Begrenzte Fehlerdiagnosen nennen Codec-/Framefehler und Paketidentitaet.
+
+Regulaerer Librarybau:16/16 Schritte, bestehende3/3 Testgruppen bestanden.
+Die temporaere AMDVDEC-Probe verwendet den echten VIDEO_V1-Vertrag und
+enthaelt13 vorhandene Clips mit unabhaengig erneut decodierten CPU-Referenzen.
+SMP4 mit produktiver R4VIDEO0.1.7:39 H.264-Bilder aus6 Clips, Baseline/Main/
+High,64x64 und96x64, alle248832 YUV-Samples exakt. Mehrere Slices und P-/B-
+Bilder sind enthalten. Die beiden Aufloesungen laufen in getrennten Sessions;
+dieser Lauf qualifiziert keinen dynamischen Groessenwechsel oder Seek.
+Ein um32Bytes verkuerztes erstes Paket wird als Decodefehler abgewiesen;
+Close/Destroy/Finish enden auch danach ohne Fehler. Die Probe importiert
+R4DESK fuer Native-stdio; der zuvor fehlende Import verursachte nur in der
+Testanwendung einen zusaetzlichen Finish-I/O-Fehler bei FFmpeg-Fehlerausgaben.
+Eine native Anforderung ohne AMD-Backend wird abgewiesen, ohne Softwarefallback.
+Test-AUTOEXEC und Konfiguration/Library des Wegwerf-Gasts wurden restauriert.
+
+Der vorbereitete native Pfad liest echte Decoderbilder ueber eine GPU-Kopie
+in einen CPU-lesbaren Staging-BO und prueft NV12/P010-Samples mit Fence- und
+Generationskontrolle. Er wurde noch nicht auf Lenovo ausgefuehrt. VC1 ist
+nicht enthalten; Display, Encode, Seek/Flush, Audio und Leistung bleiben offen.
+Belege: Temp/AMD08039/VideoPhysical/Guest-Proof.json, Cpu-Oracle-Proof.json
+und Readiness-Proof.json. R4VIDEO0.1.7 wurde noch nicht physisch installiert.
+AMDGPU51-Batch55 bleibt unbestaetigt, Release0.80.38 und Unterversion39 offen.
+
+
+Offline-Fortsetzung 0.80.39: terminaler Treiberabbau (23.09.2026)
+--------------------------------------------------------------
+Ohne Laptop zwei unabhaengige Grenzen im Neustartpfad untersucht. R4SYS
+schliesst vor DriverShutdown das Netzwerk. Ein unsicherer Device-Handoff
+fuehrt bewusst zum Ausschalten statt Warmreset; SSH-Abbruch allein belegt
+daher weder einen Crash noch einen gelungenen Neustart. Die genaue letzte
+Ursache der Lenovo-Ausfaelle bleibt ohne neuen Boot-/Hardwarebefund offen.
+
+AMDGPU51 pollte native_worker.join und recoverNative nur einmal, obwohl
+Thread-Ende und mehrere Firmware-/Taktphasen asynchron sind. Isolierter
+AMDGPU52-Kandidat wiederholt diese Schritte bis zur vollstaendigen Quittung,
+hoechstens30s beziehungsweise4096 Wartezyklen. Engere Hardwarefristen bleiben
+erhalten; ungueltige/rueckwaerts laufende Uhr oder ausbleibender Abschluss
+behalten Ressourcen. Der echte exportierte Shutdown wurde mit spaeter
+Thread-Completion am SDK-Rand reproduziert: vorher42/43, nachher43/43
+bestehende AMDGPU-Testgruppen. Vollbau17/17;27 Originalressourcen bytegleich.
+Die Callback-/Hardwareantworten dieses Hostfalls sind modelliert.
+
+Kernel212 schloss neue DriverThreads bereits vor DriverShutdown. DCN.close
+benoetigt fuer seinen Hardwareabbau jedoch einen neuen dedizierten Thread.
+Der isolierte Kernel213-Kandidat laesst diesen ausschliesslich durch den
+synchronen Lebenszyklusbesitzer waehrend des terminalen Display-Shutdowns
+zu. Bestehende Tasks erhalten Stop/Wakeup; Ressource/Heap/Semaphore/GPU-BO-
+und Queue-Admission bleiben geschlossen. Aufraeumthreads koennen keine
+weiteren Threads starten. Nach Shutdown, auch bei Fehler, schliesst der
+Kernel die Taskzulassung und prueft unveraendert Callback-/Display-/GPU-
+Quieszenz. Kein generisches Freigabepermit, kein erzwungenes DMA-Free.
+Ordinaeres Unload behaelt geschlossene Taskzulassung. DriverApi36-Layout
+unveraendert; bei Uebernahme ist die terminale Ausnahme in R4DDriver.txt und
+ProgramLifecycle.txt zu dokumentieren, nicht als bereits ausgeliefert lesen.
+
+Temporaerer AMDSTOP-R4D im echten SMP4-Gast, ohne Netz/GPU: Kernel212
+verweigert den Cleanup-Thread und geht in den Poweroff-Schutzpfad. Derselbe
+Ablauf erreicht mit Kernel213 den ACPI-Reset; alter Task beendet, neuer Task
+ausgefuehrt/gewartet/retiriert, alter Heap freigegeben, neue Allokation und
+verschachtelter Threadstart abgewiesen. Ein absichtlich zurueckgehaltener
+Task verhindert mit213 weiterhin den Warmreset. Zusaetzliche Software-
+Baseline mit212 ohne Probe erreicht ebenfalls ACPI-Reset. QEMU -no-reboot
+prueft den Resetaufruf, keinen zweiten Boot. Test-AUTOEXEC, Gastkonfiguration
+und Gastkernel restauriert. Host-Besitzertests: siehe Readiness-Proof.json.
+
+Belege, gehashte Quellenarchive und beide Kandidaten unter
+Temp/AMD08039/ShutdownAudit/; Owner-Worktrees ShutdownCandidate und
+KernelShutdown. Kanonische Quellen bleiben AMDGPU51/Kernel212; vorherige
+Native51-/VideoPhysical-Pruefungen bestehen unveraendert. Keine Installation,
+Veroeffentlichung oder native AMD-/Lenovo-Abnahme. Kernel213 und AMDGPU52
+sind getrennt getestete Kandidaten; kein gemeinsamer physischer Lauf.
+Benutzer hat SSH bis zur Meldung eines laufenden Laptops ausgesetzt.
+Native51-Batch55 weiter unbestaetigt; zuerst dessen Software-Postbootstand
+pruefen. Release0.80.38 und saemtliche Hardwareaufgaben0.80.39 bleiben offen.
+
+
+Offline-Fortsetzung 0.80.39: gemeinsamer Shutdown und zweiter Boot
+--------------------------------------------------------------
+23.09.2026, weiterhin ohne Laptop/SSH. Kernel213 und AMDGPU52 bleiben die
+unveraenderten Kandidaten aus ShutdownAudit. Zusaetzlich liegt ein eigener
+temporaerer AMD-Owner-Worktree JointDriver vor: AMDJOINT0.0.1 ersetzt nur
+Initialisierung und Hardwarequittungen durch kontrollierte Testschritte.
+Quellfunktion amdgpu_shutdown, ShutdownIo, shutdownNativeStep sowie komplette
+native_worker-/shutdown_drain-/owned_work-Dateien sind identisch mit52.
+Der Wrapper erfasst nach Rueckkehr Ressourcen und Ergebnis. Alle43 bestehenden
+Hostgruppen,17/17 Buildschritte und27 Originalressourcen bestehen weiterhin.
+
+Echter SMP4-Gast mit Kernel213: DriverThread-, Heap-, Warte- und Uhrdienste
+kommen aus dem Kernel. Der Pacing-Task endet erst drei Wartezyklen nach dem
+Stopflag. Der originale AMD-Shutdown wartet auf Join/Retirement und einen
+neu gestarteten Cleanup-Task; neue Heapallokation und Kindtaskstart bleiben
+gesperrt. Mehrphasige modellierte Hardwarequittung: 4 Recovery-
+Aufrufe, 23ms vom Stop bis zur geprueften erfolgreichen Rueckkehr.
+REBOOT erreicht ACPI-Reset UND einen zweiten vollstaendigen Boot bis zur
+Terminal-Shell. Die unveraenderten Artefakte Kernel213/AMDGPU52 sind dabei
+gemeinsam installiert; AMDGPU laeuft ausschliesslich mit Software-Policy.
+AMDGPU52 wird in diesem Nachweis weder nativ gestartet noch GPU-qualifiziert.
+
+Gegenlauf ohne modellierte Abschlussquittung: nach 8745ms und
+4093 Recovery-Aufrufen liefert der originale Shutdown -1. Die
+exakte64-Byte-Initialallokation samt Inhalt bleibt erhalten; keine Freigabe
+ohne Quittung, kein Warmreset. Kernel faehrt in den Poweroff-Schutzpfad.
+Diese CPU-Allokation ist ein Lebensdauernachweis, keine physische DMA-Probe.
+Ein erster ungueltiger Fixturelauf ist als InitBug aufbewahrt: der Adapter
+verwechselte GfxOutput-Erfolg1 mit0. Korrigiert; kein Produktfehler behauptet.
+
+Gemeinsames lokales R4U AMD39S052.R4U: 57650497 Bytes,
+SHA256 f8409873ae13eaf4d593eaf588c3ee3ba5984a4bf0809c8d7926e66b89de4f97. Sieben Payloads: Kernel213,AMDGPU52,
+passive CONFIG sowie je Quellen-ZIP und Manifest beider Besitzer. Echte
+SYSUPD-VERIFY-Pruefung im SMP4-Gast erfolgreich; kein STAGE/COMMIT und keine
+Laptopinstallation. Die Diagnose-R4D ist nicht im Paket. Aktiver Kernel
+mindestens212 ist erforderlich. Die installed-AMDGPU51-Anforderung kann
+gemaess R4U-Vertrag auch durch das eigene52-Angebot erfuellt werden; sie ist
+kein Ersatz fuer die vorherige Kontrolle des unbestaetigten Batch55.
+
+Wiederherstellung der Gastdateien, Test-AUTOEXEC und Bootkernel bestaetigt.
+Quell-/Log-/Pakethashes: Temp/AMD08039/ShutdownJoint/Readiness-Proof.json.
+Kanonische Quellen bleiben Kernel212/AMDGPU51; Kandidaten weder publiziert
+noch physisch installiert. Benutzer-SSH-Halt bleibt bestehen. Zuerst dessen
+Rueckmeldung abwarten und Native51/Resume-Installed.ps1 im Softwareboot
+ausfuehren. Release0.80.38 und alle0.80.39-Hardwareaufgaben bleiben offen.
+
+Hardwarefortsetzung23.09.2026 nach Benutzer-Rueckmeldung: SSH wieder erreichbar.
+Batch55 und AMDGPU51 jetzt vollstaendig bestaetigt; Start war automatic mit
+passiver CONFIG, kein nativer51-Versuch. Neun alte eigene Inboxpakete nach
+Abgleich mit installiertem Batch55, lokalem Transportbeleg und Laenge
+entfernt: freier Systemplatz86 auf249MB. Kein privater Updatezustand entfernt.
+Danach gemeinsames Paket AMD39S052.R4U vollstaendig zurueckgeladen und
+SHA256 f8409873ae13eaf4d593eaf588c3ee3ba5984a4bf0809c8d7926e66b89de4f97
+geprueft. SYSUPD VERIFY/STAGE/COMMIT als Batch56; nach kurzer SSH-Pause
+Kernel0.1.213 aktiv/installiert, AMDGPU0.1.52 im MODULES-Katalog und passive
+CONFIG bytegenau bestaetigt. RESUME-BATCH meldet installed; Bootlog ohne
+verlorene Bytes. DISPLAYD: bootfb/automatic/reason=none,1920x1080.
+Das belegt Installation und passiven Start, noch keinen nativen GPU-Erfolg
+oder erfolgreichen Shutdown des neuen Kernels. Quellen bleiben in ihren
+isolierten Ownerworktrees; keine Publikation und kein Releaseabschluss.
+Belege Temp/AMD08039/Native51/Installed-Proof.json sowie
+Temp/AMD08039/ResumeAfterOffline/Installed-Proof.json.
+
+Native52-Fortsetzung23.09.2026: Kernel213/AMDGPU52 wurden zuvor als Batch56
+installiert und passiv gestartet bestaetigt. Native/passive CONFIG-Pakete
+AMD39N52/AMD39P52 vollstaendig zurueckgeladen, hashgeprueft und mit SYSUPD
+verifiziert. Native CONFIG als Batch57 gestagt, COMMIT angefordert. SSH
+brach ab; vier Bootlog-Proben erhielten Verbindungsabbruch. Daher weder
+Abschluss von Batch57 noch neuer Boot, Firmware-/GPU-Fortschritt oder
+Ausschalten behauptet. Benutzer nach sichtbarem Zustand gefragt; bei
+Ausschalten Software Graphics fuer die kontrollierte Wiederaufnahme.
+Beleg Temp/AMD08039/Native52/Pending-Boot-Proof.json. Keine physische
+Funktionsabnahme abgeschlossen; Release bleibt0.80.38, Unterversion39 offen.
+
+Native52-Hardwarebefund23.09.2026: Benutzer bestaetigt Laptop eingeschaltet,
+Bild bleibt bei Desktop starten/R4XStart aufrufen. SSH inzwischen erreichbar;
+Kernel213 aktiv und nativer CONFIG-Batch57 als installed bestaetigt.
+AMDGPU52 erreicht nach bestaetigter Firmware/ASD und erneutem Engine-Stopp
+SDMA ready/running/selftest=1. Eintritt in gc-advance setzt laut GC-Owner
+einen erfolgreich bestaetigten SDMA-Selbsttest voraus; Displayclock ready.
+Neuer Abbruch: Deadline in gc-advance; genaue GC-Unterphase nicht erfasst.
+Cleanup bleibt bei sdma-close, Ressourcen quarantiniert, DISPLAYD preparing
+mit pending-owner13/pending-generation3. Keine native Ausgabe, GC-/VCN-/
+Vulkan-/Medienabnahme. Warmstart in Batch57 nun belegt; kein Ausschalten
+dieses Versuchs behauptet. Bootlog65536Bytes mit32171 verworfenen aelteren
+Bytes: AMD-Bind/Start/Fehler vorhanden, aber kein vollstaendiger Bootnachweis.
+Beleg Temp/AMD08039/Native52/Trial-Proof.json. Naechster Kandidat ergaenzt
+nur residente GC-Phasen/Zeiger/Abschlussmarker und Cleanup-Fehlerdiagnose.
+
+Native53-Hardwarebefund23.09.2026: Nach manuellem Einschalten ist AMDGPU53
+mit Kernel213 und passivem CONFIG als Batch58 installed bestaetigt. Nativer
+CONFIG-Batch59 anschliessend installed, SSH zurueck, Bootlog60552Bytes ohne
+Verlust. SDMA-Selbsttest passiert; KIQ-Abschluss exakt, Compute-HQD gemappt.
+GC scheitert erst in test_wait, Runde0, nach169Polls. GFX read/write912/960,
+Compute0/32, KIQ24/24. GFX-Fence bleibt ffffffffffffffff; Compute-Fence wurde
+wegen vorherigem GFX-Abbruch nicht gelesen. RPTR meldet keinen beweisbaren
+einzelnen Fehlerbefehl. Cleanup scheitert in unmap_wait nach44Polls mit
+Deadline; Ressourcen bleiben gehalten. DISPLAYD preparing, keine native
+Ausgabe oder GC-/VCN-/Vulkan-/Medienabnahme. Beleg:
+Temp/AMD08039/Native53/Trial-Proof.json. Untersuchung der gemeinsamen
+IB-Speicherzuordnung: bislang execute=false trotz GFX-/Compute-IB in VMID1.
+Fehlendes Ausfuehrungsattribut ist ein Korrekturkandidat, die ursachliche
+Bedeutung fuer den Hardwarehaenger muss durch einen neuen Lauf belegt werden.
+
+Native54-IB-Korrektur23.09.2026: AMDGPU0.1.54 setzt fuer die gemeinsame
+SDMA/GFX/Compute-Befehlsarena in VMID1 das fehlende PTE-Ausfuehrungsbit.
+Native BOs und Shader waren bereits ausfuehrbar. Die alte Arena-Zuordnung
+hatte nur Read/Write; die Pinned-Referenzen gmc_v9_0.c (VM-Flags),
+Mesa radv_amdgpu_bo.c (BO-Mapping) bestaetigen das Ausfuehrungsattribut.
+Bestehende SDMA-Testgruppe prueft jetzt echte Arena-Seitentabellen aller
+64 IB-Slots (je2Seiten), physische Adressen, UMA/Read/Write/Execute und
+atomare Ablehnung bei belegter letzter Seite. Gegenprobe mit altem Flag:
+42/43Tests, genau diese Pruefung scheitert (113 erwartet,97 erhalten).
+Mit Korrektur43/43Gruppen,17/17Buildschritte,27Ressourcen byteidentisch.
+Kernel, GPU-Befehlsfolgen, Deadlines und Stillstandskriterien unveraendert.
+Isolierter Owner Native54Owner, Paket AMD39X054 mit passivem CONFIG und
+vollstaendigen Quellen. Beleg Temp/AMD08039/Native54/Readiness-Proof.json.
+Vorbereitung allein belegt weder Hardwareursache noch native Abnahme.
+
+Native54-Updatepause23.09.2026: Korrektur des fehlenden Execute-PTE fuer
+die gemeinsame Befehlsarena lokal mit echter Mapping-Gegenprobe bestaetigt:
+vorher42/43 (113 erwartet,97 erhalten), korrigiert43/43Tests,17/17Buildschritte,
+27Ressourcen byteidentisch. AMD39X054.R4U,25103318Bytes,
+SHA256 6300f05395070cdad9d444394306895cacfa5842eb749b7a340b17aba17c0198.
+Vollstaendiger Rueckdownload stimmt; SYSUPD VERIFY OK, Batch60 staged.
+COMMIT unter bislang aktivem nativen AMDGPU53 beendet SSH; Benutzer
+bestaetigt erneut ausgeschalteten Laptop. Kein neuer Native54-Start und
+keine Installation behauptet. Paket enthaelt passiven CONFIG und volle
+Quellen. Naechster Schritt nach Einschalten: aktive/installierte Version,
+CONFIG, Bootlog und RESUME-BATCH pruefen; erst danach nativen Test starten.
+Native53-Befund bleibt GC test_wait Deadline und Cleanup unmap_wait Deadline.
+Belege Temp/AMD08039/Native54/Readiness-Proof.json und Pending-Boot-Proof.json.
+0.80.39 samt Aufgaben bleibt offen; oeffentlicher Release weiter0.80.38.
+
+Native54-Hardwarebefund23.09.2026: Benutzer startet Software Graphics;
+AMDGPU54 mit Kernel213 und passivem CONFIG als Batch60 installed bestaetigt.
+Anschliessender nativer CONFIG-Batch61 installed, SSH automatisch zurueck,
+Bootlog63387Bytes ohne Verlust. Gegenueber Native53 werden beide Ringe nun
+vollstaendig gelesen: GFX960/960 (vorher912/960), Compute32/32 (vorher0/32).
+GC bleibt aber in test_wait Runde0 mit Deadline: GFX-Fence ffffffffffffffff;
+Compute-Fence wegen vorherigem GFX-Abbruch noch nicht gemessen.
+Cleanup schafft jetzt Compute-Unmap und KIQ-Dequeue. Neuer Stillstand:
+GC-Park bei gui, GRBM_STATUS=e5002028, Deadline nach44Polls. Ressourcen
+weiter gehalten, DISPLAYD preparing, keine native Ausgabe oder GC-Abnahme.
+Das Execute-PTE verbessert Ringfortschritt/Abbau auf dieser Hardware,
+loest aber den gesamten Startfehler noch nicht. Abschluss-/Cachepfad wird
+weiter untersucht; keine schwachere Erfolgspruefung oder erzwungene Freigabe.
+Beleg Temp/AMD08039/Native54/Trial-Proof.json. Laptop aktuell per SSH
+erreichbar. Native54 Pending-Boot-Proof dokumentiert nur den historischen
+Zwischenstand vor dem manuellen Einschalten; Installation nun bestaetigt.
+
+Native55-Cacheformat23.09.2026: AMDGPU0.1.55/R4AMD0.1.8 begrenzen
+ACQUIRE_MEM COHER_SIZE_HI auf die originalen acht implementierten Bits
+(0xff statt0xffffff); Groesse bleibt volle48Bit in256Byte-Bloecken.
+Referenz: Linux GC9.1 CP_COHER_SIZE_HI-Maske und Mesa ac_cmdbuf_cp.c.
+Bestehende AMD-Paketgruppe prueft GFX/MEC gegen die generierte Originalmaske;
+Gegenprobe42/43Tests (255 erwartet,16777215 erhalten). Korrigiert43/43,
+17/17Buildschritte,27Ressourcen byteidentisch; R4AMD 12 Tests bestanden.
+Bei GC-Selbsttest-Deadline liest der residente Owner beide Fences/IB-Marker
+und einmal GRBM_STATUS; Beobachtungsmaske trennt fehlende Daten von Null.
+Bestehender Negativtest bestaetigt unveraenderte Deadline, gehaltene Arena,
+korrekten unabhaengigen Compute-Wert und keine zusaetzlichen Registerwrites.
+Keine neue Abnahmebedingung oder Deadline. Paket AMD39G055 mit7Payloads,
+passivem CONFIG und beiden vollstaendigen Quelleinheiten. Hardwarewirkung
+noch offen. Beleg Temp/AMD08039/Native55/Readiness-Proof.json.
+AMDGPU55 bleibt isolierter Owner; R4AMD-Korrektur liegt im Library-Repository.
+Zwei eigene obsolete Inbox-Pakete S052/D053 nach Transport-/Batchabgleich
+entfernt; C: danach164MB frei. Aktiver nativer Batch61 unveraendert.
+
+Native55-Hardwarebefund23.09.2026: Nach manuellem Start sind AMDGPU55 und
+R4AMD0.1.8 mit Kernel213/passivem CONFIG als Batch62 installed bestaetigt.
+Benutzer bestaetigt Desktop beim normalen Start. Nativer CONFIG-Batch63
+danach installed, SSH automatisch zurueck, Bootlog64341Bytes ohne Verlust.
+Neue Messung: beide IB-Testwerte geschrieben (GFX4100,Compute4101), erster
+Compute-Abschluss doppelt exakt4d45433900000002; GFX-Abschluss weiterhin
+ffffffffffffffff. Beide Ringe voll gelesen (GFX960/960,Compute32/32).
+Das belegt erste Compute-Testbefehle, keine Shader-/Vulkan-/Gesamtabnahme.
+Compute war in Native54 nicht gemessen; kein durch R4AMD8 bewirkter neuer
+Compute-Erfolg behauptet. GFX stockt nach erfolgreicher IB-Ausfuehrung
+beim Pipelineabschluss, GRBM_STATUS=e5002028 bereits vor dem Cleanup.
+Deadline in test_wait Runde0; Compute-Unmap/KIQ-Dequeue funktionieren,
+abschliessender GUI-Park erreicht erneut Deadline. DISPLAYD preparing,
+Ressourcen bleiben gehalten, keine native Ausgabe. Naechste Eingrenzung:
+Renderpipeline-/Speicherfaultstatus vor/nach dem Test im Treiber-Owner.
+Belege Temp/AMD08039/Native55/Trial-Proof.json und Passive-Desktop-Proof.json.
+0.80.39 offen, veroeffentlichter Release unveraendert0.80.38.
+
+Native56-Hardwarebefund23.09.2026: Installation Batch64 nach erneutem,
+vom Benutzer bestaetigtem Ausschalten/manuellem Einschalten voll bestaetigt;
+passives CONFIG automatisch bootfb. Nativer Batch65 installed, SSH zurueck.
+Neue Ursache eingegrenzt: vor Selbsttest VM-Fehlerstatus0; an Deadline
+VM_L2_PROTECTION_FAULT_STATUS=1c017c, VMID1, Seite0xf401a75000.
+Diese Seite ist exakt MC-Arena0xf401a00000 + EOP-Scratchoffset0x75000.
+Der ZPASS_DONE-Abschluss greift damit im aktiven VMID1 auf die ungemappte
+MC-Adresse zu; gemappter Scratch liegt unter0x8000075000. CP_STAT80040000
+meldet Query/CP busy; CP_STALLED_STAT2=200000 wartet auf SC_EOP_DONE.
+GFX-Fence fehlt, Compute-Fence wieder exakt; Cleanup endet erneut an GUI-Park.
+Folgekorrektur betrifft Scratchadresse in Selbsttest und realem Jobpfad;
+Fenceadresse, Befehlsfolge und Abnahmebedingungen bleiben unveraendert.
+Bootlogs: erste53244Bytes verlustfrei, spaeter65536Bytes mit4391verdraengten
+Bytes; Ueberlappung48853Bytes byteidentisch, lueckenlos69927Bytes rekonstruiert.
+Belege Temp/AMD08039/Native56/Trial-Proof.json und Completion-Decoded.json.
+0.80.39 samt Aufgaben bleibt offen, Release0.80.38 unveraendert.
+
+Native57-Adresskorrektur23.09.2026: AMDGPU0.1.57 verwendet fuer den
+ZPASS_DONE-Scratch im Selbsttest und realen Kontextauftrag die gehaltene
+VMID1-Abbildung0x8000075000. Der CP-Fence behaelt seine MC-Adresse.
+Native56 hatte einen neuen VMID1-Fehler exakt auf der bisherigen MC-Scratch-
+Adresse0xf401a75000 gemessen; CP wartet dabei auf SC_EOP_DONE.
+Zwei bestehende Testgruppen lesen jetzt die tatsaechlich publizierten
+Ringframes und pruefen Scratch-/Fenceadressraum getrennt. Gegenprobe41/43:
+beide erwarteten549756293120, erhielten4832317440. Korrigiert43/43Tests,
+17/17Buildschritte,27Ressourcen byteidentisch. Befehlsfolge, Fencevergleich,
+Deadlines und Ressourcenrueckhaltung unveraendert. Kernel213/R4AMD8 ebenfalls.
+AMD39V057 umfasst Treiber, passives CONFIG und alle518Quelldateien.
+Beleg Temp/AMD08039/Native57/Readiness-Proof.json. Hardwarewirkung offen;
+0.80.39 bleibt offen, Release0.80.38 unveraendert.
+
+Native57-Hardwarebefund23.09.2026: Scratch-Adresskorrektur wirkt physisch.
+Nach manuellem Einschalten Installation66 bestaetigt; nativer CONFIG67
+installed und SSH automatisch zurueck. GC erreicht ready ohne Fehler nach
+beiden Testrunden: GFX-Fence4746583900000011, Compute4d45433900000012,
+jeweils doppelt exakt, Marker4110/4111; Ringe1008/1008 und64/64.
+Der vorherige GFX-Abschluss-Deadline ist damit ueberwunden. VCN-/Power-
+Startzulassung wurde laut erreichtem Kontrollfluss durchlaufen; keine
+Codec-, Shader-, Vulkan- oder Bildabnahme daraus abgeleitet.
+Neuer Fehler Unsupported bei display-request, vor nativer Ausgabe.
+Cleanup: Compute-Unmap, KIQ-Dequeue und vollstaendiger GC-Park/close gelingen;
+danach engine-users0, mappings0, GMC0/0. Aeusserer Firmwareabbau stockt
+anschliessend erneut an cleanup_parked/rlc_busy; Firmware bleibt gehalten.
+DISPLAYD preparing. Naechste Eingrenzung: Display-API-Zulassung oder
+Panel-/Bootmodusbedingungen. Keine gelockerten Sicherheits-/Abnahmechecks.
+Bootlog65536Bytes mit2812verdraengten Anfangsbytes; kein vollstaendiger
+Bootlog behauptet. Relevante GC-/Display-/Cleanupbelege sind enthalten.
+Beleg Temp/AMD08039/Native57/Trial-Proof.json. Alle39-Aufgaben bleiben offen,
+veroeffentlichter Release0.80.38 unveraendert.
+
+Native58-Hardwarebefund 23.09.2026: Installation68 nach manuellem Einschalten
+bestaetigt, nativer CONFIG69 installed; SSH automatisch zurueck. Beide
+GC-Testrunden und vollstaendiger GC-Abbau erneut bestanden. Displayfehler
+Unsupported eingegrenzt auf boot_mode; alle neun API-Faehigkeiten vorhanden
+(caps1ff, Display136Bytes, Output176Bytes). Panel1920x1080,141000kHz,
+blank180/38,sync108/48/10/10,misc6. Firmware-panel_bpc=2 wird bisher falsch
+als zwei Bit behandelt. AMD atomfirmware.h definiert PANEL_8BIT_PER_COLOR=2;
+die ROM-Auswertung muss den Enumcode in die interne Bitzahl8 uebersetzen.
+Kein Aufweichen der 6-/8-Bit-Moduszulassung. Aeusseres Firmwarecleanup bleibt
+bei Deadline cleanup_parked/rlc_busy stehen; Ressourcen gehalten.
+Bootlog65536Bytes mit4961verdraengten Anfangsbytes, relevante Belege enthalten.
+Beleg Temp/AMD08039/Native58/Trial-Proof.json. Noch keine native Ausgabe,
+alle39-Aufgaben offen, veroeffentlichter Release0.80.38 unveraendert.
+
+Native59-Panelkorrektur 23.09.2026: AMDGPU0.1.59 uebersetzt den ATOM-Enum
+panel_bpc beim ROM-Lesen in die interne Bitzahl: 1/2/3/4/5 -> 6/8/10/12/16,
+undefinierte/reservierte Werte -> unbekannt0. Vorhandene Moduszulassung
+bleibt6/8Bit. Der vorhandene Test-ROM verwendet jetzt den echten Code2,
+und die bestehende Parser-Testgruppe prueft alle256rohen Bytewerte an
+originalem Packed-Offset51. Zuvor schlug der Test fehl, danach43/43Gruppen,
+17/17Buildschritte und27Ressourcen bestanden. Keine neue Testgruppe.
+Native58 hatte physisch bpc2 und den Fehler boot_mode gemessen; alle neun
+API-Faehigkeiten und beide GC-Runden bestanden. Native59 noch nicht physisch
+abgenommen. Kernel213,R4AMD8,Release0.80.38 unveraendert. Vollstaendige
+Quellen und passives CONFIG im Paket AMD39B059. Readiness-Proof.json.
+
+Native59-Hardwarebefund 23.09.2026: Installation70 nach manuellem Einschalten
+bestaetigt; nativer CONFIG71 installed und SSH automatisch zurueck. Der
+ATOM-Farbtiefenfehler ist physisch ueberwunden: Displayanforderung angenommen,
+SDMA-Queue aktiviert, beide Bildpuffer angelegt/kopiert/veroeffentlicht und
+DCN-Kern vorbereitet. Neuer Abbruch wait_panel/Unconfirmed: Panel-Bindtask
+meldet Fehler, dessen urspruengliche Ursache bisher pauschal verdeckt wird.
+GC-Fences erneut exakt, Marker4110/4111; GC-Abbau vollstaendig. Aeusseres
+Firmwarecleanup weiterhin Deadline cleanup_parked/rlc_busy, Ressourcen gehalten.
+Benutzer sieht Bootbild bei R4XStart, SSH erreichbar; keine native Ausgabe.
+Frueher Bootlog53267Bytes ohne Verlust plus spaeter65536Bytes/dropped1683:
+51584Bytes Ueberlappung exakt geprueft; zusammenhaengender Log67219Bytes
+ab Boot rekonstruiert, beide Originale behalten. Trial-Proof.json und
+merged-boot.log unter Temp/AMD08039/Native59. Naechster Schritt: urspruenglichen
+Panel-Bindfehler und Phase sichtbar machen. Alle39-Aufgaben bleiben offen,
+Release0.80.38 unveraendert; kein Shader-/Codec-/HDMI-Nachweis abgeleitet.
+
+Native60 Updateversuch 23.09.2026: 43/43Hostgruppen,17/17Buildschritte und
+27Ressourcen bestanden. Neue Diagnose erhaelt Panel-Bindphase, Originalfehler,
+native Rueckgabe, ATOM-Revision/Tabellengroessen und Boardroute. Keine neuen
+Hardwareoperationen; Taskdaten werden erst nach Join ausgewertet.
+Paket AMD39D060 vollstaendig hin-/zurueckuebertragen und SHA256-geprueft,
+SYSUPD VERIFY und STAGE72 erfolgreich, COMMIT angefordert. SSH endete mit
+Timeout; dies bestaetigt keine Installation und keinen erfolgreichen Boot.
+Postbootpruefung laeuft ueber Native60/Resume-Installed.ps1. Danach ist der
+separat vorbereitete native CONFIG-Lauf noetig; bis dahin bleibt Native59
+der letzte physische Befund: Farbtiefenfehler behoben, wait_panel/Unconfirmed,
+aeusseres Firmwarecleanup RLC-busy/Deadline. Kein nativer Ausgabe-Nachweis.
+Alle39-Aufgaben offen; Release0.80.38 unveraendert.
+
+Native60-Hardwarebefund 23.09.2026: Installation72 nach manuellem Einschalten
+bestaetigt, nativer CONFIG73 installed, SSH automatisch zurueck. Panel-Bind
+scheitert bereits in route mit Unsupported, vor ATOM-Initialisierung oder
+nativer Linkanbindung. Boardpfad: connector3114,encoder211e,external0,
+hardware1,slave0,aux0,hpd-active0,capsf. DDC-Register5d91 mit shift8/mask8,
+HPD5db5 mit0/0; dekodiertes Panel8Bit,1920x1080,141000kHz.
+Ursache: Panel-/HDMI-Routen verlangen faelschlich DDC-Shift0/0. ATOM kennzeichnet
+Hardware-I2C als Pinpaar; originale DCN1-Register haben Clockbit0 und Databit8.
+Die gemessene8/8-Beschreibung muss als Datenpin dieses Paares erkannt werden;
+exakte Register-/Lane-/HPD-Pruefungen bleiben erforderlich.
+GC-Runden und GC-Abbau erneut bestanden; aeusserer Firmwareabbau weiterhin
+Deadline cleanup_parked/rlc_busy mit gehaltenen Ressourcen. Bootlog65536Bytes,
+526Anfangsbytes verdraengt; relevante Diagnosen vorhanden, kein vollstaendiger
+Bootlog behauptet. Beleg Temp/AMD08039/Native60/Trial-Proof.json.
+Keine native Ausgabe/Shader/Codec/HDMI-Abnahme; alle39-Aufgaben offen,
+Release0.80.38 unveraendert.
+
+Native61-DDC-Korrektur 23.09.2026: AMDGPU0.1.61 erkennt in Panel und HDMI
+beide Mitglieder des ATOM-Hardware-I2C-Pinpaars: Clock0/0 oder Data8/8.
+Gemischte oder andere Bitpositionen bleiben abgewiesen; native C-Anbindung
+prueft weiterhin die exakten Register/Lanes/HPD-Felder. Native60 hatte am
+Lenovo DDC5d91/8/8 und HPD5db5/0/0 gemessen und route/Unsupported gemeldet.
+Beide bestehenden Routen-Testgruppen pruefen je1024Shift-/Maskkombinationen;
+keine neue Testgruppe. Alter Code scheitert, korrigiert43/43Hostgruppen,
+17/17Buildschritte und27Ressourcen bestanden. Zusaetzlich werden vorhandene
+Firmware-Parksamples bei Cleanup protokolliert, ohne weitere MMIO-Zugriffe.
+Physische61-Abnahme noch offen; Kernel213,R4AMD8,Release0.80.38 unveraendert.
+Paket AMD39G061 mit passivem CONFIG und vollstaendigen Quellen.
+Readiness-Proof.json; Firmwarecleanup und native Bildausgabe bleiben offen.
+
+Native61 Updateversuch 23.09.2026: DDC-Pinpaardekodierung fuer Panel und HDMI
+korrigiert: passende Clock0/0- und Data8/8-Felder werden erkannt. Beide
+bestehenden Routengruppen pruefen jeweils1024Shift-/Maskkombinationen.
+Alter Code41/43, korrigiert43/43Hostgruppen,17/17Buildschritte,27Ressourcen.
+Zusaetzliche Firmware-Parkdiagnose verwendet nur bereits erfasste Register.
+Paket AMD39G061,25137825Bytes,SHA256
+b9afd2b34836b446bca7959c156ba0ab77ba5864ef8bce533da54840ebd4129e,
+hin-/zurueckuebertragen und hashgeprueft. VERIFY und STAGE74 erfolgreich,
+COMMIT angefordert; Verbindung endete mit Timeout. Postboot-Installation
+und nativer Test75 sind noch nicht bestaetigt. Paket enthaelt passives CONFIG.
+Letzter physischer Befund bleibt Native60: DDC5d91/8/8 wird in route abgelehnt;
+GC und GC-Abbau bestanden, aeusserer Firmwareabbau bei RLC-busy/Deadline.
+Belege Temp/AMD08039/Native60/Trial-Proof.json und Native61/Readiness-Proof.json.
+Alle39-Aufgaben offen, Release0.80.38 unveraendert.
+
+Native61-Hardwarebefund 23.09.2026: Installation74 nach manuellem Einschalten
+bestaetigt, nativer CONFIG75 installed, SSH automatisch zurueck. DDC-Fix
+physisch wirksam: Panel-Bind ready, Route gueltig, DDC5d91/8/8, HPD5db5/0/0,
+Scratch20480, ATOM-Transmitter1/6, Command-/Datatabellen166/74. Naechster
+Abbruch wait_commit/Unconfirmed, Displaytask commit/retained result=-3.
+Originalursache innerhalb der Modevorbereitung/-programmierung noch offen.
+Beide GC-Runden und GC-Abbau bestanden. Aeusserer Firmwareabbau nach43Polls
+weiter Deadline/rlc_busy: Samplemaske1ff, CP15150000,MEC503f0000,RLC_CNTL0,
+SDMA1/4101c/10000/46deed57, GRBM3028,GRBM_STATUS2=01000008. Damit RLC_BUSY=1,
+RLC_RQ_PENDING=0; SERDES noch nicht gelesen, deren Nullwerte sind kein Nachweis.
+Ressourcen bleiben gehalten. Bootlog65536Bytes,2144Anfangsbytes verdraengt.
+Keine native Ausgabe-, Shader-, Codec- oder HDMI-Abnahme; keine neue visuelle
+Bestaetigung. Alle39-Aufgaben offen, Release0.80.38 unveraendert.
+Beleg Temp/AMD08039/Native61/Trial-Proof.json.
+
+Native62-Modediagnose 23.09.2026: AMDGPU0.1.62 protokolliert nach Task-Join
+die vorhandene Modevorbereitung: Schritt, Originalfehler, native Rueckgabe,
+ATOM-Befehlsindex/Revision, bestehende Bootvideo-/Panel-Readbacks sowie
+Panel-/ATOM-Fehler und Effekte. Keine zusaetzlichen Hardwareoperationen.
+Native61 hatte Panel-Bind erfolgreich erreicht, scheiterte dann aber mit
+wait_commit/Unconfirmed, result=-3 ohne ausreichende innere Fehlerangabe.
+43/43Hostgruppen,17/17Buildschritte,27Ressourcen bestanden; keine neuen
+Testgruppen. Paket AMD39M062 mit passivem CONFIG und kompletten Quellen.
+Physische62-Abnahme offen. Kernel213,R4AMD8 und Release0.80.38 unveraendert.
+Beleg Temp/AMD08039/Native62/Readiness-Proof.json.
+
+Native62 Updateversuch 23.09.2026: Modevorbereitungsdiagnose,43/43Hostgruppen,
+17/17Buildschritte,27Ressourcen bestanden. AMD39M062,25146875Bytes,SHA256
+a8ef3cf86cd27836606b310298e7393da01e5c4fefa5b5c5f9ee245c6ed02efb,
+vollstaendig hin-/zurueckuebertragen, VERIFY und STAGE76 erfolgreich.
+COMMIT angefordert, Postboot-Installation und nativer77-Test noch offen.
+Paket enthaelt passives CONFIG. Letzter physischer Befund61: Panel-Bind
+ready, danach wait_commit/Unconfirmed,result=-3; aeusserer Firmwareabbau
+RLC_BUSY=1 trotz RLC_CNTL=0, GRBM_STATUS2=01000008. Kein nativer Bildnachweis.
+Eigene bereits installierte Inboxpakete D060 und G061 nach Journal-/Hash- und
+Laengenabgleich entfernt, lokale Komplettkopien und Nachweise erhalten.
+Aktive75-QuelleN61 sowie Systemdateien und SYSUPD-Backups unveraendert.
+Kernel213,R4AMD8 und Release0.80.38 unveraendert; alle39-Aufgaben offen.
+
+Native62-Hardwarebefund 23.09.2026: Installation76 nach manuellem Einschalten
+bestaetigt, nativer CONFIG77 installed, SSH automatisch zurueck. Panel-Bind,
+ATOM-Befehlsrevisionen, Bootguard, vorhandenes eDP-Bildsignal und beide
+DCN-Modeplaene werden akzeptiert. Panel power1/lit1/pwm-valid1, Firmwarebusy0,
+PWM65536,period3809. Exakter Abbruch: inherited_admit/Unsupported,native=-6,
+touched0,ATOM-effects0. Die Uebernahme scheitert vor jeder Modusaenderung an
+der Pruefung ungenutzter Bildkanaele (OTG aus plus HUBP_IN_BLANK verlangt).
+Das vorhandene Bildsignal ist BIOS-Scanout, kein nativer Ausgabenachweis.
+GC-Runden und GC-Abbau bestanden; aeusseres Firmwarecleanup weiterhin
+Deadline/rlc_busy mit GRBM_STATUS2=01000008,RLC_CNTL0. SERDES nicht erreicht.
+Frueher Bootlog65536Bytes/dropped400, spaeter65536/dropped8714; beide Rohlogs
+erhalten, keine Vollstaendigkeit behauptet. Beleg Native62/Trial-Proof.json.
+Naechster Schritt: inaktive DCN1-Frontends einschliesslich bestaetigtem
+Power-Gating korrekt pruefen; PG-Zustand des Lenovo noch nicht gemessen.
+Alle39-Aufgaben offen, Release0.80.38 unveraendert.
+
+Native63-Frontendkorrektur 23.09.2026: ungenutzte DCN1-Bildkanaele gelten
+bei gestopptem OTG als ruhig, wenn HUBP_IN_BLANK gesetzt oder PGFSM_POWER_OFF=2
+des zugehoerigen HUBP-Domaenenstatus bestaetigt ist. Domaenen0/2/4/6 folgen
+der Originalsequenz dcn10_hubp_pg_control. Zustandswerte0/1/3 und aktive
+Timinggeneratoren bleiben abgewiesen; fuer geplante Bildkanaele bleibt die
+Blank-Bestaetigung vor Hardwareprogrammierung erforderlich. Gemeinsame
+Pruefung fuer Uebernahme, Stop, Fixclock und Frontendprogrammierung.
+Die bestehende Scanoutgruppe reproduziert den Fehler42/43; korrigiert43/43,
+17/17Buildschritte,27Ressourcen. Keine neue Testgruppe. Begrenzte Diagnosen
+erhalten die tatsaechlichen OTG/HUBP/Power-Readbacks der Uebernahmepruefung.
+Native62 belegt inherited_admit/Unsupported vor Modusaenderung; der genaue
+Lenovo-Powerzustand ist noch nicht gemessen, physische63-Abnahme offen.
+Paket AMD39Q063 mit passivem CONFIG und vollstaendigen Quellen.
+Kernel213,R4AMD8 und Release0.80.38 unveraendert.
+Platzbudget: Paketupload plus komplette Stage und32MBMetadaten/Freiraum;
+alte eigene Inboxpakete nur nach Journal-/Hash-/Laengenabgleich entfernt.
+Beleg Temp/AMD08039/Native63/Readiness-Proof.json.
+
+Native63 Updateversuch 23.09.2026: ungenutzte gestoppte DCN1-Frontends duerfen
+blank oder anhand PGFSM=2 bestaetigt ausgeschaltet sein; geplante Frontends
+verlangen weiterhin Blank. Aktive Timinggeneratoren und Poweruebergaenge
+bleiben abgewiesen. Gemeinsame Pruefung in Admission, Stop, Clock und Program.
+Bestehende Scanoutgruppe rot42/43, gruen43/43;17/17Buildschritte,27Ressourcen.
+Zusatzdiagnose erfasst OTG/HUBP/Powerzustand fuer den physischen Ursachenbeleg.
+Paket AMD39Q063,25148339Bytes,SHA256
+82eaafb89abf8731dbe446955e505f406fa753bd3ab971a632c287b19e2bac55,
+vollstaendig hin-/zurueckuebertragen, VERIFY und STAGE78 erfolgreich,
+COMMIT angefordert. Installation nach Neustart und nativer79-Test offen.
+Letzter physischer Befund bleibt62/inherited_admit/Unsupported vor Modeset.
+Fuer Upload+Stage+32MBReserve werden80MBbenoetigt; vor Transfer98MBfrei.
+Altes installiertes InboxpaketM062 nach Journal-/Hash-/Laengenabgleich entfernt,
+lokale Komplettkopien behalten. Aktive N62-Quelle und private Backups erhalten.
+Kernel213,R4AMD8 und Release0.80.38 unveraendert; alle39-Aufgaben offen.
+
+Native63-Hardwarebefund 23.09.2026: Installation78 nach manuellem Einschalten
+bestaetigt; nativer CONFIG79 installed, SSH automatisch zurueck. Abbruch
+weiterhin inherited_admit/Unsupported,native=-6,touched0. Readbacks zeigen
+checked=e,power-sampled=8,rejected=3: Pipe1/2 OTG80000110,HUBP100b sind
+bereits blank und werden akzeptiert; deren Powerstatus wurde nicht gelesen.
+Pipe3 liefert OTG0,HUBP0,Power0. Damit ist Power-off nicht als Ursache belegt.
+Original Linux dc_resource.c identifiziert Raven2 als DCN1.01;
+dcn10_resource.c rv2_res_cap hat drei Timinggeneratoren/Frontends. Unser
+Port initialisiert bisher vier und prueft damit einen nicht vorhandenen
+vierten Bildkanal. Naechste Korrektur: ASIC-abhaengige DCN-Ressourcenzahl.
+GC-Runden und GC-Abbau bestanden; aeusseres Firmwarecleanup weiterhin
+Deadline/rlc_busy,GRBM_STATUS2=01000008,RLC_CNTL0,45Polls,SERDES unerreicht.
+Bootlog65536Bytes/dropped3058,keine Vollstaendigkeit behauptet. Kein nativer
+Bildnachweis. Beleg Native63/Trial-Proof.json. Alle39-Aufgaben offen;
+Release0.80.38 unveraendert.
+
+Native64-Topologiekorrektur 23.09.2026: Raven2 verwendet laut Original
+dc_resource.c/dcn10_resource.c drei DCN1.01-Ressourcen, Picasso vier DCN1.0.
+Die unveraenderliche ASIC-Auswahl liefert die Anzahl; Display-Core prueft
+sie gegen den Speicherbesitzer. DML erhaelt die originale DCN1.01-Auswahl
+einschliesslich max_num_dpp3 und der originalen Latenzkorrektur. Admission,
+Stop, Fixclock, Frontendprogrammierung, Modus-/Pipegrenzen, PHY-Bindung
+und Audioinstanzen verwenden dieselbe ASIC-Ressourcenzahl; AUX/DDC bleibt4.
+Die gemeinsame MPC behalt wie im Original vier Crossbarplaetze; die
+Frontendpruefung spricht nur die drei vorhandenen Timing/HUBP-Instanzen an.
+Bestehende DML/Frontendgruppe mit gesperrten Registerzugriffen auf Instanz3:
+alter Code42/43, korrigiert43/43;17/17Buildschritte,27Firmware-Ressourcen.
+Keine neue Testgruppe. Native63 lieferte dazu den physischen Nullreadback
+des nicht vorhandenen Pipe3 bei erfolgreich blanken Pipe1/2.
+Paket AMD39T064 mit passivem CONFIG und vollstaendigen Quellen. Physische
+Installation/Abnahme64 noch offen. Firmwarecleanup/RLC_BUSY bleibt offen.
+Platzbudget Upload+vollstaendige Stage+16MBReserve; NTFS ersetzt per
+Namensuebergabe bestehender Datenobjekte, keine dritte Payloadkopie.
+74MBvor Upload beobachtet, private Backups und aktive Quelle erhalten.
+Kernel213,R4AMD8 und Release0.80.38 unveraendert; alle39-Aufgaben offen.
+Beleg Temp/AMD08039/Native64/Readiness-Proof.json.
+
+Native64 Updateversuch 23.09.2026: Raven2-Displayressourcen auf drei
+DCN1.01-Kanaele begrenzt, einschliesslich originaler DML-Auswahl und
+aller Frontend/Clock/Stop-Pruefungen. Picasso bleibt vier; gemeinsame MPC
+hat entsprechend dem Original weiterhin vier Crossbarplaetze.
+Bestehende DML/Frontendgruppe rot42/43, gruen43/43;17/17Buildschritte,
+27Ressourcen. Paket AMD39T064,25141136Bytes,SHA256
+0a0154d2274f6920fab3359ae6700858905be6e3a648c6d6c1f190a83908977f, vollstaendig hin-/zurueckuebertragen, VERIFY und
+STAGE80 erfolgreich, COMMIT angefordert. Installation nach Neustart und
+nativer81-Test offen. Letzter physischer Befund63: Pipe1/2 blank akzeptiert,
+nicht vorhandener Pipe3 mit Nullreadbacks faelschlich geprueft.
+Upload+Stage+16MBReserve: 64 MBbenoetigt, vor Transfer 74 MBfrei.
+Altes installiertes InboxpaketQ063 nach Journal-/Hash-/Laengenabgleich
+entfernt, lokale Komplettkopien behalten; private Backups erhalten.
+Kernel213,R4AMD8 und Release0.80.38 unveraendert; alle39-Aufgaben offen.
+
+Native64-Hardwarebefund 23.09.2026: Installation80 nach manuellem normalen
+Boot bestaetigt; nativer CONFIG81 installed, SSH automatisch zurueck.
+Raven2/DCN1.01-Korrektur physisch wirksam: inherited_admit besteht mit
+checked6,power-sampled0,keinem abgewiesenen Kanal. Pipe1/2 sind blank;
+der nicht vorhandene vierte Kanal wird nicht mehr geprueft. Panelbindung,
+Paneldaten und beide GC-Graphics/Compute-Fencerunden bestanden.
+Naechster Fehler: mode_prepare pixel_clock/Io,native0,touched1,
+ATOM-error none,effects1,panel-phase discovered. Der genaue Teilschritt
+(DPREFCLK oder Pixelclock) ist noch nicht erfasst. Hardware wurde bereits
+veraendert; unveraendertes BIOS-Bild wird nicht behauptet.
+Recovery stoppt bei display-close und quarantiniert Ressourcen; GC- und
+aeusserer Firmwareabbau sind in diesem Versuch nicht bestaetigt. Kein
+Uebertrag des RLC-Befunds aus63. DISPLAYD preparing,16588800Bytes device-BO
+retained. Spaeter Bootmitschnitt62190Bytes,dropped0,vollstaendig bis zum
+Erfassungszeitpunkt. Kein nativer Bildnachweis und keine Sichtbestaetigung.
+C:26MB frei; vor weiterem Vollpaket regulaere Updatearchivierung pruefen.
+Beleg Native64/Trial-Proof.json. Alle39-Aufgaben offen; Release0.80.38 bleibt.
+
+AMD-Arbeitspause auf Userwunsch 23.09.2026 nach Native64
+====================================================
+Der User moechte zuerst behindernde Punkte vorziehen. AMD-Arbeiten sind
+pausiert; keine weiteren SSH-Proben, Updates, Neustarts oder Builds laufen.
+0.80.39 und ihre fuenf Aufgaben bleiben Offen. Kein Releaseabschluss,
+keine kanonische Uebernahme und kein Sammelpush; Public-Release0.80.38.
+
+Gesicherter Stand:
+- Lenovo zuletzt per SSH192.168.110.100 erreichbar, normal/automatic
+  gebootet. Kernel0.1.213,AMDGPU0.1.64,R4AMD0.1.8 installiert. Vollpaket80
+  und anschliessender nativer CONFIG-Batch81 jeweils installed bestaetigt.
+  CONFIG bleibt native; DISPLAYD preparing, kein aktiver nativer Scanout.
+  Es wurde zum Pausieren weder rebootet noch auf passive umgeschaltet.
+- Native64 behebt die Ressourcenzahl: Raven2/DCN1.01 hat drei Frontends,
+  Picasso/DCN1.0 vier. Physisch besteht inherited_admit jetzt (checked6,
+  kein rejected pipe). Panelbindung und beide GC-Fencerunden bestehen.
+- Naechster Abbruch pixel_clock/Io,touched1,ATOM-effects1,ATOM-error none.
+  Ob DPREFCLK-Rueckgabe oder eigentliche Pixelclock scheitert, ist noch
+  nicht getrennt protokolliert. Kein nativer Bild-/Beschleunigungsnachweis.
+- Cleanup bleibt jetzt bei display-close; Ressourcen quarantiniert,
+  16588800Bytes device-BO retained. GC-/Firmwareabbau in64 nicht erreicht.
+  RLC_BUSY ist ein separater vorheriger Befund aus63, kein64-Nachweis.
+- Bootlog late-boot.log:62190Bytes,dropped0,vollstaendig bis Erfassung.
+  Native64/Trial-Proof.json bindet Logs per SHA256. Host:43/43Testgruppen,
+  17/17Buildschritte,27Firmware-Ressourcen. Quellen518Dateien eingefroren.
+
+Behinderungen, die sich zum Vorziehen anbieten (noch keine neue Planung):
+1. Updateplatz: C:1023MB gesamt, nur26MB frei; D:112773MB frei. Installiertes
+   AMD39T064.R4U liegt noch in Inbox (~24MB). Nach geprueftem Entfernen der
+   nicht mehr aktiven Quelle waeren nur etwa50MB frei, weiterhin unter dem
+   bisherigen64MB-Budget fuer ein Vollpaket. Private Backups/Quellen bleiben
+   unter SYSUPD; nicht per SFTP loeschen. Verdacht: bindPreviousBackups in
+   SDK/r4os/system_update_engine.zig betrachtet nur das vorherige Journal;
+   zwischengeschaltete CONFIG-Batches verlieren moeglicherweise die Rotation
+   der alten Treiberbackups. Noch nicht als Ursache getestet oder behoben.
+   ARCHIVE-BOOT-BACKUP existiert nur fuer FAT/boot nach C und hilft hier nicht.
+2. Update-/Neustart-/Fehlerabbau: wiederholtes notwendiges manuelles
+   Einschalten und Bootscreen/R4XStart bei unbestaetigter Anzeige verhindern
+   verlaessliche autonome Testfolgen. Kernel213 hat begrenztes Warten und
+   einen Retention-Veto; keine erzwungene Freigabe oder Warmresetumgehung.
+3. Hostplatz: zuletzt nur380MB frei. AMD64-Buildcache bereits entfernt;
+   weitere Builds brauchen ggf. gezielte Bereinigung eigener Buildcaches.
+
+Wiedereinstieg nach ausdruecklichem Fortsetzen:
+1. Diese Notiz und Native64/Trial-Proof.json lesen. Awaiting-Boot.json sowie
+   alte commit-pending-Notizen sind historisch und durch installed80/81
+   ueberholt. Installation64/CONFIG81 nicht erneut ausfuehren.
+2. Vor neuen Transfers Platz und SYSUPD-Status frisch pruefen. Aktive Quelle
+   AMD39N64.R4U und private Journale/Backups unveraendert lassen. Bereits
+   vorbereiteten Software-Rueckfall AMD39P64.R4U nur ueber SYSUPD einsetzen.
+3. Pixeltaktpfad gezielt untersuchen: panel_runtime.zig:pixelClock,
+   Port/dcn_clock.c:r4dcn_reference_clock_program und pixel_clock_program.
+   DPREFCLK-command setdceclock2/1 waehlt den Takt per Firmware; words[0]
+   muss2400..120000 in10kHz liefern. Rueckgabewert noch unbekannt.
+   Original Linux dce112_set_dprefclk/command_table2.c entspricht bislang
+   den verwendeten Parametern. Keine vermutete Taktkonstante einsetzen.
+   Naechster Kandidat braucht getrennte Teilschritt-/ATOM-Rueckgabediagnose,
+   sofern vorher kein belegbarer Fehler gefunden wird.
+4. Frozen Native64Owner nicht veraendern. Neue isolierte Besitzkopie aus
+   Native64/Sources.zip aufbauen, vorhandene Logs nicht ueberschreiben.
+   Native65 existiert noch nicht. Kanonisch weiterhin AMD51/Kernel212.
+5. Danach nativen Panelbetrieb und geordneten Fehlerabbau qualifizieren;
+   Shader/Compute/Codec/HDMI/Audio und sichtbare/hoerbare Abnahmen bleiben
+   offen. VulkanPhysical/VideoPhysical sind vorbereitete spaetere Proben,
+   kein Hardwarebeleg. HDMI-Geraet zuletzt nicht angeschlossen.
+
+Lokale Belege: Temp/AMD08039/Native64/ (Trial-/Installed-/Readiness-Proof,
+Sources.zip/json,AMD39T064.R4U samt Rueckdownload,AMDGPU64.R4D,Logs).
+Weitere Einordnung: Docs/Drivers/AMDIntegration08038.txt,
+Docs/Drivers/AMDReset08036.txt,Docs/SupportedHardware.txt.
+
+
+USB-Zwischenrelease 0.80.39, Vorbereitung am 23.09.2026
+===================================================
+Auf ausdruecklichen Userwunsch wird ein aktuelles Full-Prerelease fuer die
+Neuinstallation erstellt. Dies hebt die AMD-Arbeitspause nicht auf; es
+finden keine Laptopzugriffe statt. Die fuenf Hardwareaufgaben bleiben offen.
+Die eingefrorenen und bereits geprueften Quellen von Kernel0.1.213 und
+AMDGPU0.1.64 wurden mit unveraenderter Baseline kanonisch uebernommen;
+R4AMD0.1.8, R4ACO0.1.3 und R4VIDEO0.1.7 sind enthalten. Die vorstehende
+Pausennotiz beschreibt den damaligen Stand; ihre Aussage AMD51/Kernel212
+als kanonischer Stand ist damit ueberholt. Historische Versuchsbelege bleiben.
+AMDGPU ist im expliziten AMD-Full-Paket enthalten, im Produkt-CONFIG aber
+passive. Native Aktivierung und Hardwareabnahme werden nicht vorweggenommen.
+Recovery0.1.59 bleibt gepinnt. Installieren mit Partitionierung erzeugt
+10GB SYSTEM und5GB RECOVERY; DATA nutzt den verbleibenden Datentraeger.
+Eine solche Neuinstallation loescht alle alten Partitionen einschliesslich
+DATA. Ein blosses R4OS-/Recovery-Update vergroessert sie nicht.
+Releasevorbereitung und neue Pruefbelege: Temp/AMD08039/Release/.
+
+Die kanonischen Besitzerbuilds und der volle Workspace-Build bestehen.
+Das explizite AMD-Full-Image enthaelt114 Module; alle installierten Module
+sind gegen den versiegelten Imageplan gehasht. Zwei SMP4-Starts bestehen:
+Softwarepolicy/oeffentliche API-Transporte/OpenGL-Pixel sowie Desktop mit
+produktiver passiver AMD-Konfiguration, Fenster-Geometrie/Restart/Close und
+vollstaendiger Softwarekomposition. Kein nativer GPU- oder Laptopnachweis.
+Image-SHA256:3516a84bc3c5f7908538a7c06a04a76991e448d96f2eda28a66bf910ce4be49a.
+Belege: Release/Build-Results.json,Build-Full-Result.json,ModuleHashes.json,
+FirmwarePackage-Proof.json sowie Guest/Proof0.json und Proof1.json.

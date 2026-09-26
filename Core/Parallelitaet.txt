@@ -90,7 +90,9 @@ The short SMP4 acceptance performs 64 allocate/write/free cycles per online
 CPU through the real heap owner, including one 512-KB to 2-MB allocation per
 CPU for concurrent growth. It requires every CPU witness and rejects any
 owner-order, cleanup or content failure. Its lock marker also requires the
-retired global-BKL counter to remain zero.
+retired global-BKL counter to remain zero. The same workers also perform
+64 shared mutex-protected increments each; the final count must equal the
+number of online CPUs times 64, with no failed acquisition or unlock.
 
 Serial span output
 ------------------
@@ -209,6 +211,17 @@ while every eighth non-urgent selection takes the raw FIFO head to preserve
 cross-role NORMAL/LOW progress. A contended mutex may donate the waiter's rank
 to its owner for at most 4 ticks and 4 dispatches; donation is removed on the
 final unlock and cannot create an unbounded high lane.
+
+A contended mutex transfers ownership directly to one selected waiter on its
+final unlock. Mutex ID/generation, depth one and the target's canonical held
+lock count are published before Ready. The first successful retry acknowledges
+this handoff without adding recursion depth. New arrivals cannot steal it.
+A hard kill after selection is deferred by the same rule as any other owned
+mutex; the task resumes and unlocks normally. Timeout/cancel/kill before
+selection removes the wait node. Failed wake publication undoes ownership and
+continues to the next candidate. Normal unlock wakes one successor; stale or
+inadmissible waiters cannot strand the remaining queue. The role/FIFO search
+itself remains linear and is not claimed to be constant-time.
 
 A directed single wake chooses the best enrolled wake role and remains FIFO
 inside one rank. Wake-all, cancellation, kill, and retry drains stay strict

@@ -286,3 +286,27 @@ Hardware semantics were checked against these primary Linux references:
 https://www.kernel.org/doc/html/latest/PCI/acpi-info.html
 https://raw.githubusercontent.com/torvalds/linux/master/arch/x86/kernel/apic/apic.c
 (handle_spurious_interrupt, accessed 2026-09-08; no Linux code imported.)
+
+Bounded cooperative kernel work (0.81.15)
+----------------------------------------
+
+The kernel RIP filter remains conservative. Explicit safeReschedulePoint
+boundaries also serve equal-rank Ready tasks once the running quantum has
+expired; urgent wakes still bypass the quantum. A point first rejects any
+outer no-sleep or runtime owner, then checks IF, preemption depth, held
+mutexes and pending wait handoff. Resource lifetime is the caller's duty.
+An UnwindToken permits suspension while preventing hard kill of an unfinished
+transaction; it is not a held owner lock.
+
+Reader-pinned GUI clones/reads already provide boundaries after 64-KB copies,
+command blocks and 128x128 raster tiles. Eager VM commit and failed-commit
+rollback now use the same boundary after at most 64 pages, with the VM owner
+released, the range lease active and the unwind token enrolled. Private
+frames and rollback cursors stay owned throughout. Publication sections and
+other unaudited kernel loops are not made asynchronously preemptible.
+
+The existing short R4LPREEMPT acceptance includes an equal-rank kernel worker
+and ordinary LSTRX on the same AP. The worker processes a private 64-KB buffer
+until LSTRX enters; progress requires a successful explicit boundary. The
+probe checks normal program completion and buffer cleanup. KERNELCOOP reports
+its switches; its success is included in the existing R4LPREEMPT result.

@@ -28,18 +28,45 @@ byte counters make the time/memory tradeoff observable.
 
 Eager non-pageable VM commits acquire naturally adjacent PMM frames in
 batches of at most 64 pages. They never invoke the allocator's whole-memory
-contiguous search. Each natural extent uses one physical-block claim and one
-bounded mapping transaction; a mapping failure removes every PTE installed by
-that transaction before returning. The complete virtual extent is zeroed
-before publication. Uncommit first verifies the exact contiguous PTE/frame
-run, then removes it and releases its physical-block ownership as one prepared
-transaction. Demand-paged R4X faults and Page-State transitions remain
-page-granular.
+contiguous search. A range-scoped transaction and task unwind guard retain
+its identity while the VM owner is released between bounded steps. Physical
+allocation and claim stay under the VM owner; private extents are zeroed via
+the permanent HHDM outside it before the bounded PTE publication. Ordinary
+large requests retain their full size. A request above 64 pages under an
+outer no-sleep/runtime owner returns Busy: dropping an inner VM lock cannot
+make that outer critical section bounded. Small stack/fault commits remain
+legal there. PMM/block-tree discrepancies have a bounded retry budget.
+
+Release, competing commit/uncommit and guard mutations cannot change a range
+with an active resident transaction. On failure, rollback processes the
+mapped prefix in bounded steps and frees private extents only through a
+prepared physical-release transaction. A TLB or metadata failure retains the
+exact prefix/cursor and any private extent under the range ID. A later commit
+or release resumes that rollback; no failed operation reports partial success.
+Demand-paged R4X commitment and the separately bounded commitResident path
+keep their distinct contracts.
+
+Heap growth reserves its unpublished tail under the heap owner, then drops
+that owner across the VM commit. Existing free blocks remain usable and frees
+can coalesce them, but trailing uncommit is suppressed until publication or
+successful cleanup. The grower re-reads the predecessor before joining the
+new free span. A competing grower can wait on a resident predicate-backed
+queue only with interrupts enabled, without an outer owner, preemption guard
+or held mutex. Atomic/no-sleep callers never wait; existing free space or a
+bounded commit remains available. The grower's unwind guard survives both
+preparation and the final wakeup. Heap payload poisoning and ordinary trailing
+uncommit remain separate operations, outside this commit-latency change.
 
 The short SMP4 acceptance profile performs 16 sequential 192-KiB heap churn
 iterations and publishes `HEAPPROBE`. It requires bounded commit/uncommit
 calls, restored live-byte/block counts, bounded retained pages and the full
-poison-byte delta; it is not a subsystem long-run test.
+poison-byte delta. The existing owner stress also starts one 512-KiB to 2-MiB
+allocation per CPU. HEAPPROBE additionally checks a 257-page resident request,
+late overlap with rollback preserving a pre-existing page, zero-before-use,
+complete accounting/release and physical-reserve OOM. It is not a subsystem
+long-run test. Resident batch, maximum-page, unlocked-zero-byte and rollback
+counters expose the bounded commit mechanism; they do not establish physical
+hardware timings.
 
 Program memory
 --------------

@@ -62,10 +62,11 @@ The ownership matrix is deliberately conservative:
   sleepable, ranked mutexes. Only their scheduler-facing waiter transitions
   briefly enter the runtime owner.
 - BSP-only until separately audited: pageable-VM I/O/reclaim, foreground and
-  shell/console programs, services, GUI owners and unaudited R4D callbacks.
-- Parallel-enabled: explicitly marked CPU-only kernel work and the internal
-  LoaderDiag `LSTRX.R4X` background fixture. Child threads inherit the exact
-  audited owner class.
+  shell roles, modules without an audited execution declaration, Desktop
+  and unaudited R4D callbacks.
+- Parallel-enabled: explicitly marked kernel work and background R4X with
+  runtime.parallel=owned-v1 (Calculator, CLIPSVC, LSTRX). Child threads inherit
+  the instance declaration; see the 0.81.19 contract below.
 
 The scheduler runtime owner is reentrant and uses
 acquire/release publication. It is a no-sleep boundary: outside bounded IRQ
@@ -333,3 +334,49 @@ resident semaphore output permit with task unwind binding serializes callback
 lifetime and permits backend waits without holding stream metadata. Busy
 retains source PCM. Backend shutdown first closes its callback admission and
 retains all referenced storage on failed finalization. See Audio/README.txt.
+
+0.81.19: explizite parallele Modulbesitzer
+-----------------------------------------
+R4X koennen META=runtime.parallel=owned-v1 deklarieren. Der Loader validiert
+den Wert einmal; unbekannte oder doppelte Werte sind ungueltig. Ohne Angabe
+oder mit bsp bleibt die bisherige CPU-0-Bindung. Es gibt keine Pfad-/
+Diagnosenamensliste mehr. Hintergrundprogramme werden lastabhaengig auf
+Online-CPUs platziert; neue Threads erben den unveraenderlichen Vertrag der
+Instanz. Ein Task behaelt seine Home-CPU. Foreground und Shell bleiben beim
+BSP-Konsolenbesitzer. Dies ist ein Besitzvertrag im vertrauten Single-User-
+System, kein Sicherheitsmodell und keine oeffentliche Affinity-API.
+
+Freigegeben sind Calculator und CLIPSVC sowie das schon zuvor gepruefte
+LSTRX-Testmodul. Calculator hat einen Hauptthread als GUI-Produzenten,
+instanzlokalen Zustand und ausschliesslich Plattformimporte. CLIPSVC hat
+einen sequenziellen Endpoint-Owner mit eigenem Clipboard-Puffer; Registry,
+Nachrichten, Antwort, Stop und Cancel laufen ueber vorhandene IPC-Owner.
+Sein vorhandener Selbsttest prueft auch einen geerbten Worker mit IPC/Join.
+
+GUI-Produzentenaufrufe und Frame-Metadatenleser teilen je Instanz einen
+UnwindGuard; kein globaler Zeichenlock und kein Lock ueber ganze Frames.
+Unveraenderliche Frame-Referenzen behalten einen Kill-Schutz bis nach Copy
+und Release. Ereignisqueue, Titel und Fenstersnapshot verwenden kurze
+residente Abschnitte; fremde Caller-Puffer werden ausserhalb kopiert.
+Revision/Close werden vor dem Aktivitaetswake veroeffentlicht.
+
+Die freigegebenen VM-Reservierungen behalten Lazy-Zero, sind aber bis zur
+Freigabe oder Decommit nicht auslagerbar. Bestehende Commit-/Residentlimits
+gelten weiter; Speicherknappheit kann OOM liefern. Das ist eine bewusste
+Grenze, solange Page-in/Reclaim CPU 0 gehoeren, keine universelle SMP-
+Freigabe aller Speicher- und Dateipfade.
+
+Weitere Module benoetigen eine Besitzerpruefung ihres gesamten erreichbaren
+Pfads und aller R4L-/R4P-Zustaende. Insbesondere bleiben Desktop/Scanout,
+physische Konsole, dateilastige Apps mit gemeinsamen FAT-Scratchzuständen,
+Synth-/Grafikbibliotheken und nicht einzeln auditierte Driver-/Audio-
+Deadlinecallbacks beim bisherigen BSP-Besitzer. Queue-Metadatensicherheit
+allein beweist keine Callback-Reentranz. AMD/NVIDIA und Klickifax wurden
+nicht freigegeben oder geaendert. Recovery behaelt seinen eingefrorenen
+BSP-Vertrag: ihm fehlen die zusammengehoerigen Scheduler-/GUI-Owner dieser
+Revision. Eine isolierte Parser-/Allowlistenuebernahme waere unvollstaendig.
+
+Die bestehende kurze SMP4-Abnahme startet normale Calculator-GUIs auf CPU
+1/3 und einen CLIPSVC-Selbsttestclient auf CPU 2 neben dem normalen Dienst.
+Sie verlangt Frames/Eingaben, IPC aus einem geerbten Thread, Close, Kill,
+Reap und die wiederhergestellte Payload-Baseline. Keine Hardwareabnahme.

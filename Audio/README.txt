@@ -134,3 +134,35 @@ and their tests are listed in the corresponding inventories.
 The current HDA stream geometry, ownership, IRQ and lifecycle rules are in
 `Docs/Drivers/HdaStreamContract.txt`. `AudioDiagnostics.txt` documents the
 deterministic AudioDiag patterns, QEMU WAV analysis and 60-second ring test.
+
+Kernel PCM ownership (0.81.17)
+-----------------------------
+
+The global stream mutex covers only bounded metadata and ring publication.
+Each writer/closer holds a per-stream transaction reservation plus a task
+unwind token. Conversion runs on a local resampler snapshot and at most one
+16-KB output buffer outside that mutex; only a complete chunk commits its
+phase and bytes. Stream format and program generation remain stable for the
+reservation. Consumers can drain already published bytes in parallel.
+
+The output owner is a resident semaphore permit with an unwind token. It
+serializes backend registry/selection, callbacks and callback lifetime without
+a held stream mutex. A producer only attempts immediate output ownership;
+contention schedules the existing progress worker. Every mix quantum borrows
+at most 1920 bytes from each of eight rings and snapshots volume. The rings
+remain read-reserved until the backend acknowledges the complete output; Busy
+consumes nothing. Close/owner cleanup retries an active producer/read lease.
+Open and last-stream Stop share output ownership, so a new stream cannot race
+the last-stream decision. The internal closeAllStreams reports retry as bool.
+
+Driver cleanup drains current output ownership and closes that backend's
+callback admission before DriverShutdown. A cancelled preparation reopens
+admission; failed shutdown or unregister retains context and generic owner
+resources for retry/quarantine. Status/selection avoid callbacks into a closing
+backend. Recursive public entry from an output callback reports Busy. A
+contended performance summary still supplies stream data but omits callback
+status until a later observation can acquire output ownership.
+
+Synth policy, driver-specific conversion/DMA and the physical device remain
+with their existing owners. This change does not qualify physical audio or
+the excluded AMD/NVIDIA adapters.

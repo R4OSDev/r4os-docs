@@ -334,6 +334,74 @@ background I/O, so the temporary queue detachment cannot create a false clean
 result. Reclaim never discards dirty data, and device invalidation cancels
 speculative work before draining and removing the device identities.
 
+Explicit writeback windows (0.81.29, A2-0015)
+--------------------------------------------
+Explicit device/batch/shutdown drains can stage up to 16 full dirty pages
+(64 KB total) in one fixed resident window. Selected pages keep the existing
+FIFO or batch-sequence order. Physically adjacent selected pages merge up to
+the backend's request limit; at most four disjoint runs enter one window.
+All selected sectors must have the same write-batch owner. A nonzero or
+selective batch uses one contiguous ordered run. Disjoint unscoped runs
+within the current drain may overlap, up to min(4, backend queue depth), with a
+runtime worker plus an asynchronous backend. Synchronous/PIO backends retain
+one in-flight request. No API/ABI table change is required.
+Unscoped does not identify payload: NTFS also caches one-sector metadata
+writes without a batch token. Its seamFlush/deviceFlush boundaries remain
+the ordering and durability contract; no write from a later filesystem
+phase is moved across that boundary.
+
+The cache pins each page and its frame under io_busy, copies into the resident
+window and snapshots every sector's dirty generation. It releases the cache
+owner before block submission/waits. The block batch pins the exact device
+generation until every admitted request has completed, including partial
+failure, reset or timeout classification. Borrowed buffers cannot detach.
+Successful siblings are acknowledged individually; only sectors with the
+same owner and dirty generation become clean. Failed, unsubmitted or redirtied
+state remains dirty. A failed transfer keeps the historical one cache retry
+unless its transport already owns retries. The final flush barrier follows
+only after the complete drain succeeds; existing FIFO flush admission stays
+unchanged. Normal writes to a pinned page still wait until writeback ends.
+
+The window is a single bounded resident allocation in kernel storage, so no
+heap allocation or reclaim recursion is needed. While it is occupied, other
+drains retain the existing single-page path. Partial or mixed-owner pages,
+range invalidation, pressure reclamation and the four-page background budget
+also retain that path. This bounds both added memory and changes to ordering.
+No full-page copy of unrelated clean sectors is written. Window counters in
+the internal cache summary report pages, request sizes and admitted pending
+requests; the stable external performance payload is unchanged.
+
+The existing FSDIAG pagecache mode accepts an explicit FAT data letter:
+`FSDIAG E /PAGECACHE`. E: must be a mounted FAT32 test volume with TEMP
+present. Use 512-byte clusters so this fixture's single-sector writes create
+enough dirty payload pages for the autonomous-pressure assertion. Use a
+separate block device whose first mounted letter is E: for the existing
+storage-owner assertion. Provide a valid partition table, then use R4PART to
+remove the temporary existing E: mount and reassign the additional FAT
+partition from its automatically assigned letter to E:. Its
+large-stream and interleaved-mutation paths now honor that
+selection, and reject a non-FAT volume before mutation. Managed C: and D:
+are NTFS; the NTFS metadata/cold-read probes remain on C:. No FAT assertion
+was weakened to make an NTFS fixture pass.
+
+Host evidence uses the actual cache-window and block-batch function bodies
+with the real cache policy index and controlled queue/completion seams:
+16 contiguous pages become one 64-KB request; four separated unscoped pages
+reach four pending requests (two at device depth two, one for synchronous
+backends). Selective/mixed ownership, partial pages, smaller device limits,
+submission backpressure, partial completion failure, one-retry ownership,
+changed dirty generations, occupied staging, stale/retiring devices and
+flush-after-drain ordering retain their invariants. This is a bounded work
+and ownership result, not a hardware throughput or FPS measurement.
+
+The focused QEMU/KVM integration check with four vCPUs passed: two concurrent
+block writes retained their device pin through out-of-order partial failure
+and drained completely. FSDIAG /PAGECACHE and /NTFS both passed with the
+separate 64-MB FAT partition described above: 1-MB stream/checksum, selective
+durability, autonomous dirty progress, cold NTFS reads, reclaim and 1-MB
+move/replace/cross-volume checks. TestInjection was restored and the regular
+kernel rebuilt without the optional block selftest flag. No hardware run.
+
 Speculative read-ahead is deliberately disabled in 0.75.6. Adaptive and
 single-page variants were exercised against the subsystem/AUTOEXEC workload
 after contiguous demand fills were introduced; every variant reproducibly

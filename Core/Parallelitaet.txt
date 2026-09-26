@@ -87,7 +87,8 @@ Waiting task-context callers briefly restore interrupt delivery between
 failed attempts so the higher-priority TLB IPI remains serviceable.
 
 The short SMP4 acceptance performs 64 allocate/write/free cycles per online
-CPU through the real heap owner, requires every CPU witness and rejects any
+CPU through the real heap owner, including one 512-KB to 2-MB allocation per
+CPU for concurrent growth. It requires every CPU witness and rejects any
 owner-order, cleanup or content failure. Its lock marker also requires the
 retired global-BKL counter to remain zero.
 
@@ -151,15 +152,31 @@ keeps this stack contract synchronized with the assembly restore frame.
 Scheduler work sets
 -------------------
 
-The stable Task registry owns identity and inventory only. Three intrusive
-projections derive from it under the IRQ-disabled state-transition boundary:
-the Ready FIFO, a stable ordered finite-deadline queue, and deferred-reap
-candidates. Runnable selection and starvation diagnostics visit Ready tasks;
-timeout dispatch starts at the deadline head and stops at the first future
-wait. Equal deadlines retain enrollment order. One timer IRQ wakes at most 64
-due tasks, leaving an ordered and diagnosed backlog for the next delivery. A
-reaper pass visits only the candidates present at its start. Blocked unrelated
-tasks do not increase these hot paths.
+The stable Task registry owns identity and inventory only. Its intrusive
+projections remain under the shared runtime owner: one Ready FIFO per CPU,
+four Ready-rank AVL indices, the finite-deadline AVL with its ordered list,
+and deferred-reap candidates. Index nodes live inside their stable Task;
+mutation never allocates or swaps Task payloads. Rank selection visits at
+most four cached heads. Each rank is ordered by original Ready enrollment,
+so donation or budget changes preserve the former FIFO tie rule. Every eighth
+non-urgent selection still uses the global FIFO head in constant time.
+
+Ready insertion/removal, rank changes and deadline insertion/removal take
+logarithmic index work. Deadline neighbors maintain the existing list;
+its cached head still drives timeout dispatch and tickless idle. Equal
+deadlines retain enrollment order. Independent 128-bit enrollment serials
+remove the former whole-list renumbering at the 64-bit sequence boundary;
+64-bit deadline saturation remains unchanged. One timer IRQ wakes at most
+64 due tasks, leaving an ordered backlog for the next delivery. A reaper
+pass visits only the candidates present at its start.
+
+With metrics enabled, every sixteenth tick samples at most eight Ready tasks
+per CPU through a rotating cursor. Unlink moves that cursor before a Task can
+retire. Starvation warnings may therefore lag by a sweep of the Ready set,
+but diagnostics no longer scan the whole list in one IRQ. Held diagnostic
+mutex-slot totals are maintained at acquire/release; reading lock metrics
+no longer scans the Task registry. These limits bound diagnostic work without
+changing dispatch, wake, cancellation or object lifetime.
 
 Active execution retains the periodic scheduler source needed for preemption.
 When the current task is truly idle, HPET or the calibrated LAPIC is switched

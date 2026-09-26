@@ -21,32 +21,55 @@ durable point. Cleanup is identity-checked: an unrelated file that later
 appears under the same path is never deleted as if it were the old partial
 upload.
 
-Copying (0.78.28)
+Copying (0.81.27)
 -----------------
-SDK file_stream.copy and Files.copy use file_copy_buffered, one paired
-filesystem request for source lookup, destination identity check and every
-chunk. The caller keeps exclusive ownership of its nonempty buffer until
-return. R4SYS revision 18 appends this optional slot; Query:1 is unchanged.
-An older provider returns unavailable without a truncate/read fallback.
-The C facade exposes the same operation through r4_files_copy.
+SDK file_stream.copy and Files.copy use the optional file_copy_buffered slot
+(R4SYS revision 18, Query:1 unchanged). The paired request retains both mount
+uses, task unwind lifetime and canonically ordered volume mutation leases.
+Backend gates cover lookup/stage creation and individual read/append/flush
+calls. A completed chunk yields with those backend gates released, so other
+tasks can read files or metadata on either volume. Other writers remain
+excluded for the complete copy. This is not per-file writer parallelism.
+Nested legacy callers retain exclusive gates if a parent still owns one.
+Read-to-write upgrades never wait while holding a backend gate needed by an
+existing mutation owner. Mount-use retention also excludes unmount/claims.
 
-The 32-byte FileCopyProgress payload contains version/size, completed bytes,
-source size, append count and maximum completed chunk. File-stream result
-codes distinguish success, invalid/same-file input, missing source, size
-above 4 GB and I/O failure. A successful return includes the final flush.
-After failure the provider attempts to remove its incomplete destination
-under the same request; cleanup I/O can fail. Progress never implies that
-a partial target is durable or still present, and is not a retry offset.
-Replacing an unrelated destination retains the existing non-atomic copy
-contract. Atomic document publication continues to use replaceAtomic.
+Native copy, buffered copy and the move fallback use the same transfer path.
+Each chunk is at most 32 KB. Native callers own one private heap buffer;
+buffered callers exclusively own their nonempty buffer until return. The
+32-byte FileCopyProgress reports source size, completed staged bytes, append
+count and maximum chunk. Errors, including cancellation, do not turn this
+progress into a retry offset or durability claim. Older providers return
+unavailable without a truncate/read fallback; the C facade has parity.
 
-Native copy and move reject aliases before stream invalidation. NTFS uses
-the record plus sequence, FAT uses the live short-entry sector/offset and
-also rejects shared nonempty cluster chains. Empty FAT files with different
-directory locations remain distinct. Backend/VFS copy preflight repeats
-the identity guard before destination mutation. Generic native copies own
-one 32-KB heap buffer per operation, released before the paired request's
-unwind guard ends; disjoint volume pairs can still proceed independently.
+Source identity is checked before destination mutation: NTFS record/sequence,
+FAT short-entry location or a shared nonempty chain. The inline source Entry
+and mount lease survive individual calls; no backend scratch pointer escapes.
+A bounded unique 8.3 stage is built in the target directory. The old target
+remains readable until the final metadata phase. Source/target aliases,
+read-only targets, allocation errors and cancellation before publication do
+not replace it. Prepublication cleanup attempts to delete the owned stage;
+cleanup I/O failure can retain it, but memory/leases always unwind.
+
+After flushing the stage, the final backend gate deletes the old target and
+publishes the completed stage. This retains the existing non-atomic copy
+contract. FAT persists detachment of the short stage owner before installing
+the new target (including LFN), preventing two durable names that each free
+the same chain. A failure at this boundary can leave a missing/partial target
+or orphaned completed payload; publication is never automatically retried,
+rolled back or followed by unsafe stage deletion. Atomic document replacement
+still uses replaceAtomic. NTFS uses its existing same-directory rename path.
+A move deletes its source only after successful copy publication; a failed
+source delete can leave both complete files, as before.
+
+A2-0014 evidence: existing storage-test extended with the bounded transfer
+case; actual request and R4SYS adapter bodies tested on the host for reader
+admission, mutation exclusion, retained uses, nested admission rollback,
+aliases, OOM, cancel, read/append/flush failure and caller buffers. A 70001-byte
+copy uses 3 chunks (maximum 32768 bytes); an 8192-byte caller buffer uses 9.
+The FAT publication-body test injects each detach/flush/publish boundary.
+Kernel build and existing QEMU testquick with four vCPUs also passed.
+These are software-work and ownership checks, not physical latency results.
 
 
 NTFS random-write failure progress (0.78.29)

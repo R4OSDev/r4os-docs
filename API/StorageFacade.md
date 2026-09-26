@@ -190,3 +190,33 @@ unavailable. Exact completed bytes, source size, chunk count and largest
 chunk remain available on failure. Success includes final flush; failed
 copy cleanup can itself fail, so progress is not a durable retry offset.
 Same-file aliases are rejected before any destination preparation.
+
+
+## Resumable directory generations (0.81.26)
+
+`Files.iterate` and `r4_files_iterate` use optional R4SYS `directory_next`.
+The caller owns the 1088-byte cursor; discarding it cancels without a close
+operation. Each call validates the logical caller, mount generation,
+directory identity and mutation history under the filesystem request gate.
+The backend retains physical FAT position/LFN state or a bounded NTFS I30
+stack. A call examines at most 256 physical entries before returning progress;
+the facade resumes after a cooperative yield. A found entry also carries its
+FileInfo metadata, avoiding a separate name lookup for every row.
+
+EOF is explicit. Restart (-10), I/O and output-capacity errors are failures,
+never a successful partial listing. On restart discard all accumulated rows
+and create a new iterator. A directory-change cursor must also bracket work
+performed after enumeration when a consumer publishes a complete generation.
+Older tables retain legacy index enumeration. Explicit index positioning and
+`revisitAfterRemoval` preserve their old live-index semantics.
+
+Explorer retains one complete sorted generation and uses binary page
+selection. A changed directory, navigation, refresh or sort configuration
+builds a private candidate before replacing the visible rows. Each generation
+is limited to 16 MB; old and candidate storage, including allocation growth,
+can overlap. Capacity exhaustion/OOM does not truncate results and retains the
+previous view. Shortcuts keep their existing title/icon resolution policy.
+
+A2-0013: R4SYS v25 haengt directory_next an Slot 155 an, alte Slots/Signaturen bleiben unveraendert. 1088-Byte-Cursor im Aufrufer bindet logischen Thread/Generation, Mount, Verzeichnis und Aenderungssequenz; keine permanente Kernelallokation oder Closepflicht. Maximal 256 physische Eintraege pro Aufruf, Fortschrittsrueckgabe statt langem Gatebesitz; FAT haelt Cluster/Slot/LFN, NTFS einen I30-Stack von maximal acht Ebenen. Mutationen, History-Overflow, Owner-/Mount-/Pfadwechsel verlangen expliziten Neustart und Verwerfen der Teilgeneration; Fehler liefern kein EOF. Namen und FileInfo kommen gemeinsam aus demselben Eintrag. Zig- und C-Iteratoren verwenden den optionalen Tail mit altem ABI-Fallback; explizite Delete-Iteration behaelt nach revisitAfterRemoval die bisherige Live-Indexsemantik. Explorer 0.1.19 baut eine vollstaendige sortierte Kandidatensicht auf (maximal 16 MB je Generation), publiziert erst nach EOF/Aenderungspruefung und nutzt danach binaere Seitensuche ohne erneute Enumeration. OOM/Lese-/Mutationsfehler behalten die letzte vollstaendige Sicht. Vorherige und neue Generation koennen waehrend des Aufbaus nebeneinander leben; 16 MB ist keine Zusage fuer Gesamt-/Spitzenspeicher. Kein stiller Erfolgsbeschnitt. Kernel 0.1.229; Recovery/Kernel 0.1.61, Menu 0.1.23 mit kompatibler Owneruebernahme, eingefrorenem Scheduler und unveraenderten 39 importierten Runtime-Modulen. Recovery nimmt erforderliche FAT-LFN-/Wachstumsregeln und VFS-Aenderungsbenachrichtigungen mit; fehlende optionale R4SYS-Tails bleiben Null. Kontrollierte Contract-Baselines nach Signatur-/Slotpraefixvergleich neu erzeugt; keine andere Plattformgruppe erweitert.
+
+Nachweise: bestehender NTFS-Tree-Hostlauf PASS (1700 Dateien/1905 physische Cursorbesuche statt mindestens 1445850 Namen bei wiederholter Praefixauswahl; lange Namen, mehrstufige Indizes, halbe/vollstaendige Loeschung, 2000 Mutationen und 5x40 Crashbudgets). Aktuelle FAT-Cursor-/LFN-Funktionskoerper mit RAMsektoren: 2000 Dateien/2001 Slotbesuche und 126 Cluster, 255 UTF16-Einheiten ueber Cluster-/256er-Grenzen, EOF, IO, ungueltige FAT-Linien, Zyklen und LFN-Pruefsummen PASS (3 Faelle). Aktueller R4SYS-Funktionskoerper mit Gate-/Mountmocks: Fehler lassen Cursor/Output unveraendert, Restart nach Owner/Mount/Knoten/Mutation/Overflow, Fortschritt/EOF und kein verbliebener Mountpin PASS. Bestehende Zig-Storagefacade 4/4 und C-Facade mit neuem/kleinem Table, Restart/Metadaten/EOF/Removal PASS. Aktuelle Explorer-Seitenfunktion mit injiziertem Allokator und R4SYS-Mocks: 130 Eintraege einmal (131 Aufrufe), mehrere Seiten ohne weitere Enumeration/Metadatareads, IO/Mutation/OOM erhalten vorherige Ansicht PASS. Vorhandene Storagebesitzertests 18/18, Contract-Generator 26/26 Mutationen plus Zig/C-Layouts PASS. Normale Kernel-/Explorer- und Recovery-Builds PASS. Kein neuer Dauer-Gate, kein Hardware-/QEMU-Test, keine Laufzeit-/FPS-Zusage. Belege Temp/Astra2/Implementation/*-26-*.log. Astra2.json historisch unveraendert.

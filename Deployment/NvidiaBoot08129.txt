@@ -1,0 +1,76 @@
+﻿OssiPC: Startblockade mit Release 0.81.29
+========================================
+Stand: 28.09.2026; Korrektur NVIDIA 0.1.145.
+
+Befund
+------
+Der OssiPC (GA106, 10de:2504 / 1458:4074) startete Release 0.81.29 mit
+Kernel 0.1.231 und NVIDIA 0.1.144. SSH, Dienste und Desktop-Task liefen,
+waehrend der Bildschirm bei Desktop starten / Fehler: AMDGPU stehenblieb.
+Die installierten Partitionen sind bereits SYSTEM 10240 MB und RECOVERY
+5120 MB; die frueher beobachteten kleinen Partitionen sind nicht mehr aktiv.
+
+Zwei unabhaengige Fehler:
+- Full enthaelt NVIDIA, aber kein AMDGPU.R4D. CONFIG.R4S enthielt trotzdem
+  DRIVER=AMDGPU. Der Kernel meldete zu Recht die fehlende Datei; diese erste
+  Fehlermeldung blieb auf dem Startbildschirm stehen.
+- NVIDIA nahm den Bootbildschirm an sich, reichte seine Startschritte jedoch
+  mit gewoehnlichem DriverWork ein. Diese Auftraege besitzen die
+  Treiberidentitaet, aber nicht den fuer gfxDisplayBootInfo erforderlichen
+  Lifecycle-Owner. Daher scheiterte checkLive im ersten FRTS-Schritt mit
+  Display, effects=false, memory-retained=false. Der Boot-Hold blieb erhalten.
+  DISPLAYD /STATE meldete preparing, pending-owner=8, pending-generation=2,
+  backend=none und Software fallback: unavailable. Die AMDGPU-Dateimeldung
+  war somit nicht die Ursache des unsichtbaren Desktops.
+
+Korrektur
+---------
+NVIDIA 0.1.145 verwendet den vorhandenen workSubmitOwned-Vertrag. Version,
+Tabellengroesse und Callback werden vor Ressourcen-/PCI-/Boot-Hold-Zugriff
+geprueft. Fehlende Unterstuetzung laesst den Firmwarebildschirm verfuegbar.
+Ein belegter Lifecycle-Owner hat keinen Callback ausgefuehrt und wird nach
+Freigabe seines Completion-Tickets begrenzt wiederholt (5 s / 4096 Versuche).
+Noch ausstehende Completion-Wakeups behalten dasselbe Ticket bis zur
+Freigabe oder zum Timeout. Alle Wartezeiten liegen im separaten Treibertask.
+Kernel-API und AMDGPU-Treiber wurden nicht geaendert.
+
+Distribution gleicht nach allen Overlays die beiden optionalen GPU-
+DRIVER-Eintraege mit den R4D-Zielen des fertigen Imageplans ab. Fehlende
+GPU-Dateien werden nicht mehr zum Laden eingetragen. Explizite AMD-Images
+behalten AMDGPU und dessen vorhandene Policy; sonstige Einstellungen bleiben
+unveraendert. Die Quellkonfiguration wird nicht ueberschrieben.
+
+Nachweise
+---------
+NVIDIA: vorhandene Lifecycle-Testgruppe einschliesslich ABI-Ablehnung,
+tatsaechlichem Pacing-Task, Owned-Callback, Busy-Wiederholung, spaeter
+Completion-Freigabe, Cancellation und Timeout bestanden; Modulbuild und
+gepinntes Firmware-/Containerpaket bestanden.
+Distribution: beide/einer/keiner der optionalen GPU-Treiber sowie
+unveraenderte Overlay-Einstellungen geprueft; kanonischer Full-Imageplan
+mit NVIDIA und ohne AMDGPU-Ladeeintrag erfolgreich erzeugt.
+Keine zusaetzliche Test-Gategruppe und kein Hardwarebenchmark angelegt.
+Diese Hostnachweise belegen keine physische native Grafikausgabe.
+
+Bereitgestelltes administratives R4U:
+NVIDIA-BOOT-0.1.145-0.81.29.R4U, 107660439 Bytes
+SHA256 c46864b8fa6f2edbcd7124fc20ca93a1d4e55acf556ab2ac8e311e56f529f0fa
+Zwei Payloads: NVIDIA.R4D und die angepasste CONFIG.R4S des OssiPC.
+Voraussetzung: aktiver Kernel >= 0.1.231. Zielrelease bleibt 0.81.29.
+Das bereits veroeffentlichte Release-ZIP v0.81.29 wird nicht veraendert.
+
+Lokale Belege: Temp/OssiBoot08129/ und Temp/OssiBootFix/.
+Installation am 28.09.2026
+--------------------------
+R4U vollstaendig aus der administrativen Inbox zurueckgeladen; SHA256 stimmt
+bytegenau. SYSUPD VERIFY result: OK; STAGE: batch=1, packages=1; COMMIT
+result: OK state=Pending restart, 107659240 Payloadbytes angewendet.
+Beim angeforderten Neustart brach die Netzwerkverbindung ab. Ein erneuter
+Boot und die aktive Treiberversion sind bisher nicht bestaetigt. Daraus
+folgt keine native Hardwarefreigabe und keine bestaetigte Desktopreparatur.
+Das Systemupdate-Journal ist nach dem naechsten erreichbaren Start mit
+SYSUPD RESUME-BATCH abzuschliessen und anschliessend mit SYSUPD STATUS,
+MODULES.JSON, DISPLAYD /STATE und DISPLAYD /NVIDIA zu kontrollieren.
+Bei weiterhin fehlender nativer Ausgabe den vorhandenen Bootmenueintrag
+R4OS Software Graphics verwenden. Kein erneutes Einspielen des unveraenderten
+0.81.29-Release-ZIP: es enthaelt weiterhin NVIDIA 0.1.144.

@@ -106,8 +106,10 @@ Gemeinsamer Vertrag und Folgestart
 ---------------------------------
 GfxDriverMemoryApi bleibt wire1 und waechst optional auf 208 Byte:
 device_lost liegt bei 200. GfxDriverDisplayApi bleibt wire1 und waechst auf
-136 Byte: device_reset bei 120, prepare_reset bei 128. Die Resetfaehigkeit
-erfordert beide Displayfunktionen. Alte Tabellenpraefixe bleiben nutzbar.
+144 Byte: device_reset bei 120, prepare_reset bei 128 und die optionale
+terminal_release bei 136. Die Resetfaehigkeit erfordert weiterhin die
+beiden Resetfunktionen; terminal_release wird getrennt ueber Tabellenlaenge
+und Slot geprueft. Alte Tabellenpraefixe bleiben nutzbar.
 Details: Repositories/Contract/ABI/R4DDriver.txt.
 
 device_reset(q0) wechselt die genaue alte Displaybindung auf recovering.
@@ -115,6 +117,35 @@ q1 darf erst nach GPU-Stillstand alte gemeinsame Queue-, Cursor-, Modus-
 und Ausgabebesitzer ausraeumen. prepare_reset fordert eine neue Queuebindung
 und eine neue Displaygeneration; die alte Bootsicherung bleibt identisch.
 Keiner dieser Metadatenaufrufe ersetzt einen Hardware-Nachweis.
+
+
+Kernel 0.1.232 ergaenzt terminal_release fuer das endgueltige Herunterfahren.
+Erst ein erfolgreich quittierter quiesced-device_reset mit genau demselben
+Treiber, Backend und der zurueckgegebenen Resetgeneration erlaubt, die
+gehaltene CPU-Bootsicherung freizugeben. Der gemeinsame Abbau aller Queue-,
+Modus-, Cursor-, Ausgabe- und nativen Bridge-Nutzer muss abgeschlossen sein.
+Die Ausgabe bleibt unavailable; Firmware- und normale Bildschreiber bleiben
+gesperrt. Weder Restore-Callback noch Pixelkopie werden ausgefuehrt. Busy
+haelt die Abbauidentitaet fuer einen begrenzten Wiederholungsversuch; nach
+Erfolg ist nur der identische Freigabeaufruf idempotent. Fremde, alte oder
+noch nicht abgebaute Bindungen geben keine Ressourcen frei.
+
+NVIDIA 0.1.154 bindet diesen Abschluss in den System-Shutdown ein. Der
+pausierte Work-Task behaelt Device und IRQ-Wecksemaphore bis zu deren Abbau.
+Der gesunde Headless-Pfad schliesst neue Arbeit, leert CE/GR samt bestehender
+Telemetrie und baut RM-Graph, RPC47/Suspend sowie SB/Booter Unload ab. Erst
+ein bestaetigter FLR/DMA-Stillstand erlaubt die gemeinsame Resetquittung und
+terminale Displayfreigabe. Es folgen weder Restage noch GPU-Neustart.
+Bereits gehaltene API-Tabellen tragen den Abbau nach Sperre neuer Abfragen.
+Falsche Quittungen, unruhige Hardware oder Borrower behalten Ressourcen;
+CPU-Freigabefehler behalten die exakte Wiederholungsidentitaet. Unvollstaendige
+Starts und aktive Displayengines bleiben im konservativen Resetpfad.
+
+Kernel232/NVIDIA154 sind lokal gepruefte Kandidaten. Die bestehenden Owner-
+und SMP4-CPU-Pruefungen ersetzen weder physischen DMA-Stillstand noch den
+OssiPC-Abbau oder zwei normale Warmstarts nach GPU-Arbeit; diese Nachweise
+bleiben in 0.82.1 offen. Belege und genaue Paket-/Artefakthashes:
+ExFiles/Reports/OssiGPU/20260929-terminal/Candidate154.json.
 
 Bei nicht wiederherstellbarer Ausgabe bleiben SSH und serielle Diagnose
 unabhaengig. Die Meldung nennt den vorhandenen Limine-Eintrag

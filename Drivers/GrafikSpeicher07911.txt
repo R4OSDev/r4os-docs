@@ -1,6 +1,286 @@
 ﻿NVIDIA-Speicherbesitz 0.79.11
 =============================
-Stand: 12.09.2026, NVIDIA 0.1.77. 0.79.11 softwareseitig abgeschlossen;
+Aktualisierung 29.09.2026 / Roadmap 0.82.1:
+Die unten beschriebenen RM-verwalteten VA- und MAP_MEMORY_DMA-Pfade sind
+historische Hostnachweise. Auf der realen GA106 liefert MAP_MEMORY_DMA
+auch mit bestaetigtem SplitVAS=false NV_ERR_INVALID_FUNCTION. NVIDIA
+0.1.159 verwendet deshalb im nativen Lauf einen externen FERMI_VASPACE_A
+mit eigenen MMU-v2-Tabellen, SET/UNSET_PAGE_DIRECTORY und einer bestaetigten
+PF-TLB-Invalidierung. Derselbe Besitzer verwaltet System-BOs, physisch
+zusammenhaengendes VRAM und Aliase; Tabellen bleiben bis zum bestaetigten
+Abbau oder unabhaengigen Reset-Ruhenachweis gehalten. Original-C-Vergleich
+und Hostmodelle ersetzen keine physische Mapping-/CE-/GR-Abnahme.
+OssiPC nimmt mit159 den externen Root und die Kontrollpuffer-PTEs samt
+PF-Invalidierungsabschluss an. Der folgende Kontextuebergang scheitert mit
+Unsupported; echte GPU-Zugriffe und sauberer Abbau bleiben offen.
+Mit160 erreicht COPY0 die Kontextanlage; private Methodenpuffer verlangen
+anschliessend explizite Nullung, weil das automatische Clear-Cap fehlt.
+161 ergaenzt den originalen GSP-MEMSET vor Mapping/Publikation. Physisch
+scheitert noch der Decoder an der erfolgreichen VRAM-Zuteilung: RM
+normalisiert Flags und Heapbereich.162 korrigiert die eng begrenzte
+Auswertung anhand des originalen heap.c und der echten161-Quittung.
+Clear und GPU-Arbeit bleiben physisch offen. OssiPC ist nach einmaligem
+WoL wieder auf Softwaregrafik mit NVIDIA0.1.161, Batch16. Aktuelle Belege und
+offene Abnahmen: ExFiles/Reports/OssiGPU.txt. Kernel 0.1.232, Release 0.82.0.
+
+162 bestaetigt expliziten Clear und COPY0-Kanal, aber noch keine GPU-Pixel.
+Das16MB-Grafikmapping scheitert bei10047488Bytes an der5s-Frist.163 fasst
+PTE-Edits begrenzt zusammen (64Seiten/250us), behaelt Frist/TLB-ACK und
+meldet fuer R4NV die ausgerichtete Nutzspanne der externen VAS. Software162,
+Batch18 ist nach einem WoL sauber; Hardware163 und Warmstart bleiben offen.
+
+163 bestaetigt alle18 privaten Mappings/21168128Bytes, COPY0 und die GR-
+Initialisierungsbarriere. Im anschliessenden Renderstart folgt PBDMA0x20
+fuer den regulaeren GR-CID8.164 erfasst die bisher fehlenden inline NoCat-
+Diagnosedaten begrenzt im vorhandenen Workerlog. Noch keine Copy-/Render-
+Pixelabnahme; Software163/Batch20 nach einem WoL, BO/Pins/Retain0. Bekannter
+SbProgress-/Deadline-Abbau und zwei saubere Warmstarts bleiben offen.
+164 sichert die NoCat-Daten vollstaendig ueber den Textfilter. FIFO-Payload
+und GR-Registerdump sind im OssiGPU/native164-Beleg enthalten; ein
+funktionaler PBDMA-Fix folgt daraus noch nicht.165 ergaenzt begrenzte
+Lesediagnosen der gehaltenen CE-/GR-Systemringe beim ersten fatalen Fehler.
+165 fragt ausserdem CE_GET_CAPS_V2 ab und waehlt fuer eigenstaendige
+Copy-Kanaele nur asynchrone Motoren mit SYSMEM. Die GRCE-Paarung bleibt
+erhalten. Ob dies den physischen PBDMA-Fehler behebt, ist noch offen.
+Aktueller Rueckweg: Software164/Batch22, BO/Pins/Retain0 nach einem WoL.
+Hardware165 beendet die neue CE-Abfrage mit0x56/NOT_SUPPORTED, noch vor
+CE-/GR-Kanaelen. CE_GET_CAPS_V2 ist eine Hostfunktion.166 verwendet nach
+kceGetDeviceCaps_IMPL stattdessen CE_GET_PHYSICAL_CAPS/0x20802a07 mit den
+internen Client-/Subdevice-Handles aus der bestaetigten GSP-Statiksicht.
+Fuer GA106 ergaenzt der Host nur NVLink-Performancebits; GRCE/SYSMEM werden
+weiter aus der echten Firmwareantwort gelesen und nicht erfunden.
+Original-C- und Device-Vergleiche pruefen nun auch diese genaue Route.
+Software165/Batch24 ist bestaetigt, BO/Pins/Retain0; SSH kam diesmal ohne
+WoL zurueck. Dies geschah ohne vorherige CE-/GR-Arbeit und erfuellt T7 nicht.
+Hardware166 bestaetigt die physische CE-Abfrage: COPY0/1 sind GRCE,
+COPY2 ist eigenstaendig mit SYSMEM und Runlist1. GR-Initialisierung
+schliesst ab, aber der erste CE-Shaderupload wird nicht abgeholt:
+GPGET0/GPPUT1, Token0x8; GR GPGET1/Semaphore1 mit Token0x10.
+167 fragt den Token ueber den originalen Kernel-RM->Physical-RM-Control
+0xc36f0301 ab. Der bisherige oeffentliche0xc36f0108 hat zusaetzliche
+Hostlogik; Ampere unterscheidet Host- und interne GSP-Tokens. Rueckgaben
+bleiben opak und unveraendert. Verfuegbarkeit und GPU-Wirkung bleiben
+bis zum physischen Lauf offen. Original-C prueft die28-Byte-Pakete und
+unterschiedliche Tokenwerte; Device-Modelle verlangen den genauen Befehl.
+Software166/Batch26 ist mit BO/Pins/Retain0 bestaetigt; der Ruecklauf
+brauchte nach120s einmal WoL. Kein positiver CE-/GR- oder T7-Nachweis.
+Hardware173 bestaetigt mit R4NV15 erstmals beide vollstaendigen Pixelrunden:
+je512 CE-Pixel und GR-Fill153/preserved359/readback512, insgesamt8 CE/2 GR
+mit2048 exakten Vergleichen. Surface-Clip ist auf GA106 damit bestaetigt.
+Der Gesamtsmoke bleibt wegen Ressourcenbilanz rot: Nach Ende der Verbraucher
+halten gecachte Systemmappings weitere Referenzen; nach zwei Runden sind
+16384 Bytes retained. Die erste Bilanz wird ausserdem noch waehrend eines
+nativen131072-Byte-Abbaus aufgenommen. Weder das Freigabekriterium noch der
+zweite Vergleich werden deshalb als bestanden gewertet.
+
+NVIDIA178: Erste Zulassungsfehler vor der Quarantaene festhalten
+Die vorhandene Fehlerdiagnose nennt zusaetzlich die erste Pruefphase,
+die Gueltigkeit der gehaltenen Speicheridentitaeten, failed/recovery,
+Queue-Epoche, Queue-/Log-Syncstatus sowie Reader-/FRTS-Fehler. Der Snapshot
+entsteht vor dem nachfolgenden Quarantaene-/Resetabbau, der diese Zustaende
+selbst veraendert. Ausschliesslich bereits gehaltene CPU-Metadaten werden
+gelesen; weder neue Tabellenabfrage noch MMIO/RPC oder Fehlerwiederholung.
+Alle Zulassungs-/Freigabegrenzen bleiben bestehen. Diese Ergaenzung grenzt
+den realen176-Stale ein und ist kein Nachweis seiner Behebung.
+Modulbuild7/7, vorhandene Devicegruppe5/5 (1/1) und direkter Stackcheck
+bestanden; frischer SMP4/KVM-Gast ebenfalls bestanden(59.64s). Physisch178 ist installiert und vollstaendig hashidentisch gelesen. Nach laengerem Leerlauf bestehen erneut8CE/2GR/2048 exakte Pixel samt ruhender Bilanz.177->178 zeigte noch Stale, aber mit bestaetigtem177-Fehlerabbau/resources0/normalem Warmstart. Der Stale-Ausloeser bleibt offen.
+
+NVIDIA177: Native Freigabetickets waehrend des Fehler-Resetabbaus bedienen
+Die erweiterte vorhandene Headless-Devicefixture erzwingt auch nach einem
+GPU-Fehler die echte treiberweite Collectionbarriere.176 bleibt nach61
+Abbauschritten im ersten FIFO mit Retained stehen: dessen eigene Leihen
+sind bereits quittiert, aber native BOs warten noch auf Treiberfreigabe.
+177 bedient nach gueltigem Reset-Ruhenachweis zwischen den Abbauschritten
+jeweils ein exakt gebundenes natives Freigabeticket. Die regulaere
+Native-Phase schliesst weiterhin Produzenten und wartet auf deren Nutzer.
+Es gibt keine erzwungene Leasefreigabe, keinen RM-Aufruf nach Reset und
+keinen Ersatz fuer den physischen DMA-Stopp. FIFO-/Controlbesitzer duerfen
+nur bei einzeln quittierten Leihen und ausdruecklichem collector-busy auf
+den naechsten Schritt warten. Ihre Metadaten und Namensraeume bleiben bis
+zur abschliessenden Collection erhalten; andere Fehler bleiben Fehler.
+Der Repro besteht danach:6Collections,2 berechtigt busy, alle nativen BOs
+retired und unveraenderte TX-Sequenz nach Reset. Normaler Terminalfall
+weiter6Collections/0blocked mit vollstaendigem Abbau. Device5/5 mit1/1 Test,
+Modulbuild7/7, direkter Stackcheck und frischer SMP4/KVM-Gast bestanden. Hardware177 besteht zwei konsekutive GPU-/Warmstartproben ohne Wake mit resources0; der Fehlerabbau ist im spaeteren177->178-Update ebenfalls physisch bestaetigt.
+NVIDIA176: RUSD bleibt beim terminalen Unload bis zum Reset gebunden
+570.144 auf GA106 lehnt INIT_USER_SHARED_DATA mit physAddr0 mit1f ab.
+Die Originalfunktion gpuDestroyRusdMemory_IMPL baut nur den Speicher ab;
+sie sendet keinen entsprechenden Deinit-Control. Der terminale R4OS-Pfad
+setzt deshalb bereits bei beginShutdown die Firmware-Lebensdauerpolicy:
+Pollmaske und endliche Boostanforderung werden normal quittiert geleert,
+die vorhandene RUSD-Seite bleibt danach gebunden und retained. Es wird kein
+neues physAddr0-RPC gestartet. Dies ist keine erfolgreiche Abmeldung und
+kein closed-Zustand: Freigabe folgt erst nach bestaetigtem physischem Reset.
+Ein bereits ausstehender Control wird weiterhin regulaer abgeschlossen.
+Gewoehnlicher Graphabbau ohne Firmware-Unload verlangt weiter seine eigene
+Detach-Quittung; ungewisser DMA-Besitz wird nicht freigegeben.
+Die bestehende Power-Devicefixture reproduziert vorher
+TerminalRusdReinitialization. Nach Korrektur bleiben Poll/Boost0, kein neuer
+Detach-Control, dieselbe gebundene Seite und Ablehnung unbewiesener Freigabe
+bestaetigt. Andere Ablehnungs-/Quittungs-/Retainfaelle bleiben enthalten.
+Build7/7, Device5/5 mit1/1 Test und direkter Stackcheck bestanden.
+Frischer176-SMP4/KVM-Gast und physischer Folgelauf bestanden: voller CE/GR-Smoke, RUSD-Ablehnung behoben und normaler Post-GPU-Reboot ohne WoL in76.4310658s, resources=0. Physisch175 besteht erstmals
+der ganze CE/GR-Smoke samt Bilanz und ein sauberer normaler Post-GPU-Reboot.
+NVIDIA175 / DISPLAYD48: Begrenzte Leerlauffreigabe und ruhende Vergleichsbilanz
+Die physisch173/174 exakten CE-/GR-Pixel loesen noch nicht den verbleibenden
+Ressourcenfehler: pro Scene halten zwei gecachte Systemmappings weitere
+8192 Bytes. Der R4GFX-Vertrag erlaubt begrenzte Mapping-Caches, der
+Grundbetriebsnachweis verlangt jedoch wirkliche Freigabe nach Producerende.
+175 versieht Mapping-only-Cacheeintraege mit monotoner Nutzungszeit und
+startet nach250ms ohne Nutzung den vorhandenen bestaetigten RM-Unmap-Pfad.
+Aktive Arbeiten, oeffentliche VA-Benutzer/Aliase und Praesentations-Schatten
+bleiben geschuetzt. Native BO-Destruktion kommt vor dieser Leerlaufpflege;
+ein neuer Auftrag oder Treiber-Shutdown ist zur Freigabe nicht erforderlich.
+Die bestehenden Druck-/Slotgrenzen und Generationen bleiben bestehen.
+DISPLAYD48 wartet schon vor der ersten warmen Referenzbilanz hoechstens
+1000ms auf allocation/destruction/retained=0. Anschliessend gilt weiterhin
+der strikte Feldvergleich nach Runde2; kein Toleranzaufschlag und keine
+optimistische Freigabe. Der Software-Smoke muss weiter mit0 GPU-Jobs
+ablehnen. Die vorhandene Headless-Devicefixture prueft reale modellierte
+Cachefreigaben ohne Nachfolgeauftrag, Erhalt der expliziten VA und spaetere
+Submit-/Timeoutbehandlung. Die Terminalfixture haelt ihre zwei Mappings
+bis zum Shutdown, damit der174-Regressionsfall erhalten bleibt.
+175: Modul7/7, Device5/5 mit1/1 Test, DISPLAYD48-Build6/6, direkter Stackcheck und frischer SMP4/KVM-Gast bestanden. Physisch175: voller CE/GR-Smoke8CE/2GR/2048 exakte Pixel, ruhende Ressourcenbilanz und erster normaler Post-GPU-Neustart ohne WoL in75.5529787s; kompletter Treiberabbau resources=0. Finale Folgekorrektur176 und zweiter Neustart noch offen.
+NVIDIA174 korrigiert zwei unabhaengige Abbaufehler beim Treiberbesitzer.
+Der Kernel darf einen bereits leeren nativen Allokationsanbieter waehrend
+des Shutdowns selbst entfernen. Dessen stale-Abmeldung bedeutet nur ohne
+ausstehende Allokation "bereits geschlossen"; Pending-Claims, Busy und
+andere Fehler behalten ihren Zustand. Die vorhandene Terminalprobe wartet
+mit altem Code6000 Schritte beim Runtime-Abbau, mit der Korrektur besteht
+sie einschliesslich Pending-/Fehlerfaellen. Hardware173 bleibt exakt im
+ersten Runtime-Reset-Schritt loss stehen; der einzelne API-Status ist dort
+noch nicht geloggt.
+
+Nach dem Schliessen des Rendercaches nimmt174 neu freigegebene native BOs
+noch im selben Graph-Turn zur RM-Destruktion an, bevor ein Systemmapping
+globale Collection verlangt. Die bisherige Terminalfixture liess eine
+explizite VA des frueheren Raw-Push-Falls offen. Ihr Abbau gab zufaellig
+den benoetigten zusaetzlichen Turn. Mit wie auf Hardware bereits geschlossenem
+VA und realistischer Collector-Barriere reproduziert sie vorher Retained,
+mapping0, pending-native=true und genau eine blockierte Collection; der
+nachfolgende Fehlercleanup endet in Panic. Diese Reihenfolge wird korrigiert,
+ohne Freigabebarrieren zu lockern oder Besitzer-Metadaten zu verwerfen.
+174: Modulbuild7/7, Device5/5 mit1/1 Test, direkter Stackcheck unter64KB und frischer SMP4/KVM-Gast bestanden. Physisch174: gesunder und anschliessender CE/GR-Neustart ohne WoL, resources=0 und driver-shutdown=OK; voller Smoke wegen Cache-/Referenzbilanz noch rot. RUSD-Abmeldung1f und NoCat28 beim Unload weiter auswerten.
+R4NV15, DISPLAYD47, Kernel232 und Release0.82.0 bleiben unveraendert.
+Software174/Batch43 ist bestaetigt. Voller Smoke, Gesamt-/Fehlerabbau und
+zwei normale Neustarts nach GPU-Arbeit ohne WoL bleiben fuer0.82.1 offen.
+Hardware172 mit R4NV14 bestaetigt erstmals auch GR-Abschluss und Readback,
+liefert aber noch keine geaenderten Pixel: DISPLAYD47 misst153 falsche
+Pixel von512, alle512 sind unveraendert. CE512 exakte RGB-Pixel bestehen.
+R4NV15 setzt deshalb die bisher fehlenden Surface-Clip-Grenzen0xff4/0xff8
+auf die volle Renderflaeche, zusaetzlich zu Viewport und Scissor, wie der
+gepinnten NVK-Pfad. Shader-Prefetch wird separat klassengerecht gesetzt:
+C597 schreibt nur Programmadresse A/B; C797 und neuer erhalten hoechstens
+127 Prefetch-Bloecke einschliesslich Shaderheader. Die bestehende
+Viergenerationenprobe reproduziert beide alten Fehler und besteht danach;
+Shaderbytes und externe ABI bleiben unveraendert. Physischer173-Nachweis
+steht noch aus.
+
+Der gesunde172-Shutdown vor GPU-Arbeit erreicht geschlossene RM-Objekte,
+RPC47-ACK, suspendierte GSP-CPU, FWSEC/BooterUnload complete und FLR complete.
+Die vorher blockierende Host-Pagetable-Freigabe ist hier behoben. RmClosed
+ist der beabsichtigte interne Uebergang zum Firmwareabbau. Nach GPU-Arbeit
+bleibt jedoch ein Systemmapping beim globalen Collector stehen, waehrend
+zwei native Cache-BOs mit131072 Bytes auf Abbau warten. RUSD-Detachstatus1f
+wird dabei korrekt als bis zum Reset gehaltene Seite behandelt; deren
+endgueltige Freigabe ist noch nicht bestaetigt. Beide172-Neustarts enden
+nach FLR mit Timeout und brauchen Wake-on-LAN.173 protokolliert deshalb
+den letzten Reset-Abbauschritt aus residenten Metadaten, ohne neue
+Hardware- oder API-Abfrage. Der Gesamt-/Fehlerabbau bleibt offen.
+Software172/Batch38 wurde mit null BO/Pins/Pending/Retain wiederhergestellt;
+danach SYSUPD20/UPDSVC24 als Batch39 installiert. Zwei normale Neustarts
+nach GPU-Arbeit ohne WoL und der volle CE/GR-Smoke sind weiterhin Pflicht.
+Hardware171 bestaetigt erneut CE mit512 exakten RGB-Pixeln. GR passiert
+den entfernten Raster-Override, scheitert nun an SET_SAMPLE_MASK0xfa4.
+R4NV14 entfernt diesen zusaetzlichen Befehl und behaelt die regulaeren
+vier Sample-Masken0xfbc..0xfc8 mit0xffff entsprechend dem gepinnten NVK.
+Der bestehende Viergenerationentest reproduziert vorher MissingState/0.
+
+Der separate gesunde Neustart mit171 beginnt den Graphabbau, scheitert
+aber nach bestaetigtem TLB-Invalidate beim Freigeben einer Host-Pagetable
+in Retained; anschliessend unsauberer Poweroff und einmal WoL. In diesem
+Lauf gab es keine RUSD-Abmeldung, deren171-Korrektur bleibt physisch offen.
+NVIDIA172 trennt deshalb logische Tabellenentfernung und abschliessende
+gemeinsame Collection: Nach einzeln bestaetigter CPU-/DMA-/BO-Freigabe
+darf ausschliesslich collector-busy den RM-Abbau weiterlaufen lassen.
+Tabellenmetadaten bleiben resident und muessen spaeter durch closeEmpty
+oder den gueltigen Reset-Abbau vollstaendig gesammelt werden. Andere
+Freigabefehler bleiben Fehler. Der Collector bleibt eine unveraenderte
+Barriere fuer den ganzen Treiberepoch; kein Kernel-/ABI-Wechsel.
+Der vorhandene Devicefall verzogert die gemeinsame Collection bis zum
+umgebenden Objektabbau. Vorher reproduziert er Retained nach dem zweiten
+Invalidate mit5 gehaltenen Seiten und ohne Root-Unbind; sein Fehlercleanup
+endet anschliessend in Panic.172 besteht Build, Devicegruppe und SMP4;
+R4NV14 besteht den Bibliotheksbuild mit2/2 Tests.
+Software171/Batch36 ist bestaetigt; voller CE/GR-Smoke und zwei normale
+Neustarts nach GPU-Arbeit ohne WoL bleiben offen.
+Hardware170 wiederholt den erfolgreichen CE-Test (drei Jobs,512 exakte
+RGB-Pixel) und passiert den korrigierten Blendwert. GR scheitert am
+zusaetzlichen Raster-Override0xfb8. R4NV13 entfernt diesen Befehl aus allen
+vier generierten Klassentabellen; die regulaere1x1-Samplewahl0x15d0 bleibt.
+Der gepinnte NVK-Pfad verwendet ebenfalls diese regulaere Sample-Einstellung.
+Bestehender Viergenerationentest: vorher MissingState erwartet/0 gefunden,
+danach bestanden. Shaderbytes und oeffentliche ABI bleiben unveraendert.
+
+NVIDIA171 laesst bei terminalem Shutdown den RM-Graphabbau weiterlaufen,
+wenn die Firmware das Abmelden der RUSD-Seite nachvollziehbar abgelehnt
+hat, keine Controlantwort mehr aussteht, Polling aus und Boost beendet ist.
+Die exakte Seite samt DMA-Leihe bleibt dabei unveraendert gehalten; normale
+Graphschliessung darf diesen Weg nicht nutzen. Die Freigabe erfolgt weiter
+erst ueber den bestehenden gueltigen FLR-/DMA-Stoppnachweis. Das ist keine
+vorgetaeuschte Detachbestaetigung. Bestehende Devicefaelle pruefen zusaetzlich
+aktive Pollmasken/Boosts, fehlende Retention und veraenderte Leihidentitaet.
+Die alte Graphadmission reproduziert Busy nach vollstaendigem Antwort-ACK
+und Ownership-Handoff;171 besteht Build, Devicegruppe und SMP4-Lauf.
+Software170/Batch34 ist nach120s und einmal WoL wiederhergestellt.
+GR-Pixel, voller CE/GR-Smoke, vollstaendiger Abbau und zwei normale
+Neustarts nach GPU-Arbeit bleiben offen.
+Hardware169 bestaetigt erstmals drei echte CE-Jobs mit512 exakten RGB-Pixeln:
+Upload, Kopie im Grafikspeicher und separater Readback. Danach scheitert der
+GR-Fill mit fatalem graphics_command0x45/Hardware-ChID16; kein vollstaendiger
+Smoke, kein bestaetigter Device-close. Der Originalheaderabgleich findet im
+R4NV-Zustandsgenerator den falsch verschobenen Blendwert: Methode0x1140
+erwartet TRUE in Bit4, also0x10; bisher wurde reserviertes Bit0 gesetzt.
+R4NV12 regeneriert alle vier Klassen aus der korrigierten DRF_DEF-Formel.
+Der bestehende Mehrgenerationentest reproduziert16/1 vor dem Fix und besteht
+danach. NVIDIA170 bettet diese korrigierten Tabellen ein und protokolliert
+bei Fehlern die gehaltenen Graph-/Broker-Abbauzustaende ohne neue Abfragen.
+Der Hardware169-Fault-Recovery erreicht nach SbProgress die Deadline in
+BooterUnload/SEC2/upload/nested-halt. Software169/Batch32 wurde nach120s und
+einmal WoL wiederhergestellt; BO/Pins/Pending/Retain0.170-Hardwarebeleg,
+GR-Pixel, vollstaendiger Abbau und zwei normale Neustarts bleiben offen.
+Hardware168 erreicht CE/GR und render-ready: Host-ChID8/Runlist1/Token10008
+fuer COPY2; GR verwendet ChID16/Runlist0/Token10. Initialisierungsbarriere
+und Shader-Upload abgeschlossen. Der oeffentliche2048-Byte-Pixeltest
+scheitert noch vor einem bestaetigten Job mit nichtfatalem Mappingfehler.
+169 korrigiert die GPU-Residency auf die logische BO-Laenge. Die separate
+mapping-only DMA-Leihe behaelt die gerundeten Hintergrundseiten. Kernel232
+erlaubt die aufgerundete GPU-Leihe nicht; beide vorhandenen Besitzermodelle
+bilden diese bisher fehlende Grenze jetzt ab. Die unveraenderte168-
+Implementierung scheitert daran im vorhandenen Device-Test; die Korrektur
+wird mit demselben Test geprueft. Firmware-/Wirelayout bleibt unveraendert.
+Begrenzte Teardown-Diagnose erfasst die gehaltene Operation und deren
+Uhren/Deadline ohne weitere MMIO-Abfragen. Sie ersetzt keinen Abbaunachweis.
+Software168/Batch30 ist nach120s und einmal WoL wiederhergestellt,
+BO/Pins/Pending/Retain0. Exakte CE-/GR-Pixel, sauberer Abbau und zwei
+normale Neustarts nach GPU-Arbeit bleiben offen.
+Hardware167 erreicht mit dem internen Token-Control keinen fertigen Kanal:
+Channel in channel_wait, issued0, kein GPU-Ergebnis. Konkreter RM-/Hoststatus
+fehlt in dieser Aufnahme.168 protokolliert die Kanalablehnung unmittelbar.
+168 verwendet den originalen Hostweg aus kernel_channel.c und dem
+TU102/GA100-FIFO-HAL: jeder gehaltene FIFO-Slot reserviert eine eigene
+USERD-Seite und Hardware-ChID8..512, ohne GSP-reservierten ChID0. Physical
+RM bindet sie ueber PAGE_FIXED/INDEX_FIXED_FALSE. Erst Allokation und Bind
+mit validierter Antwort/ACK erlauben das Hosttoken aus Hardware-ID und
+bestaetigter Runlist. Der RM-cid ist weiterhin eine andere Identitaet.
+Ungewisse Abbaupfade behalten den Slot und damit dessen Hardware-ID.
+Der erfolglose Token-RPC entfällt. Original-C prueft Flags und Hosttoken
+fuer768 Kombinationen plus jede Bitmutation und geaenderte Wirefixtures.
+Vorhandene Device-Faelle pruefen eindeutige IDs, spaete Tokenfreigabe und
+behaltene Ressourcen bei geaenderter Hardwarezuordnung in der Antwort.
+Software167/Batch28 ist nach einmal WoL mit BO/Pins/Retain0 bestaetigt.
+Positive CE-/GR-Pixel, sauberer Abbau und zwei GPU-Warmstarts bleiben offen.
+Historischer Stand: 12.09.2026, NVIDIA 0.1.77. 0.79.11 softwareseitig abgeschlossen;
 T1 bis T6 und die gezielten Softwareabnahmen A1/A2 sind erledigt.
 Release bleibt 0.79.12; Kernel 0.1.158. Standard bleibt passiv.
 Physische Nacharbeit: ExFiles/Reports/OssiGPU.txt / 0.79.11, Status OFFEN.

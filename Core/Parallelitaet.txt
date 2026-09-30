@@ -18,9 +18,24 @@ Rules
 - Service reactors process only short nonblocking requests; session work uses
   bounded workers or explicit asynchronous completion.
 
-Module tasks may use SIMD. The scheduler saves a CPUID/XCR0-sized FPU state
-for SIMD-capable tasks. The standard module target assumes AVX2; the kernel
-is built without SIMD and remains ReleaseSafe.
+Module code may use SIMD. The scheduler saves a CPUID/XCR0-sized FPU state
+for every executable task, including kernel-main and generic kernel workers:
+storage, networking, IPC and graphics work can enter R4D/R4P callbacks even
+though the kernel itself is built without SIMD in ReleaseSafe. Only the
+dedicated CPU-idle task, which cannot enter modules, skips this state.
+The external R4D IRQ guard saves that same task state before installing a
+clean handler state, then restores it on return. The standard module target
+assumes AVX2. A kernel-worker label is not evidence of a SIMD-free call graph.
+The canonical initial image resets XMM/YMM and MXCSR to0x1F80 explicitly;
+FNINIT alone only resets x87 and can retain the firmware's SIMD contents and
+rounding/exception policy. AP and IRQ initialization reuse the same image.
+
+The four critical Task/stack reserve bundles also preallocate their FPU
+buffers at boot. Admission under memory pressure performs no new allocation;
+retirement retains the buffer and the next admission resets its register
+image. OPTION TASKREGISTRY selftest=fpu-work selects the bounded existing
+Task test for both shared Driver Work lanes, kernel-main and two reserve
+reuses across the real IRQ FPU boundary. It does not execute GPU commands.
 
 SMP ownership foundation
 ------------------------

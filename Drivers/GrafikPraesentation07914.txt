@@ -1,8 +1,10 @@
 ﻿VBlank, Pageflips und Hardwarecursor – 0.79.14
 ============================================
-Stand: NVIDIA0.1.100, Kernel0.1.163, Desktop0.1.46, DISPLAYD0.1.18.
-Release0.79.14: Softwareumfang abgeschlossen. Physische Abnahme offen in
-ExFiles/Reports/OssiGPU.txt / 0.79.14; OssiPC wurde nicht kontaktiert.
+Aktuelle Vorbereitung 0.82.7: NVIDIA0.1.189, Kernel0.1.236,
+Desktop0.1.89, DISPLAYD0.1.61. Urspruenglicher Softwareabschluss 0.79.14:
+NVIDIA100/Kernel163/Desktop46/DISPLAYD18. Physische Head-/Flip-/Cursorabnahme
+bleibt in 0.82.37/T4,T8, sichtbare Tearing-/Pfeilqualitaet in 0.82.38/T3,T8.
+Anzeigeunabhaengige OssiPC-GPU-Belege werden davon getrennt gefuehrt.
 
 Praesentation
 ------------
@@ -52,16 +54,20 @@ Darstellung. Groesse, Pitch, Laenge, Hotspot und Grenzen werden geprueft;
 quadratische Hardwarebilder 32/64/128/256 erhalten transparentes Padding.
 
 Eine feste private 512-KB-Allokation traegt zwei Bildplaetze. Der unabhängige
-Quellimport bleibt beim Upload erhalten; vorhandenes 12-KB-Staging und CE
-kopieren begrenzte Teile. GET beendet keine Lesesperre. Nur inaktive Bilder
-werden beschrieben. Core-Quittung, danach neuer Head-IRQ und zwei kohaerente
+Quellimport bleibt beim Upload erhalten; gemeinsames Control-Staging und CE
+kopieren begrenzte Teile. Die Kapazitaet kommt aus gsp_control_storage;
+die fruehere feste Angabe von 12 KB ist ueberholt. GET beendet keine
+Lesesperre. Nur inaktive Bilder werden beschrieben. Core-Quittung, danach
+neuer Head-IRQ und zwei kohaerente
 ARM-Samples bestaetigen Sichtbarkeit beziehungsweise Ausblenden. Bild-,
 Positions-, Render- und Windowquittungen sind nicht austauschbar.
 
-R4DRAW15/640 ergaenzt drei optionale Slots nach dem bisherigen 616-Byte-
+Seit R4DRAW15/640 existieren drei optionale Slots nach dem bisherigen 616-Byte-
 Praefix: display_cursor_info, display_cursor_submit, display_cursor_status.
-GfxDriverDisplayApi bleibt Wireversion1; Revision3/96 ergaenzt configure,
-take und complete hinter Byte72. Neue Datensaetze: Info80, Request88,
+GfxDriverDisplayApi bleibt Wireversion1; Revision3/96 fuehrte configure,
+take und complete hinter Byte72 ein. Der aktuelle Layoutstand8/152 behaelt
+diesen Praefix und fuegt unter anderem die Reset-/Headless-Rueckbindung an.
+Datensaetze: Info80, Request88,
 Status72, DriverJob160, Completion40. Alte Praefixe bleiben unveraendert.
 Zig- und C-Fassaden pruefen die gesamte optionale Cursor-Erweiterung.
 
@@ -74,7 +80,7 @@ und Freigaben liegen ausserhalb des Display-Zustandslocks. Programmende
 fordert geordnetes Release; Treiberverlust/Timeout behalten unklare Besitzer.
 Eine echte spaete Quittung kann denselben Auftrag noch abschliessen.
 
-Desktop0.1.46 verwendet fuer Software, Hardware und RemoteFrame denselben
+Desktop verwendet seit0.1.46 fuer Software, Hardware und RemoteFrame denselben
 12x18-Pfeil. Nach Prepare entfernt ein normales erfolgreiches Present den
 Softwarepfeil; erst dessen sichtbarer Flip erlaubt Show. Bewegungen werden
 zusammengefasst und brauchen im Hardwarebetrieb keine Cursor-Damage und
@@ -85,8 +91,8 @@ Softwarecursor aktiv. RemoteFrame zeichnet fuer seine synchrone Kopie einen
 begrenzten Pfeilausschnitt und stellt den lokalen Szenenpuffer danach wieder
 her; reine Mausbewegungen aktualisieren nur die Fernansicht.
 
-Nachweise
----------
+Urspruengliche Nachweise 0.79.14
+-------------------------------
 Bestehende Gruppen: NVIDIA51, Kernel-Display53, Desktop392, SDK-Fassaden8
 plus C; Contract-Pruefung und alle drei Artefaktbuilds bestanden. Original-
 C67D-C-Vektoren belegen Groessen/Hotspot/Alpha/Hide und IMP-Feldlage. Device-
@@ -100,3 +106,90 @@ Kernel-API, bootfb, Desktop-Softwarecursor, begrenzte Damage und vorhandener
 RemoteFrame-Vertrag. Keine neue Testgruppe und kein physischer Bildnachweis.
 Quellen, Originale, Artefakthashes und Logs: GrafikPraesentation07914.json.
 MIT-Volltexte bleiben im Treibermodul und in der Distribution enthalten.
+
+Begrenzte physische Fehlerprobe fuer 0.82.37
+-------------------------------------------
+NVIDIA189 erweitert den vorhandenen reset-probe-Einstieg um
+OPTION NVIDIA reset-probe=flip-irq-timeout. Er wird nur zusammen mit
+mode=native beziehungsweise dem nativen Auto-Modus angenommen. HEADLESS,
+passive Modi und unbekannte Werte werden vor Firmware-/PCI-Arbeit abgelehnt.
+Die effektive Software-Graphics-Bootpolicy hat weiterhin Vorrang und
+ignoriert die Probe. Eine nicht unterstuetzte Resetidentitaet verhindert
+den Start vor Firmwareausfuehrung.
+
+Die Probe verbraucht ihre Freigabe bei genau einem tatsaechlich eingereichten
+Window-Flip. Initiale Core-/Window-Uebernahme und nicht eingereichte Arbeit
+verbrauchen sie nicht. Fuer diesen Flip wird die Verwendung neuer Head-
+Beobachtungen bis zu seiner unveraenderten Deadline ausgesetzt. IRQ-Handler,
+Quittierung der Ursachen, Window-Befehle, BEGUN und GPU-Speicher laufen
+unveraendert weiter. Das ist ein absichtlich erzeugter Beobachtungstimeout;
+es behauptet weder einen elektrischen IRQ-Ausfall noch einen GPU-Hang.
+Es entsteht kein sichtbarer Abschluss. Beide Scanoutbilder und ungeklärte
+DMA-Nutzungen bleiben bis zum regulären physischen Rueckweg gehalten.
+Abbruch/Detach verwendet weiterhin die eigenen echten Stilllegungsquittungen.
+Der einmalige automatische Reset und Runtime-Neuaufbau bewaffnen die Probe
+nicht erneut. Ein neuer Boot mit unveraenderter Konfiguration wuerde sie
+erneut anfordern; die Option daher nach dem einen Versuch wieder entfernen.
+
+Vorbereitete Ausfuehrung ausschliesslich in0.82.37/T4,T8:
+1. Fuer diesen GPU-Rueckweg genau einen aktiven Head verwenden. Zuerst native
+   Ausgabe ohne Probe mit aktueller Artefaktbindung, realer Headquelle,
+   steigenden IRQ-/Flipwerten und ruhender Ressourcenbilanz
+   bestaetigen. Zwei-/Dreipuffer- und Cursor-Positivfaelle getrennt erfassen.
+2. Passendes Software-Rueckrollpaket bereithalten. Den qualifizierten
+   GA106-Fn0-/D0-/FLR-Rueckweg aus0.82.6/17 versionsbezogen abgleichen.
+   Die einmalige native Probe nur per regulaerem SYSUPD-Paket aktivieren.
+3. DISPLAYD /NVIDIA und /STATS samt Quelle/Epoche/Sequenz zeitnah sichern.
+   Erwartet: genau ein flip-submitted-Marker mit Head, Windowpunkt und
+   Originaldeadline; weiterlaufende echte Headereignisse/BEGUN, aber keine
+   daraus erfundene Sichtbarkeit. Fehler/Timeout und gehaltene Bilder
+   muessen bis zur bestaetigten physischen Ruhe sichtbar bleiben.
+4. Genau einen unterstuetzten Fehler-FLR verfolgen; IRQ-/SSH-Fortschritt,
+   neue Generation, INIT_DONE/RM/CE und Bildrueckweg aus Softwarequelle
+   pruefen. C67D-/BAR1-Quittungen gehoeren in0.82.37/T8. Ungeklaerte Ruhe
+   erlaubt keine Freigabe oder Resetkette. Anschliessend die Option per
+   SYSUPD entfernen und den regulaeren Folgezustand getrennt bestaetigen.
+
+Die bestehenden fehlenden-IRQ-, Notifier-, FINISHED-, ARM-, Cursorupload-,
+PIO-Backpressure-/Timeout- und DEALLOC-Faelle bleiben in den Softwaremodellen
+erhalten. Die neue Probe ergaenzt dort den Fall, dass ein echter Modell-IRQ
+und BEGUN vorliegen, aber absichtlich nicht als Sichtbarkeitsbeleg verwendet
+werden. Sie ist kein Gastaufruf eines Hostmodells. Neue Gates wurden nicht
+angelegt; elektrische/aktive Belege werden erst in0.82.37 erhoben.
+
+Aktuelle Qualifikation 0.82.7 / 01.10.2026
+-----------------------------------------
+NVIDIA189: bestehende komplette Devicegruppe5/5Schritte,1/1Gruppe und
+Lifecycle4/4Schritte,1/1Gruppe sowie ReleaseSmall7/7 bestanden. Zwei/Drei-
+Puffer, CE-Ueberlappung, getrennte IRQ/BEGUN/FINISHED-Quittungen und die
+Cursor-/ARM-/PIO-/Upload-/Dealloc-Fehlerfaelle sind Softwarebelege. Die neue
+konfigurierte Probe liefert auch bei eingetroffenem Modell-IRQ und BEGUN
+keinen sichtbaren Abschluss und behaelt beide Bilder bis zur echten Ruhe.
+Die Bootpolicy-/Moduspruefung erfolgt vor PCI/Firmware; Software ignoriert
+alle Probeoptionen. Originale unveraenderte C67D/C67A-Wirefaelle4/4Schritte
+wurden vor der reinen Diagnoseerweiterung mit188 frisch geprueft.
+
+Unveraenderte Besitzerbelege: Kernel236 Display7/7 aus0.82.6 einschliesslich
+Cursorlebensdauer und Praesentationsstatistik; Desktop89 komplett398/398
+aus0.82.5 einschliesslich Cursorbarriere, Modus/Hide und RemoteFrame.
+Frisch: SMP4/KVM-Desktop mit /SMOKE-WINDOW-IDLE /CURSOR54.212s und
+NVIDIA-Runtime60.71s bestanden. Beides sind Gast-/Softwarebelege.
+
+OssiPC hat189 per treiberexklusivem SYSUPD-Paket erhalten. Ganze Artefakte,
+Katalog110 und Recovery-Manifeste abgeglichen; Kernel236 bleibt identisch.
+Die HEADLESS-Konfiguration ist bytegleich und enthaelt keine Probeoption.
+Echte8CE/2GR-Auftraege mit2048exakten Pixeln und vollstaendiger BO-/Runtime-
+Bilanz bestanden; /STATS meldet ehrlich unavailable. Kein Empfaenger wurde
+frisch abgefragt, keine Ausgabe oder Displayfehlerprobe gestartet. Der
+vorausgehende188-Abbau hat resources0, native-DMAstopped, terminal-display-
+released und warm-reset-ready; der Updateboot brauchte kein Wake-on-LAN.
+Der erste Pruefhelper stoppte vor GPU-Arbeit am erwarteten leeren Headfilter
+(Exit1). Dieser urspruengliche Fehlschlag bleibt archiviert; die begrenzte
+Fortsetzung qualifiziert den einmaligen GPU-Lauf separat. Kein Treiberfehler
+wurde dadurch verdeckt oder eine Displayprobe wiederholt.
+
+Quellabschluss0.82.7, Gastbasis0.82.6 und installierte Basis0.82.0 bleiben
+getrennt. Archiv: ExFiles/Reports/OssiGPU/20261001-presentation08207.
+GrafikPraesentation07914.json enthaelt hardware_preparation_08207 samt
+Quellhashes und Einzelbelegen. Echte IRQ/Flip/ARM/Zaehler und begrenzte
+Displayfehlerprobe0.82.37/T4,T8, Sichtabnahme0.82.38/T3,T8 bleiben offen.

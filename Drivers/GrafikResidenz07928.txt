@@ -1,4 +1,7 @@
-﻿Grafikspeicher und Scheduling 0.79.28
+﻿Aktueller Stand: Fortschreibung0.82.15 am Ende; anzeigeunabhaengige Pressure bestanden.
+Vorangehende Release-/Abnahmeangaben beschreiben den historischen0.79.28-Stand.
+
+Grafikspeicher und Scheduling 0.79.28
 ===================================
 Softwareabschluss: gezielte Besitzerpruefungen, Produktbuilds und SMP4 bestanden.
 Release 0.79.28, Kernel 0.1.178, NVIDIA 0.1.120, R4GFX 0.1.14,
@@ -30,8 +33,10 @@ Objekte und sperrt weitere Allokationen; ein schliessender Besitzer bleibt
 bis zum bestaetigten letzten Release sichtbar.
 
 Konfigurierte VRAM-Budgets sind vom gemeinsamen RAM-Budget getrennt.
-Das RAM-Budget betraegt 1 GB, pro Produzent 256 MB; diese Werte reservieren keinen
-Speicher im Voraus. Legacyprovider ohne Budgeterweiterung verwenden weiterhin
+Im aktuellen Kernel 0.1.238 betraegt das gemeinsame RAM-Budget 4 GB und der
+Produzentenrahmen 2 GB (memory/gfx_buffers.zig). Die urspruenglichen Werte
+von 0.79.28 waren 1 GB/256 MB. Diese Grenzen reservieren keinen Speicher im
+Voraus. Legacyprovider ohne Budgeterweiterung verwenden weiterhin
 den gemeinsamen Rahmen. Der Treiber autorisiert seine eigene Konfiguration;
 Anwendungen und DISPLAYD erhalten nur die lesende Abfrage.
 
@@ -40,7 +45,44 @@ abzueglich Boot-/Firmwareunion und spekulativem RM-Reservehinweis, abgerundet
 auf 64 KB. Moegliche Ueberlappung des Hinweises vergroessert keine Zusage.
 Bis zu 64 MB, maximal ein Achtel des Rahmens, bleiben fuer Kontroll-/Scanout-
 Fortschritt frei. Die Ablehnung erfolgt vor Heap-/RM-Mutation. Der Rahmen
-ist keine Platzierungsgarantie; RM kann auch darunter eine Allokation ablehnen.
+ist keine Platzierungsgarantie; ein physischer Besitzer kann auch darunter
+eine Allokation ablehnen.
+
+NVIDIA 0.1.192 erlaubt fuer mode=headless die optionale Konfiguration
+OPTION NVIDIA vram-limit-mb=64. Dezimale Werte von 64 bis 65536 MB senken
+die Obergrenze auf min(erkannte Kapazitaet, konfigurierte Grenze). Ein MB
+sind 1024*1024 Bytes. Ohne Option bleibt die erkannte Obergrenze erhalten;
+die Fortschrittsreserve bleibt ein Achtel, maximal 64 MB. Die Konfiguration
+wird nach GPU-Wiederaufbau fuer die neue Speichergeneration erneut verwendet.
+Ungueltige Werte oder Verwendung ausserhalb des Headless-Modus werden vor
+PCI-/Firmwarezugriff abgelehnt; Softwaregrafik umgeht native Initialisierung.
+Anwendungen bekommen dadurch keine schreibende Budgetberechtigung.
+
+Anwendungs-VRAM ab NVIDIA 0.1.193 (Nachweise am Dateiende)
+---------------------------------------------------------------
+Die Firmware reserviert einen eigenen kleinen Heap. Direkte
+NV01_MEMORY_LOCAL_USER-Anforderungen treffen diesen Heap; sie sind kein
+Allokator fuer die volle gemeldete VRAM-Kapazitaet. Der erste physische
+0.82.15-Lauf mit192 scheiterte schon bei parallelen 4-MB-Images. Die
+anschliessende Einzelmatrix schaffte64KB bis4MB, aber beide8MB-Faelle
+meldeten NV_ERR_NO_MEMORY (0x51). Alle Ressourcen wurden wieder frei.
+
+Der Treiber verwaltet normales Anwendungsbacking bei Host-MMU nun in den
+von der statischen GSP-Regionentabelle dem Host ueberlassenen Bereichen.
+Ganze teilweise reservierte/protected Regionen und die vollstaendige
+Boot-/Firmware-/Displayunion bleiben ausgeschlossen. Stabile residente
+Extentknoten verhindern Ueberlappung und bleiben bis zum exakten letzten
+Verbraucher und bestaetigten PTE-/TLB-Abbau erhalten. Gehaltene Aliase,
+Fehler und Reset behalten weiterhin ihre eigenstaendigen Freigabebarrieren.
+Kontroll- und Scanoutbacking verwendet weiter den privaten RM-Vertrag.
+
+Die originalen570.144-Besitzer sind memmgrInitBaseFbRegions_FWCLIENT,
+vidmemConstruct_IMPL/_vidmemPmaAllocate und _kgspSetFwWprLayoutOffset.
+GA102/AD102 haben laut g_gpu_nvoc.c keine ACR-bestimmten WPR-Offsets;
+ein fehlendes Nullpaar hebt daher die authentifizierte Bootreservierung
+nicht auf. Gemeldete abweichende oder unvollstaendige Werte sperren die
+Platzierung weiterhin. Die Diagnose zeigt gemeldete und benutzbare Layouts
+getrennt an. Kein Firmware-Objekt oder ACK wird fuer Hostbacking erfunden.
 
 Auslagern und Rekonstruieren
 ---------------------------
@@ -48,8 +90,9 @@ R4GFX besitzt die logischen, mit source_create_native erzeugten Offscreen-
 Images. memory_trim waehlt ungepinnte Bilder nach niedrigster Prioritaet und
 danach letzter Nutzung. Ein echter COPY_ROWS-Readback erzeugt einen RAM-
 Schatten. Erst nach exaktem Fenceabschluss ohne aktive/gehaltene Ressourcen
-wird die alte private native Referenz abgegeben. Der native Besitzer baut
-seine RM-Objekte ab; die gemeinsame Belastung faellt erst nach dessen ACK.
+wird die alte private native Referenz abgegeben. Der native Besitzer entfernt
+die GPU-Mappings und gibt das physische Backing erst nach den exakten
+Quittungen frei. Beim privaten RM-Backing gehoeren dessen Objekt-ACKs dazu.
 
 resource_resident fordert die Rekonstruktion an. Neue native Allokation,
 COPY_ROWS-Upload und abschliessende Generationspruefung gehen der Freigabe
@@ -148,3 +191,95 @@ die neuen reinen Slicehelfer werden im NVIDIA-Artefakt eingebunden.
 Hashes, Modulstaende und Beleggrenzen: GrafikResidenz07928.json. Protokolle
 unter ExFiles/Reference/GFX/0.79.28/Evidence. Keine Aussage dieses Dokuments
 ersetzt die physische Abnahme in OssiGPU.txt.
+
+Fortschreibung 01.10.2026 / 0.82.15
+----------------------------------
+Der automatische anzeigeunabhaengige Speicher-/Konkurrenzumfang ist auf
+OssiPC/GA106 bestanden. NVIDIA193 behebt die Verwechslung zwischen kleinem
+GSP-Heap und den vom Host verwalteten Anwendungsregionen. Der urspruengliche
+Fehlversuch192 bleibt unter Failure192 erhalten: Einzelallokationen bis4MB
+gelangen, Raw und Image8MB scheiterten an RM0x51. Jetzt bestehen beide8MB-
+Faelle mit exakter Rueckkehr zur vorherigen Budgetbelastung. Diese isolierte
+Matrix fuehrt keine CE-/GR-Auftraege aus; deren Nachweis folgt separat.
+
+Die wirkliche Regionentabelle nennt12GB physisch,12570132480Byte geeignete
+Hostbereiche und203915264Byte behaltene Bootunion. Die optionalen WPR-
+Offsetfelder sind tatsaechlich beide0. Originale570.144-Besitzer erklaeren
+diese nicht gemeldeten Felder fuer GA102/AD102; die neue Diagnose trennt
+layout-reported=false und layout-usable=true. Bekannte reservierte Bereiche
+und jede Bootreservierung bleiben ausgeschlossen. Fragmentierung und
+vollstaendige Firmwarebelegung sind damit nicht gemessen.
+
+Zwei getrennte, besitzende Prozesse arbeiteten30Sekunden parallel. Jeder
+besaß zwei gepinnte4MB-Bilder und eigenen4MB-Systemreadback. Je Runde:
+1.048.576Pixel fuellen,4MB nativ kopieren,4MB abhaengig zur CPU lesen und
+alle RGB-Werte exakt vergleichen. Beide schafften375Runden; einschliesslich
+Warmbildern je752CE- und377GR-Abschluesse,395.313.152 gepruefte Pixel.
+Das zusaetzliche Readback beim Ende von Prozess1 wurde nicht in diese
+expliziten Abschluesse eingerechnet. Sein oeffentlicher Beleg stand bei
+phase0/flags2 und ging in den regulaeren device_close. Daraus wird keine
+noch aktive DMA-Ausfuehrung abgeleitet. Beide Prozesse endeten mit Exit0,
+wurden reaped und gaben Referenzen sowie eigenen Speicher frei.
+
+Treibergrenze8 gehaltene Jobs, CE-Abschnitt hoechstens1MB und GR-Abschnitt
+hoechstens262144Pixel bleiben erhalten. Die oeffentliche Anwendung kann
+16 Belege halten; das ist nicht der physische Treiberpool. Angeforderte
+RM-TSG-Zeitscheibe2000us, rejection=null. Gemessene Maxima vom Einreichen
+bis zur beobachteten Freigabe:109236202ns und133360780ns, je1129Proben.
+Das sind Ende-zu-Ende-Zeiten mit Warteschlangen und Abhaengigkeiten,
+keine gemessene Hardwarepraeemption und keine Zusage einer2ms-Jobdauer.
+
+Waehrend beider Produzenten wurden50 absolute Mausbewegungen ueber den
+normalen Remoteinputpfad aufgenommen und als neue Desktop-Cursorrevision
+veroeffentlicht. Maximum11.715.282ns, Revision1->52, danach urspruengliche
+Position wiederhergestellt. Nach Freigabe Leser/Leases/Snapshots/Storage0.
+Drei gleichzeitig ausgefuehrte SSH-VER-Aufrufe dauerten0,7965/0,7525/0,7742s.
+Der normale HEADLESS-Desktop verwendet seinen Softwareframebuffer; seine
+Publikation ist kein nativer Scanoutbeleg. Die parallelen CE-/GR-Pixel
+wurden eigenstaendig auf der echten NVIDIA-GPU erzeugt und geprueft.
+
+Mit dem echten Treiberbudget64MB, davon8MB Fortschrittsreserve, pruefte
+ein weiterer begrenzter Prozess vier verwaltete4MB-Bilder mit Prioritaeten
+10/20/30/gepinnt sowie Raw1MB und Import1MB. Drei memory_trim-Aufrufe
+lagerten zuerst10, dann20, dann30 aus. resource_resident rekonstruierte
+die aktive Anforderung zuerst, danach die wartende hohe und niedrige
+Prioritaet (oeffentliche Slots3/5/4). Dieselben Handles und exakte Pixel
+blieben erhalten; Raw, Import und gepinntes Bild unveraendert.
+
+Vier weitere4MB-Bilder erhoehten die tatsaechliche Belastung bis56819712
+Byte. Die naechste Anforderung lieferte BUSY ohne Teilhandle und loeste
+eine wirkliche zusaetzliche Auslagerung aus. Insgesamt4Evictions/4Restores,
+keine Fehler oder verbleibende RAM-Schatten;16.777.216Pixel geprueft.
+Nach bestaetigtem Ende kehrte die warme gemeinsame Bilanz in derselben
+Speichergeneration1 exakt zurueck: RAM66285568, VRAM21168128, Mapping122880,
+Scanout0, ausstehende Allokation/Freigabe/Retained0. Kein Laufzeitfehler
+oder GPU-Reset. Die einmalige RUSD-Seite4096Byte wurde zuvor durch einen
+separaten Smoke aufgewarmt; keine Kalt-/Warmgleichheit behauptet.
+
+Die bestehende Device-Gruppe prueft echte Host-PTEs fuer gleichzeitig8MB
+und4MB, Boot-/Reservierungsausschluss, Alias-/Lastuse-/TLB-/Resetfreigaben,
+unveraenderte private RM-Pfade und fehlerhafte Inventare. Device5/5Steps,
+Lifecycle4/4Steps, R4GFX-Residenz4/4Steps jeweils1/1Gruppe bestanden;
+NVIDIA-Produktbuild und frischer SMP4/KVM61,01s bestanden. Keine neue
+dauerhafte Testgruppe. Kernel238, Desktop97, WINSVC11, R4GFX30 und R4NV16
+wurden hier nicht geaendert; qualifizierte SDR-Fixes aus0.82.14 werden
+mit diesem Abschluss gespeichert. Dessen HDR-Aufgabe bleibt bis21 offen.
+
+SYSUPD installierte NVIDIA193 (Batch80/Tx99), voller107719474Byte-Hash
+dda55dcf83119a5d54bda4b77a7359d2cdac7337c10d2028305c84ea691bcab3;
+genau eine Versionsaenderung im110-Eintrag-Katalog. Danach wurde die
+urspruengliche HEADLESS-CONFIG unveraendert ueber Batch81/Tx100 hergestellt.
+Der193-Abbau nach der Speicherdruckarbeit bestaetigt resources0, gestoppte
+DMA und warm-reset-ready Kernel238; normaler Folgestart ohne Wake-on-LAN.
+Ohne Testgrenze gilt wieder12366184448Byte Budget. Frische8CE/2GR mit2048
+exakten Pixeln und stabilem zweitem Durchlauf sowie14Dienste ohne Fehler
+bestaetigen die Rueckkehr. Kein reset-probe in der Konfiguration.
+
+Kanonisch: GrafikResidenz07928.json / pressure_qualification_08215.
+Originale Belege und Diagnosequellen:
+ExFiles/Reports/OssiGPU/20261001-pressure08215/Final08215/Result08215.json.
+Quellrelease0.82.15, installierte Releasebasis weiterhin0.82.0. Der
+technische Umfang ist abgeschlossen; sichtbare Bedienbarkeit, Kabel/
+Hotplug und manuelle Herkunftskriterien bleiben0.82.38/T6. Aktive Ausgabe
+bleibt0.82.37. Diese Anteile der urspruenglichen A1/A2 werden nicht durch
+automatische Cursorpublikation oder Offscreenpixel ersetzt.

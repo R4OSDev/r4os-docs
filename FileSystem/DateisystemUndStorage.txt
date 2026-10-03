@@ -810,3 +810,47 @@ Keine neue Gast-, Hardware- oder Release-Gesamtpruefung fuer diese Grenzen.
 ----------------
 A2-0016 umgesetzt: ATAPIO 0.1.4, RELEASE_VERSION 0.81.28. LBA28-Backendrequest 1..128 Sektoren, ein READ/WRITE SECTORS-Kommando je zusammenhängendem Request mit einem DRQ-Payloadschritt je Sektor. Prüfung freier Taskfile vor neuem Kommando, 400-ns-Abstände nach Kommando/Daten, BSY zuerst und abschließendes DRQ=0. Nicht vorhandener Bus und ERR/DF/Timeout ergeben Fehler. Ein Flush je erfolgreichem Schreibrequest plus expliziter Flush unverändert; keine LBA48-/AHCI-/NVMe-Änderung. Die vorherige Implementierung hatte bereits einen Flush pro maximal 8-Sektorrequest (keinen Flush in writeOne); bei 64 KB sinken dadurch 128 Einzelkommandos und 16 Requestflushes auf 1 Kommando und 1 Requestflush.
 Nachweis: aktueller Transfer-/Statuscode als Hostfixture, 2 gruppierte Fälle PASS (1/8/128 Sektoren, Datenvergleich, LBA28-Ende/Grenzüberschreitung, Geräteende, Buffer, Null/Übergröße, BSY/DRQ-Timeout, stale ERR/DF während Busy, Teilfehler nach einem Sektor, DF, nicht endender DRQ, Flushfehler, explizites Flush). Tatsächliche Zig-Funktionskörper zusätzlich über C-Portcallbacks gegen QEMU pc/IDE qtest mit 4 konfigurierten vCPUs geprüft; CPUs angehalten, kein Gastbetriebssystemtest. 512/4096/65536 Byte schreiben, Rohdatei nach Flush vergleichen, lesen und vergleichen: je 1 WRITE + 1 FLUSH, 1 READ, anschließend 1 expliziter FLUSH, alle Bytes gleich. Letzter Gerätesektor und abgewiesener Überlauf geprüft. Produktbuild/R4M0-Inspektion PASS. Kein Hardwaretest, keine Aussage zur Laptop-Anbindung/FPS. Evidenz Temp/Astra2/Implementation/atapio-28-qtest.json, *-28*.log und validation-28.json. Astra2.json unverändert.
+
+
+Fragmentierte NTFS-Verzeichnisindizes (0.82.28)
+---------------------------------------------
+Der gemeinsame SDK-NTFS-Besitzer und sein Kernel-Support verwenden fuer
+INDEX_ALLOCATION die wirkliche Kapazitaet von AttrScratch.runs (256).
+Die kleinere Grenze MAX_DATA_RUNS (24) gehoert zum separaten Puffer fuer
+Dateinutzdaten. Sie darf keinen weiteren I30-Block verhindern, wenn die
+gesammelte Indexrunliste und der bestehende MFT-Record ihn aufnehmen.
+Run-/Record-/Bitmapgrenzen, Reservierung, Flush und Rollback bleiben erhalten;
+kein groesserer residenter Puffer und kein neuer API-Slot.
+
+OssiPC 03.10.2026: C: NTFS auf AHCI, TEMP-MFT-Record31, 4096-Byte-Cluster
+und Indexbloecke. Die lesende generationgebundene Rohdiagnose fand 24
+fragmentierte Runs mit 25 belegten Bloecken und entsprechender Bitmap.
+Eine reine CPU-Probe schrieb zwoelf320-Byte-Dateien erfolgreich; weitere
+24 neue Namen und die Abschlussdatei lieferten FileWrite=-4 bei weiterhin
+freiem Speicher. Keine GPU-Arbeit in dieser Reproduktion. Statische Namen
+in anderen noch freien Blaettern waren weiterhin schreibbar.
+
+Die bestehende CheckNtfsTreeModel0607-Fixture wurde um resident320-Byte-
+Dateien mit getrennten4096-Byte-Allokationsluecken erweitert. Originalcode:
+Fehler ab Datei498,24Indexruns und4720freieCluster. Korrigierter Besitzer:
+1200Dateien/1200Luecken,60Runs, alle Nutzdaten und kalter Remount bestanden.
+Die ganze bestehende Baum-/Churn-/Append-/Crashmatrix (5x40Budgets) besteht;
+keine neue Dauertestgruppe. Der optionale --fragmented-index-Modus grenzt
+nur diesen bestehenden Besitzerfall ein.
+
+Kernel0.1.240 wurde gebaut, hostgeprueft und in einem kurzen SMP4-Gast auf
+Prozesslebensdauer/Waits/Shutdown geprueft; dieser Gast ist kein NTFS-
+Hardwaretest. R4NIDX0.1.1 ersetzt auf OssiPC nur Kernel239->240 in der
+installierten Basis0.82.0: voller Paket-Rueckdownload, VERIFY, Batch97/
+Transaktion117 installiert, einziges KERNEL-Katalogdelta, unveraenderte
+CONFIG und voller lesender BOOT-ELF-SHA256
+031c2be1f384b2e4b6f3c745e43e476cff2f6e36c44272ad701f67365982b57a.
+Normaler Neustart ohne Wake-on-LAN. Die neue reine CPU-Probe schreibt
+alle36Originalnamenformen sowie Fortschritts-/Abschlussdateien erfolgreich;
+alle36vollen320-Byte-Rueckdownloads stimmen. Die separate Rohdiagnose
+bestaetigt jetzt27I30-Runs/28Bloecke. Urspruengliche Fehler bleiben erhalten.
+Belege: Temp/Ossi08228/{FileIO28B,FileIO28C,Meta28B,
+Meta28-AfterFixedCPU.txt,FragmentedIndex28-Old,FragmentedIndex28-Fixed,
+NtfsTree28-Owner,Kernel24028-Qualification.json,Update28A-Installed.json}.
+
+Abgeschlossener Beleg0.82.28: ExFiles/Reports/OssiGPU/20261003-profile08228/Final08228/Result08228.json; urspruengliche Fehler und neue CPU-/Metadaten-/GPU-Belege getrennt erhalten.

@@ -149,6 +149,19 @@ requests wake an otherwise idle Terminal so it can observe lifecycle state.
 The one-byte poll remains a compatibility path and is not required for an
 event-driven host.
 
+Kernel 0.1.263 retains a console input target lease in its exact stable
+ProgramThread, including inherited console targets. Short unwind guards
+protect lease construction and normal release; no guard spans input sleep.
+After hard kill detaches the exact scheduler Task and its intrusive waiter,
+thread retirement releases the retained target before thread/stack teardown.
+Normal return clears the same lease once under the program registry owner;
+failed identity or release retains it for retry. A stack-local defer alone
+cannot own a lease across a killable wait: DESKTOP's hard close previously
+left a dead terminal's extra pin behind, preventing completion and window
+removal. CLEANUPD /CONSOLEWAIT isolates real parked Close, Kill and redirected
+child Kill cases from the existing lifecycle profile and checks its exact
+resource/registry baseline. It adds no recurring gate.
+
 Console producers store normalized bytes once in sealed 16-KB backing blocks.
 The private completion transcript and an inherited visible transcript retain
 references to the same blocks, with independent ordered segments and 16-KB
@@ -448,6 +461,15 @@ no active dedicated callback. Shared Work is then cancelled/drained. Any
 unproven handoff enters poweroff or halt instead of warm reset. This grants
 no generic cleanup permit and does not weaken ordinary unload admission.
 See Drivers/GrafikFirmware07910.txt and its system_transition_checkpoint.
+
+Kernel 0.1.259 includes audio drivers in the terminal warm-reset pass. An
+empty HDMI output can still own running DMA, so absence of application
+streams is not quiescence. The existing prepare/begin/commit owner cleanup
+closes audio callback admission, invokes DriverShutdown and verifies full
+backend/IRQ/work/DMA cleanup before acknowledging the audio owner. Failure
+retains or quarantines ownership and vetoes warm reset. Audio is stopped
+before the earlier-initialized display driver is dismantled; storage remains
+available for the terminal reboot log. Ordinary unload uses the same barrier.
 
 Kernel 0.1.152 / DriverApi35 lets the exact live dedicated Task post normal
 Work with flags=0 and its current owner epoch. Stop or parent close rejects

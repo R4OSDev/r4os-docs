@@ -115,12 +115,19 @@ request header. Zig's narrowed @min result alone cannot represent a complete
 1024-byte legacy or 4096-byte App-Audio message; explicit widening prevents
 those boundary requests from wrapping to zero length.
 
-HDA 0.3.16 parks an exhausted hardware ring after a bounded three-period
-codec postroll. It preserves the open logical stream and conversion state;
-new PCM restarts the ring. Partial tails are emitted once without padding
-each normal write. Idle source exhaustion has its own close-log counters;
-missing periods despite already queued PCM remain backend underruns. The
-parked ring produces no periodic completion IRQs or audio worker jobs.
+HDA parks an exhausted analog/DisplayPort ring after a bounded three-period
+codec postroll. HDA 0.3.26 keeps a selected, available HDMI output clocked
+through its cleared ring instead: completion IRQs are disabled, with no
+periodic refill work or artificial application stream. The optional v4 Idle
+callback in Kernel 0.1.259 separates normal PCM completion from physical
+Stop; route replacement, disconnect and shutdown still stop DMA. Older
+backends retain Stop fallback. An HDMI physical start allows one second for
+receiver acquisition before accepting PCM; subsequent tones resume at the
+actual ring position with two silent lead periods. That acquisition bound
+comes from the Hisense short-tone probe, not a universal receiver guarantee.
+The quiet carrier still consumes 192,000 DMA bytes/s while HDMI is selected.
+Partial tails are emitted once without padding each normal write. Source
+exhaustion has its own counters; gaps despite queued PCM remain underruns.
 
 PCM clients retain frame-aligned progress reported before Busy, timeout or a
 hard error. R4Synth sends matching stereo S16LE WAV data directly and paces

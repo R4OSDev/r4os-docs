@@ -1,4 +1,4 @@
-HDA reference comparison for R4OS
+﻿HDA reference comparison for R4OS
 =================================
 
 Reference set
@@ -16,6 +16,55 @@ This document records the historical 0.67 fixed-ring comparison. The complete
 0.71.5 current-state, topology, transport, lifecycle and hardware analysis is
 in Drivers/HdaPerfectionAnalysis0715.txt; claims below about a corrected
 stream format refer to the descriptor side unless stated otherwise.
+
+NVIDIA DMA coherency (0.82.44)
+-----------------------------
+Legacy NVIDIA PCI HDA defines these configuration fields:
+output byte 0x4c bit 0, input byte 0x4d bit 0, transport byte 0x4e bits 3:0.
+The Linux controller's azx_init_pci and generic NVIDIA class match document
+this setup; OpenBSD azalia_pci_write uses aligned dword read/modify/write for
+these byte fields. On OssiPC, HDA28 could not confirm this setup and stopped
+that controller before DMA; cleanup confirmed the original zero value. These
+older fields cannot be assumed for every PCIe GPU. Zero alone does not prove
+missing coherence.
+HDA29 instead finds PCIe Device Control and clears No Snoop for cached DMA;
+legacy PCI keeps the old path. W1C Status and the FLR trigger are never echoed.
+No foreign implementation was copied. Sources:
+https://raw.githubusercontent.com/torvalds/linux/master/sound/hda/controllers/intel.c
+https://raw.githubusercontent.com/openbsd/src/master/sys/dev/pci/azalia.c
+https://edc.intel.com/content/www/us/en/design/publications/14th-generation-core-processors-cfg-and-mem-registers/pci-express-device-control-devicectl-0-2-0-pci-offset-78/
+
+OssiPC 10DE:228E read back config4c=00000000 and PCIe Device Control=2930
+(NoSnoop permitted) before the change. Permission does not establish that
+the function actually issued noncoherent transactions. CPU PCM was intact as the playback
+position passed, but the short tone was inaudible. Those observations do not
+prove what DMA read. Hardware hearing confirmation remains separate from
+register readback and the analog SMP4 PCM tests; evidence is retained under
+ExFiles/Reports/OssiGPU/20261008-final08244/.
+
+Stopped stream binding (0.82.44)
+--------------------------------
+Intel HDA1.0a4.5.3 configures descriptor and codec before setting RUN; section
+3.3.35 reserves stream number0 for unused descriptors. The pinned Linux
+7.1.6 core/stream.c snd_hdac_stream_setup clears RUN and writes stream_tag;
+snd_hdac_stream_start separately sets DMA_START and interrupt bits. R4OS
+independently confirms the stopped tag/direction before either physical start.
+No foreign implementation was copied and no claim is made that the spec
+explicitly prohibits a combined MMIO write.
+
+On OssiPC the digital controller initially has no sink and stream0. Late
+selection previously changed the codec to stream1 and wrote tag+RUN together.
+In the HDA32/HDA33 controlled comparison, separate tag/readback before RUN
+made the first post-boot warm tone audible without route/video rebind. The
+next original half-second WAV without caller silence was also heard. The
+diagnostic readback showed000000 ->100000 with RUN0. This supports ordering;
+an internal hardware tag latch was not directly measured. HDA34 retains this
+change without the diagnostic trace, and also guards normal analog PCM.
+NVIDIA308 removes the unsuccessful N306/N307 initial-On experiments and uses
+the original305 implementation. Exact installation and SMP4 ordinary PCM/
+route/terminal cleanup are separately verified. Physical cold-short/game
+hearing remains in the current acceptance report, not inferred from counters.
+Evidence: ExFiles/Reports/OssiGPU/20261008-final08244/.
 
 Code-related comparison
 -----------------------

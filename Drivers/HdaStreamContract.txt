@@ -28,6 +28,20 @@ stream; command transport and allocated ring storage remain available for
 presence queries and later activation. PCI discovery, mappings and MSI
 allocation occur during initialization, never during a user route switch.
 
+HDA 0.3.29 requires coherent NVIDIA DMA after controller reset and before
+starting CORB/RIRB or PCM DMA. The normal cached mapping requires coherence;
+mfence orders writes but does not flush cache lines. A bounded, cycle-checked
+PCI capability walk selects the function's PCIe Device Control register:
+clear No Snoop (bit11), preserve other control bits, write zero to W1C Device
+Status and the FLR trigger, then verify. Legacy PCI without PCIe capability
+uses vendor config4c mask000f0101. Modern GPU functions need not implement
+those older fields (OssiPC rejected them in HDA28); config4c=0 alone is not
+evidence of incoherent DMA. These PCI bytes are distinct from HDA MMIO.
+Unavailable/malformed configuration or unconfirmed setup prevents DMA startup.
+Restore only the owned bits against current values after stream, position
+and command DMA stop. Failed restoration retains controller identity and
+pending ownership. Non-NVIDIA controllers are unchanged.
+
 The controller is always quiesced and passed through CRST low/hold/high,
 including a firmware-initialized state. Command-DMA stop, both CRST edges and
 post-reset STATESTS use monotone tick deadlines. Discovery evaluates all 15
@@ -152,6 +166,14 @@ Initial playback prefers an available HDMI sink, otherwise an available
 analog/default output. Persistent preference and desktop controls belong to
 0.78.17.
 
+Kernel 0.1.259 also accepts AudioBackend v4: an optional eight-byte Idle
+callback follows the unchanged 96-byte v3 prefix (total 104 bytes). Ordinary
+last-client/synth completion may call Idle; physical route replacement,
+unregister and owner shutdown must call Stop. A null Idle, v2 or v3 backend
+falls back to Stop. Failure/Busy is preserved; it does not acknowledge a
+physical stop. HDA 0.3.26 requires v4 and must be installed together with a
+supporting kernel. Its public application PCM and AUDSVC contracts are unchanged.
+
 Hardware boundary: the NVIDIA display engine must also enable HDMI audio and
 supply presence/ELD to HDA. Limine framebuffer output alone is not proof of
 that setup. No arbitrary GPU register programming or modeset is performed by
@@ -231,6 +253,15 @@ Write contract
   queues can emit their buffered tail before RUN is cleared; these postroll
   periods are not underrun recovery.
 
+HDA 0.3.34 prepares every physical PCM/carrier start in two writes: while
+RUN and SRST are clear, program the nonzero stream tag and exact descriptor
+direction, then read back the stopped binding. Only a confirmed binding may
+start DMA. Unassigned stream0, unexpected RUN/reset or failed readback rejects
+startup; queued resources and controller identity remain owned for cleanup.
+This covers receivers which appear after initial DMA setup with no codec
+route. Quiet-carrier resume keeps its already running descriptor; logical
+Close is not a new physical start. Normal analog start uses the same guard.
+
 DMA geometry and ownership
 --------------------------
 - One period is 480 frames or 1,920 bytes, exactly 10 ms in the hardware
@@ -300,6 +331,15 @@ are bounded. DMA position and LPIB must both lie within CBL and agree within a
 two-period read skew; unavailable, invalid or repeatedly divergent DMA data
 degrades visibly to LPIB.
 
+HDA 0.3.39 normalizes only the exact raw CBL endpoint to ring position zero
+before DMA/LPIB agreement, progress checks or period indexing. HDA1.0a
+section3.3.37 permits LPIB to count through CBL inclusively; rejecting that
+wrap can unnecessarily recover and discard queued PCM. CBL zero, values
+above CBL and invalid all-ones readings remain rejected; internal offsets
+stay strictly below CBL. Existing elapsed-time, freeze, source-skew and
+recovery ownership limits are unchanged. Primary reference:
+https://www.intel.com/content/dam/www/public/us/en/documents/product-specifications/high-definition-audio-specification.pdf
+
 Since HDA 0.3.16, an underrun means a missing hardware period despite later
 prepared PCM or at least one complete software period waiting for DMA. Each
 such period increments underruns and silence_refills. An earlier gap remains
@@ -320,18 +360,33 @@ hardware period; newly accepted PCM is never written behind the consumer.
 After source exhaustion, the already-cleared ring emits three more periods
 of silence for the same codec/host tail protection used by Drain. Newly
 prepared PCM cancels this pending idle transition. After the postroll, the
-driver clears RUN and descriptor interrupts, resets the descriptor and ring
+analog/DisplayPort path clears RUN and descriptor interrupts, resets the descriptor and ring
 ownership, and retains the logical stream, software queue and resampler phase.
 No periodic completion work continues on the parked ring. New full periods
 restart at descriptor zero with the normal prefill. An already parked, empty
 Close only resets the logical conversion state; it does not replay postroll.
 
+For a selected, ready HDMI sink (not DisplayPort), HDA 0.3.26 instead keeps
+RUN on the completely cleared ring with IOCE off. FIFO/descriptor error IRQs
+remain enabled. No repeating work or user stream owns this carrier; the
+driver retains all DMA resources. A new physical clock starts with zero PCM
+and a one-second acquisition deadline; Write returns Busy without consuming
+caller data until it expires. Selection and the first write after automatic
+selection/recovery use the same rule. A warm resume reads the live DMA/LPIB
+position, excludes its active period and reserves two silent lead periods
+before caller PCM. It changes neither RUN nor BDL/CBL/LVI. Exhaustion retains
+the open stream's resampler phase; explicit last-client Idle resets it.
+The Hisense probe established that a cold 0.5-second signal was lost while
+the same signal after one second of actual zero PCM was audible. This is a
+receiver-specific observation; quiet HDMI still transfers 192,000 bytes/s.
+
 Lifecycle
 ---------
 Open and the first writes fill the queue and ring. An application stream Close
 pumps remaining canonical PCM and requests the bounded backend Drain. HDA
-emits queued requested frames and the three-period postroll before clearing
-RUN. On a 400-ms drain timeout it performs a forced stop, accounts and clears
+emits queued requested frames and the three-period postroll before parking
+or entering the quiet HDMI carrier. Physical Stop always clears RUN. On a
+400-ms drain timeout it performs a forced stop, accounts and clears
 software PCM, ready periods and resampler state, and only then returns the
 error. Driver shutdown uses the same bounded Drain and may continue safe
 teardown after that forced stop. Both paths
@@ -348,16 +403,23 @@ stage, require reverse release and repeat the complete teardown without a
 second release. A transport, IRQ/MSI or completion that cannot be proven
 quiescent vetoes further unsafe frees and retains ownership for retry.
 
-AUDSVC creates only a logical client stream at Open. HDA therefore receives
-no open, DMA start or zero-filled PCM quantum until the first non-silent
-write. A complete silent service block is consumed without a backend write;
-if HDA is active, the service closes it once through this same bounded Drain.
+AUDSVC creates only a logical client stream at Open and sends no zero-filled
+PCM merely to keep an output alive. A complete silent service block is
+consumed without a backend write; an active service stream closes once
+through the same bounded Drain/Idle. The selected HDMI carrier is separate
+driver-owned output state, not service materialization.
 
 BDL, stream and position allocations are constrained below 4 GiB whenever
 GCAP does not advertise 64-bit addressing. Shutdown drains and stops RUN,
 disables controller interrupts, unregisters IRQ routes, rolls MSI back and
 joins Driver Work before disabling and freeing position, stream or BDL DMA and
 before unregistering the audio backend.
+
+Kernel 0.1.259 includes audio in the terminal warm-reset driver pass, using
+the same callback-admission and complete owner-cleanup barrier as ordinary
+unload. A silent HDMI carrier is still hardware activity. Successful shutdown
+must join work, remove backend callbacks and release tracked DMA/IRQ owners;
+failure vetoes the warm reset instead of inferring quiescence from silence.
 
 Measurement surface
 -------------------

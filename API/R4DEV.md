@@ -94,7 +94,7 @@ Details: [AMD-Laptopbedienung](../Drivers/AMDLaptop08035.txt).
 <!-- R4OS-APIREF:BEGIN R4DEV (generiert von ApiContractGen aus ApiContract.json - NICHT von Hand editieren) -->
 ## Tabellen-Referenz R4DEV (generiert)
 
-Kernel-Gruppentabelle `R4XStartR4Dev` v12, 368 Bytes, 42 Funktionsfelder und 44 Slots insgesamt.
+Kernel-Gruppentabelle `R4XStartR4Dev` v13, 392 Bytes, 45 Funktionsfelder und 47 Slots insgesamt.
 Signatur-Wahrheit: `abi.R4DevFns` (Feldname == Tabellenfeld).
 Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 
@@ -144,4 +144,7 @@ Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 | 41 | 344 | function | `performance_input` | `*const fn (*ProgramInputPerformanceInfo) callconv(.c) i32` |
 | 42 | 352 | function | `display_state` | `*const fn (*DisplayStateInfo) callconv(.c) i32` |
 | 43 | 360 | function | `driver_module_info` | `*const fn (u32, *DriverModuleInfo) callconv(.c) i32` |
+| 44 | 368 | function | `performance_instrumentation` | `*const fn (*ProgramInstrumentationInfo) callconv(.c) i32` |
+| 45 | 376 | function | `performance_lock` | `*const fn (u32, *ProgramLockPerformanceInfo) callconv(.c) i32` |
+| 46 | 384 | function | `performance_stack` | `*const fn (u32, *ProgramStackPerformanceInfo) callconv(.c) i32` |
 <!-- R4OS-APIREF:END R4DEV -->

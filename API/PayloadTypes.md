@@ -5,9 +5,9 @@ Diese Datei wird deterministisch aus `API/ApiContract.json` erzeugt. Manuelle Ä
 Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenzen und Conformance-Fixtures werden produktiv aus diesem Schema erzeugt; handgeschriebene Dateien bleiben nur Fassaden oder erklaerende Texte.
 
 - Schema: v11, Baseline `standalone-contract-0.64.11`
-- Reachability: 304 von 304 Typen aufgelöst oder explizit klassifiziert
+- Reachability: 308 von 308 Typen aufgelöst oder explizit klassifiziert
 - Zentrale SDK-only-Wurzeln: 0; Runtime-R4Ls besitzen libraryeigene Vertraege
-- Operationen: 0; Fehlerdomänen: 63; Konstanten: 1926; Limits: 109
+- Operationen: 0; Fehlerdomänen: 63; Konstanten: 1933; Limits: 109
 
 ## App-Profile
 
@@ -196,7 +196,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `GfxMmioWindow` | extensible | extern_struct | 56/8 | 56/8 | 56/8 | 56/8 |
 | `GfxOwnedBufferReservation` | extensible | extern_struct | 88/8 | 88/8 | 88/8 | 88/8 |
 | `GfxOwnedBufferRelease` | extensible | extern_struct | 80/8 | 80/8 | 80/8 | 80/8 |
-| `GfxDriverMemoryApi` | extensible | extern_struct | 248/8 | 248/8 | 248/8 | 248/8 |
+| `GfxDriverMemoryApi` | extensible | extern_struct | 256/8 | 256/8 | 256/8 | 256/8 |
 | `GfxFence` | fixed_layout | extern_struct | 40/8 | 40/8 | 40/8 | 40/8 |
 | `GfxQueueConfig` | extensible | extern_struct | 40/8 | 40/8 | 40/8 | 40/8 |
 | `GfxQueueHandle` | extensible | extern_struct | 16/8 | 16/8 | 16/8 | 16/8 |
@@ -224,7 +224,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `GfxNativeRegistration` | extensible | extern_struct | 128/8 | 128/8 | 128/8 | 128/8 |
 | `GfxNativeState` | extensible | extern_struct | 32/8 | 32/8 | 32/8 | 32/8 |
 | `GfxBootHoldRequest` | extensible | extern_struct | 56/8 | 56/8 | 56/8 | 56/8 |
-| `GfxDriverDisplayApi` | extensible | extern_struct | 136/8 | 136/8 | 136/8 | 136/8 |
+| `GfxDriverDisplayApi` | extensible | extern_struct | 152/8 | 152/8 | 152/8 | 152/8 |
 | `DriverResourceInfo` | extensible | extern_struct | 32/8 | 32/8 | 32/8 | 32/8 |
 | `DriverFirmwareTableInfo` | extensible | extern_struct | 48/8 | 48/8 | 48/8 | 48/8 |
 | `DriverResourceApi` | extensible | extern_struct | 56/8 | 56/8 | 56/8 | 56/8 |
@@ -325,6 +325,10 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `PlatformInputSnapshot` | fixed_layout | extern_struct | 64/8 | 64/8 | 64/8 | 64/8 |
 | `DriverPlatformApi` | extensible | extern_struct | 32/8 | 32/8 | 32/8 | 32/8 |
 | `HidConsumerOp` | fixed_layout | extern_struct | 64/8 | 64/8 | 64/8 | 64/8 |
+| `DirectoryScanCursor` | extensible | extern_struct | 1088/8 | 1088/8 | 1088/8 | 1088/8 |
+| `ProgramInstrumentationInfo` | extensible | extern_struct | 48/8 | 48/8 | 48/8 | 48/8 |
+| `ProgramLockPerformanceInfo` | extensible | extern_struct | 120/8 | 120/8 | 120/8 | 120/8 |
+| `ProgramStackPerformanceInfo` | extensible | extern_struct | 144/8 | 144/8 | 144/8 | 144/8 |
 
 ## Typdetails
 
@@ -5537,7 +5541,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 - Quelle: `API/ApiContract.json`
 - Klasse: `extensible`
 - Repräsentation: `extern_struct`
-- Version/Größe/Alignment: 7 / 248 / 8
+- Version/Größe/Alignment: 8 / 256 / 8
 
 | Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
 |---|---:|---:|---:|---|---|
@@ -5573,6 +5577,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `virtual_take` | 224 | 8 | 8 | `u64` | - |
 | `virtual_complete` | 232 | 8 | 8 | `u64` | - |
 | `reserved_span` | 240 | 8 | 8 | `u64` | - |
+| `unmanaged_span` | 248 | 8 | 8 | `u64` | - |
 
 ### `GfxFence`
 
@@ -6128,7 +6133,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 - Quelle: `API/ApiContract.json`
 - Klasse: `extensible`
 - Repräsentation: `extern_struct`
-- Version/Größe/Alignment: 6 / 136 / 8
+- Version/Größe/Alignment: 8 / 152 / 8
 
 | Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
 |---|---:|---:|---:|---|---|
@@ -6150,6 +6155,8 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `output_transition` | 112 | 8 | 8 | `u64` | - |
 | `device_reset` | 120 | 8 | 8 | `u64` | - |
 | `prepare_reset` | 128 | 8 | 8 | `u64` | - |
+| `terminal_release` | 136 | 8 | 8 | `u64` | - |
+| `resume_headless` | 144 | 8 | 8 | `u64` | - |
 
 ### `DriverResourceInfo`
 
@@ -8094,6 +8101,96 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `pressed` | 28 | 4 | 4 | `u32` | - |
 | `report` | 32 | 32 | 1 | `[32]u8` | - |
 
+### `DirectoryScanCursor`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `extensible`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 1088 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `change` | 8 | 40 | 8 | `DirectoryChangeCursor` | - |
+| `owner_id` | 48 | 4 | 4 | `u32` | - |
+| `owner_kind` | 52 | 4 | 4 | `u32` | - |
+| `owner_generation` | 56 | 8 | 8 | `u64` | - |
+| `backend` | 64 | 1024 | 8 | `[128]u64` | - |
+
+### `ProgramInstrumentationInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `extensible`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 48 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `mode` | 8 | 4 | 4 | `u32` | - |
+| `service_lock_stride` | 12 | 4 | 4 | `u32` | - |
+| `work_critical_stride` | 16 | 4 | 4 | `u32` | - |
+| `lock_count` | 20 | 4 | 4 | `u32` | - |
+| `stack_group_count` | 24 | 4 | 4 | `u32` | - |
+| `clock_source` | 28 | 4 | 4 | `u32` | - |
+| `clock_generation` | 32 | 4 | 4 | `u32` | - |
+| `clock_flags` | 36 | 4 | 4 | `u32` | - |
+| `clock_resolution_ns` | 40 | 8 | 8 | `u64` | - |
+
+### `ProgramLockPerformanceInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `extensible`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 120 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `index` | 8 | 4 | 4 | `u32` | - |
+| `flags` | 12 | 4 | 4 | `u32` | - |
+| `name` | 16 | 32 | 1 | `[32]u8` | - |
+| `acquisitions` | 48 | 8 | 8 | `u64` | - |
+| `nested_acquisitions` | 56 | 8 | 8 | `u64` | - |
+| `collisions` | 64 | 8 | 8 | `u64` | - |
+| `cpu_collisions` | 72 | 8 | 8 | `u64` | - |
+| `wait_spins` | 80 | 8 | 8 | `u64` | - |
+| `max_wait_spins` | 88 | 8 | 8 | `u64` | - |
+| `hold_cycles` | 96 | 8 | 8 | `u64` | - |
+| `max_hold_cycles` | 104 | 8 | 8 | `u64` | - |
+| `order_violations` | 112 | 8 | 8 | `u64` | - |
+
+### `ProgramStackPerformanceInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `extensible`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 144 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `index` | 8 | 4 | 4 | `u32` | - |
+| `kind` | 12 | 4 | 4 | `u32` | - |
+| `flags` | 16 | 4 | 4 | `u32` | - |
+| `reserved` | 20 | 4 | 4 | `u32` | - |
+| `name` | 24 | 32 | 1 | `[32]u8` | - |
+| `created` | 56 | 8 | 8 | `u64` | - |
+| `released` | 64 | 8 | 8 | `u64` | - |
+| `reserve_max_bytes` | 72 | 8 | 8 | `u64` | - |
+| `initial_commit_max_bytes` | 80 | 8 | 8 | `u64` | - |
+| `committed_max_bytes` | 88 | 8 | 8 | `u64` | - |
+| `high_water_total_bytes` | 96 | 8 | 8 | `u64` | - |
+| `high_water_max_bytes` | 104 | 8 | 8 | `u64` | - |
+| `create_cycles_total` | 112 | 8 | 8 | `u64` | - |
+| `create_cycles_max` | 120 | 8 | 8 | `u64` | - |
+| `release_cycles_total` | 128 | 8 | 8 | `u64` | - |
+| `release_cycles_max` | 136 | 8 | 8 | `u64` | - |
+
 ## Fehlerdomänen
 
 ### `arp`
@@ -8987,7 +9084,7 @@ Geltung: `storage`, Einheit: `status_code`, Stabilität: `fixed_contract`.
 | `dns_flag_a_record` | `1` | `u32` | flag | bitmask | `dns` | fixed_contract |
 | `dns_op_build_a_query` | `1` | `u32` | identity | number | `dns_op` | fixed_contract |
 | `dns_op_handle_response` | `2` | `u32` | identity | number | `dns_op` | fixed_contract |
-| `driver_api_version` | `35` | `u32` | version | number | `driver_api` | fixed_contract |
+| `driver_api_version` | `36` | `u32` | version | number | `driver_api` | fixed_contract |
 | `driver_api_thread_work_version` | `35` | `u32` | version | number | `driver_api` | fixed_contract |
 | `driver_magic` | `826888260` | `u32` | magic | number | `driver` | fixed_contract |
 | `driver_work_flag_from_irq` | `1` | `u32` | flag | bitmask | `driver_work` | fixed_contract |
@@ -9836,6 +9933,7 @@ Geltung: `storage`, Einheit: `status_code`, Stabilität: `fixed_contract`.
 | `program_inventory_status_invalid` | `3` | `u8` | value | enum_value | `program_inventory` | fixed_contract |
 | `program_inventory_status_more` | `1` | `u8` | value | enum_value | `program_inventory` | fixed_contract |
 | `program_inventory_status_restart` | `2` | `u8` | value | enum_value | `program_inventory` | fixed_contract |
+| `program_instance_flag_desktop_host` | `8` | `u8` | value | bit | `program_inventory` | fixed_contract |
 | `program_inventory_summary_flag_stable` | `1` | `u32` | value | bit | `program_inventory` | fixed_contract |
 | `program_inventory_version` | `1` | `u16` | identity | version | `program_inventory` | fixed_contract |
 | `program_join_handle_size` | `32` | `u16` | value | bytes | `program_inventory` | fixed_contract |
@@ -10270,6 +10368,7 @@ Geltung: `storage`, Einheit: `status_code`, Stabilität: `fixed_contract`.
 | `file_update_atomic_checked_flag_long_stage` | `16` | `u32` | flag | bitmask | `file_update_atomic_checked` | fixed_contract |
 | `vm_commit_resident_max_bytes` | `262144` | `u64` | value | bytes | `vm_commit` | fixed_contract |
 | `audio_backend_outputs_version` | `3` | `u32` | version | number | `audio_outputs` | fixed_contract |
+| `audio_backend_idle_version` | `4` | `u32` | version | number | `audio_outputs` | fixed_contract |
 | `audio_output_kind_line_out` | `0` | `u32` | version | number | `audio_outputs` | fixed_contract |
 | `audio_output_kind_speaker` | `1` | `u32` | version | number | `audio_outputs` | fixed_contract |
 | `audio_output_kind_headphone` | `2` | `u32` | version | number | `audio_outputs` | fixed_contract |
@@ -10577,6 +10676,7 @@ Geltung: `storage`, Einheit: `status_code`, Stabilität: `fixed_contract`.
 | `display_presentation_info_overlay` | `128` | `u32` | value | number | `display_presentation` | fixed_contract |
 | `gfx_queue_operation_direct_present` | `7` | `u32` | value | number | `gfx_queue` | fixed_contract |
 | `display_presentation_flag_direct` | `4` | `u32` | value | number | `display` | fixed_contract |
+| `display_presentation_flag_polled` | `8` | `u32` | value | number | `display` | fixed_contract |
 | `audio_output_reason_auto_display_port` | `8` | `u32` | identity | number | `audio_service_outputs` | fixed_contract |
 | `gfx_output_kind_dvi` | `6` | `u32` | value | number | `gfx_outputs` | fixed_contract |
 | `display_presentation_info_system_source` | `256` | `u32` | value | number | `display_presentation` | fixed_contract |
@@ -10759,6 +10859,10 @@ Geltung: `storage`, Einheit: `status_code`, Stabilität: `fixed_contract`.
 | `platform_input_kind_lid` | `3` | `u32` | value | number | `input` | fixed_contract |
 | `platform_input_kind_capabilities` | `4` | `u32` | value | number | `input` | fixed_contract |
 | `hid_report_op_consumer` | `3` | `u32` | value | number | `hid_report` | fixed_contract |
+| `driver_api_owned_work_version` | `36` | `u32` | version | number | `driver_api` | fixed_contract |
+| `driver_work_owner_busy` | `-32000` | `i32` | value | status | `driver_work` | fixed_contract |
+| `window_graphics_headless` | `2` | `u32` | identity | number | `window_graphics` | fixed_contract |
+| `performance_irq_coverage_instrumentation_disabled` | `32` | `u32` | flag | bitmask | `performance_irq_timing` | fixed_contract |
 
 ## Limits
 

@@ -1,0 +1,201 @@
+﻿Kernelinstrumentierung und Spectra - 0.83.1
+==========================================
+
+Stand: 0.83.1 technisch abgeschlossen. Beide kurzen SMP4-Gastlaeufe und
+je 482 Kernel-Hosttests bestanden. Spectra selbst folgt in 0.83.2.
+
+Messmodus
+---------
+Der normale Kernel baut mit -Dmetrics=false (Standard). -Dmetrics=true
+aktiviert Detailinstrumentierung beim Kernelbuild; ein Neustart mit diesem
+Kernel ist erforderlich. Eine Abfrage aktiviert weder Messungen noch Traces.
+Beide Modi behalten funktionale Zeitquellen, Deadlines, Schedulerbudgets,
+Lockbesitz/Unwind, Guardseiten, Stackvorbereitung, Speicherinitialisierung,
+FPU-Sicherung und Ressourcenbuchhaltung.
+
+Im Basismodus entfallen Runtime-/Owner-Lock-Spinsummen und Haltezeiten,
+IRQ-Router-Zeitstempel, Service-Lockzeiten, Kernel-IPC-/Driver-Work-
+Nanosekundenzeiten, Stack-Musterfuellung/-Scans/-Zyklusmessung und die
+bereits optionalen Lockreihenfolge-/Starvationsscans. Zugehoerige Nullfelder
+sind NICHT gemessene Nullzeiten. Betriebs-, Fehler- und Fortschrittszaehler
+bleiben erhalten. Boot-/Loaderzeiten und fachliche I/O-/Audio-/Presentzeiten
+bleiben getrennte bestehende Messgruppen; -Dmetrics ist kein Abschalter fuer
+die funktionale Systemuhr oder jede im System vorkommende Dauer.
+
+Im Detailmodus werden Runtime-/Owner-Lockzeiten je aeusserer Belegung in
+rohen TSC-Ticks erfasst; dies sind keine Nanosekunden. Service-Locks messen
+jede echte Kollision und jede 64. unbestrittene Aufnahme. Driver-Work misst
+seine zusaetzliche Nanosekunden-Kritischzeit einmal je 64 globale kritische
+Sektionen; Owner-Klassenanteile dieser Stichprobe sind keine Vollerfassung.
+IRQ-, IPC- und Work-Auftragszeiten werden je Ereignis erfasst. Stack-Hochwasser
+ist eine Musterabschaetzung beendeter Stacks, kein Ueberlaufschutz.
+
+Messgruppen, Zweck und Besitzer
+------------------------------
+Boot, Loader, PCI: Boot-/Loaderphasen und Discoverykosten sind fuer den
+Refactor weiter sinnvoll. Endliche Startphasen und explizite Ladevorgaenge;
+keine periodische Sammlung. Besitzer kernel/boot_perf.zig, loader_perf.zig,
+platform/pci_inventory.zig, kernel/module_file.zig. Verbraucher BOOTDIAG,
+LOADERD, PERFDIAG, HWDIAG; gezielte Boot-/PCI-Abfragen bereits vorhanden.
+
+Scheduler, Waits, Synchronisation: Lauf-/Wake-/Timeout-/Fortschrittszaehler
+und Wartezustand bleiben; daraus folgen auch funktionale Entscheidungen.
+Runtime-Owner und memory/owner_locks.zig behalten Aufnahme-, Kollisions- und
+Fehlerzaehler. Wiederholte Zeitstempel, Spinsummen und Maximalwert-Atomics
+sind optional. sched/sync.zig behaelt funktionale Lock-/Unwindverfolgung.
+Verbraucher PERFDIAG, THREADD, CLEANUPD und gezielte SMP-Proben.
+
+IRQ/Clock: Dispatch-/Handled-/Fehlerzaehler sowie Owner/FPU-Sicherung bleiben.
+kernel/irq_router.zig erzeugt im Basismodus keine Messzeitstempel. Vorher
+kostete eine Route mit einem Handler vier Capture-Aufrufe und zwei Tick-
+Abfragen; weitere Handler erhoehten die Kosten. Clockkalibrierung und
+Deadlineuhr sind funktional. Verbraucher PERFDIAG, BOOTDIAG, DRVDIAG.
+
+Service-Core und Kernel-IPC: Registry-/Queue-/Antwort-/Kopier-/Fehlerzaehler
+bleiben fuer Diagnose und Kapazitaetsbeurteilung. services.zig erhaelt sein
+Lock-Sampling nur im Detailmodus; service_ipc.zig erfasst dort Queue-,
+Handler- und End-to-End-Zeiten. R4NET-IPC ist hier ein Kernelvertrag;
+fachliche Netzwerkdienste bleiben eigenstaendige Besitzer.
+
+Driver-Work: Fortschritt, Slotbelegung, Completion-/Freigabequittungen,
+Deadline-/Budgetzustand und Fehler bleiben. driver_work.zig schaltet seine
+Nanosekundenzeiten gezielt ab; die zuvor doppelte permanente Kritischzeit
+(Owner-TSC plus Work-Nanosekunden) ist im Detailmodus auf eine zusaetzliche
+1/64-Stichprobe begrenzt. Verbraucher DRVDIAG und PERFDIAG.
+
+Speicher/Stacks/Programme: Speicher-/Commit-/Cache-/Reclaim-/Fehlerzaehler
+und Generationen behalten ihre Aussage. sched/task.zig und program/r4x.zig
+fuellen und scannen Stackmuster nur im Detailmodus, auch bei Cache,
+Critical-Reserve, R4X-Haupt-/Threadstacks und Wachstum. Basismodus behaelt
+Anlage/Freigabe und R4X-Groessenaggregate. Verbraucher MEMSUITE, STACKD,
+THREADD, LOADERD, CLEANUPD, APPHEAPD und PERFDIAG.
+
+Dateisystem/Storage/Cache: Besitzer fs/request.zig, fs/page_cache.zig,
+storage/block.zig, FAT/NTFS. Requests, Bytes, Treffer, Belegung, Fehler,
+Writeback/Reclaim und die vorhandenen Requestdauern bleiben sinnvoll.
+Viele Zeitwerte teilen ihre Zeitbasis mit echten Timeout-/Waitvertraegen;
+kein pauschales Entfernen. Verbraucher FSDIAG, STORDIAG, NTFSDIAG, MEMSUITE,
+PERFDIAG. Treiberinterne Hardwaremessungen werden nicht allein wegen R4DEV
+zu Kernelmessungen.
+
+Audio/Grafik/Netz/Eingabe: Kernelzaehler fuer Writes, Puffer, Drops, Presents,
+Pakete, RX/TX, Tasten/IRQs und deren fachliche Fortschritts-/Latenzbeurteilung
+bleiben. Hardware-/Firmware-/Renderer- und Anwendungsdiagnosen gehoeren
+weiter dem tatsaechlichen Besitzer. Verbraucher AUDIOD, DISPLAYD, NETDIAG,
+NETIOD, INPUTD und PERFDIAG; keine pauschale Uebernahme dieser Programme.
+
+Abfragen und Ausgabe
+--------------------
+R4DEV v13 ergaenzt append-only die Slots performance_instrumentation,
+performance_lock und performance_stack. Alte Slots und Payloadpraefixe
+bleiben erhalten. Die drei neuen Abfragen pruefen Version/Groesse, schreiben
+bei Fehlern nichts und liefern 1 bei Erfolg, die Listen 0 am Ende, -1 fuer
+ungueltige Version/Kapazitaet. Contract/SDK besitzen Zig- und C-Bindings.
+
+performance_instrumentation meldet Modus, Sampling, Listenlaengen und
+Clockquelle/-generation/-qualitaet. Locklisten enthalten Runtime plus alle
+zehn Owner-Klassen; Stacklisten alle vier Kernelrollen und neun R4X-Profile.
+Es sind atomar gelesene Feldsnapshots, kein global gleichzeitiger Zustand.
+performance_irq_timing markiert deaktivierte Erfassung ausdruecklich.
+
+Die breite PerformanceSummary bleibt kompatibel, aber teuer: 6352 Bytes,
+viele Owner-/Subsystem-Snapshots und gegebenenfalls Backendstatus-Callbacks.
+Gezielte Abfragen bevorzugen; keine breite Summary oder Textausgabe in
+Arbeitslastschleifen. Spectra uebernimmt in 0.83.2 die vollstaendige Anzeige
+einschliesslich aller Tasks, IRQs und Bootphasen.
+
+Normale Messung aktualisiert begrenzte residente Zaehler/Datensaetze und
+erzeugt keine Messdatei oder laufende Textzeile. Bootlog ist ein begrenzter
+65536-Byte-Ring mit Ueberschreiben. LOGSVC besitzt seine eigene bestehende
+Sammlung; eine Performanceabfrage fuegt keinen neuen Dienst hinzu.
+REBOOT.LOG wird im vorhandenen Shutdownpfad geschrieben, nicht pro Messung.
+Erfolgreiches R4X-Stackwachstum schreibt nur bei explizitem Stack-Trace ins
+Bootlog. Fehlerausgabe bleibt erhalten. Stack-Tracezeilen melden detail=on
+oder detail=off; auch der Testauswerter unterscheidet dies.
+
+Eigenkosten und Nachweis
+-----------------------
+Prozentwerte lassen sich nicht aus Zaehlern oder Quellcode ableiten.
+PERFDIAG /OBSERVER ist ein ausdruecklicher begrenzter Zwischenverbraucher
+fuer 0.83.1; sein Verfahren geht danach an Spectra. Feste SMP4-Lasten fuer
+Runtime/Yield, VM, Thread-/Stackanlage, Clock, Driver-Work/IRQ und getrennte
+Metadata-/Lock-/Summaryabfragen; Konsolenausgabe ist eine eigene Phase.
+Je Phase ein Warmlauf und fuenf Rohsamples. Die Audio-Workphase enthaelt
+absichtlich feste 25-ms-Pausen und ist deshalb kein reiner CPU-Kostentest.
+Rohdaten werden erst nach den Lastphasen ausgegeben (abgesehen von der
+ausdruecklichen Ausgabephase); Clockgeneration und Erfassungsmodus bleiben
+sichtbar. Hostumgebung, Kernelvarianten und Artefakte im A/B-Bericht binden.
+TCG-SMP ist kein Nachweis physischer Parallelskalierung. Benchmarks.jsonl
+wird weder gelesen noch beschrieben.
+
+Befunde aus der Gastabnahme
+--------------------------
+PERFDIAG prueft optionale Sleep-Lock-Scans passend zum Messmodus. Seine
+Cacheprobe liest jetzt eine nicht residente Fontdatei: die kleine VERSION.R4S
+liegt bei NTFS im MFT-Record und belegt keinen Pagecachezugriff. Bei
+Preemption teilen Timer- und priorisierte Wake-Proben ihre Ergebniszaehler;
+nur Timerproben erhoehen den historischen Simulationstaktzaehler, und ein
+Wake darf vor Quantumablauf wechseln. Die Probe prueft diesen Besitzervertrag
+statt einer ungueltigen Gleichheit zwischen unterschiedlichen Mengen.
+
+Fruehe Bootintervalle koennen nach spaeterer TSC-Aufloesung mit einem
+zwischenzeitlichen periodischen Nullursprung kollidieren. Der Bootbesitzer
+weist rueckwaerts liegende Folgeintervalle jetzt als unverfuegbar aus und
+erhaelt nur geordnete Teilzeiten. Er erzeugt weder negative Dauern noch
+eine gueltige Phase mit letztem Zeitstempel vor dem ersten. Dies aendert
+keine funktionale Zeitquelle oder Deadline. Zwei Regressionen erweitern den
+bestehenden Monotonic-Math-Besitzertest.
+
+Die Detailabnahme fand ausserdem eine Lock-Inversion beim Prozessende:
+Registry-Rang 110 hielt BO-Rang 100 beim Schliessen der GPU-VA-Annahme.
+Der Exit haelt nun eine gegen Caller-Kill geschuetzte Generationsleihe,
+schliesst die Annahme ohne Registry-Lock und validiert den Exit erneut.
+Die Annahmesperre bleibt vor der Exit-Publikation; Retire/Freigabe warten
+weiter auf die genaue Leihe. Die temporaere serielle Lockspur ist entfernt.
+
+Kontrollierter A/B-Befund vom 13.10.2026
+---------------------------------------
+QEMU 11.0.2, q35, TCG single-thread, Haswell, vier vCPUs, 1024 MB RAM,
+gleicher Dateiplan und PERFDIAG 0.3.20; Kernel 0.1.264 in Basis/Detail.
+Frische AHCI-Diskkopien, feste virtuelle RTC, kein Netzwerk, HDA ohne
+Hostaudio, Softwareausgabe ohne Desktop. Beide nutzen TSC (Generation 2,
+Flags 111, deklarierte Aufloesung 1 ns) und HPET-Ereignisse mit 1000 Hz.
+Deklarierte Clockaufloesung ist keine Zusicherung physischer Messgenauigkeit.
+Je Modus ein Lauf, je Phase ein Warmlauf und fuenf Messsamples. Die nach-
+folgende Konformitaet bestaetigte je 77 Checks und null Lock-Verstoesse.
+
+Median je Operation (ns), Detaildifferenz bezogen auf Basis:
+Phase                 Basis         Detail       Differenz
+clock                     686.4        686.2      -0.0%
+runtime_yield            1220.6       1417.1     +16.1%
+vm                     365755.7     366898.5      +0.3%
+thread_stack          1121439.8    3359576.6    +199.6%
+metadata_query            547.4        546.2      -0.2%
+lock_query                270.3        277.4      +2.6%
+summary_query          153568.9     166231.6      +8.2%
+driver_work          32242201.4   32460696.1      +0.7%
+console_output        1152391.5    1139097.1      -1.2%
+
+Thread/Stack umfasst Anlage, 8192 beruehrte Workerbytes, Join und Freigabe;
+VM umfasst Reserve/Commit, vier beruehrte Seiten und Release. Es sind Kosten
+der ganzen Operation mit/ohne optionale Messung. Erhaltene Basiszaehler und
+funktionale Arbeit wurden nicht gesondert abgeschaltet. Work enthaelt feste
+Wartezeiten und quantifiziert deshalb keine isolierte IRQ-/Callback-CPUzeit.
+Kleine und negative Differenzen liegen innerhalb der moeglichen Streuung.
+Weder die knapp dreifache Thread/Stack-Zeit noch die Yield-Differenz sind ein
+allgemeiner R4OS-Verlangsamungswert. Die Summary kostet in dieser Umgebung
+rund 280 Metadatenabfragen; Konsolenausgabe ist nochmals deutlich teurer.
+
+Alle 90 Rohsamples, Median/Minimum/Maximum, Clockdaten, Host- und Artefakt-
+identitaeten: Diagnostics/KernelInstrumentation0831.json. Serialausgaben,
+verworfene Fehlersuchen und Quellstandbelege lokal unter
+ExFiles/Reports/Spectra/20261013-instrumentation/. Der erneute A/B-Durchlauf
+war nach der im Detailmodus gefundenen Exit-Lock-Inversion erforderlich;
+beide finalen Varianten enthalten dieselbe Korrektur und keine Serialspur.
+
+Weitere Pruefungen: append-only Contract (435 alte Slots/305 Payloads/
+1932 Konstanten unveraendert), Contract-Konformitaet, gezielte Zig/C-
+Fassadenpruefung, SDK-/Diagnosebuilds und vorhandene Markerauswertung.
+Der breite SDK-Hosttest wurde wegen eines weiter aktiven unveraenderten
+FAT-Tests abgebrochen; kein vollstaendig bestandener SDK-Gesamtlauf.
+Dieser getrennte Befund steht mit Reproduktionslog in Problems.txt.

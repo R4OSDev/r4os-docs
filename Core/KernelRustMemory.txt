@@ -1,0 +1,78 @@
+﻿Rust-Speichergrundlage 0.83.8
+============================
+
+Besitz und Uebergang
+-------------------
+Rust/memory besitzt Memory Map, Geraetereservierungen, PMM/Blocks, Owner-Locks,
+Paging, Page-Table-Aufbau und Rootwechsel, Heap und Speicher-Bootkoordination.
+vm_ranges, vm_index und vm_commit_spans halten die einzige residente
+Range-/ID-/Adress-/Commit-Span-Speicherung. vm_frames, vm_transactions und
+vm_query besitzen physische Vorbereitung, eager/residenten Commit,
+Uncommit/Rollback/Freigabe, Guards, Readiness und kohaerente Snapshots.
+
+memory/*.zig verbindet die noch aktiven Verbraucher ueber private C-Fassaden.
+Der Pager behaelt Page-State, Backing, Reclaim und wartendes I/O bis 0.83.17.
+Seine begrenzten C-Leihen zeigen auf dieselben residenten Rust-Ranges;
+kein zweiter Katalog und kein Fallback. Rust-Referenzen bleiben innerhalb
+einer kurzen Ownerphase und leben nicht ueber I/O, Reschedule oder Cleanup.
+Feste C-Layouts, Fehlercodes, Namen als Pointer/Laenge und ausdrueckliche
+optionale Slots vermeiden sprachinterne Typen an den Uebergangsgrenzen.
+
+Freigabe und begrenzte Arbeit
+----------------------------
+Physische Freigabe verlangt die genaue Block-/Besitzeridentitaet und alle
+benoetigten generationstreuen TLB-Quittungen. Bei Timeout werden PTEs
+wiederhergestellt und Frames behalten. Vorbereitete oder teilweise
+ausgefuehrte VM-Operationen behalten Freigabeanker und genaue Retrybereiche.
+Die SMP-/TLB-Runtime selbst folgt erst in 0.83.10.
+
+Natuerliche Extents, freie Frames, Firmware-/Modul-/Geraetereservierungen,
+logische Laengen und Teilseiten folgen dem eingefrorenen Ausgangsvertrag.
+Eager-Arbeit bleibt auf 64 Seiten je Physik-/Mappingbatch begrenzt. Die
+VM-Mutation wird vor Zeroing und Reschedule verlassen; die genaue Range
+und der Task-Unwindschutz behalten ihre Leihe. Poolinitialisierung und
+-iteration kopieren keine ganzen Tabellen auf den Kernelstack.
+
+Heap und Stackverbraucher
+-------------------------
+Rust-alloc verwendet ausschliesslich den initialisierten Kernelheap. Bins,
+Coalescing, Wachstum, Poison und begrenzte Tailfreigabe bleiben erhalten.
+Wachstum gibt den Heapowner vor VM-Arbeit ab und pinnt den genauen
+Task-Unwindschutz. Gehaltene Restbereiche werden nicht vorzeitig freigegeben.
+
+Task-/Programmverwaltung folgt in 0.83.11/16; ihre vorhandenen Stackpfade
+nutzen schon die portierte VM. Kernel-/Workerstack: 64 KB plus 16 KB
+terminaler Guard, acht Cacheplaetze und vier vorab reservierte kritische
+Taskbuendel samt FPU. Normaler R4X-Stack: 4 MB Reserve, anfaenglich 64 KB,
+64-KB-Wachstum und 4-KB-Guard; andere Profile behalten ihre bisherigen Werte.
+Owneraufnahme bereitet 64 KB Stackspielraum vor dem ersten Lock vor.
+Wachsender/terminaler Guard, Rollback und generationsgebundener Abbau
+bleiben unter den bisherigen Verbrauchern; keine Stackpolicyoptimierung.
+
+Abnahme
+-------
+KernelRustMemory0838.json bindet vorhandene Hostgates, Clippy und kurze
+SMP4-Nachweise an ELF, Image und Quellen. Vier notwendige VM-Fixtures
+ergaenzen den bestehenden Loader-Gate: ID-/Adressidentitaet, voller
+Rangekatalog, Commit-Span-Merge/Split und Splitverweigerung vor Mutation.
+Wegfallende transitive Page-Batch-/Backing-Wiederholungen behalten ihre
+direkten Gates. Neue dauerhafte Gastgates werden nicht angelegt.
+
+Quick endet vor den spaeten Boot-Selbsttests und dem Terminal. Deshalb
+prueft ein eigener begrenzter SMP4-Terminalplan Spectra MEMORY, STACK und VM.
+Eine temporaere SDK-Probe verwendet unveraendertes R4SYS fuer residenten
+Commit, Nullinitialisierung, Doppelcommit-Abweisung, Teildecommit und Freigabe.
+Sie ist kein kanonisches Modul. Der vorhandene Kernel-Stackguard-Fehlerfall
+prueft die terminale, ungemappte Grenze des portierten VM-Pfads.
+
+Die IF-Erhaltungsproben in sync.selfTest schalten lokale Interruptflags um;
+ein Runtime-Ownertoken darf keinen blockierenden Aufruf ueberleben. Der
+vorherige Test tat dies und stoppte vor dem Terminal. Die vorhandenen
+On-/Off-Proben pruefen die Korrektur, ohne Schedulergrenzen zu lockern.
+Temporaere Bootmarker werden aus dem Abschlusscode entfernt.
+
+Profile, feste ABI-/unsafe-Regeln, Rueckweg und Abschlussgrenzen stehen in
+KernelRustMigration.txt und KernelRustBuild.txt. Apps, R4D/R4P, Libraries,
+Spectra und der separate Recovery-Kernel bleiben unveraendert. Windows
+wurde in dieser Welle nicht ausgefuehrt; keine Performancebehauptung und
+keine neue Benchmarkreferenz.

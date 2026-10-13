@@ -1,0 +1,88 @@
+﻿Rust-Kernel: Boot und Exceptiongrundlage 0.83.7
+=============================================
+
+Rust/boot/entry.rs exportiert kmain. Die Reihenfolge der bestehenden
+Bootphasen, Fehleroptionen und spaeten Fachschnitte bleibt erhalten.
+Repositories/Kernel/main.zig ist waehrend der Migration die private
+Komposition fuer noch nicht migrierte Fachbesitzer. Alle Uebergaben verwenden
+feste C-Werte, Integer, rohe Pointer, begrenzte Bytebereiche oder opake
+Besitzeraufrufe; keine Zig-Slices oder Rust-Referenzen als C-Layout.
+
+Limine und residente Bootdaten
+-----------------------------
+Rust/boot/limine.rs besitzt die sechs Requests und deren Start-/Endmarker in
+den bisherigen .limine_reqs_a_start/m_data/z_end-Sektionen. Retention ueber
+used und wirkliche Referenzen; vom Bootloader geschriebene Responsepointer
+werden volatile ohne Rust-Leihe gelesen. Die C-Protokolllayouts bleiben
+unveraendert und unabhaengig vom zentralen Modulvertrag.
+
+Rust/boot/info.rs normalisiert die begrenzte Memorymap, HHDM, RSDP,
+Framebufferbeschreibung, Preload-Module und genaue Executableidentitaet vor
+Heap und Scheduler. Grenzen bleiben 128 Mapeintraege, 16 Module, 256
+Pfadbytes und 512 Kommandozeilenbytes; Ueberlauf, Trunkierung und unvollstaendige
+Bootoptionen behalten ihre bisherigen Ergebnisse. Keine neue Diskheuristik.
+Die einmalige Softwaregrafikentscheidung und Executable-UUIDs bleiben resident.
+
+bootloader/boot_info.zig liefert den spaeteren Zig-Besitzern unveraenderte
+native Leseransichten: Map- und Framebufferdaten kommen aus Rust, BootModule-
+Slices und der Info-Kopf sind nach Init unveraenderliche Kompatibilitaetsviews.
+Diese Ansichten normalisieren oder entscheiden nichts und sind keine zweite
+mutable Bootregistry. Preload-Nutzdaten behalten ihre bisherige Lebensdauer.
+
+CPU-Tabellen und Assembly
+------------------------
+Rust/arch/tables.rs besitzt GDT, TSS, IDT und IST-Stacks. Selektoren 08/10/18,
+32 residente CPU-Slots, zwei 16-KB-ISTs je CPU und dieselbe Vektorzuordnung.
+Die Hardware-TSS hat 104 Drahtbytes; die fruehere Zig-Slotgroesse 112,
+Descriptorgrenze 111 und I/O-Map-Basis 112 werden bewusst erhalten.
+Descriptorpointer: zehn Bytes, Basisoffset zwei. IDT-Eintrag: 16 Bytes.
+
+cpu.S, isr.S und ap_trampoline.S bleiben Assembly. Rust und die privaten
+Zig-Adapter pruefen den 160-Byte-Registerframe, Vectoroffset 120,
+Erroroffset 128, RIP 136 und RFLAGS 152. IST-Faultframes enthalten weitere
+16 Bytes fuer RSP/SS. Rust kopiert diese 176 Bytes erst nach genauer
+residenter Taskstackreservation durch den bisherigen VM-Besitzer.
+
+Wartender Page-in laeuft auf dem genauen unterbrochenen Taskstack, niemals
+auf dem geteilten Fault-IST. Eine eigene 4096-Byte-/64-ausgerichtete
+SIMD-Sicherung bleibt ueber Warteoperationen und Modulaufrufe erhalten.
+Runtime-, IRQ-, Clock-, TLB- und VM-Arbeit bleibt bis 0.83.9–11/17 bei ihren
+bestehenden Besitzern; kein neuer Lock, Scheduler oder IRQ-Allokationspfad.
+
+Fruehe Ausgabe und terminale Fehler
+----------------------------------
+Rust/boot/foundation.rs besitzt CPU-Bootbereitschaft, Intro, Ausnahmeproben,
+COM1-Hookauswahl und Bootlog-Umleitung. COM1 bleibt abschaltbar. Allgemeine
+Log-Sinks und spaetere Anzeige-/Fontbesitzer behalten ihre Uebergangsadapter.
+Rust/boot/r4b.rs liest das unveraenderte R4B0-Bild und zeichnet zentriert mit
+echtem Pitch und Farbmasken; MMIO-Pixel erhalten volatile Wort-/Bytezugriffe.
+
+Rust/boot/log.rs besitzt den 64-KB-Bootlog unter dem bisherigen Rang-70-Owner.
+Rust/boot/serial.rs besitzt den einzigen 8-KB-COM1-TX-Ring unter Rang 80.
+Byteordnung, neuestes begrenztes Fenster, Drop-/Bulk-/Drainzaehler und
+16-Byte-FIFO-Bursts bleiben erhalten. Ein UART-Stillstand wird nach der
+bisherigen begrenzten Probe gelatcht; Crash/Shutdown haengen daran nicht.
+Nur der lockfreie Leercheck braucht getrennte atomare Head-/Tailwerte.
+
+Rust/boot/crash.rs und fatal.rs besitzen Recordbau, Stopcodes, Reentranz,
+Bootphase und BSP-Fehlerzustand. Panic nutzt begrenzte Stackbytes, panic=abort
+und den bestehenden terminalen Kernel-Fatalcode. Die bisherigen Zig-Panic-
+und CPU-Exceptioncodes bleiben erhalten. Framebuffer-/Fontprimitiven,
+Bootscreen-Zustand und sichtbarer Crashrenderer behalten bis zur Anzeige-
+welle 0.83.21 ihren genauen Zig-Besitzer; Rust steuert den Terminalpfad.
+Bootzeitmessung und allgemeine Instrumentierung folgen in 0.83.26.
+
+Pruefung
+--------
+Kernel/Build.sh test (Windows: Build.bat test) bindet die vorhandenen Crash-
+und Bootscreenfixtures an die wirklichen Rust-Corefunktionen. Der Anschluss
+liegt in Tests/RustOwners und Tests/RustOwnerBridge.zig. Linux fuehrt bare
+SysV-Objekte auf dem Host aus; Windows verwendet fuer seinen Hostrunner
+COFF. Das ist keine zweite Kernelimplementierung oder zusaetzliche Testsuite.
+Produktkernel behalten ausschliesslich ihr geprueftes bare Profil.
+
+Gastabnahmen ausschliesslich SMP4: kurzer normaler Start sowie gezielte
+vorhandene Exception-, Panic-, Fatal- und Stackguardoptionen. Ein Debugsymbol-
+ELF bleibt Release mit Checks. COM1-aus-Fehlerausgabe separat am Framebuffer
+pruefen. Stand und Belege: Core/KernelRustBoot0837.json; Windows und echte
+Hardware werden durch diese Host-/QEMU-Nachweise nicht behauptet.

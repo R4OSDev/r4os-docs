@@ -1,0 +1,178 @@
+﻿Rust-Kernelmigration 0.83.4–27
+==============================
+
+Umfang und Vergleich
+-------------------
+Die produktive Kernelimplementierung wird im bestehenden Kernel-Repository
+von Zig nach Rust uebertragen. Funktions-, ABI- und Besitzgleichheit haben
+Vorrang. Optimierungen und ein Gesamtrefactor folgen erst nach 0.83.27.
+Apps, Services, Libraries, R4D/R4P, Subsysteme und Spectra bleiben Zig.
+Der separate, veroeffentlichte Recovery-Kernel bleibt an RecoveryPin.json
+gebunden. Der Self-Hosting-Pfad baut weiterhin Zig-Module; ein Rust-Kernelbau
+innerhalb von R4OS ist nicht Bestandteil dieser Migration.
+
+KernelRustBaseline0834.json bindet den sauberen Zig-Quellcommit, jede
+versionierte Kerneldatei, ihren Migrationsschritt, vorhandene Tests und
+installierte Modulbinaerdateien an SHA256. Das dort genannte lokale
+Belegarchiv enthaelt verifizierte Git-Bundles von Kernel, Contract, SDK,
+Distribution und Workspace, die originalen Binaerdateien, den Recovery-ZIP,
+Boot-/Preload-Dateien und die vorhandenen Spectra-/DevCenter-Belege.
+Checksums.json prueft archivierte Quellen, Binaerdateien und Originalbelege.
+Der separat mit leerem lokalem Cache
+gebaute Zig-Kernel stimmt bytegenau mit dem gemessenen Kernel ueberein.
+
+Die eingefrorene Spectra-Referenz bleibt standard-1.json, run_id
+6133385b-2b6c-496a-9950-9835a0752f8b. Ihre gemessene Releaseversion ist
+0.83.2; Verpackung und Dokumentation als 0.83.3 aendern diese Herkunft nicht.
+Der zweite vorhandene SMP4-Lauf a6fd0cad-6ce9-47a7-840d-4e0babb1da2f ist
+mit overall=100.156904 vollstaendig validiert. Beide echten Exporte sind
+bereits im DevCenter. Fuer 0.83.4 wird keine neue Referenz angelegt.
+
+Festes Rust-Profil
+-----------------
+Toolchain und Komponenten kommen ausschliesslich aus
+DevKit/Setup/RustToolchain.json: Rust 1.99.0, Edition 2024, Ziel
+x86_64-unknown-none, no_std/no_main und der DevKit-Starter fuer jeden Aufruf.
+Der produktive Cargo-Releasebau verwendet opt-level=3, overflow-checks=true,
+debug-assertions=true und panic=abort. Kein stiller Wechsel auf das normale
+Cargo-Releaseprofil ohne diese Pruefungen. Code-Modell kernel, statische
+Relocations, kein PIE, keine Red-Zone; das freestanding Target erzeugt im
+normalen Kernelcode keine SIMD-/FPU-Nutzung. Hosttests laufen als getrennte
+Hostprogramme und belegen diese Maschinenkonfiguration nicht.
+
+Rust-Panic, Bounds-, Overflow- und Vertragsfehler muenden in den bestehenden
+terminalen Fatal-/Crashpfad; kein Unwinding ueber C oder einen Taskwechsel.
+Beabsichtigtes Integer-Wrapping ist lokal ausdruecklich als wrapping_* zu
+begrenzen; Konvertierungen und Groessenrechnungen bleiben geprueft.
+Cargo-Build und Linker pruefen kmain, ELF64/EM_X86_64/EXEC, hoehere Haelfte
+ab 0xffffffff80000000, Limine-Sektionen und .r4os.kernel.meta.
+Der Installationspfad r4os.elf bleibt fuer Distribution und Update stabil.
+
+ABI und unsafe
+--------------
+Contract/API/ApiContract.json bleibt die zentrale Plattformwahrheit.
+Auch die bewusst append-only gepflegten technischen Typen ausserhalb des
+generierten Blocks von Contract/Generated/SDK/Zig/abi.zig sind zu erfassen;
+der vorhandene C-Header allein beschreibt DriverApi/ProtocolApi nicht.
+Rust-Bindings werden beim Contractbesitzer erzeugt und mit dessen normalem
+Check auf Drift geprueft. Sprache hinzufuegen aendert keine API-Version.
+
+Oeffentliche Strukturen verwenden repr(C), genaue Breiten, Feldreihenfolge,
+Ausrichtung und unveraenderte Praefixe. Funktionszeiger verwenden extern C;
+Nullbarkeit ist ausdruecklich. Rust-Referenzen, Vec, String, Result und
+Rust-enums werden nicht als neue Wire- oder C-ABI-Typen eingefuehrt.
+sizeof, alignof, offsetof, Slots, Query-IDs und Rueckgabecodes werden gegen
+Zig/C geprueft. Scalar-Float- und SIMD-Aufrufgrenzen muessen auch mit echten
+gegenseitigen Aufrufen pruefen; gleich grosse Strukturen allein reichen
+nicht. Die jeweilige Grenze muss den bestehenden FPU-Sicherungsvertrag
+erhalten und darf SIMD nicht fuer normalen Kernelcode freischalten.
+
+unsafe bleibt beim Besitzer des Hardware-, Speicher-, FFI- oder
+Kontextwechselvorgangs. Jede solche Grenze dokumentiert gueltige Identitaet,
+Lebensdauer, Ausrichtung, Exklusivitaet, Lock und Abschlussbedingung.
+Volatile beschreibt Hardware-/Bootloaderzugriffe, nicht SMP-Synchronisation.
+Atomare Publikation und Acquire/Release ersetzen weder Owner-Locks noch
+die generationsgebundene Abschlussquittung. Gepackte Bytes werden ohne
+unausgerichtete Rust-Referenzen gelesen; Wiregroessen bleiben unabhaengig
+von der Ausrichtung eines uebersetzten Hosttyps.
+
+Programme, Tasks und embedded Locks behalten stabile Heapadressen und
+ID/Generation. Pin und Borrowing ersetzen nicht den Kill-/Unwindschutz.
+Ein Drop gibt DMA, TLB-Frames, laufende Arbeit oder gehaltene Bilder erst
+nach der bisherigen expliziten Quittung frei. Auf fehlgeschlagenen oder
+killbaren Pfaden bleibt der unabhaengige Cleanupbesitzer erforderlich.
+Begrenzte Kernelstacks verbieten grosse Arraykopien und Heapobjekt-Aufbau
+ueber einen grossen temporaeren Stackwert.
+
+Uebergang und Rueckweg
+---------------------
+Pro Zustand gibt es genau einen aktiven Besitzer. Nicht migrierte Bereiche
+duerfen voruebergehend als Zig-Objekt eingebunden bleiben. Private C-Bruecken
+geben nur genaue Daten/Handles weiter, keine Rust-/Zig-nativen Typen oder
+unwinding-Pfade. Unterschiedliche LLVM-Versionen werden ausschliesslich als
+native Objekte verbunden, ohne gemeinsames Bitcode-/Cross-Language-LTO.
+Uebernommene Mutationen und Cleanup verschwinden aus dem alten produktiven
+Pfad; es gibt keinen stillen Fallback und keine zweite Registry/Scheduler.
+
+Zum Vergleich oder Rueckweg einen isolierten Checkout aus den Bundles im
+Belegarchiv erstellen, den dokumentierten Contract-/SDK-Stand und Zig 0.16.0
+verwenden und vorhandene Buildstarter aufrufen. Niemals den laufenden
+Workspace zuruecksetzen. Die eingefrorenen Module koennen ohne Neubau gegen
+den Rust-Kernel getestet werden. Der veroeffentlichte Recovery-ZIP und das
+vorhandene Previous-Kernel-/SYSUPD-Verfahren bleiben unabhaengig erhalten.
+0.83.27 entfernt produktiven Zig-Kernelbau und private Uebergangsbruecken;
+benoetigte Assembly, externe Zig-Module und Recovery bleiben zulaessig.
+
+Migrationsmatrix und vorhandene Abnahme
+--------------------------------------
+Die JSON-Datei ordnet jede Ausgangsdatei genau einem verantwortlichen
+Schritt zu und nennt Folgearbeiten an bereichsuebergreifenden Dateien.
+Das ist die vollstaendige Bestandsmatrix; die folgenden
+Wellen nennen ihre fachlichen Grenzen und wiederverwendeten Nachweise.
+Eine gemeinsame Orchestrierungsdatei darf vorher noetige kleine Anpassungen
+erhalten. Ihr Fachzustand wird erst mit der zugeordneten Welle uebernommen.
+
+0.83.5  Contract-Bindings: vorhandene generierte Zig/C-Conformance,
+        Provider-Signatur-/Feldnegative; neue Rustseite im selben Check.
+0.83.6  Cargo-/Hostbuild: bestehende Buildstarter, ELF-/Versionspruefungen,
+        Instrumentierungs- und Fehler-Injektionsoptionen.
+0.83.7  Limine/Fruehboot/Exceptions/Assembly: Bootscreentests und vorhandene
+        begrenzte Exception-/Panic-/Fatalproben.
+0.83.8  PMM/Paging/Heap/Stacks: Besitzer- und Heaptests, HEAPPROBE,
+        Spectra CHECK MEMORY/STACK, spaeter wartende VM in 0.83.17.
+0.83.9  IRQ/Clock/ACPI/PCI: monotonic_math/pci_scan/Firmwaretests,
+        CLOCKPROBE und vorhandene Boot-/Clockdiagnose.
+0.83.10 SMP/AP/TLB/FPU/Kontextwechsel: vorhandener kurzer SMP4-/TLB-Nachweis,
+        task_index/initial_stack/tlb_policy und TASKREGISTRY fpu-work.
+0.83.11 Tasks/Sync/Wait/Join/Kill/Reap: wait_node/Tasktests, vorhandene
+        Spectra CHECK THREAD/LIFECYCLE und exakte Lock-/Unwindgrenzen.
+0.83.12 Treiber-/Protokollbesitzer/Work/IRQ/DMA/MMIO: loader-test,
+        Ressourcen-/Work-/DMA-Ownerfaelle, Spectra CHECK WORK/RESOURCES.
+0.83.13 Block/MBR/GPT/Bootlaufwerk: storage-test, Blockdispatch-/Splitfaelle
+        und vorhandene produktive AHCI/NVMe-Module.
+0.83.14 VFS/NTFS/FAT32/Streams/Pagecache/Support: vorhandene Storage-,
+        NTFS-Baum-/Fragmentierungs-/Crashfaelle; CHECK FILESYSTEM/NTFS.
+0.83.15 R4M0/Loader/Module/Provider: loader-test, negative Container,
+        Relocations und unveraenderte Zig-R4L/R4D/R4P; CHECK LOADER.
+0.83.16 R4X/Start/Programmlebensdauer: vorhandene Handle-/Kill-/Exit-/Reap-,
+        Consolewait- und Admissionfaelle; CHECK LIFECYCLE.
+0.83.17 Wartende VM/Pagefault/Backing/Reclaim: vorhandene Pagefault-Frames,
+        eigene Diagnose-Reservierungen und CHECK MEMORY/ASYNC_IO.
+0.83.18 Servicecore/IPC/R4SYS: services_tests, service_ipc_queue und
+        CHECK IPC; SERVMAN bleibt Konfigurations-/Policybesitzer.
+0.83.19 USB/xHCI/HID/MSC: bestehende USB-/Ring-/DMA-/Recoveryfaelle und
+        geraetegenaues SET_CONFIGURATION; CHECK INPUT.
+0.83.20 Netzwerk/R4NET: vorhandene Backend-/RX-/TCP-/SerialLink-Ownerfaelle,
+        CHECK NETWORK/IPC und SSH-Ruecklauf mit bestehenden Modulen.
+0.83.21 Console/Input/Fonts/Softwareframebuffer: input-test/font_test,
+        Scroll-/Clipping-/Firmwaretests und produktiver Terminalstart.
+0.83.22 GPU-BO/VA/Residency/Generation/Exit/Retire: bisherige Allocation-,
+        Mapping-/Budget-/Leasefaelle; keine native Treiberumschreibung.
+0.83.23 Display/Present/Cursor/Power/R4DESK/R4DRAW: display-test und
+        vorhandene exakte Queue-/Reset-/Bildfreigabequittungen.
+0.83.24 Audio/PCM/Mixer/R4AUDIO: vorhandene Audio-Ownerfaelle,
+        logisches Idle getrennt vom quittierten physischen DMA-Stopp.
+0.83.25 SYSUPD/Upload-Recovery/Bootpolicy/Shutdown: vorhandene Journal-/
+        Claim-/Atomic-/Recoveryfaelle; Recovery vor Loadercaches.
+0.83.26 Instrumentierung/R4DEV/Spectra: Basismodus und Detailmodus,
+        passive METRICS/LOGS und aktive CHECK/BENCH, wirkliche Compilerdaten.
+0.83.27 Gesamtparitaet: alle migrierten produktiven Bereiche, keine Zig-
+        Kernelreste; unveraenderte Module, sechs echte Standardscores.
+
+Abnahmen laufen ausschliesslich mit SMP4. Je Fachwelle relevante bestehende
+Hostfaelle und kurze Gastproben; kein neuer paralleler Gesamttestkatalog,
+keine Single-Core-, Browser- oder pauschalen Langlaeufe. Standardbenchmark
+und DevCenter-Verfahren: Agents/Benchmark.txt und
+Diagnostics/SpectraStandardBenchmark.txt. Methode, Lasten, Rohsamples,
+Referenz und Messmodus bleiben unveraendert. Erhebliche reproduzierbare
+Regressionen werden vor Abschluss geklaert, nicht durch neue Referenzen
+verdeckt. Windows-Ausfuehrung und fehlende physische Spezialnachweise
+bleiben ausdrueckliche Grenzen; Hostchecks behaupten keinen Hardwaretest.
+
+Massgebliche Besitzervertraege
+-----------------------------
+Agents/Konventionen.txt, Agents/API-ABI.txt, Agents/R4M0-Container.txt,
+Agents/KernelStruktur.txt, Core/ProgramLifecycle.txt,
+Core/Speicherverwaltung.txt, Core/Modulsystem.txt,
+FileSystem/DateisystemUndStorage.txt und die betroffenen API-Dokumente
+gelten unveraendert. Die Roadmap fuehrt den aktuellen Arbeitsstatus.

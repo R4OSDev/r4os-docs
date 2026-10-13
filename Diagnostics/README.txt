@@ -47,8 +47,8 @@ Kernel boot/loader, scheduler/waits/locks, clocks/IRQs, memory, lifecycle, IPC,
 work and filesystem/I/O probes belong here. The provider API alone does not
 change a driver/service diagnostic into a kernel diagnostic. All queries
 respect the normal/detail build mode; they do not enable traces or benchmarks.
-The migration does not use or replace Benchmarks.jsonl. The separate private
-database/WebAPI tool remains outside the R4OS build and inventories.
+The separate private DevCenter stores the complete standard benchmark runs
+and remains outside the R4OS build and inventories.
 
 Spectra standard benchmark and result data (0.83.3)
 --------------------------------------------------
@@ -67,3 +67,10 @@ comparison limits, lossless raw fields and the current API contract are document
 in SpectraStandardBenchmark.txt. Validation and actual run identities are in
 Spectra0833.json. The separate private DevCenter implementation stays outside
 this roadmap and its synthetic contract fixtures are never production imports.
+
+Performance benchmark history now uses only this standard suite and DevCenter.
+Import the original complete run.json with its UUID, registered host and reference;
+then read it back and check all five metrics, 30 raw samples and six validated
+scores. The measurement runner does not upload automatically. The short workflow
+is in Agents/Benchmark.txt; private host/authentication operations are in
+Agents/DevCenter.txt.

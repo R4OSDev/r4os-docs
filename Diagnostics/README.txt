@@ -23,51 +23,32 @@ A diagnostic may inspect low-level state when that is its explicit purpose,
 but normal applications continue to use the SDK facades.
 
 
-Spectra: planned consolidation in 0.83.X
----------------------------------------
+Spectra: central kernel tool (0.83.2)
+--------------------------------------
 
-Status: planned, not implemented. Roadmap 0.83.1 prepares the kernel
-instrumentation; 0.83.2 introduces SPECTRA.R4X and migrates its consumers.
-Roadmap 0.83.3 adds the short standard kernel benchmark described below.
+Owner: Repositories/Diagnostics/Spectra; public repository
+https://github.com/R4OSDev/r4os-diagnostic-spectra.
+SPECTRA.R4X is included from the Slim profile upward. Terminal and SSH use
+METRICS for passive counters, LOGS for bounded kernel sources, CHECK for
+explicit functional probes, and BENCH for selected bounded workloads.
+No desktop is required. The later hybrid GUI can reuse these collectors
+and output models; no GUI or permanent collector is included in this step.
 
-Spectra will be the central userland tool for kernel measurements, kernel
-diagnostic/debug messages, kernel checks and kernel benchmarks. Its owning
-project will be Repositories/Diagnostics/Spectra, with the public repository
-R4OSDev/r4os-diagnostic-spectra. The first implementation provides commands
-and parameters for local Terminal and SSH sessions without a running desktop.
-Shared diagnostic logic and structured results prepare a later GUI in the
-same R4X. The GUI and consolidation of other repositories' own diagnostics
-belong to later work.
+Usage, exact groups, JSON/explicit export, clock/sampling quality, unavailable
+values, cancellation and observer costs: Spectra.txt. The function-by-function
+owner mapping and retained specialist purposes are in SpectraMigration.json.
+Existing loader fixtures and measurement assertions move with their owner;
+original licenses, provenance and source commits remain in the Spectra repo.
+The old whole-kernel diagnostic modules and BootInfo/MemView are retired after
+migration verification. Mixed apps keep their independent tasks: SDK allocator,
+storage hardware, TCP/UDP services, non-kernel logs and system identity.
 
-Classify each function by the component it measures or checks. An API exposed
-by the kernel may describe a driver or service; that alone does not make the
-function part of this migration. Kernel-owned boot/loader, scheduler, waits,
-locks, clocks/IRQs, memory, program lifecycle, IPC, work queues and I/O cores
-are in scope. Driver-, service-, library-, application- and subsystem-specific
-diagnostics remain with their owners for the later complete refactor.
-
-Every retained kernel measurement must be readable, including currently
-internal lock and stack aggregates and complete per-task, IRQ and boot-phase
-records. Report units, clock/sampling quality and unavailable measurements
-explicitly. Passive queries, active checks and benchmarks have separate
-commands; detailed capture and live refresh are explicit. Reuse bounded
-logging sources and display lost-record information. Export is requested by
-the caller. This work does not use or replace Benchmarks.jsonl.
-
-Move the kernel functions out of existing diagnostic applications as they
-are integrated into Spectra. Keep mixed applications for their remaining
-specialist functions. If no independent purpose remains, remove the module,
-its local repository and its corresponding GitHub repository after the
-required functions and checks have moved. Update build/image references,
-installed-package removal, runners, markers and inventories together so the
-obsolete module is neither shipped nor recreated.
-
-Completion includes AGENTS.md, relevant Agents instructions, user/API
-documentation and Docs/Inventory/AllModules.json, Tests.json and Docs.json.
-Use existing owner checks and short, targeted SMP4 guest runs through
-Terminal/SSH; verify migrated benchmark execution with bounded explicit runs.
-The roadmap holds the individual implementation tasks and acceptance state.
-
+Kernel boot/loader, scheduler/waits/locks, clocks/IRQs, memory, lifecycle, IPC,
+work and filesystem/I/O probes belong here. The provider API alone does not
+change a driver/service diagnostic into a kernel diagnostic. All queries
+respect the normal/detail build mode; they do not enable traces or benchmarks.
+The migration does not use or replace Benchmarks.jsonl. The separate private
+database/WebAPI tool remains outside the R4OS build and inventories.
 
 Spectra standard benchmark and result data (planned 0.83.3)
 ----------------------------------------------------------

@@ -560,3 +560,39 @@ moeglich. Damit erreicht ein AP keinen weiterhin BSP-gebundenen Swap-in.
 Commit-/Residentquoten, Lazy-Zero und TLB-Abbau bleiben erhalten; dieser
 Vertrag kann bei RAM-Knappheit OOM liefern und wird nicht als vollstaendiger
 paralleler Pager ausgegeben. Alte Reservierungen bleiben unveraendert.
+
+
+Pageable fault continuations (0.83.2)
+------------------------------------
+The CPU-local 16-KB exception IST is an emergency entry stack. A VM page-in
+can wait for filesystem I/O and must not retain its call frames there while
+another task faults on that CPU. The page-fault entry captures CR2, prepares
+resident headroom in the interrupted task's exact stack and copies the full
+hardware/register frame there before resolving pageable VM. R4X stacks keep
+their terminal guard and 64-KB resident owner budget. Resident kernel stacks
+require 32 KB of remaining space; foreign/exhausted stacks fail closed.
+Stack growth itself stays on the IST and cannot enter the waiting VM path.
+
+The private continuation also preserves the interrupted CPUID/XCR0 SIMD
+state separately from the scheduler's task-state slot: storage R4Ds may use
+SIMD and the page-in may switch tasks. No extra permanent per-task stack or
+per-fault text log is created. The Spectra memory check over SSH exposed the
+old shared-IST corruption; normal/detail SMP4 evidence is recorded with the
+Spectra 0.83.2 migration report.
+
+Diagnostic reclaim and backing identity (0.83.2)
+------------------------------------------------
+R4DEV memory_reclaim_probe uses the normal shared cache/stack reclaim path,
+but selects VM eviction candidates only from the calling R4X owner. A
+caller without an R4X owner selects no VM pages. Production VM-fault/commit
+reclaim still considers all owners. Diagnostic files must not become backing
+for an unrelated live service merely because it precedes the test range.
+The unchanged ABI returns global accounting and the work of this invocation.
+
+Live backing reservations retain their exact file identity. Selecting a
+changed file/path/size while any reservation remains returns
+backing-unavailable and preserves the old reservation and page-in metadata.
+After their authenticated release, another backing file can be selected.
+Spectra MEMORY/STORAGE refuse to replace their files when a prior reservation
+is live. Kernel storage host tests cover rejection, preservation, exact
+release and subsequent successful replacement.

@@ -1,0 +1,82 @@
+﻿Rust-Bindings des Plattformvertrags
+==================================
+
+Besitz und Ausgabe
+------------------
+Repositories/Contract bleibt die einzige Plattform- und technische ABI-Wahrheit.
+ApiContractGen erzeugt die Schema-Projektionen; AbiRustGen reflektiert danach
+die kanonischen Typen aus Generated/SDK/Zig/abi.zig. Dadurch werden auch dessen
+bewusst append-only gepflegte Treiber-, Protokoll-, Ressourcen- und Callback-
+Typen erfasst. Es gibt keine handgepflegte Rust-Kopie im Kernel.
+
+Die eigenstaendig konsumierbare no_std-Crate liegt unter
+Repositories/Contract/Generated/SDK/Rust/ (r4os-contract, Edition 2024).
+Generated/Inventory/RustABI.json beschreibt ihre Abdeckung; das normale
+API-Inventar verweist ebenfalls auf diese Projektion. Version 0.1.0 der Crate
+ist eine Paketkennung, keine neue R4L-, Plattform- oder Kernelversion.
+
+Darstellung
+------------
+403 repr(C)-Strukturen enthalten 6.661 gegen Zig gepruefte Feldoffsets.
+20 Integer-Enums verwenden repr(transparent)-Newtypes mit benannten Werten:
+unbekannte Wirewerte sind damit darstellbar, ohne Rust-enum-UB zu erzeugen.
+585 Callbackdeklarationen verwenden unsafe extern C; optionale Callbacks
+sind Option<unsafe extern C fn(...)>. Datenzeiger bleiben rohe Zeiger,
+auch bei Nullbarkeit; Option<*mut T> waere ein anderer Vertrag.
+
+2.369 Konstanten und die vorhandenen Header-/Felddefaults kommen aus den
+kanonischen Zig-Werten. Default existiert nur fuer Typen, bei denen alle
+Felder einen Initialwert haben; verpflichtende Callbacks werden nicht durch
+Nullzeiger ersetzt. Die Initialisierung grosser Typen bleibt beim residenten
+Besitzer, ohne grosse temporaere Kernelstackkopien.
+
+Nur die drei Zig-internen Dokumentations-/Inventartypen R4AppProfileMeta,
+R4PlatformApiMeta und R4ApiSlotMeta sowie deren statische Inventararrays
+werden ausgelassen; sie enthalten native Zig-Slices und sind keine C-ABI.
+Auch Zig-Fassadenfunktionen werden nicht zu neuen C-Exports.
+
+Der aktuelle zentrale Vertrag hat keine Float-/SIMD-Werte als direkte
+Aufrufparameter oder Rueckgaben. Der freestanding Rust-Softfloat-ABI benutzt
+fuer direkte Floatwerte andere Register als ein normaler SIMD-faehiger
+C-Modulbau. Der Generator weist solche neuen Signaturen deshalb zurueck,
+bis ihre konkrete Bruecke geprueft ist. SIMD-faehige Verbraucher des
+bestehenden Integer-/Zeigervertrags bleiben unterstuetzt; IRQ-/Task-FPU-
+Sicherung bleibt ein separater Kernelbesitzervertrag.
+
+Generierung und Pruefung
+-----------------------
+Repositories/Contract/Build.sh beziehungsweise Build.bat mit write erzeugt
+zuerst die Schema-/Zig-/C-Ausgaben, kompiliert danach deren aktuelle Typen
+fuer die Rust-Projektion und schreibt sie. Normale Builds und check sind
+rein vergleichend und schreiben keine versionierten Dateien um.
+Generierte Rust-Dateien werden nicht von Hand formatiert oder editiert.
+
+Ein beabsichtigtes Schema-/Baseline-Update bleibt der bisherige ausdrueckliche
+ApiContractGen-Aufruf. Danach write aufrufen, um auch die Rust-Projektion zu
+aktualisieren. Eine zusaetzliche Sprache aendert keine bestehende API-Version
+oder Baseline. Ohne Schemaaenderung bleiben vorhandene Zig-/C-Ausgaben gleich.
+
+test erweitert die vorhandene Contract-Abnahme um Host- und Baretarget-
+Kompilation, Clippy sowie eine native Rust/Zig/C-Aufruf-Fixture. Sie prueft
+beide Callrichtungen, negative Rueckgabewerte, breite Skalare, Register-/
+Stackargumente, Callback-Nullbarkeit, verschachtelte Workcallbacks, rohe
+Null-/Datenzeiger, Enumwerte und kanonische Headerdefaults. Der C-Verbraucher
+behaelt SIMD- und Floatdaten ueber einen echten Integer-API-Aufruf.
+Unter Linux laeuft dabei der echte freestanding Rust-SysV-Code; unter
+Windows wird das Baretarget kompiliert und der native Host-C-Vertrag benutzt.
+Eine Hostfixture ist kein R4OS-IRQ-, Scheduler- oder Hardwaretest.
+
+Standalone-Verbrauch
+--------------------
+Eine Cargo-Git-Abhaengigkeit auf den Contract mit genauem rev findet die
+Crate im Repository. Der Kernel pinnt diesen Quellcommit; beim Workspacebau
+wird der lokale Contract nur ueber einen expliziten, geprueften Hostpfad
+eingebunden. Keine zweite Bindingdatei im Kernel und kein Fallback auf andere
+ABI-Versionen. Compileraufrufe ueber DevKit/Setup/Rust.sh beziehungsweise
+Rust.bat halten Toolchain und Homes isoliert. Standalone-Tests benoetigen
+dieselbe Rust-Version und Zig, installieren aber keine globale Toolchain.
+
+Rust-Darstellungsvertraege:
+https://doc.rust-lang.org/reference/type-layout.html
+https://doc.rust-lang.org/std/option/index.html#representation
+https://doc.rust-lang.org/rustc/platform-support/x86_64-unknown-none.html

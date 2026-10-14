@@ -1,0 +1,140 @@
+﻿Rust-Tasks und Synchronisation 0.83.11
+=====================================
+
+Besitz und Grenzen
+------------------
+Rust/sched/task/ besitzt die stabil adressierte dynamische Taskregistry,
+ID/Generation, Ready-/Timeout-/Reap-/Rollbacklisten, Rollen und Budgets,
+Donation, Inventare, guarded Stacks, FPU-Ressourcen und kritische Bootreserve.
+Zig erhaelt opake Taskhandles; Feldzugriffe und Statuskopien gehen an den
+nativen Besitzer. Native Rustlayouts werden nicht als C-Strukturen exportiert.
+VM-Reservierung/Commit/Freigabe bleibt bis 0.83.17 beim bestehenden VM-Besitzer;
+sched/task_vm_bridge.zig reicht ausschliesslich feste Aufrufdaten weiter.
+
+Taskadressen bleiben bis zur genauen Ressourcenfreigabe stabil. Laufende,
+gepinnte, wartende oder durch Lock/Unwind gehaltene Generationen sind nicht
+reapbar. Freigabe verlässt den Runtime-Owner, behaelt ihren genauen Claim und
+stellt fehlgeschlagene Freigaben wieder in die vorhandene Retryliste.
+Alle modulfähigen Tasks und kernel-main behalten ihren CPUID/XCR0-FPU-Puffer.
+Nur reine CPU-Idle-Tasks sind ausgenommen. Die vier kritischen Reserven und
+der vorhandene Stackcache ersetzen keine dynamische Taskkapazitaet.
+
+Rust/sched/task_index.rs und wait_node.rs besitzen intrusive AVL- und
+Waiterverkettung. Die bisherigen fuenf Zig-Inlinefixtures bleiben unveraendert
+und binden dieselben nativen Implementierungen. Test-only Hardwarelinks im
+RustOwners-Hostarchiv sind schwache Assembly-Traps: eine unbeabsichtigte
+Hardwareausfuehrung scheitert, echte starke Fixtureadapter behalten Vorrang.
+
+Rust/sched/sync_*.rs besitzt WaitQueue, Event, Completion, Semaphore,
+rekursive generationentreue Mutex und wait-spannende UnwindGuard.
+Feste private C-Records erlauben embedded Locks in noch nicht migrierten
+Zigbesitzern. Callbackadapter verwenden ausdrueckliche C-Aufrufe. Keine zweite
+Registry, keine kopierten Kill-Schutzzaehler und kein neuer Releasebesitzer.
+Der TaskContext leiht weiter den echten residenten Unwind-Zaehler.
+
+Native einzelne Taskfeld-Projektionen bleiben fuer den Compiler inline,
+damit ein Feldread keinen vollstaendigen temporaeren TaskView aufbaut.
+Lock-Zaehler mutieren innerhalb bestehender kritischer Sektionen unter deren
+genauem Runtime-Owner; nur ausserhalb wird ein eigener Owner erworben.
+Die zwoelf reinen Wait-Zaehler verwenden AtomicU64 an denselben Ereignis-
+und Latenzstellen wie zuvor. Relaxed-Statistik publiziert keine Task-/Queue-
+oder Ressourcenfreigabe. Ausgabe bleibt der bisherige 96-Byte-Snapshot mit
+beobachtbaren Einzelwerten, ohne neuen Transaktionsvertrag ueber alle Felder.
+Die Rust-Daten bleiben damit auf SMP synchronisiert. Erzeugter Code und
+echte getrennte Vergleichslaeufe dokumentieren die Migrationskosten.
+
+Wait-Prädikat, Enrollment, Release und Blockpublikation behalten die bisherige
+Runtime-Reihenfolge. Nach dem Parken wird nur der genaue Task gelesen; die
+alte Queue oder der Prädikatkontext koennen bereits beendet sein. Einzelwakes
+waehlen den besten bestehenden Rang, innerhalb desselben Rangs FIFO.
+Hard-Kill detacht den eigenen Waitnode. Mutex-/Semaphore-Handoff bindet den
+Besitz/Kill-Schutz vor Ready-Publikation. No-Sleep-Owner ueberstehen kein Wait;
+UnwindGuard behaelt seinen unabhängigen wait-spannenden Besitz. Passive
+Admission-Reads und Eventreset sind kurze Runtime-Zugriffe, damit Rust keine
+ungeschuetzten gemeinsamen Plain-Reads/Writes benoetigt.
+
+Rust/kernel/deadman.rs besitzt Startzustand und die bisherige kooperative
+5-/30-/120-Sekunden-Pruefung. Storage-/Display-/Logadapter enthalten keinen
+Watchdogzustand. Ein harter Spin mit gesperrten Interrupts bleibt unerreichbar.
+
+Diagnose und Timerzaehlung
+-------------------------
+Rust/sched/task_probe/ uebernimmt alle 51 bisherigen TaskRegistry-Helfer,
+inklusive echter Work-/FPU-Aufrufe und expliziter SIMD-Probeassembly. Lasten,
+Grenzen und Ressourcenbasis bleiben gleich. Testzustand ist BSP-gebunden;
+produktive Task- und Wait-Zahlen erhalten keine daraus abgeleitete Obergrenze.
+SYNCCHECK ist nativ und behaelt Event200, Mutex und IF-an/aus.
+
+Die Idleprobe muss den Caller wirklich schlafen legen. Bare HLT bei einem
+weiterhin Running gemeldeten Caller misst produktive periodische IRQs mit.
+Der native Timer zaehlt deshalb privat die im One-shot-Modus bedienten IRQs;
+die Diagnose zeigt Idlezahl und Gesamtzahl getrennt. Die Idlegrenze bleibt 3,
+Zeit-/Lateness-/Fallback-/Cancel-/periodische Rueckkehrkriterien bleiben gleich.
+An Timerprogrammierung, Schedulerpolitik, oeffentlichen R4DEV-Layouts und
+bestehenden Gesamtsummen aendert diese Messkorrektur nichts.
+
+Abnahme und weitere Migration
+-----------------------------
+Der gemeinsame Beleg steht in KernelRustTasks08311.json; Originalquellen,
+Artefakte, Serienlogs, fruehere fehlgeschlagene Messungen und vollstaendiger
+Spectra-/DevCenter-Export liegen im dort verlinkten lokalen Archiv.
+Kernel 0.1.271 / Release 0.83.11: Format, produktiver Compiler/Clippy,
+129 Buildschritte und 439 urspruengliche Hostfaelle bestehen. Der normale
+SMP4-Quick ist an das aktuelle Boot-ELF gebunden. Die volle Taskprobe
+bestaetigt 160 gemischte Tasks, 10.000 Anlage-/Abbauzyklen mit vollstaendiger
+Ressourcenbasis, OOM/Reserve/Netzwerkfortschritt, Rollen/Fairness/Donation/
+Handoff und 65 absolute Timeouts in zwei Batches von 64+1.
+
+Der Detailbuild bestaetigt SYNCCHECK Event200/Mutex/IF-an-aus, echte FPU-/IRQ-
+Grenzen, normale und Deadline-Work, kernel-main, Reserve-OOM/Wiederverwendung
+und BlockAsync Reset/Cancel. Spectra THREAD, LIFECYCLE, THREAD /PROCESSEXIT
+und WORK bestehen mit ERRORLEVEL=0. Die Detailabnahme behaelt ihre eigene
+ELF- und Quellenidentitaet, deren Vergleich im JSON-Nachweis erhalten ist.
+Der finale normale Build ist gesondert durch Hosttests, SMP4 und die volle
+Taskprobe geprueft. Stop behält seine genaue eigene Sleep-/Joinqueue;
+fremde Workcompletion wird weiterhin nur durch echten Abschluss/Cancel wach.
+
+Ein echter unveraenderter Spectra STANDARD liefert fuenf Hauptmetriken,
+30 Rohsamples und sechs Scores. run_id: 59d772e3-cf77-48a2-857d-2478fa87db5e
+Gesamtindex: 88.148073 bei unveraenderter Referenz 100.
+Alle Originalfelder und Rohdaten wurden nach unveraendertem PUT per GET im
+DevCenter geprueft; alle sechs Scorebereiche sind gueltig. Bereichswerte,
+Streuung und Vergleich zu 0.83.10 stehen einmalig im JSON-Nachweis.
+
+Performancebewertung: Der regulaere unveraenderte Standardlauf des finalen
+Kernelartefakts bleibt 59d772e3-cf77-48a2-857d-2478fa87db5e, overall=88.148073.
+Er wird nicht durch den besseren Affinitaetslauf ersetzt. Im regulaeren Kontext
+liegt scheduler_sync bei 11.448 us gegen 4.638 us des alten Kontrollkernels;
+IPC bei 5.817 gegen 5.051 us. Dieser Abstand bleibt als Messbefund erhalten.
+
+Die zusaetzliche vollstaendige Gegenprobe begrenzt beide unveraenderten Kernel
+auf dieselben vier physischen Hostkerne (QEMU inkl. vCPU-/I/O-Threads, CPUs 0-3).
+Mit unveraenderten Spectra-Binaerdateien, Lasten, NVMe-Testmedium, SMP4 und
+Referenz misst sie alt 11.185 / neu 5.829 us im Scheduler, IPC +2.42%, Lifecycle
++0.31%, Dateisystem -2.85% und Speicher +24.38%. Auch die umgekehrten Abstaende
+und Streuung werden erhalten. Das beweist keine allgemeine Beschleunigung und
+keine garantierte Gleichheit jeder Einzellast. Die Hostaffinitaet steht im
+Originalexport; diese Probe ist ein technischer Kontrollkontext.
+
+Direkte begrenzte Zaehlerproben zeigen vergleichbare Wait-/Wake-/Yield-/Runtime-
+Mengen, keinen neuen Wechselkreis. Die gesonderte CPU-Probe mit symbolisiertem
+Diagnoseartefakt findet Runtime-Aufnahme/Contention als groessten beobachteten
+Scheduleranteil. Beide Kernel platzieren Runtime-Lock und dessen Statistik
+bereits gemeinsam in einer Cachezeile; neu eingefuehrtes False-Sharing ist
+damit nicht belegt. Die langen Diagnoseworkloads sind keine Standardindizes.
+
+Die anfangs zusaetzlichen Statistik-Ownereintritte und unnoetigen TaskView-/
+Rangberechnungen des Ports wurden korrigiert. Fuer den verbleibenden Abstand
+ist ein stabiler, durch den Rust-Port verursachter Faktor zwei nicht belegt:
+unter kontrollierter Hostzuteilung kehrt sich der Schedulerabstand um. Die
+genaue Ursache der Kontextempfindlichkeit ist nicht isoliert; Hostzuteilung,
+Contention und Code-/Arbeitszustand begrenzen die Aussage einzelner kurzen
+Laeufe. Abnahme mit dieser offengelegten Messgrenze und allen Originaldaten;
+keine Referenz-, Score-, Workload- oder Schedulerpolitik-Aenderung. Allgemeine
+Optimierungen bleiben nach 0.83.27. Weitere Performancearbeit darf diese
+Kontrollen nicht als Nachweis einer allgemeinen Rust-Beschleunigung ausgeben.
+
+Belegarchiv: ExFiles/Reports/KernelRust/20261014-tasks08311.
+Externe Module, Contract/API/ABI und Recovery wurden nicht umgeschrieben.
+Windows-Ausfuehrung und physische Spezialhardware sind nicht nachgewiesen.
+Naechster Besitzerwechsel ist 0.83.12 Treiberregistry, Work und Ressourcen.

@@ -1,0 +1,122 @@
+﻿Rust-SMP, Scheduler und Taskzustand 0.83.10
+=========================================
+
+Native Besitzer
+---------------
+Rust/arch/percpu.rs fuehrt die einzige 32-CPU-Tabelle: GS:0-Identitaet,
+64-Byte-Slots, Lifecycle, schedulable/online/qualified-Masken, produktive
+CPU-Masken und genaue Runtime-Tiefe. Identitaeten entstehen vor der
+Lifecycle-Publikation; lokale Tiefe gehoert mit IF=0 zum genauen CPU-Slot.
+Rust/arch/smp.rs besitzt AP-Start, private Niedrigspeicherseiten und
+64-KB-Bootstacks, Topologie, Aktivierung, Stop und IPI-Auswahl. INIT/SIPI,
+250-ms-Start-/100-ms-Stopgrenzen und Clock-/Scheduler-Zulassung bleiben
+unveraendert. Der gepackte 88-Byte-Trampolinvertrag behaelt Progress an
+0x4E und protected_offset an 0x50; EFER.LMA bleibt aus der AP-WRMSR entfernt.
+
+Rust/arch/tlb.rs besitzt Anfragen, genaue Generationen, Quittungen und
+Missing-ACK-Diagnose. Page-table-Aufnahme serialisiert Anfragen; der
+TLB-IPI braucht keinen Runtime-Owner. Kleine Bereiche verwenden INVLPG,
+ab 64 Seiten den bisherigen CR3-Reload. Ein Timeout bleibt ein Fehlschlag:
+der Caller behaelt seine alte Zuordnung und den beanspruchten Frame.
+Zustandsaenderung auf offline ersetzt nur die erlaubte genaue Abschlusslage.
+
+Rust/arch/fpu.rs besitzt CPUID/XCR0-Auswahl, kanonisches Anfangsbild und
+Task/AP/IRQ-Pufferoperationen samt Zaehlern. Kein geratenes XSAVE-Format:
+Legacy/Header, AVX-Komponentenoffset und CPUID-Groesse muessen in den
+4096-Byte-/64-Byte-Vertrag passen. FNINIT und der bestehende SIMD-Normalizer
+setzen MXCSR/XMM/YMM. Alle ausfuehrbaren Tasks behalten ihren State,
+einschliesslich kernel-main, Modul-Worker und kritischer Reservetasks.
+Nur reine Idle-Tasks ohne Modulaufrufe duerfen ihn auslassen.
+
+Rust/sched/scheduler.rs fuehrt Ready-/Rollen-/Fairnessauswahl, Praeemption,
+Wake-/Timeout-/Idlefristen, aktuelle/Idle-Tasks je CPU, sichere Reschedule-
+Punkte und die Betriebs-/Detailzaehler. Der genaue IRQ-FPU-Token behaelt
+Taskpointer und Generation. Rust/sched/task_context.rs fuehrt die einzige
+Unwind-Counterbindung je CPU; ein Token gibt seinen urspruenglichen Counter
+zurueck, auch nach einer neuen Bindung. Ueberlauf wird abgelehnt.
+Heap und residente VM-Transaktionen rufen diesen Besitzer direkt auf.
+
+Kontextwechsel und temporaere Taskgrenze
+---------------------------------------
+Taskobjekte, intrusive Listen, Rollenbudgets/Donation, stabile Adressen,
+Generation und Reap bleiben bis 0.83.11 beim Taskbesitzer. Die private
+sched/scheduler_bridge.zig transportiert eine feste 136-Byte-C-Projektion
+oder skalare Operationen; kein Rust-/Zig-natives Tasklayout geht ueber C.
+Pro Schedulerzustand besteht genau ein nativer Besitzer.
+
+Vor dem physischen Wechsel muss die Runtime-Tiefe genau 1 sein. cpu.S
+sichert den kompletten ausgehenden RSP, wechselt unter den eingehenden
+Registersatz und ruft erst dann r4os_finish_context_switch auf. Keine
+Rust-Zustandsleihe oder RAII-Runtimeaufnahme lebt ueber diesen Rand;
+IRQ-Aufnahme und Rueckkehr fuehren ihre gespeicherten IF-Flags ausdruecklich.
+Die bisherigen sechs gesicherten Register, SysV-Ausrichtung und der
+Taskeintrittstrampolin bleiben erhalten. Due-timeout-Batches bleiben 64;
+ein faelliger Rest verhindert HLT und verschiebt keine absolute Frist.
+
+Bestehende Diagnosen
+-------------------
+Die ausdrueckliche kurze SMP-Probe behaelt ihre feste Integerarbeit,
+Heap-/Mutex-/Clock-/TLB-Nachweise und unveraenderte serielle Darstellung.
+Der verbleibende Mutex gehoert bis 0.83.11 dem Syncbesitzer; Task-, VM- und
+Heap-Cuts mutieren ausschliesslich deren genaue Objekte. Diagnosezeilen
+gehen wie zuvor direkt ins serielle Testlog, nicht in den 64-KB-Bootlog.
+Der Standardbenchmark bleibt davon getrennt bei Spectra STANDARD/SMP4.
+
+Die vorhandene R4X-Besitzerprobe erzwang bisher CPUs 1/3/2. Das konnte die
+Teil-AP-Injektion auf CPU2 nicht bestehen. Sie fuehrt dieselben zwei CALCs,
+CLIPSVC-/Threadarbeiten und genauen Cleanuppruefungen jetzt auf zugelassenen
+APs aus; mit vier aktiven CPUs bleibt die bisherige Platzierung erhalten.
+Fehlende CPU-Bits duerfen weder in Mainausfuehrung noch Clock/TLB-Zielen
+auftauchen. Der urspruengliche Fehlversuch und ein abgebrochener Hostlauf
+wegen eines alten Abschlusslogs bleiben im Belegarchiv getrennt erhalten.
+
+Abnahme und Vergleich
+---------------------
+Kernel 0.1.270 / Release 0.83.10: Format, Clippy mit -D warnings und
+129 Hostschritte mit 439 vorhandenen entdeckten Faellen bestehen. Sechs
+urspruengliche Policy-/Stacktestkoerper und beide Assemblydateien sind
+bytegleich mit der Migrationsbasis. Der frische normale SMP4-Quick belegt
+AP-Arbeit, Timer-/IPI-Praeemption, Owner-Lockordnung und TLB-Korrektheit.
+
+Am selben Abschlussartefakt bestehen die vorhandenen YMM-/IRQ-/Work-Lane-/
+kernel-main-/Reserve-OOM-/MXCSR-Wiederverwendungsproben. Die absolute
+Fristenprobe bestaetigt 65 faellige Timeouts bei einer Batchgrenze von 64,
+erhaltene zukuenftige Fristen und unveraenderte Timer-IRQs. Die HPET-Variante
+maskiert nur das virtuelle TSC-Feature. Die x2APIC-/Detailvariante aendert
+nur ihre vorhandenen Buildoptionen. Die Teil-AP-Injektion konfiguriert vier
+vCPUs, schliesst CPU2 aus und belegt drei aktive CPUs mit genauer Maske 0xB.
+Danach wurde das normale ELF hashgleich wiederhergestellt und ein neues
+Testimage mit genau diesem Bootartefakt gebaut.
+
+Ein echter Spectra STANDARD wurde mit den unveraenderten fuenf Bereichen,
+30 Rohsamples und sechs Scores ausgefuehrt. Der vollstaendige Originalexport
+wurde unveraendert ins DevCenter importiert; GET bestaetigt saemtliche
+Lauf-/Umgebungs-/Artefaktfelder und Rohdaten sowie sechs gueltige Scores.
+run_id: 3ec94ba1-eb8a-4b40-88ba-9eb6e707e03f
+Gesamtindex: 102.727274 (feste Referenz = 100).
+Bereichswerte und Streuung stehen einmalig im gemeinsamen JSON-Nachweis;
+der Einzelvergleich ist keine pauschale Zusage einer Geschwindigkeitssteigerung.
+
+Der erste Vergleich gegen den historischen 0.83.9-Lauf zeigte 41,5 Prozent
+hoehere IPC-Zeit. Zwei technische Kontrolllaeufe mit gleicher Methode und
+unveraenderten Anwendungen grenzen dies ein: Das alte archivierte ELF
+misst unter den aktuellen Bedingungen selbst hoehere IPC-Zeiten. Im
+Paarvergleich verbleiben 4774,30 gegen 5388,84 ns/Operation, also 12,87
+Prozent Mehrzeit fuer IPC; diese Grenze wird fuer den Zwischenstand
+akzeptiert und bleibt sichtbar. Die vier anderen Bereiche sind im
+Paarvergleich aehnlich oder schneller, Gesamtindex 113,30 gegen 114,12.
+Der erste Gesamtindex 102,73 wird durch die Kontrollmessung nicht ersetzt.
+Alle drei echten Laeufe samt Rohdaten sind getrennt im DevCenter erhalten.
+Der genaue Kostenanteil der temporaeren Task-/Sync-C-Bruecken ist nicht
+isoliert; ihre Mitwirkung ist eine plausible Ableitung, kein Ursachenbeweis.
+0.83.11 ersetzt diese Grenzen im Zuge der geplanten Besitzmigration.
+
+Quellen, Zwischenstaende, unveraenderte Originaltests, Fehlerbelege,
+Build-/Host-/Gastlogs und Benchmark/Readback sind mit SHA-256-Manifest unter
+ExFiles/Reports/KernelRust/20261014-smp08310 gesichert.
+Gemeinsamer Nachweis: Docs/Core/KernelRustSmp08310.json.
+
+Module, Contract/ABI und Recovery bleiben unveraendert. Windows und
+physische Hardware wurden in dieser Welle nicht ausgefuehrt. Taskregistry,
+Taskobjekte, Listen, Budgets/Donation und Wait-/Syncprimitive behalten bis
+0.83.11 ihren bisherigen Besitzer und werden dort gemeinsam portiert.

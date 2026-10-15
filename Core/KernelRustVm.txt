@@ -1,0 +1,63 @@
+﻿Rust-VM, Pager, Backing und Reclaim 0.83.17
+=========================================
+
+Besitz und Wartegrenzen
+----------------------
+Rust/memory besitzt nun auch Page-State/Spans, Demandfault, Page-in/-out,
+Eviction, Backing-Datei/Slots und Reclaim. Die bisherigen backing_store.zig,
+reclaim.zig und virt.zig sind typisierte private Fassaden ohne eigenen
+mutablen Katalog oder produktiven Zig-Fallback. Alle 33 oeffentlichen
+virt-Einstiege und die bestehenden Modul-/API-/ABI-Vertraege bleiben erhalten.
+Die 119 kanonischen Vergleichsmodule bleiben bytegleich; SDK und Recovery
+bleiben Zig. Paging-/IDT-Fassaden und ISR-Assembly bleiben bytegleich.
+
+Ranges/IDs/Commit-Spans verwenden die bereits nativen Speicherbesitzer.
+Page-State und Backing verwenden denselben VM-Owner; passive Backingsnapshots
+und Cleanup sind ebenfalls begrenzt zugelassen. Rust-Referenzen und der
+CPU-gebundene Ownertoken bleiben innerhalb einer kurzen Ownerphase. Vor
+Datei-I/O, Reschedule oder Wait wird der Owner ausdruecklich freigegeben.
+Busy, pager_io_count und der genaue taskgebundene Unwindanker pinnen die
+Range. Wartende Registerframes und SIMD bleiben auf dem unterbrochenen
+Taskstack; der pro CPU geteilte Exceptionstack wird nicht wartend behalten.
+
+Backingreservierungen behalten Dateiidentitaet und Slotgeneration bis zur
+echten Freigabe. Page-in publiziert erst nach vollstaendigem Lesen und
+erneuter Identitaetspruefung; private Frames bleiben bis dahin gehalten.
+Writeback behaelt Dirty-Epoche und echte TLB-/I/O-Quittungen. Erneutes
+Schreiben waehrend I/O behaelt die Seite resident und dirty. Fehler und
+Timeout ersetzen keine Freigabequittung. Diagnose-Reclaim bleibt auf den
+Caller begrenzt; produktiver Reclaim bleibt systemweit. Der Rekursionsschutz,
+Callbackpublikation und Betriebszaehler sind atomar. Cache-/Stack-/Pagecache-
+und VM-Reclaim behalten Reihenfolge und Budgets. Untere Dateizugriffe,
+Scheduleraufrufe und typisierte Zig-Callbacks sind zustandslose C-Schnitte.
+
+Abnahme und Grenzen
+------------------
+Produktbau, strenges Clippy und der originale Backing-Identitaetsfall gegen
+den nativen Besitzer bestehen. Ein gebuendelter SMP4-Gast prueft unveraenderte
+MEMORY/VMSTRESS-, MEMORY/PAGERSTRESS- und ASYNC_IO-Faelle sowie den bestehenden
+8-Request-/3-Thread-Killpool. Die VM-Funktionsfaelle mit 2048 Demandfaults,
+Kind-Kill/Reap und Limitfehlern bestehen. Pagerfaelle bestaetigen 27 Page-outs,
+30 Fault-ins, Reclaim, retrybare/permanente Fehler und erhaltene Daten samt
+lebendem YMM-Zustand ueber echte Page-ins. ASYNC_IO besteht 512 Churnanfragen.
+
+Beide vollen MEMORY-Profile scheitern erst an der finalen Elternbilanz mit
+zwei zusaetzlichen App-Stackbloecken. Der veroeffentlichte 0.83.16-Kernel
+reproduziert bei ausschliesslich ausgetauschtem ELF exakt alle sechs
+Vorher-/Nachherwerte beider Profile. Fuer diesen Ablauf ist keine neue
+Migrationsabweichung belegt. Ursache, allgemeine Leckfreiheit und ein voller
+oeffentlicher Profilpass werden daraus nicht abgeleitet; Fehlbelege bleiben.
+
+Der Detailmodus ist nur gebaut; kein Detailgast, voller Hosttestkatalog,
+Windows- oder Hardwarelauf wird behauptet. Neue konkurrierende Same-page-
+Fault-/AP-Page-in- und TLB-Timeoutinjektionen wurden nicht angelegt. Auf
+Userwunsch werden vorhandene Faelle gebuendelt, ohne neue permanente Suite.
+Finaler Normalbau und genau ein unveraenderter SMP4-STANDARD sind gebunden;
+DevCenter bestaetigt alle fuenf Metriken, 30 Rohsamples und sechs Scores.
+Der Gesamtindex steigt auf 108.398312; die Speicherzeit steigt zugleich um
+30.491855% gegen .16. Ursache und Wiederholbarkeit bleiben offen; kein
+zusaetzlicher Lauf zur Scoreverbesserung. Die Speicherabweichung und fruehere
+Scheduler-/Lifecycle-/IPC-Beobachtungen bleiben fuer regulaere Pflichtlaeufe
+markiert. Rohwerte, Streuung und Vergleichsgrenzen stehen einmal im JSON.
+Gemeinsamer Beleg: Core/KernelRustVm08317.json. Naechste Welle: 0.83.18
+Servicecore/IPC/R4SYS; Optimierungen bleiben nach der Gesamtmigration.

@@ -1,0 +1,96 @@
+﻿R4OS 0.83.24 - Rust-Audio-Core, PCM, Mixer und R4AUDIO
+====================================================
+
+Die sechs verbliebenen produktiven Audioimplementierungen sind nativ in
+Rust/audio und Rust/program/r4audio.rs. Kopierte Receiver-/Audio-Routen-
+metadaten waren bereits seit0.83.23 nativ; die siebte Quellzuordnung dieser
+Welle uebernimmt diesen Besitzer unveraendert. Kernel0.1.284/Release0.83.24
+behalten Modul-/Query-/API-/ABI-Vertraege und119 bytegleiche Vergleichsmodule.
+AUDSVC, HDA/AC97 und MIDI-/SID-/OPL3-R4Ds/R4Ps bleiben unveraendert.
+
+Besitz und Datenpfad
+-------------------
+Die58 bestehenden Core-Einstiege und19 R4AUDIO-Einstiege rufen denselben
+nativen Besitzer. Streamringe, Generationen, Transaktionen, Resamplerphase,
+Lese-/Schreibreservierungen, Backend-/Synthregister, Ausgabewahl, Zaehler und
+Bootstatus haben keinen zweiten Zig-Zustand. R4D-Anmeldung, Outputerweiterung,
+Closing und Cleanup binden ihn direkt; alte Synthpraefixe werden weiterhin
+feldweise gelesen, render_pcm erst nach seiner wirklichen Praefixpruefung.
+
+Der vorhandene sleepable Streammutex mit Rang280 und der separate Output-
+Semaphore behalten Reihenfolge und Bedeutungen. Output besitzt das genaue
+Task-Unwindtoken ueber wartende Callbacks; seine rekursive Wiederaufnahme
+bleibt abgewiesen. Reservierte Ringe und Phasen bleiben nach Busy/Timeout
+bis zur wirklichen Quittung erhalten. Keine Rust-Metadatenreferenz spannt
+Freigabe des Streamlocks, Heap, einen Callback oder einen wartenden Aufruf.
+
+PCM bleibt ganzzahlig: U8/S16LE, Mono/Stereo, exakte Frame-/Bytegrenzen,
+Q16-Phase mit Rest, lineare Interpolation und Abschluss nur am echten
+Streamende. Ein unveraenderter nativer PCM-Span leiht die Callerdaten nur
+bis zur Ringkopie. Mixer behielt Unity-Kopie, Ringwrap, Fixedpoint-Volumen
+und saturierende Mehrquellensumme. Kapazitaeten und Pumpbudgets bleiben.
+Die bisherigen Test-/Arbeitszaehler gehoeren nativ; produktive Core-Aufrufe
+uebergeben keinen Diagnosezaehler. Bereits bestehende Betriebs-/Fehler- und
+Zeitzaehler bleiben erhalten; keine neue Logquelle oder Messsuite.
+
+Der Audio-Progressworker bleibt ein begrenzt geweckter Short-Completion-
+Task mit FPU-Zustand und bisheriger BSP-Platzierung. Keine Idle-Pollschleife:
+Mixretry2ms, einmalige Backendbeobachtung10ms und echte Busy-Rueckmeldung
+verwenden die bisherigen funktionalen Clocks/Deadlines.
+
+PCM-Idle darf einen stillen Hardwarecarrier behalten. Ausgangswechsel,
+Backendentfernung und schliessender Owner verlangen dagegen den wirklichen
+Stopcallback. Idlefehler ersetzen keine Stopquittung. Neue Callbacks werden
+vor DriverShutdown geschlossen; ein fehlgeschlagener Abbau behaelt Kontext
+und genaue Registrierungsidentitaet. Alte/neue HDA-Controller teilen weder
+Kontext noch Stopquittung. Boot-/SID-Auswahl und Statusmeldungen behalten ihre
+bisherige Policy, einschliesslich vorhandener Modell-/Praefixgrenzen.
+
+Private C-Records besitzen Groessen-/Offsetpruefungen. Optionale Funktionen
+sind echte C-Callbacks; alte Zig-Codeadressen gehen ausschliesslich durch
+ihre genaue Zig-Signatur. Verbleibende zustandslose Projektionen, Bootconfig-
+und Logaufrufe sind Migrationsgeruest bis0.83.25–27, keine zweiten Besitzer.
+
+Gezielte bestehende Abnahme
+--------------------------
+Alle zehn vorhandenen Backend-/Mixer-/PCM-Faelle und der bestehende
+Streaming-Chunkhelfer liefen einmal gebuendelt. Originale Samples, Formate,
+Zaehler, Generationen und Idle-/Closing-/Stop-Erwartungen sind unveraendert.
+Nur der Testzaehlerreset schreibt jetzt durch den Zeiger auf den nativen
+Record. Unabhaengige Kataloge und unveraenderte Treibersuiten wurden nicht
+wiederholt. Vollstaendiger produktiver Kernelbau und striktes Clippy bestanden;
+enge dokumentierte Lintausnahmen behalten originale Rechen-/Receiptformen.
+
+Ein SMP4-Gast mit zwei emulierten HDA-Controllern verwendet den unveraenderten
+kanonischen AUDIOD sowie die schon vorhandenen privaten AUDIDLE-/AUDOUT-
+Artefakte und deren aeltere kompatible API-Praefixe. PCM-Kontinuitaet, Lazy-/Idle-
+Abschluss, Master/Mehrstreams/Persistenz und Dienstneustart, Replay, HDA-
+Diagnosen, Idle/Wiederaufnahme/Teilperioden sowie Ausgangswechsel und PCM
+auf beiden Controllern bestehen ihre originalen Erfolgskriterien.
+Alle drei Programme kehren mit ERRORLEVEL0 zurueck; normaler Poweroff.
+Die zehn Modellfaelle werden dabei nicht erneut ausgefuehrt.
+
+Genau ein unveraenderter STANDARD auf SMP4/KVM, fuenf Bereiche mit je einem
+Warmlauf und fuenf Messungen;30 Rohsamples und sechs gueltige Scores im
+DevCenter vollstaendig zurueckgelesen. Lauf:26a91b6c-4f2b-42ec-a88e-5e94bd9a3d01.
+Scores: Scheduler/Sync 4.578067, Memory 135.694054, IPC 4.298937,
+Lifecycle 85.928709, Filesystem 68.006800, Gesamt 27.457370.
+Vergleichsmediane, Spannen und MAD stehen im gemeinsamen Beleg. Dieser
+Lauf verwendet HPET statt vorher TSC, Uhrenpaarkosten9070ns statt230ns.
+Scheduler und IPC zeigen einen starken Einbruch mit getrennten Spannen.
+Clock-/Qualifizierungs-/Runtimecode sind bytegleich zu0.83.23; der Grund der
+anderen Uhrenwahl und eine Wiederholbarkeit sind nicht bestimmt. Die Scores
+sind nach unveraendertem Profil formal gueltig; keine reine Audioursache oder
+Performanceparitaet behauptet. Referenz und Lasten unveraendert; kein
+Ergebnis-Auswahllauf, keine erzwungene Clock und keine zusaetzliche Gastsuite.
+
+Erhaltene Vorbereitungs-/Compiler-/Lintfehler stehen im Archiv. Die kurzen
+Gaeste belegen emulierte HDA-/Kernel-/Servicepfade; keine Hoerabnahme,
+physisches HDMI/DMA, AC97-Gastqualifikation oder Windows. Normales Poweroff
+belegt keinen DriverShutdown. Originale Modellsignale ersetzen keine reale
+physische Stopquittung. Historische Scheduler-/IPC-/Memory-Messbeobachtungen
+bleiben offen; ein Lauf belegt weder Wiederholbarkeit noch Ursache/Paritaet.
+
+Gemeinsamer Beleg: Core/KernelRustAudio08324.json.
+Quellen, Rohdaten und Erstfehler: ExFiles/Reports/KernelRust/20261016-audio08324.
+Naechste Welle:0.83.25 Bootpolicy, Updates, Recovery und Shutdown.

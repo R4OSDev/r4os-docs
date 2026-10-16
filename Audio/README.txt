@@ -173,3 +173,13 @@ status until a later observation can acquire output ownership.
 Synth policy, driver-specific conversion/DMA and the physical device remain
 with their existing owners. This change does not qualify physical audio or
 the excluded AMD/NVIDIA adapters.
+
+Native kernel audio since0.83.24
+-------------------------------
+Rust/audio owns PCM conversion, mixing, streams, backend/output admission,
+progress and audio boot status; Rust/program/r4audio.rs owns the table calls.
+AUDSVC, HDA/AC97 and MIDI/SID/OPL3 modules retain their current contracts and
+artifacts. Ordinary Idle may retain a silent carrier; route/owner teardown
+still requires Stop. Scoped original cases, one SMP4 audio guest and one
+STANDARD/DevCenter result, with physical/hearing/timeout limits, are bound in
+Core/KernelRustAudio.txt and KernelRustAudio08324.json.

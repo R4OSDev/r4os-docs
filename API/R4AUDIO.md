@@ -5,6 +5,11 @@ Audio-Service-Streams, MIDI, SID, OPL3 und Synth-/Audiogeraetdiagnose.
 
 Import: R4AUDIO:Query:1
 
+Seit0.83.24 liegen Kernel-PCM-/Mixer-/Stream-/Outputbesitz und R4AUDIO nativ
+in Rust/audio und Rust/program/r4audio.rs. API/ABI, SDK und externe
+AUDSVC-/R4D-/R4P-Verbraucher bleiben unveraendert. Besitz und gezielte
+Abnahme: [KernelRustAudio.txt](../Core/KernelRustAudio.txt).
+
 Bereitstellung: eingebauter Kernel-Provider; keine R4L-Datei und kein
 eigenstaendiger Installations- oder Updatepfad.
 

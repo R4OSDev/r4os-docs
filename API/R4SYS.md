@@ -210,3 +210,8 @@ Physische Storageoperationen verwenden das generationierte Inventar und
 die exklusiven Regionsbelegungen aus `StorageFacade.md`. Raw-I/O, Flush,
 Mount/Unmount und Rescan laufen ueber additive optionale Slots; bestehende
 Tabellenfelder behalten ihre Offsets.
+
+Seit0.83.25 gehoeren Kernel-Update-/Uploadtransaktionen und Boot-Recovery
+nativ zu Rust/update; R4SYS ruft denselben Besitzer direkt auf. Oeffentliche
+Slots, Dateireferenzen und Journal-/Claimformate bleiben unveraendert.
+Besitz und gezielte Abnahme: [KernelRustUpdate.txt](../Core/KernelRustUpdate.txt).

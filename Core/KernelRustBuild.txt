@@ -1,101 +1,87 @@
-﻿Kernelbuild waehrend der Rust-Migration
-=====================================
+﻿Nativer Rust-Kernelbuild
+========================
 
 Einstieg und Optionen
 --------------------
-Repositories/Kernel/Build.sh und Build.bat starten denselben Build.ps1.
-Der Workspace-Rootbuild verwendet weiterhin diese Starter. Sie bauen erst
-Cargo und verbinden anschliessend dessen native ELF-Objekte mit den noch
-produktiven Zig-Kernelteilen. r4os.elf bleibt unter zig-out/bin/; Distribution,
-Limine und SYSUPD behalten ihre bisherigen Artefakt- und Versionsvertraege.
+Repositories/Kernel/Build.sh und Build.bat starten dieselbe Build.ps1 unter
+PowerShell 7. Seit 0.83.27 erzeugt Cargo mit rust-lld das produktive ELF aus
+Rust und notwendiger Assembly; eine Zig-Compile-/Linkstufe existiert nicht.
+Andere Module und der separate Recovery-Kernel behalten ihre bisherigen
+Builds. Workspaceorchestrierung, Limine, Distribution und SYSUPD verwenden
+weiter zig-out/bin/r4os.elf.
 
-BuildOptions.json ist die gemeinsame Quelle fuer Namen, Typen, Defaults und
-Konfigurationsfelder der vorhandenen metrics-/Boot-/Fehleroptionen. PowerShell
-waehlt die Werte und gibt sie explizit an Zig und den Cargo-Build weiter.
-Rust build.rs erzeugt daraus interne Konstanten; der Kernel besitzt keine
-zweite handgepflegte Optionsliste. Optionen wie -Dmetrics=true, -Dcom1-debug=false,
--Dboot-selftests=true oder -Dsmp-fail-ap-index=3 bleiben erhalten.
-Vorhandene Zig-Teststeps und deren Filter bleiben beim bisherigen Besitzer.
+    ./Repositories/Kernel/Build.sh
+    ./Repositories/Kernel/Build.sh fmt
+    ./Repositories/Kernel/Build.sh check
+    ./Repositories/Kernel/Build.sh clippy
 
-Zusaetzlich gibt es zwei ausdrueckliche begrenzte Fehlerproben:
--Drust-panic-test=true und -Drust-overflow-test=true. Beide landen im
-terminalen Kernel-Fatalpfad. Produktbuilds setzen beide auf false.
-Temporare Fehlerimages verwenden eingefrorene Artefakte und einen eigenen
-Imageplan; danach den Normalbuild samt kanonischem Testimage wiederherstellen.
+Unter Windows entsprechend Build.bat. fmt prueft ohne Umschreiben; clippy
+verwirft Warnungen. Der alte install-Alias und -Doptimize=ReleaseSafe bleiben
+fuer Aufrufer kompatibel. Das feste gepruefte Rust-Profil wird dadurch nicht
+veraendert. Alte Zig-Testselektoren werden als ungueltig abgewiesen.
 
-Profile und native Objekte
+BuildOptions.json ist die einzige Namens-/Typ-/Defaultquelle fuer metrics,
+COM1, Boot-/Fehlerproben und AP-Fehlerinjektion. PowerShell schreibt eine
+SHA256-gebundene Konfiguration; build.rs erzeugt daraus Rust-Konstanten.
+Beispiele: -Dmetrics=true, -Dcom1-debug=false, -Dboot-selftests=true,
+-Dsmp-fail-ap-index=3. Explizite Rust-Panic-/Overflowproben bleiben erhalten;
+die nur fuer Zig sinnvolle Panicprobe ist entfernt. Produktdefaults bleiben
+ohne solche Fehlerproben und ohne intrusive Bootselbsttests.
+
+Toolchain und Linkvertrag
 -------------------------
-Rust/Cargo verwenden ausschliesslich den isolierten DevKit-Starter, Rust
-1.99.0 und x86_64-unknown-none. Produktprofil: opt-level=3, Overflow- und
-Debug-Assertions an, panic=abort, Code-Modell kernel, statische Relocations,
-kein Red-Zone/SIMD im normalen Kernelcode, kein Cross-Language-LTO und kein
-gemeinsames LLVM-Bitcodeformat. Die passenden Compilerflags und Profile werden
-auch gegen widersprechende Caller-Umgebungswerte ausdruecklich gesetzt.
-Aufrufumgebung nach Erfolg oder Fehler wiederherstellen.
-Die verbleibenden Zig-Kernelteile behalten ReleaseSafe ohne SIMD.
+Der isolierte DevKit-Starter waehlt die in RustToolchain.json festgelegte
+Rust-Stable-Version 1.99.0, Edition 2024 und x86_64-unknown-none. Kein Zugriff
+auf eine zufaellige globale Cargo-/rustup-Installation. Cargo.lock bindet den
+Contract; der Builder vergleicht kanonisches Schema und generierte Rust-
+Bindings des Workspace bytegenau gegen diesen Pin. Keine stillen ABI-Updates.
 
-Cargo-Artefakte liegen unter Artifacts/Kernel/Rust/. Die ausgewaehlte interne
-Buildkonfiguration liegt dort unter Configurations/<SHA256>.R4S; bestehende
-Konfigurationsdateien duerfen nicht still geaendert werden. Native Referenzen
-bestimmen die eingezogenen Archivsektionen; unbenutzte Compilerhilfen werden
-nicht zu einem zweiten Kernelpfad. strip-kernel=true entfernt auch von nativen
-Rust/Core-Objekten mitgebrachte Hostdebug-/Symbolsektionen aus dem finalen ELF.
+no_std/no_main, opt-level=3, overflow-checks=true, debug-assertions=true und
+panic=abort bleiben fest. Code-Modell kernel, statische Relocations, keine
+Red-Zone und kein SIMD/FPU im normalen Kernelcode; kein LTO. Widersprechende
+Caller-Profilvariablen werden fuer den Aufruf ersetzt und danach restauriert.
+Die normalen Task-/IRQ-Grenzen sichern weiter SIMD-faehige Modulaufrufe.
 
-Die Kernelversion kommt weiter ausschliesslich aus VERSION.R4S. build.rs und
-die bestehende Zig-Seite lesen dieselbe Quelle. Die Cargo-Paketkennung 0.0.0
-ist kein zweiter Produktversionszaehler. .r4os.kernel.meta bleibt Format 1.
-Seit 0.83.7 besitzt Rust die Limine-Requests und deren volatile Antworten.
-Bootreihenfolge und Exception-/Diagnosegrenzen: Core/KernelRustBoot.txt.
+Rust/main.rs exportiert kmain, bindet die erhaltene x86_64-Assembly ein und
+ruft die native Bootfolge auf. linker.ld erzeugt ELF64/EM_X86_64/EXEC ab
+0xffffffff80000000 mit getrennten RW-/RX-/RO-/RW-Segmenten. Limine-Startmarker,
+Requests und Endmarker bleiben in drei eigenen geordneten KEEP-Sektionen.
+.r4os.kernel.meta behaelt sein 44-Byte-Format 1. Rust/boot/version.rs liest
+VERSION.R4S ueber build.rs; Cargo-Paketversion 0.0.0 ist keine Produktversion.
+Compiler_builtins erfuellt benoetigte freestanding Compilerhilfen.
 
-Kontrollierter Uebergang
------------------------
-0.83.6 verbindet zuerst die Rust-Buildinfo und den Rust-Panicpfad. Die private
-32-Byte-C-Struktur enthaelt nur genaue Integerbreiten; beide Sprachen pruefen
-Groesse, Ausrichtung und Offsets. Beim Boot bestaetigt Rust denselben Options-
-Bitstand, AP-Fehlerindex und dieselbe Kernelversion wie Zig. Abweichung ist
-ein terminaler Fehler, kein Fallback.
+Artefakte und Herkunft
+----------------------
+Cargo-Zwischenergebnisse liegen unter Artifacts/Kernel/Rust/, ausgewaehlte
+Konfigurationen unter Configurations/<SHA256>.R4S. Bestehende Hashdateien
+werden nicht geaendert. strip-kernel=true entfernt Symbol-/Debugsektionen
+mit dem gepinnten llvm-objcopy; es veraendert keinen Kernelvertrag.
 
-Seit 0.83.7 gehoeren Fatalzustand und Crashrecords Rust. Die bisherige Anzeige
-bleibt ueber private C-Adapter erreichbar. Rust formatiert ohne Heap und ohne Unwinding; die
-Fehlermeldung steht vor dem optionalen Dateipfad, damit die bestehende
-128-Byte-Crashanzeige den Grund behalten kann. Andere Kernelzustandsbesitzer
-bleiben bis zu ihrer jeweiligen Welle Zig. Es gibt keine doppelte Registry,
-Scheduler, Ressourcenverwaltung oder neue oeffentliche ABI.
+Ein erfolgreicher Produktbau schreibt r4os.elf und r4os.build.json gemeinsam
+nach zig-out/bin/. Der Bericht bindet die wirklichen ELF-Bytes, Kernelversion,
+Sprachen rust/assembly, Rustcompiler, rust-lld, Profil, Optionen und
+Konfigurationshash. fmt/check/clippy ersetzen diesen Produktbericht nicht.
+Tools/BuildMetadata.ps1 prueft Herkunft und Hash fuer Distribution/Spectra;
+historische Zig-/Mischbau-Berichte bleiben als solche lesbar.
 
-Der bestehende test-Step verbindet die Crash-/Bootscreenfixtures mit
-Tests/RustOwners. Dessen Archiv unter Artifacts/Kernel/RustOwners dient nur
-den Hosttests, besitzt keinen Booteinstieg und ersetzt kein Produktartefakt.
-Linux fuehrt darin echte bare SysV-Objekte aus; Windows braucht natives COFF.
+Spectra STANDARD friert genau diesen Bericht mit dem gemessenen ELF ein.
+Alle Lasten, Rohsamples, Scoreformel und die feste Zig-Referenz bleiben
+unveraendert. Herkunft ist keine Geschwindigkeitsbehauptung. Verfahren:
+Agents/Benchmark.txt und Diagnostics/SpectraStandardBenchmark.txt.
+Rust/Core-/Compilerlizenzen bleiben im Distributionimage unter R4OS/LICENSES.
 
-Seit 0.83.8/9 verbindet dasselbe Archiv auch die uebernommenen Speicher-,
-Clock-/Firmware-/PCI-Besitzer mit den vorhandenen Zig-Teststeps. Deren Original-
-testkoerper bleiben beim bisherigen Gate; wegfallende transitive Wiederholungen
-werden nicht durch einen zweiten Testkatalog ersetzt. Hostfixtures verwenden
-denselben gepinnten Contract und feste C-Grenzen; privilegierte IRQ-/MMIO-
-Arbeit belegen ausschliesslich die getrennten echten Gastproben.
+Pruefgrenzen und Historie
+-------------------------
+Vor Gastproben zuerst den Kernel und danach das Testimage bauen; die Boot-
+partition muss den genauen neuen ELF-Hash tragen. SMP4 ist Standard. Tests
+auf betroffene vorhandene Faelle begrenzen; kein pauschaler Kataloglauf.
+Alte Zig-Hosttests, Uebergangsarchive und Testselektoren sind nicht Teil des
+aktuellen Builds. Originalquellen und ihre bisherigen Ergebnisse sind ueber
+Git und die Wellenarchive erhalten; keine automatische Behauptung, sie seien
+als Rust-Hosttests neu ausgefuehrt worden. Einzelheiten und Endabnahme:
+Core/KernelRustMigration.txt und Core/KernelRustFinal.txt.
 
-Ein direkter Zig-Bau ohne geprueftes Cargo-Archiv wird ausdruecklich abgewiesen.
-Fuer normale und Standalone-Workspacebauten die Hoststarter mit deren
-Settings-/DevKit-Zuordnung verwenden. Kernel-Cargo und Zig pinnen weiterhin
-denselben Contract; kleine Companionaenderungen bleiben beim Besitzer.
-
-Compiler- und Benchmarkherkunft
-------------------------------
-Ein erfolgreicher Installationsbau schreibt neben r4os.elf die Hostdatei
-r4os.build.json. Sie bindet SHA256 und eingebettete Kernelversion an die
-wirklichen Sprachen, Compilerversionen, Einzelprofile, Optionen und
-Konfigurationspruefsumme. Reine Besitzer-Teststeps ueberschreiben den Bericht
-des alten installierten ELF nicht mit den Testoptionen.
-
-Tools/BuildMetadata.ps1 prueft diesen Bericht gegen die genauen Artefaktbytes.
-Die Spectra-Standardphase friert ihn mit dem Kernel ein und uebernimmt beide
-Compiler samt getrennten Profilen in artifacts[].build_options. Ein gemeinsamer
-Rust/Zig-Kernel wird nicht pauschal als Zig-ReleaseSafe exportiert. Bei fehlenden
-oder abweichenden Metadaten neu bauen; keinen Compilerstand erraten.
-Kernelversion aus dem Bericht, Messmodus und Sampling weiter aus dem Gast.
-
-Die Standardlasten, Scoreformel, Rohsamples und eingefrorene Referenz bleiben
-unveraendert. Der Bericht ist Hostherkunft, keine neue Messung und keine
-Geschwindigkeitsbehauptung. Verfahren: Agents/Benchmark.txt sowie
-Diagnostics/SpectraStandardBenchmark.txt. Rust/Core-/Compilerlizenzen liegen
-unveraendert im Distributionimage unter R4OS/LICENSES.
+Die Zwischenstaende 0.83.6–26 verbanden native Rust-Objekte mit schrittweise
+abgeloesten Zig-Besitzern und Tests/RustOwners. Sie sind historische Belege,
+kein unterstuetzter zweiter Produktbau. Windows und echte Hardware werden nur
+bei tatsaechlicher Ausfuehrung als getestet ausgewiesen.

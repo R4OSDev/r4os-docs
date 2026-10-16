@@ -1,0 +1,825 @@
+﻿# 0.83.X Kernel Oxidation
+
+**Status:** Abgeschlossen
+
+## Leitbild
+R4OS 0.83.X schafft zuerst zentrale, begrenzte Kerneldiagnose und eine nachvollziehbare Performancebasis mit Spectra und DevCenter. Nach den abgeschlossenen Schritten 0.83.1–3 wird ausschliesslich die produktive Kernelimplementierung in Repositories/Kernel von Zig auf Rust umgestellt. Die Migration erfolgt in einzeln abnehmbaren Unterversionen 0.83.4–27 mit unveraendertem Verhalten und binaer kompatiblen Boot-, Modul-, API-/ABI- und Ressourcenvertraegen. Apps, Services, Libraries, Treiber, Protokolle, Subsysteme, Spectra und der eigenstaendige Recovery-Kernel bleiben in Zig. Noetige Begleitaenderungen an Contract-Bindings, DevKit, Build-/Test-/Distributionintegration und Dokumentation erfolgen beim jeweiligen Besitzer. Rust Stable und eine feste Toolchain begrenzen kuenftige Compilerumstellungen. Zusaetzliche Architektur-/Performanceoptimierungen und der Gesamtrefactor anderer Repositories folgen erst nach erfolgreicher Kernelmigration.
+
+## Notizen
+[Kernelmigration Rust 0.83.4–0.83.27]
+Stand: 0.83.1–3 abgeschlossen; Spectra/DevCenter einsatzbereit. Rust 1.99.0 mit Cargo, rustfmt/Clippy, LLVM/LLD, Quellen und x86_64-unknown-none liegt isoliert im DevKit; Versions-/Komponentenwahrheit: DevKit/Setup/RustToolchain.json. Ausgangsstand und vorhandene Referenzbelege werden in 0.83.4 gebunden. Die produktive Implementierung gehoert weiter demselben Kernel-Repo.
+
+Umfang: Funktions-/ABI-Gleichheit zuerst. Bestehende Modulquellen und gesicherte Zig-Binaerdateien bleiben Verbraucher; kleine zwingende Bindings-/Hostintegrationsaenderungen beim Contract-/DevKit-/Distribution-/Dokumentationsbesitzer sind erlaubt. Recovery-Kernel und R4OS-Self-Hosting bleiben Zig. Keine GUIentwicklung, Treiber-/Protokollauslagerung, zweite API-Wahrheit oder neue Benutzer-/Rechte-/Sandboxarchitektur waehrend der Migration. Zusaetzliche Optimierungen erst nach 0.83.27 separat planen.
+
+Uebergang: Kleine private C-ABI-Bruecken im Kernel erlauben komponentenweise Portierung. Jeder Zustand hat genau einen aktiven Besitzer; keine doppelten Registries/Scheduler oder stillen Fallbacks. Noch nicht migrierte Dienste duerfen bis zu ihrer Welle den bisherigen Kernelteil benutzen. Uebernommene Arbeit/Ressourcen vollstaendig abschliessen und ihren alten Pfad beim Besitzwechsel entfernen. Neue Korrektheitsfehler beim Besitzer unmittelbar beheben. Endzustand in 0.83.27 ohne produktiven Zig-Kernelcode, Zig-Kernelkompilation oder Uebergangsbruecken; erforderliche Assembly bleibt zulaessig.
+
+Vertraege: no_std, feste Stable-Toolchain, explizites sicheres Produktprofil/Overflowchecks, panic=abort, Kernel-Code-Modell, kein Red-Zone/SIMD im normalen Kernelcode. C-ABI/Wirelayouts, optionale Praefixe, Querynamen/Fehlercodes und R4M0 bleiben kompatibel. Rust-Leihen/Drop ersetzen keine DMA-/TLB-/Work-/IRQ-/Bild-/Reset-/Freigabequittung oder den bestehenden Kill-/Unwindschutz. Bootreihenfolge und Besitzerinvarianten aus Agents/Konventionen.txt, API-ABI.txt, KernelStruktur.txt und den dort verlinkten Verträgen gelten weiter.
+
+Abnahme: Bestehende relevante Besitzerfaelle nach Rust portieren und vorhandene Spectra-/Loader-/Gastabnahmen wiederverwenden. Neue dauerhafte Tests/Gates nur fuer bisher unbelegte zwingende Vertragsgrenzen; kein paralleler kompletter Neu-Testkatalog. Alle Gasttests SMP4. Fachwellen mit gezielten kurzen Proben; regulaere Headless-Abnahmen enthalten die vorhandene Standardphase. Keine Single-Core-, Browser- oder pauschalen Langlaeufe. Belege einmal bei der Unterversion, keine mehrfachen Rohdaten/Hashes in Aufgaben. Verfuegbare freigegebene Hardware automatisiert verwenden; fehlende Windows-/physische Spezialnachweise separat benennen und nicht als geprueft ausgeben.
+
+Performance: Ausschliesslich Spectra STANDARD mit unveraenderten fuenf Lasten, einem Warmlauf/fuenf Messungen je Bereich, 30 Rohsamples, fuenf Bereichsscores und overall. Methode/Suite/Scoring/Messmodus und eingefrorene Referenz bleiben vergleichbar; reale Compiler-/Artefaktstaende als Kontext speichern. Standardexport unveraendert unter seiner echten run_id in DevCenter importieren, benannte Referenz gegebenenfalls zuerst; GET und score_validation kontrollieren. HTTP-Erfolg allein belegt keine gueltigen Scores. Fehler/Teilwerte und Streuung erhalten, keinen Index reparieren oder Referenz zur Kaschierung einer Regression wechseln. Reproduzierbare erhebliche Verluste vor Abnahme klaeren; keine erfundene pauschale Geschwindigkeitsgrenze. Kein neuer Lauf allein wegen eines Uploadfehlers.
+
+Abschluss je Unterversion: Nur erreichte Arbeit als abgeschlossen markieren; betroffene Anleitungen/Inventare aktualisieren. RELEASE_VERSION erhoehen, Kernel-/Modulversion nur bei tatsaechlicher Artefaktaenderung; danach Sammelpush mit dem vorhandenen Hoststarter. Ausfuehrung vom User freigegeben: 0.83.4–27 sind abgeschlossen und gepusht. Der produktive Kernel baut ausschliesslich Rust und benoetigte Assembly;119Vergleichsmodule bleiben bytegleich. Fachbelege und offene Mess-/Pruef-/Performancegrenzen stehen einmal bei den jeweiligen Unterversionen; Endstand: Docs/Core/KernelRustFinal.txt. Optimierungen und Gesamtrefactor werden getrennt geplant.
+
+## 0.83.1 Kernelinstrumentierung begrenzen und Eigenkosten nachweisen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Vorbereitung des Kernelrefactors und von Spectra: sinnvolle kernelseitige Betriebs-, Fehler- und Fortschrittszaehler erhalten und dauerhaft aufwendige Detailmessungen gezielt zuschaltbar oder gesampelt ausfuehren. Messgruppen, Verbraucher und Verfuegbarkeit klar dokumentieren; funktionale Besitzer-, Synchronisations-, Deadline-, Unwind- und Ressourcenvertraege bleiben erhalten. Die Eigenkosten von Erfassung und Abfrage getrennt mit einer kurzen kontrollierten SMP4-Messung bestimmen. Messwerte im Normalbetrieb in begrenzten RAM-Datensaetzen halten; keine fortlaufenden Messdateien, Hintergrundabfragen oder zusaetzlichen Dauergates einfuehren. Die zentrale Bedienung und Uebernahme bestehender Kerneldiagnosen folgen in 0.83.2.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Kernelseitige Messstellen und Verbraucher beim jeweiligen Besitzer einordnen.
+  - Notizen: Boot/Loader/PCI, Scheduler/Waits/Locks, IRQ/Clock, Service-Core/IPC/Driver-Work, Speicher/Stacks/Programmlebenszyklus sowie die kernelseitigen Storage-/Dateisystem-/Cache-, Audio-, Grafik-, Netzwerk- und Eingabepfade pruefen. Pro Messgruppe Zweck, funktionale Abhaengigkeiten, aktuelle Verbraucher, Aufloesung, Zusatzarbeit und Ausgabeweg festhalten. Basiszaehler, optionale Detailmessung und entbehrliche Alt-/Doppelwerte unterscheiden. Eine durch R4DEV oder R4NET erreichbare Fremdkomponentenmessung gehoert nicht allein deshalb zum Kernelumfang. Die Zuordnung fuer die Spectra-Migration in 0.83.2 verwenden.
+- [Erledigt] #2 Einen durchgaengigen, dokumentierten Modus fuer optionale Instrumentierung festlegen und verdrahten.
+  - Notizen: Normalbetrieb mit begrenzten Basiszaehlern; teure Zeitmessungen und Stack-Hochwasser ausdruecklich aktivierbar oder mit dokumentierter Samplingrate. Die bisher nur teilweise wirksame -Dmetrics-Grenze bereinigen. Funktional benoetigte Lockverfolgung, Lebenszyklus-/Unwindzustand, Guardseiten, Stackvorbereitung, Deadlines und Ressourcenbuchhaltung duerfen nicht mit Statistik abgeschaltet werden.
+- [Erledigt] #3 Runtime-/Owner-Lock-, IRQ-, Service-/IPC- und Driver-Work-Messung auf den festgelegten Umfang begrenzen.
+  - Notizen: Unnoetige permanente Statistik-Atomics und Zeitabfragen reduzieren; Detailzeiten gezielt zuschalten oder samplen. Bei Driver-Work die doppelte Messung der kritischen Sektionen pruefen. Bestehendes Service-Lock-Sampling beruecksichtigen. IRQ-/Fehler-/Fortschrittszaehler, echter Deadline-/Budgetzustand sowie Besitzer- und Freigabevertraege erhalten.
+- [Erledigt] #4 Stack-Hochwasser und Stackanlage-/Freigabezeiten gezielt zuschaltbar machen.
+  - Notizen: Musterfuellung, Scans und reine Telemetrie-Aggregate nur im vorgesehenen Messmodus ausfuehren. Normale, gecachte und kritisch reservierte Kerneltaskstacks sowie R4X-Haupt-/Threadstacks und Stackwachstum abdecken. Notwendige Speicherinitialisierung, Guardseiten, FPU-Zustand und idempotenten Ressourcenabbau erhalten; Traceausgabe ausdruecklich halten.
+- [Erledigt] #5 Gezielte Kernelabfragen fuer Spectra vorbereiten und Diagnoseverbraucher bis zur Migration anpassen.
+  - Notizen: Breite PerformanceSummary-Abfragen, Locks, Aggregation und Backendstatus-Callbacks auf vermeidbare Eigenkosten pruefen; gezielte bestehende Abfragen bevorzugen. Nicht erfasste Zeiten eindeutig als unverfuegbar ausweisen und Sampling/Clockqualitaet kenntlich machen. Bisher nur intern lesbare Runtime-/Owner-Lock- und Stackaggregate sowie vollstaendige Task-/IRQ-/Bootphasenabfragen fuer die zentrale Auslesbarkeit beruecksichtigen. Contract-/SDK-Kompatibilitaet und notwendige bestehende Verbraucher bis zur Uebernahme in 0.83.2 erhalten; dort entfallen deren migrierte Kernelfunktionen. Messschleifen ohne breite Summary-Abfragen oder Textausgabe halten.
+- [Erledigt] #6 Eigenkosten der Instrumentierung mit einem kurzen kontrollierten SMP4-Vergleich messen.
+  - Notizen: Dieser Schritt ordnet ausdruecklich eine begrenzte A/B-Messung mit Detailinstrumentierung aus/ein an. Ausschliesslich vier vCPUs; identischer QEMU-Backend, CPU/RAM, Clockbasis, Artefaktstand und Arbeitslast. Relevante Lock-/IRQ-/Work-/Stackpfade gezielt erfassen und Erfassungs-, Abfrage- und Ausgabekosten getrennt bewerten. Rohwerte, Streuung und Grenzen dokumentieren; TCG-SMP nicht als Nachweis echter physischer Parallelskalierung ausgeben. Keine Single-Core- oder langen Gesamttestlaeufe und keine Eintraege in Benchmarks.jsonl.
+- [Erledigt] #7 Ausgabegrenzen, vorhandene Besitzerchecks und kurze SMP4-Smokes pruefen; Dokumentation und Artefaktversionen pflegen.
+  - Notizen: Normal- und Detailmodus gezielt pruefen; passive RAM-Erfassung von Trace-, Boot-/Shutdown- und Fehlerausgabe trennen. Stackwachstumszeilen, begrenzten Bootlog und REBOOT.LOG beruecksichtigen. Betroffene bestehende Tests/Diagnosen anpassen statt neue Dauergates anzulegen. Messmodi, Kosten und Aussagegrenzen beim Besitzer dokumentieren; Inventare bei Bedarf aktualisieren. RELEASE_VERSION und nur tatsaechlich geaenderte Kernel-/Modulartefakte erst zum Abschluss versionieren und gesammelt pushen.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Normal- und Detailmodus sind durch vorhandene Besitzerchecks und kurze SMP4-Smokes bestaetigt.
+  - Notizen: Basiszaehler und funktionale Vertraege bleiben korrekt. Optionale Messung erzeugt im ausgeschalteten Zustand keine Musterfuellungen, Scans oder reinen Detailzeit-Updates; Verfuegbarkeit und Sampling sind korrekt deklariert. Keine fortlaufende Messdatei oder regelmaessige zusaetzliche Logausgabe.
+- [Erledigt] Ein nachvollziehbarer SMP4-Beleg beziffert Erfassungs- und Abfragekosten getrennt.
+  - Notizen: Gleiche Umgebung und Arbeitslast fuer A/B; Rohwerte, Streuung, Clockqualitaet und technische Grenzen dokumentiert. Erhaltene Basiszaehler und verpflichtende Sicherheits-/Ressourcenarbeit werden nicht als abschaltbare Statistik ausgegeben. Kein Vergleich mit Single-Core-Historien.
+
+### Notizen
+Abgeschlossen: Basis/Detail getrennt, R4DEV v13 append-only und Zig/C-Fassaden bereit. Je 482 Kernel-Hosttests und 45 A/B-Samples plus 77 Konformitaetschecks pro SMP4-Modus bestanden. Exit-Lock-Inversion beim Besitzer behoben. Kosten und Grenzen: Docs/Diagnostics/KernelInstrumentation.txt/.json (JSON: KernelInstrumentation0831.json); Rohbelege ExFiles/Reports/Spectra/20261013-instrumentation. Detail Thread/Stack ca.3x, Yield +16%; kein allgemeiner Systemfaktor. Breiter SDK-FAT-Testhaenger bleibt getrennt in Problems.txt, gezielte Fassaden/Builds gruen. Release 0.83.1 und acht Repositories gesammelt gepusht. Weiter mit Spectra in 0.83.2.
+
+## 0.83.2 Spectra: zentrale Kerneldiagnose und Bereinigung bisheriger Werkzeuge
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+SPECTRA.R4X als eigenstaendiges Diagnosewerkzeug im Userland einfuehren. In 0.83.X werden ausschliesslich Messwerte, Diagnose-/Debugmeldungen, Funktionspruefungen und Benchmarks des Kernels gebuendelt. Zuerst Bedienung mit Parametern ueber Terminal und SSH; gemeinsame Fachlogik und strukturierte Ergebnisse bereiten die spaetere GUI in derselben R4X vor. Uebernommene Kernelfunktionen aus bisherigen Diagnoseanwendungen entfernen. Anwendungen mit verbleibendem Fachzweck behalten; andernfalls Modul sowie lokales und oeffentliches GitHub-Repository loeschen. Dokumentation, Agent-Anweisungen, Inventare, Imageplaene und bestehende Testaufrufer zusammen umstellen. Die vollstaendige Ueberarbeitung aller Repositories, weitere Fachbereiche und die GUI folgen spaeter.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Kernelumfang und Uebernahme je Diagnosefunktion verbindlich zuordnen.
+  - Notizen: Verbindliche Zuordnung: Docs/Diagnostics/SpectraMigration.json. 16 vollstaendige Kerneldiagnosen und BootInfo/MemView werden abgeloest; APPHEAPD/STORDIAG/NETIOD/LOGCENTER/SYSINFO sowie SSHD behalten ihren Fachzweck. SSHD gibt Kernelinventare an Spectra ab und behaelt transport-only PING. Alle 14 Loaderfixture-Artefakte stimmen bytegenau mit dem aktuellen Quellbesitzer ueberein; historische Pins gesichert.
+- [Erledigt] #2 SPECTRA.R4X mit gemeinsamer Fachlogik und Terminal-/SSH-Einstieg anlegen.
+  - Notizen: Besitzer Repositories/Diagnostics/Spectra mit eigenem oeffentlichem Repository R4OSDev/r4os-diagnostic-spectra gemaess Agents/Github.txt. Manifestname SPECTRA, Konsolenstart als Standard; normale Console-/STDIO-Ausgabe und Exitcodes fuer lokale Terminal- und SSH-Aufrufe. Im regulaeren System sowie im Testimage auffindbar installieren. Datenzugriff, Ausfuehrungslogik und Darstellung trennen; lesbare Textausgabe und versionierte strukturierte Ergebnisse aus demselben Modell. Der vorhandene Startvertrag erlaubt spaeter eine GUI derselben R4X; in diesem Schritt keine GUI oder neue dauerhafte Sammeldienst-Infrastruktur entwickeln.
+- [Erledigt] #3 Alle beibehaltenen Kernelmesswerte vollstaendig und gezielt auslesbar machen.
+  - Notizen: Passive Snapshot-Abfragen nach Messgruppen und ein expliziter Gesamtabruf. Runtime-/Owner-Locks und Kernel-/R4X-Stackaggregate ebenso beruecksichtigen wie vollstaendige Task-, IRQ-, Bootphasen- und relevante I/O-/Work-/IPC-Eintraege; keine stillen Beschraenkungen auf erste Beispielzeilen. Vorhandene Contract-/SDK- Abfragen wiederverwenden, fehlende Abfragen minimal beim Besitzer ergaenzen. Einheiten, Zeitbasis, Snapshot-/Laufbezug, Sampling und fehlende/deaktivierte Werte eindeutig darstellen. Gezielt abfragen; Live-Aktualisierung nur auf Anforderung mit begrenztem Intervall und erkennbarem Ende. 0.83.1-Modi respektieren.
+- [Erledigt] #4 Kernelmeldungen und Debugausgaben ueber begrenzte bestehende Quellen anbinden.
+  - Notizen: Kernel-Bootlog und passende LOGSVC-Quellen fuer gefilterte Snapshot-/Liveansichten verwenden. Herkunft, Schweregrad, Zeitbasis und ueberschriebene/verlorene Daten sichtbar machen. Fuer benoetigte bisher nur seriell erreichbare Kernelmeldungen einen begrenzten lesbaren Pfad beim Besitzer schaffen. Kernelmessung darf nicht bei jedem Ereignis Texte formatieren oder Dateien schreiben. Fehlende Quelle korrekt melden; eine gestartete Messwertabfrage aktiviert keine Detailtraces. Export nur ausdruecklich; bestehende Boot-/Fehler-/Shutdown-Diagnose erhalten.
+- [Erledigt] #5 Vorhandene Kernelpruefungen und Kernelbenchmarks nach Spectra uebernehmen.
+  - Notizen: Die in Aufgabe 1 zugeordneten sinnvollen Kernelfunktionen mit gezielter Auswahl migrieren. Passive Messwert-/Meldungsanzeige, aktive Funktionspruefung und Benchmark haben getrennte explizite Aufrufe. Benchmarks behalten begrenzte Laufzeit, Abbruch und bestaetigten Ressourcen-/Serviceabbau auf allen Ausgaengen. Ausgabe und Live-Abfragen ausserhalb der Messschleifen halten; Umgebung, Messmodus, Rohwerte, Streuung und Abfragekosten angeben. Vorhandene sinnvolle Verfahren wiederverwenden; keine Vollimplementierung zukuenftiger Fachbereiche.
+- [Erledigt] #6 Uebernommene Kernelfunktionen aus den bisherigen Diagnoseanwendungen entfernen.
+  - Notizen: Nach gepruefter Uebernahme die alten Kernel-Messanzeigen, Diagnosebefehle und Benchmarkpfade samt ausschliesslich dafuer benoetigter Helfer/Imports entfernen. Keine zweite Bedienoberflaeche fuer dieselbe Kerneldiagnose bestehen lassen. Programme mit verbleibenden Fachfunktionen darauf zuschneiden und gezielt pruefen. Bestehende Automatisierung, Benchmarkrunner, Gastmarker und Testzuordnungen auf die passenden Spectra-Aufrufe umstellen; notwendige Besitzerpruefungen nicht allein wegen des Werkzeugwechsels verlieren.
+- [Erledigt] #7 Zwecklos gewordene Diagnosemodule und ihre lokalen/GitHub-Repositories loeschen.
+  - Notizen: Fuer jedes nach Aufgabe 6 leere Diagnoseprojekt den fehlenden Restzweck und die erfolgreiche Uebernahme benoetigter Funktionen festhalten. Dann Artefakt, lokales Projektrepository und dessen genau zugeordnetes oeffentliches R4OSDev-Repository entfernen. Zuvor alle benoetigten Quellen/Fixtures und weiterhin gueltigen Nachweise beim neuen Besitzer sichern. Build-/Image-/ Installations-/Updateverweise, Paketlisten, Module-/Testinventare und Werkzeugaufrufe bereinigen; frische Images und unterstuetzte Updates duerfen die entfernten Module nicht weiter ausliefern oder alte Repositories neu anlegen. Module mit eigenstaendigem verbleibendem Fachzweck behalten.
+- [Erledigt] #8 AGENTS.md, Agent-Anleitungen und Docs auf Spectra und die neue Zustaendigkeit umstellen.
+  - Notizen: AGENTS.md sowie betroffene Agents/Test.txt, TestCategories.txt, Benchmark.txt und KernelStruktur.txt mit dem tatsaechlich erreichten Stand abgleichen. Spectra-Bedienung, Messgruppen, Normal-/Detailmodus, Datenquellen, Ausgabegrenzen, Eigenkosten und Ersatz alter Aufrufe in Docs dokumentieren; API-/SDK-Dokumentation bei Vertragsaenderungen nachziehen. AllModules.json und Tests.json manuell aktualisieren, Docs.json gemaess Inventarregeln pflegen. Aktive Anleitungen duerfen keine entfernten Programme/Repositories mehr verlangen; historische Belege behalten ihre damalige Bedeutung. Benchmarks.jsonl bleibt unberuehrt.
+- [Erledigt] #9 Kernelumfang, Migration und Terminal-/SSH-Bedienung mit kurzen SMP4-Nachweisen abschliessen.
+  - Notizen: Vorhandene betroffene Besitzerchecks und gezielte kurze SMP4-Gastlaeufe verwenden. Parameter, Hilfe, Text-/strukturierte Ausgabe, Exitcodes, vollstaendige Eintragsabfrage, fehlende Quellen/Detailwerte und Abbruch ueber Terminal und SSH pruefen; Konsolenbetrieb braucht keinen laufenden Desktop. Uebernommene Kernelbenchmark-Ausfuehrung durch ausdrueckliche begrenzte Funktionslaeufe nachweisen, keine pauschalen Lang-/Gesamtsuiten. Keine Single-Core-Laeufe oder neuen Dauergates ohne Bedarf. Restfunktionen gemischter Diagnosen sowie Referenz-/Imagebereinigung bestaetigen. RELEASE_VERSION und nur geaenderte Kernel-/Modulartefakte zum Abschluss versionieren und den passenden Sammelpush ausfuehren.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Spectra zeigt alle beibehaltenen Kernelmessungen und benoetigten Kernelmeldungen ueber Terminal/SSH.
+  - Notizen: Die Zuordnung deckt alle Kernelgruppen ab. Eintragslisten sind vollstaendig; Einheiten, Zeitbasis, Verfuegbarkeit, Sampling und Datenverlust sind sichtbar. Passive Anzeige startet weder Pruefungen noch Benchmarks oder Detailtraces. Normal-/Detailmodus und begrenzte Live-/Exportwege entsprechen 0.83.1; Bedienung und strukturierte Ausgabe funktionieren ohne laufenden Desktop.
+- [Erledigt] Migrierte Kerneldiagnosen und Kernelbenchmarks haben genau einen kanonischen Aufruf in Spectra.
+  - Notizen: Vorhandene notwendige Funktionen und Nachweise sind uebernommen und mit gezielten Besitzerchecks/kurzen SMP4-Laeufen bestaetigt. Alte Anwendungen enthalten ihre uebernommenen Kernelfunktionen nicht mehr. Verbleibende Fachfunktionen gemischter Programme bleiben nutzbar; aktive Tests und Benchmarks enden oder brechen mit korrektem Ressourcenabbau ab.
+- [Erledigt] Zwecklose Diagnosemodule samt Repositories sind entfernt; Anleitungen und Inventare sind konsistent.
+  - Notizen: Je entferntem Projekt ist der entfallene Restzweck nachvollziehbar; lokale und zugeordnete GitHub-Repositories sind geloescht. Aktive Build-/Image-/ Update-/Testpfade verlangen oder installieren diese Module nicht mehr. AGENTS.md, betroffene Agent-Anleitungen, Docs und Inventare beschreiben den erreichten Spectra-Stand; Spectra ist im regulaeren System und Testimage vorhanden. GUI und fachfremde Refactors sind kein Abschlusskriterium.
+
+### Notizen
+Abgeschlossen: oeffentliches Spectra 0.1.0, alle Kernelgruppen und Meldungsquellen ueber Terminal/SSH; 18 lokale/GitHub-Altprojekte nach gesicherter Historie entfernt. Gemischte Werkzeuge auf Restzweck reduziert. 487 Kernel-, 18 Spectra-, 4 SSHD- und 399 Desktop-Hosttests, Normal-/Detail-SMP4 und regulaerer KVM-Kurzlauf bestanden. Wartender Page-in, diagnostischer Reclaim und Backing-Identitaet beim Kernelbesitzer korrigiert. Alle vier Imageplaene bereinigt; frisches Testimage gebaut und verifiziert. Nachweis/Grenzen: Docs/Diagnostics/Spectra0832.json. Release 0.83.2 und 18 Repositories gesammelt gepusht (GitHub-Transient beim VirtioNet-Push durch Wiederholung behoben). Weiter mit Standardbenchmark 0.83.3.
+
+## 0.83.3 Spectra-Standardbenchmark: fuenf Bereiche und Gesamtindex
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Einen kurzen Standardbenchmark als festen Bestandteil des regulaeren SMP4-Gasttestlaufs einfuehren. Scheduler/Synchronisation, Speicherverwaltung, Kernel-IPC, Programmlebenszyklus sowie Datei-/I/O-Kern erhalten getrennte Messungen und Bereichsindizes; zusaetzlich einen Gesamtindex aus allen fuenf gleich gewichteten Bereichen ausgeben. Feste versionierte Arbeitslasten, dokumentierte Umgebung und eine eingefrorene Referenz mit 100 Punkten erlauben nachvollziehbare Vergleiche beim Kernelrefactor. Rohwerte und Metadaten in einem versionierten Datensatz exportieren. Das vom User parallel entwickelte Datenbanktool samt privatem Repository bleibt ausserhalb dieser Roadmap.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Die fuenf kurzen Arbeitslasten und deren Messkonfiguration verbindlich festlegen.
+  - Notizen: Stabile Bereichs-IDs scheduler_sync, memory, ipc, lifecycle und filesystem_io. Fuer jeden Bereich repräsentative feste Operationen, Arbeitsmengen, Erfolgskriterien, Cachezustand, Aufwaermphase und Wiederholungen versionieren. Scheduler-Wakes/Lockuebergaben, Reserve/Commit/Fault/Release, Kernelanfragen/-antworten, Start mit vollstaendigem Programmabbau und definierte Datei-/I/O-Operationen abdecken. Vorhandene passende Pruefungen wiederverwenden. Messintervalle muessen zur Clockaufloesung passen; keine GUI-, Netzwerkserver- oder Datenbankabhaengigkeit einfuehren.
+- [Erledigt] #2 Alle fuenf Bereiche in Spectra einzeln sowie als Standardlauf ausfuehren und getrennt ausgeben.
+  - Notizen: Jeden Bereich mit begrenzter Dauer, wiederholten Rohmessungen, Korrektheitspruefung und bestaetigtem Ressourcenabbau implementieren. Parameterauswahl ueber Terminal/SSH; Standardlauf fordert alle fuenf Bereiche an. Text, Datei-/Consoleausgabe und breite Diagnoseabfragen ausserhalb der gemessenen Schleifen halten. Zeit pro abgeschlossener Operation bevorzugen; Rohzeit, Operations-/Bytemenge und Checkresultate erhalten. Unabhaengige Teilresultate auch bei Fehlern ausgeben, Abbruch/Timeout sichtbar melden.
+- [Erledigt] #3 Fuenf Bereichsindizes und einen gleich gewichteten Gesamtindex mit fester Referenz berechnen.
+  - Notizen: Ein validierter unveraenderlicher Referenzlauf definiert 100 Punkte. Zeitmetriken mit Referenz/Aktuell, Durchsatz mit Aktuell/Referenz normieren; bei mehreren primaeren Metriken feste versionierte Gewichte innerhalb des Bereichs und geometrische Mittel verwenden. Gesamtindex = 100 * Produkt(Bereichsindex/100)^(1/5). Vor Vergleich Umgebung, Arbeitslast, Scoring und Messmodus pruefen. Fehlende, fehlerhafte, unaufgeloeste oder inkompatible Bereiche liefern null plus Grund und verhindern einen gueltigen Gesamtindex; niemals Gewichte nachtraeglich auf vorhandene Bereiche verteilen. Referenzwechsel erzeugt einen neuen ausdruecklichen Referenzbezug.
+- [Erledigt] #4 Einen verlustfrei importierbaren Ergebnisdatensatz fuer das separate Datenbanktool exportieren.
+  - Notizen: Versioniertes Schema fuer Lauf, Umgebung, Artefaktstaende, Einzelmetriken, Rohsamples und sechs Scoreeintraege gemaess Docs/Diagnostics/README.txt konkretisieren. run_id, Host-UTC-Zeiten, Suite-/Scoringversion, Referenzlauf, Vergleichskonfiguration, CPU/vCPUs/RAM, QEMU-Backend/Version, Storage-/Imageparameter, Clockquelle/-qualitaet, Instrumentierungsmodus sowie relevante Commits/Artefakthashes festhalten. Warmlaeufe, verworfene Versuche und Fehler kenntlich erhalten; Nanosekunden/Zaehler ohne 64-Bit-Praezisionsverlust exportieren. Der Export und lokale Referenzvergleich funktionieren ohne Datenbankdienst. Keine Arbeit am separaten privaten Tool oder an Benchmarks.jsonl.
+- [Erledigt] #5 Den Standardbenchmark in den regulaeren SMP4-Testlauf und die bestehenden Hoststarter aufnehmen.
+  - Notizen: Dieser Schritt autorisiert die automatische begrenzte Benchmarkphase im regulaeren SMP4-Abnahmelauf ausdruecklich. Einmal je solchem Testlauf nach definiertem Boot-/Ruhezustand ausfuehren; Windows/Linux teilen die PowerShell-Logik. Bestehende Quick-Probes bleiben gezielte Kurzproben. Aufruf, Ausgabe, Timeout und Exitcodes im vorhandenen Runner behandeln; keine parallelen unbegrenzten Messdienste oder zweite Testorchestrierung. Vollstaendige korrekte Arbeitslasten sind Pflicht; reine Geschwindigkeitsstreuung ohne festgelegtes Budget nicht als Funktionsfehler ausgeben.
+- [Erledigt] #6 Berechnung, Ergebnisvertrag und reproduzierbaren kurzen SMP4-Lauf gezielt pruefen.
+  - Notizen: Bestehende Besitzerchecks um notwendige Score-/Schemafaelle ergaenzen: Referenz ergibt 100, bekannte relative Beschleunigung/Verlangsamung, festes Bereichsgewicht, unvollstaendige/falsche Referenz, Fehler/Nullzeit und verlustfreie Rohdaten. Kurzen realen SMP4-Referenz- und Wiederholungslauf mit identischer Konfiguration ausfuehren; alle fuenf Teilbereiche und Gesamtindex verlangen, Streuung offenlegen. TCG-SMP ist keine physische Skalierungsabnahme. Keine Single-Core-Laeufe oder langen Gesamtsuiten.
+- [Erledigt] #7 Standardtest, Referenzregeln und Importfelder dokumentieren und die Unterversion abschliessen.
+  - Notizen: AGENTS.md, betroffene Agents/Benchmark.txt, Test.txt, Build.txt, Docs/Diagnostics und Test-/Dokumentationsinventare auf den erreichten Stand bringen. Die ausdrueckliche Standardbenchmark-Ausnahme und weiterhin optionalen sonstigen Benchmarks eindeutig beschreiben. Referenzdatensatz/-identitaet, Vergleichsgrenzen und Beispielergebnis fuer den separaten Import bereitstellen. RELEASE_VERSION sowie nur geaenderte Artefaktversionen zum Abschluss erhoehen und gesammelt pushen; paralleles privates Repository ausserhalb dieser Arbeit halten.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der regulaere SMP4-Test liefert alle fuenf Bereichsergebnisse und den Gesamtindex.
+  - Notizen: Alle Bereiche laufen als begrenzte, fachlich korrekte und separat aufrufbare Arbeitslasten. Vergleichbarer Referenzlauf ergibt 100; feste Gewichte und Referenzbezug sind sichtbar. Fehlerhafte oder unvollstaendige Laeufe koennen keinen gueltigen Gesamtwert erzeugen. Terminal-/SSH-Ausgabe und Ressourcenabbau sind geprueft.
+- [Erledigt] Rohdaten, Vergleichsgrundlage und sechs Scoreeintraege lassen sich ohne Datenbankdienst exportieren und nachvollziehen.
+  - Notizen: Schema, Laufidentitaet, UTC-Zeiten, Umgebung/Messmodus, Artefaktstaende, Einzelmetriken/Rohsamples und Referenzlauf sind vorhanden. Aus exportierten Werten sind alle gueltigen Bereichs- und Gesamtindizes reproduzierbar. Anleitungen und Inventare beschreiben den neuen Standardtest. Das separate Datenbanktool/private Repository sowie Benchmarks.jsonl sind nicht Bestandteil der Umsetzung.
+
+### Notizen
+Abgeschlossen: Spectra 0.1.1 mit fuenf festen Kernelarbeitslasten, je einem Warmlauf/fuenf Samples und sechs gleich gewichteten Scores. Eingefrorene Referenz 100; identischer KVM-SMP4-Wiederholungslauf overall 100.156904. Standardphase im vorhandenen regulaeren Runner, Quick/Browser/Build-only ausgenommen. Verlustfreier Schema-1-Hostexport und Offlinevergleich ohne Datenbankdienst. 22 Zig- und PS7-Score/Schemafaelle, byteidentischer unabhaengiger Public-Pin-Build sowie Text/JSON/Einzelbereiche/Dateireferenz/Abbruch mit exaktem Abbau ueber SSH bestanden. Bestehende 127-Byte-Argumentgrenze dokumentiert; lange SSH-Referenz per Batch. Nachweise/Metadaten/Grenzen: Docs/Diagnostics/Spectra0833.json. Release 0.83.3 und vier Repositories gesammelt gepusht; Kernel 0.1.265 unveraendert.
+
+## 0.83.4 Rust-Migration: Ausgangsstand, Umfang und Abnahmematrix
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Den funktionsfaehigen Zig-Kernel als unveraenderlichen Vergleich sichern und alle produktiven Kernelbereiche, Schnittstellen sowie bisherigen Nachweise einer Migrationswelle zuordnen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Zig-Ausgangsstand und vorhandene Standardbenchmarkreferenz sichern.
+  - Notizen: Sauberer Zig-Quellstand, fuenf verifizierte Git-Bundles, 126 installierte Dateien und veroeffentlichter Recovery-Pin gesichert. Separater Build mit leerem lokalem Cache bytegleich; beide vorhandenen echten Spectra-/DevCenter-Belege erhalten.
+- [Erledigt] #2 Vollstaendige Kernel-Migrationsmatrix und unveraenderliche Aussengrenzen erfassen.
+  - Notizen: Alle 350 versionierten Kerneldateien genau einer verantwortlichen Welle zugeordnet; bereichsuebergreifende Folgearbeiten und 149 vorhandene Inventareintraege verknuepft. Keine unbelegten oder doppelten Dateien.
+- [Erledigt] #3 Rust-Profil, Uebergang und vorhandene Testabdeckung verbindlich festlegen.
+  - Notizen: Produktprofil, Overflow-/Panic-/ABI-/unsafe-/Besitzregeln, native Objektbruecken und Abschlussgrenzen dokumentiert. Recovery/Self-Hosting bleiben Zig; keine neue Referenz, neue Testsuite oder Kernelartefaktaenderung.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Ausgangsstand, vollstaendige Migrationsmatrix und verbindlicher Abnahmevertrag sind nachvollziehbar.
+  - Notizen: Dateibestand/Quell- und Archivhashes vollstaendig geprueft, fuenf Bundles verifiziert, Kernelrebuild bytegleich. Vorhandene unveraenderte SMP4-Standardbelege weiter gueltig; DevCenter-GET bestaetigt beide Laeufe mit allen sechs Scores. Windows-Ausfuehrung nicht behauptet.
+
+### Notizen
+Abgeschlossen und gesammelt gepusht. Unveraenderlicher Ausgangsstand und vollstaendige Dateimatrix: Docs/Core/KernelRustBaseline0834.json; Profil/Abnahmevertrag/Rueckweg: Docs/Core/KernelRustMigration.txt. Originalbelege: ExFiles/Reports/KernelRust/20261013-baseline0834. Release 0.83.4; Kernel 0.1.265 unveraendert. Naechster Schritt: 0.83.5 vollstaendige Rust-ABI-Bindings beim Contractbesitzer.
+
+## 0.83.5 Rust-Bindings fuer den unveraenderten Plattform- und Modulvertrag
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Im Contract-Repository Rust-Bindings aus derselben Vertragswahrheit erzeugen und die bestehenden Zig-Verbraucher binaer kompatibel halten.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Zentrale Generierung um vollstaendige Rust-Bindings erweitern.
+  - Notizen: Automatische no_std-Projektion aus allen kanonischen Schema-/technischen Zig-Typen: 403 C-Strukturen, 6661 Felder, 20 Integer-Enums, 585 Callbackdeklarationen, 2369 Konstanten und echte Felddefaults. Keine zweite ABI-Wahrheit; reine Zig-Metadaten ausdruecklich ausgenommen.
+- [Erledigt] #2 Layout- und Aufrufkompatibilitaet an den vorhandenen Conformance-Faellen pruefen.
+  - Notizen: Bestehende Contract-Zig/C-Abnahme und 26 Mutationen bestehen. Rust-Host/Baretarget-Layouts, Clippy und reale native Rust/Zig/C-Aufrufe mit Nullbarkeit, Workcallbacks, breiten Stackargumenten, Enums, Defaults und SIMD-faehigem C-Verbraucher bestehen. Manipulierter R4XStart-Header wird abgewiesen; keine direkte Float-/Vector-API im Bestand.
+- [Erledigt] #3 Kernelimporte und Standalone-Verbrauch der erzeugten Rust-Bindings vorbereiten.
+  - Notizen: Kernel importiert nur die Contract-Crate. Cargo und Zig-Standalonebau pinnen denselben veroeffentlichten Commit mit Git-Lock beziehungsweise Paketpruefsumme. Beide Rust-Profile und Zig-Bau ohne lokalen Fork geprueft; Zig-Kernelartefakt bleibt bytegleich. Normale Contractchecks sind rein lesend.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Rust und bestehende Zig/C-Verbraucher sehen dieselben vollstaendigen Layouts und Aufrufvertraege.
+  - Notizen: Alle Layout-/Aufruf- und Standalone-Pinchecks bestanden, kanonisches Schema/Baseline und bestehende Zig/C-Ausgaben unveraendert. Vorhandene SMP4-Belege des bytegleichen Kernels weiter gueltig; Hostfixture behauptet keine IRQ-/Hardware-/Windows-Abnahme.
+
+### Notizen
+Abgeschlossen und gesammelt gepusht. Darstellung/Verbrauch: Docs/API/RustContractBindings.txt. Gemeinsamer Abnahmebeleg: Docs/Core/KernelRustBindings0835.json; Originalbelege: ExFiles/Reports/KernelRust/20261013-contract0835. Release 0.83.5, Kernel 0.1.265 bytegleich. Naechster Schritt: 0.83.6 Cargo-Build und private native Uebergangsbruecken.
+
+## 0.83.6 Cargo-Kernelbuild und kontrollierter Rust/Zig-Uebergang
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Rust ueber die vorhandenen Hoststarter und DevKit-Pfade einbinden; waehrend der fachlichen Wellen ein vollstaendig lauffaehiges gemeinsames Kernelartefakt behalten.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Gemeinsamen PowerShell-7-Build mit Cargo und vorhandenen Hoststartern einrichten.
+  - Notizen: Gemeinsamer PS7-Build ueber duenne Windows/Linux-Starter; kanonische BuildOptions.json bindet bestehende metrics-/Boot-/Fehleroptionen. Gepruefte Cargo-Objekte und Zig-Besitzer liefern weiterhin r4os.elf samt Kernelmetadaten; lokale Zig-/gepinnte Rust-ABI bytegleich geprueft.
+- [Erledigt] #2 Private temporaere Bruecken und objektbasiertes gemeinsames Linking herstellen.
+  - Notizen: Private feste C-Buildinfo und begrenzte Panicbytes; ein aktiver Besitzer je Zustand. Native ELF-Objekte ohne gemeinsames LLVM-Bitcode/LTO, genaue Options-/Versionsquittung beim Boot. Bestehende Besitzer bleiben bis zu ihrer Fachwelle Zig.
+- [Erledigt] #3 Produktprofil, Artefaktdiagnose und Compiler-Metadaten wahrheitsgetreu integrieren.
+  - Notizen: Rust-Release mit Overflow/Assertions/panic=abort/no-red-zone und ohne SIMD im normalen Kernelcode; Basis-/Detail-Hostchecks, Clippy, finale SMP4-Abnahme und echte Panic-/Overflowproben bestanden. ELF-gebundene Compiler/Profile im Spectraexport und DevCenter bestaetigt; Aufrufumgebung/alte Testartefaktmetadaten bleiben korrekt.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Der gemeinsame Kernelbuild und die bestehenden Host-/Artefaktvertraege funktionieren mit festgelegter Rust-Toolchain und kontrolliertem Uebergang.
+  - Notizen: Gemeinsamer Kernel 0.1.266 mit beiden Compilerprofilen, bestehenden Artefaktvertraegen, kurzer SMP4-/Fatal-/Overflowabnahme und sechs gueltigen DevCenter-Scores geprueft. Schedulerverlust im identischen Wiederholungslauf nicht reproduziert; beide Rohlaeufe und grosse Streuung erhalten, keine stabile Geschwindigkeitsbehauptung. Windows nicht ausgefuehrt.
+
+### Notizen
+Abgeschlossen und gesammelt gepusht. Build/Verbrauch: Docs/Core/KernelRustBuild.txt; gemeinsame Abnahme: Docs/Core/KernelRustBuild0836.json und ExFiles/Reports/KernelRust/20261013-build0836. Release 0.83.6, Kernel 0.1.266; andere Modulquellen/Recovery unveraendert. Naechster Schritt: 0.83.7 Rust-Boot, Limine und Exceptiongrundlage.
+
+## 0.83.7 Rust-Boot, x86-Einstieg und fruehe Fehlerausgabe
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Kernelentry, Limine-Bootdaten und fruehe Architektur-/Diagnosegrundlagen ohne Aenderung ihrer Reihenfolge portieren.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 kmain, Limine-Requests und die fruehen Bootschnitte portieren.
+  - Notizen: Rust exportiert kmain und besitzt Limine-Requests/volatile Antworten, residente normalisierte BootInfo und CPU-/Intro-/COM1-Bootschnitte. Feste private C-Adapter erhalten die spaeten Fachbesitzer und die unveraenderte Reihenfolge einschliesslich Recovery vor Loader-Caches.
+- [Erledigt] #2 GDT, TSS, IDT und Low-Level-Assembly an den Rust-Einstieg binden.
+  - Notizen: Ein Rustbesitzer fuer GDT/TSS/IDT und IST; bestehende Assembly erhalten. 160-Byte-Frame/176-Byte-IST-Kopie und Offsets beidseitig geprueft. Wartender Page-in behaelt genaue Taskstackreservation und eigene 4096-/64-ausgerichtete SIMD-Sicherung; Clock/IRQ/Runtime/VM folgen ihren Fachwellen.
+- [Erledigt] #3 Bootlog, Fatal-/Panic-/Crashpfade und vorhandene Fehlerproben erhalten.
+  - Notizen: Rust besitzt Bootlog-/COM1-Ringe, Umleitung, Fatalzustand und Crashrecords mit bisherigen Stopcodes. Neun SMP4-Fehlerfaelle und sichtbarer COM1-aus-Fatalreport bestaetigt. Basis/Detail jeweils 494 Hosttests, Clippy und echter neu gebauter Normal-SMP4-Start bestanden; Anzeige-/Fontrenderer bleiben fuer 0.83.21 angebunden.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Rust-Boot und Low-Level-Einstieg erreichen mit korrekten Frames und sichtbaren Fehlerpfaden die bestehende Weiterinitialisierung.
+  - Notizen: Rustboot und echte Exception-/IRQ-/IST-Frames erreichen mit sichtbaren Fehlerpfaden die vorhandene Weiterinitialisierung. Normales ELF 0.1.267 in der echten BOOT-Partition und der frische SMP4-Gast sind hashgebunden; Release 0.83.7. Alte vorhandene Quickimages ausgeschlossen. Erster Stackguard-Timeout samt korrektem Report erhalten; unveraendertes ELF im begrenzten Retry bestanden. Windows/Hardware nicht ausgefuehrt.
+
+### Notizen
+Abgeschlossen und gesammelt gepusht. Vertraege: Docs/Core/KernelRustBoot.txt; gemeinsame Abnahme: Docs/Core/KernelRustBoot0837.json und ExFiles/Reports/KernelRust/20261013-boot0837. Release 0.83.7, Kernel 0.1.267; andere Modulquellen/Recovery unveraendert. Anzeige-/Fontbesitzer folgen 0.83.21; naechster Schritt: 0.83.8 Speichergrundlage.
+
+## 0.83.8 Rust-Speichergrundlage: PMM, Paging, Heap und Kernelstacks
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Physische und virtuelle Speichergrundlagen unter ihren bisherigen Besitz- und Freigabevertraegen portieren; wartender Pager folgt in 0.83.17.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Memory Map, Blocks, PMM und virtuelle Kernelbereiche portieren.
+  - Notizen: Reservierungen fuer Firmware, Geraete, Module und kritische Aufgaben behalten. Ausrichtung, Null-/Overflowpruefung, Teilseiten und genaue logische Laengen abdecken. Ressourcen vor physischer Freigabe weiterhin an genaue Besitzer-/Generationsnachweise binden.
+- [Erledigt] #2 Page Tables, CR3, Mapping und TLB-Freigabe erhalten.
+  - Notizen: Kernel-/Geraete-/Programmmappings, Unmap/Decommit, Dry-Run und Rollback portieren. Physische Frames erst nach allen benoetigten generationstreuen Online-CPU-Acks freigeben; Timeout behaelt Frames und stellt PTEs wieder her. SMP-TLB-Pfade erst mit 0.83.10 vollstaendig abnehmen.
+- [Erledigt] #3 Heap, residente Reserven und begrenzte Stack-/Guardvertraege portieren.
+  - Notizen: Rust-alloc nur ueber den initialisierten Kernelallokator. Kein frueher Heapzugriff, keine unkontrollierten Stapelsnapshots. Kernel-/Worker-/R4X-Stackgroessen, Wachstum und terminale Guards erhalten. Vorhandene Allokations-/OOM-/Guardtests verwenden; VM-Backing und wartendes Datei-I/O vorerst beim noch aktiven Besitzer belassen.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Speichergrundlagen und Stackguards behalten Allokations-, Rollback- und Freigabekorrektheit.
+  - Notizen: Betroffene vorhandene Besitzerfaelle und gezielte SMP4-Nachweise verwenden. Belege und verbleibende Grenzen einmal bei dieser Unterversion dokumentieren; gemeinsame Abschlussregeln stehen in den allgemeinen Versionsnotizen.
+
+### Notizen
+Abgeschlossen und gepusht: Rust besitzt die Speichergrundlage samt eager/residenter VM, einmaligem Range-/ID-/Adress-/Spankatalog, PMM/Blocks, Paging/Rootwechsel, Heap, Snapshots und Speicher-Bootkoordination. Private C-Fassaden halten die unveraenderten Verbraucher; wartender Pager, SMP-TLB-Runtime und Task-/Programmverwaltung folgen in ihren eigenen Wellen.
+Abnahme: 129/129 Hostgates, 485/485 Faelle, Clippy; echtes SMP4 mit HeapCheck2000, korrigierten IF-On-/Off-Proben, Spectra MEMORY/STACK/VM, residentem Commit/Nullinitialisierung/Doppelcommit-Abweisung/Teildecommit/Freigabe und terminalem Kernel-Stackguard. Normales Abschlussimage mit Kernel0.1.268/Release0.83.8 besteht den hashgebundenen SMP4-Quick. Temporaere Marker und Testinjection entfernt. Keine anderen Modulquellen oder Recoveryaenderung.
+Gemeinsame Belege und Quellen: Docs/Core/KernelRustMemory0838.json; Vertrag: KernelRustMemory.txt. Windows und physische Hardware wurden hier nicht ausgefuehrt; keine Performancebehauptung oder neue Referenz. Naechster Schritt: 0.83.9 Interrupts, Clock und Plattformgrundlagen.
+
+## 0.83.9 Rust-Interrupts, Clock, Timer und Plattformgrundlagen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+APIC/IRQ, Clock-/Timerbasis, ACPI-/PCI-Grundlagen und Hardwareinventare portieren, ohne neue Timer- oder Pollingstrategie.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 PIT, LAPIC/IOAPIC, HPET und IRQ-Eintritte portieren.
+  - Notizen: Maskierung, Routing, EOI, gemeinsame IRQs, Deadline-Handoff und vorhandene APIC-Varianten erhalten. IRQ-Mutation bleibt begrenzt beim Runtime-/IRQ-Besitzer; wartende Arbeit und grosse Wake-/Freigabefolgen bleiben im Worker.
+- [Erledigt] #2 Clocksource, monotone Zeit, Generationen und One-Shot-Fristen erhalten.
+  - Notizen: Qualitaet, Fallback, Aufloesung, Degradation und absolute Deadlines portieren. Funktionale Clocks sind unabhaengig von Detailmessungen. Vergangene Taskfristen vor Idle-Rearm abarbeiten; fremde Wakes duerfen sie nicht als neue minimale One-Shots verschieben.
+- [Erledigt] #3 ACPI-/Firmware-/PCI-Views und Inventare portieren.
+  - Notizen: Gepruefte Byte-/Wirelayouts, Mapping-/MMIO-Regeln, stabile Geraeteidentitaeten und vorhandene Inventarvertraege erhalten. Fremde PCI-Config-Zugriffe bleiben an ihren Treiber-Init-Kontext gebunden. Bestehende Clock-/IRQ-/Firmware-/PCI-Faelle und kurze SMP4-Proben verwenden.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Rust-Zeitbasis, IRQs und Plattforminventare erfuellen die bisherigen Genauigkeits-, Kontext- und Deadlinevertraege.
+  - Notizen: Betroffene vorhandene Besitzerfaelle und gezielte SMP4-Nachweise verwenden. Belege und verbleibende Grenzen einmal bei dieser Unterversion dokumentieren; gemeinsame Abschlussregeln stehen in den allgemeinen Versionsnotizen.
+
+### Notizen
+Abgeschlossen: Alle27Quellzuordnungen fuer IRQ/Runtime/Controller, CPU/Clock/Timer/Zeit, Firmware/ACPI, PCI/ECAM und Inventare, Plattformstart und beide Timer-Bootphasen besitzen ihren Fachzustand in Rust. Bestehende Algorithmen/Fristen/Ownergrenzen erhalten; Zig nur private C-Projektion/Darstellung zu verbleibenden Besitzern. Kernel0.1.269/Release0.83.9; vier betroffene Repositories im Sammelpush publiziert, andere Module/Recovery unveraendert.
+Abnahme: Produktbuild/Format/Clippy,129Hostgates/436Faelle; Original13Clock-/6PCI-/1Firmware-Testkoerper unveraendert. Normaler SMP4, HPET/no-TSC, no-MCFG-Legacy, x2APIC/Detail und finaler Terminalgast mit HWDIAG/3SYSINFO/Spectra-Bootlog bestanden. Original-Inventarorakel48Faelle/3533Records/12Truncations sowie40echte Public-Records; Stackframes und Header/ELF/Image/Quelle gebunden. Alter HPET-BSP-Registrierungsfehler beim Besitzer behoben, Fehlversuch erhalten. Normalartefakt nach Variante byteidentisch restauriert.
+Spectra STANDARD: echter Lauf 3be856f9-9d9e-4849-ae60-5aada0d10768,5Bereiche/30Rohsamples/6Scores, overall=105.266710. Unveraenderter Export ins DevCenter importiert, volle Rohdaten und sechs gueltige Scores per GET bestaetigt. Feste Referenz bleibt unveraendert; kein pauschaler Beschleunigungsanspruch aus einem Lauf.
+Der reproduzierbare Speicher-Rueckgang wurde vor Abschluss eingegrenzt und korrigiert: groesserer Rustbau materialisierte216-Byte-VM-Snapshots in der Quotenpruefung. Explizites Inlining stellt den bisherigen Skalarpfad ohne neue Speicher-/Ownerstrategie her. Alte Laeufe, Phasendiagnose, Compilervergleich und alle aktuellen Scores/Streuungen bleiben im gemeinsamen Beleg erhalten.
+Ergebnis/Belege einmal: Docs/Core/KernelRustPlatform0839.json und KernelRustPlatform.txt; Archiv ExFiles/Reports/KernelRust/20261014-platform0839. Physische Plattformen, Windowsausfuehrung und unforced Hardwarefehler bleiben Grenzen; alte engere Nachweise behalten eigene Quellidentitaeten. Naechster Schritt0.83.10: SMP/AP/TLB/FPU/Kontextwechsel. Gesamtmigration0.83.10–27 bleibt offen.
+
+## 0.83.10 Rust-SMP, Scheduler, Kontextwechsel und SIMD-Zustand
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Vier-CPU-Start und Scheduler unter dem gemeinsamen Runtime-Owner portieren; Register- und FPU-Zustaende bleiben genau taskgebunden.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 AP-Start, Per-CPU-Zustand, IPIs und SMP-Fehlerpfade portieren.
+  - Notizen: Trampoline, Online-/Fehlerzustaende, Reschedule und TLB-Acks auf allen vier CPUs pruefen. Bestehende Teil-AP-Fehler-Injektion verwenden; keine Single-Core-Abnahme oder erfundene neue Poolkapazitaeten.
+- [Erledigt] #2 Ready-Auswahl, Praeemption und Assembly-Kontextwechsel portieren.
+  - Notizen: Rollen, Budgets, Donation, sichere Reschedule-Punkte und tickless Idle erhalten. Runtime-Owner erst nach gesichertem ausgehendem RSP freigeben; keinen globalen BKL einfuehren. Die Bruecke darf keine konkurrierenden Zig-/Rust-Scheduler betreiben.
+- [Erledigt] #3 Taskgebundene FPU-/SIMD-Sicherung und kritische Reservetasks abnehmen.
+  - Notizen: CPUID/XCR0-gerechte States fuer alle ausfuehrbaren Tasks einschliesslich Kernel-Worker und kernel-main erhalten. Auch indirekte Zig-R4D-/R4P-Aufrufe koennen SIMD nutzen. Externe IRQs, Taskwechsel, Stackausrichtung, Reservewiederverwendung und bestehende SIMD-/Praeemptionsfaelle pruefen.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] SMP4-Kontextwechsel und Praeemption erhalten Register, SIMD, Runtime-Owner und TLB-Korrektheit.
+  - Notizen: Betroffene vorhandene Besitzerfaelle und gezielte SMP4-Nachweise verwenden. Belege und verbleibende Grenzen einmal bei dieser Unterversion dokumentieren; gemeinsame Abschlussregeln stehen in den allgemeinen Versionsnotizen.
+
+### Notizen
+Abgeschlossen: produktive Per-CPU-/AP-/IPI-/TLB-/FPU-/Unwind-/Scheduler- und explizite SMP-Diagnosebesitzer sind Rust; beide Assemblydateien und sechs urspruengliche Policy-/Stacktests unveraendert. Kernel 0.1.270 / Release 0.83.10 bestehen Format, Clippy, 129 Hostschritte/439 vorhandene Faelle sowie normale, SIMD-/IRQ-/Reserve-, Fristen-, HPET-, x2APIC-/Detail- und Teil-AP-SMP4-Abnahmen. Teil-AP-Diagnose auf zugelassene CPUs korrigiert; genaue TLB-/Runtime-/Freigabevertraege erhalten.
+Ein echter Spectra STANDARD mit fuenf Bereichen/30 Rohsamples/sechs Scores ist unveraendert importiert; vollstaendiger DevCenter-Readback und alle Scorevalidierungen bestehen. Zwei technische Kontrolllaeufe grenzen den historischen IPC-Abstand ein; verbleibende 12,87 Prozent IPC-Mehrzeit sind als Zwischenstandsgrenze dokumentiert, Paar-Gesamtindex praktisch gleich. Alle drei echten Ergebnisse bleiben getrennt erhalten. Normalartefakt hashgleich restauriert; Kernel, Distribution, Docs und Projekt gesammelt gepusht. Gemeinsame Belege, Performancevergleich und Grenzen: Docs/Core/KernelRustSmp08310.json; Bedien-/Besitzbeschreibung: Docs/Core/KernelRustSmp.txt. Module, Contract und Recovery unveraendert; Windows/physische Hardware nicht ausgefuehrt.
+Naechster Schritt: 0.83.11 migriert die bisher durch feste private C-Cuts angebundenen Taskobjekte, Taskregistry/Listen/Budgets/Donation und Wait-/Syncprimitive einschliesslich Join/Stop/Kill/Reap.
+
+## 0.83.11 Rust-Taskregistry, Waits und Synchronisation
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Taskzustand, Mutex-/Waitprimitive, Deadlines und Kill-Schutz ohne Aenderung der bisherigen Wake- und Freigabesemantik portieren.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Taskregistry, Rollen-/Deadlineprojektionen und Reaping portieren.
+  - Notizen: Stabile Adressen, IDs/Generationen, Ready-/Wait-/Reap-Zustand, paginierte Inventare und OOM-/Restart-Verhalten erhalten. Reserven bleiben real nachgewiesen; kein neuer fixer Pool als Ersatz fuer bestehende Dynamik.
+- [Erledigt] #2 Mutex, UnwindGuard, Semaphore, Event und WaitQueue portieren.
+  - Notizen: Bestehende Owner-Rangfolge, gerichtete Wakes, begrenzte Donation und Runtime-Serialisierung erhalten. No-Sleep-Owner ueberspannen weder Wait noch I/O/Callback. UnwindToken bleibt Kill-Schutz, kein Lock; Rust-Drop ersetzt keine echte externe Freigabequittung.
+- [Erledigt] #3 Sleep/Join/Stop, Timeouts und Abschluss-Waits pruefen.
+  - Notizen: Thread-Stop weckt eigene Sleep-/Join-Waits, keine Work-Completion. Blockierende Abschluss-Waits verlassen Ready; keinen Yield-Kreis einfuehren. Signal-vor-Wait, Parallelitaet, Lock-Handoff, OOM und Kill-Schutz ueber vorhandene Besitzerfaelle und kurze SMP4-Proben abnehmen.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Rust-Tasks und Waitprimitive behalten Generationen, gerichtete Wakes, Stop-/Kill-Schutz und bestaetigten Abbau.
+  - Notizen: Betroffene vorhandene Besitzerfaelle und gezielte SMP4-Nachweise verwenden. Belege und verbleibende Grenzen einmal bei dieser Unterversion dokumentieren; gemeinsame Abschlussregeln stehen in den allgemeinen Versionsnotizen.
+
+### Notizen
+Abgeschlossen: Taskregistry/Ressourcen/Reserven, Ready-/Timeout-/Reap-/Rollbacklisten, Rollen/Budget/Donation, Sync-/Wait-/Unwindprimitive, Deadman und die komplette bisherige TaskRegistry-Diagnose gehoeren Rust. Sechs bisherige Zig-Besitzer sind zustandslose Fassaden mit opaken Handles/festen C-Records. API/ABI, externe Module und Recovery unveraendert.
+Kernel 0.1.271 / Release 0.83.11 bestehen Compiler/Format/Clippy, 129 urspruengliche Hostschritte/439 Faelle, frischen SMP4, volle 160-Task-/10000-Zyklen-/Ressourcenbasis-/OOM-/Rollen-/65-Timeout-Proben und Detail-IF/FPU/IRQ/Reserve/BlockAsync. Spectra THREAD/LIFECYCLE/PROCESSEXIT/WORK bestanden. Idle-Diagnose zaehlt wirkliche One-shot-IRQs bei unveraendertem Grenzwert 3 und sichtbarer Gesamtzahl; Timerpolitik bleibt gleich.
+Der regulaere unveraenderte Standard mit fuenf Bereichen/30 Rohsamples/sechs Scores bleibt erhalten, ebenso alle acht historischen/technischen Vergleichslaeufe. 0.83.11-Exporte ins DevCenter importiert und vollstaendig zurueckgelesen. Kontrollierte Hostzuteilung bestaetigt keinen stabilen Faktor-zwei-Schedulerverlust; genaue Kontextursache nicht isoliert, keine allgemeine Beschleunigung behauptet. Performancevergleich, genaue Artefakt-/Quellenidentitaeten, Archiv und Grenzen einmalig: Docs/Core/KernelRustTasks08311.json; Besitzbeschreibung: Docs/Core/KernelRustTasks.txt. Kernel, Distribution, Docs und Root gesammelt gepusht. Windows/physische Spezialhardware nicht ausgefuehrt.
+Naechster Schritt: 0.83.12 Treiberregistry, DriverApi/IRQ-Routing, Work/Threads/Completion und DMA-/MMIO-/Heap-/Cleanupbesitz; externe R4Ds bleiben unveraendert.
+
+## 0.83.12 Rust-Treiberregistry, IRQ-Work und Ressourcenbesitz
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Kernelteil der R4D-Integration samt Work-, Thread-, Semaphore-, DMA-/MMIO- und Cleanupbesitz portieren; externe Treiber bleiben unveraendert.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 DriverApi, Treiberregistry und IRQ-Routing an Rust-Besitzer binden.
+  - Notizen: R4D-Init/Shutdown, optionale Praefixe, PCI-/DMA-/IRQ-/Backendtabellen und genaue Instanzgenerationen erhalten. Gebundene Tabellen bleiben fuer den Abbau benutzbar, auch wenn neue Abfragen bereits geschlossen sind. Keine geaenderte Treiber-ABI oder Vendorlogik in Rust neu schreiben.
+- [Erledigt] #2 Driver-Work, Ownerthreads und Completion-/Abbruchpfade portieren.
+  - Notizen: Tasklokale Enqueue-Ausgabe, atomare Ticketpublikation, genaues Cancel vor Join und echte Abschlussquittungen erhalten. Laufende Arbeit behaelt Module, Tasks, Semaphore und Geraeteressourcen. Residente IRQ-Metadaten bleiben begrenzt; callbacksichere Worker behalten Stack-/FPU-Vertraege.
+- [Erledigt] #3 DMA/MMIO, Treiberheap und terminalen Ressourcenabbau abnehmen.
+  - Notizen: Leihen, logische Nutzlaengen, Mappingrundung, Cache-/Syncgrenzen und physische Ruhenachweise getrennt erhalten. Annahmeschluss vor Shutdown, keine Freigabe bei Busy/Timeout oder ungeklärter DMA. Vorhandene deterministische Work-/IRQ-/Release-Faelle und passende unveraenderte R4Ds verwenden.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Unveraenderte R4Ds behalten Kernel-API, IRQ-/Workabschluss und sicheren Ressourcen-/Shutdownbesitz.
+  - Notizen: Betroffene vorhandene Besitzerfaelle und gezielte SMP4-Nachweise verwenden. Belege und verbleibende Grenzen einmal bei dieser Unterversion dokumentieren; gemeinsame Abschlussregeln stehen in den allgemeinen Versionsnotizen.
+
+### Notizen
+Abgeschlossen/veroeffentlicht: Kernel0.1.272 / Release0.83.12, alle24 Treiber-/Protokoll-/DriverApi-/Work-/Ressourcenimplementierungen nativ, keine zweite mutable Zig-Besitzertabelle. Original439Hostfaelle/129Schritte und34bytegleiche Besitzer-Testkoerper; frischer SMP4-Quick mit NVMe-MSI-X, volle SYSINFO/WORK/THREAD, unveraenderte NVIDIA.R4D-Runtime samt CPU-Heap/Threads/Semaphore/C-Abbruch/Recovery/Cleanup sowie Detail-IF/FPU/IRQ/OOM-Reserve/BlockAsync bestanden. Genaues Normalartefakt restauriert. Unveraenderter STANDARD mit5Bereichen/30Rohsamples/6Scores, overall98.029733; vollstaendiger DevCenter-Readback und Performancebewertung bestanden. Rohdaten/Streuung bleiben erhalten; kein allgemeiner Rust-Geschwindigkeitsbeweis. Gemeinsamer Nachweis: Docs/Core/KernelRustDrivers.txt und KernelRustDrivers08312.json; Archiv ExFiles/Reports/KernelRust/20261014-drivers08312 mit520Quellen. Docs/Inventar/AGENTS aktualisiert, Sammelpush4Repos erfolgreich und RemoteHEAD bestaetigt. Grenzen: private C-Schnitte nur zu ausstehenden Fachbesitzern; kein physischer GPU-/Windows-Ausfuehrungsnachweis. Naechster Schritt0.83.13 Blockstorage/Bootmedium/Partitionen.
+
+## 0.83.13 Rust-Blockstorage, Bootmedium und Partitionen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Blockdevice-Dispatch, Queues, Boot-Probing und MBR/GPT-Portierung unter den bestehenden I/O- und Besitzvertraegen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Blockregistry, Requests, Dispatcher und Worker portieren.
+  - Notizen: Teilrequests, Reihenfolge, Completion, Timeout/Cancel, Medienidentitaet, Residency und Flush erhalten. Produktiver NVMe-/AHCI-/ATAPIO-Zugriff bleibt bei den unveraenderten R4Ds; nur bestehendes kernelkritisches Boot-Probing portieren.
+- [Erledigt] #2 GPT/MBR, Bootquelle, Drivegrundlage und Mountentscheidungen portieren.
+  - Notizen: CRC-/Backup-GPT, Geometrie-/Kapazitaetschecks, Sektor-/Bytegrenzen, Bootpartition und Mehrpartitionenlayout erhalten. Keine neue Partitionierungs- oder Storagearchitektur einfuehren.
+- [Erledigt] #3 Bestehende Storage- und Fehlerabnahmen mit Rust-Blockpfad ausfuehren.
+  - Notizen: Vorhandene Read/Write/Flush-/Queue-/Medienwechsel-/Fehlerfaelle verwenden. Frische SMP4-Testimages und unveraenderte Treiber pruefen; regulären Poweroff und exakten Request-/Ressourcenabschluss verlangen.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Rust-Blockpfad und Partitionserkennung bedienen die bestehenden Medien und Treiber ohne Daten-/Abschlussregression.
+  - Notizen: Betroffene vorhandene Besitzerfaelle und gezielte SMP4-Nachweise verwenden. Belege und verbleibende Grenzen einmal bei dieser Unterversion dokumentieren; gemeinsame Abschlussregeln stehen in den allgemeinen Versionsnotizen.
+
+### Notizen
+Abgeschlossen: Kernel0.1.273/Release0.83.13. Alle16 Block-/Boot-/Partitions-/Wartungsbesitzer nativ; Host439/129 und Storage21, unveraenderte26 benannte Testkoerper, frisches SMP4, echte GPT-/MBR-/Parallel-/Async9-/Detail-/Powerofffaelle sowie bisherige oeffentliche R4PART-/StorageAccess-Wartungs-/Fehler-/Ownercleanupabnahmen bestanden. 119 normale Modulbinaerdateien bytegleich. Ein regulaerer STANDARD mit30 Rohsamples und6 gueltigen Scores vollstaendig im DevCenter geprueft; zwei begruendete unveraenderte Alt/Neu-Standardkontrollen mit gleicher Hostaffinitaet separat erhalten und importiert. Performancebefund, Streuung, Grenzen und Publikation einmalig: Docs/Core/KernelRustStorage.txt und KernelRustStorage08313.json samt verknuepftem Belegarchiv. Docs/Inventare aktualisiert; vier Repositories per Sammelpush publiziert, echte Remoteheads und Quellen geprueft. FS/Drive/generische Substrate behalten bis Fachport/.27 ihren Besitzer. Keine Windows-/physische Hardware-/erfolgreiche AHCI-Ersatz-DMA behauptet. Naechster Schritt:0.83.14 Dateisysteme; Optimierungen nach.27.
+
+## 0.83.14 Rust-VFS, NTFS/FAT32 und Dateistreams
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Kernel-Dateisysteme einschliesslich ihrer Kernel-Supportkopien portieren; bestehende Storageformate und geteilte Zig-Verbraucher bleiben stabil.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 VFS, Drives, Pfade, Nodes, Requests und Streams portieren.
+  - Notizen: Case-Regeln, Volume-/Nodeidentitaeten, Verzeichnisrevisionen, Kopieren, Glob, asynchrones I/O und Stream-Finish-Durabilitaet erhalten. Kein neuer Dateivertrag oder direkter App-/Treiber-Workaround.
+- [Erledigt] #2 NTFS, FAT32 und Kernel-Supportkerne verhaltensgleich uebertragen.
+  - Notizen: On-Disk-Bytegroessen, Runlisten, I30-Wachstum, Bitmaps, Allokation, Recovery und Rollback nach vorhandenen Fixtures pruefen. Rust-Port gilt nur fuer die Kernel-Kopie; SDK-/Hosttools-/Recovery-Kopien in anderen Repositories bleiben Zig und binaer/on-disk kompatibel.
+- [Erledigt] #3 Pagecache und Dateifreigaben mit vorhandenem Dateisystemnachweis abnehmen.
+  - Notizen: Writeback, Dirty-/Pinned-/Backingbesitz, Flush, Delete und Fehlerbehandlung erhalten. Vorhandene NTFS-/FAT-/Stream-/ASYNC_IO-Faelle sowie Offline-Imagepruefung wiederverwenden. Wartender VM-Pager folgt in 0.83.17 auf dieser Grundlage.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Rust-Dateisysteme lesen und schreiben die vorhandenen Formate mit korrekter Durabilitaet, Identitaet und Fehler-Rollback.
+  - Notizen: Betroffene vorhandene Besitzerfaelle und gezielte SMP4-Nachweise verwenden. Belege und verbleibende Grenzen einmal bei dieser Unterversion dokumentieren; gemeinsame Abschlussregeln stehen in den allgemeinen Versionsnotizen.
+
+### Notizen
+Abgeschlossen: alle15 VFS-/Drive-/Request-/Cache-/FAT32-/NTFS-Besitzer nativ, genau ein residenter Mountbesitzer. Kernel0.1.274/Release0.83.14 veroeffentlicht. Original458Hostfaelle/129Schritte/60Wurzeln,119unveraenderte Modulbinaerdateien, gezielte Normal-/Detail-/Offline-/Fehlerfaelle und echter saubererVierboot-Kernelupdate-/Rollback bestanden. Genau ein kompletter STANDARD mit30Samples/6Scores im DevCenter feldweise validiert; langsamere Scheduler-/Lifecyclewerte und ueberlappende Messbereiche ausdruecklich dokumentiert. Altfehler der vollen Diagnose/SDK-Modelle mit Original-Zig-Kontrollen erhalten; vorheriger Beobachtungstimeout bleibt unvollstaendig. Gemeinsamer Nachweis samt Rohdaten-/Quellenarchiv und Grenzen: Docs/Core/KernelRustFilesystem.txt und Docs/Core/KernelRustFilesystem08314.json. SDK/Hosttools/Recovery bleiben Zig. Naechster Schritt:0.83.15 Modulregistry und R4M0-/R4L-/R4D-/R4P-Loader; Optimierungen nach.27.
+
+## 0.83.15 Rust-Modulregistry und R4M0-/R4L-/R4D-/R4P-Loader
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Container-, Relocation- und Providerpfade auf Rust uebertragen und die unveraenderten Zig-Module aus dem gesicherten Bestand weiter laden.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 R4M0-Parser, Ressourcen und Relocations portieren.
+  - Notizen: Header, Imports/Exports, Schutzbits, BSS, Segment-/Offset-/Overflowgrenzen, Startkontexte und feste Query-Namen erhalten. Unbekannte/defekte Module sichtbar ablehnen, keine geaenderte Container- oder Manifestversion erzwingen.
+- [Erledigt] #2 Modul-/Providerregistry, R4L-Bindung und R4D/R4P-Aktivierung portieren.
+  - Notizen: Genau sechs eingebaute Platform-Provider vor Preload registrieren. Resolver, Referenzen, Instanzgenerationen und Init-/Shutdown-/Unloadreihenfolge erhalten. Unvollstaendige Aktivierung braucht bestaetigtes Rollback; gebundene Code-/Datenseiten bleiben bis zu echten Freigaben resident.
+- [Erledigt] #3 Vorhandene Loaderfixtures und gesicherte Zig-Binaerdateien abnehmen.
+  - Notizen: Gueltige und negative R4X/R4L/R4D/R4P-Faelle, Resolver-/Importfehler, grosse Module und Praeemption mit bestehendem Spectra-Loadernachweis pruefen. Artefakthashes des Vergleichsbestands behalten; keine Neuuebersetzung der Verbraucher als Ersatz fuer Binaerkompatibilitaet.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Rust-Lader und Registry binden die vorhandenen Zig-Modulbinaerdateien mit unveraendertem Container-/Providervertrag.
+  - Notizen: Betroffene vorhandene Besitzerfaelle und gezielte SMP4-Nachweise verwenden. Belege und verbleibende Grenzen einmal bei dieser Unterversion dokumentieren; gemeinsame Abschlussregeln stehen in den allgemeinen Versionsnotizen.
+
+### Notizen
+Abgeschlossen: alle acht Modul-/Loaderbesitzer nativ; R4M0/R4L/R4D/R4P-Vertrag und119 Zig-Verbraucher bytegleich. Original461 Hostinstanzen/129Schritte/60Testwurzeln, Loader92 und originale Fixturekoerper, Alt/Neu-Kontrollen sowie echte Normal-/Detail-SMP4-Loader-/SYSINFO-/DMA-Cleanupfaelle abgenommen. Final Kernel275/Release0.83.15: Produkt/Clippy/Format und frischer exakter SMP4 bestanden. Genau ein STANDARD mit30Rohsamples/6Scores komplett im DevCenter rueckgelesen; Gesamtindex94.634078. IPC+10.033522% gegen0.83.14 bleibt offene Einzelreihenbeobachtung fuer folgende Pflichtlaeufe; Ursache/Wiederholbarkeit nicht belegt. Grenzen, Fehlversuche, Quellen und Publikation einmal gebunden: Docs/Core/KernelRustLoader08315.json (Text: KernelRustLoader.txt). Vier oeffentliche Repositories veroeffentlicht und sauber. Naechster Schritt0.83.16: R4XStart/Programme/Prozesslebenszyklus; Optimierungen nach0.83.27.
+
+## 0.83.16 Rust-R4XStart, Programme und Prozesslebenszyklus
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Programmstart, stabile Instanzen, Thread-/Ownerbindung und generationensicheren Exit/Kill/Reap portieren.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 R4XStart-Kontext, Initialstack und Programmrollen portieren.
+  - Notizen: R4XStart, Initialstack, Startrollen, lokale Kontexte, Programm-APIs und Shellstarter nativ; unveraenderter R4X-/Query:1-Vertrag,119 kanonische Zig-Verbraucher bytegleich. Gemeinsamer Beleg und verbleibende Grenzen: Docs/Core/KernelRustPrograms08316.json; Beschreibung: KernelRustPrograms.txt. Vollstaendiges lokales Archiv: ExFiles/Reports/KernelRust/20261016-programs08316.
+- [Erledigt] #2 ProgramInstance, Completion, Exit/Kill und Deferred-Reaper portieren.
+  - Notizen: Registry/Generationen, Completions, Exit/Kill/Reap, Asyncworker, Console/GUI/SharedRaster und Ressourcenorchestrierung nativ mit einem aktiven Besitzer. Exakte Pins/Unwind-/Freigabequittungen und untere Besitzergrenzen erhalten. Gemeinsamer Beleg und verbleibende Grenzen: Docs/Core/KernelRustPrograms08316.json; Beschreibung: KernelRustPrograms.txt. Vollstaendiges lokales Archiv: ExFiles/Reports/KernelRust/20261016-programs08316.
+- [Erledigt] #3 Vorhandene Lifecycle-, Thread-, Loader- und Inventarfaelle abnehmen.
+  - Notizen: Gezielte gebuendelte SMP4-/Originalfaelle und Kontrollen abgenommen. Bestehende volle oeffentliche Formatter-/Beobachter-/Bildfenster-/GUI-4096-Grenzen bleiben ausdruecklich erhalten; keine vollen Gate-Paesse behauptet. Tests auf Userwunsch minimiert. Ein finaler STANDARD vollstaendig im DevCenter zurueckgelesen; langsamere Scheduler-/Lifecycle-Kohorte offen dokumentiert. Gemeinsamer Beleg und verbleibende Grenzen: Docs/Core/KernelRustPrograms08316.json; Beschreibung: KernelRustPrograms.txt. Vollstaendiges lokales Archiv: ExFiles/Reports/KernelRust/20261016-programs08316.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Rust-Programme starten und enden mit unveraendertem R4XStart und exaktem generations-/ressourcensicherem Abbau.
+  - Notizen: Native Start-/Lifecyclebesitzer mit unveraenderten Zig-Verbrauchern und originalen positiven Abbau-/Fehlerfaellen abgenommen. Historische Fehlgrenzen und begrenzte Performanceaussage bleiben sichtbar. Gemeinsamer Beleg und verbleibende Grenzen: Docs/Core/KernelRustPrograms08316.json; Beschreibung: KernelRustPrograms.txt. Vollstaendiges lokales Archiv: ExFiles/Reports/KernelRust/20261016-programs08316.
+
+### Notizen
+Abgeschlossen und per Sammelpush veroeffentlicht: alle sechs Start-/Programm-/Prozessbesitzer nativ, Kernel0.1.276/Release0.83.16,119 Zig-Verbraucher unveraendert. Gebuendelte Original-/SMP4-Belege samt alten oeffentlichen Pruefgrenzen und originalem Zig-Gegenbeleg sind erhalten. Genau ein finaler STANDARD mit30 Rohsamples und6 gueltigen Scores im DevCenter bestaetigt; Scheduler-/Lifecycle-Verlangsamung dieser Kohorte bleibt Messbeobachtung fuer folgende Pflichtlaeufe, keine pauschale Performancegleichheit. Gemeinsamer Beleg und verbleibende Grenzen: Docs/Core/KernelRustPrograms08316.json; Beschreibung: KernelRustPrograms.txt. Vollstaendiges lokales Archiv: ExFiles/Reports/KernelRust/20261016-programs08316. Naechster Schritt:0.83.17 wartende VM, Backing und Reclaim.
+
+## 0.83.17 Rust-VM, wartende Page-Faults, Backing und Reclaim
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Auf Speicher-, Dateisystem- und Lifecyclegrundlage den vollstaendigen VM-/Pagerpfad portieren.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Reserve/Commit/Fault/Decommit/Release und Programmmappings portieren.
+  - Notizen: Alle33 virt-Einstiege erhalten; Reserve/Commit/Fault/Uncommit/Release und Page-State nativ an denselben Ranges/IDs/Spans. Guards, logische Nutzlaengen, Owner und TLB-/Framefreigaben bleiben gebunden;119 kanonische Verbraucher bytegleich. Gemeinsamer Beleg und Grenzen: Docs/Core/KernelRustVm08317.json; Beschreibung: KernelRustVm.txt. Vollstaendiges lokales Archiv: ExFiles/Reports/KernelRust/20261016-vm08317.
+- [Erledigt] #2 Wartenden Pager, Backing und Reclaim verhaltensgleich portieren.
+  - Notizen: Wartender Pager, Backingidentitaet/Slotgeneration und Reclaim nativ. Kein VM-Borrow/Owner ueber I/O oder Wait; Taskframe/SIMD, Busy-/Unwindpins, Dirtyepoche und echte I/O-/Freigabequittungen bleiben erhalten. Diagnose-Reclaim nur Caller, produktiver Reclaim systemweit. Gemeinsamer Beleg und Grenzen: Docs/Core/KernelRustVm08317.json; Beschreibung: KernelRustVm.txt. Vollstaendiges lokales Archiv: ExFiles/Reports/KernelRust/20261016-vm08317.
+- [Erledigt] #3 Bestehende VM-/Storage-/Kill-/OOM-Nachweise gezielt ausfuehren.
+  - Notizen: Vorhandener Backing-Identitaetsfall und gebuendelte Original-SMP4-Funktionsfaelle einschliesslich Page-in/Writeback/Fehler/Reclaim/Kindkill/ASYNC_IO und8/3-Killpool abgenommen. Beide vollen MEMORY-Profile scheitern final an exakt vom originalen0.83.16-ELF reproduzierten Eltern-Stackwerten. Keine neuen Concurrent-Fault/AP-Page-in-/TLB-Timeoutinjektionen, kein voller Host-/Detailgastlauf. Genau ein STANDARD mit vollstaendigem DevCenter-Readback. Speicherzeit dieser Kohorte+30.491855%; Ursache/Wiederholbarkeit offen. Tests auf Userwunsch minimiert. Gemeinsamer Beleg und Grenzen: Docs/Core/KernelRustVm08317.json; Beschreibung: KernelRustVm.txt. Vollstaendiges lokales Archiv: ExFiles/Reports/KernelRust/20261016-vm08317.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Rust-VM und Pager behalten wartende Taskframes, Backingidentitaet und bestätigte Mapping-/I/O-Freigaben.
+  - Notizen: Native VM/Pagerbesitzer mit unveraenderten Verbrauchern und positiven originalen Identitaets-/Fault-/Page-in-/Writeback-/Cleanupfaellen abgenommen. Alte volle Profilgrenzen und eingeschraenkte Mess-/Abnahmeaussagen bleiben ausdruecklich erhalten. Gemeinsamer Beleg und Grenzen: Docs/Core/KernelRustVm08317.json; Beschreibung: KernelRustVm.txt. Vollstaendiges lokales Archiv: ExFiles/Reports/KernelRust/20261016-vm08317.
+
+### Notizen
+Abgeschlossen und per Sammelpush veroeffentlicht: VM/Page-State/Pager/Backing/Reclaim nativ, Kernel0.1.277/Release0.83.17,119 Verbraucher bytegleich. Gebuendelte Originalfaelle, exakter alter Eltern-Stackgegenbeleg und klar begrenzte Host-/Detail-/SMP4-Abnahme erhalten. Ein STANDARD mit30 Rohsamples und6 gueltigen Scores vollstaendig im DevCenter bestaetigt. Speicherabweichung bleibt fuer folgende Pflichtlaeufe offen, keine pauschale Performancegleichheit. Gemeinsamer Beleg und Grenzen: Docs/Core/KernelRustVm08317.json; Beschreibung: KernelRustVm.txt. Vollstaendiges lokales Archiv: ExFiles/Reports/KernelRust/20261016-vm08317. Naechster Schritt:0.83.18 Servicecore/IPC/R4SYS.
+
+## 0.83.18 Rust-Service-Core, IPC und R4SYS-Systempfade
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Kernel-Service-Registry, Endpoints/Queues und System-API-Fassaden portieren; Service-Policy und Anwendungen bleiben beim Userlandbesitzer.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Service-Core, IPC-Kanaele, Requests und Completion portieren.
+  - Notizen: Service-Registry, Endpoint-/Requestgenerationen, Queues/Kanal-IPC und Notifications nativ. Payload und laufende Arbeit bleiben bis echter Completion gehalten; unabhängige Worker und genaue Wait-/Cancel-/Caller-Kill-Grenzen erhalten.
+- [Erledigt] #2 R4SYS-Funktionen und vorhandene Systemfassaden an Rust-Besitzer binden.
+  - Notizen: Alle 65 R4SYS-Funktionen und 21 Globals samt privatem R4R1-Codec nativ; API/ABI, SDK/Recovery, SERVMAN-Policy und 119 kanonische Module unveraendert. Falsche Yield-Dispatches und der Drop-Guard bei abgelehntem Unwind-Token korrigiert; finale Quellenabweichung zum Funktionsgast exakt gebunden.
+- [Erledigt] #3 Bestehende Service-/IPC-/R4SYS-Abnahmen mit unveraenderten Verbrauchern pruefen.
+  - Notizen: Original16 Service-/Queue- und6 Codecfaelle sowie finale SMP4-Zielprofile: IPC, Dateien/Streams/Copy, Ressourcen,8/3-Killpool, SERVMAN und echte SSH-/Shutdownabnahme sowie separat serialisierte REG-Faelle. Alter voller Cacheprofilfehler bleibt offen. Finaler STANDARD mit vollstaendigem DevCenter-Readback; technischer Vorstand nach konkreter Kernelkorrektur erhalten; keine neue permanente Suite oder breiter Hostkatalog.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Unveraenderte Services und R4SYS-Verbraucher nutzen Rust-IPC mit korrekter Antwort, Warte- und Abbaulogik.
+  - Notizen: Native Service-/IPC-/R4SYS-Besitzer mit unveraenderten Verbrauchern und finalem echten SSH-/Abschlussnachweis abgenommen. Verworfener Yield-Fehlstand, alter Cacheprofilfehler und Messgrenzen bleiben beim gemeinsamen Unterversionsbeleg erhalten.
+
+### Notizen
+Abgeschlossen und per Sammelpush veroeffentlicht: elf native Besitzergruppen einschliesslich Service-/Kanal-IPC, R4SYS und privatem Registrycodec; Kernel0.1.278/Release0.83.18,119 Vergleichsmodule bytegleich. Originalfaelle und korrigierte SMP4-Zielprofile einschliesslich SSH und serialisierter Registry abgenommen; falscher Yield-Dispatch behoben, alter Cacheprofilfehler explizit erhalten. Finaler STANDARD mit 30 Rohsamples und 6 gueltigen Scores vollstaendig im DevCenter bestaetigt; technischer Vorstand bleibt erhalten. Gemeinsamer Beleg und Grenzen: Docs/Core/KernelRustServices08318.json; Beschreibung: KernelRustServices.txt. Lokales Archiv: ExFiles/Reports/KernelRust/20261016-services08318. Naechster Schritt:0.83.19 USB/xHCI/HID/MSC.
+
+## 0.83.19 Rust-USB-Hostkern, HID und Mass Storage
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Den derzeit kernelinternen USB-/xHCI-Bestand portieren; externe XHCI-/USB-R4D-/R4P-Schnittstellen bleiben stabil.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 USB-Hostregistry, xHCI-Ringe und Device-/Endpointzustand portieren.
+  - Notizen: USB-Katalog/Hostregistry und vollstaendiger xHCI-Controller nativ: exakte Runtime-/TD-Generationen, Ringe, Ports, DMA, Recovery und atomare IRQ-/Workerproduzenten. SET_CONFIGURATION bleibt pro Geraeteruntime; vier Geraete mit gleichem Wert und weitere Replugquittung im echten Emulatorpfad belegt.
+- [Erledigt] #2 Kernel-HID- und MSC/BOT/SCSI-Pfade portieren.
+  - Notizen: HID-Bindungen/Polling, eigene MSC-BOT-Medien und SCSI-/Retry-/Sensepolicy samt USB-Bootkoordination nativ. R4D/R4P-/Input-/Blockvertraege und119 Module unveraendert; typisierte Zig-Invoker behalten ihre wirkliche Aufrufkonvention. Kopierte Diagnosewerte behalten eigene Fehlertextbytes.
+- [Erledigt] #3 Vorhandene USB-Zustands-/Fehler- und verfuegbare SMP4-Faelle abnehmen.
+  - Notizen: Original47 Inline+1 Reachabilityfall erhalten; nach geaenderter Metadatenzulassung nur vorhandene3 Hostfaelle wiederholt. Ein gebuendelter SMP4/KVM-Gast: USB-Boot, zwei Medien, Protokollchecks, Copy/Checksum-Read/Delete, HID ohne PS2, Maus-Replug, Ressourcen und Poweroff. Ein finaler STANDARD vollstaendig im DevCenter bestaetigt. Physische/4Kn-/Detail-/Windows- und Messgrenzen bleiben beim gemeinsamen Beleg; keine neue permanente Suite.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Rust-USB behaelt geraetegebundene Quittungen, Ring-/DMA-Korrektheit und bestehenden HID-/Storagebetrieb.
+  - Notizen: 18 native USB-Besitzer mit unveraenderten Modulen/Protokollen sowie finalem echten USB-Boot/HID/MSC/Hotplug-SMP4-Gast abgenommen. Originale Zustands-/Fehlerfaelle, kompletter Standard/DevCenter-Readback und offene physische/Messgrenzen stehen einmal beim gemeinsamen Unterversionsbeleg.
+
+### Notizen
+Abgeschlossen und per Sammelpush veroeffentlicht: alle18 USB-/xHCI-/HID-/MSC- und Bootbesitzer nativ; Kernel0.1.279/Release0.83.19,119 Module bytegleich. Normalbuild/Clippy, Originalfaelle, ein gebuendelter USB-SMP4-Gast und genau ein finaler STANDARD mit vollstaendigem DevCenter-Readback bestanden. Physische Spezialfaelle, Windows und allgemeine Performancegleichheit bleiben abgegrenzt. Gemeinsamer Beleg: Docs/Core/KernelRustUsb08319.json; Beschreibung: KernelRustUsb.txt; lokales Archiv: ExFiles/Reports/KernelRust/20261016-usb08319. Naechster Schritt:0.83.20 Netzwerk/R4NET.
+
+## 0.83.20 Rust-Netzgrundlage, R4P-Bruecken und SerialLink
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Den kernelinternen Adapter-/Socket-/Protokollbestand samt Netzwerk-IPC und serieller Runtime portieren.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Netz-Core, RX/TX-Handoff und bestehende Protokollvertraege portieren.
+  - Notizen: Netz-Core/RX/TX und vorhandene R4P-Grenzen nativ; Paketclaims, Socketgenerationen, Deadlines und Callback-/Taskschutz erhalten. Kurze Owner uebergreifen weder R4D/R4P-Aufrufe noch Waits; Scheduler nutzt atomare TCP-Readyprojektionen.
+- [Erledigt] #2 Netz-IPC, R4NET und SerialLink-Runtime portieren.
+  - Notizen: NIPC mit acht exakten Wireantworten,16 Handles/Tombstones,41 R4NET-Einstiegen und SerialLink nativ. Konfigurationsschreiben nutzt bisherigen gemeinsamen R4SYS-Pfad. Alle119 Vergleichsmodule und externe R4P/NIC/Services bytegleich.
+- [Erledigt] #3 Vorhandene Netzwerk-/Fehlerfaelle und begrenzte SSH-Proben abnehmen.
+  - Notizen: Vorhandene Ownerfaelle, gebuendelter SMP4-Netz/IPC/NETIOD-/Ressourcengast, echte SSH/SFTP256KB-Verlustprobe und gezielter SerialLink/R4P-Profilnachlauf abgenommen. Initiale Profilfehler bleiben erhalten; keine Erwartungen geaendert. Ein normaler STANDARD vollstaendig im DevCenter validiert; Grenzen stehen im gemeinsamen Beleg.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Unveraenderte Netzwerkmodule und SSH nutzen Rust-Netzpfade mit bisheriger Protokoll-, Zeit- und Ressourcensemantik.
+  - Notizen: 22 native Netzwerk-/IPC-/R4NET-Besitzer mit unveraenderten Modulen/Protokollen, gezielten SMP4-/SSH-/SFTP-Verlust- und SerialLink-Profilnachweisen abgenommen. Originale Fehlversuche, Normal-/Verlustartefakte, kompletter STANDARD/DevCenter-Readback und physische/Messgrenzen stehen einmal beim gemeinsamen Unterversionsbeleg.
+
+### Notizen
+Abgeschlossen und per Sammelpush veroeffentlicht: alle22 Netzwerk-/NIPC-/R4NET-/SerialLink- und Bootbesitzer nativ; Kernel0.1.280/Release0.83.20,119 Module bytegleich. Normalbau/Clippy, Originalfaelle, gebuendelte SMP4-Netz-/SSH-/SFTP-Verlustprobe und gezielter Profilnachlauf sowie genau ein normaler STANDARD mit vollstaendigem DevCenter-Readback bestanden. Initiale Setupfehler, fehlender erzwungener nativer RTO, physische Spezialfaelle, Windows und Messgrenzen bleiben erhalten. Gemeinsamer Beleg: Docs/Core/KernelRustNetwork08320.json; Beschreibung: KernelRustNetwork.txt; lokales Archiv: ExFiles/Reports/KernelRust/20261016-network08320. Naechster Schritt:0.83.21 Console/Input/Fonts.
+
+## 0.83.21 Rust-Konsolen-, Eingabe- und Fontgrundlagen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Kernelinterne Eingabe, Konsolen-/Framebuffergrundlagen, Fonts und Bootdarstellung portieren; Shell und GUI-Anwendungen bleiben unveraendert.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 PS/2-/Kernelinput und Console-/STDIO-Grundlagen portieren.
+  - Notizen: PS2/Keyboard/Mouse/i8042, Queues, EN/DE/HID und PlatformInput nativ. Kurze Metadatenzulassung uebergreift weder Hook/Wake noch Wait. Native Console und RAM-Scroll behalten Firmware-Leihen und unveraendertes Terminal/STDIO.
+- [Erledigt] #2 Kernel-Fonts, Bootscreen und begrenzte Softwareausgabe portieren.
+  - Notizen: Fontkatalog/Parser/Glyphen und installierter Scan, Bootdisplay/-driver, Bootfortschritt, Crashrenderer und Diagnoseband nativ. Exakte Bank-/Taskpins, BO-/Displayinvoker und Incidentgenerationen bleiben erhalten; keine zweite native/Zig-Zustandskopie.
+- [Erledigt] #3 Vorhandene Input-/Font-/Console-/Bootscreenfaelle abnehmen.
+  - Notizen: 35 ausgefuehrte Originalinlinefaelle in begrenzten Gruppen; alle36 Originalkoerper bytegleich. Ein SMP4-Gast prueft emulierte PS2-Eingabe,14 Fonts, Terminal/SSH und Ressourcen; eine bestehende Fehlerbildprobe bestaetigt sichtbaren Crash und Incident-Handoff/Versiegelung. Ein normaler STANDARD vollstaendig im DevCenter validiert; alle Grenzen im gemeinsamen Beleg.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Rust-Eingabe und Grunddarstellung bedienen unveraenderte Terminal-/Fontvertraege und fruehe Fehlerausgabe.
+  - Notizen: 24 native Besitzer mit119 bytegleichen Verbrauchern abgenommen. Originalfaelle, kurzer SMP4-/Terminal-/SSH-/PS2-/Fontnachweis, sichtbares Fehlerbild und genau ein normaler STANDARD/DevCenter bestanden. Hostkorrekturen, physische GPU-/Nebenlaeufigkeits- und offene Performancebeobachtungen stehen einmal im gemeinsamen Beleg.
+
+### Notizen
+Abgeschlossen und per Sammelpush veroeffentlicht: alle24 Eingabe-/Font-/Softwareanzeigenbesitzer nativ, Kernel0.1.281/Release0.83.21,119 Module bytegleich. Normalbau/Clippy, begrenzte Originalfaelle, kurzer SMP4-Terminal/SSH/PS2/Font-/Ressourcengast, sichtbare Crash-/Incidentprobe und genau ein normaler STANDARD mit komplettem DevCenter-Readback bestanden. Hostkorrekturen und offene Mess-/Hardware-/Nebenlaeufigkeitsgrenzen bleiben erhalten. Gemeinsamer Beleg: Docs/Core/KernelRustInput08321.json; Beschreibung: KernelRustInput.txt; Archiv: ExFiles/Reports/KernelRust/20261016-input08321. Naechster Schritt:0.83.22 GPU-Speicher/BO-Lebenszyklus.
+
+## 0.83.22 Rust-Grafikspeicher, BO-/VA-Besitz und GPU-Ressourcen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Kernelteil der generischen GPU-Speicher-/Ressourcenverwaltung ohne Eingriff in den externen NVIDIA-/AMDGPU-Treibercode portieren.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Grafik-BOs, VA, Budgets und Mapping-/Leasezustand portieren.
+  - Notizen: Alle19 BO-/VA-/Budget-/Telemetry-/Treiberressourcenbesitzer nativ in Rust/gfx. Genau eine Tabelle/Mutex/Wachstumsinstanz; Teilseiten, Mappingrundung, Deviceepochen und Fehler-/Praefixvertraege erhalten. Externe R4Ds/SDK/Contract und119 Vergleichsmodule unveraendert.
+- [Erledigt] #2 GPU-Ownerannahme, Exit/Retire und Ressourcenfreigaben erhalten.
+  - Notizen: VA-Annahme schliesst vor Exitpublikation unter dem BO-Owner. Exakte Task-/Provider-/Execution-/Publikationspins bleiben erhalten; kein Metadatenborrow ueberlebt Warten. Logische Freigabe, echte Leihen und generationstreuer physischer Stillstand bleiben unabhaengige Barrieren.
+- [Erledigt] #3 Vorhandene deterministische Grafikbesitz-/Fehlerfaelle portieren und abnehmen.
+  - Notizen: 14 betroffene Originalfaelle und8 Originalhelfer in einer begrenzten Hostgruppe; zwei kurze SMP4-Fixtures fuer Allokation/Renderfehler und DMA-/BO-/Abbau. Ein STANDARD vollstaendig im DevCenter validiert. Vorbereitungsfehler, private Fixture-Groessenkorrektur und reale Nachweisgrenzen im gemeinsamen Beleg.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Rust-Grafikressourcen behalten genaue Identitaet, Leihbarrieren und generationstreuen physischen/logischen Abbau.
+  - Notizen: 19 native Besitzer mit119 bytegleichen Verbrauchern abgenommen. Normalbau/Clippy, begrenzte Originalfaelle, gezielte SMP4-Fixtures samt normalem Abbau und genau ein STANDARD/DevCenter bestanden. Physische GPU-/Reset-/VA-, Nebenlaeufigkeits- und Messgrenzen sowie erhaltene Fehlversuche stehen einmal im gemeinsamen Beleg.
+
+### Notizen
+Abgeschlossen und per Sammelpush veroeffentlicht: alle19 generischen GPU-Speicher-/BO-/VA-/Budget-/Telemetry-/Treiberressourcenbesitzer nativ; Kernel0.1.282/Release0.83.22,119 Module bytegleich. Normalbau/Clippy, gebuendelte Originalfaelle, zwei gezielte SMP4-Fixtures und ein STANDARD mit vollstaendigem DevCenter-Readback bestanden. Private Fixture-Groessenkorrektur, Erstfehler und offene Hardware-/Nebenlaeufigkeits-/Messgrenzen bleiben erhalten. Gemeinsamer Beleg: Docs/Core/KernelRustGpuMemory08322.json; Beschreibung: KernelRustGpuMemory.txt; Archiv: ExFiles/Reports/KernelRust/20261016-gpumemory08322. Naechster Schritt:0.83.23 Display/Presentqueues/Cursor.
+
+## 0.83.23 Rust-Display, Presentqueues, Cursor und Ausgabeleben
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Kernel-Ausgabebesitzer und R4DESK/R4DRAW-Fassaden unter den bisherigen Present-/Scanout-/Resetvertraegen portieren.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Display-/Outputregistry, Presentqueue und Bildressourcen portieren.
+  - Notizen: Alle40 neuen produktiven Display-/Output-/Queue-/Cursor-/Mode-/R4DESK-/R4DRAW-Implementierungen nativ. Alpha8 bereits seit.16 nativ; zwei zugeordnete Dateien bleiben reine Originaltesthelfer. Kopierte Audio-Routenmetadaten aus.24 als Voraussetzung vorgezogen.119 Vergleichsmodule und externe Vertraege unveraendert.
+- [Erledigt] #2 Cursor, Modejobs, Ruhe/Resume und Reset-/Shutdownfolgen portieren.
+  - Notizen: Genauer Display-/BO-/Taskbesitz, nichtrekursive Cursor-/Display- und rekursive Modus-/Treiberzulassung, Leihen, Fehler-/Timeout-/Retention-/Restaurationsquittungen erhalten. Normaler Poweroff der Gaeste belegt keinen DriverShutdown oder physischen DMA-Stillstand; diese Grenzen bleiben explizit.
+- [Erledigt] #3 Unveraenderte Desktop-/Displayverbraucher ueber vorhandene Faelle abnehmen.
+  - Notizen: Betroffene20 Originalmodellfaelle plus3 Helferwurzeln und8 Runtime-Originalfaelle einmal gebuendelt bestanden. Zwei kurze SMP4-Gaeste pruefen Queue/Modus und Softwaredesktop/Capture; ein STANDARD vollstaendig im DevCenter validiert. Erhaltene Vorbereitungsfehler und die quellengestuetzte Korrektur ausschliesslich temporaerer Serial-Auswertung stehen im gemeinsamen Beleg.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Rust-Display behaelt Present-, Cursor- und Ausgabelebenvertraege fuer vorhandene Zig-Desktop-/Treiberverbraucher.
+  - Notizen: Native Display-/Capturebesitzer mit119 bytegleichen Verbrauchern abgenommen. Normalbau/striktes Clippy, begrenzte Originalgruppen, zwei kurze SMP4-Gaeste und ein STANDARD/DevCenter bestanden. Normales Poweroff ersetzt keine Treiber-/DMA-Quittung. Modell-/Hardware-/Nebenlaeufigkeits-/Messgrenzen und erhaltene Erstfehler stehen einmal im gemeinsamen Beleg.
+
+### Notizen
+Abgeschlossen und per Sammelpush veroeffentlicht: alle40 neuen produktiven Display-/Output-/Presentqueue-/Cursor-/Mode-/R4DESK-/R4DRAW-Implementierungen nativ, Alpha8 schon seit.16. Zwei reine Originaltesthelfer, kopierte Audio-Routenmetadaten als Voraussetzung aus.24; Kernel0.1.283/Release0.83.23,119 Module bytegleich. Normalbau/striktes Clippy, gebuendelte Originalfaelle, zwei gezielte SMP4-Gaeste und ein STANDARD mit vollstaendigem DevCenter-Readback bestanden. Erstfehler sowie Hardware-/Quittungs-/Messgrenzen bleiben erhalten; Poweroff ist kein DriverShutdown-Beleg. Gemeinsamer Beleg: Docs/Core/KernelRustDisplay08323.json; Beschreibung: KernelRustDisplay.txt; Archiv: ExFiles/Reports/KernelRust/20261016-display08323. Naechster Schritt:0.83.24 Audio-Core/Mixer/R4AUDIO.
+
+## 0.83.24 Rust-Audio-Core, Mixer und R4AUDIO
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Kernel-PCM-/Mixer-/Audio-Ausgabebesitz und die bestehende R4AUDIO-Tabelle portieren; AUDSVC und Audiotreiber bleiben Zig.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Audio-Core, Streams, PCM-/Mixerformate und R4AUDIO portieren.
+  - Notizen: Sechs verbliebene Audio-/PCM-/Mixer-/Stream-/Bootstatus-/R4AUDIO-Implementierungen nativ. Receiver-/Routenmetadaten seit.23 nativ;119 kanonische Module und externe Vertraege bytegleich.58 Core- und19 R4AUDIO-Einstiege sowie R4D-Audio/Synthregistrierung binden direkt den nativen Besitzer.
+- [Erledigt] #2 Idle-/DMA-/Ausgangswechsel- und Shutdownzustand portieren.
+  - Notizen: Originaler sleepable Streammutex/Outputpermit, exakte Task-/Ownergenerationen, Transaktionen/Leihen/Phasen und Fortschrittsfristen erhalten. Nur normale PCM-Fertigstellung darf Idle; Wechsel, Entfernung und schliessender Owner brauchen Stop. Closing drainiert Callbackaufnahme vor DriverShutdown; fehlgeschlagener Abbau behaelt Kontext.
+- [Erledigt] #3 Vorhandene Audio-/Work-/Abbruchfaelle und begrenzten Betrieb abnehmen.
+  - Notizen: Zehn betroffene Originalfaelle einmal gebuendelt bestanden. Ein kurzer SMP4-Gast mit zwei emulierten HDA-Controllern und unveraenderten AUDIOD/AUDIDLE/AUDOUT prueft Wiedergabe/Mehrstreams/Dienstneustart/Replay/Idle/Teilperioden/Ausgangswechsel. Ein STANDARD vollstaendig im DevCenter validiert. Keine breite oder unveraenderte Treibersuite wiederholt; keine Hoer-/physische HDMI-/DMA- oder explizite Hardkill-/Timeoutabnahme.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Unveraenderte Audioverbraucher erhalten korrekte Rust-PCM-/Completionvertraege und physisch/logisch sicheren Stopp.
+  - Notizen: Native Audio-/PCM-/Completion-/IdleStop-Vertraege mit119 bytegleichen Verbrauchern abgenommen. Normalbau/striktes Clippy, zehn Originalfaelle, ein gebuendelter SMP4-Audiogast und ein STANDARD/DevCenter bestanden. Normales Poweroff belegt keinen DriverShutdown. Modell-/Quittungs-/Hardware-/Nebenlaeufigkeits-/Messgrenzen und erhaltene Erstfehler stehen einmal im gemeinsamen Beleg.
+
+### Notizen
+Abgeschlossen und per Sammelpush veroeffentlicht: sechs verbliebene Kernel-Audio-/PCM-/Mixer-/Stream-/Bootstatus-/R4AUDIO-Implementierungen nativ; Routenmetadaten seit.23. Kernel0.1.284/Release0.83.24,119 Module bytegleich. Normalbau/striktes Clippy, zehn gebuendelte Originalfaelle, ein kurzer SMP4-Zweicontroller-Audiogast und ein STANDARD mit vollstaendigem DevCenter-Readback bestanden. Erstfehler und Quittungs-/Hardware-/Messgrenzen bleiben erhalten; der starke Scheduler-/IPC-Ausschlag mit HPET statt TSC bleibt offen, keine reine Audioursache oder Wiederholbarkeit belegt; keine Hoer-/physische HDMI-Abnahme, Poweroff ist kein DriverShutdown-Beleg. Gemeinsamer Beleg: Docs/Core/KernelRustAudio08324.json; Beschreibung: KernelRustAudio.txt; Archiv: ExFiles/Reports/KernelRust/20261016-audio08324. Naechster Schritt:0.83.25 Bootpolicy/Updates/Recovery/Shutdown.
+
+## 0.83.25 Rust-Update-Recovery, Bootpolitik und Systemabbau
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Verbleibende Kernel-Supporttransaktionen, komplette Bootorchestrierung und terminale Systempfade in Rust abschliessen; der separate Recovery-Kernel bleibt Zig.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Kernel-Update-/Uploadtransaktionen und Boot-Recovery portieren.
+  - Notizen: Zehn zugeordnete Implementierungen fuer Updatepfade/Journal/Claims/Atomic/Replays/fruehe Boot-Recovery nativ; exakte Dateidentitaeten, Slotordnung, Backupregeln und Recovery vor Loadercaches erhalten.119 kanonische Verbraucher und separate Recovery bytegleich.
+- [Erledigt] #2 Runtimeboot, Konfiguration, Treiberpolicy und System-Shutdown portieren.
+  - Notizen: Residente Bootkonfiguration und terminale S5/Resetpfade nativ; bestehende Runtime-/Treiberpolicy-/Systemtransitionbesitzer behalten Reihenfolge und Shutdownquittungen. Globale Arbeitsbuffer haben genaue wartespannende Sync-Besitzer ueber getrennte Laufwerksgates; keine neue FS-Request-Ebene, kein RuntimeOwner ueber I/O.
+- [Erledigt] #3 Vorhandene Recovery-/Update-/Restartfaelle und Bootprofile abnehmen.
+  - Notizen: Elf Original-Inlinefaelle und acht Original-NTFS-Replaygruppen einmal; aktueller finaler SMP4-Gast mit parallelen C/D-Uploads und echter unterbrochener Update-/Bootrollbackfolge bestanden. Vorheriger Alt284-Zwischenstart bleibt als120sShelltimeout offen; erforderlicher nativer Folgestart bestand. Unveraenderter eigenstaendiger Recovery-Paketleser auf echtem Slim bestanden; vorhandenen Distribution-Bootlist9-vs8-Fehler beim Produzenten korrigiert. Ein STANDARD vollstaendig im DevCenter validiert. Keine breite UI/USB/physische/Windows-Matrix.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Rust-Kernel bootet vollstaendig, bleibt mit vorhandener Recovery kompatibel und beendet Updates/Systemressourcen nach den bisherigen Quittungen.
+  - Notizen: Aktuelle native Update-/Bootconfig-/Powerbesitzer mit119 bytegleichen Verbrauchern gezielt abgenommen: Normalbau/striktesClippy,19Originalgruppen einmal, finale SMP4-Upload-/Update-/Bootrollbackfolge und einSTANDARD/DevCenter bestanden. Eigenstaendige Recovery bleibt unveraendert; ihr Original-Paketleser bestaetigt das echte aktuelle Slim-Paket nach eng begrenzter Produzentenkorrektur. Der alte284-Zwischenstart wird nicht als erfolgreicher Shellnachweis gewertet. Genaue Quellenabgrenzung, Erstfehler und offene Altstart-/Hardware-/Messgrenzen einmal im gemeinsamen Beleg.
+
+### Notizen
+Abgeschlossen und per Sammelpush veroeffentlicht: zehn Update-/Claim-/Recovery-/Bootconfig-/Powerimplementierungen nativ, Kernel0.1.285/Release0.83.25,119 Module unveraendert. Globale Arbeitsbuffer besitzen genaue wartespannende Aufnahme. Normalbau/striktesClippy,19Originalgruppen einmal, aktueller gezielter SMP4-Gast und einSTANDARD mit vollstaendigemDevCenter-Readback bestanden. Unveraenderter Recovery-Paketleser auf echtem Slim besteht; vorhandene fehlerhafte neunte BOOT-Datei im Paketproduzenten entfernt, bleibt im disk.img. Alter284-Zwischenstart mit120sShelltimeout bleibt offen; erforderlicher nativer Folgestart erfolgreich, keine unbelegte Ursache/Paritaet. Quellstaende, Erstfehler und Hardware-/Messgrenzen einmal in Docs/Core/KernelRustUpdate08325.json und KernelRustUpdate.txt; Archiv:ExFiles/Reports/KernelRust/20261016-update08325. Naechster Schritt:0.83.26 Instrumentierung/R4DEV/Spectra.
+
+## 0.83.26 Rust-Kernelinstrumentierung und vollstaendige Spectra-Paritaet
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Alle migrierten Mess-/Log-/Diagnoseanbieter auf Vollstaendigkeit pruefen und ihren bisherigen Normal-/Detailvertrag erhalten.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Messstellen und Meldungsquellen je Migrationsmatrix abschliessend pruefen.
+  - Notizen: Sechs verbliebene Instrumentierungs-/Log-/R4DEV-Implementierungen nativ, zwei bereits native Besitzer geprueft. Alle45DEV-Slots,861Summaryzuweisungen und15alte Praefixe behalten den Contract;119Module bytegleich. Boot-/Loader-/Logaufrufe binden dieselben nativen Besitzer unmittelbar.
+- [Erledigt] #2 Unveraenderte Spectra-METRICS/LOGS/CHECK-Aufrufe und Darstellung nachweisen.
+  - Notizen: Kurze vorhandene Diagnose-/Task-/Storage-/Displaybesitzer liefern kopierte Werte/Labels ohne Referenz ueber Wait/I/O/Callback oder Callerausgabe. Passive NTFS-Cacheabfragen verwenden den bestehenden Storageowner. Ein alter reproduzierter C:-Claimkatalog-Zulassungsfehler bei parallelen C:/D:-Uploads ist im gemeinsamen geordneten Request behoben; Claimstore weist unzugelassene Runtimezugriffe ab.
+- [Erledigt] #3 Standardbenchmark und Compilerkontext fuer Rust-/Zig-Vergleich abschliessend pruefen.
+  - Notizen: Normalbau/striktesClippy; drei originale Cachefaelle und76aktive Detailchecks einmal. Finale657Messdatensaetze und gezielter SMP4-C/D-I/O-/Export-/Readback-/Cleanup-/Powerofffall bestanden; vorherige gueltige Log-/WATCH-/BOOT-Belege mit bytegleichen R4DEV-Blaettern wiederverwendet. Genau ein unveraenderter STANDARD mit30Samples/sechsScores vollstaendig im DevCenter validiert. Detail-SSH-Textverlust, Erstfehler, Quellenabgrenzung und offene Mess-/Hardwaregrenzen bleiben erhalten.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Spectra liest und prueft denselben vollstaendigen Kernelvertrag; Rust-Standardwerte sind mit wahrheitsgetreuen Metadaten auswertbar.
+  - Notizen: Native Mess-/Log-/R4DEV-Besitzer mit119bytegleichen Verbrauchern gezielt abgenommen. Finale Basisdaten und exakter behobener C/D-Claimkatalogfall bestehen; alle76originalen aktiven Detailchecks stehen mit Programmexit0 im vollstaendigen seriellen Export. Grosse SSH-Textausgabe verlor10901Bytes und gilt nicht als erfolgreicher Texttransport; Detailgaeste hostbeendet. Ein finaler STANDARD und vollstaendiger DevCenter-Readback bestanden. Gemeinsamer Beleg bindet Erstfehler, Quellendifferenz und Hardware-/Messgrenzen; keine pauschale Nebenlaeufigkeits-/Rust-Eigenkostenbehauptung.
+
+### Notizen
+Abgeschlossen und gesammelt veroeffentlicht: Kernel0.1.286/Release0.83.26, sechs verbleibende Implementierungen und alle45R4DEV-Slots nativ,119Verbraucher bytegleich. Kurze bestehende Besitzer fuer passive Kopien; reproduzierten alten C:-Claimkatalogfehler durch geordneten Ziel+C-Request behoben. Drei originale Cachefaelle und76aktive Detailchecks einmal; finale SMP4-Mess-/Parallel-I/O-/Cleanup-/Poweroffpruefung sowie einSTANDARD mit vollstaendigemDevCenter-Readback bestanden. Detail-SSH-Textverlust, Erstfehler, Quellen-/Mess-/Hardwaregrenzen einmal in Docs/Core/KernelRustInstrumentation.txt und KernelRustInstrumentation08326.json; Archiv:ExFiles/Reports/KernelRust/20261016-instrumentation08326. Naechster Schritt:0.83.27 Zig-Reste entfernen und Endabnahme.
+
+## 0.83.27 Vollstaendiger Rust-Kernel: Zig-Bruecken entfernen und Endabnahme
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Kernelmigration mit einem ausschliesslich aus Rust und benoetigter Assembly gebauten produktiven Kernel, unveraenderten Zig-Verbrauchern und dokumentiertem Vergleich abschliessen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Migrationsmatrix schliessen und alle produktiven Zig-Kernelteile entfernen.
+  - Notizen: Ausgangsmatrix350Dateien geschlossen; alle308produktiven Ausgangsquellen haben native Besitzer.468benannte Zig-Aufrufadapter, alte Testselektoren/Fixtureumschalter und unbenutzte Audio-/Buildfassaden entfernt; kein produktiver Zig-Compile-/Linkpfad.598Rust- und5Assemblyquellen,119Module bytegleich zum originalen Zig-Ausgangsstand. Originale Git-/Quell-/Belegstaende erhalten.
+- [Erledigt] #2 Vollstaendige Funktions-, ABI-, Build- und Ressourcenparitaet abnehmen.
+  - Notizen: Aktueller Pinned-Bau, Rustfmt, striktesClippy und Contractcheck bestanden. Zehn gezielte Installationsdecoderfaelle, ein finaler gebuendelter SMP4-Gast mit16Faellen und bestehender Desktop-Kurzfall bestehen auf demselben finalen ELF: originale SMP/NVMe/Loader/ABI/Ressourcen/Audio/Netzproben, JSON/Logs/WATCH, C:/D:-Readback/Cleanup und regulaeres Abschalten. Historische unveraenderte Fach-/Detail-/Recoverybelege uebernommen; fruehe Testaufbaufehler, Windows-/Hardware-/JSON-Grenzen im gemeinsamen Endbericht erhalten.
+- [Erledigt] #3 Standardbenchmarkvergleich dokumentieren und Migration gesammelt abschliessen.
+  - Notizen: Genau ein unveraenderter finaler STANDARD 7ed08437-ff05-4a78-9f4a-f239cdedb620 mit5Metriken/30Samples/sechsScores; Originalexport vollstaendig im DevCenter per GET zurueckgeprueft und sechsBereiche validiert. Vergleich, Rohstreuung und offene Performancegrenzen im gemeinsamen Endbericht; keine Optimierungsarbeit oder Referenzaenderung. Release0.83.27/Kernel0.1.287, aktuelle Agents/Docs/Inventare und Sammelpush aller5betroffenen Repositories abgeschlossen.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- [Erledigt] Produktiver Rust-Kernel, unveraenderte Zig-Verbraucher und vollstaendige Funktions-/ABI-/Standardbenchmarkbelege sind abgeschlossen; keine produktiven Zig-Kernelreste bestehen.
+  - Notizen: Produktiver Rust-/Assembly-Kernel ohne Zig-Bau oder Zig-Zustandsbesitzer;119Vergleichsmodule unveraendert. Aktuelle gezielte Funktions-/ABI-/Build-/SMP4-/Desktopbelege und ein echter vollstaendig validierter STANDARD/DevCenter bestehen. Die dokumentierten Scope-, Hardware-, Decoder- und Performancegrenzen sind erhalten; kein pauschales Test-/Performanceparitaetsversprechen. Gemeinsamer Beleg: Docs/Core/KernelRustFinal.txt und KernelRustFinal08327.json.
+
+### Notizen
+Abgeschlossen und gesammelt veroeffentlicht: Release0.83.27/Kernel0.1.287, reiner Rust-/Assembly-Bau, geschlossene Ausgangsmatrix und119bytegleiche Zig-Vergleichsmodule. Finale gebuendelte SMP4-/Desktopabnahme und genau einSTANDARD mit vollstaendigemDevCenter-Readback bestanden. Aktueller Ablauf, explizite Pruef-/Performancegrenzen und gemeinsame Belege: Docs/Core/KernelRustFinal.txt / KernelRustFinal08327.json. Hashgeprueftes Archiv: ExFiles/Reports/KernelRust/20261016-final08327. Weitere Optimierungen und Gesamtrefactor getrennt planen.

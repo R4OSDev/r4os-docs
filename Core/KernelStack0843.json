@@ -1,0 +1,141 @@
+﻿{
+  "schema": 1,
+  "release": "0.84.3",
+  "status": "completed",
+  "scope": "Pagewise stack probes before large Zig/C/C++ frame allocation or alignment, using the shared SDK and native library owners. Existing reserves, initial commits, ABI and kernel stack sizes remain unchanged.",
+  "compiler_contract": {
+    "sdk": "0.64.23",
+    "commit": "7ca65106f8f5c7958a2acbdc5ada3ce84a38ea22",
+    "package_hash": "r4os_sdk-0.64.23-NnPzAj7_EgH60pe400DlhhK2qyY-4JL9LcxUvLN730jk",
+    "zig": "Compile the original module root to optimized LLVM IR. R4XBuilder streams it and replaces only the known probe-stack=__zig_probe_stack function attribute with inline-asm. The same installed Zig/Clang lowers the IR with LLVM optimization passes disabled. The final module links the object and original native companions using the existing entry and linker contract.",
+    "reason": "Enabling Zig stack_check alone emits an out-of-line probe after an align(8192) RSP adjustment, leaving a possible gap across a 4096-byte guard. Inline probes cover both alignment and allocation in the generated prologue.",
+    "c_cpp": "The freestanding compiler driver ignores -fstack-clash-protection. Passing -Xclang -fstack-clash-protection to the existing frontend produces pagewise inline probes, including over-page alignment. Shared native C/C++ profiles use the same option.",
+    "rust": "Normal Rust kernel and native library target already emit inline probes; their probe configuration is unchanged.",
+    "probe_behavior": "Touch each crossed 4096-byte page before local data use. Preserve target ABI, registers, SIMD state and requested alignment; no probe allocation or waiting. Fault handling retains its existing exact execution and resident-headroom rules.",
+    "limits": "Probes do not make fixed task stacks larger or allow pageable faults under forbidden owners. Controlled R4X stack exhaustion is the separate 0.84.4 step. Separate Recovery and reference-only NVIDIA RM tools are outside this normal runtime rollout."
+  },
+  "validation": {
+    "sdk_normal_smokes": "R4X/R4D/R4P/R4L built and packaged successfully.",
+    "static": "The actual Spectra and CSTARTD large-frame functions have separate pagewise alignment/allocation probe loops. The IR transformation preserves every other byte and rejects unknown probe contracts.",
+    "zig_guest": {
+      "status": "passed",
+      "check": "SPECTRA CHECK STACK",
+      "vcpus": 4,
+      "large_frame_bytes": 393216,
+      "alignment_bytes": 8192,
+      "recursive_growth_retained": true,
+      "spectra_sha256": "63ac597d360bff88c6b8f805856d047b9dd54ff97154a351cfb70b7141ca54ac",
+      "serial_sha256": "96825570466e362e9eb098eff5b89f3f83e7685d800d7064a8c1d29f8f85ba9e",
+      "normal_poweroff": true
+    },
+    "c_guest": {
+      "status": "passed",
+      "check": "CSTARTD /STACKPROBE",
+      "vcpus": 4,
+      "large_frame_bytes": 393216,
+      "alignment_bytes": 8192,
+      "normal_poweroff": true,
+      "cstart_sha256": "1de2d6b818bc058e711b9a6b825a1943e1bd97ecbda6a03cd7dfb9f3451db5fd",
+      "serial_sha256": "ea57babe2f6be9c7b50d06f00c1430012af024edd29e773dd0d01f6115863f36"
+    },
+    "artifact_snapshot_correction": "The first private image captured Spectra before its inline rebuild completed. That Zig result is excluded; the C artifact already matched and passed. After build completion, only CHECK STACK was repeated with an explicit final Spectra hash. This corrected run is the Zig acceptance above.",
+    "standard_child": {
+      "version": "1.0.0",
+      "sha256": "75122e4a5a360dd0db05a81e42ca1d88b95f877dca46a09dc02b329f523e8037",
+      "byte_identical_to_frozen_reference": true
+    },
+    "integration": {
+      "first_run": "failed: 44 marker issues; guest powered off normally",
+      "first_evidence": "BrowserFirst/result.json",
+      "browser_workloads": "all six expected browser markers present",
+      "confirmed_scaffold_repairs": [
+        "FAT-specific checks receive a disposable external 64-MB FAT32 volume F with TEMP/FATTEST.R4S. C/D are NTFS; internal recovery E is not a test fixture.",
+        "DISPLAYD explicitly included in Test, matching its existing AUTOEXEC call.",
+        "Browser overlay waits for actual SUBSYS.OK instead of a fixed sleep; browser flag forwarded to marker checker.",
+        "Private registry selftests preserve the regular boot SYSTEM.BAK under a separate same-directory name and return it afterwards; never overwrite an occupied destination.",
+        "R4BASIC presenter report/marker contract includes actual replacement_frames and validates all three publication modes.",
+        "SNES reports actual paused/muted byte counts; discarded audio must equal explicitly accounted intentional discard. Write failures, lateness, DSP drops and unexplained loss remain rejected.",
+        "Filesystem ownership diagnosis resolves the selected volume/device generation through R4SYS storage inventory, then requires one matching R4DEV owner record and unchanged inventory generation; no C/D/E display-label assumption."
+      ],
+      "unresolved_observation": "First R4GB close had one audio failure; both later quiet runs passed. Exact runtime/audio/close errors are reported on failure; no audio behavior changed and no cause is claimed.",
+      "second_run": "failed: 7 marker issues; all browser markers, registry selftests and BASIC accounting passed; guest powered off normally",
+      "second_evidence": "BrowserSecond/runner.log",
+      "confirmed_product_repair": "Appearance uses R4STD text inspection before saving but omitted its TEXT_V1 import; add that exact import. Selftest cleanup uses actual APPEAR.TMP/.BAK siblings and records a numeric save failure.",
+      "focused_diagnosis": {
+        "evidence": "FocusedFsAppearance/result.json",
+        "fat_fixture_identity": "R4OS_FAT_FIXTURE=PRIVATE_TEST",
+        "appearance_save_error": -6,
+        "appearance_cause": "TEXT_V1 import omitted while the local save path calls text inspection.",
+        "filesystem": "F: streams, selective durability and pagecache policy passed. Storage diagnosis incorrectly relied on C/D/E-only display labels; bind volume and device generation through existing structured storage APIs and require a unique matching owner record."
+      },
+      "final": {
+        "status": "passed",
+        "vcpus": 4,
+        "normal_poweroff": true,
+        "evidence": "BrowserFinal/runner.log",
+        "serial_sha256": "4f073eb1a483dead415e25215daa3d93dfec058bb02b19f8a21629189e5acfb6",
+        "all_required_browser_and_general_markers": true
+      }
+    },
+    "standard": {
+      "status": "completed",
+      "run_id": "94f85f5f-d64b-45c3-8e28-131ab977b497",
+      "suite": "spectra-standard-2",
+      "release": "0.84.3",
+      "kernel": "0.1.289",
+      "vcpus": 4,
+      "metrics": 5,
+      "samples": 30,
+      "scores": {
+        "scheduler_sync": "101.254723",
+        "memory": "115.320742",
+        "ipc": "99.974465",
+        "lifecycle": "100.082494",
+        "filesystem_io": "90.799978",
+        "overall": "101.188495"
+      },
+      "exactly_one_final_run": true,
+      "export": "Artifacts/Distribution/Diagnostics/SpectraStandard/94f85f5f-d64b-45c3-8e28-131ab977b497/run.json",
+      "sha256": "452f2fc8889a65da957067107a079d72e26713aa55abcc818d9b2126b54f9d20"
+    },
+    "devcenter": {
+      "status": "valid",
+      "all_source_fields_read_back": true,
+      "all_six_scores_valid_and_matching": true,
+      "proof": "Temp/BenchmarkImport-20261017/devcenter/94f85f5f-d64b-45c3-8e28-131ab977b497/proof.json"
+    },
+    "central_build": "passed: Contract, SDK and all 12 runtime libraries, including native C/C++/Rust archives",
+    "nested_loader_fixtures": {
+      "count": 15,
+      "byte_identical_to_previous_artifacts": true,
+      "evidence": "nested-fixtures.json"
+    },
+    "final_spectra_sha256": "759d6297233a84ec12513d0fa6ed9a179b2169e6bf334cef4751b3de67841100",
+    "probe_source_after_acceptance": "The compiler contract and accepted Zig/C large-frame functions remain unchanged; final Spectra additionally fixes filesystem ownership diagnosis.",
+    "final_boot_elf": {
+      "kernel_version": "0.1.289",
+      "kernel_sha256": "8f380cf5a668eaa91d40e3cf3f989d9c3c715e132b034c97d01361504290405f",
+      "boot_sha256": "8f380cf5a668eaa91d40e3cf3f989d9c3c715e132b034c97d01361504290405f"
+    },
+    "comparison_limit": "One final STANDARD per subversion; score differences are descriptive single-run observations, not a new variability campaign."
+  },
+  "kernel_version": "0.1.289",
+  "normal_elf_sha256": "8f380cf5a668eaa91d40e3cf3f989d9c3c715e132b034c97d01361504290405f",
+  "rollout": {
+    "consumer_sdk_pins": 139,
+    "normal_module_artifacts": 139,
+    "changed_and_versioned": 104,
+    "unchanged": 35,
+    "nested_fixtures_unchanged": 15,
+    "recovery_excluded": true,
+    "details": "artifact-rollout-final.json",
+    "all_versions_rebuilt": true
+  },
+  "archive": "ExFiles/Reports/KernelStack/20261017-0843",
+  "performance_assessment": "Generated prologues and native archives can affect runtime, so exactly one final Suite-2 STANDARD on SMP4 is required after rollout. No change to the measured workloads or frozen scoring contract.",
+  "limits": [
+    "Large-frame probes establish growth and data integrity within an existing reserve; they do not establish exhaustion recovery.",
+    "No new general test suite or extra timing campaign. Existing focused checks and required browser integration cover the changed compiler chain.",
+    "Windows host and physical hardware were not exercised."
+  ]
+}

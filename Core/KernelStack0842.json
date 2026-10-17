@@ -1,0 +1,193 @@
+{
+  "schema": 1,
+  "release": "0.84.2",
+  "status": "implemented-tested-and-standard-validated",
+  "baseline": {
+    "release": "0.84.1",
+    "kernel": "0.1.288",
+    "sha256": "770df341f185a15d811fe86c0f36adfd6c317611322b8be8998fe73913c77a34",
+    "source_overlay": {
+      "base": "1f870ac3f26e9bdceedd3253b1a2d873f643eb3c",
+      "overlay": [
+        "Rust/program/stack_fault.rs",
+        "Cargo.lock",
+        "Cargo.toml",
+        "Rust/arch/tables.rs",
+        "Rust/display/crash_screen.rs",
+        "Rust/program/fault.rs",
+        "Rust/program/mod.rs",
+        "Rust/program/peer_lifetime.rs",
+        "Rust/program/runtime_tables.rs",
+        "Rust/program/stack.rs",
+        "Rust/sched/task/task_api.rs",
+        "VERSION.R4S"
+      ],
+      "purpose": "Prepare 0.84.2 without changing the pending 0.84.1 source or final artifacts."
+    }
+  },
+  "scope": "Lower proven launch, loader and driver/protocol metadata-reader stack peaks. No ABI or cache/read-policy change.",
+  "workspaces": [
+    {
+      "object": "program::launch::Reader and registry_loader::Reader",
+      "heap_bytes_each": 9208,
+      "initialization": "Copy Source identity directly and initialize cache metadata in the final allocation. Cached bytes remain MaybeUninit until filled.",
+      "lifetime": "Per classify/load/metadata probe; drop only after synchronous callback/read returns. Launch reader closes before child publication/execution."
+    },
+    {
+      "object": "[registry_loader::Pending; 32]",
+      "heap_bytes": 36352,
+      "initialization": "One resident allocation; initialize each original record at its final address, no whole-array temporary.",
+      "lifetime": "Library scan through complete dependency resolution. Entries only own copied metadata; loaded images and module leases keep separate original owners."
+    }
+  ],
+  "ownership": {
+    "admission": "Short RuntimeGuard only around exact task_context::enter/leave. No owner held across heap or filesystem work. Admitted unwind token protects allocation, use and acknowledged release across waits/migration.",
+    "allocation_failure": "No guard constructed without admitted token and nonnull allocation. Allocation failure returns the token and the existing failure form (None/false or launch error -8). Library-active publication follows successful workspace acquisition.",
+    "early_return": "Lexical scratch owner releases on malformed headers, rejected metadata, read failure and ordinary cancellation returns. Reservation/completion rollback remains the existing exact-generation owner.",
+    "release_failure": "Nonzero heap acknowledgement is a terminal invariant failure; original unwind token remains pinned and normal completion is not published.",
+    "constraints": "Scratch contains plain temporary data with no destructors/external resource ownership; no Send/Sync implementation. No lock spans I/O."
+  },
+  "caller_and_nested_stack": [
+    {
+      "path": "launch::classify / launch::run -> metadata / image load -> cached module reader -> filesystem",
+      "context": "R4X caller with its own dynamic stack contract, or fixed 64-KB kernel/async worker. Callee and IRQ stack needs remain additional; fixed frames are not whole-task high-water measurements.",
+      "reduction": "Remove the 9208-byte reader from the caller frame before every nested file read; keep only small pointer/guard metadata."
+    },
+    {
+      "path": "r4d/r4p info_file -> registry_loader::metadata_probe -> reader -> filesystem",
+      "context": "Initial discovery uses the BSP bootstrap stack before runtime; later inspection runs on its admitted task. Caller retains its 2048-byte metadata output. BSP reserve is not inferred from the independent 64-KB task allocation.",
+      "reduction": "Metadata probe fixed frame 9384 -> 200 bytes; R4D/R4P inline caller frame is not separately emitted and is not counted as zero."
+    },
+    {
+      "path": "mod_load_libraries -> probe -> metadata reader -> filesystem; later resolve_pending recursion",
+      "context": "Linear BSP loader startup. Pending set lives through both scan and dependency recursion; no single task high-water is claimed.",
+      "reduction": "At nested probe entry, fixed outer+inner frames 51776 -> 5168 bytes, excluding return addresses and deeper calls. resolve_pending remains 264 bytes per level; runtime fixed library limit is unchanged."
+    }
+  ],
+  "frame_comparison": "ExFiles/Reports/KernelStack/20261017-0842/frame-comparison.json",
+  "validation": {
+    "normal_checked_build": "passed",
+    "format": "passed",
+    "clippy": "passed",
+    "guest": {
+      "status": "passed",
+      "checks": [
+        "CHECK LOADER",
+        "CHECK THREAD"
+      ],
+      "vcpus": 4,
+      "kernel_sha256": "8f380cf5a668eaa91d40e3cf3f989d9c3c715e132b034c97d01361504290405f",
+      "serial_sha256": "80874d8c7323f29b8f3c29407320f043dde34301e5bc0d8802fcb35f23fa3537",
+      "result": "Checks/result.json",
+      "source_image_sha256": "8c1bc7f838fbc1764b26cb161a6ba99f1afd99834683a896b2e2a7b724669c83",
+      "normal_poweroff": true
+    },
+    "standard": {
+      "status": "completed",
+      "run_id": "6bb1c9fb-6f07-472a-8086-2a5350c0e1ee",
+      "suite": "spectra-standard-2",
+      "release": "0.84.2",
+      "kernel": "0.1.289",
+      "vcpus": 4,
+      "metrics": 5,
+      "samples": 30,
+      "scores": {
+        "scheduler_sync": "99.593186",
+        "memory": "107.558698",
+        "ipc": "99.660123",
+        "lifecycle": "98.536536",
+        "filesystem_io": "98.379360",
+        "overall": "100.688431"
+      },
+      "exactly_one_final_run": true,
+      "export": "Artifacts/Distribution/Diagnostics/SpectraStandard/6bb1c9fb-6f07-472a-8086-2a5350c0e1ee/run.json",
+      "sha256": "72348c0c10ddb98ecb86988669472b224cad6c5c5903a5752063a6184acb8934"
+    },
+    "devcenter": {
+      "status": "valid",
+      "all_source_fields_read_back": true,
+      "all_six_scores_valid_and_matching": true,
+      "proof": "Temp/BenchmarkImport-20261017/devcenter/6bb1c9fb-6f07-472a-8086-2a5350c0e1ee/proof.json"
+    },
+    "temporary_image_context": {
+      "status": "corrected_before_guest_start",
+      "reason": "The first private image used the canonical kernel version in its installation manifest; image verification rejected it. The existing image builder now receives an isolated path/version context matching the candidate.",
+      "evidence": "first-image-context.log",
+      "kernel_runtime_failure": false
+    },
+    "final_boot_elf": {
+      "kernel_version": "0.1.289",
+      "kernel_sha256": "8f380cf5a668eaa91d40e3cf3f989d9c3c715e132b034c97d01361504290405f",
+      "boot_sha256": "8f380cf5a668eaa91d40e3cf3f989d9c3c715e132b034c97d01361504290405f",
+      "matches_scoped_candidate": true
+    }
+  },
+  "kernel_version": "0.1.289",
+  "normal_elf_sha256": "8f380cf5a668eaa91d40e3cf3f989d9c3c715e132b034c97d01361504290405f",
+  "canonical_matches_scoped_candidate": true,
+  "archive": "ExFiles/Reports/KernelStack/20261017-0842",
+  "source_sha256": {
+    "Rust/program/launch.rs": "7670413effb2fa74397a13b9dcb93c8f44f9fea0874c55c937d900b6fd36d11a",
+    "Rust/loader/registry_loader.rs": "75556042042ce7c3fc63d6b70106fdd3facd6311408827b9c6868b40b7cf2815",
+    "Rust/memory/mod.rs": "74406b96f1a9682e2b011bfcb23b0cc5ee3c4f10d448a9eb3c81757888672da6",
+    "Rust/memory/scratch.rs": "a4c256deaa8cf4338902a92aab4a32545afa4c17193b0fc201a0f5e21e6b1a6a",
+    "VERSION.R4S": "b59718f6c730b94564c3caa484eaf9b6169f47e4bb01a07fb4a582a09c861948"
+  },
+  "frames": [
+    {
+      "function": "r4os_kernel::program::launch::run",
+      "before_bytes": 16168,
+      "after_bytes": 6968,
+      "reduction_bytes": 9200
+    },
+    {
+      "function": "r4os_kernel::program::launch::classify",
+      "before_bytes": 11592,
+      "after_bytes": 2408,
+      "reduction_bytes": 9184
+    },
+    {
+      "function": "r4os_kernel::loader::registry_loader::metadata_probe",
+      "before_bytes": 9384,
+      "after_bytes": 200,
+      "reduction_bytes": 9184
+    },
+    {
+      "function": "r4os_kernel::loader::registry_loader::probe",
+      "before_bytes": 12488,
+      "after_bytes": 2200,
+      "reduction_bytes": 10288
+    },
+    {
+      "function": "r4os_rust_mod_load_libraries",
+      "before_bytes": 39288,
+      "after_bytes": 2968,
+      "reduction_bytes": 36320
+    },
+    {
+      "function": "r4os_kernel::loader::registry_loader::resolve_pending",
+      "before_bytes": 264,
+      "after_bytes": 264,
+      "reduction_bytes": 0
+    },
+    {
+      "function": "r4os_kernel::loader::r4d::info_file",
+      "before_bytes": null,
+      "after_bytes": null,
+      "reduction_bytes": null
+    },
+    {
+      "function": "r4os_kernel::loader::r4p::info_file",
+      "before_bytes": null,
+      "after_bytes": null,
+      "reduction_bytes": null
+    }
+  ],
+  "limits": [
+    "Static frames exclude return addresses, nested callees and IRQ state; they are not runtime stack high-water measurements.",
+    "Existing 64-KB kernel task stacks and per-module memory budgets are unchanged.",
+    "No physical OOM, forced release-failure or new whole-module test campaign; failure ownership and token return were reviewed at each actual branch.",
+    "Windows host and physical hardware were not exercised."
+  ],
+  "performance_assessment": "Overall 100.688431 versus 96.871935 in 0.84.1. Filesystem score 98.379360 versus 85.405707: the earlier large filesystem observation was not repeated. Lifecycle elapsed ns/op decreased about 2.53%; memory about 5.77%; scheduler/IPC increased about 1.64/1.71%. One mandatory run per release is not a statistical/cause-isolated speedup proof; static stack reductions are independently proven. No speed budget or extra timing campaign."
+}

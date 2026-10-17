@@ -904,3 +904,32 @@ the storage layout generation: reject the old target, refresh the exact device,
 partition/range/GUID from the current inventory, then remount that target. This explicit lease
 probe is separate from observing overlapped native read requests. Source and
 validation limits: Core/KernelFileReaders08430.json. STANDARD remains Suite 2.
+
+FAT32 position writes (0.84.31 / Kernel 0.1.316)
+-----------------------------------------------
+Pure in-file overwrites keep the original bounded FAT extent cache. Seeking
+uses the matching exact mount/device/partition, first-cluster and size key,
+then walks only the remaining distance from a known nearby position. Existing
+contiguous extent coverage can skip FAT lookups; a smaller same-start/same-
+cluster observation retains a valid wider mapping instead of narrowing it. No second cursor registry or
+heap allocation is introduced. Only copied scalar positions survive waits.
+
+The existing data-write helper returns its exact last completed cluster to
+its original caller. write_from preserves its boolean contract. write_range
+publishes known start/end points only after the existing mutation/flush
+acknowledgement; incomplete reads/writes, failed flush and rejected bounds
+publish no new position. Existing growth, free, replacement, truncate, rename
+and mount-forget invalidation paths are unchanged, as are append and the0.84.30
+reader/writer lifetime barriers. Extent diagnostic counters now also include
+these shared write-position lookups, while keeping their public field names.
+
+SPECTRA CHECK FILESYSTEM /WRITEPOSITIONS selects a disposable FATTEST.R4S
+fixture. A1-MB file and unchanged blocker cover adjacent/repeated/reverse/random
+unaligned writes, truncate/replacement and EOF rejection. Interleaved8-KB
+appends create actual fragmentation; raw BPB/FAT links and both mirrors verify
+the first fragment boundary. Full bytes are checked again after exact unmount,
+fresh partition-target lookup and remount, which also drops old cache state.
+Every async write retains its buffer through actual wait/close receipts.
+Host partial-I/O and flush-failure boundaries are separate from native media
+checks. Walk counters describe avoided traversal, not elapsed speedup.
+Scope and evidence: Core/KernelFatWrite08431.json. STANDARD remains Suite2.

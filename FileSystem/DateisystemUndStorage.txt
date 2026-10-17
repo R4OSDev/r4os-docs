@@ -303,12 +303,16 @@ filesystem I/O; registration alone does not establish filesystem usability.
 A bulk read spanning contiguous absent or partially valid cache pages reserves
 and `io_busy`-pins those exact identities while holding the cache lock. It then
 releases the lock once, issues one direct read through resident heap staging,
-and reacquires the lock for an all-or-nothing publication. In 0.75.6 the run
-length has a conservative two-page ceiling in addition to caller demand,
-active cache capacity, available staging and the backend request limit. This is
-the shape covered by FSDIAG and halves backend requests for aligned cold reads;
-larger demand runs remain disabled after intermittent failures in the long
-subsystem/AUTOEXEC workload. Only sectors absent at reservation time are
+and reacquires the lock for an all-or-nothing publication. Since 0.84.29 a run
+admits at most 16 pages (64 KB), bounded by caller demand, confirmed controller
+sector limit, active capacity and immediately available unpinned clean/free
+slots from the existing cache index. Unknown capabilities retain one-page
+progress; the block owner still splits pages for sub-page controllers. Each
+read operation allocates at most 64 KB of resident heap staging outside the
+cache owner and reuses it for its remaining batches; allocation failure keeps
+the one-page path. Reservation records occupy only 16 stack slots. Hits, busy
+pins, device tail or physical allocation failure stop a run early without
+losing the admitted demand page. Only sectors absent at reservation time are
 scattered into the pages, so valid or dirty bytes cannot be replaced by stale
 media contents. A failed request publishes nothing, drops empty reservations
 and wakes waiters through the established pin transition. USBMSC owns its exact
@@ -417,6 +421,9 @@ window values and all activity counters as zero. The bounded sequential model
 remains unit-tested but is not allowed to issue I/O until a future change can
 explain and eliminate the interaction. Dirty progress and capacity contraction
 remain the only page-cache worker jobs.
+The 16-page demand cap introduced in 0.84.29 does not re-enable that worker.
+Its focused current-source/native evidence and the untested historical long-
+workload boundary are recorded in Docs/Core/KernelFileCache08429.json.
 
 Regular FAT32 mutations tag every cached dirty sector with an operation-local
 write batch. Their commit writes only that batch, including selected sectors

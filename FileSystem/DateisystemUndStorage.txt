@@ -933,3 +933,38 @@ Every async write retains its buffer through actual wait/close receipts.
 Host partial-I/O and flush-failure boundaries are separate from native media
 checks. Walk counters describe avoided traversal, not elapsed speedup.
 Scope and evidence: Core/KernelFatWrite08431.json. STANDARD remains Suite2.
+
+Decoded NTFS units (0.84.32 / Kernel 0.1.317)
+-------------------------------------------
+Four decoded, actually compressed units can remain resident. Each payload
+allocation is 64 KB; the global payload limit is 256 KB plus bounded static
+metadata. The existing per-read compressed scratch and serialized OOM fallback
+remain. Hits skip input reads and LZNT1 decoding, but still acquire that scratch.
+Raw fully mapped units, wholly sparse units and resident attributes bypass this
+cache. Existing initialized_size clipping, zero tails and decoder errors remain.
+
+The key copies the exact live mount reference, parent-cache incarnation and
+private content revision, file record, UTF16 stream name, unit index and size,
+and relevant attribute geometry. Every write invalidation advances the content
+revision, including Payload/System mutations which retain metadata. Revision
+exhaustion disables reuse. No caller or temporary-name pointer is retained.
+The existing mounted read admission prevents file/mount mutation during reads.
+
+Ready data is immutable. Exact ticketed pins survive caller copying outside the
+metadata owner; eviction/reclaim skips pinned, loading and retiring entries.
+Reservations keep their budget through allocation, copy and failure rollback.
+Only a complete successful original decode and zero-fill can be published, with
+a second content check. Allocation/free and potentially faulting copies run
+outside owner1. Existing memory reclaim and exact mount-forget retire unpinned
+entries; a slot stays occupied until its actual heap-free acknowledgement.
+There is no second PMM ledger or synthetic physical-frame reclaim receipt.
+
+SPECTRA CHECK NTFS /UNITCACHE explicitly uses the disposable initialized NTFS
+fixture: small same-unit reads, reclaim, two joined readers, rename/replacement
+and fresh remount, followed by the original initialized29 boundaries including
+unit changes. Actual-owner host cases cover all four pinned slots, failed
+allocation, invalidation before publication, named-stream/identity keys, actual
+Payload writes, original decoder failure and raw/sparse data. Lower host IO,
+heap and scheduling are modeled; native QEMU complements these boundaries.
+Counter reduction is not a measured elapsed decoding speedup. STANDARD remains
+Suite2. Evidence and limits: Core/KernelNtfsUnitCache08432.json.

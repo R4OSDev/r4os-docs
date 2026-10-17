@@ -67,6 +67,10 @@ The post-registration query separates accepted and rejected bits. Every
 metadata packet retains canonical flat bytes; unknown or rejected optional
 metadata takes that byte-identical software path. BSP Netcore selects one
 queue and only VirtioNet's validated RX TCP/UDP checksum capability.
+Since Kernel0.1.304 only complete120-byte version2 NetBackend descriptors
+are accepted. Old v1/short records fail before topology or callback work.
+Optional metadata and transmit_packet stay optional; flat callbacks,
+single queues and poll-based device work retain their current v2 contracts.
 
 The canonical xHCI path frees per-slot DMA only after a successful Disable
 Slot or after the whole controller is proven halted. Partial allocations are

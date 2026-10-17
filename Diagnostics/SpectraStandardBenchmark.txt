@@ -1,27 +1,32 @@
-﻿Spectra-Standardbenchmark (0.83.3)
+﻿Spectra-Standardbenchmark (Suite 2, Spectra 0.1.2)
 =================================
 
-SPECTRA BENCH STANDARD fuehrt fuenf feste Kernelarbeitslasten aus. Jede hat
-einen Warmlauf und fuenf Messungen. Alle Rohsamples bleiben erhalten; Median,
-Minimum, Maximum und MAD stammen nur aus den fuenf Messungen. Es gibt keine
-adaptive Arbeitsmenge, keine versteckten Wiederholungen und kein Speed-Gate.
-Suite: spectra-standard-1. Scoring: spectra-geomean-1. Cache: warm-per-area-1.
+Verbindlicher aktueller Performancebenchmark ist SPECTRA BENCH STANDARD mit
+spectra-standard-2 (Spectra ab 0.1.2). Er fuehrt fuenf feste Kernelarbeitslasten
+aus. Jede hat eine aktive Aufwaermphase und fuenf Messungen. Alle Rohsamples
+bleiben erhalten; Median, Minimum, Maximum und MAD stammen nur aus den fuenf
+Messungen. Es gibt keine
+adaptive Messarbeitsmenge, keine versteckten Wiederholungen und kein Speed-Gate.
+Suite: spectra-standard-2. Scoring: spectra-geomean-1. Cache: active-per-area-1s-3batches-v2.
 Ein MB entspricht 1024 KB.
 
 Bereiche und primaere Metrik (je Gewicht 1)
 -----------------------------------------
-scheduler_sync: 128 Notification-Roundtrips mit einem Peerthread; zwei genaue
-Notification-Handles. Anlage, Join und Close liegen ausserhalb des Intervalls;
+scheduler_sync: 16384 Notification-Roundtrips mit einem Peerthread; drei genaue
+Notification-Handles. Der Partner quittiert Bereitschaft vor Timerstart; der
+erste Request oeffnet die Startbarriere. Beide Threads behalten BSP-Policy.
+Anlage, Bereitschaftswarten, Join und Close liegen ausserhalb des Intervalls;
 das Ergebnis verlangt ihren bestaetigten Abschluss. ns/Roundtrip.
-memory: acht Reserve/Commit/Demand-Fault/Release-Zyklen zu je 128 KB. Jede der
+memory: 512 Reserve/Commit/Demand-Fault/Release-Zyklen zu je 128 KB. Jede der
 32 Seiten muss beim ersten Zugriff null sein, einen echten Fault erzeugen und
 das geschriebene Byte behalten; anschliessend kein lebender Regionhandle.
-ns/Zyklus. bytes_processed ist die logische VM-Menge (1 MB), kein Bandbreitenwert.
-ipc: 128 direkte DNS-Status-Anfragen an den eingebauten Kernel-IPC-Handler mit
+ns/Zyklus. bytes_processed ist die logische VM-Menge (64 MB), kein Bandbreitenwert.
+VM-Verwaltung und generationstreuer TLB-Abschluss gehoeren zur Arbeit.
+ipc: 16384 direkte DNS-Status-Anfragen an den eingebauten Kernel-IPC-Handler mit
 gepruefter erfolgreicher Antwort. Kein DNS-Resolve, Netzwerkserver oder
-externer Serviceprozess ist Teil dieser Last. ns/Anfrage; 3072 Request-Header-
+externer Serviceprozess ist Teil dieser Last. ns/Anfrage; 393216 Request-Header-
 Bytes. Fristen-/Clockpruefungen innerhalb der festen Schleifen sind enthalten.
-lifecycle: vier Starts der festen STDCHILD.R4X-Fixture (Version 1.0.0), jeweils
+lifecycle: 32 Starts der festen STDCHILD.R4X-Fixture (Version 1.0.0), jeweils
 Exit 17, genaue Completion, Wait und Reap bis zum verschwundenen Handle.
 ns/vollstaendig abgeschlossenem Programm. Die Fixture ist Teil des Spectra-
 Pakets und unabhaengig von der Groesse des Diagnoseprogramms. Ihr SHA-256
@@ -32,6 +37,19 @@ Durabilitaetsgrenze; Read muss alle Bytes bestaetigen, Delete die Datei
 entfernen. 1 MB Gesamt-Write/Read-Menge, ns/Zyklus. Ein eigener Instanzpfad
 verhindert das Ueberschreiben fremder Dateien; kein erzwungener Cacheflush.
 
+Aktive Aufwaermung
+-----------------
+Vor den fuenf Messungen laufen pro Bereich dieselben festen Arbeitsbatches
+aktiv, bis mindestens drei Batches UND eine Sekunde gemessene Arbeit erreicht
+sind. Es handelt sich um eine Mindestaufwaermung, keine Zusicherung erreichter
+Stationaritaet; Drift/Streuung bleiben zu pruefen. Keine adaptive Messarbeits-
+menge oder verworfenen Ausreisser. Die gesamte Aufwaermarbeit bleibt als ein
+warmup-Rohsample mit echten summierten Zeiten, Operationen und Bytes erhalten.
+Der Host verlangt ganzzahlige Batchvielfache und mindestens 1000000000 ns.
+Die fuenf measurement-Samples behalten ihre feste Arbeitsmenge. Weiterhin
+30 Rohsamples: fuenf Aufwaermaggregate und 25 Messungen. Methodenfelder:
+warmup_runs=1, warmup_min_ns=1000000000, warmup_min_batches=3, repetitions=5.
+
 Clock und Abbruch
 -----------------
 Jedes Intervall verlangt eine gueltige, nicht degradierte Clock mit gleicher
@@ -39,7 +57,8 @@ Quelle/Generation und mindestens zehn Aufloesungseinheiten. Die kleinste
 Differenz aus 64 separaten Clockpaaren beschreibt den Beobachteraufwand;
 sie wird nicht von Arbeitszeiten abgezogen. Unbekannte Kosten bleiben null.
 Text/JSON, Dateien, Referenzlesen und breite Diagnoseabfragen liegen ausserhalb
-der gemessenen Arbeit. Timeouts: zehn Sekunden pro Sample, 90 Sekunden fuer
+der gemessenen Arbeit. Timeouts: zehn Sekunden pro Sample beziehungsweise gesamter aktiver Aufwaermphase,
+90 Sekunden fuer
 die Suite; Cleanup bleibt an echte Handlequittungen gebunden. Ein unklarer
 Abbau sperrt Folgearbeit. Hosttimeout inklusive Boot: 240 Sekunden.
 Close fuehrt zu Exit 4; Fehler/Timeout zu Exit 1, Parameter zu 2, Ausgabe zu 3.
@@ -100,13 +119,32 @@ Der Spectra-Besitzer stellt auch den unabhaengigen Offlineexport:
     -Output <neue-run.json> -Reference <Referenz.json>
 Statt -Reference kann ein neuer expliziter -SelfReference verwendet werden.
 Die bestehende Datei wird niemals ueberschrieben. Der Export validiert 30
-Rohsamples, fuenf Metriken, sechs Scoreeintraege, feste Arbeitsmengen sowie die
-Aggregate. Unvollstaendiger Transport erzeugt einen Fehlerdatensatz mit
+Rohsamples, fuenf Metriken, sechs Scoreeintraege, feste Messarbeitsmengen,
+aktive Aufwaermgrenzen sowie die Aggregate. Aufwaerm-Samplewerte verwenden ihre
+echte gesamte Operationsanzahl. Unvollstaendiger Transport erzeugt einen Fehlerdatensatz mit
 Seriellog-Hash und ohne behauptete Messwerte/Indizes; der Rohbeleg bleibt erhalten.
 
 Referenz und sechs Scores
 ------------------------
-Eingefrorene Referenz: Spectra/Baselines/standard-1.json, UUID
+Eingefrorene aktive Suite-2-Referenz:
+Repositories/Diagnostics/Spectra/Baselines/standard-2.reference.json,
+run_id=495e5971-d1c6-41a2-9ea7-2ee64424e91f. Dieser vollstaendige echte Lauf
+definiert 100 Punkte und bleibt unveraendert. Im Repository stehen nur UUID
+und Pruefhashes; der vollstaendige Export liegt im DevCenter beziehungsweise
+im lokalen Artefaktverzeichnis. Resolve-SpectraReference prueft den originalen
+Exporthash und den Bewertungsvertrag; ein normalisierter API-Abruf muss
+denselben Bewertungsvertrag besitzen. API-Basis: R4OS_DEVCENTER_API_URL oder
+DEVCENTER_API_URL in Tools/BenchmarkHost.R4S. Der lokale Cache erlaubt
+Offline-Laeufe. Echte Messreihen und Rohsamples werden nicht versioniert.
+Ein ausdruecklicher reference4-Lauf
+erzeugt einen neuen Eigenbezug; er ersetzt die aktive Referenz nicht automatisch.
+Fehlt eine pruefbare Referenz im Cache und ist kein DevCenter-Abruf moeglich,
+bricht der Runner vor dem Gaststart ab; er erzeugt keinen Pflichtlauf ohne
+vergleichbare Scores. Die alte Datei
+wird weder ersetzt noch fuer Suite 2 umgerechnet. Vergleichbare absolute
+Geschwindigkeitsindizes zwischen Suite 1 und 2 werden nicht behauptet.
+
+Historische Suite-1-Referenz: Spectra/Baselines/standard-1.reference.json, UUID
 6133385b-2b6c-496a-9950-9835a0752f8b. Hash und Rohbezug im Abnahmebericht
 Spectra0833.json. Eine Referenz wird nicht automatisch ersetzt.
 Ein neuer Referenzlauf ist ausdruecklich headless Test reference4; ein bestandener
@@ -125,7 +163,7 @@ Geschwindigkeitsgarantie fuer jede App. TCG ist keine physische SMP-Skalierung.
 
 Gleich sein muessen Suite/Scoring/Messmodus/comparison_key und die vollstaendigen
 Methodenfelder execution, vcpus, ram_bytes, qemu, storage, workloads, cache_state,
-warmup_runs, repetitions. Dazu gehoeren Fixturehash und Boot-/Settle-Methode.
+warmup_runs, warmup_min_ns, warmup_min_batches, repetitions. Dazu gehoeren Fixturehash und Boot-/Settle-Methode.
 CPU-/Hostidentitaet, Umgebungslabel, Release-/Kernel-/Spectraversionen und deren
 Artefakthashes duerfen wechseln und bleiben als Kontext erhalten. Bei anderer
 QEMU-Version/Beschleunigung/Methode gibt es null mit Grund; kein stiller
@@ -179,3 +217,7 @@ pending. Unvollstaendige oder fehlerhafte Laeufe behalten ihre Fehlergruende
 und Rohdaten, aber keinen gueltigen Gesamtindex.
 Kurzvertrag: Agents/Benchmark.txt. Lokale API-Adresse, Tokenbereitstellung,
 Aufrufbeispiele und Fehlerbehandlung: Agents/DevCenter.txt.
+
+Ausdrueckliche Useranweisungen, Ergebnisse lokal zu behalten, haben Vorrang
+vor dem normalen DevCenter-Import. Identische Methoden garantieren keine
+Host-Messruhe: CPU-Zuordnung, SMT, Energieregelung und KVM-Zustand bleiben Einfluesse.

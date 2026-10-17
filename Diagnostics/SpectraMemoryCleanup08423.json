@@ -1,0 +1,158 @@
+{
+  "schema": 1,
+  "release": "0.84.23",
+  "kind": "supplemental diagnostic correction; roadmap remains paused",
+  "status": "completed",
+  "spectra_version": "0.1.17",
+  "kernel_version": "0.1.309 unchanged",
+  "problem": "PAGERSTRESS and VMSTRESS compare the caller's complete resource totals while the caller is still alive. Legitimate main-stack growth fails their final cleanup comparison.",
+  "diagnosis": {
+    "result": "confirmed on normal SMP4 kernel with original assertions and temporary per-owner block logging",
+    "owner_id": 14,
+    "stack_reserved_bytes": 33554432,
+    "stack_committed_before": 262144,
+    "stack_committed_after": 327680,
+    "stack_range_identity": "Same virtual range ID1037 and base; initial physical stack record and all seven image records unchanged.",
+    "additional_physical_segments_bytes": [
+      4096,
+      49152,
+      12288
+    ],
+    "accounting": "64KB real stack growth adds64KB physical reserve and128KB combined physical/virtual commitment. Physical fragmentation changes the row count. No surviving test VM region.",
+    "scope_correction": "The original final comparisons already use resourceTotalsForOwner(owner_id), since migration in release0.83.2. Earlier system-wide attribution in0.84.23 notes was incorrect. Historical failed outcomes and raw evidence remain unchanged."
+  },
+  "implementation": {
+    "owner": "Userland diagnostic Spectra; no kernel, ABI, stack policy or benchmark workload change.",
+    "comparison": "Allow only growth independently reported by the same live owner's main-stack information. Reservation and virtual bytes remain fixed; physical/reserved delta must equal that growth, commitment delta exactly twice it. Image/VM counts and all non-stack row counts remain equal. No fixed64KB allowance or blanket stack exclusion.",
+    "snapshots": "At most three collection attempts if observing the catalogue itself grows the caller stack; unavailable/inconsistent snapshots fail closed.",
+    "preserved": "All pager data/fault/retry/permanent-failure/recovery/responsiveness assertions, small-region cleanup and exact zero-resource cleanup after killing/reaping the child. Other exact-total comparisons retain their original meaning.",
+    "output": "Both profiles explicitly print owner and before/after stack reservation/commit. Temporary raw block tracing is removed."
+  },
+  "validation": {
+    "host": "One targeted balance regression case checks unchanged/growing/fragmented stacks and rejects extraVM/image resources, unexplained byte deltas, wrong owner/reservation and stack shrinkage.",
+    "scoped_guest": {
+      "result": "pass",
+      "normal_poweroff": true,
+      "vcpus": 4,
+      "kernel_sha256": "da1350335cd747bdad59db18f27dc42cc4845538d77f4eef73ce6dc4bbe8ff56",
+      "spectra_sha256": "f5d6630d89db77c69a8c3d9893deb91fd6e89b1e0c26e66f8e10d76372b93a65",
+      "pagerstress": "complete pass, original3cycles/12regions/fault/retry/permanent/recovery/data/counters/responsiveness/child cleanup retained",
+      "vmstress": "complete pass, original pressure/reserve/demand/limit/child cases retained",
+      "stacks": {
+        "pagerstress": {
+          "owner_id": 14,
+          "reserved_bytes": 33554432,
+          "committed_before": 262144,
+          "committed_after": 327680
+        },
+        "vmstress": {
+          "owner_id": 16,
+          "reserved_bytes": 33554432,
+          "committed_before": 262144,
+          "committed_after": 393216
+        }
+      },
+      "post_exit_inventory": {
+        "rows": 313,
+        "unique_ids": true,
+        "previous_callers_remaining_blocks": 0
+      },
+      "limits": "Passive inventory is not an atomic system-wide snapshot. Only absence of these completed exact caller IDs is used; no global capacity/leak-freedom claim."
+    },
+    "standard": {
+      "status": "completed",
+      "run_id": "06d411ce-7c58-4879-9550-569dfa2ec3f9",
+      "suite": "spectra-standard-2",
+      "vcpus": 4,
+      "metrics": 5,
+      "samples": 30,
+      "scores": {
+        "scheduler_sync": "109.907717",
+        "memory": "216.578400",
+        "ipc": "106.460771",
+        "lifecycle": "92.834517",
+        "filesystem_io": "93.636592",
+        "overall": "117.110977"
+      },
+      "sha256": "c2cb2efccad3b10f6c3a8e2abf3a72212c7c5e0c2e85d7c0a8e7e65cdb7bddd1",
+      "exactly_one_final_run": true,
+      "devcenter": "original full export; lossless read-back; all six scores valid and matching",
+      "additional_run_reason": "User-requested repair changes Spectra artifact0.1.16->0.1.17. Original0.84.23 run is retained; this is the one final STANDARD after the repair, without score-selection reruns."
+    },
+    "diagnosis_proof": {
+      "result": "cause confirmed; original whole assertion still fails in diagnostic run",
+      "kernel": "da1350335cd747bdad59db18f27dc42cc4845538d77f4eef73ce6dc4bbe8ff56",
+      "spectra_sha256": "bd484d525b3294fe31ebf946353d6794e8a18aca9a3d14426cd483e90dd7fc8f",
+      "serial_sha256": "c7cdc8bdb4850bf854cb1a542fd5864767500a41da14ad713fd5e0e320d8fbdd",
+      "owner": 14,
+      "before_stack_bytes": 262144,
+      "after_stack_bytes": 327680,
+      "same_stack_range_id": 1037,
+      "same_stack_base": 18446743249121968128,
+      "same_stack_reserved_bytes": 33554432,
+      "new_physical_stack_segments": [
+        4096,
+        49152,
+        12288
+      ],
+      "unchanged": "All seven exact image records and original physical stack record; all cycle/fault/retry/recovery/data assertions. No surviving VM region.",
+      "interpretation": "Caller stack grows64KB in first pager cycle. Catalogue adds64KB physical reserve and128KB combined virtual/physical commitment. Retained while caller is alive; row count reflects physical fragmentation, not extra stacks.",
+      "scope_correction": "Original PAGERSTRESS uses resourceTotalsForOwner(owner_id), already since0.83.2; prior system-wide attribution was incorrect."
+    },
+    "source_audit": {
+      "result": "pass",
+      "changed_original_functions": [
+        "sameTotals",
+        "testPagerStressProfile",
+        "testVmStressProfile"
+      ],
+      "other_original_functions_identical": 62,
+      "new_functions": [
+        "cleanupSnapshot",
+        "printStackBalance"
+      ],
+      "preserved": "All cycle/small-region/reclaim/retry/data/child cleanup bodies and all pager counter/responsiveness assertions byte-identical. Exact sameTotals now delegates to same eight-field equality.",
+      "original_owner_scope": "Both final profile snapshots were already owner-filtered; global helper is not the final comparator.",
+      "source_sha256": "1f80ada74f22a8bffd858dd0f181974ad835c038132887087e8cf51fcc33ad06",
+      "kernel_unchanged": true
+    },
+    "build": {
+      "spectra_build_exit_code": 0,
+      "canonical_testimage_exit_code": 0,
+      "physical_boot_structure": "verified",
+      "kernel_artifact_unchanged": true,
+      "targeted_host_regression_exit_code": 0
+    },
+    "comparison": {
+      "previous_run_id": "c1ba058d-5490-4478-9738-9ba97d860e15",
+      "score_change_percent": {
+        "scheduler_sync": "0.785089",
+        "memory": "-1.308899",
+        "ipc": "0.820553",
+        "lifecycle": "-2.532557",
+        "filesystem_io": "-10.626015",
+        "overall": "-2.667291"
+      },
+      "method_equal": true,
+      "context_equal": {
+        "execution": true,
+        "vcpus": true,
+        "ram_bytes": true,
+        "qemu": true,
+        "storage": true,
+        "workloads": true,
+        "cache_state": true,
+        "warmup_runs": true,
+        "warmup_min_ns": true,
+        "warmup_min_batches": true,
+        "repetitions": true,
+        "host": true,
+        "cpu": true,
+        "boot": true
+      },
+      "interpretation": "Single final run per artifact, descriptive only. No workload/reference change, score-selection rerun, causal speedup or performance-parity claim."
+    }
+  },
+  "test_policy": "One diagnostic reproduction and one final grouped SMP4 PAGERSTRESS/VMSTRESS plus passive post-exit inventory; no full catalogue. Exactly one final STANDARD and verified DevCenter import because the shared Spectra artifact changes.",
+  "archive": "ExFiles/Reports/SpectraMemoryCleanup/20261017-08423"
+}

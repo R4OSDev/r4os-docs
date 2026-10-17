@@ -1,8 +1,13 @@
 ﻿# R4NET
 
 R4NET ist die Netzwerkgruppe. Sie besitzt Adapter- und Konfigurationsstatus,
-UDP/TCP, DNS, DHCP, ICMP, Netz-Service-Funktionen, Serial-Link und
-Netzdiagnose.
+UDP/TCP, DNS, DHCP, ICMP, Netz-Service-Funktionen und Netzdiagnose.
+
+Seit0.84.34 ist SerialLink entfernt. Die fuenf bisherigen Slots27-31 bleiben
+binaer stabile Kompatibilitaetsstubs; sie liefern immer err_no_fn und greifen
+weder auf Puffer noch auf UARTs zu. Ein vorhandener Tabellenzeiger bestaetigt
+hier keine Transportverfuegbarkeit. Die aktuellen SDK-Contexts bieten diese
+Methoden nicht mehr an. COM1-Kerneldebugging bleibt davon unabhaengig.
 
 Import: R4NET:Query:1
 

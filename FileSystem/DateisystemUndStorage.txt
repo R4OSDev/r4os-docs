@@ -870,3 +870,37 @@ Abgeschlossener Beleg0.82.28: ExFiles/Reports/OssiGPU/20261003-profile08228/Fina
 
 Seit 0.83.2 ist SPECTRA CHECK FILESYSTEM der kanonische Aufruf. Historische
 FSDIAG-Ergebnisangaben oben behalten ihren damaligen Werkzeug- und Artefaktbezug.
+
+Parallel ordinary reads (0.84.30 / Kernel 0.1.315)
+------------------------------------------------
+Mounted single-drive read-only requests retain exact task-generation and volume
+uses through a bounded shared admission. Mutations and global/cross-drive
+operations retain exclusive admission and the original mutation order. A waiting
+writer closes admission to new readers; existing exact reader recursion can
+finish. Read-to-write promotion is rejected. Nested requests also retain their
+non-waiting admission rule while an outer payload has returned its backend.
+
+Path lookup, NTFS attribute collection and metadata callbacks still use the
+original backend gate. Only an explicitly bound synchronous ordinary data read
+may borrow that gate, retaining its shared admission, native unwind and mount
+use until real completion and backend reacquisition. Copy keeps its existing
+per-chunk reservations; streams, flush, mutation and unmount get no shortcut.
+
+FAT data frames were already local; shared extent/LRU and append metadata now
+use short resident owner phases with caller-name staging outside that owner.
+NTFS data gets a task-local 512-byte sector buffer. Compressed data alone may
+allocate 128 KB for two bounded decode buffers, outside metadata owners. If
+admission or memory is unavailable, the original serialized scratch path stays
+available. Metadata, records and write scratch are never shared concurrently.
+Public API/ABI, device lifetime, cache publication and disk formats are unchanged.
+
+Explicit SPECTRA CHECK FILESYSTEM /READERS requires disposable C: and one
+marker-selected FAT volume, TEMP/READERS.R4S and deterministic READA/B.BIN.
+It runs independent readers and a separate overwrite/truncate/rename task on
+each filesystem, validates every byte and waits for real joins. An explicit
+volume-use lease makes busy-unmount deterministic; after release, remount must
+change the exact reference and reject the stale reference. Unmount advances
+the storage layout generation: reject the old target, refresh the exact device,
+partition/range/GUID from the current inventory, then remount that target. This explicit lease
+probe is separate from observing overlapped native read requests. Source and
+validation limits: Core/KernelFileReaders08430.json. STANDARD remains Suite 2.

@@ -235,11 +235,29 @@ SMP placement
 -------------
 
 CPU placement is an internal lifecycle decision, not a public R4X affinity
-API. Foreground, shell, service, GUI and global-console owners remain on the
-BSP. The LoaderDiag `LSTRX.R4X` background container is the first audited
-CPU-only R4X class and may be initially balanced across per-CPU Ready queues;
-threads created by that instance inherit the same class. A suspended Task is
-not migrated while its stack is live.
+API. Ordinary foreground, shell, global-console and unaudited module owners
+remain on the BSP. Explicitly audited background instances declare
+runtime.parallel=owned-v1 and may be initially balanced across per-CPU Ready
+queues; child threads inherit that immutable declaration. Current audited
+owners and GUI limits are described in Parallelitaet.txt.
+
+Since 0.84.27, an empty Ready queue may take one explicitly SMP-eligible,
+non-running Task from a queue with at least two Ready tasks. One attempt
+examines at most one donor and eight rotating candidates. Initial home_cpu
+assignment is distinct from an explicit CPU binding; forced diagnostic/launch
+bindings stay fixed. Dedicated driver and asynchronous-I/O execution owners,
+live locks, pending permit handoffs, preemption guards and incomplete retire
+states are excluded. The source CPU's exact current task is excluded even
+if its logical state is Ready. Assembly still publishes outgoing RSP before
+releasing runtime admission; a live physical stack never moves.
+
+Transfer, target home/pending state and reschedule IPI share runtime admission.
+Ready order/time, roles/budgets, generation, saved RSP/FPU and exact task-owned
+unwind counter survive; there is no fresh activation or allocation. A quantum
+cooldown prevents immediate repeated migration. Explicit bindings are not
+redirected when their CPU goes offline. BSP-only/pageable-I/O ownership and
+module execution declarations remain unchanged. Evidence/limits:
+KernelBalance08427.json.
 
 AP admission since 0.78.50 follows detected -> starting -> parked ->
 qualified -> online. Only the BSP can confirm a parked CPU after its clock

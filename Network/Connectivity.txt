@@ -55,6 +55,34 @@ connection ID, physical slot and slot generation, and all RTO and TIME_WAIT
 deadlines use the monotonic kernel tick domain. Waiting for incoming data does
 not arm or retransmit outgoing payload.
 
+TCP readiness ownership (0.84.28)
+---------------------------------
+TCP waits use separate resident queues for establishment, readable and closed
+conditions of one connection, and accept/data conditions of one listener.
+A connection ticket contains its exact slot, ID and native generation; a
+listener ticket contains slot, port and a non-reused lifetime generation.
+Waiters keep that ticket across the whole operation. Closing/reopening the
+same port cannot adopt a stale accept or let its late cleanup close the new
+listener. Incoming connections retain the listener generation that admitted
+them, so a new listener cannot accept an old unclaimed connection.
+
+The existing waitable TCP task owner captures copied readiness at release.
+Runtime admission then publishes the atomics and matching wakes together.
+Scheduler predicates read only that projection and never acquire the TCP
+owner. No table pointer or TCP/runtime owner spans sleep. Only positive
+readiness and exact identity retirement signal the corresponding condition
+queues; unchanged ACK traffic does not broadcast to unrelated connections.
+Readable waiters also recheck a changed terminal state, while the original
+read predicate, read results, 250-ms fallback slices and deadlines remain.
+
+R4NET tables and fixed public records stay unchanged. tcp_sig in the native
+trace now counts actually woken tasks, previously received segment broadcasts;
+those values are not directly comparable. Existing NETWORK LIMIT adds one
+bounded native wait group inside its TCP performance-contract category, with
+real queues and eleven exactly retired own tasks. Original TCP/IPC listener
+restart checks are bundled. STANDARD has no TCP-specific workload.
+Implementation, acceptance and limits: Core/KernelTcpWake08428.json.
+
 TCP burst and ACK policy
 ------------------------
 

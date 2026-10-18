@@ -1,0 +1,116 @@
+﻿Lastausgleich belegter CPUs0.85.12
+=================================
+
+Release0.85.12 / Kernel0.1.339. Der Scheduler kann einen gesicherten
+Ready-Task auch in eine bereits belegte, weniger belastete CPU-Queue
+uebertragen. Vorher wurde jede nichtleere Zielqueue abgewiesen.
+Die Last zaehlt tatsaechliche Running-plus-Ready-Arbeit, eine physische
+Current-Instanz hoechstens einmal. Ein Transfer verlangt einen Abstand
+von mindestens zwei Lasteinheiten. Detailinstrumentierung beeinflusst
+weder Zulassung noch Auswahl.
+
+Harte Grenzen und begrenzter Aufwand
+-----------------------------------
+Beide genauen physischen Current-Instanzen sind ausgeschlossen, auch bei
+bereits geaenderter logischer State-/running_cpu-Metadatei. Feste Bindung,
+SMP-Zulassung, gespeicherter RSP/FPU-Zustand, genauer Ausfuehrungsbesitzer,
+Lock/Preemption, Handoff/Wait/Timeout und Retire/Release/Rollback behalten
+ihre Barrieren. Globale ready_order/Zeit, Rollen-/Donationsbudgets,
+Generation und genaues Unwind-Gegenstueck bleiben unveraendert.
+
+Eine normale neue Einreihung behaelt ihren schnellen Ketten-Tailpfad.
+Ein aelterer migrierter Task sucht ueber die vorhandenen vier Rang-AVL
+seinen global naechsten Nachfolger und wird davor eingefuegt. Damit
+bleiben globale FIFO, Rangreihenfolge und AVL-first gemeinsam konsistent;
+keine lineare Zielqueuensuche und keine Neuerzeugung des Ready-Alters.
+Die bestehende Queuediagnose prueft zusaetzlich die globale Altersfolge.
+
+Bei Wake werden auch bereits belegte zugelassene Ziele mit ausreichendem
+Lastabstand betrachtet. Gleichlastziele verwenden den0.85.11-Vergleich
+fuer physische Kerne, SMT und Cache. Pro produktiver CPU prueft ein echter
+Timercheckpoint hoechstens einmal pro Quantum einen geeigneten Spender.
+Er verwendet seine schon publizierte funktionale Zeit. Kein Nachholkreis;
+dringender Leerqueue-/Idle-Nachschub bleibt von dieser Frist unabhaengig.
+Je Versuch hoechstens ein Spender und acht Kandidaten. Der Spendercursor
+rueckt auch bei erfolglosem Kandidatenpraefix weiter. Die vorhandene
+Migrations-Quantenfrist verhindert sofortige Ruecktransfers. Eine aktuelle
+Uhrprobe entsteht erst fuer strukturell zulaessige Cooldown-/Transferarbeit
+und wird im Versuch genau einmal verwendet. Nur gebundene/gesperrte
+Kandidaten verursachen keine neue globale Uhrpublikation.
+
+Pruefung
+--------
+106 echte Queue-/Registry-/AVL-/Wait-/Platzierungsbesitzerfaelle bestehen,
+darunter12 neue Faelle fuer belegte Ziele, beide Current-Grenzen, umgekehrte
+Last, faule/einmalige Uhrprobe und globale Reihenfolge. Vier verschiedene
+257-Task-Einfuege-/Entnahmereihenfolgen vergleichen Kette, Rang-Inorder,
+AVL-Eltern/Hoehen/Balance unabhaengig. Elf weitere Faelle kompilieren die
+ganzen echten Timer-/Wake-/Refillfunktionen samt gemeinsamem Chooser:
+Quantenfrist, ein Spender, Cursorrotation, Online/Init, funktionale Zeit
+und unabhaengiger dringender Nachschub. Sechs ganze notify_ready-Faelle
+halten Ziel-/Quellbenachrichtigung und lokale Prioritaet fest. CPU-/Domain-/
+Queueeingaben oder Transport sind im jeweiligen Hostharness simuliert;
+daraus folgt keine Hardwaretimerabnahme.
+
+Normales und1Paket/2Kern/2Thread-SMP4 pruefen dasselbe physisch verifizierte
+ELF. Bestehende Scheduler-/Rollen-/Deadline-/Quickvertraege bleiben erhalten.
+Die neue eigene Zehn-Task-Fixture haelt alle vier Current-Instanzen produktiv
+und jeden moeglichen Zielprozessor mit eigener Ready-Arbeit belegt. Quelle
+enthaelt mindestens fuenf Lasteinheiten, jedes Ziel mindestens zwei.
+Tatsaechliche Anfangslasten werden aus Running/Ready gelesen und im
+Beleg festgehalten; ein reales Ziel muss mindestens zwei Einheiten
+weniger Last besitzen. Vorhandene fremde Ready-Arbeit bleibt erhalten. Erst nach gesicherten Event-Wakes und
+belegten Zielqueues verlieren drei eigene Quellworker ihren Diagnosepin.
+Es folgt weder eine explizite Transferfunktion noch eine Wakebenachrichtigung.
+Der echte periodische Pruefpunkt quittiert den Ursprung jedes Transfers
+am Task; diese reine Herkunftsmetadatei beeinflusst keine Zulassung. Nur
+waehrend der begrenzten Beobachtungsphase bleiben BSP-Interrupts lokal
+aus, um zusaetzliche Timeout-Wakes auszuschliessen. Der Runtime-Owner
+bleibt dabei frei; es gibt dort weder Schlafen noch Yield. AP-Timer
+laufen weiter. Eine Zeit- und Iterationsgrenze beendet auch einen
+fehlenden Fortschritt. Vor Aufraeumen/Warten wird das urspruengliche IF
+restauriert und zurueckgelesen. Damit ist der periodische AP-Pfad direkt belegt. Das Ziel behielt
+vorher seinen juengeren gebundenen Ready-Filler. Die alten Tasks werden davor
+altersgeordnet eingefuegt; gespeicherte Rollen-/Frame-/FPU-/Unwind-Fakten
+bleiben identisch. Sieben echte Worker tragen YMM/Unwind-Zustand durch
+Wakes beziehungsweise IRQs. Alle eigenen Rollen schliessen danach ab,
+die gebundene Quelle bleibt gebunden. Insgesamt94 erzeugte und94 wirklich
+freigegebene Tasks; keine lebenden Task-/Workreste oder Cleanupfehler.
+Vor der ersten eigenen Mutation wartet die Fixture begrenzt auf eine
+passende physische Current-Grenze und laesst vorhandene BSP-Arbeit
+fortschreiten. Zusaetzliche Ready-Arbeit wird als echte Last gezaehlt;
+sie muss fuer eine belegte-Ziel-Probe nicht verschwinden. Ein
+frueher Einreihungs- und ein noch nicht eindeutig zugeordneter Timerbeleg
+bleiben im Archiv; beide ohne STANDARD. Keine fremde Queue wird fuer
+die Diagnose zurueckgesetzt oder umgebunden.
+Diese Erweiterung ist eine Vier-CPU-Fixture; groessere Systeme behalten
+bestehende andere Faelle und den vollen CPU-STANDARD. Keine neue native
+R4OS-/AMD-/Hybrid-/Windows-/Hotplug-/ueber32CPU-Abnahme.
+
+Kernel fmt, strict Clippy und Produktbau bestehen. Module/API/ABI bleiben
+gegen0.85.11 unveraendert: SysInfo0.1.5, Spectra0.1.25, Contract0.64.21 und
+SDK0.64.37. Bestehende Contractabnahme wird wiederverwendet.710 permanente
+Tests, kein neues Gate. Asynchrone Kernelmeldungen koennen serielle JSON-
+Records unterbrechen; benotigte Originalwerte werden nur in ihren genauen
+vollstaendigen Skalarfragmenten gelesen. Keine JSON-Verkettung/-Reparatur,
+keine ergaenzten Werte oder behauptete atomare Konsolenrecords. Der ganze
+STANDARD-Dateiexport wird separat streng validiert.
+
+Performance und Belege
+----------------------
+Genau ein STANDARD Suite3 SMP4 fuer das finale Artefakt:
+0b348f5e-1d82-46c2-b373-fb8471dad924
+30 Originalsamples mit je4/4 Workern und sechs gueltigen Scores wurden aus
+DevCenter vollstaendig feldweise zurueckgelesen. Scheduler 22.598209,
+Gesamtindex 113.465602. Ausgang0.85.11: Scheduler21.931170,
+Gesamt107.913699, Lauf4f52b853-9836-49ef-89f4-8ec40bcc018f.
+Einzelbeobachtungen belegen keine isolierte stabile Beschleunigung oder
+Ursache der seit0.85.9 niedrigeren Schedulerwerte. Kein unveraenderter
+Nachlauf zur Scoreauswahl. Tatsachliche neue Migrationen/Zielmasken und
+Aufwandsgrenzen sind im gemeinsamen Beleg nachvollziehbar.
+
+Kernel-SHA256: 046514ac99366cf9a5f4bf1981a2c7f56c0db2968c2226aa7753681f9fb84b1b
+Gemeinsamer Kurzbeleg: Core/KernelBalance08512.json.
+Originale/Logs/ELF: ExFiles/Reports/Cpu08512/20261018-final.
+Naechster Schritt0.85.13: oeffentliche Thread-CPU-Mengen, Wunschkerne und
+Arbeitsklassen mit eigener Contract-/SDK-/Lebensdauerabnahme.

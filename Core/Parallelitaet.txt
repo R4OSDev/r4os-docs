@@ -1,7 +1,8 @@
 ﻿R4OS concurrency and responsiveness
 ===================================
 
-The scheduler is preemptive. Wait queues, completions and dedicated workers
+Program and bound Runtime-R4L code are preemptible; kernel code uses explicit
+safe reschedule boundaries. Wait queues, completions and dedicated workers
 move blocking storage, filesystem, service and driver work out of IRQ and
 reactor hot paths. Synchronous public calls may wait for completion but must
 not secretly execute a second inline runtime path.
@@ -21,8 +22,8 @@ Rules
 Module code may use SIMD. The scheduler saves a CPUID/XCR0-sized FPU state
 for every executable task, including kernel-main and generic kernel workers:
 storage, networking, IPC and graphics work can enter R4D/R4P callbacks even
-though the kernel itself is built without SIMD in ReleaseSafe. Only the
-dedicated CPU-idle task, which cannot enter modules, skips this state.
+though the kernel itself uses the checked Rust release profile without SIMD.
+Only the dedicated CPU-idle task, which cannot enter modules, skips this state.
 The external R4D IRQ guard saves that same task state before installing a
 clean handler state, then restores it on return. The standard module target
 assumes AVX2. A kernel-worker label is not evidence of a SIMD-free call graph.
@@ -92,8 +93,9 @@ The ownership matrix is deliberately conservative:
   shell roles, modules without an audited execution declaration, Desktop
   and unaudited R4D callbacks.
 - Parallel-enabled: explicitly marked kernel work and background R4X with
-  runtime.parallel=owned-v1 (Calculator, CLIPSVC, LSTRX). Child threads inherit
-  the instance declaration; see the 0.81.19 contract below.
+  runtime.parallel=owned-v1. Current canonical manifests declare this for
+  Calculator, CLIPSVC and Spectra; LSTRX remains a separate test fixture.
+  Child threads inherit the instance declaration; see the 0.81.19 contract below.
 
 The scheduler runtime owner is reentrant and uses
 acquire/release publication. It is a no-sleep boundary: outside bounded IRQ
@@ -380,12 +382,14 @@ den Wert einmal; unbekannte oder doppelte Werte sind ungueltig. Ohne Angabe
 oder mit bsp bleibt die bisherige CPU-0-Bindung. Es gibt keine Pfad-/
 Diagnosenamensliste mehr. Hintergrundprogramme werden lastabhaengig auf
 Online-CPUs platziert; neue Threads erben den unveraenderlichen Vertrag der
-Instanz. Ein Task behaelt seine Home-CPU. Foreground und Shell bleiben beim
+Instanz. Die initiale Home-CPU darf seit 0.84.27 beim begrenzten Ready-Transfer
+wechseln; explizite CPU-Bindungen bleiben fest. Foreground und Shell bleiben beim
 BSP-Konsolenbesitzer. Dies ist ein Besitzvertrag im vertrauten Single-User-
 System, kein Sicherheitsmodell und keine oeffentliche Affinity-API.
 
-Freigegeben sind Calculator und CLIPSVC sowie das schon zuvor gepruefte
-LSTRX-Testmodul. Calculator hat einen Hauptthread als GUI-Produzenten,
+Freigegeben sind Calculator, CLIPSVC und seit der Spectra-Aufnahme auch
+Spectra sowie das schon zuvor gepruefte LSTRX-Testmodul. Calculator hat einen
+Hauptthread als GUI-Produzenten,
 instanzlokalen Zustand und ausschliesslich Plattformimporte. CLIPSVC hat
 einen sequenziellen Endpoint-Owner mit eigenem Clipboard-Puffer; Registry,
 Nachrichten, Antwort, Stop und Cancel laufen ueber vorhandene IPC-Owner.
@@ -418,3 +422,102 @@ Die bestehende kurze SMP4-Abnahme startet normale Calculator-GUIs auf CPU
 1/3 und einen CLIPSVC-Selbsttestclient auf CPU 2 neben dem normalen Dienst.
 Sie verlangt Frames/Eingaben, IPC aus einem geerbten Thread, Close, Kill,
 Reap und die wiederhergestellte Payload-Baseline. Keine Hardwareabnahme.
+
+0.85.1: Quellcodeanalyse Multithreading, SMP und SMT (18.10.2026)
+------------------------------------------------------------
+Der untersuchte produktive Kernelstand ist 0.1.331, Commit
+62835c4582d1f9c2b9df180af12581b8cdcad694. Die ausfuehrliche Ausgabe dieser
+Analyse erfolgt auf Userwunsch im Chat. Diese Notiz haelt den belegten Stand
+und seine Grenzen fuer weitere Arbeit fest. Keine Produktcodeaenderung,
+kein neuer Gasttest und kein STANDARD; FPU-/SIMD-Detailabnahme bleibt 0.85.4.
+
+Im vorhandenen Vertrag umgesetzt:
+- Native Threadanlage mit eigenem Stack, stabiler ID/Generation, Start,
+  Current/Status, Exit, Join samt Timeout und geordnetem Ressourcenabbau:
+  Kernel/Rust/program/thread_runtime.rs, thread_join.rs, thread_retire.rs.
+- Praeemption von Programm- und genau gebundenem Runtime-R4L-Code auf BSP/AP,
+  per-CPU Current/Idle/Ready und Reschedule-IPIs: arch/irq.rs, arch/smp.rs,
+  sched/scheduler.rs und program/peer_lifetime.rs.
+- AP-Start und Zulassung, CPU-lokale Tabellen/Stacks, getrennte erkannte,
+  qualifizierte, gestartete und schedulierbare Zustaende; fehlerhafte APs
+  bleiben ausgeschlossen: arch/smp.rs und arch/percpu.rs.
+- Echte WaitQueues, Mutex/Semaphore/Completion und begrenzte Rangspende an
+  Kernel-Mutexbesitzer: sched/sync_wait.rs, sync_locks.rs, sync_objects.rs.
+  Native Libraries haben zusaetzlich C11-Transport und emuliertes TLS mit
+  prozess-/threadgebundenem Speicher und eigener Destruktor-Lebensdauer unter
+  Libraries/Shared/Native. Das ist kein vollstaendiger POSIX-API-Vertrag.
+- Die Kontextwechselgrenze sichert den ausgehenden RSP vor Ownerfreigabe;
+  FPU-Puffer und generationstreue TLB-Quittungen sind eingebunden. Die
+  Quellpruefung belegt vorhandene Mechanismen, keine universelle Fehlerfreiheit.
+
+Teilweise oder noch nicht umgesetzt:
+- Parallele R4X-Platzierung bleibt ausdruecklich opt-in und an den normalen
+  Hintergrund-Launch gebunden. Von 77 direkten kanonischen Manifesten
+  (40 Apps, 14 Services, 20 Diagnostics, 3 Subsystems) deklarieren genau
+  Calculator, ClipboardService und Spectra runtime.parallel=owned-v1.
+  Foreground/Shell und nicht freigegebene Besitzer bleiben CPU 0, ebenso
+  viele Kernel-I/O-/Service-/Grafik-/Treiber-Worker. Eigene R4D-Threads haben
+  eine gesonderte Parallelfreigabe; diese Aussage gilt nicht fuer alle Treiber.
+- Die CPU-Liste kennt APIC-ID und Zulassungsflags, aber keine Core-/Package-/
+  SMT-Geschwister-, Cache-, NUMA- oder P-/E-Kern-Zuordnung. Firmwaregemeldete
+  SMT-CPUs koennen wie andere logische CPUs starten und arbeiten. Eine
+  SMT-/Topologie-optimierte Platzierung fehlt; SMT ist nicht deaktiviert.
+- Initiale Platzierung nutzt Ready-Laenge plus laufende Arbeit. Spaeterer
+  Transfer beschraenkt sich auf leere Zielqueues und Spender mit mindestens
+  zwei Ready-Tasks (sched/task/balance.rs:33, scheduler.rs:751/763).
+  Laufende Tasks sind aus der Ready-Queue entfernt
+  (sched/task/task_registry.rs:760). Damit ist der Fall 'eine laufende und
+  eine wartende migrierbare Arbeit beim Spender, anderer Kern leer' vom
+  Transfer ausgeschlossen. Das kann CPU-Zeit ungenutzt lassen. Befund aus
+  dem Kontrollfluss; keine neue Laufzeitreproduktion oder Zeitmessung.
+- Kernel-RIPs sind nicht allgemein timerpraeemptibel. Laengere Kernel- und
+  R4D-Pfade brauchen passende explizite Yield-/Wait-/Reschedulegrenzen.
+- Der Scheduler-/Wait-Runtime-Owner ist weiter eine gemeinsame atomare
+  Sperre. Das serialisiert diese Metadatenoperationen und kann bei vielen
+  Wakeups/Wechseln begrenzen; produktive Arbeit ausserhalb bleibt parallel.
+  Kontentionshoehe und Performanceverlust wurden hier nicht gemessen.
+- Maximal 32 logische CPUs sind an mehreren Stellen festgelegt, einschliesslich
+  MADT-Speicherung und per-CPU Tabellen. Keine oeffentliche Threadaffinitaets-,
+  Wunschkern-, Prioritaets- oder Echtzeitklassen-API; feste Bindung ist intern.
+  CPU-Stop ist terminal, ein allgemeiner Online-/Offline-/Hotplugzyklus fehlt.
+
+Windows-/Linux-Vergleich anhand offizieller Dokumentation, gelesen 18.10.2026:
+- Windows dokumentiert prioritaetsgesteuerte Praeemption/Round-Robin,
+  dynamische Priority-Boosts, Affinitaet/Ideal Processor, SMT-/Core-/Package-
+  Beziehungen, NUMA und heterogene QoS-Platzierung sowie Processor Groups
+  fuer mehr als 64 logische Prozessoren. R4OS hat den Grundmechanismus,
+  aber nicht diese umfassenden Platzierungs- und Steuerungsmoeglichkeiten.
+- Linux besitzt per-CPU Runqueues und periodischen topologischen Ausgleich
+  ueber SMT-/SMP-/NUMA-Domaenen. EEVDF bewertet virtuelle Laufzeit und
+  Fairness/Deadlines; Kapazitaetsbewusstsein, Affinitaet und CPU-Hotplug sind
+  vorhanden. Nicht jede Architektur/Kernelkonfiguration nutzt alle Optionen.
+- R4OS verwendet vier interne Rollen mit begrenzten Budgets, Rangspende und
+  periodischer FIFO-Auswahl; daraus folgt keine EEVDF-, universelle
+  Echtzeit- oder gleichartige Skalierungsgarantie. Der Windows-Vergleich
+  beruht auf dokumentiertem Verhalten, nicht auf Einsicht in Windows-Quellcode.
+
+Priorisierte Folgerung: zuerst den Einzel-Ready-Ausgleich und eine echte
+Core-/SMT-/Package-Topologie beim Kernelbesitzer pruefen/verbessern. Weitere
+Module und Worker nur nach ihrer eigenen Besitzerpruefung parallel freigeben.
+Danach Hybrid-/NUMA-Politik, oeffentliche Hinweise und groessere CPU-Kapazitaet
+nach Zielhardwarebedarf planen. Das vertrauenswuerdige Single-User-Modell
+begruendet keine zusaetzliche Benutzer-, Rechte- oder Sandboxanforderung.
+
+Vorhandene Projektbelege: Diagnostics/SpectraAllCpu08447.json dokumentiert
+QEMU4 sowie native 16 und 4 schedulierbare CPUs. Teilnehmerzahlen allein
+belegen keine physische Kern-/SMT-Topologie oder optimale Verteilung. Der
+vorhandene feste SMP4-Test belegt seine konkreten CPU-/TLB-/Lockfaelle; weder
+32-CPU-, Hybrid-, NUMA-Abnahme noch einen allgemeinen Speedup daraus ableiten.
+
+Primaerquellen fuer den Vergleich:
+https://learn.microsoft.com/en-us/windows/win32/procthread/scheduling-priorities
+https://learn.microsoft.com/en-us/windows/win32/procthread/priority-boosts
+https://learn.microsoft.com/en-us/windows/win32/procthread/multiple-processors
+https://learn.microsoft.com/en-us/windows/win32/procthread/processor-groups
+https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-processor_relationship
+https://learn.microsoft.com/en-us/windows/win32/procthread/quality-of-service
+https://docs.kernel.org/scheduler/sched-domains.html
+https://docs.kernel.org/scheduler/sched-eevdf.html
+https://docs.kernel.org/scheduler/sched-capacity.html
+https://docs.kernel.org/core-api/cpu_hotplug.html
+https://man7.org/linux/man-pages/man2/sched_setaffinity.2.html

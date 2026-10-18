@@ -1,0 +1,312 @@
+﻿FPU, SSE und erweiterter CPU-Zustand - Analyse 0.85.4
+===================================================
+
+Stand 18.10.2026; produktiver Kernel 0.1.331 und aktive Besitzerquellen.
+Reine Quellanalyse mit direkter Folgeplanung, ohne Laufzeitcodeaenderung.
+Ergebnisse auf Userwunsch im Bericht und in der Roadmap, ohne Chatbericht.
+
+Begriffe und Ergebnis
+---------------------
+FPU bedeutet Floating Point Unit: CPU-Rechenfunktionen fuer Gleitkommazahlen.
+Der klassische x87-Zustand besitzt acht 80-Bit-Datenregister mit Stack-/Tag-
+und Rundungs-/Ausnahmekontrolle. MMX benutzt dieselben physischen Register.
+SSE/SSE2 rechnen skalar oder mehrere Werte gleichzeitig in 128-Bit-XMM-
+Registern; MXCSR steuert deren Rundung und Ausnahmen. Weitere SSE-Stufen,
+AES-NI und PCLMUL nutzen ebenfalls diesen Registerzustand. AVX erweitert ihn
+um 256-Bit-YMM-Anteile, AVX2 erweitert insbesondere die Vektoroperationen.
+AVX2 benoetigt keine eigene neue Zustandskomponente gegenueber AVX.
+
+Hardwarefaehigkeit, Betriebssystemfreigabe und erlaubte Compilerbefehle sind
+drei verschiedene Grenzen. Eine CPU kann AVX melden, waehrend das OS dessen
+Registerzustand noch nicht aktiviert und gesichert hat. Auch ohne explizite
+Vektorrechnung kann ein Compiler SIMD fuer Kopien oder andere Arbeit verwenden.
+
+Ergebnis: R4OS hat eine nachvollziehbare vollstaendige Bildsicherung fuer den
+tatsaechlich aktivierten x87-/SSE-/AVX-Zustand. Alle gefundenen ausfuehrbaren
+Taskerzeuger, externe Treiber-IRQs und wartende Page-Faults sind angebunden.
+Ein neuer normaler Taskwechsel-Registerverlust ist statisch nicht belegt.
+Eine pauschale Vollstaendigkeit fuer beliebige CPUs oder alle verschachtelten
+Kontexte ist damit nicht zugesichert. Die bekannten Zulassungsluecken bleiben
+in 0.85.5/.6; hinzu kommen ein konkreter Compilervertragsfehler einer Spectra-
+Probe, unvollstaendige Detailnachweise und begrenzte Diagnose-/Ausbauvertraege.
+
+
+Tatsaechliche Befehls- und Modulbasis
+------------------------------------
+Der normale Rust-Kernel verwendet das gepinnte x86_64-unknown-none-Target
+ohne automatische FP-/SIMD-Registernutzung und ohne Red-Zone. Die explizite
+FPU-/Probe-Assembly ist eine bewusste Ausnahme. Die Buildflags heben dieses
+Target nicht auf. Interne Floatberechnungen sind dadurch kein Beleg fuer
+unbewachte SSE-Befehle im normalen Rust-Eintritt.
+Quellen: Kernel/Build.ps1:91,106; Docs/Core/KernelRustBuild.txt:39;
+DevKit/Setup/RustToolchain.json; Rust-Targetdokumentation unten.
+
+Die Zig- und C-Modulprofile erlauben dagegen MMX, SSE bis SSE4.2, AVX/AVX2,
+AES und PCLMUL; C erhaelt unter anderem -mavx2/-maes/-mpclmul. Das betrifft
+R4X, R4L, R4D und R4P und darf nicht als beliebige SSE2-Distribution gelten.
+Tatsaechliche Nutzer sind zum Beispiel R4IMG-SVG/R4GFX-Farbrechnung mit Float-
+Daten, R4TLS mit AES-GCM, SSH-Kryptografie und Spectras Vektor-/Registerproben.
+Der erlaubte Targetumfang ist schon fuer compilererzeugte Befehle relevant;
+aus einer konkreten Quelldatei wird hier kein neuer Opcode-/ELF-Beleg gemacht.
+Quellen: SDK/r4os/build.zig:1602,1660,1770,1792;
+Libraries/R4IMG/Source/svg.zig:633,650;
+Libraries/R4GFX/Source/color_icc.zig:69,160;
+Protocols/R4Tls/src/main.zig:4,1789; Services/SshService/src/main.zig:7.
+
+Bereits geplanter Fehler A aus 0.85.2: fpu.init akzeptiert FXSAVE/SSE2 oder
+XSAVE ohne AVX2 und setzt danach MODULE_SIMD=true. Das passt nicht zur
+staerkeren gemeinsamen Modulbasis. AES/PCLMUL fehlen zudem im BSP-Inventar.
+0.85.5 bleibt der erste Korrekturschritt; kein doppelter neuer Auftrag.
+Quellen: Kernel/Rust/arch/fpu.rs:170,219,242;
+platform/cpu.rs:171,190,286; Docs/Core/CpuHardware085.txt:184.
+
+
+Initialisierung und Speicherformat
+----------------------------------
+BSP: CPUID muss FXSR, SSE und SSE2 melden. CR0.EM/TS werden geloescht,
+MP/NE gesetzt; CR4 bekommt OSFXSR/OSXMMEXCPT. Bei XSAVE wird OSXSAVE gesetzt,
+XCR0 geschrieben und zurueckgelesen. Die aktive Maske ist 3 fuer x87/SSE
+oder 7 mit AVX. AVX verlangt Hardwarebit und passende CPUID-D-Komponente.
+CPUID 0xD.0:EBX liefert die aktivierte Groesse; AVX-Komponentengroesse und
+Offset werden gegengeprueft. Ungueltige oder ueber 4096 grosse Bilder fuehren
+zum harten Initialisierungsfehler statt zu einer geratenen Puffergroesse.
+Ein Initialisierungsfehler beendet den Bootpfad vor produktiven Modulen.
+Quellen: Kernel/Rust/arch/fpu.rs:131,140,170;
+Rust/boot/foundation.rs:145.
+
+Ohne XSAVE wird FXSAVE64/FXRSTOR64 mit 512 Bytes benutzt. Sonst werden das
+XSAVE64-/XRSTOR64-Standardlayout und dieselbe 64-Bit-Maske verwendet. Puffer
+muessen mindestens die aktive Groesse besitzen und 64-Byte-ausgerichtet sein;
+das ist auch fuer den kleineren FXSAVE-Pfad ausreichend. INITIAL ist statisch
+nullvorbelegt und 64-Byte-ausgerichtet; seine Header bleiben definiert.
+Quellen: Kernel/Rust/arch/fpu.rs:9,66,156,219,258,299;
+Kernel/arch/x86_64/cpu.S:162,168,174,183.
+
+FNINIT setzt die x87-Kontrollumgebung auf 0x037F; MXCSR wird ausdruecklich auf
+0x1F80 gesetzt und alle 16 XMM beziehungsweise YMM werden geloescht. Das
+gesicherte Initialbild wird einmal wiederhergestellt und vor AP-/Tasknutzung
+veroeffentlicht. FNINIT alleine waere fuer SIMD nicht ausreichend.
+Leere x87-Tags bedeuten keine allgemeine Zusage, alle alten physischen
+x87-Datenbytes mit Null ueberschrieben zu haben. Im vertrauenswuerdigen
+Single-User-System wird daraus hier kein neues Isolationsmodell abgeleitet.
+Quellen: Kernel/Rust/arch/fpu.rs:66,94,232;
+Kernel/arch/x86_64/cpu.S:123,129.
+
+APs bekommen das Initialbild vor Schedulerfreigabe. Bereits geplanter Fehler B:
+Trampolin und FPU-Kontrolle uebernehmen BSP-CR4/XCR0, ohne vorher den lokalen
+CPUID-/Groessen-/Featurevertrag zu vergleichen. Eine heterogene oder anders
+gefilterte CPU ist damit nicht ausreichend abgesichert. Das gehoert bereits
+zu 0.85.6, einschliesslich sicherem Eintritt vor problematischen Befehlen.
+Quellen: Kernel/Rust/arch/fpu.rs:272; Rust/arch/smp.rs:476;
+Kernel/arch/x86_64/ap_trampoline.S; Docs/Core/CpuHardware085.txt:196.
+
+AVX-512-ZMM/Masken und AMX-Tiles sind nicht aktiviert; der aktuelle Vertrag
+kennt nur Masken 3/7. XSAVEOPT/XSAVEC/XSAVES sind nicht implementiert.
+Die feste 4096-Grenze ist fuer die gewaehlte Basis eine gepruefte Kapazitaet,
+kein automatisch wachsender Vertrag fuer beliebige spaetere Erweiterungen.
+AVX-512/AMX bleiben mangels konkretem Verbraucher bedarfsabhaengige Optionen.
+
+
+Zustand an den Ausfuehrungsgrenzen
+---------------------------------
+1. Taskanlage: jeder FPU-nutzende Task bekommt einen exklusiven ausgerichteten
+   Heap-Puffer mit aktiver Groesse und Kopie des Initialbilds. Normale R4X-
+   Threads, Kernel-main, Treiberthreads, DriverWork, Block-/Pager-/Netz-/USB-/
+   Audio-/Display-/IPC-Worker setzen needs_fpu=true. Die einzige gefundene
+   explizite false-Anlage ist der reine cpu-idle-Task ohne Modulcallback.
+   Quellen: sched/task/task_resources.rs:286,600,759;
+   sched/task/mod.rs:108; task/task_api.rs:545;
+   driver/work.rs:660; driver/threads.rs:417;
+   storage/block_workers.rs:140; fs/page_cache_worker.rs:35;
+   program/thread_runtime.rs:151; program/async_io.rs:419.
+
+2. Kritische Reservetasks halten Task, Stack und FPU-Puffer seit dem Boot.
+   create_critical kopiert vor jeder Wiederverwendung das Initialbild neu.
+   Damit wird kein altes Worker-Rundungs-/Registerbild weiterverwendet.
+   Quellen: sched/task/task_resources.rs:699,727,828,853.
+
+3. Yield und IRQ-Praeemption sichern old und laden next vor dem physischen
+   RSP-Wechsel. Dazwischen laeuft nur der normale SIMD-freie Kernelpfad.
+   Runtimebesitz und veroeffentlichter ausgehender RSP schuetzen Migration;
+   FPU-Puffer gehoeren dem Task, nicht einer wiederverwendeten CPUposition.
+   Sleep/Wake benutzt dieselbe Wechsellogik. Der bestehende Balancefall
+   prueft echte Migration mit lebendem YMM0 und genauen Task-/Unwindidentitaeten.
+   Quellen: sched/scheduler.rs:550,608,625,648;
+   sched/task/task_api.rs:351,368; arch/x86_64/cpu.S:90;
+   sched/task/balance.rs:54; sched/task_probe/balance.rs:88,108,155.
+
+4. Timer-/Reschedule-/TLB-Eintritt benutzt SIMD-freien Rust-/Assemblycode;
+   bei physischem Taskwechsel greift Punkt3. Externe R4D-IRQ-Handler werden
+   dagegen einzeln durch ExternalIrqFpuGuard umschlossen. Der Guard speichert
+   die unterbrochene Taskumgebung, laedt INITIAL fuer den Callback und stellt
+   nur fuer dieselbe Taskadresse und Generation das gesicherte Bild wieder her.
+   Leere Idle-Kontexte bekommen danach INITIAL. Handler duerfen nicht
+   dispatchen/blockieren; ein beliebig reentranter Callback mit eigenmaechtig
+   eingeschalteten Interrupts ist damit nicht als unterstuetzt bewiesen.
+   Quellen: Rust/arch/irq.rs:15,71; arch/x86_64/isr.S:223;
+   Rust/driver/irq_router.rs:411,464;
+   sched/scheduler.rs:1167,1198; sched/task/task_api.rs:351.
+
+5. Wartender Page-Fault: IST-Eintritt ermittelt CR2 und reserviert residenten
+   Raum auf dem genauen unterbrochenen Taskstack. Dort liegt ein eigenes
+   ausgerichtetes 4096-Byte-FPU-Bild, bevor Pager-/Datei-I/O warten oder SIMD-
+   faehige Module ausfuehren kann. Schedulerbilder duerfen sich waehrend
+   dieses Wartens aendern, das private Faultbild bleibt bestehen und wird
+   vor IRET wiederhergestellt. Reines Stackwachstum ohne wartendes I/O kann
+   auf dem SIMD-freien kurzen Eintritt bleiben. Fatale Ausnahmen kehren nicht
+   zur unterbrochenen FP-Arbeit zurueck und sind kein weiterer Restorefall.
+   Quellen: arch/x86_64/isr.S:134;
+   Rust/arch/tables.rs:338,358,376,405;
+   Rust/program/fault.rs:218,238.
+
+6. Modul-/Callback-Aufruf ist eine SysV-Funktionsgrenze. Vollstaendiger
+   Vektorregistererhalt ist dort nicht geschuldet: Datenregister sind
+   caller-saved, Kontrollwort/MXCSR-Kontrollbits dagegen callee-saved.
+   Die vorhandene Callback-/Stackreserve-Abbruchbruecke sichert GPR-Callee-
+   Register, ganzes MXCSR und x87-CW und stellt sie vor Rueckkehr wieder her.
+   Das ist bewusst keine zweite volle Taskzustandssicherung. Fuer komplexe
+   veraenderte x87-/MMX-/Ausnahmeumgebungen fehlen gezielte Abbruchbelege;
+   eine normale ABI-konforme MMX-Funktion muss vor Calls/Rueckkehr EMMS nutzen.
+   Quellen: Rust/arch/callback_abort.rs:6;
+   Rust/arch/callback_abort.S:2,14,34,48;
+   Rust/driver/threads.rs:480,971; Rust/program/entry.rs:67;
+   Contract/ABI/R4LInterface.txt:200; SysV-Quelle unten.
+
+7. Die zentrale Rust-Softfloat-Plattformgrenze enthaelt keine direkten Float-
+   oder Vektorrueckgaben/-parameter. Der Generator weist solche Erweiterungen
+   ohne gepruefte Bruecke zurueck. Floatdaten hinter Zeigern oder in einem
+   passenden Layout sind hiervon zu unterscheiden; SIMD-faehige Module mit
+   Integer-/Pointer-ABI werden unterstuetzt. Das ist bereits abgesichert.
+   Quellen: Contract/Tools/AbiRustGen/src/main.zig:94,176,312,345;
+   Docs/API/RustContractBindings.txt:38.
+
+
+Konkrete neue Befunde und Nachweisgrenzen
+----------------------------------------
+A. Spectras manuelle Performance-AVX-Probe hat unvollstaendige Assembler-
+   Deklarationen: avxLoadYmm0 aendert YMM0 ohne Registerclobber und
+   avxStoreYmm0 schreibt durch einen blossen Inputpointer ohne deklarierten
+   Speicheroutput oder memory-Clobber. volatile allein beschreibt diese
+   Effekte nicht. Der Compiler darf Register/Speicher daher anders behandeln,
+   als die Probe voraussetzt. Das ist ein konkreter Quell-/Compilervertrag-
+   Fehler der Diagnose; ein aktueller Produkt-Schedulerverlust folgt daraus
+   nicht. Eine neue Optimierungs-/ELF-/Laufzeitreproduktion wird nicht behauptet.
+   Die Faultprobe deklariert ihre YMM-/Speichereffekte bereits ausdruecklich.
+   Quellen: Spectra/src/checks/performance/main.zig:7471,7493,7500;
+   Spectra/src/checks/memory/main.zig:39;
+   DevKit/Toolchains/Zig/doc/langref.html:9904; Zig-Quelle unten.
+
+B. Vorhandene Nachweise sind sinnvoll, aber keine vollstaendige Registermatrix:
+   - SPECTRA CHECK SIMD: konkurrierende Vektorketten mit Sleep und Skalarorakel.
+     Funktionsaufrufe koennen Register verschuetten; allein kein Beweis fuer
+     jedes mitten im Befehlspfad lebende Register.
+   - /IRQSTRESS: Vektorkette ohne Calls im Hotloop. Sie ermoeglicht echte
+     Unterbrechung, verlangt aber selbst keinen beobachteten externen R4D-IRQ.
+   - /DYNAMICTASKS: zwei Wellen mit je 64 gejointen/gefreigebenen Threads,
+     verschiedene Seeds und ein absichtlich geaenderter MXCSR-Rundungsbitwert.
+   - Native FPU-Workprobe: YMM0-Roundtrip durch die echten Guardfunktionen,
+     auf normaler/deadline Worklane und Kernel-main; Aufruf selbst loest
+     keinen Hardwareinterrupt aus. Reserveprobe prueft zweimal gleiche
+     Pufferidentitaet und initiales YMM0/MXCSR.
+   - Balanceprobe: echtes Sleep/Wake/Migration mit YMM0; Faultprobe haelt
+     YMM0 ueber den tatsaechlich faultenden Speicherzugriff.
+   - Performance: lokale f64-Arithmetik und passive Groessen-/Masken-/Zaehler-
+     pruefung ersetzen keine explizite x87-/alle 16Register-/Rundungsmatrix.
+   Quellen: Spectra/src/checks/simd/main.zig:31,75,173,194,304;
+   checks/memory/main.zig:39,701; checks/performance/main.zig:2956,4695;
+   Kernel/Rust/sched/task_probe/fpu.rs:17;
+   task_probe/resources.rs:32,111,132; task_probe/balance.rs:108.
+
+C. FXSAVE und XSAVE ohne AVX sind implementierte Backendpfade, fuer die die
+   aktuelle AVX2-Distribution keine gleichwertige produktive Laufzeitabnahme
+   liefert. Die native Workprobe ueberspringt ohne AVX beziehungsweise meldet
+   es gezielt als nicht verfuegbar. Fehlende Hardware oder passende minimale
+   Diagnosefixtures bleiben offene Nachweise, keine bestandenen Fallgruppen.
+   Historische SMP4-/SIMD-/Migrationsbelege in Parallelitaet.txt,
+   KernelSync08412.json und KernelBalance08427.json werden nicht als neuer
+   unveraenderter Volltest aller CPUvarianten ausgegeben.
+
+D. Zustandsgroesse und 4096-Kapazitaet sind auf FPU-/Faultbesitzer verteilt.
+   Task- und Fault-Save-/Restoreaufrufer ignorieren teilweise boolesche
+   Rueckgaben. Die aktuellen geprueften Erzeuger liefern passende Puffer;
+   daraus folgt kein belegter gegenwaertiger Ausrichtungsfehler. Ein zentraler
+   Layout-/Fehlervertrag ist aber vor Erweiterungen und zur Erkennung spaeterer
+   Vertragsverletzungen erforderlich. task_state_bytes zaehlt kumulativ
+   initialisierte Bytes, auch Reservewiederverwendung; es ist kein Liveheapwert.
+   Quellen: arch/fpu.rs:9,299,310; arch/tables.rs:356,384;
+   sched/task/task_api.rs:351,368; program/r4dev/summary.rs:622.
+
+E. #MF/x87 und #XM/SIMD haben lesbare Vektornamen, fuehren aber derzeit in
+   den allgemeinen terminalen Crashpfad. Ein spezialisierter begrenzter
+   x87-/MXCSR-Snapshot fuer die eigentliche FP-Ursache fehlt. Unmaskierte
+   FP-Ausnahmen sind damit kein abgefangener, normal weiterlaufender Modul-
+   Fehler. Das bestehende vertrauenswuerdige Systemmodell bleibt massgeblich.
+   Quellen: Rust/arch/tables.rs:405,514,538;
+   Rust/boot/crash.rs:413,416.
+
+F. Trotz Namen wie fpu_lazy_saves wird bei jedem ausgefuehrten Taskwechsel
+   eines FPU-nutzenden Tasks unmittelbar gesichert und wiederhergestellt.
+   Es gibt kein CR0.TS-/#NM-Verfahren mit Sicherung erst bei Erstnutzung.
+   Uebersprungen wird nur die reine Idle-Ausnahme. XSAVEOPT ist eine moegliche
+   begrenzte Optimierung; ihr fehlender Einsatz ist kein Korrektheitsfehler.
+   Sie benoetigt Featurepruefung und gueltige unveraenderte Puffer-/Header-
+   identitaet. Weggelassene Komponenten sind keine frisch geschriebenen Nullen.
+   Quellen: arch/fpu.rs:156; sched/task/task_api.rs:351;
+   sched/scheduler.rs:608,648; Intel SDM1 Abschnitt 13.9.
+
+
+Folgeplanung und Abschluss
+--------------------------
+Die vier CPU-Kompatibilitaetskorrekturen 0.85.5–0.85.8 bleiben zuerst.
+Baselinezulassung und lokale AP-Pruefung werden nicht doppelt eingeplant.
+Neu aus 0.85.4, je vier Aufgaben, Besitzer und eine fachliche Abnahme:
+
+0.85.45 Spectra-SIMD-Proben compilerkorrekt und ereignisgebunden machen.
+0.85.46 FPU-Umgebung und vollstaendigen Registererhalt absichern.
+0.85.47 XSTATE-Speichervertraege und FP-Fehlerdiagnosen vereinheitlichen.
+0.85.48 XSAVEOPT fuer den vorhandenen Zustandswechsel gezielt nutzen.
+
+Diagnose bleibt bei Spectra, Modul-/Compilervertraege bei Contract/SDK und
+den jeweiligen externen Besitzern. Nur technisch notwendige CPU-, Task-, IRQ-,
+Fault- und Crashmechanismen gehoeren in den Kernel. Keine neuen Modulprojekte
+fuer diese vier Schritte. Vollstaendige Aufgaben/Abhaengigkeiten in der API.
+
+Alle vier Analysen sind damit abgeschlossen; die Umsetzung 0.85.5–0.85.48
+bleibt offen. Produkt-Release-Metadatum 0.85.4, Kernel 0.1.331 und Module ohne
+Artefaktaenderung unveraendert. Diese Analyse aendert kein Laufzeitverhalten:
+kein Build, neuer Gasttest, STANDARD oder DevCenter-Upload erforderlich.
+Keine neue physische IRQ-/Backend-/Rundungsabnahme und keine gemessene
+Geschwindigkeitssteigerung behauptet. Betroffene vorhandene Faelle erst bei
+Umsetzung gezielt ergaenzen; gemeinsame Suite3 und Benchmarkpflicht erhalten.
+
+Ausgangscommits und Quellpfade
+------------------------------
+Kernel 62835c4582d1f9c2b9df180af12581b8cdcad694
+SDK 66c0ec3eeac8bf940f29afd515a7c6eba4aab61d
+Contract 03195b2a2e7461c72a4d0d6b645ae24319ba6315
+Libraries 4f2087cc114582878845b7ed69776f5b31c5a88d
+Spectra 876efd0fa51af418dff0c7b23ef11df874f1f145
+Alle Kernel/, SDK/, Contract/, Spectra/ usw. genannten Quellpfade beziehen
+sich auf ihre Besitzer unter Repositories/ (Spectra unter Diagnostics/).
+Vorhandene Analysereports und Inventare liegen dagegen direkt unter Docs/.
+Analysierte Laufzeitquellen wurden nicht geaendert.
+
+Primaerquellen, abgerufen 18.10.2026
+----------------------------------
+Intel SDM: aktuelle Uebersicht und Ausgabe 093US/September2026 verifiziert.
+Fuer gezielte Detailstellen die weiter verfuegbare Ausgabe 078US/Dezember2022,
+Vol. 1 Kapitel 8, 11, 13, besonders 13.2–13.4 und 13.9 verwendet. Die Detail-PDF 093
+war bei Folgeabrufen nicht stabil erreichbar; kein kompletter neuer Errata-
+oder modellabhaengiger Herstellerabgleich behauptet.
+https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html
+https://cdrdv2-public.intel.com/671436/253665-sdm-vol-1.pdf
+Rust: Target x86_64-unknown-none, standardmaessig ohne FP-/Vektorregister:
+https://doc.rust-lang.org/rustc/platform-support/x86_64-unknown-none.html
+System-V-AMD64-ABI, Register-/MXCSR-/x87-/MMX-Vertrag, Originalquellen:
+https://gitlab.com/x86-psABIs/x86-64-ABI/-/raw/master/x86-64-ABI/low-level-sys-info.tex
+Zig, Inline-Assembly/Clobbers; ebenfalls mit gebuendelter Toolchaindoku verglichen:
+https://ziglang.org/documentation/master/#Clobbers
+Linux-Kerneldokumentation, Vergleichsgrenze fuer XSTATE-Freigaben und den
+vom normalen Compilerpfad getrennten Kernel-FP-Gebrauch:
+https://docs.kernel.org/arch/x86/xstate.html
+https://docs.kernel.org/core-api/floating-point.html

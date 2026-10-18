@@ -1,0 +1,372 @@
+﻿CPU-Hardwarefunktionen und Herstellermerkmale - Analyse 0.85.2
+=============================================================
+
+Stand: 18.10.2026. Statische Analyse des produktiven Rust-/Assembly-Kernels
+0.1.331, des SDK, der aufrufenden Protokolle und des externen ACPI-Treibers.
+Release-Metadatum nach Analyseabschluss: 0.85.2. Laufzeitcode und Artefakt-
+versionen bleiben unveraendert. Vollstaendige Ergebnisausgabe auch im Chat.
+
+Bewertungsrahmen
+----------------
+Erkannt bedeutet: Ein CPUID-Bit, Register oder Firmwareeintrag wird gelesen.
+Aktiviert bedeutet: Die benoetigte Betriebssystemkonfiguration wird hergestellt
+oder nachvollziehbar vom Bootloader uebernommen. Genutzt bedeutet: Ein echter
+Produktpfad verwendet die Funktion. Ein erkannter Befehlsname belegt weder
+seine Ausfuehrung noch ein eigenes optimiertes Verfahren.
+
+Geprueft wurden aktive Besitzerquellen; Paketkopien unter zig-pkg, Caches,
+historische ExFiles und Recovery gelten nicht als produktive Implementierung.
+CPU-Erweiterungen in der mitgelieferten Zig-Standardbibliothek wurden dort
+verfolgt, wo produktive Module diese Bibliothek tatsaechlich verwenden.
+
+Ergebnis: Die gemeinsame x86_64-Grundmechanik ist vorhanden. Hersteller-
+spezifische Energie-/Betriebsdiagnose und vollstaendige CPU-Zulassung fehlen.
+Vier konkrete Konsistenz-/Kompatibilitaetsgrenzen sind unten getrennt von
+optionalen Erweiterungen dokumentiert. Keine Aussage ueber Fehlerfreiheit,
+gemessenen Leistungsverlust oder alle Modelle eines Herstellers.
+
+
+Mindestbasis und Featureauswertung
+----------------------------------
+Der normale Rust-Kernel baut fuer x86_64-unknown-none ohne automatisch
+erzeugten SIMD-Code. Die gemeinsamen Zig- und C-Modulpfade erlauben dagegen
+MMX, SSE bis SSE4.2, AVX/AVX2, AES-NI und PCLMULQDQ. Insbesondere gelten
+AVX2-faehige Zielhardware und freigegebener x87-/SSE-/YMM-Zustand; dies ist
+kein pauschaler Support fuer beliebige x86_64- oder SSE2-Prozessoren.
+AES und PCLMUL sind eigene Featurebits und nicht durch AVX2 allein zugesichert.
+Eine breitere Alt-CPU-Unterstuetzung waere eine eigene Produktentscheidung.
+
+cpu.detect prueft die maximalen Standard-/Extended-Leaves vor den benutzten
+Abfragen. Vendor, Brand, Familie, Modell, Stepping, Adressbreiten, legacy
+APIC-ID, CPUID-Packagezahl und 28 Featureflags werden erfasst. Leaf 7 wird
+nur mit Subleaf 0 gelesen. FPU-Leaf 0xD wird separat mit Feature-/Leafpruefung
+ausgewertet. XGETBV wird im CPU-Inventar nur bei OSXSAVE ausgefuehrt; PAT und
+MTRRCAP werden dort nur bei passender MSR-/Featureanzeige gelesen.
+
+Grenzen: Nur ein BSP-Inventar; keine gemeinsame Faehigkeitsschnittmenge aller
+CPUs, kein vollstaendiger Modul-Mindestfeaturecheck, keine Hypervisor-ID und
+keine modellgebundene Errata-/Microcodeverwaltung. Der rohe MSR-Helfer besitzt
+keinen abfangenden Fehlerstatus. Neue Hersteller-MSRs brauchen daher eigene
+Feature-/Modell- und Virtualisierungspruefungen vor ihrem Zugriff.
+
+Quellen: [C01-C05, C08-C10, C26-C27], [H01-H03].
+
+
+Funktionsmatrix: Erkennung / Aktivierung / produktive Nutzung
+------------------------------------------------------------
+01. Long Mode und MSR
+    Erkennung: vorhanden. Long Mode wird von Limine hergestellt; APs bekommen
+    den eigenen INIT/SIPI-Long-Mode-Eintritt. MSRs werden u.a. fuer APIC,
+    EFER und GS benutzt. Keine zweite 32-Bit-Kernelvariante. [C02, C08-C10]
+
+02. APIC/x2APIC und CPU-Interrupts
+    Erkennung und Implementierung vorhanden: xAPIC ueber MMIO, x2APIC ueber
+    MSRs, INIT/SIPI und IPIs. x2APIC folgt der Firmware oder der expliziten
+    Force-Option; CPUID-Support allein schaltet es nicht automatisch ein.
+    Volle 32-Bit-Ziel-ID im x2APIC-ICR ist implementiert. Legacy-IRQ- und
+    MSI-Ziele bleiben eingeschraenkt; siehe Befund D. Maximal 32 logische
+    CPUs im jetzigen Katalog, ohne SMT-/Hybrid-/NUMA-Policy. [C08-C13]
+
+03. Zeitmessung und Timer
+    TSC, invariant TSC und CPUID-0x15-Taktverhaeltnis werden genutzt. Der
+    Hardwareclockpfad qualifiziert gegen HPET, prueft CPU-Versatz und Drift
+    und kann auf HPET bzw. die periodische Grundlage zurueckfallen. PIT ist
+    Boot-/Timerfallback. LAPIC-Timer werden gegen HPET kalibriert; BSP-Idle
+    benutzt One-Shots, APs periodische Timer. TSC-Deadline wird erkannt,
+    aber IA32_TSC_DEADLINE/LVT-Deadlinebetrieb nicht programmiert.
+    USB-Namen wie uses_tsc_deadline bezeichnen Softwarefristen und belegen
+    keinen Hardware-Deadline-Timer. RDTSCP wird nur inventarisiert; die
+    aktive Hardwareclock liest LFENCE/RDTSC. [C02, C11, C14-C15]
+
+04. PAT, MTRR und Cachetypen
+    PAT/MTRR werden erkannt; BSP-PAT und MTRRCAP werden gelesen. Limine-PAT
+    wird uebernommen; Grafik-/MMIO-Pfade waehlen UC/WC-PTEs. MTRR-Bereiche
+    werden weder vollstaendig inventarisiert noch vom Kernel programmiert.
+    Kein eigener Abgleich der PAT-Tabelle auf allen APs: Befund C.
+    Eine WC-Seitenkennung allein belegt keinen identischen effektiven
+    Speichertyp auf allen CPUs. [C02, C08-C10, C17-C19], [H01, H04]
+
+05. Seitengroessen und NX
+    4-KB-Seiten und eigene 2-MB-Mappings werden wirklich erzeugt; der private
+    HHDM benutzt bei Ausrichtung/genuegend Laenge 2 MB. Walker verstehen
+    bestehende 1-GB-Seiten. Das 1-GB-Feature wird erkannt, ein eigener
+    1-GB-Mapping-/Allokationspfad fehlt. Keine transparenten Huge Pages.
+    NX wird in Daten-/Stack-/MMIO-PTEs verwendet; EFER.NXE kommt auf dem BSP
+    von Limine und wird fuer APs mit EFER uebernommen. Kein expliziter
+    NX-loser Produktpfad. Eigene Tabellen bleiben vierstufig. [C08-C10,
+    C16-C18], [H04]
+
+06. TLB, PCID und INVPCID
+    SMP-Invalidierung mit Anfragegeneration, gezieltem IPI und exakter
+    Abschlussquittung vorhanden; lokale INVLPGs oder CR3-Reload ab 64 Seiten.
+    INVPCID wird erkannt, aber nicht ausgefuehrt. PCID wird nicht als eigene
+    Faehigkeit erfasst/aktiviert; keine Prozess-ASID-Verwaltung. Im heutigen
+    gemeinsamen Adressraum ist dies eine optionale Architekturentwicklung,
+    kein fehlender notwendiger Thread-Kontextwechsel. [C02, C20]
+
+07. Cachetopologie, SMT, Hybrid und NUMA
+    CLFLUSH-Linegroesse und ein L2-KB-Feld sind vorhanden. Keine vollstaendige
+    Cache-/Geschwister-/Packagekarte, Intel-Kernklassen oder Thread-Director-
+    Auswertung; keine AMD-Kernrang-/CCD-/CCX-Policy. Kernel-ACPI dispatcht
+    MCFG/APIC/FACP/HPET, nicht SRAT/SLIT/PPTT. Firmware darf NUMA-Hardware
+    damit weiter physisch bereitstellen, R4OS nutzt ihre Lokalitaet nicht.
+    Anschluss an 0.85.6/.7/.16/.17; Grenzen aus 0.85.1 gelten. [C02, C21]
+
+08. Idle und Wake
+    HLT/STI;HLT, PAUSE-Spins, Interrupt-/IPI-Wake und BSP-Timerrearm sind
+    vorhanden. Keine C-State-Auswahl ueber _CST/_LPI und kein eigener
+    MONITOR/MWAIT-/MWAITX-/UMWAIT-Pfad. HLT und Firmware koennen weiterhin
+    Hardware-Energiesparen bewirken; konkrete erreichte C-States sind ohne
+    Register-/Residencymessung unbekannt. System-Suspend/Resume ist getrennt
+    von CPU-Idle; ACPIPLAT implementiert keinen System-Suspend. [C11, C22-C23]
+
+09. Leistungs-/Energieverwaltung bei Intel und AMD
+    Kein eigener Intel-SpeedStep-/HWP-/EPP-Regler, keine AMD-P-State-/CPPC-
+    Steuerung, kein Leistungsprofil und kein APERF/MPERF-Readback. CPUID-
+    Basis-/Max-MHz sind Nominalinformationen, keine aktuelle Taktmessung.
+    Fehlende R4OS-Steuerung beweist weder deaktivierten Turbo/Precision Boost
+    noch fehlendes hardwareeigenes Throttling. Firmwarezustand und reale
+    Grenzen bleiben unbekannt. Externes ACPIPLAT betreibt AML/EC/Lid/Helligkeit;
+    eine geladene AML-Namespace ersetzt keinen CPU-Leistungsregler.
+    [C02, C23], [H01, H05]
+
+10. Temperatur, Energie und Hardwarefehler
+    Keine CPU-Thermal-/Power-/RAPL-Abfrage oder eigene MCA/SMCA-Bankauswertung.
+    Machine Check hat eine benannte generische Ausnahme, aber keinen
+    Hardwarefehlerbericht mit Bank-/Status-/Adressdaten. GPU-Telemetrie ist
+    kein Nachweis fuer CPU-Telemetrie. Vorhandene Firmware-/Hardwarefunktionen
+    koennen weiterhin aktiv sein. [C02, C23-C24]
+
+11. Microcode und Performancezaehler
+    Keine CPU-Microcoderevisionsabfrage, kein Update-/Erratakatalog; nur der
+    Firmwarezustand wird geerbt. Keine programmierte Hardware-PMU, kein
+    RDPMC, Intel-PEBS-/LBR- oder AMD-IBS-Backend. Spectra misst reale Arbeit
+    mit vorhandenen Uhren/Softwarezaehlern; das ersetzt keine Cache-Miss-,
+    Instruktions- oder Branch-Miss-Messung. GPU-Firmware/Microcode ist eine
+    andere Komponente und wurde nicht als CPU-Support gezaehlt. [C02, C14-C15]
+
+12. AES-NI und PCLMULQDQ
+    Im SDK-Zielprofil freigegeben und produktiv ueber R4TLS/AES-GCM und die
+    ausgewaehlten Zig-AESNI-/GHASH-Implementierungen benutzt. Die Auswahl
+    erfolgt beim Kompilieren; der jetzige Modulbuild besitzt keinen zur
+    Laufzeit waehlbaren Software-AES-Fallback. Die beiden Featurebits fehlen
+    im CPU-Inventar und in der Boot-Zulassung: Befund A. [C03, C25-C27]
+
+13. Zufallsbefehle
+    RDRAND ist im gemeinsamen SDK vorhanden, obwohl es im Kernel-Inventar
+    fehlt: CPUID-Test, Carry-Flag pro Ergebnis, begrenzte zehn Versuche und
+    vollstaendiges Loeschen der Ausgabe bei Fehler. R4TLS, R4Auth, SSH und
+    WebCrypto nutzen diesen Pfad. Kein RDSEED-/Virtio-RNG-/allgemeiner
+    Entropiepool als alternative Quelle; ohne RDRAND scheitern betroffene
+    Funktionen ausdruecklich. RDRAND bleibt optional fuer die CPU-Basis.
+    [C28-C29], [H06]
+
+14. Andere optionale Erweiterungen
+    FSGSBASE, ERMS und CLFLUSHOPT werden erkannt. Kein eigener nach diesen
+    Bits ausgewaehlter schneller Speicher-/Cachepfad; GS-Basis benutzt MSRs.
+    BMI1/BMI2, ADX, SHA-NI, RDSEED, CLWB und neuere kurze REP-Features sind
+    nicht Teil des zentralen Inventars oder eines zugesicherten Dispatchs.
+    Compiler-/Bibliotheksoptimierung ist getrennt von einer OS-Freigabe zu
+    bewerten. Erweiterte SIMD-Zustaende wie AVX-512/AMX bleiben Gegenstand
+    der Analyse 0.85.4, keine notwendige Erweiterung der AVX2-Produktbasis.
+    [C02-C03, C05, C09]
+
+15. Virtualisierung und sonstige Plattformfunktionen
+    QEMU-Gastbetrieb und externe Virtio-Treiber vorhanden. Keine Hypervisor-
+    CPUID-Identitaet, PV-Clock oder Steal-Time-Auswertung im CPU-/Clockbesitzer.
+    Kein eigener VMX-/SVM-Hypervisor und keine CPU-seitige VT-d-/AMD-Vi-
+    DMA-/Interrupt-Remappingverwaltung. Gastbetrieb verlangt keinen eigenen
+    Hypervisor. Neue Schutz-/Rechtefunktionen sind kein aus dieser Analyse
+    abgeleitetes Produktziel des vertrauenswuerdigen Single-User-Systems.
+
+
+Konkrete Befunde und betroffene CPU-Konstellationen
+-------------------------------------------------
+A. Prioritaet hoch: Modul-Mindestfeatures werden nicht vollstaendig zugelassen.
+   fpu.init akzeptiert FXSAVE/SSE2 oder XSAVE ohne AVX2 und publiziert danach
+   MODULE_SIMD=true. CPU-Inventar/Boot pruefen AES/PCLMUL nicht. Der R4M0-
+   Architekturcheck arch=1 ist nur x86_64, keine AVX2/AES/PCLMUL-Pruefung.
+   Der echte Aufrufpfad besitzt ebenfalls keine entsprechende Sperre.
+   Folge: SSE2-/AVX-only-CPUs oder VMs mit herausgefilterten Einzelbits koennen
+   freigegeben werden, obwohl spaeterer Modulcode #UD ausloesen kann. Das ist
+   eine Diskrepanz zwischen zugesagtem Buildprofil und Zulassung; der
+   vorhandene FXSAVE-Fallback sichert keine SSE2-Distribution zu.
+   Besitzer: Kernel fuer fruehe BSP-/AP-Zulassung; SDK fuer eine gemeinsame
+   dokumentierte Baseline, Contract/Diagnose nur fuer noetige Sichtbarkeit.
+   Quellen: [C02-C07, C26-C27].
+
+B. Prioritaet hoch: APs uebernehmen die BSP-Faehigkeiten ungeprueft.
+   Trampolin kopiert CR0/CR3/CR4/EFER; FPU-AP-Init kopiert BSP-Konfiguration
+   und XCR0. Ein eigener AP-CPUID-/XSAVE-Groessen-/Baselinevergleich fehlt
+   vor diesen Operationen und vor Online. Betroffen sind inkonsistente VM-
+   vCPU-Profile oder andere CPUs mit abweichenden exponierten Faehigkeiten;
+   eine Hybrid-CPU ist nicht allein wegen unterschiedlicher Kernklassen
+   inkompatibel. Risiko: Fault vor sauberer Ablehnung oder falsche globale
+   Faehigkeitszusage. Keine solche konkrete Hardwareabweichung gemessen.
+   Besitzer: Kernel CPU-/SMP-/FPU-Start; .4 vertieft den Zustandsvertrag.
+   Quellen: [C05, C08-C10].
+
+C. Prioritaet hoch: PAT-Konsistenz zwischen BSP und APs ist ungesichert.
+   Grafikmappings und WC-Zulassung benutzen die am BSP gelesene PAT-Tabelle.
+   Weder Trampolin noch AP-Entry pruefen/uebertragen PAT; im Kernel gibt es
+   keinen PAT-WRMSR-Pfad. Limine definiert PAT5=WC am Handoff, die Reset-
+   tabelle kennt dort WT. INIT allein vereinheitlicht PAT nicht; bereits
+   gleiche Firmwaretabellen sind moeglich. Bei Abweichung kann dieselbe
+   globale PTE auf CPUs unterschiedliche Cachetypen bedeuten. Der fehlende
+   Nachweis ist im Code belegt, eine aktuelle physische Inkonsistenz nicht.
+   Besitzer: Kernel CPU-/SMP- und Cache-/Mappingbesitzer, mit fruehem sicheren
+   Abgleich und lokalem Readback vor Online statt spaetem blindem WRMSR.
+   Quellen: [C02, C08-C10, C17-C19], [H01 Abschnitt 14.12.4, H04].
+
+D. Prioritaet hoch fuer hohe IDs: x2APIC ist nicht Ende-zu-Ende umgesetzt.
+   Der BSP-CpuLocal startet mit CPUID.1.EBX[31:24], waehrend der spaetere
+   SMP-Plan die volle LAPIC-ID kennt. Lapic.Status.id und das initiale
+   IOAPIC-Ziel sind u8; keine spaetere BSP-Korrektur wurde gefunden.
+   Laufende IOAPIC-Auswahl akzeptiert nur AP-Ziele <=255. MSI/MSI-X schiebt
+   die von smp.irq_target erhaltene ID dagegen ohne entsprechende Grenze in
+   das konventionelle Nachrichtenadressfeld und schreibt address_high=0.
+   Auf Systemen mit APIC-IDs >255 koennen Ziele damit abgeschnitten oder
+   Nachrichten falsch gebildet werden; dafuer muessen keine 256 CPUs online
+   sein. Ohne bestaetigtes Remapping representierbare Ziele auswaehlen oder
+   den betroffenen Pfad ablehnen; volle IPI-IDs allein reichen nicht.
+   Besitzer: Kernel CPU/SMP/LAPIC sowie IOAPIC/MSI; Anschluss an .6/.18.
+   Quellen: [C02, C08, C11-C13], [H01 Abschnitt 13.12.8.1].
+
+
+Priorisierte Verbesserungsvorschlaege und Besitzgrenzen
+------------------------------------------------------
+1. Zuerst die vier Zulassungs-/Konsistenzbefunde A-D schliessen. Gemeinsame
+   Modulbaseline vor dem ersten Modulaufruf und pro AP pruefen; fehlende Bits
+   konkret melden. Ein langsameres Legacy-Modulprofil nur bei Produktbedarf.
+   PAT-Tabelle frueh fuer alle CPUs nachweisen. Hohe APIC-IDs Ende-zu-Ende
+   mit erlaubten IRQ-/MSI-Zielen verbinden. Bestehende .4/.6/.18 beruecksichtigen.
+
+2. Danach Inventar/Topologie gemaess .6/.7/.16/.17 erweitern: aktuelle Intel-
+   Topologieleaves 0x1F/0xB und ggf. Kernklasse 0x1A, AMD modellabhaengige
+   Topologieleaves (u.a. 0x8000001E und bei entsprechenden Modellen neuere
+   strukturierte Leaves), deterministische Cacheinfos und ACPI-Naehesichten.
+   Niemand darf BSP-Packagezahl oder eine APIC-ID als Kernrang missdeuten.
+
+3. Ein externes CPU-Energie-/Leistungsmodul mit klaren Besitzern vorsehen:
+   Intel HWP/EPP und AMD CPPC bevorzugt nach Faehigkeits-/Modellpruefung;
+   ACPI-P-/C-States nur bei vorhandenen, validierten Firmwarevertraegen.
+   Kernel stellt nur notwendige per-CPU-Ausfuehrungs-/MSR-/Idlemechanismen.
+   Richtlinien, Benutzerprofile und Darstellung gehoeren in Treiber/Service
+   und bestehende Apps. Energie, Temperatur, Takt und Wake-Verhalten messen;
+   keine Turbo- oder Akkulaufzeitwirkung aus einem CPUID-Bit ableiten.
+
+4. CPU-Betriebsdiagnose ausbauen: zuerst passiver Microcode-/Temperatur- und
+   APERF/MPERF-Readback, dann modellgebundene MCA/SMCA- und PMU-Unterstuetzung.
+   Kernel behaelt nur notwendigen Exception-/Register-/Counterbesitz;
+   Spectra ist Diagnose-/Messbesitzer. Microcode-Updates verlangen einen
+   eigenen fruehen, passenden Hersteller-/CPU-/Revisionsvertrag.
+
+5. TSC-Deadline als optionale Alternative mit bestehendem LAPIC-/PIT-Fallback
+   verfolgen. BMI/SHA/ERMS/CLFLUSHOPT/neuere SIMD nur fuer einen nachgewiesenen
+   Verbraucher optimieren; Crypto-/Speicheralgorithmen gehoeren in Library/
+   Protokoll und SDK. Alternative Hardwareentropie nur bei realem Zielbedarf.
+   VMX/SVM, IOMMU, PCID und eigene 1-GB-Seiten benoetigen jeweils einen
+   begruendeten Produktfall; ihr Fehlen ist allein kein Kompatibilitaetsfehler.
+
+Dies sind Analyseempfehlungen, keine fertige Implementierung. Die bestehenden
+15 Umsetzungsschritte .5-.19 bleiben offen. Ihre Detailplanung ist in der
+Roadmap-API; diese Analyse veraendert keine Ausfuehrungsfreigabe.
+
+
+Pruefung und verbleibende Grenzen
+---------------------------------
+Statische Aufruf-/Register-/Buildprofilauswertung und Abgleich mit offiziellen
+Primaerquellen. Vorhandene QEMU4-/OssiPC16-/R4Laptop4-Belege aus
+Docs/Diagnostics/SpectraAllCpu08447.json belegen Betrieb auf diesen konkreten
+Konfigurationen, keine Featureparitaet, keine allgemeine Hybrid-/NUMA-/hohe-
+APIC-ID-Abnahme und keine korrekte Ablehnung abgespeckter CPU-Profile.
+
+Keine Laufzeitdatei geaendert: kein Build, neuer Gastlauf, STANDARD oder
+DevCenter-Upload erforderlich. Keine neue Testsuite. Fuer spaetere Fixes
+gezielte bestehende Besitzerfaelle um fehlende Featurebits, abweichende APs,
+PAT5-WC/WT und sparse/hohe APIC-IDs ergaenzen; QEMU bleibt SMP4. Synthetische
+Fallen und Registerreadbacks ersetzen keine physische Energie-/NUMA-Abnahme.
+FPU-/IRQ-/Exception-Zustandserhalt wird vollstaendig erst in .4 bewertet.
+
+
+Quellstellen des analysierten Standes
+------------------------------------
+Zeilen beziehen sich auf den unveraenderten Quellstand vom 18.10.2026.
+[C01] Repositories/Kernel/Build.ps1:91
+[C02] Repositories/Kernel/Rust/platform/cpu.rs:10,143,190,241,266,297
+[C03] Repositories/SDK/r4os/build.zig:1602,1608,1669,1770,1776,1808
+[C04] Repositories/Kernel/Rust/boot/foundation.rs:145
+[C05] Repositories/Kernel/Rust/arch/fpu.rs:131,170,224,242,272
+[C06] Repositories/Kernel/Rust/loader/r4m.rs:154
+[C07] Repositories/Kernel/Rust/program/entry.rs:68
+[C08] Repositories/Kernel/Rust/arch/smp.rs:85,290,453,476,547
+[C09] Repositories/Kernel/arch/x86_64/ap_trampoline.S:51
+[C10] Repositories/Kernel/Rust/arch/percpu.rs:78
+[C11] Repositories/Kernel/Rust/arch/lapic.rs:172,207,287,360,425
+[C12] Repositories/Kernel/Rust/platform/irq_boot.rs:139
+      Repositories/Kernel/Rust/arch/ioapic.rs:222
+[C13] Repositories/Kernel/Rust/driver/api_msi.rs:232,351
+[C14] Repositories/Kernel/Rust/platform/clocksource.rs:100,160,304,436
+[C15] Repositories/Kernel/Rust/platform/timer_boot.rs:16
+      Repositories/Kernel/Rust/usb/wait.rs:138
+[C16] Repositories/Kernel/Rust/memory/page_tables.rs:203,217,310
+[C17] Repositories/Kernel/Rust/memory/root.rs:19,22,438
+[C18] Repositories/Kernel/Rust/memory/paging.rs:193,681
+[C19] Repositories/Kernel/Rust/gfx/driver_memory.rs:490,503
+[C20] Repositories/Kernel/Rust/arch/tlb.rs:64,85
+[C21] Repositories/Kernel/Rust/platform/acpi.rs:511
+      Repositories/Kernel/Rust/arch/smp_policy.rs:3
+[C22] Repositories/Kernel/Rust/arch/runtime.rs:274
+[C23] Repositories/Drivers/AcpiPlatform/src/platform.c:72
+      Repositories/Drivers/AcpiPlatform/README.md:3
+[C24] Repositories/Kernel/Rust/boot/crash.rs:415
+[C25] Repositories/Protocols/R4Tls/src/main.zig:4,1789,1820
+[C26] DevKit/Toolchains/Zig/lib/std/crypto/aes.zig:9
+[C27] DevKit/Toolchains/Zig/lib/std/crypto/ghash_polyval.zig:287
+[C28] Repositories/SDK/r4os/secure_random.zig:4,8,56
+[C29] Repositories/Protocols/R4Tls/src/main.zig:810
+      Repositories/Protocols/R4Auth/src/main.zig:401
+      Repositories/Services/SshService/src/main.zig:593
+      Repositories/SDK/r4os/app_web.zig:1744
+
+Unveraenderte Ausgangscommits:
+Kernel: 62835c4582d1f9c2b9df180af12581b8cdcad694
+SDK: 66c0ec3eeac8bf940f29afd515a7c6eba4aab61d
+Contract: 03195b2a2e7461c72a4d0d6b645ae24319ba6315
+R4TLS: 6664035923a08b4fff73b3a880c04ec36c69f185
+ACPIPLAT: 14d68084fef81b4f445e41c752fd7deaea916ffc
+DevKit: d362a4c20a651338cec678d6c177063ebfb12cb2
+
+
+Offizielle Architektur-/Herstellerreferenzen
+--------------------------------------------
+Abgerufen 18.10.2026; Architekturvertrag und Codebefund getrennt bewertet.
+[H01] Intel SDM, Vol. 3, Order 325384-093US, September 2026:
+      APIC/x2APIC, TLB, PAT/MTRR, Power, MCA, PMU und Microcode.
+      https://cdrdv2.intel.com/v1/dl/getContent/671447
+      Uebersicht: https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html
+[H02] AMD CPUID Specification 25481, Rev. 2.34, September 2010,
+      nur fuer die dort spezifizierten Legacy-/AES-/PCLMUL-/NX-Bits;
+      keine aktuelle Zen-Topologie- oder Gesamtfeatureliste daraus abgeleitet.
+      https://www.amd.com/content/dam/amd/en/documents/archived-tech-docs/design-guides/25481.pdf
+[H03] AMD AOCL API Guide 68552, Version 5.3, Cpuid C++ APIs:
+      heutiges erweitertes Inventar als Vergleich, kein R4OS-Verbrauchernachweis.
+      https://docs.amd.com/r/en-US/68552-AOCL-api-guide/Cpuid-C-APIs
+[H04] Offizielles Limine Protocol, x86-64 machine state und PAT-Handoff.
+      https://raw.githubusercontent.com/limine-bootloader/limine-protocol/trunk/PROTOCOL.md
+[H05] AMD EPYC 8004 Windows Server Tuning Guide 58317, Rev. 1.0,
+      September 2023, Abschnitt 3.6 CPPC und 3.7 NUMA. Die beschriebenen
+      Windows-Einstellungen wurden nicht auf R4OS uebertragen/getestet.
+      https://docs.amd.com/api/khub/documents/RlrxPUfWZYp8Sdn50~xx7Q/content
+[H06] Intel Digital Random Number Generator Software Implementation Guide:
+      Featurepruefung, Carry-Flag und begrenzte Wiederholung.
+      https://www.intel.com/content/www/us/en/developer/articles/guide/intel-digital-random-number-generator-drng-software-implementation-guide.html
+
+Ergaenzend: AMD CPPC Performance Priority 69206, Rev. 1.10, Maerz 2026,
+als Entwurf fuer manche Zen6-Produkte; nicht Bestandteil der R4OS-Basis
+und hier keine Hardwareverfuegbarkeit oder Umsetzung behauptet:
+https://docs.amd.com/api/khub/documents/GxcqEy4C6j3dRMU3DJpOcQ/content
+AMD APM 24593 Rev. 3.44 wurde als aktuelle Publikation gefunden; sein
+Volltext liess sich beim Abruf nicht verlaesslich laden. Keine vorgetaeuschte
+Detailpruefung dieses Volltexts. Die Befunde oben beruhen auf den lesbaren
+Primaerquellen und dem angegebenen R4OS-Quellstand.

@@ -1,0 +1,1312 @@
+# 0.84.X Kernel Optimierung
+
+**Status:** Abgeschlossen
+
+## Leitbild
+0.84.X entwickelt den nach 0.83.X vollständig in Rust vorliegenden Kernel gezielt weiter. Klar abgegrenzte Arbeiten verbessern Stabilität, Wartbarkeit und Performance auf Grundlage konkreter Befunde. Jede Unterversion verfolgt ein nachvollziehbares Ziel; bestehende API-/ABI-, Besitzer- und Ressourcenverträge bleiben erhalten. Änderungen erfolgen beim zuständigen Besitzer und werden mit den betroffenen vorhandenen Prüfungen abgesichert.
+
+Am Ende jeder Unterversion mit möglicher Performancewirkung wird auf dem abschließenden Artefaktstand genau ein vollständiger Spectra STANDARD ausgeführt. QEMU dieses Hosts bleibt SMP4; native Hardware nutzt alle verfügbaren schedulierbaren CPUs. Seit 0.84.47 gilt spectra-standard-3 mit eigener fester Referenz; frühere Suite-2-Nachweise behalten ihre historische Methodik. Der unveränderte vollständige Export wird ins DevCenter hochgeladen und dort einschließlich aller Rohdaten und sechs gültiger Scores validiert. Bei unklarer Performancewirkung besteht die Laufpflicht ebenfalls; reine Analyse-, Planungs- oder Dokumentationsschritte ohne Laufzeitänderung benötigen keinen Pflichtlauf. Tests sind auf fachlich sinnvolle betroffene Fälle begrenzt. Auffällige Regressionen und Aussagegrenzen werden vor Abschluss nachvollziehbar bewertet.
+
+## Notizen
+Abschlussstand 18.10.2026
+Alle 47 Unterversionen und ihre 150 Aufgaben sind abgeschlossen. Finaler Stand: Release 0.84.47, Kernel 0.1.331, Spectra 0.1.24. Die acht aus der Kernelanalyse abgeleiteten Umsetzungsschritte sind erledigt; es besteht kein offener Restauftrag dieser Releasefamilie. Vollständiges Abschlusschangelog: Docs/Changelogs/V0.84.X.txt.
+
+Umgesetzte Reihenfolge
+0.84.1–4 Stackgrundlagen; 0.84.5–9 fünf Fehlerbehebungen; 0.84.10–16 Diagnosebereinigung und sechs Spectra-Erweiterungen; 0.84.17–20 Altcode und alte Kompatibilität; 0.84.21–25 Speicheroptimierungen; 0.84.26–27 Spinlocks und CPU-Lastausgleich; 0.84.28–33 Netzwerk-, Datei- und Audiooptimierungen; 0.84.34–36 SerialLink-Entfernung, COM1-Registry-Policy und externer serieller Treiber mit variabler COM-API; 0.84.37 Kernelanalyse; 0.84.38–45 Codebereinigung und fachliche Dateiaufteilung; 0.84.46 neue Images mit 16 GB SYSTEM; 0.84.47 STANDARD auf allen verfügbaren CPUs.
+
+Tests minimieren
+Nur fachlich sinnvolle, tatsächlich betroffene vorhandene Fälle gezielt wiederverwenden und bündeln. Neue Einzelfälle nur für konkrete sonst ungesicherte Funktionen, Regressionen oder Besitzgrenzen ergänzen. Keine pauschalen Vollkataloge, zusätzlichen allgemeinen Testsuiten, Dauergates, Langzeitläufe oder Messkampagnen ohne Bedarf. Bestandene Prüfungen nur bei relevanter Folgeänderung, Fehler oder neuer konkreter Unsicherheit wiederholen. Reine Sichtung, Planung und Dokumentation braucht keine zusätzlichen Laufzeittests. Die Roadmapbereinigung ändert kein Laufzeitverhalten; deshalb kein weiterer Build oder STANDARD.
+
+Performance und Datenhaltung
+Unterversionen mit möglicher Performancewirkung schließen mit genau einem vollständigen STANDARD auf dem finalen Artefaktstand und geprüftem DevCenter-Upload ab; bei Unsicherheit gilt die Laufpflicht auch für Refactorings. Seit 0.84.47 ist Suite 3 verbindlich: gleiche Arbeit je verfügbarer CPU, gemeinsame Startbarriere, mindestens eine Sekunde aktive Aufwärmung und drei Batches, danach fünf Messbatches je Bereich. QEMU bleibt SMP4; echte Hardware nutzt ihre volle schedulierbare Kapazität. Historische Suite-1/2-Ergebnisse und Referenzen bleiben unverändert und werden nicht als Suite 3 neu bewertet.
+Den vollständigen unveränderten Schema-1-Export mit seiner run_id importieren; Host registrieren und eine fehlende referenzierte Baseline zuerst importieren. Anschließend per GET alle fünf Metriken, 30 Rohsamples, genaue Workerabschlüsse und sechs gültige score_validation-Bereiche prüfen. HTTP-Erfolg allein genügt nicht. Bei Uploadfehlern denselben Export verwenden; keinen zusätzlichen Benchmark allein für den Import starten. Alle echten Testläufe dürfen seit erneuter Nutzerfreigabe ins DevCenter; vollständige Laufexporte und Rohsamples gehören weiterhin nicht in Git. Methodik und Ablauf: Agents/Benchmark.txt sowie Docs/Diagnostics/SpectraStandardBenchmark.txt.
+
+Abschlussbelege und Grenzen
+Die finalen Suite-3-Läufe auf aktuellem Kernel sind für hetzner-qemu mit 4, ossipc mit 16 und r4laptop mit 4 CPUs vollständig im DevCenter validiert. Gemeinsamer Beleg: Docs/Diagnostics/SpectraAllCpu08447.json. Fachliche Ergebnisse, historische Fehlversuche, spätere Korrekturen und offene Aussagegrenzen stehen bei den jeweiligen Unterversionsberichten. STANDARD ersetzt keine nötige Funktionsprüfung, misst nicht jeden speziellen Hotpath und belegt keine allgemeine Hardware-/GPU- oder Performanceparität.
+
+## 0.84.1 Stackfehler und Grenzen eindeutig diagnostizieren
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Stackfehler dem genauen Modul, Prozess, Thread und Stacktyp zuordnen. Erschöpfte Programmreserve, Kernelstack-Guard, fehlendes physisches Budget, fehlgeschlagener VM-Commit und im aktuellen Kernelkontext gesperrtes Wachstum unterscheidbar machen. Ausgangspunkt für die folgenden Stackarbeiten; Messwerte und Fehlergründe nicht durch pauschale Stackvergrößerung verdecken.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Begrenzte residente Fehleraufnahme mit genauer Stackidentität und Ursache ergänzen.
+  - Notizen: Programm- und Kernelstack unterscheiden; Reserve, aktuelle Belegung, Guard, Faultadresse, unterbrochenen RSP und vorhandene Modul-/Instanz-/Threadgeneration verwenden. Fehlende Zuordnung ausdrücklich erhalten. Diagnose darf ursprünglichen Fehler und Besitzerzustand nicht verändern.
+- [Erledigt] #2 Vorhandene Crashausgabe und Spectra-Diagnose um die verwertbaren Stackgrenzen ergänzen.
+  - Notizen: Kernel liefert die sachlichen Daten; Spectra stellt sie im bestehenden Text-/JSON-Vertrag dar. Keine zweite Modul- oder Stackregistry und keine neue Diagnoseanwendung anlegen. Vorhandene Diagnoseausgaben konsistent auf die neuen Ursachen beziehen.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Tests minimieren: Nur fachlich sinnvolle, von der konkreten Änderung betroffene Prüfungen einsetzen. Vorhandene Fälle gezielt wiederverwenden und bündeln; neue Fälle nur für eine konkrete sonst ungesicherte Funktion, Regression oder Besitzgrenze ergänzen. Keine pauschalen Vollkataloge, neuen allgemeinen Suiten, Dauergates oder zusätzlichen Messkampagnen. Bestandene Prüfungen nur bei relevanter Folgeänderung, Fehler oder neuer konkreter Unsicherheit wiederholen. Betroffene Artefakte beim zuständigen Besitzer bauen und versionieren; RELEASE_VERSION nach Abschluss, Kernelversion nur bei geändertem Kernelartefakt und Modulversionen nur bei geänderten Modulartefakten anpassen. Dokumentation und betroffene Inventare nachführen. Vor Abschluss die mögliche Performancewirkung der tatsächlichen Änderungen kurz bewerten. Wenn sich die Unterversion auf Performance auswirken könnte, auf dem abschließenden Artefaktstand genau einen vollständigen Spectra STANDARD (spectra-standard-2) mit SMP4 ausführen; bei Unsicherheit besteht die Laufpflicht ebenfalls. Das gilt auch für Refactorings oder Änderungen an Synchronisation, Speicher, I/O, Scheduler, Lade-/Startpfaden und produktiver Instrumentierung mit möglicher Laufzeitwirkung. Den unveränderten vollständigen Schema-1-Export dieses Pflichtlaufs nach Agents/Benchmark.txt ins DevCenter hochladen und per GET fünf Metriken, 30 Rohsamples sowie alle sechs gültigen Scores/score_validation-Bereiche prüfen; eine fehlende referenzierte Suite-2-Baseline zuerst importieren. Bei Uploadfehlern denselben Export behalten und den Import korrigieren, keinen neuen Benchmark allein für den Upload starten. Reine Analyse-, Planungs- oder Dokumentationsänderungen ohne Änderung des Laufzeitverhaltens benötigen keinen Pflichtbenchmark; die Einordnung kurz begründen. Seit erneuter Userfreigabe dürfen auch die früher lokalen Testläufe ins DevCenter. Vollständige echte Laufexporte und Rohsamples bleiben außerhalb der Git-Repositories; dort stehen nur feste Referenzdeskriptoren und fachliche Kurzberichte. Fachliche Aussagegrenzen und auffällige Regressionen festhalten, ohne unbelegte Performancegewinne zu behaupten oder die Benchmarkmethode zur Ergebnisverbesserung zu ändern. Anschließend Sammelpush über den passenden Tools/Github-Starter.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: residente Stackfehlerdiagnose in Kernel 0.1.288 und Spectra 0.1.3, bestehende gezielte Host-/Contract-/SMP4-Prüfungen grün. Genau ein finaler STANDARD vollständig im DevCenter einschließlich Rohdaten und sechs gültiger Scores geprüft. Datei/I/O bleibt eine offene Performancebeobachtung ohne belegte Ursache; beim nächsten Pflichtvergleich verfolgen. Gemeinsame Belege und Grenzen: Docs/Core/KernelStack0841.json. Reale Laufexporte einschließlich Referenzen liegen ausschließlich im DevCenter/lokalen Artefaktcache; Git enthält nur Referenzdeskriptoren. Sammelpush erfolgreich.
+
+## 0.84.2 Stackbedarf beim Start, Laden und in Treiberarbeit senken
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Konkrete große lokale Zustände und unnötige Gesamtkopien in Start-, Loader- und Treiberpfaden aus dem Stack in explizit verwaltete residente Arbeitsobjekte verlagern. Besonders den Aufruferstack vor R4XStart und die festen 64-KB-Kernel-/Treiberworker entlasten. Kleine lokale Werte beibehalten; Reserven und Start-Commit nicht pauschal erhöhen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Konkrete große Frames und Kopien im erzeugten Start-/Loader-/Treiber-Code zu ihren Besitzern zurückverfolgen.
+  - Notizen: Bisherige Stackbefunde und vorhandene Artefakte nutzen; für jeden Umbau Aufruferstack, verschachtelten Bedarf und Objektlebensdauer benennen. Keine vollständige Modul-Testreihe oder neue Messkampagne anlegen.
+- [Erledigt] #2 Belegte Stackspitzen durch lebensdauergebundene residente Arbeitsobjekte und kleine Teilsnapshots beseitigen.
+  - Notizen: Bestehende Heap-/Treiber-CPU-Allokationsverträge nutzen. Aufnahme, Initialisierung, Nutzung und Freigabe beim ursprünglichen Besitzer halten; Speicherknappheit kontrolliert zurückgeben. Retention bei unbestätigtem Abbau erhalten.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Tests minimieren: Nur fachlich sinnvolle, von der konkreten Änderung betroffene Prüfungen einsetzen. Vorhandene Fälle gezielt wiederverwenden und bündeln; neue Fälle nur für eine konkrete sonst ungesicherte Funktion, Regression oder Besitzgrenze ergänzen. Keine pauschalen Vollkataloge, neuen allgemeinen Suiten, Dauergates oder zusätzlichen Messkampagnen. Bestandene Prüfungen nur bei relevanter Folgeänderung, Fehler oder neuer konkreter Unsicherheit wiederholen. Betroffene Artefakte beim zuständigen Besitzer bauen und versionieren; RELEASE_VERSION nach Abschluss, Kernelversion nur bei geändertem Kernelartefakt und Modulversionen nur bei geänderten Modulartefakten anpassen. Dokumentation und betroffene Inventare nachführen. Vor Abschluss die mögliche Performancewirkung der tatsächlichen Änderungen kurz bewerten. Wenn sich die Unterversion auf Performance auswirken könnte, auf dem abschließenden Artefaktstand genau einen vollständigen Spectra STANDARD (spectra-standard-2) mit SMP4 ausführen; bei Unsicherheit besteht die Laufpflicht ebenfalls. Das gilt auch für Refactorings oder Änderungen an Synchronisation, Speicher, I/O, Scheduler, Lade-/Startpfaden und produktiver Instrumentierung mit möglicher Laufzeitwirkung. Den unveränderten vollständigen Schema-1-Export dieses Pflichtlaufs nach Agents/Benchmark.txt ins DevCenter hochladen und per GET fünf Metriken, 30 Rohsamples sowie alle sechs gültigen Scores/score_validation-Bereiche prüfen; eine fehlende referenzierte Suite-2-Baseline zuerst importieren. Bei Uploadfehlern denselben Export behalten und den Import korrigieren, keinen neuen Benchmark allein für den Upload starten. Reine Analyse-, Planungs- oder Dokumentationsänderungen ohne Änderung des Laufzeitverhaltens benötigen keinen Pflichtbenchmark; die Einordnung kurz begründen. Seit erneuter Userfreigabe dürfen auch die früher lokalen Testläufe ins DevCenter. Vollständige echte Laufexporte und Rohsamples bleiben außerhalb der Git-Repositories; dort stehen nur feste Referenzdeskriptoren und fachliche Kurzberichte. Fachliche Aussagegrenzen und auffällige Regressionen festhalten, ohne unbelegte Performancegewinne zu behaupten oder die Benchmarkmethode zur Ergebnisverbesserung zu ändern. Anschließend Sammelpush über den passenden Tools/Github-Starter.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Kernel 0.1.289 hält große Start-/Loader-Arbeitsobjekte resident und initialisiert sie direkt am endgültigen Ort. Genaue Kill-/Unwind-Leihen und bestätigte Freigabe bleiben erhalten. Build/fmt/Clippy und vorhandene CHECK LOADER/CHECK THREAD auf SMP4 grün; produktiver ELF bytegleich mit geprüftem Kandidaten. Genau ein finaler STANDARD vollständig im DevCenter samt Rohdaten und sechs gültigen Scores validiert; Gesamt 100,69, Datei/I/O-Auffälligkeit aus 0.84.1 nicht wiederholt. Statische Frameverkleinerung ist belegt, kausaler Geschwindigkeitsgewinn nicht. Gemeinsame Belege/Grenzen: Docs/Core/KernelStack0842.json. Sammelpush erfolgreich.
+
+## 0.84.3 Große Stackframes gegen übersprungene Guardseiten absichern
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Große Stackanpassungen vor Nutzung ihrer lokalen Daten seitenweise abdecken, damit weder die bewegliche noch die terminale Guardgrenze übersprungen werden kann. Unterstützung in der gemeinsamen Freestanding-SDK-/Compileranbindung herstellen und bei den betroffenen Modularten aktivieren. Bestehendes bedarfsgerechtes Wachstum innerhalb der festen Reserve erhalten.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Benötigte Freestanding-Stackprobes samt Compiler-Aufrufvertrag beim SDK-Besitzer bereitstellen.
+  - Notizen: Aktuelle Buildschalter und erzeugte Prologe prüfen. Seitenweise Berührung vor großer Stacknutzung sicherstellen; insbesondere ersten großen R4XStart-Frame, verschachtelte Libraryaufrufe und feste Kernel-/Treiberstacks im Vertrag berücksichtigen. Bestehende ABI-Präfixe erhalten.
+- [Erledigt] #2 Probes in die gemeinsame Modul-Buildlogik integrieren und betroffene Artefakte neu bauen.
+  - Notizen: Gemeinsamen SDK-/Buildbesitzer verwenden, Windows und Linux gleich behandeln. Geänderte eingebettete Compilerhilfen und Modulcontainer korrekt versionieren. Die Fehlereinordnung aus 0.84.1 für erreichte Guard-/Reservegrenzen verwenden; keine neue Testsuite anlegen.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Dokumentiert in Docs/Core/KernelStack0843.json. Gezielte Zig-/C-Großframeproben und vorhandene SMP4-Browserintegration bestanden. Genau ein finaler STANDARD: 94f85f5f-d64b-45c3-8e28-131ab977b497, Gesamtindex 101.188495; unveränderter Export im DevCenter, 5 Metriken/30 Rohsamples/6 gültige Scores vollständig zurückgelesen. Echte Exporte und Rohsamples bleiben außerhalb Git. Sammelpush aller 131 betroffenen Repositories erfolgreich; Nachkontrolle sauber.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: SDK 0.64.23 mit seitenweisen Zig-/C-/C++-Stackprobes; 139 normale Module neu gebaut, 104 geänderte Artefakte versioniert, 35 bytegleich; alle 15 eingebetteten Fixtures unverändert. Gezielte Großframeproben und vorhandene SMP4-Browserintegration bestanden. Kernel 0.1.289 bleibt unverändert. Beleg: Docs/Core/KernelStack0843.json. Ein finaler STANDARD 94f85f5f-d64b-45c3-8e28-131ab977b497 (101.188495) mit vollständigem geprüftem DevCenter-Import. Sammelpush erfolgreich, Workspace sauber. Grenzen und erste nicht reproduzierte Audio-Beobachtung stehen im Bericht.
+
+## 0.84.4 R4X bei sicher abfangbarer Stackerschöpfung kontrolliert beenden
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Eindeutig zugeordnete Stackerschöpfung eines R4X-Prozesses nach sicherer Kontextprüfung über den bestehenden Prozessabschluss behandeln. Diagnose und Fehlerabschluss erhalten, ohne bei diesem zugelassenen Fall das ganze System anzuhalten. Beschädigte oder unklare Kernel-/Treiberstacks und nicht sicher lösbarer Kernelbesitz bleiben im terminalen Fehlerpfad.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Sichere Zulassung für den Abbruch bei genau zugeordneter R4X-Stackerschöpfung definieren und umsetzen.
+  - Notizen: Genaue Eintritts-/Fault-Zulassung implementiert. Originaler Caller und Fault IF-on/DF-clear; exakte Task-/Thread-/Instanzbindung, eigene terminale Guardseite, sichere Codeadresse und gesicherte residente Kernel-Rueckkehr ohne gehaltene Besitzer. Beleg und Grenzen: Docs/Core/KernelStack0844.json.
+- [Erledigt] #2 Abbruch von einem intakten residenten Kernelpfad an den vorhandenen Prozess-Reaper übergeben.
+  - Notizen: Rueckkehr ueber den privaten residenten Kernel-Frame zum bestehenden Exit/Reaper; failed/-4096. SMP4: Haupt-/Arbeitsthread samt Peer quittiert und gereapt, bestehender Prozess-Exit bestanden; privater kritischer IF-off-Gegenfall blieb terminal. Normaler Kernel ist bytegleich zum geprueften Kandidaten. Beleg: Docs/Core/KernelStack0844.json.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Dokumentiert in Docs/Core/KernelStack0844.json. Exakte SMP4-Main-/Worker-Abbrüche mit Peer-Reap, vorhandener Prozess-Exit und kritischer terminaler Gegenfall bestanden; normale Artefakte bytegleich, frisches BOOT-ELF und SMP4-Quick bestätigt. Genau ein finaler STANDARD cc7d7eb8-ac85-441c-a491-eab83061cda9, Index 101.272086; voller unveränderter DevCenter-Export samt 5 Metriken/30 Rohsamples/6 gültigen Scores zurückgeprüft. Rohdaten außerhalb Git. Sammelpush und saubere Synchronisierung aller betroffenen Repositories abgeschlossen.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Kernel 0.1.290 / Spectra 0.1.5. Genau zugelassene eigene R4X-Stackerschöpfung kehrt über einen residenten Kernel-Frame zum bestehenden Exit/Reaper zurück (failed/-4096); kritische/unklare Kontexte bleiben terminal. SMP4-Main-/Worker-Fälle samt Peer-Reap, vorhandener Prozess-Exit, kritischer Gegenfall und frisches SMP4-Quick bestanden. Beleg/Grenzen: Docs/Core/KernelStack0844.json. Ein STANDARD cc7d7eb8-ac85-441c-a491-eab83061cda9 (101.272086) vollständig im DevCenter geprüft. Sammelpush erfolgreich, Repositories sauber synchron.
+
+## 0.84.5 Kernelpanic bei großen einzelnen Datei-I/O-Aufrufen verhindern
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Größenannahme für einzelne Dateiübertragungen mit ihrem vorzeichenbehafteten i32-Rückgabevertrag abstimmen. Transferlängen ab 2147483648 Bytes dürfen nicht erst nach erfolgreichem Lesen oder Schreiben durch eine expect-Konvertierung einen Kernelpanic auslösen. Zu große Anfragen vor Dateiseiteneffekten kontrolliert ablehnen oder über einen ausdrücklich passenden bestehenden Teiltransfervertrag behandeln.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Größenannahme vor Aufnahme/Ausführung der betroffenen Dateiübertragungen korrigieren.
+  - Notizen: Gemeinsame Grenze INT32_MAX vor Request-Aufnahme und erneut vor Ausfuehrung; fuenf direkte Dateioperationen und StreamWrite sichern dieselbe Grenze. TooLarge statt spaeter i32-Panic. Bestehende u64-Dateigroessen, moderne Offsets und Lockbereiche bleiben erhalten. Kernel 0.1.291 gebaut, fmt/Clippy bestanden.
+- [Erledigt] #2 Grenzen und Nebenwirkungsfreiheit gezielt absichern und API-/SDK-Aussagen nachführen.
+  - Notizen: SMP4: 28 ueberlange reale ABI-Aufrufe sofort abgewiesen, Request-ID null; INT32_MAX erreicht gezielt die ungueltige Pfadpruefung. Originaldatei, laufender Stream und Ausgabe erhalten; EOF oberhalb 4 GB, bestehender ASYNC_IO-Check und normales Poweroff bestanden. Nur kleine echte Puffer/Dateien. Vertrag/SDK: Docs/API/FileTransferLimits.txt, Agents/API-ABI.txt und SDK README. Beleg: Docs/Core/KernelIo0845.json.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Dokumentiert in Docs/Core/KernelIo0845.json und Docs/API/FileTransferLimits.txt. Gezielte SMP4-/Bestands-I/O-Prüfung, normales Poweroff und SMP4-Quick bestanden. Genau ein STANDARD 0be5c8b9-0ed1-4cd7-895c-24a3e5c10d7d, Index 103.079967; vollständiger unveränderter Export samt 5 Metriken/30 Rohsamples/6 gültigen Scores im DevCenter zurückgeprüft. Echte Rohdaten außerhalb Git. Sammelpush aller sechs Besitzer erfolgreich, Repositories sauber synchron.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Kernel 0.1.291 / Spectra 0.1.6. Einzelne Dateiübertragungen werden vor Aufnahme/Ausführung auf INT32_MAX begrenzt; bestehende u64-Offsets/Gesamtgrößen bleiben erhalten. SMP4: 28 sofortige Ablehnungen ohne Datei-/Stream-/Ausgabeänderung, oberer gültiger Randwert, 64-Bit-EOF-Offset, bestehender ASYNC_IO-Check und SMP4-Quick bestanden. Beleg/Grenzen: Docs/Core/KernelIo0845.json; API/SDK: Docs/API/FileTransferLimits.txt. Ein STANDARD 0be5c8b9-0ed1-4cd7-895c-24a3e5c10d7d (103.079967) vollständig im DevCenter geprüft; Sammelpush und Nachkontrolle sauber.
+
+## 0.84.6 TCP-Dropzähler gegen überlaufbedingten Kernelpanic absichern
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Den verbindungsbezogenen 32-Bit-rx_drops-Zähler so führen, dass kumulierte Verwerfungen auch bei lange lebenden Verbindungen keinen Kernelpanic auslösen. Sämtliche Erhöhungen bei vollen Empfangspuffern, Sequenzablehnungen, Out-of-Order-Verwerfungen und verdrängten Slots über eine konsistente nicht panikende Zähleroperation führen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Alle verbindungsbezogenen Drop-Erhöhungen mit definiertem Verhalten an der Obergrenze vereinheitlichen.
+  - Notizen: Alle sechs verbindungsbezogenen u32-Drop-Erhöhungen saturieren bei UINT32_MAX. Bestehende Paket-/Byteeinheiten und globale u64-Zähler bleiben unverändert; keine API-/ABI-Änderung. Kernel 0.1.292 gebaut, fmt/Clippy bestanden; Spectra 0.1.6 bytegleich.
+- [Erledigt] #2 Grenzübergänge im vorhandenen TCP-/Spectra-Prüfpfad mit begrenztem Zustand absichern.
+  - Notizen: Vorhandene TCP-Bufferlimit-Probe erweitert: normaler voller RX-Ring, MAX-1 per veraltetem Reset zu MAX, Paket- und Byte-Drops halten MAX, globaler realer Zuwachs exakt sechs. Seed nur in eigener Probeverbindung unter TCP-Besitzer, vor Freigabe auf echten Wert zurückgesetzt. SPECTRA CHECK NETWORK LIMIT auf SMP4 mit allen zehn bestehenden Fällen und normalem Poweroff bestanden. Beleg: Docs/Core/KernelTcp0846.json.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Abschluss 0.84.6: Kernel 0.1.292 saturiert alle sechs 32-Bit-TCP-Dropzaehlerpfade; globale 64-Bit-Zaehler und deren Einheiten bleiben erhalten. Bestehendes CHECK NETWORK LIMIT mit gezielter Grenzprobe (10 Faelle), Format/Clippy, aktuelles BOOT-ELF und SMP4-Quick bestanden. Genau ein STANDARD SMP4 fbdb36bb-2726-495a-8f8f-697cae478b03, Gesamtindex 99.006520; unveraenderter Export im DevCenter mit 5 Metriken/30 Samples/6 gueltigen Scores verlustfrei gegengeprueft. Drei betroffene Repositories gemeinsam veroeffentlicht. Einzelmessung ohne kausale Performanceaussage; Rohdaten ausschliesslich ausserhalb Git. Beleg: Docs/Core/KernelTcp0846.json.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abschluss 0.84.6: Kernel 0.1.292 saturiert alle sechs 32-Bit-TCP-Dropzaehlerpfade; globale 64-Bit-Zaehler und deren Einheiten bleiben erhalten. Bestehendes CHECK NETWORK LIMIT mit gezielter Grenzprobe (10 Faelle), Format/Clippy, aktuelles BOOT-ELF und SMP4-Quick bestanden. Genau ein STANDARD SMP4 fbdb36bb-2726-495a-8f8f-697cae478b03, Gesamtindex 99.006520; unveraenderter Export im DevCenter mit 5 Metriken/30 Samples/6 gueltigen Scores verlustfrei gegengeprueft. Drei betroffene Repositories gemeinsam veroeffentlicht. Einzelmessung ohne kausale Performanceaussage; Rohdaten ausschliesslich ausserhalb Git. Beleg: Docs/Core/KernelTcp0846.json.
+
+## 0.84.7 Initialisierte Datenlänge bei komprimierten NTFS-Dateilesungen einhalten
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Den komprimierten NTFS-Lesepfad an dieselbe initialized_size-Grenze wie gewöhnliche nichtresidente Dateien binden. Angeforderte logische Dateibytes hinter dem initialisierten Bereich müssen Nullen liefern, auch wenn dort gemappte oder dekomprimierte Nichtnullwerte liegen. Dateigröße, initialisierte Länge und physische/dekodierte Einheit getrennt behandeln.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Initialisierte Ausgabegrenze vor beziehungsweise unabhängig von der Kompressionsverzweigung anwenden.
+  - Notizen: Kernel 0.1.293 begrenzt den initialisierten logischen Praefix vor der Raw-/Kompressionswahl. Ganz uninitialisierte Bereiche loesen kein Daten-I/O aus; der Schwanz wird erst nach erfolgreichem Praefix genullt. Resident-, EOF-, Runlist- und Fehlervertraege bleiben erhalten. Besitzerbuild, Format und Clippy bestanden. Gezielter vorhandener Spectra-NTFS-Fall ist in Vorbereitung; Kurzbeleg Docs/Core/KernelNtfs0847.json.
+- [Erledigt] #2 Die genaue Initialisierungsgrenze in bestehenden NTFS-Lesefällen nachweisen.
+  - Notizen: Spectra 0.1.7: bestehender CHECK NTFS /INITIALIZED liest nur die markierte Wegwerfableitung des vorhandenen Windows-NTFS4K-Fixtures. 29 gezielte Lesezugriffe im aktuellen SMP4-Gast bestanden: Raw-Kompressionseinheiten, echtes LZNT1, komprimierte Sparse-Einheiten, unkomprimierte Kontrolle, Praefix-/Einheits-/EOF-Grenzen und Ausgabecanaries. Defekter initialisierter LZNT1-Praefix bleibt Fehler; sein ganz uninitialisierter Schwanz liefert Nullen. Fixturehash vor/nach identisch, regulaerer Poweroff. Belege gemeinsam in Docs/Core/KernelNtfs0847.json.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Abschluss 0.84.7: Kernel 0.1.293 haelt initialized_size auch fuer komprimierte NTFS-Daten ein; nur der gueltige Praefix wird gelesen, der logische Schwanz genullt. Spectra 0.1.8 erweitert den bestehenden CHECK NTFS gezielt und leitet seine Selbstversion aus module.R4MF ab. 29 passende Lesezugriffe, aktuelles BOOT-ELF, Format/Clippy und SMP4-Quick bestanden. Genau ein abschliessender STANDARD auf dem finalen Artefaktstand: 0caf8fdb-3afc-4e40-ae84-b05b8a299566, Gesamtindex 101.338359; unveraenderter Export im DevCenter mit 5 Metriken/30 Samples/6 gueltigen Scores verlustfrei gegengeprueft. Sammelpush abgeschlossen. Einzelmessung ohne kausale Performanceaussage; Rohdaten ausserhalb Git. Ergebnis, Grenzen und gemeinsame Belege: Docs/Core/KernelNtfs0847.json.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abschluss 0.84.7: Kernel 0.1.293 haelt initialized_size auch fuer komprimierte NTFS-Daten ein; nur der gueltige Praefix wird gelesen, der logische Schwanz genullt. Spectra 0.1.8 erweitert den bestehenden CHECK NTFS gezielt und leitet seine Selbstversion aus module.R4MF ab. 29 passende Lesezugriffe, aktuelles BOOT-ELF, Format/Clippy und SMP4-Quick bestanden. Genau ein abschliessender STANDARD auf dem finalen Artefaktstand: 0caf8fdb-3afc-4e40-ae84-b05b8a299566, Gesamtindex 101.338359; unveraenderter Export im DevCenter mit 5 Metriken/30 Samples/6 gueltigen Scores verlustfrei gegengeprueft. Sammelpush abgeschlossen. Einzelmessung ohne kausale Performanceaussage; Rohdaten ausserhalb Git. Ergebnis, Grenzen und gemeinsame Belege: Docs/Core/KernelNtfs0847.json.
+
+## 0.84.8 Gehaltene PS/2-Modifier ohne vorzeitigen 750-ms-Reset erhalten
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die zeitbasierte Rücksetzung weiterhin gehaltener Ctrl-/Alt-/AltGr-Tasten beseitigen. Nach einer Tastenkombination darf eine Modifier-Taste nicht allein wegen 750 ms seit ihrem Druck als losgelassen gelten. Tastenkombinationen bleiben bis zum tatsächlichen Loslassen oder einem bestätigten Eingabe-Reset wirksam.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Die verstrichene Haltedauer als alleinigen Loslassgrund entfernen und echte Resets konsistent abbilden.
+  - Notizen: Kernel 0.1.294 entfernt den 750-ms-Reset samt Zeit-/Key-seen-Buchhaltung. Modifier bleiben bis zum echten Release oder bestaetigten Reset erhalten. Bei Reset der physischen Queue werden dieselbe verworfene Scanfolge und die Text-/Status-/E0-Projektion konsistent geloest; init/disable setzen ebenfalls zurueck. IRQ-sicherer Metadatenbesitzer, Runtime-Sequenz und Wakes bleiben erhalten. Build, Format und Clippy bestanden; keine API/ABI-Aenderung. Beleg: Docs/Core/KernelKeyboard0848.json.
+- [Erledigt] #2 Gehaltene Tastenkombinationen und tatsächliches Loslassen im bestehenden Inputpfad gezielt absichern.
+  - Notizen: Spectra 0.1.9 erweitert den vorhandenen CHECK INPUT um /MODIFIERS. Drei echte QMP-PS/2-Haltefolgen mit Ctrl/Alt/AltGr ueber 750 ms samt Releases und uebereinstimmenden physischen Snapshots/Codepoints bestanden. Der gezielt wiederholte Resync-Fall beweist einen bestaetigten Queue-Reset ohne vorheriges Ctrl-Release sowie sauberen Folgeeingang/Abschluss. 312 ausgewaehlte erfolgreiche Hosttransitionen, vier Pruefgruppen, jeweils regulaerer Poweroff und Layoutrestauration. Nur der anfangs falsch auf CR statt LF wartende Diagnose-Resync wurde wiederholt; gruene Haltefolgen und unveraenderter Kernel blieben erhalten. Gemeinsame Belege und Grenzen: Docs/Core/KernelKeyboard0848.json.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Abschluss 0.84.8: Kernel 0.1.294 erhaelt Ctrl/Alt/AltGr bis zum echten Release oder bestaetigten Resync; der 750-ms-Reset ist entfernt. Physische Queue und Text-/Status-/E0-Projektion werden bei echten Resets konsistent geloest. Spectra 0.1.9: vier gezielte Pruefgruppen mit echten QMP-PS/2-Haltefolgen, Releases und begrenztem Resync bestanden; nur der betroffene Diagnosefall wurde nach Korrektur seiner Enter-Erwartung wiederholt. Build, Format/Clippy, aktuelles BOOT-ELF und SMP4-Quick bestanden. Genau ein abschliessender STANDARD SMP4 f4a0801a-782e-45ee-8365-52724f64107f, Gesamtindex 104.192104; unveraenderter Export im DevCenter mit 5 Metriken/30 Samples/6 gueltigen Scores verlustfrei geprueft. Sammelpush abgeschlossen. Einzelmessung ohne kausale Performanceaussage, Rohdaten ausserhalb Git. Gemeinsamer Ergebnis-/Grenzbeleg: Docs/Core/KernelKeyboard0848.json.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abschluss 0.84.8: Kernel 0.1.294 erhaelt Ctrl/Alt/AltGr bis zum echten Release oder bestaetigten Resync; der 750-ms-Reset ist entfernt. Physische Queue und Text-/Status-/E0-Projektion werden bei echten Resets konsistent geloest. Spectra 0.1.9: vier gezielte Pruefgruppen mit echten QMP-PS/2-Haltefolgen, Releases und begrenztem Resync bestanden; nur der betroffene Diagnosefall wurde nach Korrektur seiner Enter-Erwartung wiederholt. Build, Format/Clippy, aktuelles BOOT-ELF und SMP4-Quick bestanden. Genau ein abschliessender STANDARD SMP4 f4a0801a-782e-45ee-8365-52724f64107f, Gesamtindex 104.192104; unveraenderter Export im DevCenter mit 5 Metriken/30 Samples/6 gueltigen Scores verlustfrei geprueft. Sammelpush abgeschlossen. Einzelmessung ohne kausale Performanceaussage, Rohdaten ausserhalb Git. Gemeinsamer Ergebnis-/Grenzbeleg: Docs/Core/KernelKeyboard0848.json.
+
+## 0.84.9 Linke und rechte Shift-/Ctrl-Tasten korrekt gemeinsam auswerten
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die gemeinsame Modifierwirkung aus den getrennten gehaltenen linken und rechten PS/2-Tasten ableiten. Werden beide Shift- oder beide Ctrl-Tasten gehalten und eine davon losgelassen, bleibt der Modifier wirksam, bis auch die andere Taste losgelassen wird. Text-/Steuercodes und veröffentlichter Modifierzustand müssen denselben physischen Zustand abbilden.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Modifier aus getrennten linken/rechten Held-Bits oder der bestehenden physischen Verfolgung ableiten.
+  - Notizen: Kernel 0.1.295 nutzt die vorhandenen physischen Held-Bits e1/e5 fuer Shift und e0/e4 fuer Ctrl. Die doppelte gemeinsame Boolablage und deren Make-/Break-Zuweisungen entfallen; Release einer Seite laesst die andere aktiv. Keine Haltezaehler, E0/Replays/Reset-/Metadaten-/Wake-/Snapshot-Vertraege bleiben erhalten. Build, Format und Clippy bestanden. Gemeinsamer Beleg: Docs/Core/KernelKeyboard0849.json.
+- [Erledigt] #2 Beide Überlappungsreihenfolgen und vollständiges Loslassen gezielt nachweisen.
+  - Notizen: Spectra 0.1.10 erweitert vorhandene Input-/QMP-Helfer um /MODIFIERS /OVERLAP. Ein aktueller SMP4-Gast besteht SHIFT_LR, SHIFT_RL, CTRL_LR und CTRL_RL: verbleibende Seite und Zeichen/Steuercode stimmen nach erstem Release, nach zweitem Release normale Zeichen und Snapshot0. Vier Wiederholungsflags wurden tatsaechlich im Gast beobachtet; keine zusaetzlichen Haltezustaende. 36 begrenzte QMP-Transaktionen, alle Tasten losgelassen, Layout restauriert, regulaerer Poweroff. Gruene Zeit-/Resyncfaelle aus0.84.8 nicht wiederholt. Gemeinsamer Beleg: Docs/Core/KernelKeyboard0849.json.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Abschluss 0.84.9: Kernel 0.1.295 leitet Shift und Ctrl aus den vorhandenen getrennten physischen Held-Bits beider Seiten ab. Ein Release loest nur die eigene Seite; es gibt keinen zusaetzlichen Haltezaehler. Alt/AltGr, E0-Identitaet, Reset-/Metadaten-/Wake- und ABI-Vertraege bleiben erhalten. Spectra 0.1.10: vier gezielte Ueberlappungs-/Releasefolgen mit echten QMP-PS/2-Ereignissen und passenden physischen Snapshots/Codepoints bestanden; Wiederholungsbeobachtungen sind im Beleg getrennt erfasst. Build, Format/Clippy, aktuelles BOOT-ELF und SMP4-Quick bestanden. Genau ein abschliessender STANDARD SMP4 466bc9c3-265f-4d11-bb0d-a77f835661ba, Gesamtindex 104.057729; unveraenderter DevCenter-Export mit 5 Metriken/30 Samples/6 gueltigen Scores verlustfrei geprueft. Sammelpush abgeschlossen. Einzelmessung ohne kausale Performanceaussage; Rohdaten ausserhalb Git. Gemeinsamer Ergebnis-/Grenzbeleg: Docs/Core/KernelKeyboard0849.json.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abschluss 0.84.9: Kernel 0.1.295 leitet Shift und Ctrl aus den vorhandenen getrennten physischen Held-Bits beider Seiten ab. Ein Release loest nur die eigene Seite; es gibt keinen zusaetzlichen Haltezaehler. Alt/AltGr, E0-Identitaet, Reset-/Metadaten-/Wake- und ABI-Vertraege bleiben erhalten. Spectra 0.1.10: vier gezielte Ueberlappungs-/Releasefolgen mit echten QMP-PS/2-Ereignissen und passenden physischen Snapshots/Codepoints bestanden; Wiederholungsbeobachtungen sind im Beleg getrennt erfasst. Build, Format/Clippy, aktuelles BOOT-ELF und SMP4-Quick bestanden. Genau ein abschliessender STANDARD SMP4 466bc9c3-265f-4d11-bb0d-a77f835661ba, Gesamtindex 104.057729; unveraenderter DevCenter-Export mit 5 Metriken/30 Samples/6 gueltigen Scores verlustfrei geprueft. Sammelpush abgeschlossen. Einzelmessung ohne kausale Performanceaussage; Rohdaten ausserhalb Git. Gemeinsamer Ergebnis-/Grenzbeleg: Docs/Core/KernelKeyboard0849.json.
+
+## 0.84.10 Überholte Kernelmessungen und unbenutzte Diagnose-Einstiege bereinigen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die im Kernelbefund identifizierten alten Ad-hoc-Messungen, unbenutzten C-Wrapper und leeren Testaltstrukturen bereinigen. Funktionale Assertions und weiterhin benötigte Diagnosehelfer erhalten. Die Bereinigung folgt auf die Stackgrundlagen und die fünf Fehlerbehebungen; sie ersetzt weder die sechs nachfolgenden Spectra-Erweiterungen noch die bereits geplante SerialLink-Entfernung.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Alte SMP-Beschleunigungshürde und unkalibrierte Heap-Zeitmessungen entfernen.
+  - Notizen: Ergebnis: unfairen Einzelvergleich und 1,050x-Passgrenze sowie rohe RDTSC-Heapzeiten entfernt. Ergebnisgleichheit, CPU-Platzierung/-Masken, Monotonie, Deadlines und funktionale Heap-/IRQ-/TLB-/Lock-/Besitzpruefungen bleiben. Bestehende Markerparser und Fehlerfixtures angepasst und bestanden. Gemeinsamer Beleg: Docs/Core/KernelDiag08410.json.
+- [Erledigt] #2 Unbenutzte Diagnose-Wrapper und leere Altstruktur entfernen; aktive Aufrufwege konsistent halten.
+  - Notizen: Ergebnis: fuenf ohne aktive Aufrufer verbliebene private C-Einstiege und leere Tests-Altverzeichnisse entfernt; interne Funktionen/USB-Faelle und Spectra-Vertraege erhalten. TCP-Bootaufruf gemeinsam mit Quick auf expliziten bestehenden CHECK NETWORK LIMIT umgestellt. Privates aktuelles BOOT-Quick-Image, zehn Spectra-Faelle und Kernelinvarianten bestanden. Kein behaupteter Gewinn aus bereits verworfenen Wrappern. Beleg: Docs/Core/KernelDiag08410.json.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Abschluss: Kernel 0.1.296, Spectra unveraendert 0.1.10, Release 0.84.10. Besitzer-Build, Format/Clippy, vorhandene Parserfixtures, aktuelles Test-/Quick-BOOT-ELF und SMP4-Quick bestanden. Genau ein abschliessender STANDARD SMP4 ff74b980-e535-4c26-acca-f0896fc9fdef, Gesamtindex 98.018758; unveraendertes Original mit 5 Metriken/30 Samples/6 gueltigen Scores im DevCenter verlustfrei per GET geprueft. Sammelpush abgeschlossen. Rohdaten ausserhalb Git. Einzelmessung ohne kausale Performancebehauptung; invasiver 2000-op HeapCheck nicht erneut ausgefuehrt, SMP HEAPPROBE bestanden. Gemeinsamer Ergebnis-/Grenzbeleg: Docs/Core/KernelDiag08410.json.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abschluss: Kernel 0.1.296, Spectra unveraendert 0.1.10, Release 0.84.10. Besitzer-Build, Format/Clippy, vorhandene Parserfixtures, aktuelles Test-/Quick-BOOT-ELF und SMP4-Quick bestanden. Genau ein abschliessender STANDARD SMP4 ff74b980-e535-4c26-acca-f0896fc9fdef, Gesamtindex 98.018758; unveraendertes Original mit 5 Metriken/30 Samples/6 gueltigen Scores im DevCenter verlustfrei per GET geprueft. Sammelpush abgeschlossen. Rohdaten ausserhalb Git. Einzelmessung ohne kausale Performancebehauptung; invasiver 2000-op HeapCheck nicht erneut ausgefuehrt, SMP HEAPPROBE bestanden. Gemeinsamer Ergebnis-/Grenzbeleg: Docs/Core/KernelDiag08410.json.
+
+## 0.84.11 Kernelheap-Prüfungen in Spectra aufnehmen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die bisher vor allem beim Boot aufgerufenen funktionalen Prüfungen des echten Kernelallokators über eine gezielte Erweiterung von SPECTRA CHECK MEMORY zugänglich machen. Allokation/Reallokation/Freigabe, Alignment, Wiederverwendung, Double-Free-Abweisung, Commit/Uncommit, Retention und Rollback mit genauer Ressourcenbilanz prüfen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Bestehende Heap-Prüffälle für einen begrenzten, wiederholbaren Aufruf nach dem Boot vorbereiten.
+  - Notizen: Ergebnis: sieben bestehende Fallgruppen teilen eigenen residenten Ledger und genaue Task-Unwind-Zulassung. Eigene Rueckgaben ersetzen globale Leckannahmen. Rust-Dispatch behaelt seine Oracle unter kurzem Allocatorbesitz; Freigabenachweis folgt echten Blockgrenzen. Veraltete Innenheader beim Coalescing ungueltig gemacht. Fehlversuch und sichere Aufnahme-/Freigabegrenzen bleiben im gemeinsamen Beleg.
+- [Erledigt] #2 Gezielte Kernelheap-Auswahl und strukturierte Ergebnisse in CHECK MEMORY integrieren.
+  - Notizen: Ergebnis: explizites CHECK MEMORY /KERNELHEAP mit strukturiertem Ergebnis, JSON/Export, Header-/Kapazitaetsrand und Verfuegbarkeit. Additiver R4DEV-v15-Slot und neuer fester 168-Byte-v1-Datensatz; bestehende Praefixe/Typen/Konstanten erhalten. Contract0.64.12/SDK0.64.24 publiziert und exakt gepinnt; Spectra0.1.11. Keine allgemeine neue Suite oder Ad-hoc-Zeitmessung.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Abnahme: Besitzer-Builds, alte API-Praefixe/ABI-Gate, Format/Clippy, zwei gezielte siebenteilige R4X-Heapaufrufe samt eigener Bilanz und JSON-Export sowie aktuelles BOOT-ELF/SMP4-Quick bestanden. Bestandene Argumentablehnung bei identischem Spectra-Artefakt wiederverwendet. Genau ein STANDARD mit vollstaendig geprueftem Originalimport ins DevCenter und abschliessendem Sammelpush. Rohdaten ausserhalb Git; Details und Grenzen beim gemeinsamen Unterversionsbeleg.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Kernel 0.1.297/Spectra 0.1.11 ermoeglichen begrenzte Kernelheap-Pruefungen im laufenden R4X mit eigener Bilanz; Coalescing-Innenheader und Rust-Freigabenachweis korrigiert. Zwei siebenteilige Aufrufe, JSON-Export, ABI/Build/Clippy und SMP4-Quick bestanden; erster Fehlversuch bleibt erhalten. Ein STANDARD SMP4 31c3641b-a37f-41d0-8926-0e51da0c8ddb, Index 95.567405, Originalexport mit 5 Metriken/30 Samples/6 gueltigen Scores im DevCenter verlustfrei geprueft; Sammelpush abgeschlossen. Gesamtindex 2,50% und Speicherscore 6,08% unter 0.84.10: einzelne Beobachtung ohne kausale Zuschreibung. Beleg/Grenzen: Docs/Core/KernelHeap08411.json.
+
+## 0.84.12 Scheduler- und Synchronisationsprüfungen in Spectra aufnehmen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die verbleibenden internen Scheduler-/Synchronisationsfälle als gezielte Spectra-Prüfungen verfügbar machen. Mutex, Semaphore, WaitQueue, UnwindGuard, IF-Erhalt, Ready-/Sleep-/Reap-Verhalten, Deadlines, gezieltes Wecken, Fairness, Rollen und Prioritätsvererbung abdecken; vorhandene THREAD-, WORK- und SIMD-Prüfungen sinnvoll ergänzen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Wiederverwendbare interne Scheduler-/Sync-Fälle von Bootannahmen und globalen Injektionen lösen.
+  - Notizen: Ergebnis: bestehende Mutex/Event/IF-, Rollen-/Fairness-/Vererbungs- und IRQ/YMM-Faelle teilen eine exklusive Boot-/Live-Zulassung und genaue eigene Task-/Work-Abschlussquittungen. BSP-Controller, residenter Ledger und Task-Unwind-Schutz ueber Warteaufrufe; keine globalen Leerstandsannahmen. Eigene Semaphore-/Unwind-Vertraege und Vererbungsidentitaeten geprueft. Globale Timer-/Reserveeingriffe bleiben isoliert und werden als solche ausgewiesen.
+- [Erledigt] #2 Gezielte Scheduler-/Sync-Auswahl in Spectra mit vorhandenen THREAD-/WORK-/SIMD-Fällen abstimmen.
+  - Notizen: Ergebnis: CHECK THREAD /KERNEL[:SYNC|SCHED|FPU|ADMISSION] ergaenzt die vorhandenen Gruppen. Gemeinsames Text/JSON/Export, Verfuegbarkeit, unveraenderte Ausgabe bei falschem Header/Selektor und Tail-Canary. Append-only R4DEV v16 nach unveraendertem 408-Byte-Praefix, fester 128-Byte-v1-Datensatz, exakt publizierte Contract-/SDK-Pins. Keine allgemeine neue Suite oder Ad-hoc-Messung.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Abnahme: gezielter finaler nativer Sammelaufruf mit sieben Fallgruppen, 81 exakt freigegebenen Tasks und zwei quittierten Work-Tickets; aktuelle BOOT-ELFs, Besitzer-Builds, Format/Clippy/ABI-Gate und SMP4-Quick bestanden. Unabhaengige gruene Argument-/SIMD-/isolierte Timeoutfaelle bei identischem Spectra wiederverwendet. Genau ein STANDARD mit unveraendertem vollstaendigem DevCenter-Import samt verlustfreier5/30/6-Abnahme und Sammelpush. Rohdaten ausserhalb Git.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Kernel 0.1.298/Spectra 0.1.12 ergaenzen gezielte native Scheduler-/Sync-Vertraege mit eigener Abschlussbilanz. Finale sieben Fallgruppen, 81 Taskfreigaben, zwei Workquittungen, ABI/Build/Clippy und SMP4-Quick bestanden; unabhaengige bestandene Faelle gezielt wiederverwendet. Globale Bootinjektionen bleiben isoliert. Ein STANDARD SMP4 611bc6d9-c5ab-4121-9098-011d9c900784, Index 106.320110; Originalexport mit 5 Metriken/30 Samples/6 gueltigen Scores im DevCenter verlustfrei geprueft. Einzelvergleich zu 0.84.11: Gesamtindex 11.251436%, ohne kausale Zuschreibung. Sammelpush abgeschlossen. Beleg und Grenzen: Docs/Core/KernelSync08412.json.
+
+## 0.84.13 Funktionale SMP-/TLB-Diagnose und passive Messwerte in Spectra ergänzen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die funktionalen Teile der SMP-Probe über Spectra zugänglich machen und die passive Sicht auf CPU-übergreifende TLB-Abstimmungen und Uhrenkonsistenz ergänzen. CPU-Platzierung, Ergebnisrichtigkeit, Mapping-Sichtbarkeit auf anderen CPUs, TLB-Quittungen und Owner-/Lock-Verträge erhalten; keine neue feste Beschleunigungsgrenze einführen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Funktionale Mehrkern-Prüffälle für einen exklusiven und begrenzten Spectra-Aufruf trennen.
+  - Notizen: Ergebnis: Boot und CHECK SMP teilen CPU-Platzierung, Pruefsumme, alten/neuen Mappinginhalt auf allen CPUs, monotone Uhr und eigene Heap-/Mutexvertraege. Residenter Ledger mit genauer Taskgeneration und letzter Pin-/Ressourcenquittung; Readerabschluss vor Mapping-/Framefreigabe. Eigene TLB-Generation samt Ziel-/ACK-Maske, keine globale Deltabehauptung. Globale DROP_ACK-Injektion bleibt isoliert.
+- [Erledigt] #2 Passive SMP-/TLB-Ergebnisse und gezielte Prüfsteuerung in Spectra integrieren.
+  - Notizen: Ergebnis: CHECK SMP [/ADMISSION] und passive METRICS SMP nutzen gemeinsames Text/JSON/Export. Aktuelle CPU-/Uhrregistrierung und echte Remote-TLB-Zaehler; keine historischen Erfolgssignale oder fehlenden Detailzeiten als Nullmessung. Append-only R4DEV v17 nach unveraendertem416-Byte-Praefix mit festen224-/184-Byte-Datensaetzen, exakt publizierte Contract-/SDK-Pins. Ohne zweite CPU sind beide aktiven Varianten unverfuegbar und starten keine Arbeit.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Abnahme: gebuendelte SMP4-Faelle fuer genaue eigene Mapping-/ACK-/Taskquittungen, Wiederholung und konkurrierende Zulassung; betroffene vorherige native Scheduler-/Admission-Faelle und SMP1-Verfuegbarkeit bestanden. Aktuelle BOOT-Hashes, Besitzer-Builds/Format/Clippy/ABI und SMP4-Quick geprueft. Genau ein STANDARD mit verlustfreiem vollstaendigem DevCenter-Import5/30/6 und Sammelpush; Rohdaten ausserhalb Git.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Kernel 0.1.299 / Spectra 0.1.13 mit expliziten nativen SMP-/TLB-Pruefungen und passiven aktuellen Werten. Eigene Mapping-/Remote-ACK-/Taskquittungen, wiederholte/konkurrierende Aufrufe, betroffene Scheduler-Helfer und SMP1-Verfuegbarkeit bestanden; globale Timeoutinjektion bleibt isoliert. ABI/Build/Clippy und SMP4-Quick gruen. Ein STANDARD SMP4 01672750-e3e4-4300-a250-a667c92d8af1, Index 115.174834; Originalexport mit 5/30/6 im DevCenter verlustfrei geprueft. Einzelvergleich zu 0.84.12: Gesamtindex 8.328362%, ohne kausale Zuschreibung. Sammelpush abgeschlossen. Beleg und Grenzen: Docs/Core/KernelSmp08413.json.
+
+## 0.84.14 Blockqueue-Prüfungen in Spectra STORAGE aufnehmen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die vorhandenen synthetischen Blockdispatcher-/Async-Queue-Fälle aus Kernel/Rust/storage/block_probes.rs als gezielte Erweiterung von SPECTRA CHECK STORAGE verfügbar machen. Parallelität, Queuegrenzen, Completion-Zuordnung, Abbruch und Ressourcenlebensdauer prüfen, ohne produktive Datenträger für synthetische Fehlerfälle zu verwenden.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Synthetische Controllerfälle mit genauem Prüflaufbesitz und vollständigem Abbau verfügbar machen.
+  - Notizen: Ergebnis: vorhandene acht synthetische Dispatcher-/Async-Fallgruppen mit eigenen genauen Geraete-/Task-/Requestidentitaeten geteilt. Originale Parallelitaets-, Payload-, Queue-, Replay-, Kill-/Unload-, Reset/Timeout-, Flush- und Batchvertraege erhalten. Keine physischen Fehler-Testdatentraeger oder globalen Queueresets. Echte I/O-Guards statt neuer Diagnoseguards bei der Killprobe; eigener Abbau vor Wiederverwendung der residenten Puffer, ungewisser Zustand bleibt gehalten.
+- [Erledigt] #2 Explizite Blockqueue-Auswahl und Ergebnisse in CHECK STORAGE integrieren.
+  - Notizen: Ergebnis: CHECK STORAGE /BLOCKQUEUE[:ADMISSION] ergaenzt die vorhandene Auswahl mit gemeinsamem Text/JSON/Export und eigener Abschlussbilanz. Native genaue Pin-/Retirementzulaesse und Completiondisposition statt globaler Deltas; Replay nach regulaerem Requesterabbau wird gesondert als spaet abgewiesen ausgewiesen. Passive METRICS bleiben passiv. Append-only R4DEV v18, unveraenderter432-Byte-Praefix, fester240-Byte-v1-Datensatz und exakt publizierte Contract-/SDK-Pins.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Abnahme: gebuendelter SMP4-Gastlauf mit acht Fallgruppen, pro erfolgreichem Aufruf 11 genau freigegebenen Tasks, 3 abgemeldeten Geraeteregistrierungen und 9 echten Async-Completions; Wiederholung/ein Owner/ein Busy mit Join, passive Auswahl sowie Header/Tail/Argumente bestanden. Besitzer-Builds, Format/Clippy/ABI, aktuelle BOOT-Hashes und SMP4-Quick gruen. Ein STANDARD mit verlustfreiem DevCenter-Import5/30/6 und Sammelpush; volle Rohdaten ausserhalb Git.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Kernel 0.1.300 / Spectra 0.1.14 mit gezieltem STORAGE /BLOCKQUEUE und passiver Auswahl. Vorhandene acht synthetische Fallgruppen, pro Abschluss 11 Taskfreigaben/3 genaue Geraeteabmeldungen/9 Async-Completions, Wiederholung und konkurrierende Zulassung bestanden; keine physischen Fehler-Testdatentraeger. ABI/Build/Clippy und aktueller SMP4-Quick gruen. Ein STANDARD SMP4 91eae77c-00c6-428f-8a74-2dff8957edee, Index 107.604460; Originalexport mit 5 Metriken/30 Samples/6 gueltigen Scores im DevCenter verlustfrei geprueft. Einzelvergleich zu 0.84.13: Gesamtindex -6.572941%, ohne kausale Zuschreibung. Sammelpush abgeschlossen. Beleg und Grenzen: Docs/Core/KernelBlock08414.json.
+
+## 0.84.15 Aktiven NVMe-IRQ- und Completion-Nachweis in Spectra STORAGE ergänzen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Den vorhandenen aktiven NVMe-Lesetest und seinen MSI-/MSI-X-, IRQ-, Worker-/Completion- und Pollfallback-Nachweis in SPECTRA CHECK STORAGE integrieren. Die bisher überwiegend auf vorhandene Laufzeitstände gestützte NVMe-Sicht um einen bewusst gestarteten, genau zugeordneten Funktionsnachweis ergänzen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Vorhandenen aktiven NVMe-Lesepfad mit genauer Geräte-/Auftragsidentität und begrenztem Abschluss anbinden.
+  - Notizen: Ergebnis: genau gebundener read-only Auftrag mit residentem Sektor und nativer Request-/Backendidentitaet. Optionaler Treibernachweis verknuepft eigene CQE, Controller-/Namespacegeneration, Queue/CID, IRQ-Generation und Workerpass nach bestaetigter DMA-Freigabe; passive Zaehler sind nur Beschreibung. Normale56-Byte-Anfragen bleiben erhalten. Fehlende Freigabequittungen behalten Slot/Ressourcen/Callback und sperren neue Annahme statt eines vorzeitigen Abschlusses.
+- [Erledigt] #2 Aktive NVMe-Prüfung in STORAGE auswählen und vom passiven Laufzeitstatus unterscheiden.
+  - Notizen: Ergebnis: explizites CHECK STORAGE /NVMEIRQ mit gemeinsamem Text/JSON/Export; Hardware-/Faehigkeits-/Kontextmangel als unavailable. Bestehende /NVME-Auswahl sowie isolierte Bootmarker und Quick-Assertions unveraendert erhalten. Neuer Live-Nachweis nutzt deren Historie nicht. Append-only R4DEVv19 nach440-Byte-Praefix, fester296-Byte-Bericht; publizierte Contract-/SDK-Pins. Keine neue allgemeine Testsuite.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Abnahme: gezielte Besitzerpruefungen fuer DMA-Freigaben plus vorhandene NVMe-Zustandsfaelle; zwei eigene SMP4-Leseaufrufe mit passenden Tickets/CQE/MSI-X/Worker/Freigabe, bekannten Nutzdaten,1/1Taskfreigabe und null gehaltenen Ressourcen. Privates Testmedium unveraendert. Ohne NVMe: unavailable/run0/keine Tasks oder Auftraege. Passive Auswahl, Header/Tail/Argumente, ABI/Build/Clippy und aktueller SMP4-Quick bestanden. Ein STANDARD/DevCenter5/30/6; Sammelpush abgeschlossen, volle Rohdaten ausserhalb Git.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Kernel0.1.301 / Spectra0.1.15 / NVME0.1.9. Eigener read-only NVMe-IRQ-/Completion-Nachweis und bestaetigte DMA-Freigabe; zwei genaue MSI-X-Leseaufrufe sowie fehlende Hardware explizit abgenommen. Unveraenderte Boot-/Quick-Assertions pruefen auch alte Anfragen. ABI/Build/Clippy und Sammelpush abgeschlossen. Ein STANDARD SMP4 b829f805-8380-4438-8efa-a0a724faa3de, Index 106.689182, Einzelvergleich zu0.84.14 -0.850595% ohne kausale Zuschreibung; STANDARD misst den NVMe-Vertrag nicht direkt. Originalexport im DevCenter verlustfrei5/30/6 geprueft. Beleg/Grenzen: Docs/Core/KernelNvme08415.json.
+
+## 0.84.16 USB-Ring- und Ereignisrouter-Prüfungen in Spectra aufnehmen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die bisher unaufgerufenen funktionalen USB-Prüffälle aus Kernel/Rust/usb/ring_cycle.rs und event_router.rs als gezielte Spectra-Prüfung wieder zugänglich machen. Ringumlauf/Cycle-Bits und die genaue Zuordnung von HID-, Storage- und Kommandoereignissen mit lokalen synthetischen Daten absichern.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Bestehende Ring-/Routerfälle mit lokalem synthetischem Zustand als wiederholbare Prüfung anbinden.
+  - Notizen: Ergebnis: beide vorhandenen Ownerfunktionen unveraendert direkt angebunden. Ring:800Einreichungen mit wiederholtem Umlauf und genauen Cycle-/Endwerten; Router: eigene synthetische HID-/Storage-/Kommandoereignisse, genaue Zuordnung/Entnahme und leere eigene Restmailbox. Nur lokaler Callerstack, keine neuen Tasks/Allokationen/globalen Testdaten, keine realen TRBs oder Live-Controller-/Mailbox-/Portaenderungen.
+- [Erledigt] #2 Gezielte USB-Auswahl und strukturierte Resultate in Spectra ergänzen.
+  - Notizen: Ergebnis: explizites CHECK USB mit gemeinsamem Text/JSON/Export und ausgefuehrten/bestandenen/fehlgeschlagenen Fallmasken; INPUT und METRICS unveraendert. Optionales R4DEVv20 am unveraenderten448-Byte-Praefix, fester32-Byte-v1-Bericht und exakte publizierte Contract-/SDK-Pins. Kein USB-Geraet erforderlich, keine physische USB-/Livebootqualifikation.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Abnahme: ein gebuendelter SMP4-Gast mit zwei Aufrufen beider Originalfaelle, Argument-/Header-/Kapazitaetstailvertrag und normalem Poweroff. Besitzer-Builds, Format/Clippy, bestehende ABI-Gates und aktueller Boot-ELF-Hash bestanden. Kein zusaetzlicher Quick/Katalog: produktive USB-Funktionen unveraendert, Gast und STANDARD booten den neuen Kernel. Genau ein STANDARD mit geprueftem Originalimport5/30/6 und Sammelpush; Rohdaten ausserhalb Git.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Kernel0.1.302 / Spectra0.1.16. CHECK USB teilt die beiden unveraenderten lokalen Ring-/Routerfaelle ueber eine minimale32-Byte-API; keine Live-USB-Eingriffe oder zusaetzlichen Tasks. Wiederholung, Header/Tail/Argumente im SMP4-Gast, ABI/Build/Clippy und Boot-Hash bestanden. Genau ein STANDARD 92d598bd-0287-4ca8-bcba-053cd784a5b1, Index103.453120, Einzelvergleich zu0.84.15 -3.033168% ohne kausale Zuschreibung. Originalexport im DevCenter verlustfrei5/30/6 geprueft; Sammelpush abgeschlossen. Grenzen/Beleg: Docs/Core/KernelUsb08416.json.
+
+## 0.84.17 Verbliebenen Kernel-Altcode und private Rust-Migrationshüllen bereinigen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Nach der Diagnosebereinigung aus 0.84.10 den im weiteren Kernelbefund gefundenen allgemeinen Altcode entfernen: unbenutzte private C-Wrapper aus der abgeschlossenen Rust-Migration, alte FAT-/Cachepfade, einen ungenutzten privaten Grafikzweig und nicht mehr bediente Builtin-R4P-Zweige. Aktive Besitzer, Bootpfade und öffentliche API-/ABI-Verträge erhalten.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Unbenutzte private C-Migrationswrapper entfernen und verbleibende Rust-Aufrufe an getypte Besitzerfunktionen binden.
+  - Notizen: Ergebnis: 107private C-Einstiege entfernt: Font47, XHCI53, Monotonic6 und alte R4P-Quellabfrage. Neun aktive native Pfade an die bestehenden getypten Besitzer gebunden; echter Uhr-C-Callback bleibt. Vollstaendige aktuelle Referenzsuche mit ignorierten Unterrepos, Definitionen und aktivem Anker; Assembly/Linker/Callbacks beruecksichtigt. Genaue Font-/Controllerguards und Handle-Generationen erhalten; kein Speedclaim fuer bereits linkerentfernte Wrapper.
+- [Erledigt] #2 Nachweislich unbenutzte FAT-/Cache-/Grafik-/R4P-Zweige sowie überholte Migrationsbeschriftungen bereinigen.
+  - Notizen: Ergebnis: bestaetigte unbenutzte FAT-Einzelallokation, altes Read-Ahead-Modell samt exklusivem Cursor und ungenutztem Rueckgaberecord, privater Bootfb-Rectslot/Callback und unpopulierte Builtin-R4P-Zweige entfernt. Produktive Run-/Cache-/Regions-/USB-/Clock-/Recoverypfade und oeffentliche Tabellen/Felder/Kennungen bleiben. Historische Migrations-/Shellbridgebeschriftungen aktualisiert.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Abnahme: Format/Clippy, normaler Kernelbau und gebundene BOOT-Hashes bestanden. Vorhandene SMP4/Clock/Quick- und private FAT/PAGECACHE-Pruefung im ersten Gast bestanden. Native37Font-/Speicherfaelle und GUI-Rasterchain bestanden, NETR4P nach Korrektur seiner privaten Voraussetzungen9/9aktiv. Der damalige volle PROGRAMSTORAGE blieb an der globalen GUI-Speicherbilanz fehlgeschlagen; einmaliger Kontrolllauf auf publiziertem Vorgaenger reproduziert denselben4096-Byte-Unterschied. Keine Vollprofil-/Churn- oder Leakfreiheitbehauptung; alle Originalfehler archiviert, Assertions unveraendert. Genau ein finaler STANDARD mit geprueftem Originalimport5/30/6 und Sammelpush; Rohdaten ausserhalb Git. Spaetere vollstaendig gruene Originalnachpruefung auf Kernel329: siehe aktuellen Beleg in der Unterversionsnotiz.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: private Rust-Migrationswrapper und belegter Altcode bereinigt; aktive Besitzer, ABI und Hardware-Fallbacks erhalten. Historische Abnahme/Grenzen: Docs/Core/KernelCleanup08417.json. Nachpruefung18.10.2026 auf Release0.84.45/Kernel0.1.329/Spectra0.1.23: unveraendertes CHECK LIFECYCLE /PROGRAMSTORAGE vollstaendig bestanden, einschliesslich37nativer Faelle, GUI-Speichervergleich,72Killwait- und18Churn-Zyklen. Die damalige4096-Byte-Abweichung ist im aktuellen Lauf nicht reproduziert; historische Ursache ungeklärt, Originalfehler bleiben archiviert. Kein Laufzeit-/Pruefvergleich geaendert und daher kein neuer STANDARD erforderlich. Aktueller Beleg: Docs/Diagnostics/ProgramStorageGuiValidation08445.json.
+
+## 0.84.18 NetBackend-v1-Kompatibilität zugunsten des aktuellen v2-Vertrags zurückbauen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Annahme alter NetBackend-v1-Deskriptoren und die ausschließlich dafür benötigte Angebots-/Callbackanpassung aus dem Kernel entfernen. Alle drei aktuellen Netzwerktreiber RTL8139, RTL8168 und VirtioNet verwenden bereits NetBackend v2. Veraltete v1-Anmeldungen werden künftig ausdrücklich und ohne Registrierung oder Hardwareseiteneffekte abgelehnt.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 NetBackend-Annahme auf v2 begrenzen und die speziellen v1-Descriptor-/Offerzweige entfernen.
+  - Notizen: Ergebnis: nur NetBackend version2 mit mindestens120Byte. Versions-/Groessenpruefung vor allen Folgefeldern; ungueltige Anmeldung kehrt vor Verhandlung, Registry/Net-Topologie und Callbacks mit-1 zurueck. Alte72-Byte-v1-Annahme, synthetisches Ein-Queue/Ein-Segment-Angebot und separater versionierter Packetcallbackzugriff entfernt. V2-Angebotskoerper, optionale Flat-/Packet-/Pollfaehigkeiten und Besitz-/Abschlussvertraege erhalten.
+- [Erledigt] #2 Contract, SDK, aktuelle Treiber und Diagnoseaussagen auf den alleinigen v2-Betrieb abstimmen.
+  - Notizen: Ergebnis: RTL8139, RTL8168 und VirtioNet benutzen nachweislich version2/sizeof120 und stehen unveraendert im aktuellen Testimage. Oeffentliche Layouts/Felder/Kennungen/DriverApi-Slots sowie Contract-JSON/Rust/C bleiben bytegleich; Contract/SDK/Treibertexte korrigiert. VIRTNET-Kommentarbuild bytegleich, daher keine Modulversionen erhoeht. Bestehende exakte kompatible Contract-/SDK-Pins bleiben. Reale v2-Anmeldung von RTL8139/VirtioNet und originale NETWORK-DRIVER-Diagnose im SMP4-Gast bestanden; RTL8168 nur Quell-/Artefaktpruefung.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Abnahme: normaler Kernel0.1.304, Format/Clippy und aktueller BOOT-Hash bestanden. Ein gezielter Hostfall am echten Validator mit20Negativfaellen/echter Schutzgrenze und1optionalem v2-Positivfall; ein SMP4-Gast mit10echten DriverApi-Ablehnungen,0Fixturecallbacks/keinem Registryeintrag,2realen v2-NIC-Anmeldungen, bestehendem NETWORK DRIVER und normalem Poweroff. Keine Vollkataloge/neue Dauersuite/zusatzlicher Quick, da Plattform-/SMP-/Clockcode unveraendert. Genau ein finaler STANDARD samt unveraendertem geprueftem5/30/6DevCenter-Originalimport und Sammelpush; Rohdaten ausserhalb Git.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Kernel0.1.304 nimmt nur vollstaendige NetBackend-v2-Deskriptoren an. V1/Kurzform wird vor Net-Registrierung oder Callbacks abgelehnt; v2-Layout und optionale Flat-/Poll-/Metadatenpfade bleiben. Geschuetzter Hostgrenzfall und ein SMP4-Gast mit10echten Ablehnungen,2v2-NICs und originalem NETWORK DRIVER bestanden. Genau ein STANDARD 6f842a10-1b09-41b8-9405-67538d8fd198, Index104.464180, Einzelvergleich zu0.84.17 -2.191118% ohne Kausalbehauptung. DevCenter-Original verlustfrei5/30/6 geprueft;7Besitzer gepusht, keine Modul-/API-Layoutaenderung. Grenzen/Beleg: Docs/Core/KernelNetBackend08418.json.
+
+## 0.84.19 Alte untypisierte Audio- und Synthregistrierung zurückbauen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die alten DriverApi-Implementierungspfade register_audio_backend und register_synth_engine mit untypisierten Zeigern sowie deren ausschließlich historische Pointer-/Migrationsbuchhaltung entfernen. Aktuelle Audioausgaben und Synthtreiber verwenden die strukturierten Registrierungen mit konkreten Callbacks. Nicht mehr unterstützte alte Anmeldungen melden ausdrücklich einen Fehler und erzeugen keinen scheinbar nutzbaren Backend-/Engineeintrag.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Verbraucher auf strukturierte Registrierung bestätigen und alte Registrierungsimplementierungen abbauen.
+  - Notizen: Ergebnis: generische Audio-/Synthanlage und ausschliessliche Pointer-/Migrationsfelder entfernt. Beide alten obligatorischen Slots zeigen auf denselben seiteneffektfreien Fehlerstub(-1), ohne Argumentzugriff. AC97 v2, HDA v4 und MIDI/OPL3/SID Ex bleiben unterstuetzt; alle fuenf aktuellen Treiber bauen bytegleich und initialisieren im gezielten SMP4-Gast erfolgreich. Aktiver Mixer bleibt erhalten.
+- [Erledigt] #2 Veröffentlichten Tabellenvertrag und SDK-Darstellung kompatibel stilllegen und aktuelle Audiolebensdauer erhalten.
+  - Notizen: Ergebnis: DriverApi36/656Byte und alte Slotpositionen96/120 bleiben unveraendert reserviert, keine Wiederverwendung. Oeffentliche Schema-/Rust-/C-Vertraege bytegleich; Contract0.64.18/SDK0.64.30 dokumentieren die Stilllegung und sind exakt veroeffentlicht gepinnt.110andere Kernelfunktionen sowie PCM/Mixer/Callbackadmission bytegleich. Originale AUDIOD-PCM-/Master-/Vierfach-Replay-/HDA- und SYNTHD-Faelle bestehen; lazy Full-Protokolle mit exakt ihren drei vorhandenen Funktionen aktiviert. Keine Aussage ueber physisches Hoeren oder HDMI-/DMA-Abbau aus Poweroff.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Abnahme: Format, striktes Clippy, Contractgeneration, normaler SDK-/fuenfTreiber-/Kernelbau und aktueller BOOT-Hash bestanden. Ein gezielter SMP4-Gast: sechs echte alte Slotablehnungen, davon zwei mit unlesbaren Namen, alle aktuellen Treiber und vorhandene Audio-/Synthfaelle erfolgreich. Keine Vollkataloge/neue Dauersuite/zusatzlicher Quick. Genau ein finaler STANDARD mit geprueftem unveraendertem5/30/6DevCenter-Originalimport. Buildvorbereitungsfehler vor jedem Gast behoben und archiviert; Rohdaten ausserhalb Git. Sammelpush abgeschlossen.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Kernel0.1.305 entfernt alte untypisierte Audio-/Synthanlage; reservierte DriverApi-Slots liefern ohne Argumentzugriff-1. Aktuelle typisierte Treiber und Mixer bleiben erhalten. Ein SMP4-Gast mit6Ablehnungen,5Treiberstarts und originalen Audio-/Synthfaellen bestanden. Ein STANDARD 6d0b3493-c8c7-463c-bedc-4327583da8be, Index101.546438, Einzelvergleich zu0.84.18 -2.793055% ohne Kausalbehauptung; DevCenter-Original verlustfrei5/30/6 geprueft. Contract/SDK-Voraussetzungen und4Abschlussbesitzer gepusht; keine Modulversionsaenderung. Grenzen/Beleg: Docs/Core/KernelLegacyAudio08419.json.
+
+## 0.84.20 Unterstützung der Updatejournalformate v2–v4 entfernen; v5 und Rückrollen erhalten
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die Unterstützung der alten R4U_JOURNAL-Formate 2, 3 und 4 aus den aktiven Update-/Recovery-Pfaden entfernen. Künftig wird ausschließlich Journalformat v5 gelesen und geschrieben. Das aktuelle v5-Journal einschließlich Transaktionsfortschritt, Wiederaufnahme, Rückrollfunktion und bestätigtem Ressourcen-/Dateiabschluss bleibt vollständig erhalten.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Journalannahme bei Kernel, SDK und separater Recovery einheitlich auf v5 begrenzen.
+  - Notizen: Ergebnis: vier aktive Parser bei Rust-Kernel, SDK und separater Recovery sind v5-only. Nur alten Formaten dienende Feldnamen/Ersatzwerte/Weichen und Vor-Marker-Rueckrollableitung entfernt. V5-Serializer und genaue I/O-/Replaybesitzer bytegleich; privates Journal-/oeffentliches API-Layout erhalten. COMPONENT_BINDING=legacy sowie neue Zieldateien mit old_known=false bleiben gueltig. SDK31 exakt veroeffentlicht; SYSUPD24/UPDSVC28 und gepaartes Recovery62 neu gebaut. UPDATE bytegleich, keine neue Modulversion.
+- [Erledigt] #2 V5-Update-, Wiederaufnahme- und Rückrollverträge erhalten und ausschließlich veraltete Annahmen bereinigen.
+  - Notizen: Abnahme: je zwei vorhandene Journal-/Wiederaufnahmegruppen in drei Zig-Besitzern bestanden. Echter vorheriger Rust-Parser akzeptiert3gueltige Altformatfixtures; aktueller weist sie vor Journalzuweisung ab. V5-Bytes exakt gleich, native Wiederaufnahme/Last-good/unterbrochenes Rueckrollen/Wiederlesen bestehen. Eine reale Folge mit3SMP4-Starts: vorhandener First-Commit-Abbruch, normaler Neustart, fruehes v5-Bootrueckrollen ohne Transportpaket, neue Datei entfernt und bestehende Datei/Katalog/Release/Bystander exakt erhalten; anschliessendes Live-Apply und RESUME bestehen. Beide v5-Kopien/Fingerprints/Generationen je Zustand zurueckgelesen. Keine physische Stromausfall- oder separate Recovery-UI/USB-Qualifikation.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Abnahme: Format/striktes Clippy, normale Besitzerbauten und kanonischer BOOT-Hash bestanden. Nur betroffene bestehende Faelle und eine kurze3Start-Folge mit dokumentierter Hostfortsetzung; kein voller Katalog/neue Dauersuite/zusaetzlicher Quick. Runtimewirkung durch Parser-/Validierungs-/Artefaktaenderungen moeglich: genau ein finaler STANDARD Suite2 SMP4, unveraendertes DevCenter-Original verlustfrei5/30/6 validiert. Drei private Vorbereitungsgaeste vor Journalstart und Host-Auswertungsfehler separat archiviert. Ersten echten Abbruch/Reset und Bootrueckrollen aus denselben Daten validiert; dritter Start beendet nur offene Livefaelle, keine Wiederholung der kritischen Phasen. Sechs Abschlussbesitzer plus SDK-Voraussetzung veroeffentlicht. Rohdaten ausserhalb Git.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: R4U_JOURNAL v2-v4 entfallen bei Kernel306, SDK31 und Recovery62; v5 samt echten Dateiidentitaeten, Kopienwahl, Wiederaufnahme und Rueckrollen bleibt. Neue Dateien ohne Altinhalt und v5-legacy-Bindung bleiben gueltig. Gezielte Besitzer-/native Altformatkontrolle und eine3Start-SMP4-Folge mit echtem First-Commit-Abbruch/Bootrueckrollen/Liveabschluss bestanden. Ein STANDARD 12a576e4-e2fb-4313-b53c-7d06f0940c9d, Index100.970453, Einzelvergleich zu0.84.19 -0.567213% ohne Kausalbehauptung; Original5/30/6 im DevCenter geprueft.6Abschlussbesitzer+SDK veroeffentlicht. Beleg/Grenzen: Docs/Core/KernelJournal08420.json.
+
+## 0.84.21 Speicherbudget ohne Vollscans prüfen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Häufige Reserve-, Commit- und Demandfault-Zulassungen von den vollständigen VM-Diagnosesnapshots entkoppeln. Die dafür benötigten globalen und pro Besitzer gefilterten Verbrauchswerte beim bestehenden VM-Besitzer laufend pflegen, damit einzelne Budgetprüfungen nicht wiederholt alle 1024 Range-Slots und freie Adresslücken durchsuchen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Globale und besitzerbezogene Budgetaggregate beim bestehenden VM-Besitzer einführen.
+  - Notizen: Ergebnis: abgeleitete Reserve-/Commit-/Resident-Summen global und fuer genaue R4X-Besitzer/Window6/Kind4 beim VM-Owner. Alle bestaetigten Range-Deltas einschliesslich Demandfault, residentem Commit, Reclaim, Teilabbau und Rollback publiziert; noch gebundene Ressourcen bleiben gezaehlt. Exakte Lebensdauer ueber Range-Refcount; u128-intern, gesaettigte u64-Abfrage. Feste1024Ownerkapazitaet/Backshift,65584residenteBytes. Kein neuer Ressourcenbesitzer.
+- [Erledigt] #2 Reguläre Budgetprüfungen auf die schmalen Aggregate umstellen.
+  - Notizen: Ergebnis: profile_limit und system_limit lesen schmale ownergeschuetzte Aggregate ohne volle Range-/Adresslueckensuche. Originalfilter,384FramesSystemreserve, checked/saturatingGrenzen und bisherige Transaktions-/Zulassungsfolge bleiben. Keine neue atomare Quotenreservierung ueber I/O behauptet. Oeffentliche Statistiken und expliziter Reserve-Probe behalten breite Diagnosesnapshots; privates Range216Layout unveraendert.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Abnahme: Format/striktes Clippy und normale Kernel307-/Testimagebauten mit BOOT-Hash bestanden. Drei gezielte Actual-Source-Hostgruppen fuer Filter/Teilfreigabe/Ueberlauf/Kollisionen/Lebensdauer und4Modellthreads bestanden. Ein SMP4-Gast buendelt originale VM-, Limit-, Druck-, Pager- und7Heapgruppen; abschliessender Cachevergleich gegen echte Ranges besteht. Beide ganzen Stressprofile bleiben an ihren damaligen eigenen R4X-Stackkatalogwerten FAILED; betroffenes Teilverhalten separat belegt, keine Vollprofil-/Ursachenbehauptung. Genau ein finaler STANDARD Suite2 SMP4; Original5/30/6 verlustfrei im DevCenter validiert. Vier Besitzer veroeffentlicht; Rohdaten ausserhalb Git. Keine neue Dauersuite oder pauschaler Katalog.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Kernel307 prueft VM-Zulassung ueber unter dem bestehenden Owner gepflegte globale/genau gefilterte Budgets; volle Diagnosesnapshots und Limits erhalten. Bestaetigte Teilfreigaben, Demand/Reclaim/Rollback und Besitzerlebensdauer einbezogen. Gezielte native Hostgruppen und betroffene SMP4-VM/Pager/Heapfaelle samt Cache-Ranges-Invariante bestanden. Ganze VMSTRESS/PAGERSTRESS bleiben an damaligen eigenen R4X-Stackkatalogwerten FAILED, keine neue Ursache/volle Profilabnahme behauptet. Ein STANDARD 45f5d2a1-a7ab-498a-81c7-afc6af99c925, Index120.243811, Einzelvergleich zu0.84.20 19.088117% ohne Kausalbehauptung; Original5/30/6 im DevCenter geprueft. Vier Besitzer veroeffentlicht. Beleg/Grenzen: Docs/Core/KernelBudget08421.json. Zusatzkorrektur Spectra 0.1.17 und separate Abnahme: Docs/Diagnostics/SpectraMemoryCleanup08423.json. Die damaligen Ergebnisse bleiben erhalten; der Schlussvergleich war bereits auf den eigenen Prozess begrenzt.
+
+## 0.84.22 Seitentabellen effizienter in Batches bearbeiten
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Beim Ein- und Ausblenden benachbarter Seiten wiederholte Wege durch dieselben oberen Seitentabellen vermeiden. Die bereits begrenzten Seitenbatches mit einem gemeinsamen Tabellen-/Leaf-Cursor oder genau gebundenen Ergebnissen der Vorprüfung bearbeiten, ohne Vorprüfung, Mappingidentität oder Rollback zu schwächen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Gemeinsamen begrenzten Tabellenweg für benachbarte Seiten aufbauen.
+  - Notizen: Ergebnis: privater paging/batch-Besitzer bindet hoechstens zwei lazy2MB-Tabellenwege in64Bytes fuer bisher maximal64Seiten. Tabellen nur unter demselben durchgehend gehaltenen Page-Table-Owner; keine Leihe ueber Reschedule/Freigabe. Originale Reihenfolge der Vorpruefung bewahrt: frueher Konflikt erzeugt keine spaeteren Elterntabellen. Neue Elterntabellen ueber unveraenderte genaue Block-/Framebesitzer.
+- [Erledigt] #2 Map-, Unmap- und Rollbackbatches auf den gemeinsamen Weg umstellen.
+  - Notizen: Ergebnis: Map/Unmap/WC verwenden die geprueften Wege fuer PTE-Schreiben und genaue Rollbackwerte. Physische Einzelidentitaet/Present/Flags, TLB-Anforderung und Fehler-/Restaurationsquittung erhalten. Huge-Leaves vor Abstieg erkannt; Batchmap/-unmap weisen sie ab, WC behaelt HugePAT12/PTEPAT7 samt exakter Wiederherstellung.37andere Originalfunktionskoerper einschliesslich skalarer Operationen/Translation unveraendert. Kein groesserer Batch oder neuer oeffentlicher Vertrag.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Abnahme: Format/striktes Clippy, normaler Kernel308 und kanonisches Testimage mit echtem BOOT-Hash bestanden. Vier gebuendelte Actual-Source-Hostgruppen fuer Tabellenuebergaenge/Identitaeten/Fehler/hugePAT/exakte NACK-Restaurierung bestanden; Modellowner/TLB sind kein nativer Hardwarebeleg. Ein SMP4-Gast mit originalem VM,7Heapgruppen und genauem ownedSMP/TLB bestand,5/5Tasks und0gehaltene eigene Ressourcen, entfernte Generation/ACK14. Keine ganze Stresssuitenwiederholung oder Live-DROP_ACK. Genau ein finaler STANDARD Suite2 SMP4; Original5/30/6 verlustfrei im DevCenter validiert. IPC-Einzelvergleich zu21 -18.330334%, disjunkte Samplebereiche; nahe20, Ursache offen, keine Wiederholung zur Scoreauswahl. Vier Besitzer veroeffentlicht; Rohdaten ausserhalb Git.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Kernel308 bearbeitet Map/Unmap/WC-Batches mit maximal2geprueften Tabellenwegen in64Bytes unter demselben Owner.64Seiten/physische Identitaet/Flags/TLB-/Rollbackgrenzen bleiben; Huge-Abstieg verhindert und beide WC-PATvertraege erhalten. Vier gezielte Hostgruppen und ein SMP4-VM/Heap/ownedSMP-Lauf mit echten entfernten ACKs bestanden. Ein STANDARD a9a96ccc-29fe-4b95-a70f-442d4474061d, Index116.317789, Einzelvergleich zu0.84.21 -3.265051% ohne Kausalbehauptung, IPC -18.330334% als offene Beobachtung mit disjunkten Samples; Original5/30/6 im DevCenter geprueft. Vier Besitzer veroeffentlicht. Beleg/Grenzen: Docs/Core/KernelPaging08422.json. Zusatzkorrektur Spectra 0.1.17 und separate Abnahme: Docs/Diagnostics/SpectraMemoryCleanup08423.json. Die damaligen Ergebnisse bleiben erhalten; der Schlussvergleich war bereits auf den eigenen Prozess begrenzt.
+
+## 0.84.23 TLB-Abstimmungen bei fragmentiertem RAM bündeln
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Virtuell benachbarte Freigaben auch dann gemeinsam gegen die CPUs quittieren, wenn ihre physischen Frames nicht zusammenhängen. Die derzeit an physischen Extents orientierten Teilfreigaben in begrenzte virtuelle Batches überführen und dadurch zusätzliche Shootdown-Runden bei Fragmentierung vermeiden.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Virtuelle Freigabebatches mit genauen physischen Einzelidentitäten vorbereiten.
+  - Notizen: Umgesetzt: virtuelle Freigabepraefixe bis 64 Seiten mit genauen PTE-, Frame- und Blockidentitaeten. Framewerte und Ruecknahme fuer bis zu 384 Katalogzeilen liegen resident. Der bestehende physische Owner schuetzt die gesamte Vorbereitung. Bei Metadatenmangel zuerst zurueckrollen, danach coalescen oder einen kleineren bestaetigten Teil freigeben; der Retrycursor bleibt erhalten.
+- [Erledigt] #2 Gemeinsame TLB-Quittung und anschließende genaue Framefreigabe integrieren.
+  - Notizen: Umgesetzt: eine gemeinsame TLB-Generation mit allen erforderlichen CPU-Quittungen vor Wiedervergabe. Der gepruefte physische Satz wird vollstaendig oder gar nicht freigegeben. Timeout oder Backendablehnung restauriert PTEs und Metadaten; unbestaetigte Frames bleiben gebunden. VM-Deltas folgen erst nach Erfolg. Die private eigene Quittung ersetzt globale Ruheannahmen; oeffentliche ABI und einzelne Pager-Evictions bleiben erhalten.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Abnahme: Format, striktes Clippy, normaler Kernel 309 und aktueller BOOT-Hash bestanden. Fuenf Hostgruppen pruefen echte Algorithmen mit Modellowner/IRQ. Ein SMP4-Gast bestaetigt VM, drei Pager-Arbeitszyklen, SMP/TLB und sieben Heapgruppen. 64 echte fragmentierte Seiten brauchen genau eine eigene Quittung; Bystander und vier eigene VM-Freigaben bleiben korrekt. Der historische ganze Pager-Lauf scheiterte am Wachstum des eigenen lebenden Stacks. Zusatzkorrektur Spectra 0.1.17: strenge Bilanz mit genau bestaetigter Stackdifferenz, beide ganzen Stressprofile und Freigabe nach Prozessende bestanden. Separater finaler STANDARD der Korrektur vollstaendig im DevCenter geprueft; Zusatzbeleg bei der Unterversion. Genau ein STANDARD samt vollstaendig geprueftem DevCenter-Import. Vier Besitzer veroeffentlicht, Rohdaten ausserhalb Git.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Kernel 309 buendelt virtuelle Freigaben bis 64 Seiten auch bei physischer Fragmentierung. Residente Vorbereitung und Ruecknahme bleiben unter den bestehenden Besitzern; physische Wiedervergabe erfolgt erst nach voller TLB-Quittung und Bitmappruefung. Fuenf Hostgruppen und ein SMP4-Gast bestaetigen die betroffenen Faelle, darunter 64 echte fragmentierte Seiten mit einer eigenen Quittung und erhaltenen Bystandern. Der damalige Pager-Lauf mit Spectra 0.1.16 blieb am eigenen Stackabschluss fehlgeschlagen. Die gezielte Zusatzdiagnose bestaetigt normales Wachstum desselben Hauptstacks von 256 auf 320 KB. Spectra 0.1.17 beruecksichtigt nur dessen genau bestaetigte Buchungsdifferenz; beide vollstaendigen Stressprofile und die anschliessende Ressourcenfreigabe bestehen. Zusatzbeleg: Docs/Diagnostics/SpectraMemoryCleanup08423.json. STANDARD c1ba058d-5490-4478-9738-9ba97d860e15: Index 120.320269, Einzelvergleich zu 0.84.22 3.440987% ohne Kausalbehauptung; Original mit 5 Metriken, 30 Samples und 6 gueltigen Scores im DevCenter geprueft. Vier Besitzer veroeffentlicht. Beleg und Grenzen: Docs/Core/KernelTlb08423.json.
+
+## 0.84.24 Globale Kernelheapsperre verkürzen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Große Speicherfüllungen und geeignete VM-Tailfreigaben aus den kurzen gemeinsamen Heap-Metadatenphasen lösen. Andere CPUs sollen während der aufwendigen Arbeit weiter freie Heapblöcke nutzen können; gleichzeitig lokale Interruptsperren und Heapkonkurrenz reduzieren.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Genau gebundene private Zustände für aufwendige Heapfreigaben bereitstellen.
+  - Notizen: Umgesetzt: Grosse Bloecke und Realloc-Reste behalten belegte Grenzmarken und ein eindeutiges privates Ticket bis nach der vollstaendigen Fuellung. Andere CPUs koennen sie weder ueber freie Listen noch ueber Nachbarzusammenfassung oder Tailabbau uebernehmen. Die bestehenden Wachstumssperren schuetzen den genauen VM-Tail; Teilfehler behalten ihren Retryanker.
+- [Erledigt] #2 Vollständiges Poisoning und zulässige Tailarbeit außerhalb kurzer Heap-Sperrphasen ausführen.
+  - Notizen: Umgesetzt: Die ganze bisherige 0xDD-Fuellung laeuft bei zugelassenen grossen Freigaben ausserhalb von Heapowner 4. Vor Publikation werden Grenzmarken, Groesse und Ticket erneut geprueft. VM-Tails verlassen Owner 4 nur mit urspruenglich erlaubten Interrupt-/Task-/Besitzbedingungen. Klassen, Zusammenfassung, Wachstums-/Retentionspolitik, kleiner oder geschuetzter Altpfad und echter Abschluss vor Wake bleiben erhalten.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Abgenommen: Format, striktes Clippy, normaler Kernel 310 und aktuelles Testimage mit echtem BOOT-Hash bestanden. Vier gezielte Hostgruppen pruefen Originalalgorithmen mit Modellbesitz/IRQ/VM; ein SMP4-Gast bestaetigt die bestehenden parallelen Heap-/SMP-/TLB-Faelle und sieben Heapgruppen mit vollstaendiger eigener Ressourcenfreigabe. Genau ein finaler STANDARD samt unveraendertem, vollstaendig geprueftem DevCenter-Import. Keine neue allgemeine Suite oder zusaetzliche Messkampagne. Vier Besitzer veroeffentlicht; Rohdaten ausserhalb Git.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Kernel 310 haelt grosse freie Bloecke und Realloc-Reste bis zum Ende ihrer ganzen 0xDD-Fuellung unter exakten privaten Tickets; waehrenddessen bleibt die freie Kapazitaet fuer andere CPUs nutzbar. Geeignete VM-Tails geben die Heapsperre unter der bestehenden Wachstumsserialisierung frei. Urspruengliche Kontextzulassung, Politik, Teilfehler-Retry und Unwind-/Wake-Abschluss bleiben erhalten. Vier Hostgruppen und gezielte originale SMP4-Heap-/SMP-/TLB-Faelle bestanden. STANDARD b78d3714-10c0-49e5-9a44-272a358f1391: Index 118.953794, Einzelvergleich zur letzten 0.84.23-Korrektur 1.573565% ohne Kausal- oder Paritaetsbehauptung; Original 5/30/6 im DevCenter geprueft. Vier Besitzer veroeffentlicht. Beleg und Grenzen: Docs/Core/KernelHeapLock08424.json.
+
+## 0.84.25 Parallele SDK-Allokationen entlasten
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Den gemeinsamen SDK-Allokator bei langsamen Reserve-/Commit-/Decommit-/Release-Aufrufen entlasten. Bestehende freie Regionen während privater VM-Vorbereitung weiter nutzbar halten und längere Konkurrenz über vorhandene Warteprimitive behandeln, damit parallele Threads nicht durch reine Yield-Schleifen zusätzliche Schedulerarbeit erzeugen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Langsame VM-Vorbereitung und Abbau vom freien Blockzugriff trennen.
+  - Notizen: Umgesetzt: SDK 33 serialisiert genaue VM-Vorbereitung und Abbau unter privaten Heaptickets. Reserve/Commit/Decommit/Release geben die Metadatensperre frei; bestehende freie Bloecke und geeignete Cacheeintraege bleiben nutzbar. Abschluss bindet aktuelle Grenzmarken erneut. Fehlgeschlagener Tail-, Direkt- und Reservierungsabbau behaelt residente Retryidentitaet; nie einen moeglicherweise abgebauten Header nachlesen. Klassen, Cache-/Trim-/OOM-Politik und Default-/explizite Heaps bleiben erhalten.
+- [Erledigt] #2 Konkurrenz über echte Ereignisse abwarten und betroffene SDK-Verbraucher aktualisieren.
+  - Notizen: Umgesetzt: Getrennte Notificationrevisionen fuer Metadatensperre und VM-Praedikat vermeiden verlorene und eigene Scheinwecks. Freigabe/Publikation und echter Abschluss kommen vor Wake; letzter Wartender und fehlgeschlagener Close behalten genaue Handleidentitaet. Nur vorhandene, tatsaechlich verfuegbare Funktionen nutzen; sonst Sleep und dann vorhandenes Yield. Frueh fehlende VM-Tabelle wird nicht gespeichert. Alle 139 normalen Artefakte neu gebaut; 24 geaendert/versioniert, 115 bytegleich. 140 SDK-Pins aktualisiert; Kernel 310 und 15 verschachtelte Referenzfixtures bytegleich.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Abgenommen: Sieben gezielte vorhandene Hostfaelle mit einer neuen gebuendelten Besitzregression bestanden. Der echte SMP4-MEMORY-Lauf erhaelt Originalfaelle und prueft zwei SDK-Heaps mit acht Threads/128 Iterationen, Daten/Realloc, VM-/Cacheabbau und echte Joins. Genau ein finaler STANDARD, Originalexport im DevCenter5/30/6 gueltig verlustlos geprueft. Kein Vollkatalog oder neue Messkampagne. SDK32-Vorabfehler und gestoppte Builds bleiben im Belegarchiv, kein Vorabbenchmark. Sammelpush abgeschlossen. Beleg/Grenzen: Docs/Core/SdkAllocator08425.json.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: SDK 33 trennt langsame VM-Arbeit vom freien Blockzugriff und wartet bei laengerer Konkurrenz ueber bestehende Notifications. Genaue private Vorbereitung, Retryidentitaet, Wake nach Abschluss und vorhandene Politik bleiben erhalten. Host 7/7 und originale SMP4-MEMORY-Pruefung samt zwei Heaparten/acht Threads bestanden. 139 Artefakte gebaut, 24 geaendert/versioniert, 115 bytegleich; Kernel 310 unveraendert. STANDARD 3b8ef73b-76c0-4c78-9bc8-4bfc8a398c52: Index 118.599671, Einzelvergleich zur 0.84.24 -0.297698%; SDK-malloc wird dabei nicht direkt gemessen. Original 5/30/6 im DevCenter geprueft, alle Besitzer veroeffentlicht. Beleg/Grenzen: Docs/Core/SdkAllocator08425.json.
+
+## 0.84.26 Spinlocks bei Konkurrenz überwiegend lesend abwarten
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Bei umkämpften No-Sleep- und Scheduler-Runtime-Ownern wiederholte atomare Schreibversuche reduzieren. Nach fehlgeschlagener Übernahme zunächst lesend mit PAUSE auf Freigabe warten und erst dann erneut die atomare Besitzübernahme versuchen. Die funktionalen Interrupt-, Rang- und Kontextwechselverträge bleiben erhalten.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Lesenden Wartepfad mit genauer atomarer Übernahme in beide Owner integrieren.
+  - Notizen: Umgesetzt: Nur die zwei vorhandenen Konkurrenzschleifen beobachten nach fehlgeschlagenem Acquire-CAS lesend mit PAUSE. Ausschliesslich erfolgreiche atomare Uebernahme verleiht Besitz; Original-IF-Fenster in jedem Wartezyklus, Reentranz, Rang, CPU/Depth und Release-/RSP-Vertrag bleiben erhalten.
+- [Erledigt] #2 Vorhandene Konkurrenz-, IF- und Kontextwechselprüfungen gezielt wiederverwenden.
+  - Notizen: Abgenommen: Ein normaler SMP4-Gast buendelt vorhandenes THREAD /KERNEL:SYNC mit Sync/Unwind/vier IF-Proben und den originalen eigenen SMP-/TLB-/Parallelownerfall. Originalorakel bestanden, alle eigenen Tasks und Ressourcen quittiert. Nur zwei acquire-Bodies geaendert; Freigabe-/RSP-Pfade und Originalpruefungen bytegleich. Detail-Spinzaehler bedeuten jetzt PAUSE-Zyklen einschliesslich lesender Wartezyklen.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Format, Clippy, normaler Kernel311 und Testimage mit echtem BOOT-Hash bestanden. Genau ein finaler STANDARD mit SMP4 und unveraendertem vollstaendigem DevCenter-Import/GET5/30/6valid. Keine neue allgemeine Suite oder Messkampagne; drei Besitzer veroeffentlicht, Rohdaten ausserhalb Git.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Kernel311 wartet in No-Sleep-/Runtime-Ownern bei Konkurrenz lesend mit PAUSE und uebernimmt weiterhin nur per Acquire-CAS. IF-/Rang-/CPU-/Schachtelungs-/Release-/RSP-Vertraege erhalten; geaenderte Bedeutung der Detail-Spinzaehler dokumentiert. Gezielt gebuendelte originale Sync-/Unwind-/IF-/SMP-/TLB-Faelle bestanden. STANDARD adb7726f-7ba2-4d75-91d5-705da49b4851: Index 114.667150, deskriptiv zur 0.84.25 -3.315794%; keine Kausal- oder Paritaetsbehauptung. Original5/30/6 im DevCenter geprueft; drei Besitzer veroeffentlicht. Belege/Grenzen: Docs/Core/KernelSpin08426.json.
+
+## 0.84.27 CPU-Last nach der ersten Taskzuweisung gezielt ausgleichen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Ausdrücklich SMP-fähige Tasks nach ihrer ersten CPU-Zuteilung bei tatsächlicher Lastschieflage begrenzt neu verteilen. Leere CPU-Queues sollen geeignete ausführbare Arbeit übernehmen können, während andere CPUs mehrere bereite Tasks halten. Bestehende CPU-Affinität und technisch gebundene Hardwarearbeit bleiben verbindlich.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Begrenzten Lastausgleich für tatsächlich migrierbare Ready-Tasks integrieren.
+  - Notizen: Umgesetzt: Leere Ready-Queues uebernehmen unter dem vorhandenen Runtime-Owner einen zugelassenen Task aus einer Queue mit mindestens zwei Ready-Tasks. Ein rotierender Quellversuch, hoechstens acht Kandidaten; ein Quantum Migrationssperre. Explizite Affinitaet getrennt von Erstzuweisung. Physisch Current, feste CPU-/Treiber-/Async-Bindung, Locks/Handoffs und unsichere Lifecyclezustaende ausgeschlossen. Alter/Reihenfolge, Rollenbudgets, Generation, RSP/FPU und genauer Unwindbesitz bleiben erhalten; Ziel/Pending/IPI gemeinsam publiziert.
+- [Erledigt] #2 Migration und unveränderte Bindungsgrenzen mit vorhandenen SMP-/Schedulerfällen nachweisen.
+  - Notizen: Abgenommen: Ein normaler SMP4-Gast buendelt vorhandene native Sync-/Unwind-/IF-/Rollen-/Deadline-/FPU-Faelle und originale feste SMP-/TLB-/Ownerorakel. Nur der fehlende Vier-Task-Fall ergaenzt: bereits gestartete echte Event-Schlaefer, gebundene Ready-Ablehnung, anschliessende wirkliche Migration mit YMM-/Unwind-Erhalt, unveraenderte Readyfakten und quittierter eigener Abbau. Kein Task doppelt/verloren; keine neue Suite oder allgemeine Messkampagne. Originale physische Wechsel-/IRQ-/FPU-/Ressourcenpfade unveraendert.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Format, Clippy, normaler Kernel312 und Testimage mit echtem BOOT-Hash bestanden. Genau ein finaler STANDARD Suite2 SMP4, unveraenderter Vollimport und verlustfreies DevCenter-GET5/30/6valid. Vier Besitzer veroeffentlicht; Rohdaten ausserhalb Git. Scheduler-/Speicherdokumentation auf die aktuellen Besitzervertraege gebracht.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Kernel312 verteilt ausschliesslich geeignete nicht laufende SMP-Ready-Tasks begrenzt auf leere CPU-Queues. Feste Affinitaet, physische Current-/RSP-Grenze, genaue Task-/FPU-/Unwindidentitaet sowie Readyalter/Rollenbudgets bleiben erhalten. Gebuendelte originale Scheduler-/SMP-/TLB-Faelle und der fehlende echte Vier-Task-Migrationsfall bestanden. STANDARD d7a5d579-6f48-4c17-9509-141018a592a4: Index 118.120471, deskriptiv zur 0.84.26 3.011604%; keine Kausal- oder Paritaetsbehauptung. Original5/30/6 im DevCenter geprueft; vier Besitzer veroeffentlicht. Beleg/Grenzen: Docs/Core/KernelBalance08427.json.
+
+## 0.84.28 TCP-Wartende gezielt pro Verbindung und Listener wecken
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die gemeinsame TCP-Aktivitätswarteschlange durch gezielte generationsgebundene Warteaufnahme für Verbindungen und Listener ersetzen. Empfangene Segmente und Bereitschaftswechsel sollen nur fachlich betroffene Wartende wecken, damit Verkehr einer Verbindung andere blockierte TCP-Nutzer nicht ständig erneut einplant.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Verbindungs- und Listener-Waits samt Produzenten auf gezielte Bereitschaft umstellen.
+  - Notizen: Umgesetzt: Native TCP-Bereitschaft und getrennte Established-/Readable-/Closed- sowie Listener-Accept-/Data-Queues an genaue Slot-/ID-/Generationslebensdauer gebunden. Publikation und passende Wakes unter bestehendem Runtime-Owner; Enrollment liest nur residente Atomics. Kein TCP-Owner ueber Schlaf, keine globale RX-Weckung. Alte Verbindungen/Listener koennen keine neue Generation uebernehmen oder abbauen. Bestehende Read-/Timeout-/Paketvertraege bleiben erhalten.
+- [Erledigt] #2 Isolation paralleler TCP-Wartender und alle betroffenen Abschlusswege gezielt prüfen.
+  - Notizen: Gezielt abgenommen: Bestehendes NETWORK LIMIT mit elf exakt eigenen nativen Tasks fuer A/B-Isolation, Bereitschaft vor Enrollment, Establishment, Readable, Close/Abort, echten Timeout sowie Verbindungs-/Listenerwiederverwendung und spaeten alten Cleanup. Erster Gast: neue Diagnoseerwartung nach Abort falsch, Cleanup vollstaendig; originale TCP-/IPC-Faelle bestanden. Genau zwei neue Erwartungen korrigiert, nur LIMIT wiederholt und bestanden; bytegleicher Produktionscode durch kompletten Quellvergleich belegt. Kein Fehler verdeckt, keine allgemeine Testsuite.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Format/Clippy/Kernel313/Testimage samt echtem BOOT-Hash bestanden. Genau ein abschliessender STANDARD Suite2 SMP4 mit unveraendertem Vollimport und geprueftem DevCenter-GET5/30/6valid. Rohdaten/Fehlversuch ausserhalb Git; vier Besitzer veroeffentlicht. tcp_sig zaehlt nun wirklich geweckte Tasks, semantische Grenze dokumentiert. STANDARD misst keinen TCP-Durchsatz.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Kernel313 weckt TCP-Wartende gezielt pro genauer Verbindung bzw. Listenergeneration. Bestehende Read-/Zeit-/Paketvertraege erhalten; alte Lebensdauer kann neue nicht uebernehmen/abbauen. Originale Netzwerk-/TCP-/IPC-Pruefungen und elf eigene Taskfaelle bestanden. Erster fehlgeschlagener neuer Diagnosewert nach Abort samt vollstaendigem Cleanup erhalten; nur die zwei Erwartungen berichtigt und LIMIT gezielt wiederholt. STANDARD e0d70f26-b107-497f-b7b4-573ecf0a130f: Index 121.835393, deskriptiv zur 0.84.27 3.145028%; kein TCP-Durchsatznachweis. Original5/30/6 im DevCenter geprueft; vier Besitzer veroeffentlicht. Beleg/Grenzen: Docs/Core/KernelTcpWake08428.json.
+
+## 0.84.29 Zusammenhängende Dateicache-Lesungen in größeren Batches ausführen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die feste Begrenzung zusammenhängender Dateicache-Füllaufträge auf zwei 4-KB-Seiten durch eine begrenzte Auswahl anhand von Controllergrenzen, Cachekapazität und residentem Arbeitsbudget ersetzen. Demand-Read und produktiver Readahead sollen größere geeignete Bereiche mit weniger Einzelaufträgen füllen können.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Begrenzte adaptive Füllbatches und passende residente Arbeitsbereiche bereitstellen.
+  - Notizen: Umgesetzt: Gemeinsame Fill-Aufnahme mit endlichem16-Seiten-/64KB-Limit, bestaetigter Controllergrenze und vorhandenem freien/sauberen ungepinnten Cachebudget. Pro Leseoperation residenten Heap ausserhalb Cache-Owner allokieren/wiederverwenden; bei Allokationsmangel Einseitenfortschritt. Nur16 Reservierungsdatensaetze auf dem Kernelstack. Echte Pins/Dirty-Masken und bestaetigte Gesamtpublikation bleiben erhalten. Spekulation ist bereits deaktiviert; der gemeinsame Pfad wahrt deren verbleibendes Budget/freie Reserve, aktiviert keinen Worker.
+- [Erledigt] #2 Teilfortschritt, Konkurrenz und kleine Backendgrenzen mit vorhandenen Storagefällen prüfen.
+  - Notizen: Abgenommen: Neun gezielte Hostgruppen kompilieren den echten Cache-/Index-/Read-/Worker-Code und modellieren nur Hardware-/Schedulerprimitive: >8KB, harte Grenze, kleine/unbekannte Controller, Geraeteende, fremde Pins, gemischte gueltige/dirty Sektoren, Teilfehler/Retry/keine Publikation und PMM-/Heap-Fallback. Ein vorhandener nativer SMP4-PAGECACHE-Fall mit kalten64KB-NTFS-Spannen und separatem64MB-FAT-Medium; alle urspruenglichen Flush-/Inhalts-/Metadaten-/Callerorakel erhalten. Nach einem unerwarteten Konformanzfehler einen313-Kontrollgast mit demselben Spectra19 verwendet: alter globaler Nullvergleich bei74 frueheren Bouncepuffern falsch, eigene Zusatzlast0. Spectra20 vergleicht gegen den genauen eigenen Vorher-Snapshot; korrigierter urspruenglicher Konformanzfall samt passiven Rohsnapshots bestanden. Originale Fehlversuche behalten; keine allgemeine Suite oder Hardwarekampagne.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Kernel314/Spectra20 und Release29 beim Besitzer versioniert; Format, Clippy, Builds und aktuelles Testimage mit echtem BOOT-Hash bestanden. Genau ein finaler STANDARD Suite2 SMP4, unveraenderter Vollimport und verlustfreies DevCenter-GET5/30/6valid. Fuenf Besitzer veroeffentlicht; Rohdaten ausserhalb Git. Die historischen groesseren Subsystem-/Readahead-Haenger gelten nicht als geloest, Spekulation bleibt deaktiviert; begrenzte Aussagegrenzen im Beleg.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Kernel314 fuellt zusammenhaengende Cache-Misses adaptiv bis16 Seiten/64KB mit residentem auftragsgebundenem Heapstaging. Echte Controller-/Cache-/Pinbudgets sowie kleine Allokations-/Backendpfade und unveroeffentlichte Teilfehler bleiben erhalten. Neun echte Besitzer-Hostfallgruppen und vorhandenes natives SMP4-PAGECACHE sowie korrigierte Konformanz bestanden; Daten/Flush/Dirty-/Callerorakel erhalten. Ein313-Kontrollgast reproduzierte den alten faelschlichen globalen Bounce-Nullvergleich; Spectra20 verlangt weiterhin null Zusatzpuffer fuer die eigene Last, behaelt alle Rohzaehler. Spekulation bleibt deaktiviert, kein historischer Haenger oder physisches USB als geloest beansprucht. STANDARD 58e291e9-3a9c-4bd2-b113-74a74c065115: Index 124.812136, deskriptiv zur0.84.28 2.443250%; Original5/30/6 im DevCenter geprueft. Fuenf Besitzer veroeffentlicht. Beleg/Grenzen: Docs/Core/KernelFileCache08429.json.
+
+## 0.84.30 Unabhängige Dateileser desselben Laufwerks parallel zulassen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Unabhängige normale Lesezugriffe auf dasselbe Laufwerk parallel ermöglichen. Dafür die geteilte Lesezulassung von exklusiven Mutationen trennen und bisher gemeinsam genutzte Arbeitsbereiche sowie veränderliche Cachemetadaten sicher beim jeweiligen Besitzer behandeln. Bereits mögliche Parallelität zwischen verschiedenen Laufwerken erhalten.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Geteilte Lesezulassung und sichere auftragsgebundene Arbeitszustände einführen.
+  - Notizen: Umgesetzt: Geteilte genaue Task-/Mount-Lesezulassung vor bestehenden Backend-Metadatenphasen; wartende Schreiber schliessen neue Leseraufnahme. Nur explizite synchrone Nutzdatenleihen geben den Backendowner zurueck, behalten Use/Unwind/Read-Zulassung und holen ihn vor Fortsetzung zurueck. NTFS512B lokal und nur bei Kompression128KB Heap, bei Mangel serialisierter Fallback. FAT-Extent/LRU/Append kurz synchronisiert, Callerdaten ausserhalb Owner. Mutation/Streams/Copy/Flush/Unmount und aufsteigende Cross-Drive-Aufnahme behalten ihre Grenzen.
+- [Erledigt] #2 Parallele Leser, exklusive Mutationen und Mountlebensdauer gezielt abnehmen.
+  - Notizen: Abgenommen: Vier gezielte Gruppen mit echtem Zulassungsbesitzer pruefen Generation, Leihretention, Slots, Schreiberzulassung/Nesting; drei mit echtem NTFS-Bufferbesitzer pruefen private Buffer und Heap-/Zulassungsfallback. Ein gebuendelter nativer SMP4-Fall mit privaten NTFS/FAT-Dateien: vier echte Leser,128 unaligned Reads mit Byteorakel, zwei exklusive Schreib-/Truncate-/Rename-Tasks, sechs echte Joins und Notificationfreigabe. Separate genaue Volume-Leihe prueft Busy; nach Freigabe neuer Mount und Ablehnung alter Referenz. Betroffenen vorhandenen NTFS-/INITIALIZED-Fall mit LZNT1/raw/sparse/Nullschwanz/Canary/EOF/Fehlerorakel gebuendelt. Erster neuer Remountfall verwendete ein nach Unmount korrekt veraltetes Layoutziel; korrigierter Fall weist dessen Ablehnung nach und bindet dieselbe Partition frisch. Nur READERS wiederholt, unbeeinflussten INITIALIZED-Beleg mit identischem Kernel und sonst gleichen Quellen uebernommen. Keine allgemeine Suite oder USB-Hardwareabnahme.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Kernel315/Spectra21 und Release30 versioniert. Format, Clippy, Besitzerbuilds und aktuelles Testimage samt physischem BOOT-Hash bestanden. Genau ein finaler STANDARD Suite2 SMP4; unveraenderter Vollimport und verlustfreies DevCenter-GET5/30/6valid. Fuenf Besitzer veroeffentlicht; Rohdaten ausserhalb Git. Aussagegrenzen im Beleg.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Kernel315 laesst unabhängige normale Dateileser desselben Mounts parallel zu; Metadatenphasen und Mutationen bleiben geordnet. NTFS-Datenscratch auftragslokal, FAT-Cachemetadaten kurz synchronisiert; genaue Mount-/Task-/Unwindleihen bleiben bis Abschluss erhalten. Sieben gezielte Besitzer-Hostgruppen und ein nativer SMP4-Verbundfall samt bestehendem NTFS-/INITIALIZED bestanden. Spectra21 prueft128 Reads, exklusive Mutation, sechs Joins, Notificationfreigaben und neue Mountgeneration. STANDARD 96a9290e-ea37-4bce-9a57-5385a6903591: Index 126.674268, deskriptiv zur0.84.29 1.491948%; Original5/30/6 im DevCenter geprueft. Fuenf Besitzer veroeffentlicht. Grenzen/Beleg: Docs/Core/KernelFileReaders08430.json.
+
+## 0.84.31 FAT32-Schreibpositionen ohne wiederholte Clusterkettensuche erreichen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Wiederholtes Positionsschreiben innerhalb bestehender FAT32-Dateien über genaue Schreibcursor oder Extents beschleunigen. Bei unveränderter Clusterkette sollen Folgezugriffe nicht jedes Mal erneut alle vorherigen Cluster ab Dateianfang durchlaufen und brauchbare Kettenabbildungen nicht pauschal verlieren.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Genau gebundene Schreibcursor/Extents und gezielte Invalidierung integrieren.
+  - Notizen: Umgesetzt: Positionsschreiben nutzt den vorhandenen gebundenen FAT-Extentcache und setzt die Kettensuche nahe der Zielposition fort. Reine Datenueberschreibung behaelt gueltige Abbildungen; groessere bekannte Abdeckung bleibt erhalten. Nur genau bestaetigte Start-/Endpositionen nach bisheriger Mutations-/Flushquittung aufnehmen. Private Skalarrueckgabe fuer letzten geschriebenen Cluster; write_from behaelt bool. Append, Groessen-/Ketten-/Austausch-/Mountinvalidierung und .30-Lesevertrag bleiben erhalten.
+- [Erledigt] #2 Fortlaufende und wechselnde Schreibpositionen samt Invalidierungsfällen gezielt prüfen.
+  - Notizen: Abgenommen: Echten FAT-Dateibesitzer samt Typen/Zaehlern und originalen nth/file_clusters-Bodies mit modelliertem IO/Flush gezielt geprueft: zusammenhaengend/fragmentiert, benachbart/wiederholt/rueckwaerts/random, volle Bytes, vorhandene breite Abdeckung, Teil-/Lese-/Flushfehler ohne neue Position, Grenzen und Identitaet/Invalidierung. Die zusaetzliche Erhaltungsprobe deckte vor Abnahme eine Verkuerzung breiter Abbildungen auf und ist nach Korrektur gruen. Ein begrenzter nativer SMP4-WRITEPOSITIONS-Verbundfall auf privatem FAT: echte Fragmentgrenze und Spiegel roh geprueft, Positionswrites/EOF/Kuerzen/Austausch, unveraenderter Nachbar und volle Daten nach neuem Mount. IO-Tickets erst nach echter Wait-/Closequittung loslassen. Keine allgemeine Stress- oder Hardwarekampagne.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Kernel316/Spectra22 und Release31 versioniert. Format, Clippy, Besitzerbuilds und aktuelles Testimage mit echtem BOOT-Hash bestanden. Genau ein finaler STANDARD Suite2 SMP4; unveraenderter Vollimport und verlustfreies DevCenter-GET5/30/6valid. Vier Besitzer veroeffentlicht; reale Rohdaten ausserhalb Git. Beleg/Grenzen unten.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Kernel316 nutzt bestaetigte FAT-Kettenpositionen fuer Folgeueberschreibungen, behaelt gueltige breite Extents und veroeffentlicht neue Start-/Endpunkte erst nach bestehender Flushquittung. Append-/Invalidierungs-/Mount-/Lesevertraege bleiben erhalten. Gezielte echte Besitzer-Hostfaelle und ein nativer SMP4-WRITEPOSITIONS-Verbundfall auf zusammenhaengenden/fragmentierten1-MB-Dateien samt Spiegeln, Fehlergrenzen und Remount bestanden. STANDARD 65ab2ef8-7f78-4514-82c6-10fda4244fc0: Index 126.562799, deskriptiv zur0.84.30 -0.087997%; Original5/30/6 im DevCenter geprueft. Vier Besitzer veroeffentlicht. Beleg/Grenzen: Docs/Core/KernelFatWrite08431.json.
+
+## 0.84.32 Dekodierte NTFS-Kompressionseinheiten wiederverwenden
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Für kleine Folgezugriffe innerhalb derselben tatsächlich komprimierten NTFS-Einheit bereits dekodierte Daten begrenzt wiederverwenden. Ein kleiner genau gebundener Cache beziehungsweise eine Lesesitzung soll unnötige erneute LZNT1-Dekodierung ganzer bis zu 64 KB großer Einheiten vermeiden.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Begrenzte generations- und inhaltsgebundene Wiederverwendung dekodierter Einheiten einführen.
+  - Notizen: Umgesetzt: vier immutable dekodierte NTFS-Einheiten mit zusammen256KB Heap-Payload. Genaue Mount-/Datei-/UTF16-Stream-/Einheits-/Inhaltsidentitaet; auch Payload/System-Schreiben invalidiert trotz erhaltener Metadaten. Nicht kopierbare Pins und genaue Loading/Retiring-Tickets schuetzen Wiederverwendung und Budget. Nur vollstaendige erfolgreiche Dekodierung samt Nullfuellung publizieren; Reclaim/Mountfreigabe ausserhalb Cacheowner und erst nach echtem Heap-Free quittieren. Urspruenglicher Scratch/Fallback, raw/sparse/initialized/Fehlerpfade bleiben.
+- [Erledigt] #2 Wiederverwendung und Invalidierung anhand der vorhandenen komprimierten NTFS-Fälle prüfen.
+  - Notizen: Abgenommen: echte Cache-/Key-/Metadaten-/IO-/Reader-/LZNT1-Besitzer mit modelliertem unteren Heap/IO/Admission: heiss/kalt, alle vier Pins, Verdrangung, OOM, Loading-Reentry, Inhaltswechsel vor Publikation, echte Payload-Invalidierung, Stream-/Identitaetsschluessel, raw/sparse/Null-/Fehlergrenzen. Ein begrenzter nativer SMP4-UNITCACHE-Verbundfall: Inputkopien heiss0, nach Reclaim wieder vorhanden; zwei Leser/64Reads mit echten Joins und Notification-Close; Umbenennen/Austausch restauriert, frischer Mount und alte Referenz stale. Danach bisherige29 INITIALIZED-Grenzfaelle unveraendert bestanden. Kein Vollkatalog.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Kernel317/Spectra23 und Release32 versioniert; Format/Clippy/Besitzerbuilds/aktuelles Testimage samt physischem BOOT-Hash bestaetigt. Genau ein abschliessender STANDARD Suite2 SMP4 und originaler Vollimport/GET5/30/6valid. Fuenf Besitzer veroeffentlicht; echte Rohdaten ausserhalb Git. STANDARD misst diesen Spezialpfad nicht direkt; keine Laufzeitbeschleunigung aus Kopierzaehlern ableiten.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Kernel317 behaelt bis zu vier genau inhaltsgebundene dekodierte NTFS-Einheiten (256KB Payload). Pins und genaue Reservierungs-/Freigabetickets schuetzen Konkurrenz und Reclaim; keine Allokation/IO/Free unter Cacheowner. Originale Schreib-/Mountzulassung, raw/sparse/initialized/Decoderfehler bleiben. Gezielte echte Besitzer-Hostgrenzen und ein nativer SMP4-UNITCACHE-Verbund samt bisheriger29 INITIALIZED-Faelle bestanden. STANDARD 2c5f27ca-2677-42a9-b16f-ae6de74ad857: Index 125.556042, deskriptiv zur0.84.31 -0.795460%; Original5/30/6 im DevCenter geprueft. Fuenf Besitzer veroeffentlicht. Grenzen/Beleg: Docs/Core/KernelNtfsUnitCache08432.json.
+
+## 0.84.33 Audiomischung mit fortlaufenden Ringpositionen vereinfachen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Im allgemeinen Audiomischer wiederholte Restdivisionen pro 16-Bit-Sample und Quelle durch fortlaufende Ringpositionen beziehungsweise zusammenhängende Ringabschnitte ersetzen. Der bestehende Kopier-Schnellpfad für einen Stream mit unveränderter Lautstärke bleibt erhalten.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Allgemeinen Mixer auf begrenzte Ringabschnitte und fortlaufende Lesezeiger umstellen.
+  - Notizen: Umgesetzt: Generalpfad der acht produktiven Audiostreams verwendet unabhaengige lokale Ringcursor ohne Modulo im Sample-Schritt; gueltige Startpositionen brauchen auch keinen Initialmodulo. Nur kopierte Positionen fortschreiben. Unity-/Einzelstream-Direktkopie und breiterer privater Eingangspfad bleiben erhalten. Gemeinsame8er-Kapazitaetskonstante; keine Allokation/FPU/SIMD. Vorzeichenrechnung, Rundung, Reihenfolge, Sattigung und Workzaehler unveraendert. Core-Besitz/Readreservation/Backendquittung/Verbrauch/Close bleiben bytegleich.
+- [Erledigt] #2 Mixerergebnisse mit vorhandenen Audiofällen samplegenau vergleichen.
+  - Notizen: Abgenommen:174 begrenzte Vergleiche der vollstaendigen alten/neuen Mixer liefern exakt gleiche Bytes/Workzaehler bei Direktkopie, Skalierung, Stille, Extremwerten/Sattigung, unabhaengigen/ungeraden Ringstarts, kleinen Ringen/Restabschnitten und0/1/2/3/8/9Quellen. Originale Eingaben und Ausgabecanaries unveraendert. Ein urspruenglicher kurzer SMP4-AudioDiag mit originalem AudioOnly-WAV-Orakel prueft PCM/Deadlines, Master/Zweistream/Restart, vier Replay-Closezyklen und HDA-Diagnose. Kein LONG/Vollkatalog oder neuer allgemeiner Audiotest.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Kernel318/Release33 versioniert; Spectra23, AudioDiag, AUDSVC/HDA und API/ABI/SDK unveraendert. Format/Clippy/aktueller Build und Testimage samt physischem BOOT-Hash bestanden. Genau1 finaler STANDARD Suite2 SMP4, Originalimport/GET5/30/6valid und Sammelpush der3Besitzer. STANDARD misst Audiomischung nicht direkt; keine ungemessene Zeitbeschleunigung behaupten.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Kernel318 mischt mit begrenzten unabhaengigen Ringpositionen ohne per-Sample-Modulo. Originale Arithmetik/Direktkopie und Stream-/Backendbesitz bleiben.174 exakte alte/neue Byte-/Zaehlervergleiche und urspruenglicher kurzer SMP4-AudioDiag samt WAV-Auswertung bestanden. STANDARD 3d42c184-1d7a-4f23-90f2-12dc658b2ffe: Index 124.688355, deskriptiv zur0.84.32 -0.691075%; Original5/30/6 im DevCenter geprueft. Drei Besitzer veroeffentlicht. Beleg/Grenzen: Docs/Core/KernelAudioRing08433.json.
+
+## 0.84.34 SerialLink vollständig entfernen und COM2 freigeben
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Den nicht mehr benötigten SerialLink-Nachrichtenkanal vollständig aus dem aktiven System entfernen. Kernelruntime, Dienst, Protokoll, zugehörige Diagnose und Hostwerkzeuge sowie deren Build-, Image- und Konfigurationseinträge abbauen. COM2 wird weder beim Boot noch im laufenden Betrieb automatisch für SerialLink initialisiert, gelesen oder beschrieben und steht damit für normale serielle Nutzung durch einen entsprechenden Treiber zur Verfügung. Das bestehende COM1-Debugging einschließlich frühem Boot, laufender Ausgabe und terminalem Fehler-/Shutdownpfad bleibt erhalten.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 SerialLink aus Kernel, Bootfolge und aktiven Schnittstellen entfernen; COM1-Debugging erhalten.
+  - Notizen: Umgesetzt: SerialLink-Runtime/Queue und private R4SL-Wirehelfer entfernt. Keine COM2-Bootprobe/Initialisierung und kein Poll/Send/Status-Transport. Fuenf feste R4NET-Slots bleiben reine err_no_fn-Stubs ohne Puffer/UART/Loader/Work. Alle publizierten Namen/Signaturen/Layoutpraefixe bleiben; neunfaches Snapshotlayout behaelt reservierten Platz8, aktive Protokolle8. COM1-Serial-/Log-/Puffer-/Flushbesitzer bytegleich und Buildoption unveraendert.
+- [Erledigt] #2 SerialLink-Module und Hosttool samt Integration, Anzeigen und Inventaren vollständig bereinigen.
+  - Notizen: Umgesetzt: R4SLSVC/NETR4SL/R4SLD verlieren Quell-/Build-/Modulmanifeste; bestehende Repositories behalten Lizenz/README und Historie. Beide Autostarts, Hosttool/Artefakte, aktive SDK-Methoden, NETR4P-Rolle/Aliase, DEVMGR/IPCONFIG-Anzeigen und exklusive HELP-Hinweise bereinigt. Drei Module und nur zwei exklusive Tests ausgetragen; uebrige Kataloge erhalten. Vier geaenderte Verbraucher gebaut/versioniert,137 normale SDK-Pins aktualisiert. Contract19/SDK34 kompatibel geprueft/veroeffentlicht; Originalbindungen unveraendert. Native COM2-Probe40reale reservierte Aufrufe ohne Puffer/Register/RX-Effekt und ohne TX; Corpus21Faelle, IPC und8/8R4P bestanden. IPCONFIG zeigt unveraendert1 bei fehlendem Adapter im -nic-none-Gast, keine NIC-Detailabnahme.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Kernel319/Release34; vier geaenderte Modulartefakte, Contract19 und SDK34 versioniert; Spectra23/fester Lifecycle-Child unveraendert. Strikte Kernel-/Verbraucher-/gezielte SDK-Builds, kanonische Contract-Layouts/Interop und aktuelles Image mit echtem BOOT-Hash bestanden. Genau1 STANDARD Suite2 SMP4, Originalimport und verlustfreies GET5/30/6valid.131 Besitzer im Sammelpush plus2vorab fuer exakte Abhaengigkeitspins veroeffentlicht. Rohdaten nur ausserhalb Git. Test-Setup-/Archivkorrekturen fuehrten zu keinem zusaetzlichen Benchmark.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Kernel319 entfernt SerialLink und feste COM2-Nutzung; COM1-Debugbesitzer unveraendert. Drei dedizierte Module/Hosttool/Autostarts/aktive SDK- und UI-Anteile entfernt, publizierte ABI-Slots als inaktive err_no_fn-Stubs erhalten. Reale COM2/40Aufrufe, Corpus21, IPC und8/8R4P bestanden; urspruengliche no-NIC-IPCONFIG1-Grenze dokumentiert. STANDARD 178c025c-7b6f-414d-b07c-0941142c75f7: Index 124.480125, deskriptiv zur0.84.33 -0.167000%; Original5/30/6 im DevCenter geprueft.131 Sammelpush-Besitzer plus Contract19/SDK34 veroeffentlicht. Beleg/Grenzen: Docs/Core/KernelSerialLinkRemoval08434.json.
+
+## 0.84.35 COM1-Debugging nach dem Boot per Registry abschaltbar machen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die bisherige COM1-Debugausgabe für den frühen Boot erhalten und ihren weiteren Betrieb nach erfolgreichem Boot per Registry steuern. Unter SYSTEM\Kernel\Debug legt der BOOL-Wert Com1DebugAfterBoot fest, ob das Debugging weiterläuft: 1 behält die Ausgabe bei, 0 beendet sie am Bootabschluss und gibt COM1 für andere serielle Nutzung frei. Unmittelbar vor dem Abschalten meldet der Kernel über COM1 ausdrücklich, dass das Debugging abgeschaltet und der Anschluss freigegeben wird.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Registry-Policy für COM1 einmalig laden und am erfolgreichen Bootabschluss anwenden.
+  - Notizen: Umgesetzt: DefaultRegistry BOOL Com1DebugAfterBoot=1 unter SYSTEM\Kernel\Debug. Genau ein existierender Registry-Get im Boot-Shell-Task; nur gueltiges BOOL0 schaltet ab, alle Lesefehler/Typ-/Laengen-/Wertfehler erhalten1. Buildoption vorrangig. Residenter Entscheid nach erfolgreichem originalen BootReady und Display-/Bootfreigabe; spaetere Registryaenderungen wirken naechsten Neustart.
+- [Erledigt] #2 COM1 mit letzter Abschaltmeldung geordnet aus der Debugausgabe lösen und freigeben.
+  - Notizen: Umgesetzt: genaue Schreiberzulassung unter bestehendem Serialowner, Annahmeschluss vor Warten. Alter Puffer und letzte deutsche Meldung vor echter THRE+TEMT-Quittung. Begrenzte Wartezeit ohne Owner ueber Schlafen; unbekannter/gescheiterter Abschluss behaelt Portbelegung. Alte Callbackkopien, Timer, Flush/Sync und spaete Initialisierung bleiben danach ohne Debug-UART-Zugriff.16 gezielte Actual-Source-Hostgrenzen bestanden. Zwei echte SMP4-BootReady-Faelle bestehen: Default1 samt terminaler Ausgabe; explizit0 mit abschliessender Meldung, neuer UART-Konfiguration, eigenen Bytes und stillem Shutdown. Registryaenderung nach BootReady aendert jeweils laufende Policy nicht.
+- [Erledigt] #3 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Kernel320/Release35; Spectra23/Contract19/SDK34 unveraendert. Strikter Build und aktuelles kanonisches Image mit physischem BOOT-Hash bestanden.631 andere Rustdateien und65 weitere Funktionen bytegleich; vier alte aktive Serialkoerper bis auf Zulassung exakt. Genau1 STANDARD Suite2 SMP4 bei Default1 samt Originalimport und verlustfreiem GET5/30/6valid. Rohdaten ausserhalb Git, kurze Funktions-/Aussagegrenzen im Beleg. Sammelpush abgeschlossen.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: COM1-Debug nach erfolgreichem BootReady per einmaliger Registry-Policy abschaltbar. Default/Fehler1 behaelt Ausgabe;0 schliesst alte Schreiber/Puffer und meldet Abschaltung vor echter TEMT-Freigabe. Ungewisser Abschluss behaelt Port, keine spaete Reaktivierung. Zwei echte SMP4-BootReady-/Shutdownfaelle und16 gezielte Hostgrenzen bestanden. STANDARD ea6fe346-6e74-461e-af15-b669a7a3d144: Index 124.508162, deskriptiv zur0.84.34 0.022523%; Original5/30/6 im DevCenter geprueft. Kernel320/Release35 veroeffentlicht. Beleg/Grenzen: Docs/Core/KernelCom1Policy08435.json.
+
+## 0.84.36 Seriellen Treiber und COM-API für eine variable Anzahl von Ports bereitstellen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Einen gemeinsamen externen UART-Treiber SERIAL.R4D und eine schmale COM-Anwendungsschnittstelle bereitstellen. Anwendungen können vorhandene Anschlüsse auflisten, öffnen, konfigurieren, lesen, beschreiben und schließen. Der Portkatalog unterstützt eine variable Anzahl von Anschlüssen und ist ausdrücklich nicht auf COM1 und COM2 begrenzt. Die Freigaben aus 0.84.34 und 0.84.35 integrieren: COM2 ist ohne SerialLink nutzbar, COM1 erst nach bestätigter Abschaltung seiner Debugausgabe.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Gemeinsamen externen UART-Treiber mit mehreren unabhängigen Portinstanzen aufbauen.
+  - Notizen: SERIAL.R4D0.1.0 im eigenen oeffentlichen Repository R4OSDev/r4os-driver-serial. Residente getrennte4096B-Ringe, rohe Bytes, Konfiguration/RTS-CTS/Fehlerzaehler und geteilter IRQ-Handler je Leitung. Deklarierte ISA-UARTs und explizit bestaetigte PCI-BAR-Ressourcen; keine generische USB-/PCI-Erkennung behauptet. Fuenf Actual-Source-UARTgruppen bestanden; physischer Hardwareumfang gesondert ausgewiesen.
+- [Erledigt] #2 Portkatalog, exklusive Belegung und bestätigte COM1-Debugübergabe integrieren.
+  - Notizen: Dynamischer Heapkatalog ohne Zwei-/Vierportgrenze, stabile konfigurierte COMnummer+kanonische Hardwareidentitaet. Genaue Prozess-/Registrierungs-/Oeffnungsgenerationen, begrenzte Callbackleihen und WaitQueue/Praedikat. COM1 vor bestaetigter Debugfreigabe weder pruefen noch oeffnen. Close validiert genaue Identitaeten nochmals; laufendes Open und ungeklaerter physischer Abschluss behalten Ressourcen. Fuenf Actual-Source-Brokergruppen inklusive128Ports/Teilresultat/Abbruch/Exit/Open-Abbau bestanden. NativeSMP4 mit4realen QEMU-ISA-Ports,3parallelen Duplexverbindungen und neuem Besitzer nach Prozessende mit wartendem Leser bestanden. QEMU selbst begrenzt ISA-Geraete auf4.
+- [Erledigt] #3 COM-Anwendungs-API und SDK-Fassade mit Zeitlimits und Statussemantik bereitstellen.
+  - Notizen: Contract0.64.20:10optionale R4DEV-Felder/536B/v21 und DriverApi37serial_query, alte456/656B-Praefixe unveraendert. SDK0.64.35 Zig/C-Fassaden: Enumeration/Open/Config/Read/Write/Drain/Status/Cancel/Close, endliche Tickbudgets, genaue Teilresultate und gehaltenes fehlgeschlagenes Close. Bestehende11Ressourcenfaelle plus gezielte Fassaden und SDKSMOKE bestanden; neue Pakete veroeffentlicht und138zukuenftige Standalonepins aktualisiert, fremde Artefakte nicht unnoetig versioniert.
+- [Erledigt] #4 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Kernel321/Release36/Serial0.1.0, Spectra23 unveraendert. Strikter Build und physisch geprueftes aktuelles Testimage;628andere Rustdateien und117weitere Funktionen bytegleich. Zwei echte BootReady-Policies einschliesslich COM1-API nach Debugfreigabe und stillem Shutdown bestehen. Genau1finaler STANDARD Suite2 SMP4/Default1 mit Originalimport+verlustfreiem GET5/30/6valid. Dokumentation/Inventare/Belege und Sammelpush abgeschlossen; keine Rohsamples im Repo. STANDARD belegt keinen UART-Durchsatz.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: externer SERIAL.R4D und variable COM-API mit genauen Generationen, endlichen IRQ-Waits/Teilresultaten und quittiertem Close/Exit. COM1 bleibt bis bestaetigter Debugfreigabe reserviert; fruehe Ausgabe unveraendert. Actual-Source UART5/Broker5 inklusive128Katalogeintraegen und nativeSMP4 mit4realen Ports/3parallel/Prozessreaper/COM1-Uebergabe bestanden. Hardware-/Interleavinggrenzen im Beleg. STANDARD 9c5a26ec-53a5-4885-8fca-4fbcae89150a: Index 119.640223, zur35 deskriptiv -3.909735%; Original5/30/6 DevCenter geprueft. Kernel321/Serial1/Contract20/SDK35/Release36 veroeffentlicht. Beleg: Docs/Core/KernelSerialCom08436.json.
+
+## 0.84.37 Analyse: Kernelcode vereinfachen und sinnvoll auf Dateien aufteilen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Nach Umsetzung der bisherigen Unterversionen den gesamten dann aktuellen Kernel erneut auf verständliche Codevereinfachungen ohne Performanceverlust und auf sinnvolle fachliche Dateigrenzen untersuchen. Ziel sind überschaubare, zusammenhängende Quelldateien und kürzerer, klarer nachvollziehbarer Code. Das verbindliche Arbeitsergebnis dieser Analyse sind konkrete weitere offene Unterversionen in 0.84.X, welche die begründeten Vereinfachungen und Dateiaufteilungen anschließend umsetzen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Den gesamten aktuellen Kernel auf vereinfachbare Abläufe und überladene Quelldateien untersuchen.
+  - Notizen: Gesamter Quellbestand inventarisiert:644Rustdateien/278141Zeilen,5Assemblydateien plus Linkerskript.54Rustdateien ueber1000/10ueber2000Zeilen. Groesste gemischte Besitzer und alle18textgleichen Koerperkandidaten fachlich eingeordnet. Lexikalische Navigation, keine formale Fehlerfreiheitspruefung.
+- [Erledigt] #2 Für tragfähige Befunde konkrete Vereinfachungen und fachliche Dateizuschnitte entwerfen.
+  - Notizen: Tragfaehige Kuerzung:4unreferenzierte rohe UART-Helfer und3nachgewiesen gleiche getypte GFX-Projektionen. Fachliche Zuschnitte fuer Plattformcallbacks, GFX-Treibervermittlung, TCP, Netzwerk-IPC, Audio, Display und bestehende Programmdiagnosen. Tabellen/kohaerenteEinzelbesitzer bleiben; ABI/Layout/Lock/Wait/Callback/Retention/Orakel unveraendert.
+- [Erledigt] #3 Aus den begründeten Befunden weitere konkrete Unterversionen in 0.84.X anlegen und prüfen.
+  - Notizen: Ausgabe tatsaechlich angelegt und vollstaendig zurueckgelesen:0.84.38-45, lokaleIDs38-45, korrekte Sortierung, je4offene konkrete Aufgaben. Besitzer Kernel, vorhandene Pfade als direkte Fassaden, keine neue Indirektion oder zweite Zustandshaltung. Jede Codewelle mit minimalen betroffenen vorhandenen Pruefungen und genau1STANDARD+Originalimport/GET5/30/6valid.
+- [Erledigt] #4 Unterversion dokumentieren und bei möglicher Performancewirkung mit STANDARD abschließen.
+  - Notizen: Reine Analyse/Planung/Dokumentation abgeschlossen und veroeffentlicht. Release37, alle1247Runtime-/Quellhashes und Kernel321/Spectra23/Serial1/Contract20/SDK35 unveraendert. Kein Laufzeit-/Build-/Benchmarkbedarf; Docs-Inventar370 besteht. Beleg Docs/Core/KernelStructureAnalysis08437.json. Weiter38-45; Hauptversion bleibt offen.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Gesamtinventar650Quell-/Linkerdateien; sinnvolle Kuerzung/Dateizuschnitte entworfen und8konkrete Folgeunterversionen0.84.38-45 tatsaechlich angelegt/geprueft. Typisierte Besitzer, ABI/Layout und echte Lebensdauer-/Callback-/Abbaugrenzen bleiben erhalten; reine Tabellen nicht nach Zeilenzahl zerlegen. Reine Analyse:1247Quell-/Artefakthashes unveraendert, daher kein STANDARD. Release37 veroeffentlicht. Beleg/Grenzen: Docs/Core/KernelStructureAnalysis08437.json.
+
+## 0.84.38 Private Restpfade und doppelte Projektionen bereinigen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Vier unreferenzierte rohe UART-Helfer nach belegter Definition/Aufrufersuche entfernen. Drei inhaltlich gleiche private GFX-Testprojektionen an vorhandene getypte Besitzerfunktionen binden; Signaturen, Aufrufreihenfolge und Orakel erhalten.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Den begruendeten Dateizuschnitt bzw. die belegte Bereinigung beim bestehenden Kernelbesitzer umsetzen.
+  - Notizen: Umgesetzt:4rohe private UART-Helfer ohne bekannte aktive Aufrufer entfernt. Drei GFX-Release/Map/Unmap-Testprojektionen nutzen unmittelbar den bestehenden getypten Domainbesitzer. Keine neue Aufrufebene oder Runtimeabstraktion. Netto93Zeilen weniger.
+- [Erledigt] #2 Signaturen, Datenlayouts und genaue Besitz-/Ablaufgrenzen erhalten und pruefen.
+  - Notizen: 641andere Rustdateien und169weitere Funktionskoerper in den betroffenen Dateien bytegleich. Nur Sichtbarkeit der3vorhandenen Domainfunktionen innerhalb program erweitert. Aktive Serial-/COM1pfade, Typen/Layout, Owner/Generation, Selector/Request und Cleanup unveraendert; strikte vorhandene Compiler-/Layoutpruefungen bestanden.
+- [Erledigt] #3 Betroffene bestehende Pruefungen gebuendelt auf aktuellem SMP4-Stand ausfuehren.
+  - Notizen: Keine zusaetzliche Runtimeprobe fuer unbelegte Funktionen und nachgewiesen gleiche direkte Projektionen. Betroffene Definition-/Aufrufer-/Signatur-/Koerpernachweise gebuendelt; normaler Kernelbuild und aktuelles physisch geprueftes Image bestehen. Genau1SMP4STANDARD dient zugleich als aktuelle native allgemeine Abnahme; kein altes Testergebnis als neuer Lauf uebernommen.
+- [Erledigt] #4 Unterversion dokumentieren, mit STANDARD abschliessen und veroeffentlichen.
+  - Notizen: Kernel322/Release38 dokumentiert und veroeffentlicht; Spectra23/Serial1/Contract20/SDK35 und Modulartefakte unveraendert. Genau1finaler STANDARD Suite2 mit vollstaendigem Originalimport und verlustfreiem GET5/30/6valid, Rohdaten ausserhalb Git. Beleg/Grenzen und Archiv vorhanden; Sammelpush abgeschlossen.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Vier unbelegte rohe UART-Helfer entfernt und drei gleiche GFX-Testprojektionen direkt an vorhandene getypte Domainbesitzer gebunden; netto93Zeilen weniger. Kernel0.1.322, Release0.84.38 veroeffentlicht; fremde Modulartefakte unveraendert. Betroffene Quell-/Signatur-/Layoutnachweise und strikter Build/aktuelles physisch geprueftes Image bestanden. Tests auf sinnvolle vorhandene Faelle begrenzt. Genau1STANDARD 54344938-fefe-49da-b83d-b3b6b49cfe47, Index 120.179010; Original5/30/6 im DevCenter verlustfrei geprueft. Beleg/Grenzen: Docs/Core/KernelShortening08438.json.
+
+## 0.84.39 Plattform-Callbacks fachlich aufteilen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+2544Zeilen R4SYS-/R4DESK-/R4DRAW-Callbacks fachlich schneiden: Systemprimitive, Dienste, Prozess/Threads/VM, Dateien/Storage, Async-I/O, Desktop/Eingabe und Zeichnen. Netzwerk-, Audio- und Devicecallbacks liegen bereits bei getrennten Besitzern und werden hier nicht erneut aufgeteilt. Bestehender Modulpfad bleibt direkte Fassade ohne neue Dispatch-/Aufrufebene.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Den begruendeten Dateizuschnitt bzw. die belegte Bereinigung beim bestehenden Kernelbesitzer umsetzen.
+  - Notizen: Umgesetzt: R4SYS-Systemprimitive, Dienste, Prozess/Thread/VM, Datei/Storage, Async-I/O sowie Desktop und Drawing in7kohaerenten Dateien. Direkte alte Fassade9Zeilen; groesste Einheit840. Kein neuer Runtimezustand, Dispatcher, Wrapperaufruf oder duplizierter Besitzer.
+- [Erledigt] #2 Signaturen, Datenlayouts und genaue Besitz-/Ablaufgrenzen erhalten und pruefen.
+  - Notizen: Alle181urspruenglichen Funktionskoerper und Signaturen bytegleich, darunter180Tabellen-Callbacks und1privater Thread-Eintritt.642andere Rustdateien bytegleich. Gleiche program-Elternebene behaelt alle super-Pfade und typisierten Besitzer; alte Tabellenzugaenge sind direkte Compilezeit-Reexports. ABI/Layout und Lebensdauergrenzen unveraendert.
+- [Erledigt] #3 Betroffene bestehende Pruefungen gebuendelt auf aktuellem SMP4-Stand ausfuehren.
+  - Notizen: Quell-/Definitions-/Signaturbelege und bestehende strenge Compiler-/Layoutpruefungen gebuendelt. Aktuelles physisch geprueftes Kernel323-Image und genau1nativer SMP4STANDARD bestehen. Keine neue Suite oder breite Zusatzprobe fuer identische Koerper; kein neuer physischer GPU-/Eingabenachweis behauptet.
+- [Erledigt] #4 Unterversion dokumentieren, mit STANDARD abschliessen und veroeffentlichen.
+  - Notizen: Kernel323/Release39 dokumentiert/veroeffentlicht; fremde Modulartefakte unveraendert. Tatsachlicher Umfang SYS/DESK/DRAW in Analyse37undRoadmap39praezisiert, Netzwerk/Audio/Device schon getrennt. Genau1STANDARD Suite2/Originalimport/GET5/30/6valid, vollstaendiges Privatarchiv und Sammelpush abgeschlossen.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: 180Plattformcallbacks und1privaten Thread-Eintritt aus2544Zeilen in7fachliche Einheiten aufgeteilt; direkte9Zeilen-Fassade, groesste Einheit840Zeilen. Kein neuer Zustand oder Laufzeitaufruf. Kernel0.1.323, Release0.84.39 veroeffentlicht; fremde Modulartefakte unveraendert. Betroffene Quell-/Signatur-/Layoutnachweise und strikter Build/aktuelles physisch geprueftes Image bestanden. Tests auf sinnvolle vorhandene Faelle begrenzt. Genau1STANDARD edffb2df-965a-465c-be01-ac910450bc99, Index 121.620112; Original5/30/6 im DevCenter verlustfrei geprueft. Beleg/Grenzen: Docs/Core/KernelPlatformCallbacks08439.json.
+
+## 0.84.40 Grafik-Treibervermittlung fachlich aufteilen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+3622Zeilen nach Identitaet/Header/Querytabellen, Display/Cursor, Queue und Speicher/Renderressourcen schneiden. Zulassung, Generation, IRQ-Kontext und echte Abbauquittungen unveraendert.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Den begruendeten Dateizuschnitt bzw. die belegte Bereinigung beim bestehenden Kernelbesitzer umsetzen.
+  - Notizen: Umgesetzt: gemeinsame Identitaet/Header/Querywurzel344Zeilen, fachliche private Display702/Output881/Queue634/Memory1136Zeilen.181vollstaendige Operationen verschoben,9Wurzelfunktionen behalten. Memory bleibt als kohaerenter Vertrag zusammen; kein starrer1000Zeilen-Grenzwert. Direkte Reexports ohne neue Aufruf-/Dispatch-/Kopieschicht.
+- [Erledigt] #2 Signaturen, Datenlayouts und genaue Besitz-/Ablaufgrenzen erhalten und pruefen.
+  - Notizen: Alle190Funktionen erhalten:189nongenerische Koerper bytegleich; nur notwendige interne Sichtbarkeit und Signaturformatierung. Generischer header<T> exakt am bisherigen Ort.650weitere Rustdateien bytegleich. Attribute/Safetydocs, echter Epochbesitz, Cached-Table-Authentifizierung und Lock-/Wait-/Callback-/Abbaugrenzen erhalten.
+- [Erledigt] #3 Betroffene bestehende Pruefungen gebuendelt auf aktuellem SMP4-Stand ausfuehren.
+  - Notizen: Betroffene Quell-/Signatur-/Headerbelege und vorhandene strenge Compiler-/Layoutpruefungen gebuendelt. Aktuelles physisch geprueftes Kernel324-Image und genau1SMP4STANDARD bestehen. Keine neue Suite oder unzutreffende frische physische GPU-/Resetqualifikation.
+- [Erledigt] #4 Unterversion dokumentieren, mit STANDARD abschliessen und veroeffentlichen.
+  - Notizen: Kernel324/Release40 dokumentiert/veroeffentlicht, fremde Modulartefakte unveraendert. Genau1STANDARD Suite2 mit Originalimport und verlustfreiem GET5/30/6valid; Rohdaten ausserhalbGit. Archiv und Sammelpush abgeschlossen.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: GFX-Treibervermittlung3622Zeilen in344Zeilen gemeinsame Identitaets-/Header-/Querywurzel und4fachliche private Operationsdateien aufgeteilt.190Funktionen erhalten; kein neuer Owner oder Wrapperaufruf. Kernel0.1.324, Release0.84.40 veroeffentlicht; fremde Modulartefakte unveraendert. Betroffene Quell-/Signatur-/Layoutnachweise und strikter Build/aktuelles physisch geprueftes Image bestanden. Tests auf sinnvolle vorhandene Faelle begrenzt. Genau1STANDARD 3739aae1-617d-4158-aa2d-555c3a268cf6, Index 121.542389; Original5/30/6 im DevCenter verlustfrei geprueft. Beleg/Grenzen: Docs/Core/KernelDriverGfx08440.json.
+
+## 0.84.41 TCP-Protokollbesitzer fachlich aufteilen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+3535Zeilen nach Typen/Zustand, Verbindungsbetrieb, Empfang/Fenster und vorhandenen expliziten Contractproben schneiden. Retransmitkatalog, Seq-Wrap, Lockgrenzen und originale LIMIT/CORPUS-Orakel unveraendert.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Den begruendeten Dateizuschnitt bzw. die belegte Bereinigung beim bestehenden Kernelbesitzer umsetzen.
+  - Notizen: Umgesetzt: eine residente Typ-/Tabellen-/Zustandswurzel913Zeilen. Verbindung393/Senden-I/O384/Empfang467/Originalproben450/Fremdgrenze1169Zeilen.157vollstaendige Funktionen verlegt,25Wurzelfunktionen und alle182Funktionen erhalten. Alte verwendete Pfade direkt reexportiert; kein neuer Runtimeaufruf.
+- [Erledigt] #2 Signaturen, Datenlayouts und genaue Besitz-/Ablaufgrenzen erhalten und pruefen.
+  - Notizen: 182Funktionskoerper und Typ-/Signaturtoken erhalten;66notwendige super-Pfadqualifizierungen fuehren nach exakt gleicher net-Elternebene. Originaltypen, Tabellen, impls, Initialisierungen/Attribute/Safetytexte exakt, keine zweite Zustandswurzel.654weitere Rustdateien bytegleich. Seq-Wrap, Fenster, Kataloge, Retransmit/OOO und echte Wait-/Abbruchgrenzen unveraendert.
+- [Erledigt] #3 Betroffene bestehende Pruefungen gebuendelt auf aktuellem SMP4-Stand ausfuehren.
+  - Notizen: Betroffene exakte Quellen-/Zustands-/Pfad-/Signaturbelege und bestehende strenge Compiler-/Layoutpruefungen gebuendelt. Kernel325/aktuelles physisch geprueftes Image und genau1nativer SMP4STANDARD bestehen. Keine neue Suite, unnoetiger Vollkatalog oder frische Paketverlust-/Hardwarequalifikation; vorhandene LIMIT/CORPUS-Orakel unveraendert.
+- [Erledigt] #4 Unterversion dokumentieren, mit STANDARD abschliessen und veroeffentlichen.
+  - Notizen: Kernel325/Release41 und Besitzerzuschnitt dokumentiert/veroeffentlicht. Fremde Modulartefakte unveraendert. Genau1STANDARD Suite2 mit Originalimport und verlustfreiem GET5/30/6valid; keine Rohdaten im Repo. Archiv und Sammelpush abgeschlossen.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: TCP3535Zeilen nach einzelner913Zeilen-Zustandswurzel und5fachlichen Operationsdateien aufgeteilt;182Funktionen erhalten, keine neue Synchronisierung oder Datenkopie. Kernel0.1.325, Release0.84.41 veroeffentlicht; fremde Modulartefakte unveraendert. Betroffene Quell-/Signatur-/Layoutnachweise und strikter Build/aktuelles physisch geprueftes Image bestanden. Tests auf sinnvolle vorhandene Faelle begrenzt. Genau1STANDARD 07af02e3-a2c7-4006-b930-b921252e7464, Index 120.117965; Original5/30/6 im DevCenter verlustfrei geprueft. Beleg/Grenzen: Docs/Core/KernelTcpStructure08441.json.
+
+## 0.84.42 Netzwerk-IPC nach Diensten und Antwortformat aufteilen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+3037Zeilen getrennte Aufnahme/Dispatch, Text-/Binaerwriter und DNS/DHCP/TCP/UDP-Operationen. Aktivierungsgenauer Scratch und Freigabe vor IPC/TCP/R4D/R4P/I/O bleiben; keine neue Serialisierungskopie.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Den begruendeten Dateizuschnitt bzw. die belegte Bereinigung beim bestehenden Kernelbesitzer umsetzen.
+  - Notizen: Umgesetzt:855Zeilen gemeinsame Aufnahme/Dispatch/Status/Wire-/Writerwurzel; DHCP249/DNS283/UDP427/TCP-Operationen815/TCP-Text536.70ganze Funktionen verlegt,56Wurzelfunktionen und alle126Funktionen erhalten. Keine neue Kopie, Dispatch-/Aufrufebene oder zweite Besitzerwahrheit.
+- [Erledigt] #2 Signaturen, Datenlayouts und genaue Besitz-/Ablaufgrenzen erhalten und pruefen.
+  - Notizen: Exakte126Koerper/Typ-/Signatur-/Attribut-/Rootdatenbelege; nur8notwendige zusaetzliche super-Qualifizierungen zur identischen net-Elternebene und interne Sichtbarkeit/Formatierung.659weitere Rustdateien bytegleich. Aktivierungs-Scratch, Text-/Binaerformate und Freigabe vor IPC/TCP/R4D/R4P/I/O unveraendert.
+- [Erledigt] #3 Betroffene bestehende Pruefungen gebuendelt auf aktuellem SMP4-Stand ausfuehren.
+  - Notizen: Gezielte komplette Quellen-/Typ-/Zustandsbelege und vorhandene strenge Compiler-/Layoutpruefungen gebuendelt. Aktuelles physisch geprueftes Kernel326-Image und genau1SMP4STANDARD bestehen. Keine neue Suite oder unnoetiger Vollkatalog; keine frische physische Netzwerk-/Fehlerinjektion behauptet.
+- [Erledigt] #4 Unterversion dokumentieren, mit STANDARD abschliessen und veroeffentlichen.
+  - Notizen: Kernel326/Release42 dokumentiert/veroeffentlicht; fremde Modulartefakte unveraendert. Genau1STANDARD Suite2, unveraenderter Originalimport und verlustfreier GET5/30/6valid. Belegarchiv und Sammelpush abgeschlossen; Rohdaten ausserhalbGit.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Netzwerk-IPC3037Zeilen in855Zeilen Aufnahme/Dispatch/Codec und5fachliche DHCP/DNS/UDP/TCP-Operations-/Textdateien aufgeteilt.126Funktionen und auftragsgenauer Scratch erhalten. Kernel0.1.326, Release0.84.42 veroeffentlicht; fremde Modulartefakte unveraendert. Betroffene Quell-/Signatur-/Layoutnachweise und strikter Build/aktuelles physisch geprueftes Image bestanden. Tests auf sinnvolle vorhandene Faelle begrenzt. Genau1STANDARD c3695dfd-55b7-4893-bcb3-8b56168fd43b, Index 121.462489; Original5/30/6 im DevCenter verlustfrei geprueft. Beleg/Grenzen: Docs/Core/KernelIpcStructure08442.json.
+
+## 0.84.43 Audio-Kernbesitzer fachlich aufteilen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+2446Zeilen nach gemeinsamem Zustand/Admission, Streams, Ausgaben, Synthdispatch und passiven Messprojektionen. Mixer/SSE-Datenpfad, Permits, stiller DMA-Leerlauf und terminaler Stopp unveraendert.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Den begruendeten Dateizuschnitt bzw. die belegte Bereinigung beim bestehenden Kernelbesitzer umsetzen.
+  - Notizen: Umgesetzt: eine609Zeilen-Zustands-/Lock-/Initialisierungs-/Messwurzel; Streams/Mixer595/Ausgaben596/Synths655/Fortschritt127Zeilen.91vollstaendige Funktionen verschoben,19Wurzelfunktionen und alle110Funktionen erhalten. Keine neue Datenkopie, zentrale Zustandshaltung oder Aufrufebene.
+- [Erledigt] #2 Signaturen, Datenlayouts und genaue Besitz-/Ablaufgrenzen erhalten und pruefen.
+  - Notizen: 110Koerper/Typ-/Signatur-/Attribut- und Rootdatenbelege exakt; nur notwendige interne Sichtbarkeit/Formatierung.664andere Rustdateien bytegleich. Mixer/SSE, Fortschritt, Outputpermit, Callbackzulassung und reale Abbauquittung unveraendert. Stiller PCM/DMA-Leerlauf bleibt ausdruecklich vom physischen Ausgangsstopp getrennt.
+- [Erledigt] #3 Betroffene bestehende Pruefungen gebuendelt auf aktuellem SMP4-Stand ausfuehren.
+  - Notizen: Betroffene vollstaendige Quellen-/Zustands-/Signaturbelege und bestehende strenge Compiler-/Layoutpruefungen gebuendelt. Kernel327/aktuelles physisch geprueftes Image und genau1nativer SMP4STANDARD bestehen. Keine neue Suite oder frische physische Audio-/HDMI-/Interleavingqualifikation behauptet.
+- [Erledigt] #4 Unterversion dokumentieren, mit STANDARD abschliessen und veroeffentlichen.
+  - Notizen: Kernel327/Release43 dokumentiert/veroeffentlicht, fremde Modulartefakte unveraendert. Genau1STANDARD Suite2 mit Originalimport und verlustfreiem GET5/30/6valid; keine Rohdaten im Repo. Archiv und Sammelpush abgeschlossen.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Audio-Core2446Zeilen in609Zeilen gemeinsame Zustands-/Lock-/Init-/Messwurzel und4fachliche Operationsdateien aufgeteilt.110Funktionen und bisheriger Mixer-/Permits-/Stoppvertrag erhalten. Kernel0.1.327, Release0.84.43 veroeffentlicht; fremde Modulartefakte unveraendert. Betroffene Quell-/Signatur-/Layoutnachweise und strikter Build/aktuelles physisch geprueftes Image bestanden. Tests auf sinnvolle vorhandene Faelle begrenzt. Genau1STANDARD 72b3bfe5-08bf-4a67-b6ab-605a2cfae5db, Index 120.447204; Original5/30/6 im DevCenter verlustfrei geprueft. Beleg/Grenzen: Docs/Core/KernelAudioStructure08443.json.
+
+## 0.84.44 Display-Besitzerdateien nach Lebensphasen aufteilen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Je bestehendem Besitzer gemeinsame genaue Zustandswurzel, getrennte Vorbereitung/CPU-Praesentation, Queueeinreichung/Abschluss sowie Reset/Retention/Abbau. Keine zweite Besitzerwahrheit, keine verschobene Quittung; zusammen als ein zusammenhaengender Display-Dateizuschnitt.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Den begruendeten Dateizuschnitt bzw. die belegte Bereinigung beim bestehenden Kernelbesitzer umsetzen.
+  - Notizen: Umgesetzt: die drei bisherigen Display-Besitzer behalten getrennte Zustandswurzeln mit 843, 524 und 704 Zeilen. Vorbereitung, CPU-Darstellung, Bootframebuffer, Queuearbeit und Reset/Abbau liegen in 12 Operationsdateien. 155 ganze Funktionen verschoben, alle 211 erhalten.
+- [Erledigt] #2 Signaturen, Datenlayouts und genaue Besitz-/Ablaufgrenzen erhalten und pruefen.
+  - Notizen: Alle 211 Funktionskoerper, Signaturtypen, Attribute und bisherigen Zustands-/Typ-/Impl-/Importzeilen geprueft. Nur notwendige Sichtbarkeit und sechs genaue super-Pfade angepasst. 666 andere Rustdateien bytegleich. Keine verschobene Lock-, IRQ-, Reset-, Retention- oder Abbauquittung.
+- [Erledigt] #3 Betroffene bestehende Pruefungen gebuendelt auf aktuellem SMP4-Stand ausfuehren.
+  - Notizen: Betroffene exakte Quellen-/Signatur-/Zustandsnachweise mit bestehenden strengen Compiler-/Layoutpruefungen gebuendelt. Kernel 328, aktuelles physisch geprueftes Image und genau ein nativer SMP4 STANDARD bestehen. Keine neue Suite und keine frische physische GPU-/Scanout-/Resetqualifikation behauptet.
+- [Erledigt] #4 Unterversion dokumentieren, mit STANDARD abschliessen und veroeffentlichen.
+  - Notizen: Kernel 328 und Release 44 dokumentiert und veroeffentlicht; andere Modulartefakte unveraendert. Genau ein STANDARD Suite 2 mit Originalimport und verlustfreiem GET aller 5 Metriken, 30 Samples und 6 gueltigen Scores. Rohdaten nur im Belegarchiv/DevCenter. Sammelpush abgeschlossen.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Display-Manager, nativer Treiberbesitzer und Queue behalten jeweils ihren eigenen Zustand. 211 Funktionen bleiben erhalten; 155 davon liegen in 12 fachlichen Operationsdateien. Kernel0.1.328, Release0.84.44 veroeffentlicht; fremde Modulartefakte unveraendert. Betroffene Quell-/Signatur-/Layoutnachweise und strikter Build/aktuelles physisch geprueftes Image bestanden. Tests auf sinnvolle vorhandene Faelle begrenzt. Genau1STANDARD 77114b23-b10f-4f87-a808-bd79f71fb4f8, Index 117.847258; Original5/30/6 im DevCenter verlustfrei geprueft. Beleg/Grenzen: Docs/Core/KernelDisplayStructure08444.json.
+
+## 0.84.45 Vorhandene Programmdiagnosen nach Fallgruppen aufteilen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+2049Zeilen vorhandene Storage-/Lifecycle-, GUI-/Raster- und Shared-Ressourcenfaelle getrennt halten; gemeinsamer kleiner Testzugang. Erwartungswerte, Fehlereinjektion, Cleanup und bekannte Grenzen unveraendert; keine neue Testsuite.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Den begruendeten Dateizuschnitt bzw. die belegte Bereinigung beim bestehenden Kernelbesitzer umsetzen.
+  - Notizen: Umgesetzt: gemeinsame 401-Zeilen-Wurzel fuer Zustand, Typen, Helfer und vorhandene Fallsteuerung. Storage-/Stack-, Befehls-/Raster-, Ressourcen- und Shared-Faelle liegen in vier privaten Operationsdateien. 27 Funktionen verschoben, alle 46 erhalten; keine neue Testsuite.
+- [Erledigt] #2 Signaturen, Datenlayouts und genaue Besitz-/Ablaufgrenzen erhalten und pruefen.
+  - Notizen: Alle 46 Funktionskoerper, Signaturtypen, Attribute und bisherigen Zustands-/Typ-/Impl-/Importzeilen erhalten. Nur notwendige Sichtbarkeit und genaue super-Pfade angepasst. 680 andere Rustdateien bytegleich. Erwartungswerte, Fehlereinjektion, Ressourcenquittung und Cleanup unveraendert.
+- [Erledigt] #3 Betroffene bestehende Pruefungen gebuendelt auf aktuellem SMP4-Stand ausfuehren.
+  - Notizen: Betroffene exakte Quellen-/Orakel-/Signaturnachweise mit bestehenden strengen Compiler-/Layoutpruefungen gebuendelt. Kernel 329, aktuelles physisch geprueftes Image und genau ein nativer SMP4 STANDARD bestehen. Keine neue Suite oder Wiederholung des vollen Katalogs. Der historische PROGRAMSTORAGEGUI-Fehler aus 0.84.17 wird nicht als behoben oder frisch getestet ausgegeben.
+- [Erledigt] #4 Unterversion dokumentieren, mit STANDARD abschliessen und veroeffentlichen.
+  - Notizen: Kernel 329 und Release 45 dokumentiert und veroeffentlicht; andere Modulartefakte unveraendert. Genau ein STANDARD Suite 2 mit Originalimport und verlustfreiem GET aller 5 Metriken, 30 Samples und 6 gueltigen Scores. Keine echten Rohdaten im Repo. Belegarchiv und Sammelpush abgeschlossen.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Vorhandene Programmdiagnosen behalten ihre gemeinsame 401-Zeilen-Zustands-/Steuerwurzel. 27 ganze Funktionen liegen in vier Fallgruppen; alle 46 Funktionen und bisherigen Orakel bleiben erhalten. Kernel0.1.329, Release0.84.45 veroeffentlicht; fremde Modulartefakte unveraendert. Betroffene Quell-/Signatur-/Layoutnachweise und strikter Build/aktuelles physisch geprueftes Image bestanden. Tests auf sinnvolle vorhandene Faelle begrenzt. Genau1STANDARD dc7fdfa1-6399-4787-bd17-cb64d6109f1e, Index 118.533417; Original5/30/6 im DevCenter verlustfrei geprueft. Beleg/Grenzen: Docs/Core/KernelProgramChecks08445.json. Die acht aus der Analyse 0.84.37 abgeleiteten Schritte 0.84.38–45 sind umgesetzt.
+
+## 0.84.46 C: fuer neue Images auf 16 GB erhoehen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Nutzerauftrag: 16 GB SYSTEM in Slim/Full/Test und 22 GB Gesamtimage bei gleichbleibenden anderen Partitionen. Gemeinsame Layoutbesitzer, Recovery-Quellimport, Release-/USB-Pfade und unabhaengige physische Pruefung anpassen; feste Spectra-Suite-2-Geometrie bewahren.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Image-/Paket-/USB-Layout beim SDK- und Distributionsbesitzer sowie in der festgehaltenen Recovery anpassen.
+  - Notizen: Umgesetzt und veroeffentlicht: SDK36 liefert 22-GB-Quellen mit 16 GB SYSTEM; Distribution bindet Recovery0.1.63/Kernel0.1.62/Menue0.1.24. Alte 2-/16-GB-Quellen bleiben lesbar. Kernel329 und Spectra23 unveraendert. Details einmal im Unterversionsbericht.
+- [Erledigt] #2 Betroffene Layout-/Importfaelle und erzeugte Medien pruefen, Recovery binden, STANDARD messen und Belege veroeffentlichen.
+  - Notizen: Bestanden: vorhandene gezielte Layout-/Import-/Profilpruefungen, reale USB-Installation und anschliessender BIOS-Normal-/UEFI-Recovery-Start mit SMP4. Genau ein abschliessender STANDARD; Originalexport im DevCenter komplett geprueft. Sammelpush erfolgreich, alle138 Besitzer sauber/synchron. Grenzen und Rohbelege im Unterversionsbericht.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: Neue Slim-/Full-/Test-Images haben 16 GB C: bei 22 GB Gesamtgroesse; BOOT, Recovery und D: behalten ihre Groessen. Full mit veroeffentlichter Recovery0.1.63 neu gebaut; vorhandene gezielte Pruefungen und USB-Installation samt BIOS-Normal-/UEFI-Recovery-Start bestanden. Genau1STANDARD 80f1db5f-0f46-4bb7-94f7-443647f3daeb, Index118.406870; Original5/30/6 im DevCenter vollstaendig geprueft. Die feste Benchmarkgeometrie bleibt 16/10 GB, die neue Releasegeometrie ist funktional belegt. Updates erhalten bestehende Partitionen. Quellen gepusht, alle138 Besitzer sauber/synchron. Ergebnis/Grenzen: Docs/Deployment/SystemPartition08446.json.
+
+## 0.84.47 Spectra STANDARD nutzt alle verfuegbaren CPUs
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Nutzerauftrag: ein eigener gleich grosser Arbeitsanteil je verfuegbarer CPU in allen fuenf STANDARD-Bereichen; gemeinsame Startbarriere und abgeschlossene Gesamtdurchsatzmessung. Neue Suite 3 und feste Referenz, historische Suite 2 bleibt unveraendert. Spectra-Update auf OssiPC, ein Standardlauf mit allen16CPUs und vollstaendiger DevCenter-Import unter ossipc.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 All-CPU-Arbeit, parallele Messmethode und unveraenderten Export beim Spectra-/DevCenter-Besitzer umsetzen.
+  - Notizen: Umgesetzt: Suite3 mit gleicher Arbeit je verfuegbarer CPU, gemeinsamer Startbarriere und vollstaendigen Worker-/Rohdaten. Kernel331 behebt den IF=0-TLB-Wartekreis und die zu kleine Streamkapazitaet; API/ABI unveraendert.
+- [Erledigt] #2 Aktuelle SMP4-Referenz und gezielte Abschluss-/Abbruchvertraege pruefen, Spectra auf OssiPC aktualisieren und echten16CPU-Standard samt vollstaendigem DevCenter-Readback abnehmen.
+  - Notizen: Abgenommen: gezielte vorhandene Ownerpruefungen, aktuelles SMP4-Quick und betroffener16CPU-Dateibereich; abschliessender STANDARD auf SMP4 und allen16CPUs. Originalexporte samt sechs gueltigen Scores jeweils vollstaendig im DevCenter zurueckgelesen. Tests auf betroffene Faelle begrenzt.
+- [Erledigt] #3 Neue Referenz einfrieren, Methodik/Inventare aktualisieren, Releaseversion und Quellen veroeffentlichen.
+  - Notizen: Erledigt: feste Suite3-Referenz gepinnt, historische Referenzen bytegleich, Dokumentation/Inventare gepflegt. Release0.84.47, Kernel0.1.331, Spectra0.1.24. Sammelpush der fuenf Besitzer und separater privater DevCenter-Push erfolgreich; Rohdaten bleiben ausserhalb von Git.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Abgeschlossen: STANDARD Suite 3 nutzt alle verfuegbaren CPUs. Release 0.84.47, Kernel 0.1.331 und Spectra 0.1.24 sind veroeffentlicht. Finaler SMP4-Lauf sowie native Laeufe auf OssiPC mit 16 und R4Laptop mit 4 CPUs sind einschliesslich aller Rohdaten und sechs gueltiger Scores im DevCenter geprueft; installierte Versionen und Benchmarkartefakte bestaetigt. Nur betroffene vorhandene Pruefungen, keine breiten Kataloge. Ergebnis, Fehlerbehebungen, Vergleichsgrenzen und Belegarchive: Docs/Diagnostics/SpectraAllCpu08447.json.

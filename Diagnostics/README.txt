@@ -50,12 +50,15 @@ respect the normal/detail build mode; they do not enable traces or benchmarks.
 The separate private DevCenter stores the complete standard benchmark runs
 and remains outside the R4OS build and inventories.
 
-Spectra standard benchmark and result data (0.83.3)
---------------------------------------------------
+Spectra standard benchmark and result data (0.84.47, Suite 3)
+-----------------------------------------------------------
 
 SPECTRA BENCH STANDARD runs scheduler_sync, memory, ipc, lifecycle and
-filesystem_io separately or together. One warmup and five measurements per
-area; median/range/MAD and all raw samples, then five area scores and overall.
+filesystem_io separately or together. Each area assigns equal fixed work
+to every available schedulable CPU behind a common preparation/start gate.
+Active warmup performs at least one second and three complete batches;
+five measurement batches follow. The full suite retains 30 raw samples
+with exact worker/completion counts, median/range/MAD and six scores.
 The fixed reference defines 100; the five areas have equal geometric weights.
 Incomplete or incompatible data cannot produce a valid overall score.
 
@@ -64,8 +67,11 @@ acceptance. Quick probes and pure builds retain their scope. The central Spectra
 owner also supplies the offline Schema-1 exporter and strict reference scorer;
 no database service is required. Exact workloads, CLI/host calls, frozen reference,
 comparison limits, lossless raw fields and the current API contract are documented
-in SpectraStandardBenchmark.txt. Validation and actual run identities are in
-Spectra0833.json. The separate private DevCenter implementation stays outside
+in SpectraStandardBenchmark.txt. Current qualification and run identities are in
+SpectraAllCpu08447.json. Spectra0833.json retains the original Suite-1
+qualification; historical suites are never rescored as Suite 3. QEMU here
+remains SMP4; native hardware uses its full available CPU capacity.
+The separate private DevCenter implementation stays outside
 this roadmap and its synthetic contract fixtures are never production imports.
 
 Performance benchmark history now uses only this standard suite and DevCenter.

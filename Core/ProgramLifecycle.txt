@@ -234,30 +234,38 @@ miss and occupancy counters are included in the teardown evidence.
 SMP placement
 -------------
 
-CPU placement is an internal lifecycle decision, not a public R4X affinity
-API. Ordinary foreground, shell, global-console and unaudited module owners
-remain on the BSP. Explicitly audited background instances declare
-runtime.parallel=owned-v1 and may be initially balanced across per-CPU Ready
-queues; child threads inherit that immutable declaration. Current audited
-owners and GUI limits are described in Parallelitaet.txt.
+Since0.85.13, optional R4SYS v26 functions expose exact-generation Thread
+CPU sets, desired CPUs and bounded work classes. Ordinary foreground, shell,
+global-console and unaudited owners retain CPU0-only admission. Audited
+background instances declare runtime.parallel=owned-v1; their child threads
+inherit that immutable module approval. Public sets cannot expand it.
+A shell-hosted application with a private console can use this background
+role; visible console output alone does not identify a legacy foreground
+start. The explicit programRun path creates role0 and remains BSP-only.
+API contract and pending/save semantics: API/ThreadPlacement.txt.
 
-Since 0.84.27, an empty Ready queue may take one explicitly SMP-eligible,
-non-running Task from a queue with at least two Ready tasks. One attempt
-examines at most one donor and eight rotating candidates. Initial home_cpu
-assignment is distinct from an explicit CPU binding; forced diagnostic/launch
-bindings stay fixed. Dedicated driver and asynchronous-I/O execution owners,
-live locks, pending permit handoffs, preemption guards and incomplete retire
-states are excluded. The source CPU's exact current task is excluded even
-if its logical state is Ready. Assembly still publishes outgoing RSP before
-releasing runtime admission; a live physical stack never moves.
+Initial/wake placement and bounded queue transfer share the0.85.11 topology
+chooser. Since0.85.12 exact Running-plus-Ready load gap>=2 permits populated
+targets; urgent empty refill is independent of one periodic checkpoint per
+CPU quantum. One donor and eight rotating candidates bound each attempt.
+Forced diagnostic/launch bindings, dedicated driver/asynchronous-I/O owners,
+live locks, permit handoffs, preemption and incomplete retirement stay guarded.
+Both exact physical currents remain protected even when logically Ready.
 
-Transfer, target home/pending state and reschedule IPI share runtime admission.
-Ready order/time, roles/budgets, generation, saved RSP/FPU and exact task-owned
-unwind counter survive; there is no fresh activation or allocation. A quantum
-cooldown prevents immediate repeated migration. Explicit bindings are not
-redirected when their CPU goes offline. BSP-only/pageable-I/O ownership and
-module execution declarations remain unchanged. Evidence/limits:
-KernelBalance08427.json.
+A public request for a physical current remains pending until its real saved
+switch. The outgoing continuation is temporarily private under Runtime
+admission. Existing assembly publishes its full RSP and installs the incoming
+stack before r4os_finish_context_switch applies policy and republishes Ready
+work. The owner is unlocked only afterwards. CPU0 has a resident initialized
+idle continuation, with FPU state, so a sole local current can leave too.
+Saved blocked waits keep their precise task-owned wait/timeout nodes.
+
+Ready age, generations, saved FPU/RSP and exact task-bound unwind counters
+survive rehome; class changes share the remaining preferred-role budget of
+that activation. No CPU reservation, hotplug or realtime guarantee follows.
+Evidence: Core/KernelBalance08512.txt/.json and
+Core/ThreadPlacement08513.txt/.json; current audited owners remain in
+Parallelitaet.txt.
 
 AP admission since 0.78.50 follows detected -> starting -> parked ->
 qualified -> online. Only the BSP can confirm a parked CPU after its clock
@@ -566,8 +574,9 @@ and absence after join. It does not force numeric-ID exhaustion.
 R4SYS v22 appends cpu_capacity without changing the v21 prefix. CpuCapacity
 reports one atomic scheduler-admission mask count and the immutable SMP boot
 plan's dense slot count, including failed/offline slots. Available capacity
-excludes CPUs not admitted by scheduler/clock qualification; current ordinary
-program threads have no per-process affinity restriction. The query allocates
+excludes CPUs not admitted by scheduler/clock qualification. This global
+advisory count does not describe a particular Thread placement set; query
+thread_placement_get for that exact generation since0.85.13. The query allocates
 nothing and leaves output unchanged on failure. Counts are advisory, not CPU
 reservations, firmware totals, CPUID package counts or physical cache topology.
 Mesa uses this userland-visible capacity to size work; renderer policy stays

@@ -1,0 +1,129 @@
+﻿Native Threadplatzierung und Arbeitsklassen
+==========================================
+Stand: 0.85.13, normaler/2x2SMT-SMP4-Gast und einmaliger STANDARD abgenommen.
+
+Besitzer und Kompatibilitaet
+---------------------------
+R4SYS v26 haengt thread_placement_get bei1264 und thread_placement_set
+bei1272 an. Alle156 alten Slots und der1264-Byte-Praefix bleiben erhalten.
+Der Contract0.64.22 definiert ThreadPlacementRequest (32Bytes) und
+ThreadPlacementInfo (64Bytes), jeweils Version1. SDK0.64.38 bietet die
+optionalen nativen Zig-/C-Fassaden und Methoden des genauen JoinHandle.
+Alte Tabellen werden mit Groesse und Nullslot geprueft; kein Aufruf einer
+fehlenden Funktion. Kanonische Signaturen, Layouts und Konstanten stehen
+unter Repositories/Contract/Generated/.
+
+Ein ProgramJoinHandle bindet Thread-ID/Generation und Instanz-ID/Generation;
+reserved muss0 sein. Das gilt auch fuer den Hauptthread, dessen aktuelle
+Identitaet threadCurrentHandle ohne Join-Leihe liefert. Der Aufruf pinnt den
+Threaddatensatz kurz und loest dessen genaue Task-/Besitzeridentitaet unter
+dem Runtime-Owner auf. Kein Programregistry-Lock ueber Schedulerarbeit;
+kein Owner und keine rohe Taskadresse ueber einen Caller-Pufferzugriff.
+Der genaue Caller-Unwindanker schuetzt Eingabe und Ausgabekopie. Aufrufe
+mit lokalen Interrupts aus oder einem gehaltenen CPU-Owner liefern busy,
+bevor Puffer gelesen oder niedrigere Besitzer aufgenommen werden. Schliessende,
+beendete, abgeloeste oder nicht mehr auffindbare Ziele werden abgewiesen.
+Eine vor Close aufgenommene Operation kann sich mit Close ueberschneiden;
+ihre Taskgeneration wird vor jeder Zustandsarbeit erneut geprueft.
+
+CPU-Mengen
+----------
+Eine Menge ist ein separater Vektor aus u64-Worten: CPU n entspricht
+Bit n%64 in Wort n/64. CPU-Indizes sind die dichten konfigurierten Bootslots,
+keine APIC-IDs, Kernnummern oder garantierte Ausfuehrungskapazitaet.
+Zuerst get mit word_capacity0 und initialisierter Info abfragen. Das liefert
+die erforderliche cpu_word_count ohne Mengenpuffer. Danach mindestens diese
+Kapazitaet bereitstellen; nur die erforderlichen Worte und64 Infobytes
+werden geschrieben. Der Rest bleibt erhalten. Fehler aendern keine Ausgabe;
+Mengen- und Infopuffer duerfen sich nicht ueberlappen.
+
+Explicit set verlangt genau die abgefragte Wortzahl, eine nichtleere Menge
+und ausschliesslich aktuell zugelassene CPUs des Zielmoduls. Der Default-
+CPU-Flag verlangt word_count0 und waehlt alle vom Modul zugelassenen CPUs.
+Echte Vordergrundstarts ueber programRun, die Boot-Shell und nicht
+freigegebene Ausfuehrung bleiben auf CPU0. Eine von der Shell gehostete
+Anwendung mit privater Konsole kann intern eine Hintergrundinstanz sein;
+sichtbare Konsolenausgabe ist daher kein Beleg fuer die Startrolle.
+Nur eine ausdruecklich auditierte Hintergrundinstanz mit
+runtime.parallel=owned-v1 kann APs verwenden; Kindthreads erben diese
+unveraenderliche Zulassung, nicht automatisch eine neue CPU-Menge des Elterns.
+Interne feste Bindungen begrenzen die Menge zusaetzlich.
+
+preferred_cpu ist ein optionaler Hinweis innerhalb der erlaubten Menge;
+thread_placement_cpu_none entfernt ihn. Reale Last und freie physische Kerne
+haben Vorrang. Die harte Menge gilt auch bei Initialplatzierung, Wake und
+periodischem/opportunistischem Transfer. Ein neuer Satz kann den alten
+Migrationscooldown ueberstimmen, wenn die alte CPU nicht mehr erlaubt ist.
+Die derzeitige private Schedulerkapazitaet bleibt32; der oeffentliche
+Wortvektor fuehrt keine neue feste32-Bit-ABI ein. Keine Hotplug-, NUMA-,
+CPU-Reservierungs- oder Offline-Umlenkungsgarantie.
+
+Annahme und sicherer Wechsel
+---------------------------
+set prueft Version/Groesse, Flags, Reserven, Klasse, Menge und Wunsch-CPU
+vollstaendig vor einer Mutation. Fehler lassen Anfrage und Revision gleich.
+Eine unveraendert wiederholte Anfrage erzeugt keine neue Revision.
+request_revision kennzeichnet die angenommene Anfrage, applied_revision
+die uebernommene. Ungleichheit und flag_pending zeigen einen ausstehenden
+sicheren Wechsel an. Die Info beschreibt die angefragte Klasse/Menge;
+home_cpu/running_cpu sind der gegenwaertige Ausfuehrungssnapshot.
+
+Jede Task besitzt einen aktuellen Anfragezustand, kein getrenntes Ticket je
+Aufruf. Gleichzeitige Schreiber werden unter Runtime geordnet; eine neuere
+Anfrage kann eine noch ausstehende ersetzen. get ist eine Momentaufnahme.
+Callers muessen gemeinsame Aenderungen selbst koordinieren, wenn sie eine
+bestimmte eigene Anfrage von spaeteren Aenderungen unterscheiden wollen.
+
+Die Annahme wartet nicht auf die Migration. Ein laufender physischer Current
+behaelt seinen Stack und wirksamen Satz bis zur gespeicherten Wechselgrenze.
+IPI, Timer oder ein ausdrueckliches Task-Yield erreichen diesen Rand. Bei
+Bedarf kann der Aufrufer nach set freiwillig yielden und die Revision erneut
+abfragen. Fuer eine blockierte gespeicherte Task bleiben Wait-/Timeoutknoten
+und ihre Generationen unveraendert. Gespeicherte Ready-/Blocked-Kontexte mit
+aktiven Locks, Preemptions-/Handoffgrenzen oder ungueltigem FPU-Zustand werden
+mit busy zurueckgestellt.
+
+Beim echten Wechsel bleibt ein ausstehender alter Current unter Runtime-
+Besitz aus der Ready-Auswahl entfernt. Assembly speichert den vollstaendigen
+alten RSP, installiert den neuen Stack und ruft den vorhandenen
+r4os_finish_context_switch auf. Erst dort werden Satz/Klasse und Home
+uebernommen, bevor der Runtime-Owner freigegeben wird. Ready-Alter, FPU-
+Puffer, genaue Taskgeneration und taskgebundene Unwindzaehler bleiben erhalten.
+Auch ohne andere lokale Ready-Task ist ein echter Wechsel moeglich: CPU0 hat
+hierfuer einen residenten eigenen Idle-Kontext mit initialisiertem FPU-Puffer;
+APs behalten ihre eigenen Idle-Kontexte.
+
+Arbeitsklassen und Ergebnisse
+----------------------------
+interactive nutzt die vorhandene Interactive-Rolle, batch die Batch-Rolle.
+preferred nutzt ShortCompletion mit hoechstens vier Tick- und vier Dispatch-
+Budgeteinheiten pro echter Aktivierung. Dieselbe Anfrage und Klassenwechsel
+innerhalb dieser Aktivierung erneuern das verbrauchte Budget nicht. Eine
+legitime neue Wake-Aktivierung verwendet den vorhandenen Resetvertrag.
+Prioritaetsvererbung, periodische FIFO-Wahl und bestehende Ressourcenbarrieren
+bleiben erhalten. Stack-Anlage und Freigabe bleiben der unveraenderlichen
+Allokationsrolle zugeordnet; Klassenwechsel verschieben keine historischen
+Anlage-/Freigabezaehler. Es gibt keine harte Echtzeitgarantie.
+
+thread_ok bedeutet angenommen/abgefragt; negative Ergebnisse sind die
+bestehenden thread_error_* und thread_placement_error_capacity (-11).
+invalid umfasst falsche Flags/Klasse/Reservierung, leere oder unzulaessige
+Mengen und ungueltige Wunsch-CPUs. not_found umfasst alte Generationen und
+bereits geschlossene Ziele. busy verlangt einen spaeteren Versuch am sicheren
+Ressourcenrand. capacity meldet eine unpassende Vektorlaenge/-kapazitaet.
+Die fachlichen Ergebnisse bleiben getrennt von SDK err_no_group/err_no_fn.
+
+Verbraucher und Pruefgrenzen
+---------------------------
+SPECTRA CHECK THREAD /PLACEMENT prueft die Vordergrund-BSP-Grenze ueber
+einen ausdruecklichen programRun-Start desselben Moduls (/PLACEMENTBSP)
+und eine eigene Erfolgsdatei im privaten Testpfad; programRun alleine
+liefert keinen Kind-Rueckgabecode. Bei bereits echtem Vordergrund prueft der
+Caller seine eigene Zulassung direkt. Danach startet die Probe einen eigenen
+zugelassenen Hintergrundverbraucher. Er prueft die eigene
+Folge3,1,3,0, Klassen/Revisionen, Mengeneingaben, alte Handles, einen wartenden
+und einen vom fremden Caller umgesetzten laufenden Peer, genaue Joins und
+Default-Ruecknahme. Die bestehende /PROCESSEXIT-Probe verwendet einen Peer
+mit eigener Batch-/CPU0-Anfrage. Mindestens vier zugelassene CPUs sind fuer
+diese Diagnose erforderlich; das ist keine Produktgrenze. Ergebnis und
+wirkliche Laufzeit-/Performancebelege: Core/ThreadPlacement08513.txt/.json.

@@ -1,0 +1,220 @@
+﻿Codepages, CP437 und Unicode - Analyse 0.85.3
+===========================================
+
+Stand 18.10.2026; produktiver Kernel 0.1.331 und aktive Besitzerquellen.
+Reine Analyse mit Folgeplanung, ohne Laufzeitcodeaenderung. Ergebnisse auf
+Userwunsch in diesem Bericht und der Roadmap, ohne ausfuehrlichen Chatbericht.
+
+Begriffe und Ergebnis
+---------------------
+Eine Codepage ordnet Bytewerten Zeichen zu. CP437 ist die historische
+DOS-PC-Zeichenbelegung mit Umlauten, Linien und Blockzeichen. Sie ist keine
+CPU-Funktion. Ein Byte, ein Unicode-Codepunkt und eine Glyphennummer sind
+verschiedene Dinge: CP437 81hex bezeichnet U+00FC (ue), UTF-8 verwendet dafuer
+C3 BC; eine Fontdatei kann dieses Zeichen unter einer beliebigen Glyphen-ID
+speichern. CP850 und Windows-1252 sind andere Zuordnungen.
+
+Ergebnis: R4OS besitzt brauchbare UTF-8-/Unicode-Grundlagen, aber keinen
+durchgaengigen CP437-/Unicode-Vertrag fuer Konsole, Eingabe und Dateinamen.
+CP437 ist teilweise nur eine Konfigurations-/Fontbezeichnung. Weder eine
+vollstaendige CP437-Konvertierung noch vollstaendige Glyphenabdeckung ist
+damit nachgewiesen. Konkrete Widersprueche und Grenzen folgen unten.
+
+Die Microsoft-Mappingdatei bei Unicode wurde mit allen 256 Eintraegen gegen
+den Standardcodec verglichen: 256 stimmen ueberein. SHA256 der Originaldatei:
+6bad4dabcdf5940227c7d81fab130dcb18a77850b5d79de28b5dc4e047b0aaac.
+Quell- und Abdeckungsrechnung: Temp/Cpu08534/Codepage-StaticProof.json
+(lokaler ignorierter Arbeitsbeleg, kein benoetigtes Produktartefakt).
+
+
+Vertraege an den Textgrenzen
+----------------------------
+1. R4STD unterscheidet Bytes, streng validierten UTF-8-Text ohne eingebettetes
+   NUL, ASCII-UiText8, Systemtext und bytegenau erhaltenen Dokumenttext.
+   Systemtext akzeptiert BOM und LF/CRLF und schreibt BOM/CRLF kanonisch.
+   Dokumenttext darf Nicht-UTF-8 erhalten; das ist beabsichtigt und kein
+   Kodierungsfehler. Laengen sind Bytezahlen, nicht sichtbare Zeichen.
+   Quellen: Libraries/R4STD/Source/text.zig:38,64,78,130,165;
+   Docs/API/TextPfadZeitVertrag.md:7.
+
+2. Tastaturlayouts und Queue transportieren Unicode als u32, einschliesslich
+   U+00FC und U+20AC. Die Byteadapter entnehmen dagegen einen Codepunkt und
+   geben nur Werte <=255 zurueck. Groessere Werte sind danach verbraucht;
+   kleinere Nicht-ASCII-Werte werden als Bytezahl, nicht UTF-8, ausgegeben.
+   Eingespeiste Desktop-/SSH-Bytes werden einzeln wieder zu u32 angehoben.
+   Quellen: Kernel/Rust/input/key_layout.rs:1427,1571;
+   input/keyboard.rs:264,480; program/console_input.rs:228,490,565.
+
+3. Desktop wandelt Unicode-Tastentext korrekt in UTF-8-Bytes um und speist
+   diese in die Konsolenqueue ein. Terminal liest Byte fuer Byte, akzeptiert
+   in seiner interaktiven Zeile nur 20hex..7Ehex und reserviert 80hex/81hex
+   fuer History-Navigation. Daher wird derselbe Text je Eingangsweg anders
+   behandelt: natives ue kommt als FChex, Desktop-/SSH-ue als C3 BC an; beide
+   werden von der ASCII-Eingabe verworfen. D0 81 (U+0401) enthaelt ausserdem
+   das reservierte Byte 81 und kann den History-Zweig erreichen.
+   Das ist ein belegter Text-/Steuertasten-Konflikt, kein CP437-Decoder.
+   Quellen: Apps/Desktop/src/app.zig:8112;
+   Apps/Terminal/src/main.zig:27,100,112,137,160,219.
+
+4. Die native Konsole rendert u8-Werte direkt als Unicode-Zahlen im aktiven
+   Font. puts_raw hat keinen persistenten UTF-8-Decoder. CP437 C4hex muesste
+   U+2500 (horizontale Linie) ergeben; der jetzige Fontaufruf fragt U+00C4
+   (grosses A mit Umlaut) ab. UTF-8 C3 BC wird dort ebenfalls einzeln gemalt.
+   Der fruehe/fatale ASCII-Fallback ist bewusst klein; er beweist keine
+   spaetere CP437- oder UTF-8-Konsolenfaehigkeit.
+   Quellen: Kernel/Rust/display/console.rs:191,217,267;
+   Kernel/Rust/font/state.rs:124,139.
+
+5. Desktop-Konsole zaehlt und umbricht Bytes, die fuer Codepage 437 ab 80hex
+   als druckbar gelten. Die zusammengestellten Zeilen gehen danach unveraendert
+   an paintText, dessen Fontpfad UTF-8 dekodiert. Bereits gueltiges UTF-8 kann
+   ohne Umbruch richtig erscheinen, wird aber mit zu vielen Spalten gezaehlt
+   und darf an einer Bytegrenze zerschnitten werden. Echtes CP437 wird nicht
+   in Unicode uebersetzt. Append-Snapshots und Ringspeicherausschnitte besitzen
+   keinen entsprechenden gemeinsamen Streaming-/Skalarvertrag.
+   Quellen: Apps/Desktop/src/console_scroll.zig:20,68;
+   draw.zig:2495,2523,2635,2720; desktop_config.zig:16,104.
+
+6. Der allgemeine Font-/GUI-Pfad kann UTF-8 mit 1..4 Bytes dekodieren und
+   verwirft Overlongs, Surrogate und Werte ueber U+10FFFF als Ersatzzeichen.
+   Glyphen werden ueber Codepunktindex und stabile IDs gesucht, nicht per
+   vermeintlich gleichem Byteindex. SDK-TextField/TextArea navigieren und
+   loeschen vollstaendige UTF-8-Skalare; solche vorhandenen Implementierungen
+   sind korrekt von den alten Byte-Konsolenpfaden zu unterscheiden.
+   Der Decoder fuer einen abgeschlossenen Textspan ist kein zustandsbehafteter
+   Streamdecoder ueber mehrere Writes hinweg.
+   Quellen: Kernel/Rust/font/decode.rs:394,447;
+   font/state.rs:181,278; SDK/r4os/gui.zig:2925,2952,2985,5339.
+
+7. Terminal8 und Terminal16 erzeugen je 95 ASCII- plus sieben deutsche
+   Unicode-Glyphen, insgesamt 102. Bei korrekter CP437-Abbildung haetten nur
+   sieben der 128 hohen CP437-Bytes eine eigene vorhandene Glyphe, 121 fehlen.
+   Auch R4Sans erzeugt denselben begrenzten Zeichenbestand in mehreren Groessen.
+   U+20AC, Linien- und Blockzeichen werden dadurch nicht ploetzlich verfuegbar.
+   Fehlende Glyphe ist eine Darstellungsgrenze, kein defektes UTF-8-Byte.
+   Der R4F-Writer markiert die Terminalfonts als CP437 und Unicode, schreibt
+   aber Unicode-Werte in GMAP. Der Kernel ignoriert den Charset-Selektor bei
+   dieser Abbildung. Historische C0-Grafikglyphen sind getrennt von C0-
+   Steuerzeichen zu behandeln; die offizielle Texttabelle bildet 00..1F auf
+   Controls ab, nicht auf Smileys. CP850 ist nicht als eigener Codec vorhanden.
+   Quellen: Distribution/Assets/SystemFonts/Terminal8/src/main.zig:7;
+   Terminal16/src/main.zig:7; R4Sans/src/main.zig:6;
+   r4f_writer.zig:24,52,99; Kernel/Rust/font/decode.rs:304.
+
+8. FON-Import unterscheidet zwar OEM_CHARSET als CP437 und sonst Windows-1252,
+   weist den Glyphen aber first_char+index als Unicodewert zu. Fuer CP437
+   81hex entsteht so U+0081 statt U+00FC; fuer Windows-1252 80hex U+0080
+   statt U+20AC. Auch die Importvorschau vergleicht rohe Samplebytes mit
+   Codepunkten. Andere Windows-Charsets werden pauschal Windows-1252 genannt.
+   Ein korrekter Container mit diesem GMAP bleibt semantisch falsch zugeordnet.
+   Quellen: Libraries/R4FONT/Bindings/Zig/font_import.zig:175,315,359,452,491,648.
+
+9. FAT/VFAT und NTFS benutzen Unicode-Namen an ihren internen Grenzen, aber
+   ihre produktiven Konverter akzeptieren nur BMP-Zeichen. FAT prueft UTF-8
+   dort strikt; gueltige UTF-16-Surrogatpaare werden zwar als wohlgeformt
+   erkannt, anschliessend vom UTF-8-Ausgeber abgelehnt. Die Verzeichnis-
+   Projektion kann dann auf den kurzen 8.3-Alias zurueckfallen.
+   NTFS gibt Surrogatpaare ebenfalls nicht als UTF-8 aus. Supplementary-
+   Zeichen sind damit eine ausdrueckliche Reichweitengrenze, kein Beleg fuer
+   beschaedigte Dateiinhalte. NTFS verwendet seine $UpCase-Tabelle; FAT
+   vergleicht nur ASCII ohne Beachtung der Gross-/Kleinschreibung.
+   Quellen: Kernel/Rust/fs/fat_names.rs:50,95,122,164,300;
+   ntfs_format_names.rs:3,67,104; ntfs_volume_names.rs:47.
+
+10. Zusaetzlicher konkreter Fehler: NTFS to_utf16 laesst nichtkuerzeste
+    UTF-8-Folgen durch. C1 A1 wird zu U+0061, E0 80 AF zu U+002F, statt
+    abgelehnt zu werden. Der Lookup ruft den Helfer direkt fuer uebergebene
+    Namensbytes auf. to_utf8 ignoriert bei ungerader Eingabelaenge das letzte
+    Byte. Damit ist die angenommene Unicodegrenze nicht durchgehend strikt;
+    gleiche Namen koennen mehrere Bytevertretungen bekommen. Keine Aussage
+    ueber eine Rechteumgehung im bewusst vertrauenswuerdigen System.
+    Quellen: Kernel/Rust/fs/ntfs_format_names.rs:67,104;
+    ntfs_volume_lookup.rs:97,110.
+
+11. SSH transportiert Konsolendaten als Bytes mit CR/LF-Normalisierung und
+    Backpressure. Sein Kanal ist nicht selbst ein Terminal-UTF-8-Decoder;
+    die Text-/Steuertastenprobleme liegen an der gemeinsamen Konsolengrenze.
+    FTP kuendigt UTF8 an und bestaetigt OPTS UTF8, reicht Pfadbytes aber ohne
+    eigene strikte UTF-8-Pruefung an die Pfad-/Filesystemgrenze durch. Dies
+    erbt deren ungleiche Unicode- und Fehlergrenzen. STOR/RETR-Dateiinhalte
+    duerfen gemaess Vertrag unveraendert bleiben; nicht blind transkodieren.
+    ZIP beschraenkt Namen dagegen bewusst auf ASCII und liefert fuer andere
+    Namen Unsupported; das ist keine behauptete CP437-Unterstuetzung.
+    Quellen: Services/SshService/src/main.zig:2821,2843;
+    Services/FtpService/src/main.zig:505,513,2072;
+    Protocols/R4Zip/src/zip_core.zig:70.
+
+12. Notepads eigentlicher Editor verwendet die skalarsichere SDK-TextArea.
+    Seine eigenen Speichern-/Suchen-Dialoge nehmen jedoch u8 entgegen und
+    backspaceZ entfernt genau ein Byte. Save-as und Suchtext koennen vorher
+    aus einem UTF-8-Dateinamen oder einer Unicode-Auswahl vorbelegt werden.
+    Nach Entfernung des letzten Bytes eines Umlauts kann ungueltiges UTF-8
+    entstehen. Allgemeine GUI-Skalarsicherheit ist zudem noch keine UAX-29-
+    Graphemsegmentierung: kombinierte Zeichen und Emoji-ZWJ-Folgen benoetigen
+    mehr als Codepunktzaehlung. Vollstaendige Schriftformung/Bidi und alle
+    Unicode-Glyphen sind daraus nicht als bestehendes Produktversprechen
+    abzuleiten.
+    Quellen: Apps/Notepad/src/main.zig:518,574,628,761,950,1616;
+    SDK/r4os/gui.zig:2985,3016,3138.
+
+
+Prioritaeten und Folgeplanung
+-----------------------------
+Die vier bereits geplanten CPU-Kompatibilitaetskorrekturen 0.85.5-.8 behalten
+auf Userwunsch Vorrang vor weiterer Umsetzung. Neue offene Schritte aus
+dieser Analyse werden mit vier Aufgaben, Besitzer und Abnahme angelegt:
+
+0.85.37 Gemeinsamer Text-/Codepagevertrag und CP437/Windows-1252-Codecs.
+0.85.38 Text und Steuertasten trennen; Unicode-Terminaleingabe vereinheitlichen.
+0.85.39 Konsolenausgabe, Streaming, Ringgrenzen und Spalten vereinheitlichen.
+0.85.40 Legacy-Fontimport korrigieren und CP437-Systemglyphen vervollstaendigen.
+0.85.41 Dateinamen strikt und verlustfrei zwischen UTF-8 und UTF-16 konvertieren.
+0.85.42 Unicode-Pfade und SSH-/FTP-Grenzen konsistent anbinden.
+0.85.43 Unicode-sichere Anwendungsdialoge und gemeinsame Eingabehelfer.
+0.85.44 Graphemgrenzen fuer Cursor, Auswahl und Loeschen ergaenzen.
+
+Konkrete Fehlereingaben zuerst beim Originalbesitzer beheben. Wiederverwendbare
+Codecs/Textalgorithmen gehoeren R4STD/R4FONT/SDK, Assets der Distribution,
+Terminal-/Desktop-/Editorlogik der jeweiligen App, Protokolle den Diensten.
+Im Kernel bleiben nur technisch notwendige Eingabe-/Ausgabe-/Dateisystem-
+grenzen. Bytebewahrende Dokument-/Dateiuebertragung bleibt bytebewahrend.
+Vollstaendige Aufgaben und Abhaengigkeiten sind ausschliesslich in der API.
+
+Pruefgrenzen
+-------------
+Statische Aufruf-/Wertflussanalyse, Originalmapping mit 256 Eintraegen,
+Abdeckungsrechnung der Generatorquellen und Sichtung vorhandener Tests.
+Vorhandene GUI-Faelle pruefen Skalare, Desktop-Snapshottests ueberwiegend
+ASCII; diese sind kein Nachweis fuer CP437 oder Zeichen ueber Writegrenzen.
+Keine neue Gastsitzung, kein Kernel-/Modulbuild oder STANDARD erforderlich.
+Keine Behauptung einer neuen sichtbaren Pixel-/Tastatur-/Remoteabnahme.
+Bei Umsetzung bestehende Faelle gezielt um die oben genannten Gegenbeispiele,
+alle 256 Codepagewerte, gesplittete Sequenzen und Transaktionsfehler erweitern.
+
+Ausgangscommits
+---------------
+Kernel 62835c4582d1f9c2b9df180af12581b8cdcad694
+SDK 66c0ec3eeac8bf940f29afd515a7c6eba4aab61d
+R4STD/R4FONT 4f2087cc114582878845b7ed69776f5b31c5a88d
+Desktop 146d4bc147cfd8623c1574756450bc4765a19a78
+Terminal 81fec43a7b8211122bea76cd040c548a55bc9bee
+Notepad e3b15f11d06a39637716d0969dd557af96e6d9af
+FTPSVC 56a1ca33882fa734b8dbc98ad780423c94e849a2
+SSHD 6b13a37d82a0f3d87627d9b35072fc16b9bd24b4
+Distribution d0541ac136dbd52d0e522ac784b39e65385a9a42
+Alle oben mit Kernel/, SDK/, Apps/ etc. bezeichneten Quellpfade sind unter
+Repositories/ relativ zum Workspace-Root aufgeloest; Analysequellen unveraendert.
+
+Primaerquellen, abgerufen 18.10.2026
+-----------------------------------
+Microsoft CP437-Tabelle bei Unicode, Textcontrols von historischen Grafik-
+glyphen unterschieden:
+https://www.unicode.org/Public/MAPPINGS/VENDORS/MICSFT/PC/CP437.TXT
+Unicode 17, Kapitel 3: wohlgeformtes UTF-8/UTF-16, Skalare und Surrogate:
+https://www.unicode.org/versions/Unicode17.0.0/core-spec/chapter-3/
+Unicode UAX 29, Graphemsegmentierung (Implementierungsversion fest pinnen):
+https://www.unicode.org/reports/tr29/
+RFC 2640, FTP-Pfadkodierung und unveraenderte Nutzdateien:
+https://www.rfc-editor.org/rfc/rfc2640
+RFC 4254, SSH-Kanalbytes und Terminalanbindung:
+https://www.rfc-editor.org/rfc/rfc4254

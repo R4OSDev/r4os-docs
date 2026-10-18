@@ -1,0 +1,109 @@
+﻿R4OS0.85.14 - Sichere Grenzen fuer lange Kernelarbeit
+===================================================
+Abgenommen19.10.2026: Release0.85.14, Kernel0.1.341.
+Contract0.64.22, SDK0.64.38 und Spectra0.1.26 unveraendert.
+Maschinenlesbarer gemeinsamer Beleg: KernelCooperation08514.json.
+Rohdaten/Quellen: ExFiles/Reports/Cpu08514/20261019-final.
+
+Ausgangspunkt und Abgrenzung
+----------------------------
+Ein eigener SMP4-Quick-Boot des akzeptierten0.85.13 zeigt global maximal
+82 Ready-Ticks,281 Quantum-Ueberlaufticks,475 Deferred-Ticks und493
+Ueberlaeufe bei1000 Ereignisticks/s. Diese Zaehler benennen keinen einzelnen
+Schuldigen. IPC-/Work-Detailzeiten sind bei metrics=false teilweise nicht
+verfuegbar; Null ist dort keine gemessene Nullzeit. Die Quellpruefung fand
+eine unter Nachschub unbeschraenkte Storage-Pumpe und fehlende Wechsel
+zwischen RX-Paketen sowie bei fruehen IPC-Abschlussrueckgaben.
+VM-/GUI-Grenzen aus0.81.15 bleiben bestehende Funktionalitaet.
+
+Umsetzung bei den Originalbesitzern
+----------------------------------
+Storage: Ein Worker bearbeitet maximal8 Uebernahmen/Abschluesse eines
+Geraetes pro Durchlauf, bevor der Controller andere Geraete besucht.
+Fertiger Abschluss, echte Wakes und abgetrennter Pufferabbau beziehungsweise
+voll publizierte Submission liegen vor dem Checkpoint. Der genaue Pin und
+ein Task-Unwindanker bleiben gueltig. Inline-Bootarbeit wird weiter ganz
+abgearbeitet; Hardwarewartearbeit behaelt Worker und Completionpfad.
+
+Die Schlusspruefung reproduzierte im ersten neuen Chunkhelfer eine Division
+bei Sektorgroesse0. Die Korrektur gibt vorher0 zurueck; der vorhandene
+Splitter lehnt die ungueltige Geometrie ohne Iteratoraenderung ab.
+Der vorherige ELF958a2832 samt gruenen Normalgeometrieproben und originalem
+STANDARD4c73ebfa bleibt als Vorlaeufer erhalten. Der abschliessende Lauf
+unten gehoert zum danach geaenderten Artefakt; kein gleicher Score-Nachlauf.
+
+Synchrone Read-/Write-Spannen sind bei normaler Sektorgeometrie auf64KB
+begrenzt und respektieren kleinere Backendgrenzen. Ein einzelner groesserer
+Sektor bleibt unteilbar. Jeder quittierte Chunk bekommt einen Checkpoint;
+der dauerhafte Schreibpraefix ist vorher aktualisiert. Alle Geschwister einer
+Batchwelle muessen ihre eigene Quittung liefern, bevor deren Grenze erreicht
+ist. Keine neuen I/O-/Taskpuffer, keine fruehe Freigabe laufender DMA.
+
+Der Pagecache gibt nach einer vollstaendig quittierten Hintergrundseite und
+nach komplettem Trim Gelegenheit zum Wechsel. Held/Operation sind dann
+zurueckgegeben. Vier Seiten pro Aktivierung und bisherige Schlafpolitik
+bleiben erhalten. RX nutzt nach hoechstens8 vollendeten Frame-/Protokoll-
+Claims und nach Maintenance/Log einen Checkpoint. Die32er-Gesamtmenge und
+Batchzaehler bleiben erhalten. Geschachtelte/gepollte Verarbeitung fuegt
+keinen Wechsel unter PollGuard hinzu.
+
+IPC setzt den bestehenden Checkpoint beim Worker nach allen Handlerausgaengen,
+auch abandoned/stale. ChannelGuard, Message, Permit und Completion sind vorher
+abgeschlossen. Vorhandene Work-, Async-I/O- und Service-Reply-Punkte rufen
+den getypten Schedulerbesitzer direkt auf; keine neue Dispatchzahl.
+
+Die vier Checkpointzaehler liegen atomar ausserhalb des veraenderlichen
+Schedulerzustands. Ein wegen aeusserer Owner abgewiesener Aufruf leiht damit
+keinen ganzen State ohne dessen Runtime-Schutz. Alle uebrigen State-Lesungen
+des Checkpoints erfolgen unter Runtime; der bestehende BSP-Bootreset setzt
+auch diese Zaehler zurueck. Vier echte Hostthreads publizieren gemeinsam
+40000 fruehe Ablehnungen ohne verlorene Updates. Der Zwischenstand ELFf28e6c
+mit Zero-Guard bestand die Gastproben, erhielt aber keinen STANDARD.
+
+safe_reschedule beruecksichtigt jetzt eine angenommene CPU-Policy auch ohne
+lokalen Ready-Konkurrenten und vor Quantumablauf. Deren Uebernahme erfolgt
+weiter erst nach vollem RSP/FPU-Save am vorhandenen Finish-Switch-Rand;
+der residente Idle-Kontext erlaubt den Austritt eines allein laufenden Tasks.
+IF-aus, CPU-/Runtime-/No-Sleep-Owner, Preempt-Sperre, gehaltene Mutexes und
+Wait-Handoff verhindern den Wechsel weiterhin. Private Fortsetzungen,
+Ressourcenpins und genaue Unwindanker sind kein gehaltener Owner-Lock.
+
+Pruefung und beobachtete Grenzen
+-------------------------------
+32 gezielte Faelle kompilieren die vollstaendigen echten Besitzerfunktionen:
+Checkpoint-/Kontextsperren, begrenzte Submission/Completion, exakter Unwind,
+reale Splitabdeckung65535Sektoren in512Chunks und8er-RX-Grenzen. CPU/IRQ/Uhr/
+Backendtransport dieser Hostfaelle ist ausdruecklich simuliert.
+Pinned Rust fmt, striktes Clippy und produktiver Kernelbau bestehen.
+
+Der echte normale SMP4-Quick prueft unveraendert AP-/TLB-/Lock-/Serial-/NVMe-
+und Timer/IPI-Vertraege. Derselbe Schedulerfall quittiert94/94 eigene Tasks.
+Die vorhandene Blockqueuepruefung liefert11/11 Tasks,3/3 eigene Controller,
+9/9 asynchrone Abschluesse und keine behaltenen Puffer/Auftraege. Async-I/O
+mit Dateiinhalten/Stream/Slotstress sowie IPC-Selbsttest bestehen; alle9
+zusaetzlichen ERRORLEVELs sind0. Kein neuer permanenter Testkatalog.
+
+KERNELCOOP hat nun gleichrangige und dringende Konkurrenz auf demselben AP.
+Der bisherige private64KB-Puffer, normale LSTRX-Abschluss und Ressourcenabbau
+bleiben hart. Gemessen: gleichrangig1 Wechsel,
+dringend1 Wechsel; Fortschritt nach
+60673149ns beziehungsweise39569128ns.
+Maximal beobachtete eigene Arbeitseinheit:22010ns;
+maximaler Abstand zwischen Grenzen:30711558ns einschliesslich
+wirklicher Suspendierung. Das sind einzelne Beobachtungen dieses Probelaufs,
+keine garantierte Antwortzeit. Globale Vorher-/Nachherzaehler stammen aus
+unterschiedlichen zusaetzlichen Prueflasten und sind kein isolierter
+Latenzvergleich.
+
+Genau ein finaler Suite3-STANDARD mit allen4 CPUs,30 Rohsamples und6 gueltigen
+Scores: f95d0473-9b35-4bd2-b459-5f93d40e9efb.
+Scheduler23.371638; Gesamt119.451170.
+Originalexport und alle Felder/Scores im DevCenter vollstaendig zurueckgelesen.
+Kein erneuter Lauf zur Scoreauswahl; dieselbe Suite3-Arbeit/Referenz.
+
+Weiterhin gelten konservativer Kernel-RIP-Filter und sichere Grenzen.
+Ein einzelner MMIO-/Backend-/fremder Callback kann bis zum eigenen Abschluss
+laufen; festhaengende Hardware oder ungepruefte lange Callbacks sind damit
+nicht zeitlich begrenzt. Keine harte Echtzeit oder neue native/Windows-/AMD-/
+Hybrid-/Hotplug-/ueber32CPU-Abnahme. AP-VM-/Dateizulassung folgt separat in
+0.85.15. Bestehende Backendserialisierung und echte Freigabequittungen bleiben.

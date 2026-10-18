@@ -1,0 +1,98 @@
+﻿Lokale AP-Qualifikation vor erweitertem CPU-Zustand - 0.85.6
+==========================================================
+
+Stand 18.10.2026. Release 0.85.6, Kernel 0.1.333. Abnahme bestanden.
+Behebt Befund B aus Core/CpuHardware085.txt auf Basis des gemeinsamen
+Modulvertrags aus 0.85.5. PAT und APIC-/IRQ-/MSI-Transportgrenzen folgen
+als weiterhin priorisierte Schritte 0.85.7/.8.
+
+Verhalten und Besitz
+--------------------
+Bisher uebernahm der AP-Trampolin ungeprueft CR0, CR4 und EFER vom BSP.
+Der FPU-Eintritt setzte danach die BSP-Maske und restaurierte dessen
+Initialimage, ohne lokale Baseline-/Komponenten-/Layoutqualifikation.
+
+Der private 32-Bit-Eintritt bestimmt jetzt zuerst die eigene volle APIC-ID
+ueber CPUID 1F/B, unterstuetztes AMD-Topologieblatt oder Legacyfallback.
+Er bindet sie an die erwartete ID und die nichtleere Startepoche seines
+privaten Trampolins. Vor CR4/WRMSR prueft er MSR, PAE und Long Mode sowie
+NX fuer benoetigtes NXE. 1-GB-Seiten werden nur verlangt, wenn ein kurzer
+Scan des bestaetigten gemeinsamen Roots tatsaechliche solche Leaves findet.
+Es entsteht kein eigener 1-GB-Mappingpfad. Nicht darstellbare CR3-Roots und
+abweichende Seitentabellenmodi werden vor SIPI kontrolliert ausgeschlossen.
+
+Nur feste Legacy-CR0-Werte, CR4.PAE und EFER.LME samt benoetigtem NXE fuehren
+in den Integer-Rust-Eintritt. Ungepruefte optionale BSP-Bits werden nicht
+kopiert. Rust benutzt vor der FPU-Zulassung das bestehende SIMD-freie
+Bare-Target. Dort werden die genaue Index-/ID-/Epochenbindung, dieselben
+kanonischen 17 Modulanforderungen und die vom laufenden Kernel benoetigten
+lokalen LAPIC-/TSC-Voraussetzungen geprueft.
+
+Vor XSETBV muss das lokale Standard-XSAVE-Layout fuer YMM mit dem vom BSP
+publizierten Image uebereinstimmen: Komponentengroesse, Offset, Nutzdatenende,
+Supervisorgrenze und Speicherlimit. Nicht aktivierte weitere Komponenten
+und Flags ohne Einfluss auf die Standard-Offsets muessen nicht gleich sein.
+CPU-Modell oder Kernklasse werden nicht auf Gleichheit getestet.
+
+Danach richtet der AP nur seine eigenen FPU-Kontrollbits ein. OSXSAVE,
+reales XCR0=7, aktive XSAVE-Groesse und CR0/CR4 werden nachgelesen, bevor
+erstmals FNINIT und das gemeinsame XRSTOR erfolgen. Ein benannter Fehler
+stoppt nur diesen privaten AP-Eintritt; der BSP registriert ihn einmalig,
+ohne ihn als Starttimeout zu verschleiern, und startet andere APs weiter.
+
+Atomare private Zulassungsrecords binden erwartete/beobachtete volle ID,
+Index und Startepoche. Parken, Freigabe und Online verlangen diesen genauen
+Nachweis. Fehlgeschlagene CPUs bleiben ausserhalb der Scheduler-/IRQ-Maske.
+Neu reservierte Trampolinseiten werden zuerst vollstaendig geloescht; alte
+RAM-Werte werden vor Vorbereitung nicht als frische Rueckmeldung gelesen.
+Der gegenwaertige Start recycelt weder fehlgeschlagene Slots noch Trampoline;
+ein spaeterer CPU-Lebenszyklusbesitzer braucht einen eigenen Widerrufsweg.
+Es entsteht keine neue oeffentliche API oder Modulschnittstelle.
+
+Alle Mechanismen gehoeren technisch zum bestehenden CPU-/SMP-/FPU- und
+Pagetabellenbesitzer im Kernel. Private Dateien: arch/ap_admission.rs,
+arch/xstate_layout.rs, arch/smp.rs, arch/fpu.rs, arch/lapic.rs,
+platform/cpu.rs, memory/paging.rs und arch/x86_64/ap_trampoline.S.
+Der gemeinsame ISA-Vertrag bleibt beim externen Contract/SDK unveraendert.
+
+Gezielte Pruefung und Grenzen
+-----------------------------
+Ergebnisse/Artefakthashes und die einmalige Abschlussmessung stehen in
+Core/CpuApQualification0856.json. Temp/Cpu0856 und das dort
+bezeichnete ignorierte Archiv behalten die vollen lokalen Belege.
+
+Kernel fmt/check/Clippy und Bau einschliesslich Assembly; 18 Faelle direkt
+gegen den wirklichen Standardlayoutbesitzer; Reihenfolge im kompilierten
+32-Bit-Trampolin. Begrenzte SMP4-Gaeste variieren nur AP1: fehlendes AVX2,
+AES, PCLMUL, XSAVE oder NX. Andere APs behalten ihre Faehigkeiten. Ein
+ausdruecklicher separater Testbuild verschiebt nur dessen betrachteten
+YMM-Offset vor XSETBV; er veraendert kein produktives Hardwarelayout.
+
+Vier CPUs sind jeweils gleichzeitig vorhanden. Fuer unterschiedliche
+CPUID-Merkmale instanziiert QEMU einen BSP und drei explizite CPU-Devices.
+Das ist keine Einkernabnahme. Benannte Ablehnung, genaue Identitaet und
+Phase sowie verbleibende Kapazitaet werden vor weiteren Gasttests gelesen.
+Ein gueltiges abweichendes CPUID-Modell muss ebenfalls zugelassen werden.
+Das belegt die merkmalsgebundene VM-Zulassung, keine physische Hybridplattform.
+
+Die regulaere SMP4-Quick-Abnahme und genau ein STANDARD Suite 3 verwenden
+den normalen aktuellen Kernel ohne Layoutinjektion, nach physischer
+BOOT-ELF-Pruefung. Abnahme bestanden: acht finale gezielte AP-Starts, 18 Layoutfaelle und der
+kompilierte Trampolin; normaler SMP4-Quick und genau ein STANDARD mit
+30 Rohsamples, je vier abgeschlossenen Workern und sechs gueltigen Scores
+im vollstaendigen DevCenter-Readback. Gesamtindex: 111.430723. Die IPC-Werte
+streuen deutlich zwischen den einmaligen Laeufen 0.85.5/.6; daraus wird
+kein stabiler Leistungsgewinn oder stabiler Regressionsnachweis abgeleitet.
+Kein neuer globaler Testkatalog und keine Aenderung der Benchmarkmethode.
+Windows-Hosts und physisch unterschiedliche Kernklassen sind nicht neu
+abgenommen. PAT-Konsistenz und Transportreichweiten sind keine Ergebnisse
+dieser Unterversion; sie bleiben 0.85.7/.8.
+
+Architekturreferenzen
+---------------------
+Intel SDM Vol.3A: lokaler Wechsel mit PAE/LME, NX und aktivem Paging:
+https://cdrdv2-public.intel.com/874249/253668-090-sdm-vol-3a.pdf
+Intel SDM Vol.1: XSAVE-Komponenten und XCR0-Abhaengigkeiten:
+https://cdrdv2-public.intel.com/843827/253665-sdm-vol-1-dec-24.pdf
+Die konkreten Compiler-/Modulanforderungen folgen weiterhin dem gepinnten
+Contract/Module/CpuBaseline.json und dem echten Zig-Targetnachweis 0.85.5.

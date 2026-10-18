@@ -1,22 +1,56 @@
-﻿Spectra-Standardbenchmark (Suite 2, Spectra 0.1.2)
+﻿Spectra-Standardbenchmark (Suite 3, Spectra 0.1.24)
 =================================
 
 Verbindlicher aktueller Performancebenchmark ist SPECTRA BENCH STANDARD mit
-spectra-standard-2 (Spectra ab 0.1.2). Er fuehrt fuenf feste Kernelarbeitslasten
+spectra-standard-3 (Spectra ab 0.1.24). Er fuehrt fuenf feste Kernelarbeitslasten
 aus. Jede hat eine aktive Aufwaermphase und fuenf Messungen. Alle Rohsamples
 bleiben erhalten; Median, Minimum, Maximum und MAD stammen nur aus den fuenf
 Messungen. Es gibt keine
 adaptive Messarbeitsmenge, keine versteckten Wiederholungen und kein Speed-Gate.
-Suite: spectra-standard-2. Scoring: spectra-geomean-1. Cache: active-per-area-1s-3batches-v2.
+Suite: spectra-standard-3. Scoring: spectra-geomean-1. Cache: parallel-active-per-area-1s-3batches-v3.
 Ein MB entspricht 1024 KB.
+
+Alle verfuegbaren CPUs
+---------------------
+STANDARD fragt die aktuelle schedulierbare CPU-Kapazitaet ab und fuehrt je CPU
+einen gleich grossen eigenen Arbeitsanteil aus. Keine feste Vier-CPU-Grenze:
+QEMU dieses Hosts stellt weiterhin vier CPUs bereit, OssiPC sechzehn.
+Der Vordergrundprozess behaelt seine Konsolenrolle; ein eigener Hintergrund-
+prozess mit runtime.parallel=owned-v1 darf seine Worker auf APs ausfuehren.
+Der Kernel verteilt sie nach seiner bestehenden Schedulerpolicy, ohne neue
+Affinitaets- oder Reservierungszusage. Normale Spectra-Abfragen bleiben passiv.
+Die Manifestfreigabe gilt auch fuer andere ausdrueckliche Hintergrundstarts von
+Spectra. Native Checks mit BSP-Controller weiterhin im normalen Vordergrund
+ausfuehren; ihre Kernelzulassung verlangt diesen Kontext.
+Fuer parallele Demand-VM-Arbeit Kernel ab 0.1.330 verwenden: wartende
+Memory-Owner bestaetigen auch bei IF=0 die ausstehende genaue TLB-Anforderung.
+Ein Fault und ein freigebender anderer Prozessor duerfen nicht gegenseitig auf
+Sperre und unzustellbare Interruptbestaetigung warten. IRQ-Flags bleiben erhalten.
+Kernel 0.1.331 erweitert ausserdem den privaten Stream-Pool von 16 auf 64
+(zweimal die unterstuetzten maximal 32 CPUs), einschliesslich aller Such- und
+Freigabemasken. Mit 16 Workern darf der Exportstream nicht bereits die
+Dateiarbeit an der alten globalen Grenze von 16 Streams scheitern lassen. Die feste
+SMP4-Referenz mit Kernel 0.1.330 bleibt gueltig; Arbeitsmengen sind unveraendert.
+Alle Worker bestaetigen Vorbereitung und Scheduler-Peerbereitschaft vor der
+gemeinsamen Startbarriere. Wartende Teilnehmer bleiben bis dahin runnable,
+damit die Schedulerzulassung die Last verteilen kann. Jeder besitzt eigene
+VM-Regionen, Notifications, Kindhandles und temporaere Dateipfade/Puffer.
+Die folgenden Arbeitsmengen gelten JE CPU; Batchmengen sind diese Werte mal N.
+Primaere Metrik ist gemeinsame verstrichene Zeit geteilt durch alle wirklich
+abgeschlossenen Operationen (metric_version=2). Mehr CPUs gehen somit ueber
+den echten Gesamtdurchsatz ein; es gibt keinen nachtraeglichen CPU-Bonus.
+Der Header meldet N Teilnehmer. Jeder erfolgreiche Rohsample muss
+worker_count=completed_workers=N nachweisen. Aendert sich die verfuegbare CPU-Kapazitaet waehrend des Laufs,
+bleibt das Ergebnis fehlerhaft. Teilmengen werden nicht hochgerechnet.
 
 Bereiche und primaere Metrik (je Gewicht 1)
 -----------------------------------------
 scheduler_sync: 16384 Notification-Roundtrips mit einem Peerthread; drei genaue
-Notification-Handles. Der Partner quittiert Bereitschaft vor Timerstart; der
-erste Request oeffnet die Startbarriere. Beide Threads behalten BSP-Policy.
-Anlage, Bereitschaftswarten, Join und Close liegen ausserhalb des Intervalls;
-das Ergebnis verlangt ihren bestaetigten Abschluss. ns/Roundtrip.
+Notification-Handles. Der Partner quittiert Bereitschaft vor Timerstart; die
+gemeinsame Startbarriere startet alle Teilnehmer.
+Anlage und Bereitschaftswarten liegen vor dem Intervall; die gemessene
+Gesamtzeit endet nach bestaetigtem Worker-/Peerabschluss samt Join/Close.
+ns/abgeschlossenem Roundtrip ueber alle Teilnehmer.
 memory: 512 Reserve/Commit/Demand-Fault/Release-Zyklen zu je 128 KB. Jede der
 32 Seiten muss beim ersten Zugriff null sein, einen echten Fault erzeugen und
 das geschriebene Byte behalten; anschliessend kein lebender Regionhandle.
@@ -57,10 +91,17 @@ Quelle/Generation und mindestens zehn Aufloesungseinheiten. Die kleinste
 Differenz aus 64 separaten Clockpaaren beschreibt den Beobachteraufwand;
 sie wird nicht von Arbeitszeiten abgezogen. Unbekannte Kosten bleiben null.
 Text/JSON, Dateien, Referenzlesen und breite Diagnoseabfragen liegen ausserhalb
-der gemessenen Arbeit. Timeouts: zehn Sekunden pro Sample beziehungsweise gesamter aktiver Aufwaermphase,
-90 Sekunden fuer
-die Suite; Cleanup bleibt an echte Handlequittungen gebunden. Ein unklarer
-Abbau sperrt Folgearbeit. Hosttimeout inklusive Boot: 240 Sekunden.
+der gemessenen Arbeit. Fristen wachsen mit der CPU-Anzahl: Faktor
+max(1, ceil(N/4)). Ein Messbatch hat 30 Sekunden mal Faktor; die Aufwaermung
+mit mindestens drei ganzen Batches hat 90 Sekunden mal Faktor. Fuer die
+Suite gelten 300 Sekunden und fuer den Vordergrund 360 Sekunden mal Faktor.
+Dies sind Fehlergrenzen, keine Performancehuerden; die festen Arbeitsmengen
+und gemessenen Zeiten werden dadurch nicht veraendert. Ein unklarer Abbau
+sperrt Folgearbeit. QEMU-SMP4 hat 420 Sekunden Hosttimeout einschliesslich Boot;
+ein nativer Collector muss seine volle CPU-Anzahl und die passende Frist nutzen.
+Auch eine fehlgeschlagene Aufwaermung behaelt ihre bisherigen vollstaendigen
+Batches und die zuletzt gemessene Teilmenge; ein Peerabbruch verdeckt die
+urspruengliche Fehlerursache nicht.
 Close fuehrt zu Exit 4; Fehler/Timeout zu Exit 1, Parameter zu 2, Ausgabe zu 3.
 CHECK LIFECYCLE /STANDARDCANCEL prueft Close, Exit 4, Reap und Ownerabbau.
 
@@ -77,14 +118,14 @@ incomplete und overall bleibt null. Ohne Referenz zeigt Spectra die Messwerte
 und sechs unbewertete Scoreeintraege mit Grund. /REFERENCE liest einen vollen
 Schema-1-Hostexport; /COMPAREKEY erklaert die aktuelle Hostmethodik. Der Caller
 muss diesen Hash aus seiner tatsaechlichen Konfiguration bestimmen. Spectra
-prueft Suite, feste Lasten, SMP4, Warmlaeufe, Messmodus und alle Referenzmetriken;
-QEMU-/Storage-/Bootmethoden werden vom Host verifiziert. Der bestehende
+prueft Suite, feste Lasten, All-CPU-Policy, Warmlaeufe, Messmodus und alle
+Referenzmetriken; der Host prueft den vollstaendigen Messvertrag. Der bestehende
 Kernel-Startvertrag erlaubt 127 Argumentbytes; SSH exec benoetigt zusaetzlich
 /C und /NOAUTOEXEC innerhalb dieser Grenze. Lange Referenzaufrufe deshalb
 in eine kurze .BAT-Datei legen und diese ueber SSH starten. Die Spectra-Args
 selbst muessen weiterhin in 127 Bytes passen; alternativ einen kurzen
-eindeutigen Methodenschluessel verwenden. Eine SSH-Umgebung mit
-Netzwerk ist eine andere Methode als der netzlose automatische Standardlauf.
+eindeutigen Methodenschluessel verwenden. Native-/VM-Ausfuehrung, Netzwerk, Desktop und Bootzustand bleiben als
+Kontext sichtbar; laufende Fremdlast kann den gemessenen Durchsatz beeinflussen.
 /SETTLE:0..5000 ist fuer explizite Aufrufe erlaubt; der Standardexport fordert
 200 ms. Andere Wiederholungs-/Arbeitsmengen sind in dieser Suite unzulaessig.
 
@@ -107,8 +148,8 @@ Nur die Standardphase auf den aktuellen Testartefakten starten:
 Ab 0.84.46 verwenden Slim/Full/Test 22 GB mit 16 GB SYSTEM. Die Standardphase
 uebernimmt weiter die aktuellen Testartefakte und deren Bootplan, erzeugt sie
 jedoch mit dem festen Benchmarkprofil: 16 GB gesamt, 10 GB SYSTEM, 128 MB BOOT
-und 5 GB RECOVERY. Methode, comparison_key und feste Suite-2-Referenz bleiben
-damit unveraendert; die reale neue Releasegeometrie wird getrennt funktional geprueft.
+und 5 GB RECOVERY. Die feste QEMU-Geometrie bleibt reproduzierbar; ein nativer
+Lauf verwendet seine wirkliche Installation und zeichnet deren Groessen auf.
 
 Der Test-Imageplan muss aktuell sein. Der Runner friert seine verwendeten
 Kernel-/R4X-Dateien vor dem Imagebau ein und nutzt den ausgewaehlten
@@ -132,30 +173,22 @@ Seriellog-Hash und ohne behauptete Messwerte/Indizes; der Rohbeleg bleibt erhalt
 
 Referenz und sechs Scores
 ------------------------
-Eingefrorene aktive Suite-2-Referenz:
-Repositories/Diagnostics/Spectra/Baselines/standard-2.reference.json,
-run_id=495e5971-d1c6-41a2-9ea7-2ee64424e91f. Dieser vollstaendige echte Lauf
-definiert 100 Punkte und bleibt unveraendert. Im Repository stehen nur UUID
-und Pruefhashes; der vollstaendige Export liegt im DevCenter beziehungsweise
-im lokalen Artefaktverzeichnis. Resolve-SpectraReference prueft den originalen
-Exporthash und den Bewertungsvertrag; ein normalisierter API-Abruf muss
-denselben Bewertungsvertrag besitzen. API-Basis: R4OS_DEVCENTER_API_URL oder
-DEVCENTER_API_URL in Tools/BenchmarkHost.R4S. Der lokale Cache erlaubt
-Offline-Laeufe. Echte Messreihen und Rohsamples werden nicht versioniert.
-Ein ausdruecklicher reference4-Lauf
-erzeugt einen neuen Eigenbezug; er ersetzt die aktive Referenz nicht automatisch.
-Fehlt eine pruefbare Referenz im Cache und ist kein DevCenter-Abruf moeglich,
-bricht der Runner vor dem Gaststart ab; er erzeugt keinen Pflichtlauf ohne
-vergleichbare Scores. Die alte Datei
-wird weder ersetzt noch fuer Suite 2 umgerechnet. Vergleichbare absolute
-Geschwindigkeitsindizes zwischen Suite 1 und 2 werden nicht behauptet.
-
-Historische Suite-1-Referenz: Spectra/Baselines/standard-1.reference.json, UUID
-6133385b-2b6c-496a-9950-9835a0752f8b. Hash und Rohbezug im Abnahmebericht
-Spectra0833.json. Eine Referenz wird nicht automatisch ersetzt.
-Ein neuer Referenzlauf ist ausdruecklich headless Test reference4; ein bestandener
-Lauf muss vor einem Referenzwechsel als neuer unveraenderlicher Stand gesichert
-werden. Jeder Export nennt die genaue baseline_run_id.
+Die aktive Suite-3-Referenz wird durch
+Repositories/Diagnostics/Spectra/Baselines/standard-3.reference.json gebunden.
+run_id=28b326e2-4323-4a4c-a0d2-4c1bab4958c0, Kernel 0.1.330, Spectra 0.1.24.
+Ihr vollstaendiger echter SMP4-Lauf definiert 100 Punkte. Im Repository stehen
+nur UUID und Pruefhashes; vollstaendige Exporte bleiben im DevCenter und im
+lokalen Artefaktverzeichnis. Resolve-SpectraReference prueft Originalexport-
+hash und Bewertungsvertrag. Ein normalisierter API-Abruf muss denselben
+Bewertungsvertrag behalten. API-Basis: R4OS_DEVCENTER_API_URL oder
+DEVCENTER_API_URL in Tools/BenchmarkHost.R4S; der Cache erlaubt Offline-Laeufe.
+Ein ausdruecklicher headless Test reference4 erzeugt einen neuen Eigenbezug,
+ersetzt die Referenz jedoch nicht automatisch. Fehlt die pruefbare Referenz,
+bricht der normale Runner vor dem Gaststart ab.
+Historische Referenzen bleiben unveraendert:
+- Suite 2: standard-2.reference.json, UUID 495e5971-d1c6-41a2-9ea7-2ee64424e91f.
+- Suite 1: standard-1.reference.json, UUID 6133385b-2b6c-496a-9950-9835a0752f8b.
+Zwischen den drei Suiten gibt es keinen gueltigen Geschwindigkeitsvergleich.
 
 Bereichsindex = 100 * Referenzmedian / aktueller Median. Alle Metriken sind
 lower_is_better. overall = 100 * Produkt(Bereichsindex/100)^(1/5). Alle fuenf
@@ -167,13 +200,17 @@ Gewichte werden niemals umverteilt. Geschwindigkeitsschwankungen allein sind
 kein Funktionsfehler. Der Index beschreibt diese fuenf Lasten, keine allgemeine
 Geschwindigkeitsgarantie fuer jede App. TCG ist keine physische SMP-Skalierung.
 
-Gleich sein muessen Suite/Scoring/Messmodus/comparison_key und die vollstaendigen
-Methodenfelder execution, vcpus, ram_bytes, qemu, storage, workloads, cache_state,
-warmup_runs, warmup_min_ns, warmup_min_batches, repetitions. Dazu gehoeren Fixturehash und Boot-/Settle-Methode.
-CPU-/Hostidentitaet, Umgebungslabel, Release-/Kernel-/Spectraversionen und deren
-Artefakthashes duerfen wechseln und bleiben als Kontext erhalten. Bei anderer
-QEMU-Version/Beschleunigung/Methode gibt es null mit Grund; kein stiller
-Vergleich mit der vorhandenen KVM-Referenz.
+Gleich sein muessen Suite/Scoring/Messmodus/comparison_key und die Methoden-
+felder cpu_policy=all-available-v1, measurement=parallel-wall-ns-per-operation-v3,
+filesystem=ntfs, workloads einschliesslich STDCHILD-SHA-256, cache_state,
+warmup_runs, warmup_min_ns, warmup_min_batches, repetitions und settle_ms.
+Suite 3 misst Hardwareunterschiede: CPU-Anzahl, CPU-Modell, RAM, Storage,
+native/VM-Ausfuehrung, QEMU-Konfiguration und Bootzustand sind protokollierter
+Kontext und duerfen wechseln. Ein nativer Lauf mit 16 CPUs kann deshalb dieselbe
+Suite-3-Referenz wie ein QEMU-Lauf mit 4 CPUs benutzen. Der Index umfasst dabei alle
+Hardware-/Umgebungseffekte dieser Lasten, keine isolierte CPU-Skalierungsquote.
+DevCenter behaelt fuer historische Suite 1/2 deren strenge urspruengliche
+Vergleichsregeln. Eine neue Methodik normiert alte Messungen niemals um.
 
 Importvertrag: JSON Schema 1
 ---------------------------
@@ -190,13 +227,14 @@ baseline_run_id, environment_id, comparison_key, instrumentation_mode, notes,
 environment, artifacts, metrics, samples, scores.
 Environment enthaelt Host/CPU, die oben genannten Methodenfelder sowie den
 Bootzustand. Artefakte enthalten component, commit, dirty, SHA-256 und Buildoptionen.
-Metrik: area_id, metric_id=elapsed_ns_per_operation, metric_version=1,
+Metrik: area_id, metric_id=elapsed_ns_per_operation, metric_version=2,
 unit=ns/operation, direction=lower_is_better, primary=true, weight=1, status,
 failure_reason, sample_count, median_value, min_value, max_value, mad_value, checks.
 Checks: work_complete, clock_valid, cleanup_confirmed; jeweils echte Boolwerte.
 Sample: area_id, metric_id, sample_index, phase=warmup|measurement, status,
 failure_reason, elapsed_ns, operation_count, bytes_processed, value, clock_source,
-clock_generation, clock_resolution_ns, observer_overhead_ns.
+clock_generation, clock_resolution_ns, observer_overhead_ns, worker_count,
+completed_workers. Die Workerzaehler sind ebenfalls dezimale JSON-Strings.
 Score: area_id (fuenf Bereiche plus overall), baseline_run_id, scoring_version,
 score oder null, status=valid|unavailable, reason. Kein NaN/Infinity.
 
@@ -208,7 +246,7 @@ Dokumenten oder Exports. Kein synthetischer Testdatensatz wird produktiv importi
 Verbindlicher Mess- und Importablauf
 ----------------------------------
 Performancebenchmarks verwenden ausschliesslich diese Standard-Suite.
-Nach dem SMP4-Lauf den vollstaendigen run.json-Export mit seiner echten UUID
+Nach dem Lauf den vollstaendigen run.json-Export mit seiner echten UUID
 und registrierten Host-ID in DevCenter importieren. Fehlt dort die benannte
 Referenz, deren unveraenderten vollstaendigen Export zuerst senden. Messung und
 Import sind getrennte Schritte; ein Uploadfehler erfordert keinen neuen Lauf.

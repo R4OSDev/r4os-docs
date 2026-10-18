@@ -42,6 +42,27 @@ Red-Zone und kein SIMD/FPU im normalen Kernelcode; kein LTO. Widersprechende
 Caller-Profilvariablen werden fuer den Aufruf ersetzt und danach restauriert.
 Die normalen Task-/IRQ-Grenzen sichern weiter SIMD-faehige Modulaufrufe.
 
+Seit 0.85.5 wird der gemeinsame CPU-Vertrag aus
+Repositories/Contract/Module/CpuBaseline.json uebernommen. SDK-Zig-/C-Bau
+und Kernelboot verwenden dieselben CPUID-Anforderungen und XCR0-Maske;
+der SDK-Bau prueft auch die impliziten Compilerfeatures. Das bisherige
+AVX2-/AES-/PCLMUL-Ziel bleibt erhalten. Der Kernelbuilder vergleicht den
+Profilinhalt mit dem exakten Cargo-Contractpin und bindet die Deskriptoren
+samt SHA256 in seine gehashte Buildkonfiguration ein.
+
+Der BSP prueft zuerst die Hardwarebasis, danach den tatsaechlich aktiven
+XSAVE-/OSXSAVE-/XCR0-Zustand und dessen Groesse. Erst dann werden Module
+zugelassen; FXSAVE/SSE2 alleine gibt das AVX2-Modulprofil nicht frei.
+Fehlende Merkmale werden vor Modulcode benannt und kontrolliert gestoppt.
+Die gemeinsame R4M0-Vorbereitung besitzt zusaetzlich dieselbe Zulassungsbarriere.
+Details und Abnahme: Core/CpuBaseline0855.txt.
+
+Die isolierte Fehlerprobe -Dcpu-baseline-ymm-test=true initialisiert XSAVE
+absichtlich ohne YMM und muss vor Modulen mit missing=xcr0 enden. Sie ist
+kein produktiver Modus. Normale Images und STANDARD verwenden den Default
+false. AP-Qualifikation, PAT und volle APIC-/IRQ-Ziele folgen separat in
+0.85.6-.8; die BSP-Zulassung ersetzt diese Pruefungen nicht.
+
 Rust/main.rs exportiert kmain, bindet die erhaltene x86_64-Assembly ein und
 ruft die native Bootfolge auf. linker.ld erzeugt ELF64/EM_X86_64/EXEC ab
 0xffffffff80000000 mit getrennten RW-/RX-/RO-/RW-Segmenten. Limine-Startmarker,

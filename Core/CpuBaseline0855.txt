@@ -1,0 +1,90 @@
+﻿Modul-CPU-Baseline vor Ausfuehrung - 0.85.5
+==========================================
+
+Stand 18.10.2026. Release 0.85.5, Kernel 0.1.332. Behebt Befund A aus
+Core/CpuHardware085.txt. AP-Zulassung, PAT und APIC-/IRQ-/MSI-Ziele bleiben
+die anschliessenden priorisierten Aufgaben 0.85.6-.8.
+
+Aenderung
+----------
+Ein erfolgreich initialisiertes FPU-Speicherbackend war bisher bereits
+als Modul-SIMD-Freigabe behandelt worden. FXSAVE/SSE2 oder AVX ohne AVX2
+erfuellen aber nicht das tatsaechliche gemeinsame Modulbauprofil.
+
+Contract/Module/CpuBaseline.json beschreibt jetzt einmalig dieses vorhandene
+Profil: 17 CPUID-Anforderungen mit benoetigtem Register/Bit, zugehoerigen
+Zig-Features, bisherigen C-Flags und XCR0-Maske 7. Dazu gehoeren die implizite
+x86_64-Basis, CRC32 als SSE4.2-Abhaengigkeit sowie AES-NI/PCLMULQDQ/XSAVE.
+CPU-Tuningpraeferenzen sind von architektonischen Voraussetzungen getrennt.
+Ein genauer Vergleich gegen den vorherigen Zig-Targetquery und die vier
+C-Flags bestaetigt dieselbe Compilerbasis. Es gibt kein neues Legacyprofil.
+
+Der Contract-Buildhelfer leitet daraus beide SDK-Modulziele ab und weist
+unberuecksichtigte implizite Compilerfeatures zurueck. SDK und Kernel pinnen
+denselben veroeffentlichten Contractcommit. Kernel/Build.ps1 vergleicht auch
+die kanonische CPU-Datei mit diesem Pin und uebernimmt Deskriptoren/Profilhash
+in seine unveraenderliche Buildkonfiguration; build.rs erzeugt die privaten
+Rust-Konstanten. Keine zweite handgepflegte Runtime-Featureliste.
+
+Der BSP prueft Hardwaremerkmale und XSAVE-Komponenten vor erweiterten
+Zustandsoperationen. Nach der FPU-Initialisierung folgen OSXSAVE, reales
+XGETBV, x87-/SSE-/YMM-Maske, AVX2-Zustand, XSAVE-/YMM-Groesse und benoetigte
+CR0-/CR4-Bits. Firmware muss OSXSAVE nicht bereits gesetzt haben.
+Nur diese vollstaendige Zulassung publiziert den Modulfreigabestatus.
+Ein FPU-Backend allein besitzt diese Befugnis nicht mehr.
+
+Fehler melden das konkrete Pflichtmerkmal an Bootlog/Serial und bestehenden
+KernelFatal, bevor Modulcode erreicht werden kann. Die CPU-Initialisierung
+liegt vor Registry, Preload, R4L-, R4D-, R4P- und R4X-Ausfuehrung. Auch die
+gemeinsame R4M0-Vorbereitung lehnt ohne Zulassung ab, vor Scratch/Reservation.
+Architekturkennung 1 im Container bleibt eine Formatpruefung, kein ISA-Beleg.
+Container-/Plattformtabellen, API-Baseline und Modulartefakte bleiben gleich.
+
+Besitzer und Quellen
+---------------------
+Contract: Module/CpuBaseline.json, Module/cpu_baseline.zig, build.zig;
+ABI/R4M0.txt dokumentiert den gemeinsamen Vertrag.
+SDK: r4os/build.zig und Contractpin in build.zig.zon.
+Kernel: Build.ps1, build.rs, Rust/platform/module_cpu.rs,
+Rust/boot/foundation.rs, Rust/arch/fpu.rs und gemeinsame Vorbereitung in
+Rust/loader/registry_loader.rs. CPU-Inventar liest den bestaetigten Status.
+Die technisch notwendige CPU-/Boot-/Loaderbarriere bleibt im Kernel;
+die Compiler-/Modulwahrheit besitzt der externe Contract/SDK.
+
+Pruefung und Grenzen
+---------------------
+Die maschinenlesbaren Ergebnisse, Artefakthashes und der STANDARD-Verweis
+stehen in Core/CpuBaseline0855.json. Volle lokale Logs/Originale werden
+unter Temp/Cpu0855 und im dort bezeichneten Belegarchiv erhalten.
+
+Bestanden: Contractcheck, SDK-Zig-/C-Modulbau, Gleichheit des
+vorherigen Compilerziels, Kernel fmt/check/Clippy und aktueller Produktbau.
+Vier bestandene negative SMP4-Starts blenden AVX2, AES, PCLMUL oder XSAVE einzeln aus.
+Die fuenfte bestandene Probe startet ein ausdrueckliches Fehlerinjektionsartefakt ohne
+aktive YMM-Freigabe. Jede Probe verlangt den benannten terminalen Fehler
+und ausbleibende Modul-/Registryaktivierung; sie behauptet keinen nativen
+CPU-Defekt. Der normale SMP4-Lauf benutzt ein aktuell gebautes, physisch
+verifiziertes Boot-ELF ohne Fehlerinjektion.
+
+Wegen der geaenderten Laufzeitzulassung und Loaderbarriere ist genau ein
+Spectra STANDARD Suite 3 auf allen vier verfuegbaren QEMU-CPUs samt vollem,
+geprueftem DevCenter-Readback erforderlich. Keine neue Benchmarkmethode,
+kein breiter Testkatalog und keine pauschale Beschleunigungsbehauptung.
+Abnahme bestanden: regulaerer SMP4-Quick und genau ein STANDARD mit
+30 Rohsamples, durchgehend vier abgeschlossenen Workern und sechs gueltigen
+Scores im vollstaendigen DevCenter-Readback. Der Gesamtindex ist 117.683382;
+Referenz Suite 3 bleibt unveraendert. Die JSON-Belege halten Lauf-ID,
+Artefakthashes und Nachweisgrenzen fest.
+Windows und heterogene physische CPUs sind nicht neu getestet; APs werden
+erst in 0.85.6 einzeln qualifiziert. FXSAVE bleibt ein interner FPU-Backendpfad
+und ist keine Zusage einer produktiven SSE2-Distribution.
+
+Architektur-/Compilerreferenzen
+--------------------------------
+Die CPUID-Zuordnungen und XCR0-Freigabe folgen Intel SDM Vol.1, Kapitel13/14:
+https://cdrdv2-public.intel.com/843827/253665-sdm-vol-1-dec-24.pdf
+Aktuelle SDM-Uebersicht:
+https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html
+Die tatsaechliche Featureabhaengigkeit stammt aus der gepinnten Zig-Toolchain,
+DevKit/Toolchains/Zig/lib/std/Target/x86.zig; der direkte Zielvergleich und
+die laufende SDK-Abhaengigkeitspruefung benutzen deren wirkliche Aufloesung.

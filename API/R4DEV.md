@@ -12,6 +12,13 @@ Updatepfad.
 
 Zig-Context: r4os.r4dev.Context
 
+Ab 0.84.36 vermittelt die optionale COM-Erweiterung den dynamischen seriellen
+Portkatalog und exklusive Prozesshandles. Der typisierte Anwendungskontext
+ist `app.serial()` (SDK 0.64.35); die zehn Felder brauchen Tabellenrevision21.
+Unveraenderte Nutzbytes, endliche Tickbudgets, Teilresultate und gesondertes
+physisches Drain/Close sind in `Core/SeriellePorts.txt` beschrieben. Normale
+UART-Register, Ringpuffer und IRQ-Bedienung gehoeren `SERIAL.R4D`.
+
 R4DEV ist fuer Diagnose und device-nahe Sicht bestimmt. Hardwarebetrieb bleibt
 in Kernel/R4D/R4P. Optionale Felder werden mit hasFn geprueft.
 
@@ -94,7 +101,7 @@ Details: [AMD-Laptopbedienung](../Drivers/AMDLaptop08035.txt).
 <!-- R4OS-APIREF:BEGIN R4DEV (generiert von ApiContractGen aus ApiContract.json - NICHT von Hand editieren) -->
 ## Tabellen-Referenz R4DEV (generiert)
 
-Kernel-Gruppentabelle `R4XStartR4Dev` v13, 392 Bytes, 45 Funktionsfelder und 47 Slots insgesamt.
+Kernel-Gruppentabelle `R4XStartR4Dev` v21, 536 Bytes, 63 Funktionsfelder und 65 Slots insgesamt.
 Signatur-Wahrheit: `abi.R4DevFns` (Feldname == Tabellenfeld).
 Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 
@@ -147,4 +154,22 @@ Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 | 44 | 368 | function | `performance_instrumentation` | `*const fn (*ProgramInstrumentationInfo) callconv(.c) i32` |
 | 45 | 376 | function | `performance_lock` | `*const fn (u32, *ProgramLockPerformanceInfo) callconv(.c) i32` |
 | 46 | 384 | function | `performance_stack` | `*const fn (u32, *ProgramStackPerformanceInfo) callconv(.c) i32` |
+| 47 | 392 | function | `stack_fault` | `*const fn (u32, *ProgramStackFaultInfo) callconv(.c) i32` |
+| 48 | 400 | function | `memory_kernel_heap_check` | `*const fn (*ProgramKernelHeapCheck) callconv(.c) i32` |
+| 49 | 408 | function | `scheduler_kernel_check` | `*const fn (u32, *ProgramKernelSchedulerCheck) callconv(.c) i32` |
+| 50 | 416 | function | `smp_kernel_check` | `*const fn (*ProgramKernelSmpCheck) callconv(.c) i32` |
+| 51 | 424 | function | `performance_smp_tlb` | `*const fn (*ProgramSmpTlbSnapshot) callconv(.c) i32` |
+| 52 | 432 | function | `storage_block_queue_check` | `*const fn (*ProgramKernelBlockQueueCheck) callconv(.c) i32` |
+| 53 | 440 | function | `storage_nvme_check` | `*const fn (*ProgramKernelNvmeCheck) callconv(.c) i32` |
+| 54 | 448 | function | `usb_contract_check` | `*const fn (*ProgramKernelUsbCheck) callconv(.c) i32` |
+| 55 | 456 | function | `serial_count` | `*const fn () callconv(.c) u32` |
+| 56 | 464 | function | `serial_port_at` | `*const fn (u32, *SerialPortInfo) callconv(.c) i32` |
+| 57 | 472 | function | `serial_open` | `*const fn (u64, u64, *const SerialConfig, *u64) callconv(.c) i32` |
+| 58 | 480 | function | `serial_configure` | `*const fn (u64, *const SerialConfig) callconv(.c) i32` |
+| 59 | 488 | function | `serial_read` | `*const fn (u64, [*]u8, u32, u64, *SerialTransfer) callconv(.c) i32` |
+| 60 | 496 | function | `serial_write` | `*const fn (u64, [*]const u8, u32, u64, *SerialTransfer) callconv(.c) i32` |
+| 61 | 504 | function | `serial_drain` | `*const fn (u64, u64) callconv(.c) i32` |
+| 62 | 512 | function | `serial_status` | `*const fn (u64, *SerialStatus) callconv(.c) i32` |
+| 63 | 520 | function | `serial_cancel` | `*const fn (u64) callconv(.c) i32` |
+| 64 | 528 | function | `serial_close` | `*const fn (u64, u32, u64) callconv(.c) i32` |
 <!-- R4OS-APIREF:END R4DEV -->

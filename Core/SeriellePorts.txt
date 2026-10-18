@@ -1,4 +1,4 @@
-Serielle Anschluesse - Stand 0.84.35
+Serielle Anschluesse - Stand 0.84.36
 ==================================
 
 COM1-Debugging
@@ -31,8 +31,62 @@ oder konfigurieren den freigegebenen Debugport nicht automatisch neu.
 
 Normale serielle Nutzung
 -----------------------
-Seit 0.84.34 sind SerialLink und dessen feste COM2-Nutzung entfernt.
-Der allgemeine serielle Treiber und die Anwendungs-COM-API folgen in 0.84.36.
-Die interne Debugbelegung ist bereits fuer deren genaue Portzulassung
-abfragbar. Die vorliegenden QEMU-Proben ersetzen keine Hardwareabnahme.
-Belege und konkrete Pruefgrenzen: Core/KernelCom1Policy08435.json.
+SerialLink bleibt seit 0.84.34 entfernt. SERIAL.R4D 0.1.0 besitzt ab 0.84.36
+normale 16550-UARTs, deren Konfiguration, residente getrennte RX-/TX-Ringe,
+IRQs und RTS/CTS. Kernel 0.1.321 vermittelt nur den dynamischen Portkatalog,
+genaue Prozess-/Registrierungs-/Oeffnungsgenerationen, Callbackleihen und
+ereignisgesteuerte Warteaufrufe. Keine feste Zwei-/Vierportgrenze in der API.
+COM1 bleibt waehrend des Debugbesitzes einschliesslich Probezugriffen gesperrt.
+
+Anwendungen erhalten den optionalen Kontext ueber SDK 0.64.35 app.serial().
+count/portAt listen die vorhandenen Ports; COMnummer und Hardwareidentitaet
+stammen aus der Ressourcendeklaration, nie aus einem wiederverwendbaren Slot.
+open verwendet port_id plus generation; openNumber sucht die aktuelle
+COMnummer. Das exklusive Handle gilt fuer die genaue Prozessinstanz.
+configure, read, write, drain, status, cancel und close arbeiten damit.
+Die kanonischen Zig-/C-/Rust-Vertraege gehoeren Contract 0.64.20.
+
+Nutzbytes bleiben unveraendert. Read liefert verfuegbare Daten; Write zaehlt
+die Aufnahme in die Softwarequeue. Erst Drain bestaetigt den leeren echten
+UART-Sender, keine Gegenstelle. Auch bei Fehler/Timeout/Abbruch bleibt
+completed mit bereits angenommenen oder gelesenen Bytes gueltig. Fristen sind
+endliche logische Systemticks; 0 fragt ohne Warten ab. RX-Ueberlauf meldet
+beobachteten Verlust. Konfiguration und Status sind versionierte Records.
+
+Close schliesst neue Zugriffe und weckt wartende eigene Operationen.
+Fehlgeschlagener physischer Abschluss behaelt Handle, Port und Kontext.
+Wiederholter Close benutzt dasselbe Handle; ein inzwischen neu geoeffneter
+Port kann nicht durch einen alten Lookup geschlossen werden. Noch laufendes
+Open blockiert normalen Zugriff und Abbau bis zur echten Callbackrueckkehr.
+Prozess-/Treiberende geben nur genau quittierte Ressourcen frei. IRQ-/Heap-
+Ressourcen bleiben bei ungeklaertem Treiberabbau gehalten.
+
+Hardwareumfang und Betrieb
+-------------------------
+Ohne Optionen: deklarierte ISA-UARTs COM1 3f8/IRQ4, COM2 2f8/IRQ3,
+COM3 3e8/IRQ4, COM4 2e8/IRQ3; fehlende UARTs werden nicht angeboten.
+OPTION SERIAL ports= ersetzt diese Liste, beispielsweise mit zusaetzlichem
+5:3a8:5. OPTION SERIAL ports=none deaktiviert ISA-Deklarationen.
+OPTION SERIAL pci= erlaubt explizit bestaetigte kompatible PCI-BDF/BAR-
+Ressourcen. MMIO wird ueber die bestehende Plattform-API abgebildet. Die
+bestehende CONFIG.R4S-Optionslaenge bleibt 47 Zeichen; die API begrenzt keine
+Portanzahl. Generische PCI-/ACPI-Erkennung und USB-Serial sind weitere
+Treiberarbeit und werden hier nicht als unterstuetzte Hardware ausgegeben.
+
+Baudbasis standardmaessig 115200, OPTION SERIAL clock= aendert sie. Exakt
+teilbare Baudrate, 5..8 Datenbits, 1/2 Stopbits und Paritaet/RTS-CTS sind
+einstellbar. Bei 5 Datenbits bedeutet die lange Stopbiteinstellung 1,5 Bit.
+Pro Port je 4096 Bytes RX/TX, ein geteilter Handler je benutzter IRQ-Leitung.
+Unbedienbar bleibende IRQs werden nach begrenzter Arbeit als Hardwarefehler
+stillgelegt; unbekannte Hardware-/Gegenstellenverluste sind nicht exakt
+zaehlbar. Einzelheiten, Ressourcenformat, Fehler und Wiederaufnahme:
+Repositories/Drivers/Serial/DOCUMENTATION.de.txt im Treiberrepository.
+
+Abnahme und Grenzen
+------------------
+Gezielte Vertrags-/Fassadenpruefungen, Actual-Source-UART-/Brokergrenzen und
+SMP4-Integration sind in Core/KernelSerialCom08436.json dokumentiert.
+Hostmodelle ersetzen dort Register bzw. Kernelabhaengigkeiten; sie belegen
+keine physische Hardware und keine erschoepfende SMP-Interleavingpruefung.
+STANDARD bleibt ein allgemeiner Systemvergleich, kein UART-Durchsatztest.
+Der getrennte COM1-Policybeleg bleibt Core/KernelCom1Policy08435.json.

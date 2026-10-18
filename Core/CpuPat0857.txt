@@ -1,0 +1,97 @@
+﻿Bestaetigte PAT-/MTRR-Vertraege und Cacheabbildungen - 0.85.7
+===========================================================
+
+Stand 18.10.2026. Release 0.85.7, Kernel 0.1.334. Abnahme bestanden.
+Behebt Befund C aus Core/CpuHardware085.txt. Module und oeffentliche
+Schnittstellen bleiben unveraendert. Transportgrenzen folgen als letzte
+vorgezogene Kompatibilitaetskorrektur in 0.85.8.
+
+Verhalten und Besitz
+--------------------
+Der BSP uebernimmt seine vollstaendige reale PAT-Tabelle unveraendert.
+Alle acht Eintraege werden validiert; WB, striktes UC und gegebenenfalls WC
+werden anhand dieser Tabelle ausgewaehlt. Kein Code setzt PAT5 mit WC gleich.
+Der unterstuetzte Bootvertrag verlangt PAT, MTRRs, PAT0=WB, einen strikten
+UC-Eintrag und normalen CR0-Cachebetrieb. Ein unpassender BSP-Vertrag endet
+benannt vor dem ersten Modul, statt unbekannte Speicherattribute zu nutzen.
+
+Jeder noch private AP prueft lokale PAT-/MTRR-Faehigkeiten und deren Zustand
+vor FPU-/Modulzulassung. Unterschiedliche gueltige PAT-Tabellen werden in
+diesem fruehen IF=0-Fenster mit dem vollstaendigen BSP-Wert synchronisiert:
+No-Fill-Cachemodus, WBINVD sowie CR3-/PGE-Behandlung einschliesslich globaler
+Translationen umschliessen den MSR-Schreibzugriff. Der echte lokale Readback
+ist Teil der vorhandenen genauen Index-/ID-/Startepochenzulassung. Ohne
+bestaetigte Tabelle wird der AP weder geparkt/freigegeben noch online.
+
+MTRRs werden ausschliesslich gelesen. Fixe und variable Bereiche werden
+nach ihren effektiven Typen verglichen; andere Reihenfolge, Aufteilung oder
+inaktive Register brauchen nicht bytegleich zu sein. Engere physische
+Adressgrenzen und mehrdeutige Ueberlappungen werden abgewiesen. PAT und MTRR
+werden auch bei der Mappingzulassung gemeinsam ausgewertet: PAT-WC kann
+beispielsweise MTRR-UC uebersteuern; UC-minus ist kein striktes UC.
+Der herstellerabhaengige WT/WP-Randfall bleibt konservativ unzugelassen.
+
+MMIO-, ECAM-, LAPIC-/IOAPIC-/HPET-, AHCI- und xHCI-Abbildungen verlangen
+bestaetigtes effektives UC; angeforderte WC-Abbildungen muessen wirklich WC
+sein. Der alte PCI-Pfad meldet ein fehlgeschlagenes WC nicht mehr als Erfolg.
+WC ist dort auf vorab als prefetchable deklarierte BARs begrenzt. Bestehende
+MMIO-Fenster behalten ihre Besitzer-, Ueberlappungs- und Freigabepruefung.
+
+Die private Boot-Pagetabelle erhaelt PAT-Bit 7 bei 4-KB-Seiten und setzt
+es fuer grosse Seiten korrekt auf Bit 12 um. Beim Aufteilen grosser Seiten
+bleiben physische Basis und Cacheattribute erhalten. Framebuffer- und
+MMIO-Aliase erhalten im neuen Root dieselben effektiven Attribute; noch
+cachebare Firmware-Framebuffer werden nicht unter lebenden Nutzern umgetypt.
+Der fruehe Rootwechsel und sein Rueckweg leeren Caches und globale TLBs.
+
+Spaetere WC-Zulassung prueft den ganzen Bereich, physische Identitaet,
+Geraetespeicher und alle bestehenden Aliase unter dem Pagetabellenbesitzer.
+Cachebares RAM, widerspruechliche Aliase und nur teilweise zu aendernde grosse
+Leaves werden kontrolliert abgewiesen. Bereits bestaetigtes WC bleibt
+benutzbar. Typaenderungen nutzen lokale und bestaetigte entfernte INVLPG-
+Invalidierungen auch fuer globale/grosse Eintraege. Kein neuer Laufzeitpfad
+zum Umtypen lebender WB-Nutzdaten oder zum Programmieren von MTRRs entsteht.
+
+Diese CPU-, Boot- und Pagetabellenmechanismen gehoeren technisch in den
+Kernel. Die privaten Besitzer sind arch/pat.rs, arch/memory_types.rs und
+memory/paging/cache.rs; die bestehenden Geraete-/Grafikbesitzer nutzen sie.
+Es entsteht kein neues Modul und keine zweite externe Cachepolicy-Instanz.
+
+Gezielte Pruefung und Grenzen
+-----------------------------
+Core/CpuPat0857.json verzeichnet Quell-/Artefakthashes und die Belege.
+Vollstaendige Rohdaten liegen im dort benannten ignorierten lokalen Archiv.
+Kernel fmt/check/striktes Clippy und produktiver Bau bestanden. 117 Faelle
+gegen die wirklichen Typ-, Pagetabellen- und MMIO-Fensterbesitzer pruefen
+PAT5=WC/WT, alternative/fehlende WC-Eintraege, ungueltige Tabellen, alle
+Selektoren fuer kleine/grosse Seiten, tatsaechliches Split-/Walkverhalten,
+effektive MTRRs und bestehende Besitzer-/Freigabegrenzen.
+Weitere 15 Faelle verwenden den wirklichen Laufzeit-Cachebesitzer mit
+Pagetabellen-Batchpfad: widerspruechliche/gueltige Aliase, RAM-Ablehnung,
+physische Identitaet, partielle/ganze grosse Leaves und fehlgeschlagene
+Invalidierung mit Ruecknahme. Hardware/MSR-/TLB-Quittungen sind dort gemockt;
+die echte SMP4-TLB-Probe bleibt ein eigener Laufzeitnachweis.
+
+Zwei begrenzte negative SMP4-Starts pruefen fehlendes BSP-PAT/MTRR vor
+Modulen. Drei weitere variieren nur AP1: fehlendes PAT, fehlendes MTRR und
+ein injizierter Readback-Vergleichsfehler. Jeweils bleiben drei CPUs aktiv.
+Die Injektion verwendet ein eigenes ELF und belegt keinen Hardwaredefekt.
+Der normale SMP4-Start liest auf allen vier CPUs dieselbe vollstaendige
+PAT-Tabelle zurueck; alle drei APs durchlaufen eine echte Synchronisierung.
+
+Der regulaere SMP4-Quick-Vertrag einschliesslich R4L-Praeemption und
+Cross-CPU-TLB-Probe besteht auf dem physisch verifizierten normalen BOOT-ELF.
+Genau ein STANDARD Suite 3 mit 30 Rohsamples und je vier abgeschlossenen
+Workern besteht einschliesslich vollstaendigem DevCenter-Readback und sechs
+gueltigen Scores. Gesamtindex: 140.729904. Aus einmaligen VM-Messungen wird
+kein stabiler Leistungsgewinn abgeleitet. Windows-Hosts, native Hardware,
+CPU-Hotplug und neue APIC-/IRQ-/MSI-Reichweiten sind nicht neu abgenommen.
+
+Architekturreferenzen
+---------------------
+Intel SDM Vol.3A: PAT-Selektoren, INIT-Verhalten und Programmierung:
+https://cdrdv2-public.intel.com/835754/253668-sdm-vol-3a.pdf
+Intel SDM, effektive PAT-/MTRR-Typen, Aliase und globale Invalidierung:
+https://cdrdv2-public.intel.com/868137/325462-089-sdm-vol-1-2abcd-3abcd-4.pdf
+AMD APM Vol.2, Revision 3.44, Tabellen 7-11 und Abschnitte 7.8.6/7.8.7:
+https://docs.amd.com/v/u/en-US/24593_3.44_APM_Vol2

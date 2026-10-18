@@ -1,0 +1,98 @@
+﻿Lastausgleich eines einzelnen wartenden Tasks - 0.85.9
+=====================================================
+
+Stand 18.10.2026. Release 0.85.9, Kernel 0.1.336. Abnahme bestanden.
+Behebt den Mindestmengenbefund aus Core/Parallelitaet.txt (Analyse 0.85.1).
+Andere Module und die oeffentliche API/ABI bleiben unveraendert.
+
+Der Scheduler beruecksichtigt jetzt die Ready-Queue und die genaue noch
+physisch laufende, produktive Taskinstanz. Ein bereits in Ready verlinkter
+aktueller Task wird einmal gezaehlt. Idle, Blocked und Dead liefern keine
+zusaetzliche produktive Arbeit. Derselbe Besitzer prueft die Last beider
+CPUs: Der Spender muss nach einem Transfer weiterhin mindestens gleich
+viel Arbeit wie das Ziel behalten. Ein laufender plus ein wartender Task
+kann deshalb eine zuvor freie zweite CPU beschaeftigen. Ohne laufende
+Spenderarbeit wird ein einzelner wartender Task nicht sinnlos verschoben.
+
+Push beim Ready-Wecken und Pull beim Leerwerden einer CPU verwenden diese
+gemeinsame Ungleichgewichtspruefung. Die Bedeutung der vorhandenen reinen
+Ready-Anzahlabfrage wird nicht veraendert. Ein einzelner wegen Bindung,
+Handoff oder anderer bestehender Barrieren unzulaessiger Task wird ueber
+denselben Kandidatenpraedikatsbesitzer bereits vor der Wake-Zielsuche
+abgewiesen. Das vermeidet Sucharbeit auf dem Mutex-/Event-Weckpfad, ohne
+die groesseren Queues oder deren rotierenden Cursor umzudeuten. Die Zeit
+fuer den Cooldown wird erst nach struktureller Zulassung und nur bei einer
+vorherigen Migration gelesen; abgelehnte/frische Kandidaten benoetigen
+keine zusaetzliche globale monotone Uhrpublikation.
+Quellen-/Zielqueue, genaue aktuelle Instanzen, Pending-Publikation und
+bestehendes Reschedule-IPI
+bleiben unter derselben Runtime-Zulassung. Die globale Zulassung bleibt
+bis zum gesicherten physischen Contextswitch bestehen; ein logisch schon
+Ready gesetzter Task darf seinen noch laufenden Stack nicht verlieren.
+
+Der bestehende Migrationsbesitzer behaelt alle Kandidatenbarrieren:
+genau aktueller Task, running_cpu, feste Bindung, SMP-Zulassung, Idle,
+Ausfuehrungsbesitzer, Retire/Release/Rollback, Locks, Preemptionssperre,
+Wait-Handoff, wartende Queue/Timeout, ungesicherter RSP oder FPU-Zustand.
+Auch die acht Kandidaten je Versuch, rotierende Auswahl und der vorhandene
+Migrationsabstand bleiben erhalten. Generation, Ready-Alter/-Reihenfolge,
+Rollen-/Spendenbudgets, gespeicherter Stack, FPU-Puffer und genauer
+Unwindzaehler werden beim Transfer nicht neu angelegt.
+
+Der technisch notwendige Mechanismus bleibt beim bestehenden Scheduler-
+und Taskbesitzer im Kernel. Die vorhandene Spectra-Diagnose konsumiert ihn
+weiter ueber denselben Vertrag; es gibt kein neues externes Modul.
+
+Gezielte Abnahme
+----------------
+Artefakt-/Quellhashes und Rohbelegorte: Core/KernelBalance0859.json.
+Kernel fmt/check, striktes Clippy und Artefaktbau bestanden.
+45 begrenzte Hostfaelle verwenden die wirklichen Tasktypen, Registry,
+intrusiven Ready-/AVL-/Wait-Besitzer und den produktiven Migrationscode.
+Sie pruefen den fehlenden Ein-Task-Fall, keine Spenderarbeit, produktives
+Ziel, bereits verlinktes physisches Current, Bindungs-/Ressourcenbarrieren,
+Cooldown und das rotierende Acht-Kandidaten-Budget. Nur CPU-Online-/Busy-
+Proben sind simuliert; diese Faelle sind keine Contextswitch-Abnahme.
+
+Ein normaler SMP4-Gast buendelt den unveraenderten Quick-Vertrag und
+SPECTRA CHECK THREAD /KERNEL:SCHED /JSON. Der bisherige Vier-Task-Fall
+bleibt erhalten. Seine Ergaenzung weckt genau einen bereits gestarteten
+eigenen Task aus einem echten Event-Wait. Unter einer Runtime-Zulassung
+bleibt die gebundene Variante am Spender; nach Aufhebung allein dieser
+eigenen temporaeren Bindung transferiert die normale Ready-Benachrichtigung
+ihn zum vorher wirklich untatigen Ziel. Der Controller bleibt waehrend
+dieser Publikation die physisch laufende Spenderinstanz. Der Worker kehrt
+nach Freigabe des Runtimebesitzers auf der anderen CPU zurueck.
+
+Echte Ausfuehrung, Ready-Fakten, Taskgeneration, vorhandener YMM-/Unwind-
+Worker und genau einmaliger Ruhestand sind bestaetigt. Das gesamte
+gewaehlte Schedulerergebnis quittiert 80 erzeugte und ebenso viele abgebaute eigene Tasks, keine lebenden Tasks,
+keine Workreste und keine Cleanupfehler. Fremde Queues/Fristen oder globale
+Zaehler werden nicht fuer die Probe zurueckgesetzt. Die Ergaenzung braucht
+mindestens zwei CPUs; der bisherige Vier-Task-Fall weiter mindestens drei.
+
+Das physisch verifizierte BOOT-ELF entspricht dem aktuellen Artefakt.
+Genau ein STANDARD Suite 3 auf dem finalen Artefakt mit vier
+abgeschlossenen Workern je Sample, 30 Rohsamples und sechs gueltigen Scores besteht samt vollstaendigem
+DevCenter-Readback. Gesamtindex: 135.959242.
+Finaler Schedulerindex: 66.109731
+(0.85.8: 93.303666).
+Zwei gueltige Kandidatenlaeufe bleiben samt vollem DevCenter-Readback
+im Roharchiv erhalten. Ihre niedrigeren Schedulerwerte (65.015225 und
+68.280766 gegen 93.303666 in 0.85.8) waren Anlass der konkreten Suchpfad-
+und danach der unnoetigen globalen Uhrabfragekorrektur. Nur die jeweils
+geaenderten Quellen begruenden den neuen Lauf; es gibt insgesamt drei
+STANDARD-Laeufe dieser Unterversion, einen je Artefaktstand.
+Die Werte belegen fuer sich keinen stabilen Leistungsgewinn oder eine
+vollstaendig isolierte Kausalitaet. Die Schedulerindizes aller drei
+0.85.9-Staende liegen unter 0.85.8. Die funktionale Migration ist abgenommen;
+diese niedrigere Schedulerbeobachtung bleibt fuer gezielte Lastausgleichs-/
+Platzierungsarbeit in 0.85.11 offen. Keine Abnahme als Beschleunigung.
+
+Weitere Grenzen
+----------------
+Die bestehende FPU-Workerprobe bleibt ein konkreter Erhaltungsnachweis;
+allgemeine Compiler-/FP-Umgebungsvertraege folgen in 0.85.45-.48.
+SMT-/Kern-/Package-Erkennung und topologiebewusste Platzierung sind die
+naechsten getrennten Schritte 0.85.10/.11. Keine neue native, Windows-,
+Hybrid-, Hotplug- oder Mehr-als-32-CPU-Abnahme wird daraus abgeleitet.

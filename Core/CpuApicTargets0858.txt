@@ -1,0 +1,122 @@
+﻿Volle APIC-Identitaeten und transportgueltige Interruptziele - 0.85.8
+==================================================================
+
+Stand 18.10.2026. Release 0.85.8, Kernel 0.1.335. Abnahme bestanden.
+Behebt Befund D aus Core/CpuHardware085.txt. Damit sind alle vier
+vorgezogenen Kompatibilitaetskorrekturen 0.85.5-.8 umgesetzt. AHCI wird auf
+0.2.5 erhoeht; andere Module und oeffentliche API/ABI bleiben unveraendert.
+Die weitere Roadmap beginnt .9.
+
+Verhalten und Besitz
+--------------------
+Die lokale CPU-ID stammt aus gueltigem CPUID 1F/B, unterstuetzter
+AMD-Topologie oder dem Legacyfallback. Derselbe volle Wert initialisiert
+den fruehen BSP-Slot und dessen CPU-Status. LAPIC-Hardware-ID und bereits
+gebundener BSP-Slot werden vor Interrupt-Routing bestaetigt. Widersprueche
+enden kontrolliert, statt eine gekuerzte ID als neue Identitaet zu behandeln.
+CPU-, LAPIC- und IRQ-Statusprojektionen behalten u32-IDs. Die betroffenen
+privaten Rust-Snapshots und ihre Layoutpruefungen sind angepasst; der
+oeffentliche HardwareSummary-Vertrag exportiert hier nur Zaehler.
+
+x2APIC wird bei bestehendem Firmwaremodus, passender expliziter Option
+oder benoetigten hohen BSP-/Topologie-IDs gewaehlt, sofern lokal vorhanden.
+Ein BSP ohne passenden Transport endet benannt; ein nicht adressierbarer
+AP bleibt vor SIPI ausgeschlossen, waehrend passende CPUs weiter starten.
+Der AP bestaetigt auch seine reale lokale LAPIC-ID vor Online. Eine
+unpassende lokale x2APIC-Faehigkeit bleibt Teil der AP-Zulassungsbarriere.
+
+Der private Architektur-Besitzer arch/apic_target.rs unterscheidet:
+- Physische xAPIC-IPIs: individuelle IDs 0 bis 254.
+- Physische x2APIC-IPIs: volle 32 Bit, ausgenommen FFFFFFFF als Broadcast.
+- Konventionelle IOAPIC-/MSI-/MSI-X-Ziele ohne Remapping: IDs 0 bis 254.
+  FF ist dort Broadcast und kein individuelles Ziel. FF ist als x2APIC-
+  IPI-Ziel architektonisch gueltig; diese Grenze wird nicht verwechselt.
+
+Vor dem Bilden von Feldern werden auch u64-Aufrufargumente, Vektoren und
+die verwendeten physischen ICR-Formate validiert. Implizite logische Ziele,
+Shorthand-Broadcasts und reservierte Felder werden nicht weitergereicht.
+Scheduler-, TLB- und Stop-IPIs verwenden volle IDs mit genauer Slot-/
+Startepochenbindung. Stop behaelt die Identitaet ueber den eigenen Uebergang
+von online nach stopping; normale neue Nachrichten verlangen online.
+
+Geraeteinterrupts waehlen ausschliesslich darstellbare schedulierbare,
+genau qualifizierte Ziele. Der BSP ist bereits vor der AP-Planpublikation
+ueber seine bestaetigte Bootidentitaet erreichbar; kein uninitialisiertes
+Topologiearray liefert einen erfundenen Ersatzwert null. Ein fehlendes
+Ziel bleibt Option/Fehler und wird nicht auf acht Bit abgeschnitten.
+
+MSI und MSI-X pruefen das Ziel vor den Konfigurationsschreibzugriffen.
+Die gespeicherte Bindung enthaelt die genaue CPU-Epoche; erneutes Enable
+und spaeteres MSI-X-Unmask validieren sie wieder. Bei fehlender Bindung
+liefert Enable -8 beziehungsweise Unmask false. Der bestehende Record
+bleibt fuer den quittierten Geraeteabbau erhalten. Disable/Cleanup brauchen
+weiterhin die reale Konfigurations-/Tabellenruecklesung, bevor der Besitzer
+vergessen wird; eine unpassende CPU-Epoche verhindert den Abbau nicht.
+
+IOAPIC-Routen behalten volle IDs als Diagnosewerte. Programmierung und
+erneutes Unmask bestaetigen das wirkliche aktuelle physische Ziel; Mask
+bleibt zum Abbau auch nach Zielausfall erlaubt. Legacy-Aktivierung waehlt
+ein belegtes geeignetes Onlineziel oder laesst Routing unveraendert und
+meldet den bestehenden PIC-Fallback. Es entsteht kein IOMMU-Remappingpfad.
+
+Die reale x2APIC-Probe zeigte zusaetzlich einen fruehen Verbraucherfehler:
+AHCI registrierte vor der LAPIC-Bestaetigung einen Legacyersatz, dessen
+unroutbare Registrierung Erfolg meldete. Der IRQ-Besitzer quittiert jetzt
+nur einen tatsaechlich zulaessigen Pfad; ein Fehlversuch nimmt allein den
+neuen Handlerrecord unter dem bestehenden Runtimebesitzer zurueck und
+laesst bestehende Shared-Handler erhalten. AHCI bindet Interrupts erst an
+seiner vorhandenen v2-Laufzeitgrenze nach Controller-/Workerstart. Beim
+Preload bleiben HBA-Quellen maskiert. Fehlende Laufzeitzulassung behaelt
+den vorhandenen begrenzten Pollingpfad; Shutdown verhindert neue Bindung.
+
+Diese CPU-, Scheduler-, IPI- und Geraeteinterruptmechanismen gehoeren zu
+ihren technisch notwendigen Kernelbesitzern. Neue private Dateien sind
+arch/apic_target.rs und platform/cpu_identity.rs. Es entsteht kein neues
+externes Modul. Die AHCI-Verbraucherkorrektur liegt in dessen bestehendem
+Treiberrepository. Slot-Recycling, CPU-Hotplug und dynamische IRQ-Migration
+brauchen weiterhin ihren gesonderten Lebenszyklus-/Ressourcenvertrag.
+
+Gezielte Pruefung und Grenzen
+-----------------------------
+Artefakt-/Quellhashes und Belegorte: Core/CpuApicTargets0858.json.
+Vollstaendige Rohdaten bleiben im dort benannten ignorierten lokalen Archiv.
+Kernel fmt/check/striktes Clippy und beide Artefaktbauten bestanden.
+
+115 Faelle verwenden die wirklichen CPUID-/Zielformat-/MSI-/MSI-X-Besitzer
+und den vorhandenen Geometriebesitzer. Sie pruefen hohe/sparse BSP-IDs,
+254/255/256 und grosse 32-/64-Bit-Grenzen, Nachrichtenfelder, keinen
+passenden Empfaenger, veraltete Epochen sowie quittierten oder gehaltenen
+Cleanup. Weitere 49 Faelle verwenden die wirklichen LAPIC-/IOAPIC-Besitzer:
+volle Statuswerte, fruehe Modus-/Identitaetsgrenzen, ICR-Schreibwerte und
+fehlende konventionelle Ziele. CPUID-/MSR-/PCI-/Register-/Online-Hardware
+ist in diesen Hostfaellen simuliert; sie sind keine native Hardwareabnahme.
+Neun weitere Faelle gegen den wirklichen IRQ-Router pruefen fehlgeschlagene
+Zulassung, Ruecknahme, erhaltene Shared-Handler und PIC-/MSI-Grenzen ohne
+Callbackausfuehrung. Die vorhandenen AHCI-Zustandstests samt Modul-/ABI-Bau
+bestehen. Vorherige fehlschlagende Kandidaten bleiben im lokalen Archiv;
+sie sind keine Abschlussabnahme.
+
+Ein eigener Build mit bestehendem force-x2apic=true besteht einen echten
+Vier-CPU-Gast mit verstreuten IDs 0/2/4/6. Sechs moegliche QEMU-Slots dienen
+nur dieser Topologiedarstellung; genau vier CPUs sind vorhanden und online.
+Genaue AP-Zulassung, Praeemption/Reschedule-IPI, Cross-CPU-TLB und Clockprobe
+bestehen. Der normale Build mit force-x2apic=false besteht den regulaeren
+SMP4-Quick-Vertrag im xAPIC-Modus einschliesslich NVMe-MSI-X-Abschluss.
+Beide BOOT-ELFs sind physisch gegen das jeweilige Artefakt verifiziert.
+
+Genau ein STANDARD Suite 3 auf dem finalen normalen Artefakt besteht:
+30 Rohsamples mit je vier abgeschlossenen Workern und sechs gueltige
+Scores nach vollstaendigem DevCenter-Readback. Gesamtindex: 144.516742.
+Keine neue Benchmarkmethode und kein stabiler Leistungsgewinn abgeleitet.
+Hohe native BSP-/AP-IDs, physische Hybrid-/mehr-als-32-CPU-Systeme und
+Windows-Hosts sind nicht neu abgenommen. Alte VMM-Broadcastquirks verlangen
+ihren eigenen Plattformnachweis; die Host-Grenzfaelle ersetzen ihn nicht.
+
+Architekturreferenzen
+---------------------
+Intel SDM: physische x2APIC-ICR-Ziele und konventionelle MSI-Felder:
+https://cdrdv2-public.intel.com/868137/325462-089-sdm-vol-1-2abcd-3abcd-4.pdf
+KVM API, x2APIC und historischer FF-Broadcastquirk:
+https://docs.kernel.org/virt/kvm/api.html
+QEMU-Besitzer fuer 32-Bit-x2APIC und Broadcastquirk-Konfiguration:
+https://github.com/qemu/qemu/blob/master/target/i386/kvm/kvm.c

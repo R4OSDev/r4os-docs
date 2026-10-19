@@ -1,0 +1,114 @@
+﻿TSC-Deadline als lokaler Hardwaretimer - 0.85.25
+================================================
+Abnahme19.10.2026; Release0.85.25, Kernel0.1.351.
+Contract0.64.25/SDK0.64.41 und alle Modul-Artefakte bleiben unveraendert.
+Gemeinsame Quellen-/Artefakt-/Rohdatenbelege und Grenzen:
+Core/CpuDeadline08525.json; ExFiles/Reports/Cpu08525/20261019-final.
+
+Ergebnis und Besitzer
+--------------------
+Der vorhandene LAPIC-Besitzer nutzt auf geeigneten CPUs IA32_TSC_DEADLINE
+als echten Interrupttimer. Clocksource und Interrupttimer bleiben getrennt.
+Die alte Startauswahl bevorzugte HPET. Nur ein qualifizierter Deadline-
+Kandidat bevorzugt jetzt den bereits vorhandenen validierten Count-LAPIC-
+Handoff mit echter IRQ-/IOAPIC-Quittung. Erst nach der eigenen nichtnull
+Topologie-Epoche beginnt TSC-Deadline. Ohne Eignung bleibt die bisherige
+HPET-/Count-LAPIC-/PIT-Auswahl erhalten; HPET bleibt auch Referenzclock.
+Richtlinien und neue Hardwareprovider sind fuer diese Kernelmechanik
+nicht erforderlich. Spectra bleibt Diagnosebesitzer und Artefakt0.1.32.
+
+Jede CPU prueft TSC/MSR/APIC/Deadline, registrierte qualifizierte Frequenz,
+genaue Clockgeneration und Start-Epoche. Native CPUs verlangen lokal einen
+invarianten TSC. Unbekannte native Hersteller und bekannte betroffene Intel-
+Modelle ohne bestaetigten Microcodestand behalten den alten Timer; keine
+unbelegte Erratafreigabe. Ein Hypervisor mit angebotenem Deadline-Merkmal
+traegt die Architekturverantwortung fuer virtuelle TSC-/Deadline-Koordination.
+Der vorhandene gemeinsame Frequenz-/Korrelationsbesitzer bleibt Wahrheit.
+
+Frist und Lebensdauer
+--------------------
+Nur der eigene LAPIC-Besitzer schreibt MSR6E0 mit genauen CPU-/Epochen-
+Grenzen und der vorhandenen eng gebundenen GP-Rueckkehr. xAPIC-LVT und
+Deadline-WRMSR sind durch MFENCE geordnet. Ziele verwenden den lokalen
+rohen TSC, keine korrigierte Gegen-CPU-Zeit. Absolute logische Fristen
+werden ueber die exakten inversen Event-/Clock-Skalen und lokale Korrektur
+abgebildet; keine neue volle Tickdauer aus der Mitte eines laufenden Ticks.
+Ein frueher IRQ mit bereits geloeschtem Hardware-One-Shot armiert dasselbe
+unveraenderte Ziel erneut, ohne Fristquittung oder Verschiebung.
+Null disarmiert. Aufgerundete
+Skalierung, Minimum16 Zyklen, endliche60-Sekunden-Checkpoints und gepruefte
+Addition behandeln kleine/ferne/ueberlaufende Werte. Periodische Arbeit
+armiert jeweils einen echten One-Shot; verpasste Perioden werden in einem
+Rechenschritt uebersprungen. Es gibt keinen IRQ-Nachholkreis.
+
+Ein alter bereits eingereihter Vektor darf nur eine aktuell faellige eigene
+Frist quittieren. Unarmiert, pausiert, fremde Epoche oder noch zukuenftiges
+Ziel geben keine neue Timerquittung. Auch der logische Idlebesitzer behaelt
+eine zukuenftige Frist nach fruehem IRQ oder Hardwarecheckpoint. Clockwechsel
+widerrufen die Qualifikation; der lokal behaltene kalibrierte Count-Timer
+uebernimmt ohne Kalibrierung/Allokation im IRQ. Die feste Clockgeneration
+wird nicht wiederholt; ausgeschoepfte Generationen qualifizieren nicht neu.
+
+AP-Parken maskiert den echten LVT und verlangt zusaetzlich einen wirklich
+null geschriebenen und gelesenen Deadline-MSR. Ungewisse Ruhe wird nicht
+quittiert. Abbruch des Drains restauriert nur dieselbe CPU/Epoche und die
+passende Clock, sonst den behaltenen Count-Timer. Neuaufnahme ueber INIT/SIPI
+bindet einen frisch qualifizierten Timer. Die vorhandenen Task-/RSP-/FPU-/
+IRQ-/TLB-/Retirementbesitzer bleiben unveraendert. Private Zaehler laufen je
+CPU-Slot kumulativ; ihre Konfiguration besitzt eigene Epoche/Clockgeneration.
+
+Pruefung
+--------
+15 echte Produktions-Quellfaelle pruefen begrenzte Mathematik, native
+Eignung/Errata, alte/fruehe IRQs, One-Shot/Disarm, genaue CPU/Epoche,
+Clockwiderruf, echte Null-Quittung und kontrollierten MSR-Fehler mit IF-Erhalt.
+Hardware-/Clock-/IRQ-Peers sind dort modelliert; keine Hardwarebehauptung.
+Normaler Kernelbau, Format und striktes Clippy bestehen. Alle drei folgenden
+KVM4-Gaeste besitzen denselben finalen normal gebauten Kernel und belegten
+physischen BOOT-Hash sowie unveraenderte Modul-/ABI-Artefakte:
+
+Die vier vorhandenen Kapazitaetswarteschleifen fuer Einzel-Ready, initiale
+Platzierung, Event-Wake und belegte Ziele uebergeben nach ihrer kurzen Pause
+vor einer erneuten Abfrage ausdruecklich an bereite Arbeit.
+Vorlaeufer mit einem bzw.zwei Ticks Pause beobachteten2000 bzw.1001mal eine
+belegte Quellqueue, ohne je eine Ziel-CPU abzulehnen. Periodische Abfragen
+allein belegen keine Ausfuehrungschance zwischen den Beobachtungen. Die
+Proben nutzen dafuer den normalen Scheduler-Yield; fremde Queues veraendern
+sie nicht. Ihre2000-Tick-Gesamtfrist, genaue Queue-/FPU-/Unwindpruefung und
+echten Idle-Voraussetzungen bleiben bestehen. Begrenzte Ablehnungszaehler
+und kopierte Taskidentitaeten protokollieren diesen Kontext ausschliesslich
+innerhalb der vorhandenen ausdruecklichen Diagnose.
+
+- Isolierter vorhandener TASKREGISTRY-Bootselector selftest=tsc-deadline:
+  bisherige Vorbereitung und strenge Checkpoint-/Frueher-/IRQ- und65/64+1-
+  Idle-Faelle. Hardwarezustellung und echter Sleep haben getrennte Fenster,
+  weil ein anderer IRQ den faelligen Wait ohne Timerquittung aufwecken darf;
+  echte1..3 Timerquittungen und maximal3 Ticks Verspaetung bleiben Pflicht.
+  echter weiter Zukunfts-MSR mit Readback, echte alte Selbst-IPI ohne
+  Fristquittung, minimales neues Ziel, bereits abgelaufener Hardwaretarget,
+  konkurrierende AP-IRQs und wirklicher Clockwechsel auf HPET mit lokaler
+  Count-Uebernahme auf allen vier CPUs; PASSstage8. Keine Live-CHECK-Injektion.
+- Normaler Gast: vier reale Deadline-Timer; bestehende55 CPUID-/Controlfaelle
+  pro CPU,16 echte GP-/IF-Quittungen, echte Worker-Joins und logische AP-
+  Offline-/Neuaufnahme samt Modul-YMM/Wait/NVMe512B sowie Placement bestehen.
+- Fehlendes Feature: nur das virtuelle CPUID-Deadline-Bit wird entfernt.
+  Rohabfragen bestaetigen die Abwesenheit, keine Deadline-Arme; die fruehere
+  HPET-BSP-/Count-AP-Auswahl und konkurrierender Fortschritt bleiben korrekt.
+
+Alle drei behalten die originale127er Schedulerabnahme mit100 vollstaendig
+abgebauten Tasks, zwei Works, IF4/Event200 und65 echten Deadline-Tasks sowie
+die urspruenglichen SMP/TLB/Owner/IRQ/NVMe/Clock-Gates.7+3+4 Gast-ERRORLEVEL0.
+Genau ein finaler normaler STANDARD Suite3 mit allen vier CPUs,30 vollstaen-
+digen Rohsamples4/4 und sechs gueltigen Scores samt vollem unveraendertem
+DevCenter-Readback: d205e3a8-8cc4-4df3-bdde-89be8d3692cb.
+
+Grenze und naechster Schritt
+---------------------------
+Keine neue physische Intel-/AMD-/Windows-/Energie-/Hybrid-/NUMA-/Hotplug-
+Abnahme oder harte Echtzeitzusage. Die nativen Erratamodelle bleiben bis zum
+belegten Microcodevertrag beim alten Timer. Der feste CPU-Featurevertrag
+meldet Benutzung weiter als unbekannt; er wurde nicht still erweitert.
+Die Timerwirkung wird nicht mit einer kuerzeren TSC-Lesezeit gleichgesetzt.
+STANDARD ist eine Beobachtung des gesamten Standes, kein isolierter Speedup.
+Naechster Schritt0.85.26: passive CPU-Takt-/Temperatur-/Energie-/Microcode-
+Betriebsdaten beim geplanten externen CPUPOWER-Besitzer.

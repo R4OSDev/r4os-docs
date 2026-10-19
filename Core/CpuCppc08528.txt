@@ -1,0 +1,111 @@
+﻿R4OS0.85.28 - AMD-CPPC und bevorzugte Kerne
+=========================================
+Stand: 2026-10-19. Abgenommen: Release0.85.28, Kernel0.1.354,
+CPUPOWER0.1.2 und Spectra0.1.35; SysInfo0.1.8 unveraendert.
+Quell-, ABI-, Fixture- und echte lokale KVM-SMP4-Abnahme. Native physische
+AMD-Steuerung/Boost-/Energiewirkung bleibt unqualifiziert.
+
+Umsetzung und Besitz
+--------------------
+CPUPOWER ist der externe Treiberbesitzer. Der Kernel stellt nur benannte
+aktuelle-CPU-MSR-Operationen, genaue Ressourcenlebensdauer, den vorhandenen
+CPU-Katalog und die zwingende begrenzte Scheduler-Anbindung bereit.
+Native AuthenticAMD19h50h..5Fh mit MSR und CPUID80000008.EBX27 ist das
+belegte Profil. Milan-Telemetrie ist kein CPPC-Beleg. VM, unbekannte Modelle,
+fehlende Faehigkeiten und andere Transporte werden vor Instruktion abgewiesen.
+
+Primaerquelle: AMD PPR56569-A1 public3.03, Abschnitt1.8 und Registerseiten
+184-185. Der Haupttext nennt21.09.2021, das offizielle Web-Metadatum18.11.2021.
+Die Ueberschrift Model51h/A1 wird nicht als konkrete CPUID/Stepping erfunden;
+Abschnitt1.8 nennt ausdruecklich den Bereich50h..5Fh. Offizielle URLs und
+Hashes stehen im gemeinsamen JSON; die fremde vollstaendige PDF bleibt Temp.
+https://docs.amd.com/v/u/en-US/56569-A1-PUB_3.03
+https://docs.kernel.org/admin-guide/pm/amd-pstate.html
+AMD-authored Linux-Dokumentation ergaenzt nur Transport-/Rang-/Autonomiebedeutung.
+
+AMD-Register und Steuerungsgrenzen
+--------------------------------
+C00102B0 CAP1: Highest31:24, Nominal23:16, LowestNonlinear15:8, Lowest7:0.
+C00102B3 REQUEST: EPP31:24, Desired23:16, Minimum15:8, Maximum7:0.
+Diese Belegungen unterscheiden sich von Intel HWP. CAP1 muss eine gueltige
+nichtleere Ordnung besitzen. Neue lokale Requests pruefen frische Grenzen,
+Desired0 fuer autonome Wahl oder einen gewuenschten Wert innerhalb der
+eigenen Grenzen, EPP0..255. Ein Readback ist eine gespeicherte Anforderung,
+keine erreichte Frequenz oder garantierte physische Begrenzung.
+
+CAP2 C00102B2 liefert nur einen gegenwaertigen abstrakten Constraint. STATUS
+C00102B4 wird gelesen; MINEXCURSION-Historie wird nicht geloescht. Keine
+Ableitung von MHz, Energie, gemessener Kapazitaet oder Effizienz aus Rangen.
+
+ENABLE C00102B1 ist W1-only und ohne belegte Software-Deaktivierung. Die
+Aktivierung ist ein separater Vorgang ohne Parameter mit ausdruecklichem
+Einverstaendnis. Der PPR nennt dabei keinen Instanzqualifikator: R4OS verlangt
+konservativ alle konfigurierten kompatiblen Online-CPUs in einem vollstaendig
+bekannten Paket. Die Quittung belegt nur den aktuellen lokalen Readback;
+eine Broadcast-Reichweite oder spaetere Deaktivierung wird nicht behauptet.
+
+Baselines, Pendingdaten und eindeutige Token bleiben vor jedem moeglichen
+Schreibversuch resident. Compare/Write/Readback laeuft mit lokal erhaltenem IF;
+das ist keine Hardware-Atomizitaet gegen asynchrone Firmware. Schreib-/Readback-
+Fehler und Fremdkonflikte behalten Ressourcen. Nur echte Baseline- und
+Freigabequittungen melden Parameter zurueck; auch Reset0 und ausgeschoepfte
+Revisionen bleiben sauber rueckgabefaehig. Unabhaengige Sensorfehler verhindern
+keine Rueckgabe. Vor terminalem Shutdown muss diese explizit erfolgen:
+terminal() wartet nicht auf ProbeLease. PowerService0.85.29 koordiniert den Rand.
+
+Bevorzugte Kerne im bestehenden CPU-Katalog
+-----------------------------------------
+Ein eigener passiver Cache bindet Rohraenge an Provider-/CPU-/Clock-Epochen,
+eine nicht wiederverwendete Publikationssequenz und maximal1s Abtastalter.
+Der Zeitstempel beginnt vor dem echten CAP1-Lesefenster; Wartezeit macht ihn
+nicht nachtraeglich frisch. Gleiche Nominal-/Nonlinear-/Lowest-Skala,
+bekannte Paket-/Kerngeometrie und konsistente Online-SMT-Peers sind Pflicht.
+Unbekannte, alte, gemischte oder widerspruechliche Daten bleiben unbekannt.
+Das unveraenderliche Topologie-Domainlager wird nicht nachtraeglich beschrieben.
+
+Die optionale kopierte Scheduler-Reihenfolge lautet: harte Zulassung, wirkliche
+Running+Ready-Last, physische Kernbelegung, ausdruecklicher CPU-Wunsch, statische
+Klasse, bestehende NUMA-Praeferenz, dann CPPC-Rang vor Cache/alter CPU.
+Abkuerzungen und die alte Ein-Task-Lasttoleranz verwenden denselben Schluessel.
+Batch ignoriert eine erfundene Effizienzumkehr. Nur gespeicherte Home-Wahl und
+bereits notwendige Drain-Wahl nutzen die Hinweise; Rangwechsel allein starten
+keine Queue-/Running-Stackmigration. Ohne Cachezeile keine neue Clock-Probe.
+
+ABI und Sichtbarkeit
+--------------------
+Contract0.64.29/R4DEV27/640B, SDK0.64.44. CpuCppcInfo192/Backend32 sind vom
+festen HWP-Ergebnis getrennt. Gemeinsamer Request64 behaelt seine Bedeutung.
+Hint64/HintInfo96 sind eigenstaendig. DriverCpuPowerApi128 behaelt64/72/112,
+Wire1 und feste Alt-Records; aeussere DriverApi37 bleibt unveraendert.
+CHECK SMP /POWER prueft ausdruecklich beide Inspektionen und Verweigerungen.
+METRICS CPUPOWER liest nur Cachezeilen und zeigt unbekannte Raenge als null.
+Normale Diagnosen aktivieren/schreiben keine Leistungsparameter.
+
+Abnahme und offene Grenzen
+-------------------------
+880 genaue Laufzeitquellen. Vollstaendige Contract-/SDK-
+Abnahme, C/Zig-Fassaden, Kernelbau und Clippy bestehen. Der echte Provider-
+Runner hat36 Tests:35 Verhalten und1 Import-/Discoveryfall; davon13 neue
+CPPC-Faelle. Kernel-Broker15 und Register15 pruefen echte Besitzerfunktionen
+mit simulierten Hardwarepeers. Echte Policy/Home/NUMA-Funktionen belegen die
+Prioritaeten und gespeicherten Ressourcen. Kein Host-CPUID/MSR wurde ausgefuehrt.
+
+Der reale lokale KVM4-Gast besteht16 Befehle,7 echte Worker/Joins mit14
+Telemetrieaufnahmen,35 HWP- und49 CPPC-Pruefungen sowie133 Modell-ID-
+Verweigerungen ohne zusaetzlichen MSR-Fehler. Logischer Offline-/Online-
+Epochenwechsel, alte127 Schedulerfaelle/100 Tasks/65 Deadlines/16 echte GP-
+Fehler/63 Lifecyclefaelle und die bestehenden FPU-/I/O-Vertraege bestehen.
+Der Gast belegt Verweigerung und Lebensdauer, keine native CPPC-Ausfuehrung.
+
+Genau ein finaler normaler Suite3/all4-STANDARD: 13bcf0fd-e1b5-4769-a691-c0b816aeac71.
+30 vollstaendige4/4-Samples, sechs gueltige Bereiche und vollstaendiges
+unveraendertes DevCenter-Readback. Arbeits-/Referenz-/Scoringmethode gleich;
+keine isolierte kausale Beschleunigungs- oder physische Wirkungsbehauptung.
+
+Native AMD-Aktuierung/Readback, Boost-/Energiegewinn und Firmware-/SMI-/IRQ-
+Koexistenz bleiben unqualifiziert. Keine Remote-/OssiPC-/Windows-Abnahme.
+Keine automatische Politik; PowerService0.85.29 folgt. AML_CPC, Shared-Memory-
+Transport und aeltere Firmware-Pfade bleiben0.85.30; Zen6-Priority/Floor fehlt.
+
+Gemeinsame Rohbelege, genaue Quellen/Artefakte und STANDARD stehen einmal hier:
+Core/CpuCppc08528.json und ExFiles/Reports/Cpu08528/20261019-final.

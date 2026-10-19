@@ -118,9 +118,11 @@ The ownership matrix is deliberately conservative:
 - Service registry, endpoints and channel IPC retain their existing
   sleepable, ranked mutexes. Only their scheduler-facing waiter transitions
   briefly enter the runtime owner.
-- BSP-only until separately audited: pageable-VM I/O/reclaim, foreground and
-  shell roles, modules without an audited execution declaration, Desktop
-  and unaudited R4D callbacks.
+- BSP-only until separately audited: foreground and shell roles, modules
+  without an audited execution declaration, Desktop and unaudited R4D
+  callbacks. Since0.85.15 owned-v1 VM/page-in/reclaim accepts AP callers;
+  file operations keep exact buffer/volume/request owners and existing workers.
+  Core/ApMemoryIo08515.txt/.json states the remaining backend limits.
 - Parallel-enabled: explicitly marked kernel work and background R4X with
   runtime.parallel=owned-v1. Current canonical manifests declare this for
   Calculator, CLIPSVC and Spectra; LSTRX remains a separate test fixture.
@@ -453,15 +455,16 @@ und Release. Ereignisqueue, Titel und Fenstersnapshot verwenden kurze
 residente Abschnitte; fremde Caller-Puffer werden ausserhalb kopiert.
 Revision/Close werden vor dem Aktivitaetswake veroeffentlicht.
 
-Die freigegebenen VM-Reservierungen behalten Lazy-Zero, sind aber bis zur
-Freigabe oder Decommit nicht auslagerbar. Bestehende Commit-/Residentlimits
-gelten weiter; Speicherknappheit kann OOM liefern. Das ist eine bewusste
-Grenze, solange Page-in/Reclaim CPU 0 gehoeren, keine universelle SMP-
-Freigabe aller Speicher- und Dateipfade.
+Bis0.85.14 blieben diese VM-Reservierungen nicht auslagerbar. Seit0.85.15
+duerfen neue Reservierungen gepruefter owned-v1-Instanzen auch auf APs
+Writeback/Page-in/Reclaim nutzen. Atomare Quotenaufnahme und wartende
+private Taskframes/FPU, quittierter CPU-Schreibschutz und genaue Dateipuffer-
+leihen sichern diesen Weg. Commit-/Residentlimits und Backendserialisierung
+bleiben erhalten; Core/ApMemoryIo08515.txt/.json beschreibt die Grenzen.
 
 Weitere Module benoetigen eine Besitzerpruefung ihres gesamten erreichbaren
 Pfads und aller R4L-/R4P-Zustaende. Insbesondere bleiben Desktop/Scanout,
-physische Konsole, dateilastige Apps mit gemeinsamen FAT-Scratchzuständen,
+physische Konsole, nicht einzeln gepruefte dateilastige Apps,
 Synth-/Grafikbibliotheken und nicht einzeln auditierte Driver-/Audio-
 Deadlinecallbacks beim bisherigen BSP-Besitzer. Queue-Metadatensicherheit
 allein beweist keine Callback-Reentranz. AMD/NVIDIA und Klickifax wurden

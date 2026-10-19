@@ -1,0 +1,105 @@
+﻿R4OS0.85.15 - Speicher und Datei-I/O fuer AP-Aufrufer
+===================================================
+Abgenommen19.10.2026: Release0.85.15, Kernel0.1.342, Spectra0.1.27.
+Contract0.64.22 und SDK0.64.38 unveraendert; kein neues Modul oder API-Layout.
+Gemeinsamer Beleg: ApMemoryIo08515.json.
+Rohdaten und Originalquellen: ExFiles/Reports/Cpu08515/20261019-final.
+
+Freigabe und Originalbesitzer
+----------------------------
+Die vier CPU-0-Abweisungen fuer Writeback, Busy-Wait, gesicherten Page-in
+und VM-Reclaim sind entfernt. Neue VM-Reservierungen bereits zugelassener
+owned-v1-Instanzen duerfen ausgelagert werden. Die unveraenderliche Modul-
+und Foregroundzulassung wird dadurch nicht erweitert.
+
+VFS besitzt bereits genaue Task-/Generationsleihen je Volume. NTFS hat
+Scratch je Mount und eigene Lesepuffer je Request; bei Allokationsmangel
+bleibt der bisherige serialisierte Backendpfad erhalten. Diese vorhandenen
+Besitzer wurden nicht neu implementiert. Oeffentliche Dateioperationen
+behalten ihre bestehenden Worker, Queues, Abschluss- und Cancelquittungen.
+Insbesondere werden bestehende BSP-Worker nicht automatisch AP-Worker.
+
+Ein ausfuehrender Dateiauftrag leiht einen betroffenen pageable VM-Puffer
+vor jedem Dateisystemlock. Die vorhandene genaue Range-I/O-Leihe sperrt
+Auslagerung, Decommit und Release. Seiten werden vor Backendaufnahme
+eingeladen; kein wartender Backing-Read haelt dabei einen FS-Owner.
+Alle64 Seiten liegt ein sicherer Checkpoint ausserhalb der CPU-Owner.
+Die Leihe endet erst nach Rueckkehr des echten Backends und vor Publikation
+der Requestcompletion. Close/Cancel duerfen laufende Arbeit weiterhin nicht
+freigeben. Heap-/Stackpuffer sowie Pfad-/Metadatenzeiger behalten ihren bisherigen
+residenten Vertrag.
+Die neue VM-Pufferaufnahme verlangt einen eigenen, voll committeden Bereich;
+ein bereichsuebergreifender oder nicht ladbarer Puffer scheitert kontrolliert.
+Die gesamte angegebene Pufferspanne muss in das Residentbudget passen.
+
+Schreibschutz, Fehlerfortsetzung und Quoten
+----------------------------------------
+Vor jedem Writeback und auch vor sauberer gebundener Eviction wird CPU-
+Schreiben mit atomarer Aenderung ausschliesslich des PTE-Writable-Bits
+geschlossen. Hardware-Accessed/Dirty gehen dabei und beim Rollback nicht
+verloren. Erst echte TLB-Quittungen erlauben Dirty-Snapshot und Datei-I/O.
+Der BSP setzt/prueft CR0.WP; der AP-Trampolin setzte es bereits. Damit gilt
+der Schutz auch fuer CPL0. Dies ist Datenkonsistenz im Single-User-System.
+
+Der genaue Busy-/Range-/Unwindbesitz bleibt waehrend des Transfers aktiv.
+Urspruenglicher Schreibzugriff wird vor Busy-Ende/Wake zurueckgegeben;
+unsicher gescheiterte Wiederherstellung gibt keine Barriere frei. Nur der
+genaue Present-Write-Fehler3 eines eigenen committeden, urspruenglich
+schreibbaren VM-Bereichs darf warten oder nach lokalem TLB-Refresh erneut
+ausgefuehrt werden. Echte Readonly-, NX-, Reserved- und fremde Fehler
+bleiben abgewiesen. Frame und separates4096-Byte-FPU-Abbild liegen dabei
+wie bisher auf dem genauen unterbrochenen Taskstack, nicht dem geteilten IST.
+
+Ein inzwischen von einer anderen CPU behobener Not-Present-Fault darf
+fortfahren; ein beim Warten gewechselter Bereich darf das nicht.
+Saubere Eviction zaehlt die wirklich quittierte Freigabe statt einer unter
+Parallelitaet unzuverlaessigen globalen Freiseitendifferenz.
+Reserve-/Commitquoten werden mit ihrer Publikation unter dem VM-Owner
+aufgenommen. Page-in reserviert seinen Residentanteil vor dem Owner-Abwurf;
+alle Ausgaenge geben ihn zurueck oder wandeln ihn in echte Residency um.
+Oeffentliche Ist-Residency bleibt physisch, kein zweites Ressourcenregister.
+
+Pruefung und verbleibende Grenzen
+--------------------------------
+Pinned fmt, striktes Clippy und Produktbau bestanden. Die Hostpruefungen
+kompilieren die echten Pager-/Puffer-/PTE-Funktionen und das komplette
+Budgetledger. IRQ-/TLB-/I/O-Transport ist dort ausdruecklich nachgebildet.
+Acht echte Hostthreads belegen bei vier Seiten Limit genau vier wartende
+Residentanteile; Fehler/Identitaetswechsel und vollstaendiger Abbau bestehen.
+
+Der physisch verifizierte SMP4-Gast prueft AP1/2/3, eigene Datei-/VM-Puffer,
+C/C/D-Volumes, echte Wait/Close/alte Requests, gemeinsame gesicherte Seiten,
+Vektorfortsetzung gegen ein skalares Orakel, Page-out mit zwei konkurrierenden
+Schreibern und eigenen Reclaim mit exaktem Inhalt und Slotabbau. Vorhandene
+VM-, Async-Pool-, begrenzte Lifecycle-Cancel-, FPU- und NTFS-Orakel bleiben
+erhalten. Einzelne interne Schutzfault-Zeitpunkte werden im Gast nicht
+gezaehlt; der genaue Fehler3-Zweig ist durch echte Funktionsfixtures belegt.
+Native RAM-Erschoepfung und Hardware-/IRQ-Verlust sind damit nicht bewiesen;
+Reserve-/Allokationsmangel und fehlende Quittungen haben gezielte Hostfaelle.
+
+Drei fruehere Gaststaende bestaetigten Datei-/Page-in-/Vektorfunktion.
+Der erste Cancelhelfer suchte noch alte ASYNIOD-Ausgabetags; mit den echten
+Produzententags besteht seine unveraenderte Block-/Kill-/Reappruefung.
+Die Schreiberprobe gab fuer den zweiten Page-out an eine schon gueltige
+Reservierung das erforderliche Eviction-Flag nicht an. Der Kernel wies
+korrekt ab; deshalb existierte kein Busy-Intervall fuer ihre Beobachter.
+Die erste reine Timing-Einordnung war verfrueht. Der korrigierte Aufruf
+benutzt den bestehenden ausdruecklichen Eviction-Vertrag und meldet seinen
+Status zuerst. Der Kernel blieb identisch; alle Rohlogs/Modulstaende
+sind archiviert. Die naechste Schreiberpruefung bestand; eine zu kleine
+Reclaimprobe erreichte noch keine VM-Rueckgabe. Der oeffentliche64-Frame-
+Deckel und die bestehende Stack-/Cacheprioritaet werden nun wie im
+bisherigen VM-Eviction-Pruefer beruecksichtigt; Einzelquittungen sind im
+Rohlog. Auf den frueheren Staenden wurde kein STANDARD ausgefuehrt.
+
+Genau ein finaler STANDARD Suite3 mit allen vier CPUs:
+5af5389c-9d3c-444a-bb9f-eb5768dbf2d5;30 Rohsamples und sechs gueltige Scores.
+Der unveraenderte Export wurde vollstaendig im DevCenter zurueckgelesen.
+Ein Lauf ist keine stabile isolierte Beschleunigungsmessung. Per-Volume-
+Metadaten, Backend-Scratch-Fallback, Buffer-Range-Leihen und globaler Reclaim-
+Eintritt behalten ihre begrenzenden Besitzer. Keine allgemeine Freigabe
+weiterer Apps/Treiber oder neue native/Windows/AMD/NUMA/Hotplug-Abnahme.
+
+Primaerquelle fuer CPL0-Seitenschutz und TLB-Regeln: Intel SDM Volume3A,
+Revision093, https://cdrdv2-public.intel.com/929359/253668-093-sdm-vol-3a.pdf
+Quellstand/Pruefsumme im JSON; keine Fremdquelle ersetzt den Quellcodetest.

@@ -266,11 +266,12 @@ the old PTE is restored, a recovery invalidation is attempted and the caller
 receives a failure while the frame remains claimed. Contiguous extents use one
 range request of at most 64 pages instead of one IPI round per page.
 
-Pagefile I/O and VM eviction intentionally span filesystem/block waits and
-therefore remain BSP-owned. A slot-backed page fault releases the no-sleep
-metadata boundary before its existing busy/generation/lifecycle transaction;
-the corresponding AP path fails closed. This is an explicit foundation limit,
-not a claim that pageable VM is already parallel.
+Since0.85.15 pageable-VM writeback, page-in and reclaim admit already
+approved AP callers. Exact range/unwind/pending-budget leases survive
+filesystem waits outside the VM owner. Atomic permission changes and real
+TLB acknowledgements freeze CPU writers before both writeback and clean
+eviction. File workers retain/prefault owned VM buffers before any FS gate.
+Remaining buffer/backend limits and evidence: Core/ApMemoryIo08515.txt/.json.
 
 Safety invariants
 -----------------
@@ -372,16 +373,15 @@ Busy internally (the existing VM_ERROR_MAP_FAILED ABI result) until it reaches
 zero; the existing reaper can retry. Diagnostic page-state mutations are also
 rejected while the region has a live pager transaction.
 
-Page-out establishes an acknowledged hardware dirty epoch under the VM owner.
-The original mappings stay alive during the write. At completion, hardware
-and recorded dirty state are checked again under that owner. A concurrent
-writer keeps the whole transfer resident and dirty, with its slot binding;
-only a later quiet complete write can evict it. Thus a mixed or old on-disk
-snapshot is never used as the authoritative image of a changed resident page.
-The automatic pager and VM-region diagnostic page-out use the same transaction.
-Failed writeback keeps resident ownership and dirty data. Pageable execution
-and final writeback publication retain the existing BSP ownership contract;
-DMA buffers must still follow their resident/pinned driver contract.
+Since0.85.15 page-out first atomically removes CPU write permission and
+waits for the actual TLB receipts, then establishes the dirty epoch. CPL0
+also obeys this interval through CR0.WP. Waiting writers retain their own
+private interrupted frame/FPU; resident write permission returns before
+Busy is cleared. The automatic pager, clean-bound eviction and VM diagnostic
+share that lifetime. Completion still rechecks recorded/hardware dirty state.
+Failed writeback keeps resident ownership and dirty data. An uncertain failed
+permission restoration does not release its live barriers. AP callers are
+admitted; DMA keeps its separate resident/pinned driver contract.
 
 Seven focused host cases cover reservation reuse, backing replacement, sparse
 coverage, controlled writes during I/O, incomplete reads, dirty-epoch failure
@@ -580,7 +580,7 @@ range's active lease and task unwind enrollment survive this boundary. A
 failed rollback keeps the cursor and private/published frames for retry.
 Nested no-sleep/runtime owners and IRQ-disabled contexts never yield.
 
-0.81.19: VM-Reservierungen von runtime.parallel=owned-v1-Instanzen setzen
+Historisch0.81.19 bis0.85.14: VM-Reservierungen von owned-v1-Instanzen setzen
 im internen VM-Besitzer eviction_allowed=false. Commit markiert die
 bedarfsgeladenen Seiten von Beginn an als pinned; Diagnose-ClearPinned darf
 diese Besitzbindung nicht aufheben. Decommit/Release bleiben regulaer

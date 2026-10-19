@@ -1,0 +1,174 @@
+﻿R4OS0.85.16 - Gepruefte Kernelworker auf mehreren CPUs
+====================================================
+Abgenommen19.10.2026: Release0.85.16, Kernel0.1.343, Spectra0.1.28,
+NVME0.1.10 und VIRTNET0.1.5. Contract0.64.22/SDK0.64.38 unveraendert.
+Gemeinsamer Beleg: KernelWorkers08516.json.
+Rohdaten, Originalquellen und frueherer Gaststand:
+ExFiles/Reports/Cpu08516/20261019-final.
+
+Freigabe beim jeweiligen Besitzer
+--------------------------------
+Block, Pagecache, RX und native IPC-Auftraege behalten ihre bisherigen
+Subsystembesitzer. Es gibt kein globales Umschalten aller Kernelworker.
+R4D deklarieren nach Einzelpruefung META=r4d.parallel_callbacks=owned-v1.
+Der Loader bindet dies an den genauen initialisierten Treiber; dessen
+Registrierungen uebernehmen den unveraenderlichen Callbackvertrag.
+Fehlende Angabe bleibt BSP, ein unbekannter Wert ist ungueltig. Nur NVME
+und VIRTNET sind hier freigegeben. AHCI, USB, Grafik und Audio erhalten
+keine zusaetzliche Callbackzulassung. Direkte AP-Fallbacks rufen keine
+ungeprueften Fremdcallbacks auf; Busy behaelt den bestehenden Vertrag.
+
+Der R4P-Ausfuehrungsslot gehoert jetzt dem genauen Task statt einer globalen
+Kennung. Verschachtelte Aufrufe restaurieren den vorherigen Slot. Genaue
+Task-/Unwindaufnahme bleibt ueber wartendes Datei-I/O bestehen. Reine fruehe
+Bootausfuehrung hat einen eigenen exklusiven Fallback. Pro Modul schuetzt
+ein schlafender Callowner weiterhin zustandsbehaftete Protokollcallbacks;
+andere Module und USB-Backing koennen fortfahren. Immutable Modulsnapshots
+werden unter kurzer Metadatenaufnahme publiziert, kein globaler Modulowner
+bleibt waehrend eines fremden I/O-Waits gehalten.
+
+Tatsaechliche Verteilung und erhaltene Reihenfolge
+------------------------------------------------
+Der kritische primaere Blockworker bleibt BSP-Fallback. Gepruefte sekundaere
+Controllerworker koennen APs nutzen; ID/Generation werden vor Ready
+publiziert. Lebende Geraete eines Controllers teilen eine Callbackklasse.
+Nach wirklichem Unregister darf eine ungepruefte neue Controllerinstanz
+denselben Namen verwenden: ein alter AP-Worker wird dann ueber den
+vorhandenen BSP-Fallback geroutet. Alte Geraetereferenzen bleiben ungueltig.
+Request-/Volume-/DMA-Leihen enden weiterhin erst mit ihren echten Quittungen.
+Ein AP-Caller reicht Cancel fuer einen ungeprueften BSP-Treiber im eigenen
+exakten Requestslot an dessen bisherigen Worker weiter. Der nimmt ihn
+einmal, prueft ID/Handle und ruft den Callback ausserhalb aller Owner auf.
+Puffer bleiben bis zur wirklichen physischen Quittung gehalten. Ungepruefter
+AP-Reset wird vor Aenderung des Resetzustands abgewiesen. Der Slot bleibt
+152 Byte gross mit unveraenderten Offsets; Grund1..3 nutzt ein Paddingbyte.
+
+Der vorhandene einzelne Pagecacheworker darf auf APs laufen. Held/Operation,
+io_busy je Eintrag, Flushfenster und wirkliche Blockcompletions bleiben.
+Ein BSP-Worker pollt und pflegt weiterhin Netzwerkzustaende. Ein optionaler
+AP-Worker verarbeitet kopierte RX-Frames, solange alle lebenden Adapter
+geprueft sind. Ein taskgebundener reentranter PROCESS-Owner erhaelt die
+FIFO-Verarbeitung auch beim Rueckfall; CallbackGuard reicht von Aufnahme
+bis zur genauen Framefreigabe. Ein leerer AP-Worker schlaeft unbefristet,
+der BSP behaelt seinen begrenzten IRQ-Fallback.
+
+IPC behaelt fuenf BSP-Lanes und ergaenzt hoechstens min(online-1,4) AP-
+Worker mit eigenem Antwortpuffer, Cursor und Event. Nur ausdruecklich
+gepruefte native Handler mit geprueften Netzwerkprovidern sind zugelassen.
+Nachrichten nehmen ihre genaue Handler-/Channelgeneration mit.
+Ohne AP-Kapazitaet oder gepruefte Netzwerkprovider wird nur die bisherige
+BSP-Lane geweckt. Eine unzulaessige AP-Lane kehrt vor jedem Channelmutex
+zurueck. Der urspruengliche Kandidat weckte trotzdem einen AP und liess
+ihn alle Kanaele pruefen, obwohl er keinen Auftrag uebernehmen durfte.
+Das erzeugte vermeidbare Runtime-/Mutexkonkurrenz im DNS-Statusbenchmark. Der
+Channelowner serialisiert Auftraege desselben Kanals; unabhaengige Kanaele
+koennen fortfahren. BSP-Lanes helfen weiter bei gepruefter Arbeit. Erst
+nach wirklicher Completion wird ein Nachfolger geweckt; leere Lanes schlafen.
+Alle neuen ausfuehrenden Tasks haben ihren eigenen FPU-Zustand.
+
+VIRTNET und die Completion-/Wait-Grenze
+-------------------------------------
+TX-Einreichung und Poll-TX-Reclaim teilen denselben TX-Lock. Besetzter
+TX-Reclaim verhindert das unabhaengige RX-Drain nicht. Ein Poll-Lock je
+State ersetzt das globale plain Flag. Status nimmt Poll und TX nur
+nichtblockierend auf und laesst bei Busy den gesamten Calleroutput
+unveraendert. IRQ-geteilte RX-Cursor/Zaehler und gemeinsame Kick-/Busy-
+Zaehler sind atomar; IRQ wartet nie auf Tasklocks. Shutdown behaelt den
+vorhandenen Callbackschluss, IRQ-Abbau, Reset und DMA-Ruhenachweis.
+
+Der erste Gast bestand den neuen BSP-Rueckfall und alle anderen Domainen,
+scheiterte aber an der folgenden synthetischen Timeoutprobe. Der explizite
+Reset davor bestand bereits; die erste Einordnung als Resetfehler war
+ungenau. Der reale AP-Completionpfad konnte den Slot abschliessen und
+wecken, bevor der Caller sich erneut in die Queue eintrug. Dessen
+unbedingter Wait schlief dann trotz fertigem Slot bis zu fuenf Sekunden.
+Die bisherigen zwei Sekunden der Diagnose und ihre Orakel bleiben erhalten.
+Der zweite Gast besteht alle elf funktionalen Pruefungen; seine normale
+Quick-Konfiguration hat jedoch keine Netzwerkkarte. Daher liefert er noch
+keinen produktiven AP-RX-Beleg. Der finale fokussierte Gast ergaenzt eine
+isolierte virtuelle VIRTNET-Karte ueber eine Temp-Konfigurationskopie. Die
+kanonische gemeinsame QEMU-Konfiguration wird nicht veraendert.
+Die weitere Quellpruefung schliesst auch den AP->BSP-Cancelpfad; der
+zusatzliche Legacyfall belegt CallerCPU1 und CancelcallbackCPU0 mit
+echter Completion und Join. Der dritte Gast besteht alle nativen
+Kernelblockfaelle, aber der erweiterte Consumer erkennt eine ungleiche
+Zaehleraufnahme: Einreichungen kamen noch aus dem zurueckgesetzten
+Neunerbatchzaehler, Abschluesse bereits aus allen Geraetestatistiken.
+Der Bericht summiert nun beide aus denselben wirklichen Geraetequittungen:
+elf gesamt, davon zwei im Legacyfall und neun im Originalbatch. Die
+sieben expliziten Completionreceipts und die Cancel-/Timeout-/Resetzaehler
+behalten ihren bisherigen Originalbatchumfang; der zusaetzliche
+Legacycancel hat seine eigene genaue Fallquittung.
+Im Test-Bootprofil fehlte zudem DRIVER=VIRTNET; die vorhandene NIC war
+daher noch kein aktiver Adapter. Die Temp-Kopie aktiviert ihn jetzt
+ausdruecklich. Der vierte Gast besteht alle zwoelf gezielten Faelle und
+belegt AP-Ausfuehrung in allen fuenf Domaenen. Nur der danach angehaengte
+urspruengliche Netzwerk-Limittest scheitert: limit_app liest direkt aus
+der gemeinsamen Protokoll1-Queue und erwartet seine gerade eingereihte
+Testnachricht. Reale ICMP-Antworten aus der DNS-Probe stehen dort bereits
+voran. Im finalen frischen Gast laeuft derselbe unveraenderte Zehnercheck
+vor dieser erzeugten Netzlast. Kein fremdes Paket wird zur Vorbereitung
+geloescht und kein Orakel gelockert. Der bestehende LIMIT-Check braucht
+fuer diese Raw-Queue-Probe weiterhin den ruhigen Queuezustand.
+Keiner dieser vier Zwischenstaende hatte einen STANDARD.
+Ein weiterer funktional bestandener Kandidat hatte genau einen STANDARD
+mit vollem DevCenter-Readback. Sein IPC-Index107.472822 gegen532.472440
+im vorherigen Release war Anlass fuer die Quellpruefung. Die unzulaessigen
+AP-Wakes und Kanalscans sind beim Originalbesitzer repariert. Der alte
+Export bleibt vollstaendig erhalten; derselbe Artefaktstand wurde nicht
+noch einmal gemessen. Erst der korrigierte finale Kernel erhaelt seinen
+eigenen einzelnen STANDARD; gleiche Suite3-Arbeit und Referenz bleiben.
+
+Jetzt snapshotten Wartende vor ihrer urspruenglichen Zustandspruefung eine
+residente Wake-Epoche des Geraetes. Der Producer erhoeht sie vor dem
+bisherigen Runtime-Wake; eine atomare Predicatepruefung teilt die Aufnahme
+mit der eigentlichen Wait-Eintragung. Abschluss vor, waehrend oder nach
+dieser Grenze geht nicht verloren. Dasselbe gilt fuer einen frei werdenden
+Requestslot. Keine neue Lockumkehr Runtime->Storagemetadaten, keine
+Zeitfrist ersetzt eine physische Completion-/Cancelquittung. Bei Wieder-
+verwendung eines Geraetes wird seine Epoche nicht zurueckgesetzt.
+
+Belege und Grenzen
+------------------
+Pinned fmt, striktes Clippy und alle betroffenen Produktbauten bestehen.
+Hostfixtures kompilieren die vollstaendigen echten Cancel-Slot-, PPI-/Callowner-,
+VIRTNET- und Wake-/Wait-Funktionen. Zwei echte Hostthreads pruefen
+ueberlappende Protokoll-/Dateiwartepfade und TX/Poll-Reclaim; kontrollierte
+Wakezeitpunkte pruefen die drei Eintragungsphasen. Native Task-/Datei-,
+MMIO-/IRQ- beziehungsweise Runtime-/Queuetransporte sind dort nachgebildet.
+
+Der physisch verifizierte SMP4-Gast besteht alle zwoelf gebuendelten Checks:
+gemischtes DNS/UDP/Datei-I/O, IPC-Selbsttest und logischer Treiberabbau,
+Netzwerk-Lifecycle, Blockqueue,
+Asyncpool, begrenzter Prozesscancel, AP-VM, NTFS, native Sync/FPU und Summary.
+Blockqueue:13/13 Tasks gereapt,4/4 Registrierungen wirklich entfernt,
+elf Asynccompletions, sieben angenommene Completionreceipts sowie alle
+urspruenglichen Flush-/Order-/Cancel-/Reset-/Inhaltspruefungen. Vier
+Registrierungen bedeuten drei verschiedene Controller plus eine echte
+Wiederregistrierung. Keine zurueckbehaltenen Requests/Puffer/Controller.
+IPC WORKERS prueft neben DNS/UDP einen eigenen4KB-Dateisatz samt Inhalt,
+Delete und wirklichem Join. Vorhandene AP-VM-/FPU-/Cancelorakel bleiben.
+
+Private passive Ausfuehrungsmasken:
+{"block": 7, "cache_policy": 4, "ipc_handlers": 13, "r4d_block": 3, "rx_frames": 2}
+Block und r4d_block erfassen angenommene erfolgreiche Callbackeintritte;
+r4d_block schliesst synthetische Backends aus. Der Gast belegt zusaetzlich
+den echten NVME-Runtimeread mit MSI-X. cache_policy bedeutet tatsaechliche
+geschuetzte Policyselektion einschliesslich leerer Scans; es ist kein
+Schreibdurchsatzzaehler. rx_frames zaehlt produktive kopierte Framecallbacks,
+ipc_handlers native Handler mit nichtnegativem Return, keinen DNS-Erfolg.
+Alle fuenf Domaenen zeigen wirkliche AP-Ausfuehrung. Diese Beobachtung
+erweitert keine Zulassung und fuehrt keinen neuen oeffentlichen ABI ein.
+
+Genau ein finaler STANDARD Suite3 mit allen vier CPUs:
+f90d9dd9-169c-452a-96b5-a3e1b84b48df;30 Rohsamples, sechs gueltige Scores und
+vollstaendiger unveraenderter DevCenter-Readback. Auf allen vier frueheren
+Zwischenstaenden wurde kein STANDARD gestartet. Ein Lauf ist keine isolierte
+oder statistisch gesicherte Beschleunigungsmessung.
+
+Es bleiben ein Cacheworker, serialisierte RX-Frameverarbeitung, R4P-
+Callowner je Modul, IPC je Kanal und der kritische BSP-Blockfallback.
+Ungepruefte Netzwerkprovider erzwingen den konservativen BSP-Rueckfall.
+Andere Apps, Libraries und Treiber gewinnen keine pauschale Freigabe.
+Keine neue native Hardware-, Windows-, AMD-, NUMA-/Hotplug- oder
+>32CPU-Abnahme. Naechster Schritt:0.85.17, weitere Libraries und Apps.

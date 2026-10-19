@@ -1,0 +1,118 @@
+﻿Intel HWP/EPP im externen CPU-Treiber - 0.85.27
+=============================================
+Abnahme19.10.2026: Release0.85.27, Kernel0.1.353, CPUPOWER0.1.1,
+Spectra0.1.34, Contract0.64.28/R4DEV26 und SDK0.64.43. SysInfo0.1.8 bleibt
+unveraendert. Gemeinsame Quellen/Artefakte/Rohdaten/Grenzen stehen einmal
+in Core/CpuHwp08527.json und ExFiles/Reports/Cpu08527/20261019-final.
+
+Ergebnis und Rolle
+------------------
+CPUPOWER besitzt nun explizite Intel-HWP-/EPP-Anforderungen und deren
+Rueckgabe. HWP ueberlaesst dem Prozessor die Auswahl einer Leistungsstufe;
+Min/Max/Desired sind abstrakte Hinweise, keine MHz. Desired0 waehlt autonom.
+EPP0..255 verschiebt die Praeferenz zwischen Leistung und Energieeffizienz;
+es ist kein Wattlimit. Ein Register-Readback bestaetigt den gespeicherten
+Hinweis, keine erreichte Frequenz oder garantierte physische Einsparung.
+
+Die belegten Steuerungsprofile sind native Intel Familie6 Modelle4E/5E.
+Jede CPU wird gegen ihren kanonischen CPUID-Stand geprueft. VM, andere
+Modelle, fehlendes HWP und nicht umgesetzte PECI-/Fast-Access-/Polarity-
+Kombinationen werden vor Modellregisterzugriffen abgewiesen. EPP ist ein
+eigenes Faehigkeitsbit. Weitere Generationen werden nicht geraten.
+
+Der Treiber erzeugt keine Threads und aktiviert beim Start keine Richtlinie.
+Der Kernel stellt nur notwendige benannte lokale Registeroperationen,
+genaue CPU-/Heap-/Provideridentitaet und Ressourcen-/Callbacklebensdauer.
+PowerService/Energieprofile folgen in0.85.29. Passive Telemetrie und deren
+Haswell-/MilanB1-Profile bleiben wie in Core/CpuPower08526.txt dokumentiert.
+
+Schnittstelle und konkrete Operationen
+-----------------------------------
+Die optionale getypte C-/Zig-Fassade cpuPerformance(request,out) liefert
+ein festes Receipt mit Zustand, Fehler, Gueltigkeit, Rohwerten, Epoche,
+Provider, Besitz-Token und Revision.0 als Funktionsresultat bedeutet, dass
+dieses Receipt gelesen werden muss; auch ein echter Schreib-/Readback-
+Fehler wird so vollstaendig statt als verlorene Besitzinformation gemeldet.
+Verweigerungen vor einem Schreibversuch lassen Ausgabe und Tail gleich.
+
+inspect ist ein ausdruecklicher lokaler Lesezugriff. Zuerst wird770 gelesen;
+bei deaktiviertem HWP werden die dann unzulaessigen Folgeregister nicht
+ausprobiert. Bei aktivem HWP bleiben Faehigkeiten, lokaler774-Request und
+optional772-Paketvorgaben getrennt. METRICS CPUPOWER und SYSINFO bleiben
+Cacheansichten und starten auch jetzt keine Leistungssteuerung.
+
+apply prueft aktuelle lokale Grenzen, Min<=Max, Desired0 oder den eigenen
+Bereich und optionales EPP. Ungueltige Werte oder fehlende Faehigkeit
+bewirken keinen Schreibzugriff. Ein geerbter Package_Control-Request wird
+abgewiesen. Activity-/Valid-/sonstige Felder bleiben erhalten;772 wird nie
+geschrieben. Wiederholte Anforderungen brauchen den genauen lebenden Token
+und die aktuelle Revision. Nach verlorener Caller-Rueckkehr kann inspect
+den residenten Besitz wieder sichtbar machen.
+
+enable ist ein eigener Aufruf ohne Parameterwerte und verlangt ausdrueckliche
+Zustimmung zur resetfesten Aktivierung.770 wirkt auf das ganze Paket und
+kann nur durch RESET geloescht werden. Deshalb muss die komplette bekannte,
+kompatible und online befindliche Paketmitgliedschaft samt logischer
+Grenze belegt sein. Ein lokaler Request gibt keine Paketaktivierung frei.
+Weder Release noch Shutdown behauptet,770 wieder deaktiviert zu haben.
+
+release erfolgt auf derselben CPU und stellt den genau gesicherten lokalen
+Baseline-Request wieder her. Token und Speicher bleiben bis zur wirklichen
+Lesequittung erhalten. Ungewisse Readbacks und unerwartete beobachtete
+Fremdaenderungen halten die Ressourcen; sie werden nicht ueberschrieben.
+Die Rueckgabe braucht keine verfuegbaren Zusatzsensoren. Neue Arbeit wird
+bei Revisionserschoepfung geschlossen, die genaue Rueckgabe bleibt moeglich.
+Die MSR-Folge besitzt keine Hardwareatomizitaet gegen asynchrone Firmware.
+
+Lebende Tokens sperren konservativ den globalen koordinierten CPU-Lifecycle
+und den Treiberabbau. Die terminale Abschaltung setzt unabhaengig davon
+ihren Terminalzustand und erlaubt danach keine CPU-Registeroperationen.
+Der Caller muss daher vor Offline/Entladen/terminalem Shutdown explizit
+zurueckgeben; ungeklaerte Instanzen bleiben gehalten/quarantiniert. Die
+koordinierte Rueckgabe durch PowerService vor diesem Rand folgt in0.85.29.
+
+ABI und Nachweise
+-----------------
+R4DEV26/624B ergaenzt genau einen optionalen Slot. Neue feste Records sind
+Request64B, Info176B, Backend32B und WriteReceipt72B. Alte feste Records,
+passive Info320B/Backend40B und DriverApi37 bleiben gleich. Die getrennt
+verhandelten DriverCpuPowerApi-Praefixe64/72/112 behalten alle alten Slots
+und Caller-Tails. Contract und SDK wurden als notwendige unveraenderliche
+Abhaengigkeiten nach voller Abnahme vor den Verbrauchern veroeffentlicht.
+
+23 Treibertests (ein Importtest,22 fachliche Faelle),11 Kernel-Brokerfaelle
+und13 echte Register-/Featurefaelle bestehen. Hardware-/CPU-/Heap-Peers sind
+dort modelliert; keine Host-CPU-Instruktionen wurden fuer diese Proben
+ausgefuehrt. Volle Contract-Zig/C/Rust-Layouts/Clippy/Interop, kompletter
+SDK-Test und bestehende C/Zig-Fassaden8/13 bestehen einschliesslich voller
+64bit-Stackargumente und alter Tabellen. Kernelbau/Clippy, Treiber-/Spectra-
+Bau und vorhandene Spectra-Tests bestehen.14 funktionale Kernelbesitzer
+einschliesslich Scheduler/FPU/Lifecycle/Clock/Deadline bleiben bytegleich.
+
+Der physisch verifizierte neue BOOT-Kernel besteht einen echten KVM-SMP4-
+Gast mit16 ERRORLEVEL0.7/7 Worker auf4 und danach3 verfuegbaren CPUs sind
+beendet;14 Telemetrieerfassungen,35 HWP-Pruefungen und98 ohne Instruktion
+abgewiesene Modell-IDs stimmen. Die alten127 Schedulerfaelle,100/100 Tasks,
+2/2 Works, IF4,200 Events,65 Fristtasks,16 echte GP und63 Lifecyclefaelle
+samt YMM-/Wait-/NVMe-Vertrag bestehen. HWP bleibt in der VM unverfuegbar;
+gueltige native Schreibzugriffe werden dort nicht behauptet.
+
+Genau ein finaler normaler all4-Suite3-STANDARD: bf84e7cb-5920-4b07-9cb2-e3bc6a9b3978.
+Alle30 Rohsamples besitzen4/4 abgeschlossene Worker; alle sechs Scores
+und saemtliche Originalfelder sind im unveraenderten DevCenter-Readback
+geprueft. Arbeitsvertrag, feste Referenz und Scoreverfahren bleiben gleich.
+Dies belegt keinen isolierten Speedup oder physischen HWP-/Energieeffekt.
+
+Primaerquellen: Intel SDM0933B17.4 und4 Tabelle2-39; genaue URLs/Hashes
+stehen im JSON-Beleg. Zusaetzlich wurde Intels historisches Update332689-
+010EN, April2017, im Original-PDF-Spiegel geprueft: SKL122 kann Guaranteed
+veralten lassen; SKL126 erlaubt Reset-MaxFF. Die Baseline wird roh bewahrt.
+SKL127/129 betreffen Benachrichtigungen; hier wird keine Interruptpolitik
+eingeschaltet oder Ein-Sekunden-Aktualisierung angenommen. Aktuelle
+Silizium-/Firmwarekorrekturen oder native IRQ-Koexistenz sind nicht abgenommen.
+
+Keine verfuegbare freigegebene native Intel-Zielhardware wurde neu geprueft;
+echte Request-Readbacks, Betriebsfrequenz und Energie-/Thermalwirkung bleiben
+eine physische Abnahmegrenze. Kein Windows-Host-/Fernhardwarelauf und kein
+Host-CPUID-Probelauf; native84.47-Belege bleiben historisch. Naechster
+Umsetzungsschritt0.85.28: AMD-CPPC und bevorzugte Kerne.

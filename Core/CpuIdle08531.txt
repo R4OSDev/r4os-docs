@@ -1,0 +1,96 @@
+﻿R4OS0.85.31 - Begrenztes CPU-Idle mit sicherem Wake
+=================================================
+Stand: 2026-10-19. Release0.85.31 / Kernel0.1.357,
+ACPIPLAT/CPUPOWER0.1.4, SysInfo0.1.11. Contract0.64.33 / SDK0.64.47.
+PowerService0.1.1, Spectra0.1.36, Terminal und Desktop bytegleich erhalten.
+
+Umgesetzt
+---------
+ACPIPLAT validiert auf seinem vorhandenen Worker _CST, _CSD und relevante
+_LPI-Angaben nach genauer MADT-UID/APIC-Zuordnung. Paket-/Resourcegrenzen,
+alle-CPU-Paritaet, doppelte Prozessorobjekte und Abhaengigkeiten werden geprueft.
+Ein _LPI-Beleg behaelt seine eigene Zustandsidentitaet, Mindestverweilzeit,
+Latenz und Kontextangaben; er erbt weder _CST-Methode noch dessen Leistungswert.
+Der Quelltag unterscheidet _CST-Ein-/Austrittslatenz von _LPI-Wake-Latenz;
+beide Werte werden in Mikrosekunden angegeben und sind keine Messungen.
+Auch vorhandene fehlerhafte Abhaengigkeiten sperren andere sonst geeignete
+Eintraege, solange ihr gemeinsamer Geltungsbereich unbekannt ist.
+Zugehoeriges Notify0x81 zieht den Katalog zurueck; fremde Quellen tun dies nicht.
+
+CPUPOWER gibt einen kleinen externen Anfangsrahmen vor: maximal100us deklarierte
+Ein-/Austrittslatenz, Zeitbudget groesser als das Vierfache dieser Latenz.
+Dieser Rahmen ist von PowerService-Frequenzprofilen unabhaengig. Er erzeugt
+weder zusaetzliche Worker noch einen Modulcallback im Idlepfad und aktiviert
+keine Hardwarefunktion durch MSR-Schreiben.
+
+Der erste tiefere Eintritt nutzt nur das architektonische Intel-MONITOR/MWAIT
+mit _CST-C2-Semantik, Hardwarekoordination und ohne Bus-Master-Vermeidung.
+Die lokale CPU muss MONITOR, CPUID5-Erweiterungen, Interrupt-Break bei IF0,
+den genauen Substate, ARAT und invarianten TSC bestaetigen. Die echte
+Monitor-FSM-Freigabe wird geschuetzt gelesen. Der Substatezaehler gehoert zum
+Hintziel plus1; ACPI-Semantik und physische Hintnummer sind verschiedene Angaben.
+
+Jede CPU nutzt eine permanente eigene Kernel-Monitorseite. Ein nicht wartender
+Pagetable-Tryguard prueft den wirklichen PTE-/PAT-/MTRR-WB-Vertrag; keine
+Mappings werden geaendert. Vor Eintritt braucht es einen bewaffneten lokalen
+weiterlaufenden LAPIC-Timer mit genuegend verbleibendem Budget. HLT bleibt
+der Fallback. Es gibt keinen neuen Broadcast- oder Timerstillstandsweg.
+
+MONITOR liegt vor der letzten Pruefung faelliger absoluter Taskfristen,
+Ready-Arbeit, CPU-Epoche/Lifecycle und Wakebudget. Runtime ist vor MWAIT
+freigegeben. Ruecknahme schliesst den Gate, schreibt das Monitorwort und
+sendet die bestehende Wake-IPI; aktive Eintritte muessen wirklich enden.
+Nach MWAIT wird zuerst der Eintrittspin freigegeben und dann ueber STI/NOP/CLI
+der noch anstehende Wake-IRQ zugelassen, bevor leave_idle den Timer ersetzt.
+AML, Modulcode, Allokation und gehaltene Runtimeowner fehlen am Eintritt.
+
+Darstellung und stabile Vertraege
+--------------------------------
+Descriptor96, Policy32 und Info192 sind getrennte feste Records; der optionale
+Mechanismus waechst von168 auf184, R4DEV29 auf656 Bytes. Alle bisherigen
+Records, Praefixe, Slotbedeutungen und DriverApi37 bleiben erhalten.
+SYSINFO /CPUIDLE:n liest passiv. _CST hat keine deklarierte Mindestverweilzeit,
+_LPI keinen solchen Leistungswert; fehlende/ungueltige Daten sind unverfuegbar.
+Softwareversuche, HLT-Zaehler und verstrichene Softwarezeit belegen weder
+gemessene Residency noch Wakezeit oder Energie. Lokale Zulassung ist ein
+gepruefter Softwarestand, keine aktuelle physische Zustandsmessung.
+
+Pruefung
+--------
+1020 eingefrorene Quellen/Buildinputs,14 unveraenderte funktionale
+Kernelbesitzer und8 Artefakthashes. Volle Contract-/SDK-Konformitaet, Kernel-
+Build/Clippy und die drei geaenderten Modulbuilds bestehen. Bestehende Tests:
+68 Firmware- plus17 AML-Idlefaelle,38 CPUPOWER,9 echte Idle-Quellfaelle,
+2 genaue Pagingfunktionsfaelle,28 Broker/API, terminal1 und Route1. Hardware-
+und OS-Gegenstellen dieser Hostfaelle sind simuliert; kein nativer Hostprobe.
+Zwei Reviewregressionen wurden am alten Code gezielt rot und korrigiert gruen:
+gemischter _CST/_LPI-Beleg sowie fehlende Peersperre bei unklarer Abhaengigkeit.
+Der erste47-Befehls-Gastlauf bleibt getrennt und unveraendert archiviert;
+der endgueltige Lauf verwendet die korrigierten Quell-/Artefakthashes.
+
+Final echter lokaler KVM SMP4:47 ERRORLEVEL0, wirkliche Joins und natuerlicher
+Poweroff. Die alten127 Scheduler-/65 Deadline-/100 Task-/16 GP-/63 Lifecycle-
+und IF-/NVMe-Orakel bleiben erfuellt. Fuenf neue passive Idleabfragen zeigen
+HLT auf allen4, keine MWAIT-Versuche und keine erfundenen Hardwaremessungen.
+CPU1 bleibt nach Offline/Online mit Epoche5 gegen seinen alten Bootbeleg
+gesperrt; die alte Firmwarebeschreibung wird nicht stillschweigend erneuert.
+
+Genau ein finaler normaler STANDARD Suite3/all4: 6a244ee7-8fe2-4997-9481-4dd6be148cf0.
+30 volle Rohsamples mit jeweils4/4 Workern, sechs gueltige Scores und voller
+unveraenderter DevCenter-Readback. Gesamtindex: 159.993581.
+Frueherer Lauf0.85.30: ed7bb8b0-1459-495d-a2db-c351f21b8523. Das sind zwei Kontexte,
+kein isolierter Geschwindigkeits- oder physischer Energiebeleg.
+
+Offene Grenzen und naechster Schritt
+-----------------------------------
+Physischer MWAIT-Eintritt, wirkliche Residency, Wakezeit und Leistungsaufnahme
+sind auf KVM nicht qualifiziert. Generische I/O-Eintritte, C3, AMD-Sonderwege,
+OS-Koordination, _LPI-Kontext/Hierarchie und stoppende Timer ohne Broadcast
+bleiben gesperrt. Kein Systemsuspend, keine neuen Enablewrites. Geaenderte
+Kataloge/CPU-Epochen brauchen passenden Neustart bzw. neue Publikation.
+Keine Remote-/OssiPC-/nativen Hostproben und kein Windows-Lauf.
+Naechster Roadmapschritt:0.85.32 MCA/AMD-SMCA.
+
+Gemeinsame vollstaendige Quellen/Rohdaten/Herkunft:
+Docs/Core/CpuIdle08531.json
+ExFiles/Reports/Cpu08531/20261019-final

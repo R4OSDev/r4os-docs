@@ -1,6 +1,6 @@
 ﻿SNES-Benchmark: Mess- und Vergleichsvertrag
 ==========================================
-Stand: 0.86.16, Vertrag r4os.subsystem-benchmark / Schema 1.
+Stand: 0.86.17, Vertrag r4os.subsystem-benchmark / Schema 1.
 
 Besitz und Bestand
 -----------------
@@ -143,7 +143,10 @@ liefert nur die kurze Qualifikation und legt keinen Benchmarkexport an.
 Kernwerte: ungedrosselte Emulation inklusive PPU, APU und PCM-Drain/Kopie.
 PCM wird fuer einen Pruefhash begrenzt gepuffert; Hashen erfolgt nach Timerende.
 Fensterwerte: produktiver, getakteter Lauf mit tatsaechlichem Fenster und
-Audiotransport. Gastbudget vor dem ersten Hostturn bei Zeit0 verankern;
+Audiotransport. Die Wandzeit umfasst runtime.run einschliesslich finalem
+Audio-Close/Drain; spaeteres Fenster-/Gastdeinit liegt ausserhalb. Das ist
+kein isolierter Steady-State-Durchsatz oder bestaetigte Wiedergaberate.
+Gastbudget vor dem ersten Hostturn bei Zeit0 verankern;
 Aufwaerm- und Messgrenze separat auf die festen Gastzeitpunkte begrenzen.
 Ein langsamer Hoststart darf den 250-ms-Aufwaermrand nicht unerreichbar machen.
 Capture/Backend/Pacing unterscheiden sich zwischen den Profilen; nicht deren
@@ -228,3 +231,79 @@ Leer-/Fehler-/Teil-/uint64-/Referenzfaellen bestanden. Unvereinbare Kern-/
 Fenstervergleiche werden begruendet ausgeschlossen, Spectra-Umschaltung
 funktioniert. Alle30 API-/Datenbankfaelle weiterhin gruen. Host-/Anzeige-
 aenderung ohne neue R4OS-Laufzeitwirkung: kein weiterer STANDARD.
+
+Durchgaengige Abnahme 0.86.17
+---------------------------
+-Upload importiert neue Originaldateien optional; -ImportRun <run.json>
+wiederholt ausschliesslich den Dateiimport ohne Build oder Messung. URL aus
+-DevCenterUrl, R4OS_DEVCENTER_API_URL oder Tools/BenchmarkHost.R4S; lokaler
+Bearer-Token aus Umgebung/Bereitstellung, niemals aus dem Export. Fehlende
+Hosts aus dem echten Laufkontext registrieren, bestehende Stammdaten erhalten.
+Vollstaendiger GET wird gegen alle normalisierten Originalfelder verglichen:
+fuenf Batches mit Warmlaeufen, null/Arrays, exakte uint64/UTC und alle Artefakte.
+Isolierte Pruefung bestaetigt Idempotenz, Konflikt, Fehler-/Teillaeufe sowie
+die Ablehnung eines absichtlich geaenderten letzten Warmupfeldes. Originale
+bleiben fuer den Retry unveraendert. Keine neue dauerhafte Testsuite.
+
+Vorab festgelegte kleine Matrix: vier gueltige NTSC-Exporte aus0.86.14
+weiterverwenden, nur den fehlenden gepaarten PAL-Kernlauf ergaenzen. Insgesamt
+sechs echte Exporte mit30Messbatches und30zugehoerigen Warmlaeufen vollstaendig
+im DevCenter; Normal/Detail haben gleiche Masterarbeit und funktionale Digests.
+NTSC/PAL benutzen denselben Hostbenchmark-Binaerhash; das produktive R4SNES
+ist unveraendert0.22.14. Keine native R4OS-/Windows-Leistungsabnahme.
+PAL-Fenster bleibt die qualifizierte Kurzprobe, keine volle Leistungsreihe.
+
+Ausgangsmediane fuer jeweils3s emulierte Arbeit (kein neuer Punktescore):
+  Kern NTSC, Hostprozess: normal1.824592603s /1.6442x Echtzeit,
+    detail1.829914250s; beobachtet+0.292% Wandzeit.
+  Kern PAL, Hostprozess: normal1.612178016s /1.8608x Echtzeit,
+    detail1.613025184s; beobachtet+0.053% Wandzeit.
+  Fenster/Audio NTSC, R4OS KVM4: normal3.965497275s /0.7565x Echtzeit,
+    detail3.947666138s; beobachtet-0.450% Wandzeit.
+Das letzte Minus ist Streuung/Pacing, kein nachgewiesener Gewinn durch
+Instrumentierung. Die Werte sind lokale Beobachtungen, keine Overheadgrenze.
+PAL/NTSC sind eigene Arbeitsvertraege; die Profil-/Hostunterschiede erlauben
+keine Subtraktion als isolierte Fensterkosten. Alle Einzelwerte einschliesslich
+Ausreisser bleiben an ihren UUIDs. Kompakter kanonischer Referenzdeskriptor:
+Repositories/Subsystems/R4SNES/Baselines/active-v2.reference.json. Er pinnt
+drei erste Normalreihen samt Originalexporthash und zugehoeriger Diagnosereihe;
+Rohsamples ausschliesslich im DevCenter bzw. lokalen Artifacts-Cache.
+
+Erste Engpassbewertung und sinnvolle Folgeprioritaeten
+---------------------------------------------------
+1. Produktiver Audio-/Dienstweg: Detailmedian der aggregierten Audioaufrufe
+   0.704034270s bei3.947666138s Gesamtwandzeit; Gastschritt2.619108020s.
+   Dies sind getrennte Mediane, keine addierbare CPU-Bilanz. Der Audioblock
+   umfasst Schreiben, Steuerung UND das finale Close/Drain. Zuerst diese
+   Kosten trennen und die genaue Dienstantwort/-warteschlange zuordnen;
+   erst danach begrenztes Buendeln bzw. vermeidbare synchrone Uebergaenge
+   bewerten. Aktueller Besitzerpfad: SDK subsystem_runtime.AudioPump /
+   R4AudioSink -> app_audio.AudioStream.writeBounded -> AUDSVC.
+   Groessere Quanten/mehr Puffer sind ohne Latenz-/Closebeleg keine Loesung.
+2. Kern-PPU: groesster gesampelter Block in NTSC und PAL. NTSC-Kernmediane
+   PPU1.204839ms, CPU/Bus0.914274ms; integrierte Stichproben entsprechend
+   PPU1.539162ms, CPU/Bus1.389854ms. Keine Hochrechnung auf3s/CPU-Prozente.
+   Zuerst ppu.renderPixel/backgroundPixel/outputCandidate/composeMain und vorhandene
+   Tile-/Zeilencaches untersuchen: unveraenderte Geometrie-, Layer-, Fenster-
+   und Farbauswahl beim genauen Register-/Zeilenrand vorbereiten. Keine zweite
+   pauschale Tilecache-Idee; vorhandene Invalidierungen und CGRAM-/Raster-
+   Beobachtbarkeit sowie Writes mitten in der Zeile muessen gleich bleiben.
+3. CPU/Bus/Ereignisdispatch: machine.runOperation, scpu.EventSink und der
+   physische Clockfilter bilden den zweiten grossen Stichprobenblock. Nur
+   nachweislich ereignisfreie Intervalle buendeln oder wiederholte Auswahl
+   vereinfachen; bestehendes WAI-Fastforward und Clockfilter nicht duplizieren.
+   IRQ/NMI, Refresh, DMA/HDMA, MMIO-/SMP-Synchronisation und Pixelraender sind
+   harte Grenzen. Vor einer Umsetzung erzeugten Normalcode gezielt pruefen.
+4. DSP/SMP nachrangig vertiefen; DMA-/Koprozessorspannen dieser Szene sind
+   klein bzw. enthalten keine echte Zusatzchiparbeit. Kein allgemeiner
+   Zusatzchipbefund. Bildeinreichung (~7.24ms Detailmedian), PCM-Rendern und
+   Poll sind hier gegenueber Gastschritt/Audio klein; Desktopdarstellung und
+   physische Ausgabe liegen ausserhalb dieser Besitzerzeiten.
+
+Fenster-Normalreihe: alle fuenf Batches131 erzeugte und131 eingereichte Bilder,
+0Audiofehler und0verworfene Bildeinreichungen; keine sichtbare/hörbare
+Hardwarequittung. Median des maximalen Masterrueckstands23569975Zyklen,
+PCM-Queue3840Bytes, normaler finaler Rest0. Beim Close verworfene PCM-Bytes
+sind eigener Abbaustand, kein automatischer Nachweis hoerbarer Aussetzer.
+Keine Optimierung in dieser Unterversion; nur Runner/Import/Referenzen und
+Auswertung. Vorhandener STANDARD0.86.14 bleibt gueltig, kein neuer Pflichtlauf.

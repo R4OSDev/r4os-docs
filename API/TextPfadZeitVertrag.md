@@ -16,6 +16,25 @@ This document explains the distinctions without duplicating constants.
 
 R4STD owns reusable text, settings, date, time and R4S configuration helpers.
 
+R4STD0.2.5 adds the independent `CODEC_V1:1` without changing the five old
+interfaces. Legacy bytes carry an explicit codepage/mode. CP437 text follows
+Microsoft's control mapping; separate PC graphics follows Unicode IBMGRAPH
+for01..1F/7F, with00 still U+0000. Windows-1252 rejects its five unassigned
+bytes; CP850 is distinct and unsupported. Exact inverse conversion reports
+unrepresentable scalars. There is no guessing, normalization or implicit
+replacement. Bulk conversion preflights the whole span and rejects overlap.
+
+Scalar UTF-8 permits U+0000; the existing no-NUL text/path rules still apply.
+The codec accepts shortest scalar encodings only. Its caller-owned16-byte
+state distinguishes complete, valid incomplete and invalid input, examines
+at most four bytes and retains at most three pending bytes. Negative results
+consume nothing and preserve state/output. The caller explicitly reports,
+replaces or resets and may retry the offending byte; finish does not discard
+unfinished input. Byte counts, scalar counts, graphemes and glyph identities
+remain separate. Typed keyboard events are a separate transport contract.
+Source/ABI/oracle/C and real imported-provider evidence, with terminal/font/
+filesystem/protocol/app/grapheme follow-up limits: Core/TextCodecs08537.txt/.json.
+
 ## Paths
 
 System paths use a drive plus normalized components. Resolution is

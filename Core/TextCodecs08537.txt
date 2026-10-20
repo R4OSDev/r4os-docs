@@ -1,0 +1,109 @@
+﻿R4OS0.85.37 - Gemeinsame Textvertraege und echte Legacy-Codecs
+============================================================
+Stand20.10.2026; Release0.85.37, R4STD0.2.5/Libraries0.64.18,
+Spectra0.1.42. Kernel0.1.362, Contract0.64.38/SDK0.64.52 unveraendert.
+Quellen/Originaltabellen/ABI/C/Zig/Hosttests/Build und realer KVM4 bestanden.
+Gemeinsamer maschinenlesbarer Beleg und Archivpfad: TextCodecs08537.json.
+
+Vertraege und Besitzer
+----------------------
+R4STD besitzt die neue unabhaengige CODEC_V1:1,80Byte mit32-Byte-Header und
+sechs typisierten Funktionen. Zwei feste16-Byte-Records beschreiben skalare
+Ergebnisse und caller-eigenen Streamzustand. Die fuenf vorhandenen Interfaces,
+ihr Layout/IDs/Funktionen, elf alte Records und alle alten Konstanten/Fehler
+bleiben exakt erhalten. Neue Rueckgabewerte sind ergaenzend. Kein neuer
+Kernel-/Plattform-/Kern-SDK-Vertrag. Neue Verbraucher importieren CODEC_V1
+explizit; alte Verbraucher behalten ihre bisherigen Imports. Ein alter
+Kontext ohne Codec meldet RuntimeUnavailable, statt eine Erweiterung zu lesen.
+
+Bytes bleiben uninterpretiert. SystemText behaelt UTF8 ohne NUL, BOM-/CRLF-
+Kanonisierung; DocumentText erhaelt seine Originalbytes. Der skalare Codec
+laesst U+0000 zu, hebt aber keine No-NUL-Text-/Pfadgrenze auf. Tastenevents,
+Bytefolgen, Unicode-Skalare, Grapheme und Fontglyphen sind verschiedene
+Vertraege. Diese Unterversion aendert keinen Tasteneingabe-/Darstellungspfad.
+
+Echte Codepagekonvertierung
+---------------------------
+CP437-Kontrollmodus bildet alle256Bytes nach Microsofts Originaltabelle ab,
+einschliesslich C0-Steuerzeichen und DEL. Byte81hex wird U+00FC, C4hex wird
+U+2500; das ist keine direkte Byte-als-Unicode-Interpretation.
+Der ausdrueckliche PC-Grafikmodus ersetzt nur01..1F und7F mit der getrennten
+Unicode-IBMGRAPH-Abbildung. Byte00 bleibt U+0000; keine implizite Ausfuehrung
+von Terminalsteuerung. U+263A gehoert nur dort zu Byte01. Es wird die allgemeine
+PC-Spalte verwendet, niemals die andere CP864-Spalte. Die Quelle ist eine
+Unicode-Tabelle und ausdruecklich keine von IBM gelieferte Abbildung.
+Windows1252 hat251 definierte Werte;81/8D/8F/90/9Dhex sind undefiniert und
+liefern einen eigenen Fehler. CP850 besitzt eine getrennte Kennung und ist
+in dieser Schnittstelle nicht implementiert, niemals ein Alias zu CP437.
+Rueckkonvertierung verlangt eine exakte Abbildung. Nicht darstellbare gueltige
+Skalare, undefinierte Bytes und ungueltige Skalare sind getrennte Fehler.
+Keine Kodierungsvermutung, Normalisierung oder automatische Ersetzung.
+
+Tabellen und Hashes sind gepinnt. Originalhinweise bleiben erhalten;
+lediglich ein abschliessendes DOS-EOF-Byte wird beim Vendoring entfernt und
+ein finales LF gesichert. UPSTREAM.json nennt Original- und vendorten Hash.
+Unicode LicenseV3 und die urspruengliche IBMGRAPH-Notiz/Daten liegen voll im
+Distributionsimage. Quellen:
+https://www.unicode.org/Public/MAPPINGS/VENDORS/MICSFT/PC/CP437.TXT
+https://www.unicode.org/Public/MAPPINGS/VENDORS/MICSFT/WINDOWS/CP1252.TXT
+https://www.unicode.org/Public/MAPPINGS/VENDORS/MISC/IBMGRAPH.TXT
+
+Striktes UTF8 und begrenzte Streams
+-----------------------------------
+Nur kuerzeste1..4-Byte-Folgen fuer Unicode-Skalare werden akzeptiert.
+Overlongs, Surrogate, isolierte Continuations und Werte ueber U+10FFFF sind
+ungueltig; gueltige Nichtzeichen bleiben Skalare. Vollstaendig, gueltig
+unvollstaendig und ungueltig sind getrennte Ergebnisse. Ein bereits
+unmoegliches Praefix gilt sofort als ungueltig, nicht als fehlendes Folgebyte.
+Massstab: RFC3629 und Unicode17, Abschnitt3.9/Tabelle3-7.
+https://www.rfc-editor.org/rfc/rfc3629
+https://www.unicode.org/versions/Unicode17.0.0/core-spec/chapter-3/
+
+Jeder Stream besitzt seine16Bytes beim Caller, ohne globalen Decoder oder
+Heap. Hoechstens vier Eingabebytes werden untersucht, nach einem Aufruf
+bleiben hoechstens drei gueltige Praefixbytes wartend. Negative Ergebnisse
+verbrauchen nichts und lassen Zustand/Ergebnis unveraendert. Der Caller
+meldet/ersetzt/verwirft ausdruecklich, setzt bei Bedarf zurueck und kann das
+fehlerausloesende Byte erneut verarbeiten. So verschwindet ein folgendes ASCII
+nicht. finish meldet unvollstaendige Eingabe, ohne sie still zu verwerfen.
+Bulk-Zig-Konvertierung prueft alle Skalare, Kodierung, Gegenabbildung,
+Kapazitaet und Ueberlappung vor Ausgabe. Ueberlappende Puffer sind in beiden
+Richtungen abgewiesen; Fehler liefern keine Teilausgabe. Der importierte
+zustandslose Provider bleibt fuer den zweiten Schreibdurchgang gepinnt.
+Byte-/Skalarzaehlung verspricht keine Graphemzahl, Spaltenbreite oder Glyphen.
+
+Nachweis
+---------
+R4STD-Build:18/18Schritte,52/52Tests, fuenf neue gebuendelte Gruppen. Alle256
+CP437-Text-/256Grafik- und256Windows1252-Eintraege gegen fest gepinnte
+Originaltabellen geprueft; definierte Werte voll rueckkonvertiert und durch
+UTF8 gefuehrt. Originaltabellen unabhaengig mit striktem Python-Codec
+verglichen. Alle65536Zweibytepraefixe gegen std.unicode als unabhaengiges
+Orakel; skalare Breiten-/Surrogat-/Maximal-/Nichtzeichen-/Splitgrenzen,
+getrennte Streams, kaputter Zustand, Kapazitaet/Overlap und Dokumentbytes.
+Alle sechs Funktionssignaturen durch echten nativen C/Zig-Transport und
+Layout-/Conformancepruefung. Alte Imports ohne Codec behalten den alten Pfad.
+
+Spectra42 CHECK TEXT /CODECS [/JSON] verwendet die reale importierte R4L.
+Realer lokaler KVM4 mit normalem host-CPU-Modell, vier genau platzierte,
+gejointe/gereapte Worker:3052 gueltige Mapping-/Invers-/UTF8-Faelle,
+20 korrekte undefinierte Bytes,48 Skalargrenzen und180 Splitausfuehrungen.
+2048 Legacy-Rundlaufbytes und1024 originale Dokumentbytes blieben exakt.
+Streamfehler, erneutes ASCII nach Reset, fehlende CP850-Implementierung,
+unmoegliche Gegenabbildung und vollstaendige Ausgabe nach Vorpruefung
+bestehen. Beide Gast-ERRORLEVELs0, kanonische Quick/SMP4-Gates und echter
+Poweroff bestanden. Der Kernel und13 andere Modulartefakte sind bytegleich.
+
+Genau ein finaler normaler unveraenderter Suite3/all4:
+4d67314a-2b0d-416c-bddf-80c7b0969574;30vollstaendige4/4Rohsamples und sechs gueltige volle
+Original-DevCenter-Readbacks. STANDARD-Lasten/-Tests/-Referenz unveraendert.
+Keine Messauswahl, Methodenveraenderung oder allgemeine Leistungszusage.
+
+Offene Grenzen und naechster Schritt
+------------------------------------
+Codecs sind kein Beleg fuer durchgaengige Terminaleingabe/-ausgabe, Fonts,
+Dateinamen, Netzprotokolle, Appdialoge oder Grapheme. Diese Pfade folgen in
+0.85.38-.44; insbesondere Text/Tasten ab38, Ausgabe/Serial ab39. Native
+Windows-/physische Hardwareausfuehrung ist hier nicht qualifiziert. Keine
+Host-CPU-/MSR-/Cacheprobe, Remote/OssiPC-, TCG- oder ISA-Erzwingung.
+Naechster Schritt0.85.38.

@@ -43,6 +43,29 @@ bis ihre konkrete Bruecke geprueft ist. SIMD-faehige Verbraucher des
 bestehenden Integer-/Zeigervertrags bleiben unterstuetzt; IRQ-/Task-FPU-
 Sicherung bleibt ein separater Kernelbesitzervertrag.
 
+FP-Umgebung des x86_64-SysV-Vertrags (0.85.46)
+-------------------------------------------
+Ein frischer nativer Task beginnt mit x87-CW 0x037F, leeren x87-Tags und
+MXCSR 0x1F80. Leere Tags sagen nichts ueber die unbenutzten Datenbytes aus.
+Bei normalen Aufrufen erhalten Callees das x87-Kontrollwort und die
+MXCSR-Kontrollbits. x87-/MMX-/XMM-/YMM-Daten und der x87-Status sind
+caller-saved; MXCSR-Statusbits 0..5 sind ebenfalls caller-saved. Ein normaler
+MMX-Callee kehrt nach EMMS in den x87-Modus zurueck. Direkte Float-/Vektor-
+Parameter und -Rueckgaben bleiben ohne die oben genannte Bruecke gesperrt.
+
+MXCSR-Werte duerfen nur durch die tatsaechliche MXCSR_MASK zugelassene Bits
+setzen; bei gemeldetem Maskenwert Null gilt architektonisch 0xFFBF. DAZ wird
+daher nicht aus SSE2 allein abgeleitet. Die vier Rundungsmodi sowie FTZ/DAZ
+aendern keine Aufruf- oder Threadbesitzregeln.
+
+Ein echter Taskwechsel und ein IRQ sichern dagegen die ganze aktivierte
+FP-Umgebung des unterbrochenen Tasks. Ein aufgerufener R4D-/R4P-Callback
+unterliegt selbst dem normalen SysV-Vertrag. Ein nichtlokaler Callback-
+Abbruch kann dessen EMMS/Epilog ueberspringen; der residente Resume-Rand
+verwirft deshalb caller-saved x87/MMX-Daten und stellt die gespeicherten
+Kontrollworte wieder her. Das ist weder ein IRQ-Restore noch eine Freigabe
+uebersprungener Ressourcenbesitzer.
+
 Generierung und Pruefung
 -----------------------
 Repositories/Contract/Build.sh beziehungsweise Build.bat mit write erzeugt
@@ -62,6 +85,8 @@ beide Callrichtungen, negative Rueckgabewerte, breite Skalare, Register-/
 Stackargumente, Callback-Nullbarkeit, verschachtelte Workcallbacks, rohe
 Null-/Datenzeiger, Enumwerte und kanonische Headerdefaults. Der C-Verbraucher
 behaelt SIMD- und Floatdaten ueber einen echten Integer-API-Aufruf.
+Dabei darf der Compiler caller-saved Daten auslagern. Dieser Fall verspricht
+keinen physischen Registererhalt ueber einen normalen SysV-Aufruf.
 Unter Linux laeuft dabei der echte freestanding Rust-SysV-Code; unter
 Windows wird das Baretarget kompiliert und der native Host-C-Vertrag benutzt.
 Eine Hostfixture ist kein R4OS-IRQ-, Scheduler- oder Hardwaretest.

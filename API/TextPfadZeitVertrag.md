@@ -32,6 +32,19 @@ consume nothing and preserve state/output. The caller explicitly reports,
 replaces or resets and may retry the offending byte; finish does not discard
 unfinished input. Byte counts, scalar counts, graphemes and glyph identities
 remain separate. Typed keyboard events are a separate transport contract.
+
+Since0.85.38 R4DESK16 appends read/push event slots after the stable536-byte
+prefix. A fixed16-byte record distinguishes Unicode scalars, logical keys
+and single UTF-8 stream bytes; bytes80/81/82 never imply navigation. Batches
+contain at most64 events, bind the exact process generation and acknowledge
+only a complete-event prefix. The caller retains an unaccepted suffix.
+Legacy byte reads check representability before dequeueing a larger scalar.
+Terminal owns a per-instance R4STD decoder and scalar editing/history;
+independent typed events retain unfinished stream state. Desktop and SSH
+keep bounded producer queues and exact target bindings. Byte capacity,
+scalar boundaries and glyph layout remain distinct. Core/TextInput08538
+records the actual KVM4/editor/clipboard and component limits; output and
+grapheme behavior remain separate follow-ups.
 Source/ABI/oracle/C and real imported-provider evidence, with terminal/font/
 filesystem/protocol/app/grapheme follow-up limits: Core/TextCodecs08537.txt/.json.
 

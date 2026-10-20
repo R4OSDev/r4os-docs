@@ -1,0 +1,102 @@
+﻿R4OS 0.85.38 - Getrennte Text- und Tasteneingabe
+==============================================
+Stand 20.10.2026. Release0.85.38, Kernel0.1.363, Contract0.64.39/SDK0.64.53.
+Terminal0.1.17, Desktop0.1.130, SSHD0.1.16. R4STD0.2.5/Libraries0.64.18
+und Spectra0.1.42 bleiben unveraendert. Gemeinsamer Beleg/Archivpfad:
+TextInput08538.json. Nur lokale KVM4-Abnahme und genaue Softwarefaelle.
+
+Vertrag und Kernelbesitz
+------------------------
+R4DESK16/552 haengt zwei Slots an den alten536-Byte-Praefix an. Alle484
+alten Plattformslots und alle alten Typen/Konstanten bleiben exakt.
+ConsoleInputEvent ist fest16Byte: version1, kind, value, flags0. kind1
+transportiert einen Unicode-Skalar, kind2 eine logische Taste und kind3
+ein UTF8-Streambyte. Bytes80/81/82 sind dadurch keine Navigationstasten.
+Push adressiert die genaue Prozessgeneration; bis64 Ereignisse/Aufruf,
+Quittung als Ereignispraefix. Ungueltige Batches aendern keine Queue.
+Nicht angenommene Suffixe bleiben beim Aufrufer. Alte Byte-APIs behalten
+Signaturen/Bytewerte und pruefen vor Entnahme, ob der naechste Skalar als
+Byte zurueckgebbar ist. Ein blockierter Kopf wird nicht umgangen.
+
+Die Konsolenqueue behaelt4095 Bytes Budget. Ein Skalar kostet seine ganze
+UTF8-Laenge; Aufnahme/Entnahme erfolgen unter dem vorhandenen Inputbesitzer.
+4096 interne u32-Slots benoetigen16664 statt4368 Bytes Konsolenpayload.
+Die native256-Slot-Queue bleibt begrenzt; ihre bereits aufgenommenen
+Zeichen bleiben bei einer unmoeglichen Byteabfrage erhalten. Keine
+unbegrenzte Eingabegarantie bei ausgeschoepften Produzentenpuffern.
+Caller-Daten werden vor Inputlocks resident kopiert/validiert. Read kopiert
+erst nach Ende von Zielpin und Inputmutex zum Caller. Der genaue Task-
+Unwindanker bleibt waehrend moeglicher Warte-/Pagefaultpfade erhalten.
+Bestehende Generation-, Close-, Capture- und Waitbesitzer bleiben erhalten.
+Globale Eingabestatistiken sind atomar; bestehende Push-/Batchcallzaehler
+zaehlen die alten Byte-/Tastenslots, Bytezaehler auch die neuen Ereignisse.
+
+Externe Textbesitzer
+--------------------
+Terminal importiert CODEC_V1 und behaelt Decoder/ANSI-Zustand pro Instanz.
+Gesplittete UTF8-Zeichen bleiben ueber Reads erhalten, auch wenn getrennte
+native Text-/Tastenereignisse dazwischen eintreffen. Ungueltige Praefixe
+werden ausdruecklich verworfen; das ausloesende Byte wird erneut geprueft,
+damit gueltiges folgendes ASCII nicht verloren geht. CR/LF wird weiter
+einmal normalisiert. Unterstuetzt sind die begrenzten unmodifizierten
+Xterm-Pfeil-/F3-Folgen, keine vollstaendige Terminalemulation.
+
+Lineediting speichert komplette UTF8-Skalare in4096 Bytes, Backspace entfernt
+einen Skalar, History endet auch bei512-Byte-Grenze vor einem ganzen Zeichen.
+Vorhandene Befehls-/Argument-/Pfadkopien pruefen die komplette Bytekapazitaet
+und uebernehmen gueltigen UTF8-Text unveraendert; kein Abschneiden mitten im
+Zeichen. ASCII-Grossschreibung der bisherigen Shell bleibt erhalten.
+
+Desktop sendet dekodierte native Skalare und echte Tasten getrennt. Paste
+filtert keine UTF8-Fortsetzungsbytes80..9F mehr heraus. Pro genauer Fenster-
+und Prozessgeneration bleiben bis4096 Ereignisse erhalten, insgesamt
+256KB fuer vier Fenster. Nur angenommene Praefixe werden entfernt; eine
+eigene begrenzte Retryfrist arbeitet auch bei stillen Lesern weiter.
+Bei Schliessen/Neubindung folgt der alte Rest keinem neuen Prozess.
+
+SSHD bindet die Eingabe an den genau gestarteten Prozesshandle. Die bisherige
+32KB-Bytequeue behaelt partielle UTF8-Folgen; bis64 explizite Streambytes
+werden gebuendelt. Empfangsfenster werden nur fuer angenommene Bytes oder
+bewusst entfernte CRLF-Paarbytes quittiert. Zu lange Startargumente werden
+vollstaendig abgelehnt. UTF8-Dekodierung/ANSI-Editing bleiben beim Terminal.
+
+Pruefung und Grenzen
+---------------------
+Vier finale Rust-Policygruppen, fuenf C/Rust/Zig-Interopfaelle,26 Generator-
+Mutationen sowie gezielte und volle SDK-Pruefung bestehen. Neue SDK-Slots
+werden auch an einer echten unzugaenglichen alten Tabellengrenze geprueft.
+Desktop-Teilannahme/Neubindung und bestehende SSH-Kanalfälle sind bestanden.
+Strenger Kernel-Clippy, alle betroffenen Builds und physischer BOOTELF-
+Abgleich sind erfolgreich.1606 Laufzeiteingaben bleiben versiegelt;
+drei Modulartefakte geaendert, zwoelf weitere unveraendert.
+
+Der echte KVM4 prueft1365 Euro-Skalare/4095 Bytes, volle Queue, atomare
+ungueltige Batchablehnung, behaltene Skalare nach Byteverweigerung,
+unberuehrte Caller-Tails und abgelaufene Zielgenerationen. Die echten
+Befehlsschleifen pruefen ueber skalare und einzeln gesendete Bytes:
+U+00FC/Euro/U+0401/U+0100/U+1F600, Backspace, History-Up/F3 und512-Byte-Grenze.
+Zwei reale Desktop-Terminalfenster pruefen dekodierte Tasten und Paste.
+Ihre genauen Abschlusscodes und die Desktopquittung werden vor Erfolg
+geprueft/freigegeben. GUI-Ausgabe liegt in der Prozessaufnahme; der echte
+Parent quittiert nach diesen Pruefungen auf der seriellen Bootkonsole.
+Alle vorhandenen Quickmarker und der natuerliche Poweroff bestehen.
+
+Der erste echte Gastlauf bestand Terminal; der direkte Desktopbefehl wurde
+vom vorgesehenen Shellschutz abgelehnt. Ein weiterer Startversuch wurde
+vor Gaststart wegen eines schon belegten Belegpfads abgebrochen. Die finale
+API-gesteuerte Abnahme verwendet einen frischen Pfad; alle alten Belege
+bleiben erhalten. Kein STANDARD wurde fuer diese Fehlversuche gestartet.
+
+Genau ein normaler unveraenderter Suite3/all4:
+  run_id=0bac57bb-7028-4884-9a76-aa19b4936d8f
+  overall=155.143877
+  5 Bereiche,30 Rohsamples,6 gueltige Scores; durchgehend4/4 Worker.
+Unveraenderter vollstaendiger Export und kompletter DevCenter-Readback samt
+sechs Scorevalidierungen. Keine Leistungssteigerung aus diesem Lauf ableiten.
+
+Physische Tastatur/Windows/OssiPC/Remotehardware wurden nicht abgenommen.
+SSH-Paket-/Creditlogik ist im echten Komponentenpfad geprueft; der Terminal-
+Stream laeuft im Gast. Eine zusaetzliche SSH-Netzsitzung wird nicht behauptet.
+Ausgabe/Scrollback/Spalten/Glyphen folgen0.85.39, Fonts0.85.40, Dateinamen41,
+Protokollpfade42, Appdialoge43 und Grapheme44. Kein Host-CPU-/MSR-/Cacheprobe,
+kein TCG, keine erzwungene ISA, kein neuer STANDARD-Vertrag.

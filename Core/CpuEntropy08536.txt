@@ -1,0 +1,111 @@
+﻿R4OS0.85.36 - Alternative Entropie mit Virtio-RNG
+================================================
+Stand20.10.2026; Release0.85.36, Kernel0.1.362, Spectra0.1.41,
+VIRTRNG0.1.0, R4TLS0.2.10, R4AUTH0.1.6, SSHD0.1.15,
+Klickifax0.29.23/KFXLIVE0.2.24, Contract0.64.38 und SDK0.64.52.
+Quellen, ABI, Softwarefaelle und reale strikte KVM-SMP4-Faelle bestanden.
+Belege und Grenzen: CpuEntropy08536.json; Roharchiv wie dort angegeben.
+
+Gemeinsamer Vertrag und Besitzer
+--------------------------------
+SDK secure_random bleibt die gemeinsame Auswahl fuer TLS, CredSSP, SSH und
+WebCrypto. App-Startup bzw. Protokoll-Init binden stabile optionale Funktionen
+vor Workern/Callbacks. RDRAND braucht fuer jeden Abschnitt eine frische
+Kernelzulassung der wirklich ausfuehrenden CPU und weiterhin das Carry-Flag.
+Maximal64Worte je residentem Callback, zehn CF-Versuche je Wort. Fehlende,
+abgelehnte oder unvollstaendige Hardwarearbeit wird nicht uebernommen.
+Eine bestaetigt registrierte Geraetequelle ist die Alternative. Ihr erklaertes
+Maximum begrenzt jeden Teilaufruf auf hoechstens4096Byte. Ein fehlerhafter
+Teil verwirft die gesamte Ausgabe einschliesslich vorher erfolgreicher
+Teile. Keine Uhr-/ID-Ersatzwerte, kein Entropiepool. WebCrypto behielt denselben
+Pfad und seine65536-Byte-Grenze. Bereits kompilierte Programme behalten ihren
+eingebetteten SDK-Stand; die sechs konkreten Krypto-Verbraucher wurden gebaut.
+
+VIRTRNG ist ein eigenes oeffentliches R4OSDev/r4os-driver-virtiorng-Projekt.
+Es spricht modernes Virtio-PCI, Vendor1AF4/Device1044 bzw.1005 mit modernen
+Capabilities, nur VERSION_1 und Requestqueue0. Geraetekonfiguration ist fuer
+RNG nicht erforderlich. Acht Deskriptorplaetze, ein8192-Byte-DMA-Bereich mit
+4096-Byte-Nutzpuffer; nur geraeteschreibbare Deskriptoren. Erst exakter
+Used-Index, Deskriptor und wirkliche Laenge erlauben die begrenzte Kopie.
+Kurze Antworten sind erlaubt und werden im selben250ms-Anfragebudget
+vervollstaendigt. Begrenztes Polling statt eines neuen IRQ-Vertrags; keine
+behauptete Entropie-IRQ-Abnahme. Legacy-only und fremd firmwarebelegte Queues
+bleiben ausserhalb der zugesicherten Anbindung.
+
+Kernel, ABI und Lebensdauer
+---------------------------
+Im Kernel liegen nur die technisch notwendige CPUzulassung und der generische
+Treiberquellen-/Lebensdauer-/Kopiervertrag. Keine Virtio-Algorithmen oder
+Zufallsinstruktionen im Kernel. RDRAND erweitert nur die bestehende
+Fensterart/Maske; das Inventar bleibt61Merkmale und die Modulbaseline bleibt
+AVX2/XCR0=7 ohne neue XSTATE-Komponente.
+R4SYS28/1304 haengt Info/Fill an1288 an. R4DEV33/720 und DriverApi37 bleiben
+unveraendert. DriverResourceApi1 waechst von64 auf72 mit erhaltenen32/48/56/64-
+Praefixen; das im Init zwischengespeicherte Entropieinterface bleibt beim
+Abmelden nutzbar. ProtocolApi1 behaelt seinen104-Byte-Praefix und bekommt
+optionale Funktionen bei104/112 bis120. Vier feste Records und ein gepruefter
+C-Callbacktransport; alte Header/Slots/IDs bleiben unveraendert.
+
+Der originale Task bleibt waehrend Warten und Ergebniskopie gepinnt. Ein
+residenter4096-Byte-Kernelpuffer wird vor dem Treiberbesitzer vorbereitet;
+DMA trifft nur den treibereigenen Puffer. Exakte Besitzer-/Ressourcenepoche,
+Modulslot/-generation und nie wiederverwendetes Anmeldeticket bleiben erhalten.
+Kein Runtime-/Rangbesitzer oder mutable Rust-Registry-Leihe spannt den fremden
+Aufruf. Der Treiberbesitzer wird vor einer moeglicherweise wartenden
+Seitenfehler-Kopie an den Caller abgegeben. Fremde Treiber-/IRQ-/no-sleep-
+Kontexte bekommen vor Ausgabezulassung einen Kontextfehler; der SDK-Pfad
+loescht jede zurueckkehrende fehlgeschlagene Ausgabe vollstaendig.
+
+Aufnahmeschluss liegt vor Shutdown. Abmelden ist keine DMA-Ruhequittung.
+Resetstatus0 und ausgelesenes deaktiviertes Busmastering gehen der genauen
+DMA-/MMIO-Freigabe voraus. Fehlende Quittungen halten Quelle, Code und
+Ressourcen geschlossen; kein zweiter blinder Reset. Der genaue lebende
+Entropiebesitzer nimmt als Misc-Treiber am terminalen Treiberabbau teil.
+Normaler Poweroff allein belegt diesen logischen Abbau nicht; deshalb wurde
+der echte Restartpfad mit QEMU-no-reboot gesondert bis zur Freigabe geprueft.
+
+Pruefung und belegter Rahmen
+----------------------------
+Volle ABI-Pruefung mit vier Rust/Zig/C-Transportfaellen, finale volle SDK-
+Pruefung, fuenf gezielte Entropie-/CF-/Maximal-/Schutzseitenfaelle und die
+bestehenden CPU-/SHA-/Speicherfaelle bestanden. Zwoelf genaue CPU-/Fenster-
+und sechs tatsaechliche Kernelquellen-Faelle verwenden explizite Peers statt
+Host-CPU-/MSR-/Cacheproben. Sie pruefen genaue Task-/Treiberbindung, Abbruch,
+Generation, geschlossenen Besitzer, Fehlerausgabe und atomare passive Snapshots.
+Sieben Treiberfaelle pruefen echte Transport- und Queuefunktionen mit Peers:
+kurze/verzoegerte/ungueltige Antworten, Reset/DMA/MMIO-Freigabe und dauernde
+Retention nach fehlendem Stillstand. Der erste reale Lauf deckte einen
+falschen Erfolgsvergleich auf: MMIO meldet den Contract-Erfolg1. Beide Stellen
+verwenden jetzt die benannte Konstante; die isolierte alte Null-Mutation wird
+von allen drei echten Transportfaellen abgewiesen. Originalfehlbelege bleiben
+im Archiv und gelten nicht als Abnahme.
+
+Die installierten sechs RDRAND-/CF-Callbacks sind an wirkliche Containerbytes
+gebunden, viermal103 und zweimal111Byte, jeweils ohne weiteren Aufruf.
+Siebzehn neue Kernel-Entropiefunktionen enthalten keine SIMD-, RNG- oder
+FPU-Sicherungsinstruktion.746Kernelquellen und14STANDARD-Dateien blieben
+gegenueber0.85.35 unveraendert;1183Quellinputs sind festgehalten.
+
+Reale lokale KVM4, host/rdrand=off, echte modern Virtio-RNG-PCI-Funktion mit
+rng-random/urandom-Backend und1024Byte/1ms-Quota: vier echte platzierte Worker
+wurden gejoint/gereapt. Je sieben direkte Groessen plus gemeinsamer32-Byte-
+und65536-Byte-WebCrypto-Aufruf bestanden, ebenso TLS/CredSSP/SSH. Alle vier
+RDRAND-Freigaben wurden vor Callback abgelehnt. Im funktionalen Quellenstand
+wurden108Anfragen/281428Byte mit
+336echten Used-Abschluessen und228kurzen
+Antworten ohne Quellenfehler gezaehlt. Quittungen und Anbindung belegen die
+Quelle; Byteinhalte/Statistik werden weder protokolliert noch als Beweis benutzt.
+Ohne Geraet und ohne RDRAND bestanden auf allen vier CPUs die kontrollierten
+Fehler und vollstaendig geloeschten Ausgaben, ohne Ersatzquelle/DMA.
+Der gesonderte reale Restart bestaetigt den genauen VIRTRNG-Shutdown und die
+Freigabe vor dem Resetwunsch; no-reboot verhindert einen zweiten Gaststart.
+Sechs vollstaendig eingefuegte TLS/Auth-Lademeldungen wurden fuer JSON allein
+verlustfrei getrennt, Rohserial blieb erhalten. Die bestehende Serialgrenze
+bleibt fuer0.85.39 offen; keine Felder oder Werte rekonstruiert.
+
+Genau ein finaler normaler unveraenderter Suite3/all4-Lauf
+a1fa1a73-2894-4df0-862b-2a9a04e3e6a6;30vollstaendige Rohsamples mit4/4Workern und sechs
+volle gueltige Original-Readbacks im DevCenter. Keine Methoden-/Referenz-
+aenderung, keine Messauswahl und kein allgemeines Beschleunigungsversprechen.
+Physische Entropiequalitaet, native/Windows-Ausfuehrung sowie andere
+Hardwarequellen bleiben unqualifiziert. Naechste Unterversion0.85.37.

@@ -43,8 +43,25 @@ Terminal owns a per-instance R4STD decoder and scalar editing/history;
 independent typed events retain unfinished stream state. Desktop and SSH
 keep bounded producer queues and exact target bindings. Byte capacity,
 scalar boundaries and glyph layout remain distinct. Core/TextInput08538
-records the actual KVM4/editor/clipboard and component limits; output and
-grapheme behavior remain separate follow-ups.
+records the actual KVM4/editor/clipboard and component limits; grapheme
+behavior remains a separate follow-up.
+
+R4DESK17 appends console text metadata/encoding slots after the stable552-byte
+prefix. ConsoleTextInfo is a separate fixed32-byte record; ConsoleState64 is
+unchanged. Exact live process generations select UTF8, CP437 or Windows1252;
+a pending prefix refuses a switch. Font charset never selects the decoder.
+The R4STD resident core decodes each producer stream once, retains incomplete
+prefixes and reports invalid/undefined input as U+FFFD. Closing a nonempty
+prefix appends one replacement per stream and reports truncation. Snapshots
+hold canonical complete UTF8 scalars, including at ring/caller boundaries.
+A scalar occupies one monospaced cell; backspace removes a whole scalar and
+wrap is delayed until the next printable cell. Completion reads retain raw
+byte offsets/counts into that canonical transcript, including continuation
+bytes; they are not a document/binary stream or a character-indexed API.
+Caller output copies occur after registry/output owners and pins end, while
+the exact task remains admitted. Input encoding and document/file bytes do
+not change. Active-font coverage, graphemes, full-width/Bidi/shaping remain
+separate. Core/TextOutput08539.txt/.json records actual software/KVM4 scope.
 Source/ABI/oracle/C and real imported-provider evidence, with terminal/font/
 filesystem/protocol/app/grapheme follow-up limits: Core/TextCodecs08537.txt/.json.
 

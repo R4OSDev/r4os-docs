@@ -1,6 +1,6 @@
 ﻿SNES-Benchmark: Mess- und Vergleichsvertrag
 ==========================================
-Stand: 0.86.17, Vertrag r4os.subsystem-benchmark / Schema 1.
+Stand: 0.86.44, Vertrag r4os.subsystem-benchmark / Schema 1.
 
 Besitz und Bestand
 -----------------
@@ -14,8 +14,9 @@ Sechs exklusive Stichprobenphasen sind CPU/Bus, DMA, PPU, SMP, DSP und
 Zusatzchips. Verschachtelte PPU-/DSP-Zeiten sind abgezogen. Es sind Wandzeiten;
 Unterbrechungen/Descheduling sind enthalten. Kein CPU-Auslastungsnachweis.
 Der integrierte Lauf misst Guest-Step inklusive Persistenz, PCM, Video,
-Poll, Wait und Audiodienst. Desktop-Presents sind global und lassen sich
-nicht als quittierte einzelne SNES-Bilder ausgeben. Angenommene PCM-Bytes
+Poll, Wait und Audiodienst. Globale Desktop-Presents und seit0.86.44 dem
+Fenster zugeordnete erfolgreiche Teil-/Vollkopien bleiben getrennt; beide
+belegen keine physische Einzelbildsichtbarkeit. Angenommene PCM-Bytes
 belegen keine physische Wiedergabe; ein passender Hardwarecursor fehlt.
 
 Messstellen
@@ -695,3 +696,125 @@ Genau ein abschliessender normaler Suite-3-SMP4-STANDARD:
 a4189728-dbb8-4b55-a1aa-c86b3825d8dc; BOOT-Kernelhash passend, alle30
 Rohsamples mit4/4 Workern, fuenf Metriken und sechs gueltige Scorebereiche
 vollstaendig im DevCenter zurueckgelesen. Kein zusaetzlicher breiter Testlauf.
+
+0.86.44: Restarbeit und explizite Fensterausgabe
+--------------------------------------------
+Desktop0.1.134 erweitert ausschliesslich die ausdrueckliche Diagnose. Die
+normalen Mal-/Kompositionsalgorithmen bleiben auf dem Stand von0.86.43;
+keine neuen Clocks in normalen Frames. Der vorhandene Benchmarkzweig
+verwendet die bereits erfassten Besitzerzeiten. SNES0.22.16/Kernel0.1.381
+und der feste v2-Gastarbeits-/Referenzvertrag bleiben unveraendert. Deshalb
+kein zweiter STANDARD fuer diesen Diagnoseschritt; der Pflichtlauf fuer den
+Produktfix ist oben bei0.86.43 belegt. Kein OssiPC-Update oder Full/Slim-
+Release in diesem Schritt; regulaere veroeffentlichte Pakete bleiben0.86.42.
+
+Der gemeinsame Windows-/Linux-PS7-Runner unter R4SNES unterstuetzt:
+  ./Benchmark.sh -Profile Window -Mode normal -WindowSize Small -OutputAnalysis -Upload
+  ./Benchmark.sh -Profile Window -Mode normal -WindowSize Maximized -Upload
+Small setzt vor dem Kindstart einen414x224-Client; Maximized nutzt den
+wirklichen Arbeitsbereich. Der Desktop bindet seine begrenzte Spur an den
+genauen Prozess/Fensterslot. Geometriewechsel, Generationenruecklauf,
+Ueberlauf und unvollstaendige Daten sind Fehler. Der Host prueft Viewport,
+Chronologie, Generationenmenge und beide Gastartefakte. Die zusaetzlichen
+Ausgabebedingungen bilden einen neuen Vergleichskontext: alte Referenzen
+werden weder umgeschrieben noch als Vergleich dieser Geometrien ausgegeben.
+
+Wichtige Zaehlerkorrektur: Das alte environment.global_desktop_presents
+zaehlte trotz seines Namens die Zeilen der fensterbezogenen Generationenspur.
+Neue Exporte unter output_context_contract=desktop-window-output-v1 lesen
+hier tatsaechlich die globalen erfolgreichen Desktop-Presents des erfassten
+Sessionsabschnitts. window_generation_copy_observations zaehlt dagegen nur
+Generationen, deren Fensterinhalt in einer erfolgreichen Softwarekopie lag.
+full_client_copy braucht einen einzelnen den ganzen Client deckenden
+Damagebereich. Die rohe Spur bleibt erhalten, inklusive Abschlusszeit und
+Besitzer-Wandzeiten. Eine Generationenkohorte kann nach dem Gasttimer fertig
+kopiert werden; ihre Anzahl geteilt durch Gastwallzeit ist keine sichtbare
+FPS. actually_presented_frames/physical_visible_frames bleiben null.
+Ohne Cursoreingaben bleibt Cursorlatenz ebenfalls null, nicht gemessene Null.
+
+Genau zwei normale NTSC-v2-Reihen mit je fuenf Batches, QEMU/KVM-SMP4,
+Software1280x720, produktivem WINSVC/AUDSVC und Null-Audiosink:
+  Small:     4560a241-c5e0-45fb-a68c-0aa6019331cf
+  Maximized: 355bb8dc-f6fb-4d4f-b812-7a4bdd9b383d
+Beide unveraenderten vollstaendigen Exporte sind im DevCenter valid und
+verlustfrei zurueckgelesen. Gleiche wirkliche Masterarbeit und identische
+Anfangs-/Endzustands-/Framehashes in allen zehn Batches; je180 Beamframes,
+131 geaenderte generierte/eingereichte Bilder, keine DSP-/Transportfehler,
+gepruefter Abbau. Generierte Bilder sind keine Beamframe-FPS.
+
+Small: Client414x224, Viewport256x224 (1:1); Median der fuenf Gastarbeits-
+Wandzeiten3.034321s, Echtzeitfaktor0.988689. Je131 Generationen mit
+Vollclientkopie beobachtet. Maximized: Client1264x650, Viewport742x650
+(fractional); Median3.706628s, Faktor0.809361. Je99/107/98/103/101 von131
+eingereichten Generationen mit Vollclientkopie beobachtet. Ein erfolgreicher
+GUI-Commit und producerseitig0 verworfene Einreichungen garantieren also
+keine Ausgabe jeder Generation. Globale Sessionszaehler737/571 enthalten
+auch Aufwaermung/weitere Desktoparbeit und sind keine Batch-FPS.
+
+Median der fuenf Batchmediane der beobachteten Besitzerframes:
+                    Small          Maximized
+  Malen+Komposition 1.260539ms      16.564170ms
+  Displaypresent    0.027734ms       0.306873ms
+  Gesamter Frame    1.292399ms      16.865730ms
+Maximaler Frame innerhalb der gemessenen Generationenkohorten:3.097286 bzw.
+33.476262ms. Kein Eingabereiz, daher kein belegter Cursorlatenzwert. Diese
+synchronen Desktop-Wandspannen zeigen UI-Blockierpotential; keine exklusive
+CPU-Zeit oder physische Eingabe-/Scanoutlatenz. Die langsamere grosse Ausgabe
+ist weiterhin real, auch wenn die reine Displaykopie wenig Zeit beansprucht.
+
+-OutputAnalysis fuehrt vor SNES eine feste RAM-Probe mit dem oeffentlichen
+Ownerfixture aus0.86.43 aus. Zwei native Ausgangsgroessen, zwei Varianten
+(normal / sicher verdeckten Hintergrund auslassen), je ein Warmlauf und
+vier Messungen:20 Datensaetze. Echte Cache/SceneBuffer/COLOR_V1, ReleaseSmall,
+stabile warme Reservation; beide kompletten Original-Canvas-Hashes bei allen
+Durchlaeufen ausserhalb der Timer geprueft. Kein Displaywrite, kein Spiel-ROM.
+Minimales Clockpaar49ns. Beginn enthaelt Lookup/Wiederverwendung und Loeschen;
+es ist kein separat instruierter exklusiver Clear-Timer.
+
+Normale Variante, Median jeder Phase in ms:
+                              Client414x224   Client1904x1010
+  Hintergrund-Beginn/Leeren        0.111017        2.409970
+  Hintergrund-Fuellen             0.028818        0.665146
+  Hintergrund-Vergleich/Kopie     0.029286        0.621984
+  Fenster-Beginn/Leeren            0.108195        2.343399
+  Fenster-Fuellen                  0.028900        0.667316
+  Nearest-Skalierung               0.066875        1.763697
+  Fenster-Vergleich/Kopie          0.017759        0.575746
+  Komposition                     0.127579        3.012740
+Zusaetzlicher Ownerbeginn unter0.001ms. Mediane der vollstaendigen gemessenen
+Spannen, nicht die Summe von Einzelmedianen: Capture0.408206/9.041927ms,
+Gesamt0.529997/12.062335ms. Ohne verdeckten Hintergrund sinkt Gesamt auf
+0.362006/8.390789ms bei gleichen ganzen Zielbildern. Rund3.7ms grosser
+Zusatznutzen ist fuer genau diesen Diagnosekandidaten belegt.
+
+Ein konkreter weiterer Befund aus dem gebauten Desktop-ELF: clearLayer ruft
+pro Zeile compiler_rt.memset auf. Die mitgelieferte Zig0.16.0-ReleaseSmall-
+Routine schreibt in ihrer inneren Schleife ein Byte je Iteration; fillRect
+schreibt vier Bytes. Das passt zum grossen warmen Beginn-/Loeschanteil.
+Auch das eingelinkte memcpySmall ist byteweise; sein gesonderter Aufwand
+fuer geaenderte Zeilen ist hier noch nicht isoliert. Keine Veraenderung an
+Toolchain, allgemeiner SDK-CRT oder Kernel aufgrund dieser Analyse.
+
+Grenzen: Die RAM-Szene besitzt zwei statische opake Ebenen und ganzzahlige
+Viewports. Warme Vergleiche kopieren dort keine geaenderten Zeilen. Die
+wirkliche Fensterszene enthaelt weitere Desktopmaler/Transport und maximiert
+bei1280x720 einen gebrochenen Skalierungsfaktor. Ihre16.6ms duerfen nicht
+durch Subtraktion der andersartigen RAM-Spannen kausal zerlegt werden.
+Ebenso sind die nativen18ms von Full42 keine QEMU-Zeiten; SMW bleibt eine
+getrennte unkontrollierte Spielbeobachtung. Kein allgemeiner60-FPS-Nachweis.
+
+Aus belegten Befunden automatisch geplant, noch nicht ausgefuehrt:
+0.86.45 qualifiziert einen kleinen lokalen CPU-Loeschpfad ohne Byte-Nullung;
+0.86.46 prueft danach den verbleibenden Nutzen sicher verdeckter unterer
+Ebenenarbeit vor Capture. Echte opake Deckung, Alpha-/Profil-/Randfaelle,
+Freilegen/Resize/Cursor und erneuter Nutzenbeleg bleiben Pflicht. Reine
+Skalierer-/globale CRT-/Besitzerumbauten sind hier nicht gerechtfertigt.
+
+Kompakter Index mit Exporthashes, Phasenmedianen, Quell-/Artefaktbindung und
+begrenzt gesichertem Maschinencodebeleg:
+Artifacts/Modules/R4SNES/Benchmarks/0.86.44-output-analysis.json.
+Alle Rohdaten bleiben in den beiden vollstaendigen Exporten; keine zweite
+Messarchivkopie im Repository. Nur notwendiger Desktopbuild/PS7-Parsecheck
+und diese beiden gezielten Fensterlaeufe; keine neue Suite. Ein beim Bau
+gefundenes fehlendes Fensterindexargument wurde vor dem ersten Lauf korrigiert.
+Private Gastimages/Quellkopien werden vom Runner nach jedem Lauf entfernt.

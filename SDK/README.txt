@@ -12,7 +12,7 @@ the current local SDK, Contract, Libraries and DevKit checkouts before Zig
 resolves packages. Relative or absolute mappings are supported.
 
 Rust R4X projects use Cargo.toml/Cargo.lock and the SDK's shared host builder
-instead of a Zig build script. SDK76/Contract44 provide profile2 with locked
+instead of a Zig build script. SDK77/Contract44 provide profile2 with locked
 local dependencies/features, explicit component roots, actual Rust/C/header
 compiler inputs and optional C companions. Rust alloc and explicit C heaps
 share the existing VM allocator. Local Rust/C library consumers and typed
@@ -26,6 +26,10 @@ Graphics buffers/imports/maps, outputs/modes, queues/fences, cursor/present,
 telemetry and coherent status use the same compiler-typed native owners.
 Rust graphics contexts are pinned independently of GUI/host admission;
 resources, generations, absolute submit deadlines and completion remain explicit.
+Audio/PCM, device/CPU/memory/diagnostic/clock views and power profiles also
+use the same native owners through Rust platform. Stream writes preserve
+frame-aligned partial progress, Busy and timeout; close remains explicit.
+No audio acceptance, passive status or policy receipt proves physical action.
 Safe owned async I/O retains its buffers through exact close ACK;
 borrowed admission is explicitly unsafe, including drop/forget constraints. Three matched
 runtime objects supply heap and common C/Zig helpers. Rust integer target

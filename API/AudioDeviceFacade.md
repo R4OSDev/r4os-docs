@@ -112,3 +112,26 @@ Die optionalen R4DEV-Funktionen werden ueber echte Tabellengroesse/hasFn
 geprueft. Unverfuegbare Erweiterung: null bzw. err_no_fn; keine PCI-Probe
 und kein GPU-Rendering aus dieser Fassade. Vertrag und Softwarestart:
 Docs/Drivers/GrafikFallback07904.txt.
+
+## Shared Rust/C access since SDK0.64.77
+
+Rust `platform` and the compiler-typed `<r4os/gui_bridge.h>` boundary invoke
+the original Audio/PCM/Device/Power owners. The transport name is historical;
+platform admission needs no application window, R4DESK, R4DRAW or Desktop
+policy. Contexts stay pinned and private native data remains MaybeUninit.
+`platform::raw` exposes complete current typed methods; passive diagnostics,
+explicit work, callbacks and actual hardware receipts retain their contracts.
+
+The C audio header also checks rate/channel/frame boundaries, retains Busy
+progress and provides write_once. Rust Stream/WriteCursor use the original
+Zig logic. Resampler uses the original PCM converter and borrows direct input.
+Close is explicit; neither Drop nor accepted PCM proves playback or DMA stop.
+Current summary defaults use V2; missing providers are not emulated through V1.
+Explicit V1 data views remain supported. Zero success/end meanings follow each
+API, including CPU capability success0 and inventory end0. Detail counters and
+clock validity need their original instrumentation/backend flags.
+
+Native owner cases and a real silent-stream/status KVM4 consumer qualify this
+scope. Physical audio/power/PMU/faults, Windows and new Rust SIMD/FP remain
+unqualified. Evidence: `Docs/SDK/LanguageParity.txt`, SDK
+`Inventory/LanguageParity.json` (`platform_current_58`).

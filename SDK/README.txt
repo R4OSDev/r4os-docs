@@ -12,10 +12,16 @@ the current local SDK, Contract, Libraries and DevKit checkouts before Zig
 resolves packages. Relative or absolute mappings are supported.
 
 Rust R4X projects use Cargo.toml/Cargo.lock and the SDK's shared host builder
-instead of a Zig build script. SDK70/Contract43 provide profile2 with locked
+instead of a Zig build script. SDK72/Contract44 provide profile2 with locked
 local dependencies/features, explicit component roots, actual Rust/C/header
 compiler inputs and optional C companions. Rust alloc and explicit C heaps
-share the existing VM allocator. See SDK/LanguageParity.txt and the owner's
+share the existing VM allocator. Local Rust/C library consumers and typed
+file/path/registry/console facades reuse the current owners. Three matched
+runtime objects supply heap and common C/Zig helpers. Rust integer target
+defaults are qualified; explicit Rust SIMD/FP remains gated by the bare
+compiler issue documented in SDK/LanguageParity.txt. Native C/Zig objects
+and the required hardware retain the canonical CPU profile.
+See SDK/LanguageParity.txt and the owner's
 Rust/README.txt for current scope and qualifications; further facades and
 module roles remain separate roadmap work.
 

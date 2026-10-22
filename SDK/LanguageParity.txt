@@ -206,3 +206,84 @@ Hostac45e2dd5ddbc54ca8305290c7e9adf4d39852f0931d0c094b8b0e14059f04cf;
 C b164c4d4ff135557fef0690cad5c83d667cfb0e162476ec8dff4ddaf51cfc900.
 Nur SDK-/Host-/Testfixtureaenderung, normale Produktartefakte unveraendert:
 kein STANDARD, kein neues Full/Slim-Release und keine Hardwarefreigabe.
+
+Fortschreibung 0.86.50: gemeinsamer instanzgebundener Heap
+-------------------------------------------------------
+SDK0.64.69 setzt Rust-alloc und den hoeheren C-Heap auf denselben vorhandenen
+SDK-VM-Allocator. C hatte bereits direkte VM-Pufferhelfer; die urspruengliche
+Matrix47 war dort unvollstaendig. Diese unteren Primitiven bleiben, ihr
+ungepruefter Groessen-/Ausrichtungs-/Seitenrundungsueberlauf ist korrigiert.
+Neue Fassaden sind C heap.h und Rust App::heap/Buffer sowie das optionale
+Cargo-feature alloc fuer Box/Vec/String. Keine drei Heapalgorithmen, kein
+Kernelallocator-Duplikat und keine neue Kernel-/Container-ABI.
+
+Der Publisher baut r4os/heap_runtime.zig gegen die kanonische CPU-Baseline
+mit echten Inline-Stackprobes. Tools exportieren dieses freistehende Objekt
+mit Quellen-/CPU-/Artefakthashes; der Rustbuilder bindet es in dieselbe
+R4M0-Datei ein. Verbraucher brauchen weiterhin keinen Zig-Compiler. Das
+gepinnt installierte rust-std enthaelt bereits liballoc; kein Rust-src,
+unstabiles OOM-Attribut oder fremder globaler Compiler ist erforderlich.
+Neue Feature-/Objektangaben sind allgemein im Codegenprofil/Receipt; Auswahl
+der Komponenten und Projektpins bleibt beim Aufrufer, ohne Studio-Bindung.
+
+Jedes Heapangebot prueft den realen Thread-Handle und dessen Instanzgeneration.
+Rust App bleibt ohne Send/Sync; explizite Buffer leihen ihren Heap. Der globale
+Allocator haelt nur die residente Plattform-/Instanzidentitaet, keine Root-
+Contextleihe. Sichere Buffer-Slices enthalten initialisierte Bytes; Neuanlage
+und Wachstum nullen neue Bereiche, GlobalAlloc behaelt den Raw-Vertrag.
+Rootrueckgabe baut keinen noch von Workern nutzbaren Heap ab.
+Optionales finish schliesst Allokation irreversibel, laesst lebende Puffer
+noch freigeben und quittiert Erfolg erst nach allen realen VM-/Notification-
+Freigaben. Vollstaendige Metriknamen/-werte stammen aus einem gesperrten
+Snapshot des Besitzers. active_bytes enthaelt den C/Rust-Verwaltungspraefix.
+
+Konkreter Besitzerfehler: Ein fehlgeschlagener grosser Direct-Release konnte
+die Nachverfolgung eines zweiten logischen Free verlieren. Nun bleiben noch
+residente wartende Header verkettet; vor jedem physischen Release wird genau
+eine reine Werteidentitaet abgetrennt. Teilweise entladene Header werden nie
+erneut gelesen. direct_retiring zeigt noch unquittierte Freigaben. Trim/Finish
+arbeiten sie ab, ohne unabhaengige Small-Region-Arbeit pauschal zu sperren.
+
+Rust-FFI fuehrt zu unrelaxierten GOTPCREL-Eintraegen. Statt Codegen-/Loader-
+Fallback erzeugt der Packager aus einer vollstaendig gebundenen finalen GOT
+gepruefte REL32-Verweise auf die Slots und ABS64-Slotdefinitionen. Nur EXEC/
+DYN, -4-Addend, exakter modulinterner Symbolwert, passende Grenzen und jeder
+nichtleere Slot mit Definition sind zugelassen; Konflikte werden verworfen.
+GOTPCRELX/ABS32 bleiben abgewiesen. kernel/PIE/fat-LTO und stabile Toolchain
+bleiben; keine LLVM-Schalter oder unsichere Relaxationsannahmen erforderlich.
+
+Gezielt qualifiziert: VM-Allocator8/8 einschliesslich mehrfach fehlendem/
+partiellem Release, lebendem Heap und echten Warte-/Handoff-Faellen; bestehende
+Packager5/5 samt neuer geschlossener GOT und Negativformen. Native Rust->C-ABI
+->wirklicher SDK-Heap prueft Bounds/Alignment, OOM-/Resize-Erhalt, falsche
+Instanz/Generation und vollstaendige Endquittungen. Sein neuer Runner entfernt
+nach Erfolg die eigene Testumgebung; keine Laufarchive. Bestehender Rust-
+Outputlebenszyklus prueft auch das Entfernen erledigter failed-link.elf-Dateien.
+
+Gebuendelter lokaler KVM-SMP4-Funktionslauf auf K381: C-Pool/calloc/realloc/
+Owner-/Overflow-/Abbau und echter Rust-alloc-Bau/Start mit Box/Vec/String,
+Resize/Alignment und vier generationengebundenen Compute-Workern bestanden.
+AP-Ausfuehrung bestaetigt; alle Worker gejoint und Heap-Finish0. Beide finalen
+Container vollstaendig zurueckgelesen, regulaerer Shutdown/QEMU0. Die erste
+Fixture reservierte64KB fuer einen VM-Callpfad und traf dessen terminale
+Guard; reserve=0 nutzt jetzt die vorhandene Kernel-Profilvorgabe. Keine
+allgemeine Zusage fuer beliebig klein gewaehlte Threadstacks daraus ableiten.
+Windows-Packager gebaut, keine Windows-/Hardware-/R4L-Heapfreigabe.
+Gezielte Gegenprobe der zuletzt initialisierten Rust-Puffersicht: derselbe
+SMP4-Vertrag mit finalem Container, Exit0 und erneut allen vier Joins/Finish0;
+keine zweite STANDARD-Messung. Finale Fixture-SHA256:
+Rust7be2a19c60e2dde9bc54d77e69cc98f1b6c1497d8268e0e47da45129dd3197a6;
+C2b9207c6f9acd4f3d3a017bdda631c94011a47b086d0b4eb3ea1c7d1b05aaa22.
+
+Gemeinsamer Allocatorcode hat normale Laufzeitwirkung. Desktop0.1.137 und
+Spectra0.1.49 sind deshalb mit aktuellem SDK neu gebunden; Kernel381 bleibt.
+Genau ein normaler Suite-3-SMP4-STANDARD a3947af1-d6cb-4307-a06b-17109ef07baa
+bestanden:30Rohsamples/vierWorker/sechsScores vollstaendig DevCenter-zurueck-
+gelesen. Unveraenderter Export-SHA256
+d76d0491ad7d067a94b7f9f59e12833f997aab5eeac027f8c855adde07c70590;
+BOOT-Kernel e06111b9363b44712fe69ded9ddfc3edb1f60c5c271c59a42238a816b0882340.
+Kein gebundener Vorher-/Nachher-Nutzenbeleg und kein separater Heap-Speedlauf;
+kein neues Full/Slim-Release und kein Hardwareupdate.
+Normale Container-SHA256: Desktop
+2b493582b26d800f6ddf67d306e192b37a727a654b202bd98b06ad3dd8901421;
+Spectra d2433c2e7c8349d219fa6bbd5c66b8f708b5dca36a7f19fe0bffc6f832f6cd8b.

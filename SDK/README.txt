@@ -2,7 +2,7 @@
 ========
 
 The SDK in `Repositories/SDK/` is the normal development surface for Zig and
-C modules. It provides startup code, typed platform facades, module build
+C modules and the qualified Rust R4X profile. It provides startup code, typed platform facades, module build
 support, templates, C headers and generic Runtime-R4L helpers. The separate
 Contract repository remains the canonical API and ABI source.
 

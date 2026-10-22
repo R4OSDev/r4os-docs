@@ -11,6 +11,14 @@ A module project contains `module.R4MF`, `build.zig`, `build.zig.zon`,
 the current local SDK, Contract, Libraries and DevKit checkouts before Zig
 resolves packages. Relative or absolute mappings are supported.
 
+Rust R4X projects use Cargo.toml/Cargo.lock and the SDK's shared host builder
+instead of a Zig build script. SDK70/Contract43 provide profile2 with locked
+local dependencies/features, explicit component roots, actual Rust/C/header
+compiler inputs and optional C companions. Rust alloc and explicit C heaps
+share the existing VM allocator. See SDK/LanguageParity.txt and the owner's
+Rust/README.txt for current scope and qualifications; further facades and
+module roles remain separate roadmap work.
+
 Zig applications initialize `r4os.App`; C applications include
 `<r4os/r4os.h>`. Both consume the same R4XStart context and group tables.
 Optional groups and fields remain explicit; facades do not invent fallback

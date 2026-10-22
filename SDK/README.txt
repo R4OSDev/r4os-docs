@@ -36,6 +36,13 @@ runtime objects supply heap and common C/Zig helpers. Rust integer target
 defaults are qualified; explicit Rust SIMD/FP remains gated by the bare
 compiler issue documented in SDK/LanguageParity.txt. Native C/Zig objects
 and the required hardware retain the canonical CPU profile.
+SDK84 also binds all current subsystem catalogue/launch/host/runtime/save
+owners for Rust/C. Canonical subsystem manifests and installed MODULES.JSON
+remain the sole host catalogue. Safe Rust helpers borrow original source and
+callback storage; full native media/save operations retain explicit stable
+context/buffer/generation loans. Three small Zig/C/Rust hosts qualify equal
+work/video, resolver, real sync/async saves and window cleanup in local KVM4.
+GUI consumers use Desktop Run for the required window attachment before entry.
 See SDK/LanguageParity.txt and the owner's
 Rust/README.txt for current scope and qualifications; further facades and
 module roles remain separate roadmap work.

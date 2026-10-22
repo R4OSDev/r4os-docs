@@ -221,3 +221,65 @@ Notepad methods on private FAT files and the real Paint methods on private
 NTFS files: Save and Save As over existing targets, exact saved bytes,
 metadata and sibling cleanup. It also confirms fresh Save As of a Notepad
 prefix through the create-only atomic path. Both product modules build.
+
+
+Desktop current contract and diagnostic cleanup (0.86.73)
+---------------------------------------------------------
+Desktop138 removes the three preparation_query/preparation_busy_queries/
+preparation_changed_queries fields: the current full owner/caller search
+found only declarations and writes. presentation_info, exact Busy/geometry/
+device/reset identities, the original deadlines and retirement stay operational.
+No speedup is inferred from fewer fields or source lines.
+
+Current R4SYS service_open/call/close, R4DESK remote_frame_publish_regions and
+R4DRAW display_blit_xrgb32_stride are required before the process handle is
+opened. Host admission checks the complete current WINSVC color exchange for
+the exact generation, with nonzero initial revision and no active output/mode
+request. Unknown color opcode is a clear failure. The old color truncation,
+missing-region full-frame substitute and missing-stride row-loop substitute
+are removed. Real full snapshots after a valid delta failure, software/bootfb,
+optional native backends, reconnect/retry and exact cleanup remain supported.
+
+All33 existing Desktop inventory entries retain their distinct useful scope.
+The explicit /SMOKE and /SMOKE-R4X still exercise actual menu/app/terminal
+lifecycles against current Full paths; they are manual/private poweroff runs.
+/SMOKE-KLICKIFAX additionally needs the on-demand browser explicitly staged.
+/SMOKE-WINDOW-IDLE requires Full-only AppDefaults and CLOCK.R4X; Test omits
+both. CLOCK is its timer producer, replacing the stale MemView description.
+Only qualified Spectra replacements in74–77 may retire unique assertions.
+
+Live HEADLESS-SUBSYSTEM, Terminal INPUTTEST, normal SNES-v2 Small/Maximized/
+OutputAnalysis readers and existing pixel/generation/Busy/lifecycle/native
+reference oracles remain. /SOFTWARE-PROFILE still calls the explicit background
+omission comparison, including productive coverage metadata and independent
+original painter pixels; it remains useful for Rust and later cost deltas.
+
+Only13 completed0.79.44 run-output files/140677Bytes were removed from Desktop/
+Distribution Tests/Reports. The professional summary/hashes in existing
+GrafikIntegration07944.txt/.json remain historical; no new archive copy.
+The coordination owner also refreshes its ModuleCatalog through the selected
+cache-aware SDK build, avoiding stale admission after grammar changes.
+Final acceptance: existing render-test and normal Desktop138 build exit0.
+A private normal Full/KVM4 /SMOKE-WINDOW-IDLE confirms current slot/color
+admission, exact drag/resize geometry, two producers, empty idle, WINSVC
+restart/reconstruction, color/ICC/shared-CMM pixels, resources and cooperative
+Close, then regular POWEROFF/actual QEMU exit0. The final guest image's
+R4DESK bytes equal the normal artifact, SHA256
+d3d635c9fea5bd47916f8d4b1a742898439183159615bca995eaf97c2d55b1f8.
+BOOT equals unchanged Kernel381/e06111b9363b44712fe69ded9ddfc3edb1f60c5c271c59a42238a816b0882340.
+The initial probe caught a missing nonzero status revision in the new startup
+mailbox; fixed before final acceptance. Another attempt used Test without
+Full-only actors; the final scenario uses the correct profile. No success
+or clean stop is attributed to the failed startup attempt.
+
+Exactly one final normal spectra-standard-3 SMP4:
+2e186a4a-5fa4-4bb1-9ccb-cc9c3aae6415, unchanged run.json SHA256
+fe517f268f034c99bd83a7d367f6cb79a9971273b81ebda5f6f0f46f25c46f11.
+DevCenter PUT201 and full normalized GET agree on every payload field,
+all5metrics/30raw samples/6scores; all six score areas valid. STANDARD uses
+its original no-Desktop boot contract and is no isolated Desktop speed claim.
+Product73/Desktop138; Kernel381/SDK90/Libraries27/Spectra50 remain. Reports,
+metadata, inventory and root cached-catalog fix belong to their owners;
+completed guest/image/source copies removed. Full/Slim42/OssiPC unchanged.
+Handoff to Spectra74–77: retain the listed current assertions/owner oracles
+until qualified replacements exist; Rust86 receives that released scope.

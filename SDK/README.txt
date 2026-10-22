@@ -43,6 +43,13 @@ callback storage; full native media/save operations retain explicit stable
 context/buffer/generation loans. Three small Zig/C/Rust hosts qualify equal
 work/video, resolver, real sync/async saves and window cleanup in local KVM4.
 GUI consumers use Desktop Run for the required window attachment before entry.
+SDK85 adds genuine C/Rust R4L provider projects with ordinary local contracts,
+baselines and Query/API exports. Zig retains IMPLEMENTATION_ZIG; C/Rust need
+no dummy Zig implementation. Rust uses r4os-rust-r4l-v1 and a matched host
+contract generator. Caller-owned session/allocator/callback lifetime remains
+explicit; SDK R4X-global alloc is rejected for shared providers. Six real
+Zig/C/Rust consumer/provider combinations pass in local KVM4. New C/Rust
+R4L templates require their explicit local contract/lock initialization.
 See SDK/LanguageParity.txt and the owner's
 Rust/README.txt for current scope and qualifications; further facades and
 module roles remain separate roadmap work.

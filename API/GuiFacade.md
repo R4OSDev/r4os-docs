@@ -1,13 +1,16 @@
 ﻿# GUI facade
 
-R4DESK owns windows, events, controls and desktop lifecycle. R4DRAW owns
-drawing, text, images, surfaces and frame commands. The SDK GUI facade
-combines them into owner-thread objects without hiding group availability.
+R4DESK supplies window, input and desktop operations; WindowService and the
+Desktop coordinate exact window identity and lifecycle. Controls and dialogs
+belong to the SDK. R4DRAW supplies drawing, text, images and frame commands.
+The GUI facade combines them without hiding group availability.
 
 ## Lifecycle
 
-A GUI application creates a window, polls or waits for events, draws only in
-the appropriate paint/frame phase and destroys the window before exit.
+A normal GUI host creates and binds the window before R4X entry. The hosted
+application opens its facade, polls or waits, draws in the paint/frame phase
+and returns normally for host retirement. A Desktop host has a separate role
+and does not need a pre-existing application window.
 Window IDs and event payloads are borrowed observations; application-owned
 state remains in the application.
 
@@ -121,6 +124,35 @@ immutable bytes until the final frame or lease reference disappears.
 
 The complete function tables are in `R4DESK.md` and `R4DRAW.md`; frame shape
 serialization is summarized in `GuiShapeContract.txt`.
+
+## Shared C and Rust access
+
+SDK0.64.75 exposes the same GUI, text/input, widget/dialog, shape/chart,
+Canvas/FrameCanvas and clipboard owners through `<r4os/gui_bridge.h>` and
+Rust `gui`/`gui::raw`. Compiler reflection supplies typed calls, native opaque
+storage, field/union access and a checked layout/dispatch fingerprint. There
+is one widget/Unicode/raster implementation. Float data crosses by pointer;
+this does not qualify a new Rust scalar floating-point ABI.
+The new window-paint entry requires current frame callbacks. Missing whole-
+glyph/revision callbacks remain unavailable and zero revisions remain zero;
+explicit immediate FrameCanvas work and missing fonts keep their own meaning.
+
+Rust `gui::Session` pins caller-owned storage and borrows timers. `Paint`
+exclusively borrows the session and scratch buffers until commit or discard;
+dropping it cancels. Semantic `EventKind` differs from raw `GuiEventKind`.
+Borrowed `TextField`/`TextArea` and input queues execute the same algorithms
+as Zig's fixed arrays. Raw native storage remains `MaybeUninit` in Rust;
+padding and inactive union bytes must not be read as initialized data.
+
+`Role::DesktopHost` and C role1 admit without querying an app window. The
+technical host claim validates the exact process generation and WINSVC epoch.
+Transport failure closes the endpoint; reopening is explicit. Closing that
+connection does not revoke the live process's host binding. Desktop startup,
+output recovery and retry policy stay with the application. Native graphics
+queue/output facades are a separate group. Usage and qualification limits:
+`../SDK/LanguageParity.txt` and SDK `Rust/README.txt`.
+The native process-inventory class byte uses 0/1/2; R4XStart class values use
+1/2/3. Host eligibility follows the exact WindowService process view.
 
 
 Grafikintegration 0.79.44

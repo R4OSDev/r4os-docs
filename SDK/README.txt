@@ -113,6 +113,11 @@ space/time tradeoff stays measurable.
 Independent Runtime-R4Ls keep contract, baseline, implementation, bindings
 and tests in their own library unit. The core SDK provides only the generic
 named-table resolver and module-build mechanism.
+For higher R4STD/R4IMG/R4FONT consumers, Libraries0.64.25 supplies the
+library-owned r4os-library-helpers crate and *_helpers.h C headers. SDK0.64.78
+links their explicit -LibraryHelpersRoot with the selected -ZigRoot and records
+the native inputs/objects. Algorithms, Unicode data and local contracts stay
+at the libraries; see Libraries/Shared/Rust/README.md and LanguageParity.txt.
 
 Subsystem hosts remain ordinary GUI R4X processes. `r4os.subsystem_host`
 provides caller-owned virtual video surfaces, bounded raster presentation and

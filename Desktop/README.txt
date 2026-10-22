@@ -6,6 +6,18 @@ window composition, focus, z-order, taskbar, desktop items and user-facing
 input dispatch. The kernel provides the privileged display and event
 mechanisms but does not own desktop policy.
 
+Explicit functional diagnostics are orchestrated by SPECTRA CHECK DESKTOP
+since 0.86.75. Spectra owns its two GUI children, tray item, deadlines,
+assertions and completion/reap; Desktop keeps only scene operations and the
+productive screenshot worker. The bounded byte contract is
+Apps/Desktop/Contract/desktop_check_v1.zig, carried by the existing WINSVC
+tray exchange. SPECTRA CHECK REMOTEFRAME owns the single public snapshot
+oracle; the transitional RFDIAG entry uses that same body. /CANCEL tests real
+cooperative child cleanup. Restart, master-audio and synthetic-capture
+variants require an explicitly isolated Desktop boot. Checks return to their
+caller. Protocol, migration boundaries and qualification are documented once
+in Docs/Diagnostics/Spectra.txt.
+
 Since 0.78.8, Desktop keeps one WINSVC endpoint handle for window and tray
 operations. Drag/resize changes retain the latest geometry and publish it at
 bounded 50-ms intervals; release publishes the final pointer position

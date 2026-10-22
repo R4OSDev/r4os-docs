@@ -208,3 +208,26 @@ kann einen laufenden Callback nicht ueberholen. Der Callback selbst laeuft
 ausserhalb des kurzen SMP-Owners; sein Abschluss kann keinen busy-Zaehler
 einer spaeteren Registrierung veraendern. Die vorhandene R4D-Abbaufolge und
 der synchrone DISPBLIT-Treibervertrag werden damit wirksam abgesichert.
+
+## Shared Rust and C graphics owners
+
+SDK0.64.76 keeps the existing C `r4draw.h` and exposes every public Zig
+R4DRAW/buffer/output/queue/telemetry/status helper through the compiler-typed
+`gui_bridge.h` visual boundary. These are SDK-local calls, not new Kernel API
+slots. Rust `graphics` provides pinned independent admission, typed buffer,
+output and queue access, mapping receipts, coherent snapshots and telemetry
+formatting. `graphics::raw` reaches the remaining original typed helpers.
+No application window or Desktop host claim is needed for offscreen work.
+
+Handles retain their exact generations and output identities. Explicit future
+monotonic deadlines, Busy, retained resources, reset/fence receipts and actual
+visibility keep their original meanings. Neither dropping a context nor a
+successful submit/copy acknowledges device completion or scanout. Native CPU
+addresses never become safe Rust slices automatically. Raw access and async
+payload ownership remain unsafe and follow the original owner contracts.
+
+The existing descriptor/retire/output/cursor/telemetry oracles and a real
+Rust/C CPU-copy consumer qualify this boundary on KVM SMP4. Hardware/native
+scanout, Windows and new Rust SIMD/FP ABI remain unqualified. Compact evidence
+and exact limits: `Docs/SDK/LanguageParity.txt` and SDK
+`Inventory/LanguageParity.json` (`graphics_current_57`).

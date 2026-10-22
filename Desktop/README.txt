@@ -18,6 +18,19 @@ variants require an explicitly isolated Desktop boot. Checks return to their
 caller. Protocol, migration boundaries and qualification are documented once
 in Docs/Diagnostics/Spectra.txt.
 
+Since 0.86.76, SPECTRA BENCH DESKTOP runs the original software-output RAM
+fixture, and SPECTRA BENCH SNES /WINDOW controls the existing SNES-v2 owner
+through the same bounded Desktop/WINSVC channel. Desktop prepares the exact
+Small or Maximized geometry before attaching the owned SNES process and
+records its actual copied generations. Spectra waits for real completion
+and reap without sampling IPC during the workload. Original owner JSON,
+global presents, copy receipts and unknown physical visibility remain
+distinct. /OWN-DESKTOP explicitly creates and closes only an otherwise
+absent private host; ordinary commands return without powering off.
+The native Core benchmark remains in the SNES host runner. Measurement
+contracts and qualification are in Docs/Diagnostics/Spectra.txt and
+Docs/Diagnostics/SnesBenchmark.txt.
+
 Since 0.78.8, Desktop keeps one WINSVC endpoint handle for window and tray
 operations. Drag/resize changes retain the latest geometry and publish it at
 bounded 50-ms intervals; release publishes the final pointer position

@@ -126,5 +126,5 @@ nur die eigenen generationstreuen Leases, Demand und gegebenenfalls Publisher.
 maximaler CPU-Leserdauer. Pixelcopy bleibt preemptible und getrennt vom kurzen
 Metadatenowner; Leasehaltung umfasst weder GPU-Referenz noch lokalen Present.
 
-RDPSVC, RFDIAG und Desktop-Screenshots verwenden diesen gemeinsamen Weg.
+RDPSVC, Spectra CHECK REMOTEFRAME und Desktop-Screenshots verwenden diesen gemeinsamen Weg.
 Bild-/Cursor-/Farbpolicy: `Docs/Drivers/GrafikCapture07932.txt`.

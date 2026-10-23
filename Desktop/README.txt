@@ -12,7 +12,7 @@ assertions and completion/reap; Desktop keeps only scene operations and the
 productive screenshot worker. The bounded byte contract is
 Apps/Desktop/Contract/desktop_check_v1.zig, carried by the existing WINSVC
 tray exchange. SPECTRA CHECK REMOTEFRAME owns the single public snapshot
-oracle; the transitional RFDIAG entry uses that same body. /CANCEL tests real
+oracle; the RFDIAG module/build is retired since0.86.77. /CANCEL tests real
 cooperative child cleanup. Restart, master-audio and synthetic-capture
 variants require an explicitly isolated Desktop boot. Checks return to their
 caller. Protocol, migration boundaries and qualification are documented once
@@ -27,6 +27,9 @@ and reap without sampling IPC during the workload. Original owner JSON,
 global presents, copy receipts and unknown physical visibility remain
 distinct. /OWN-DESKTOP explicitly creates and closes only an otherwise
 absent private host; ordinary commands return without powering off.
+The original generation trace stays in the structured Desktop JSON report;
+the redundant SNES-PRESENT.TXT writer and Desktop PERF forwarders are retired
+since0.86.77. No removed marker or executable is needed by the current host.
 The native Core benchmark remains in the SNES host runner. Measurement
 contracts and qualification are in Docs/Diagnostics/Spectra.txt and
 Docs/Diagnostics/SnesBenchmark.txt.
@@ -269,15 +272,22 @@ All33 existing Desktop inventory entries retain their distinct useful scope.
 The explicit /SMOKE and /SMOKE-R4X still exercise actual menu/app/terminal
 lifecycles against current Full paths; they are manual/private poweroff runs.
 /SMOKE-KLICKIFAX additionally needs the on-demand browser explicitly staged.
-/SMOKE-WINDOW-IDLE requires Full-only AppDefaults and CLOCK.R4X; Test omits
-both. CLOCK is its timer producer, replacing the stale MemView description.
-Only qualified Spectra replacements in74–77 may retire unique assertions.
+The general window/idle check is now SPECTRA CHECK DESKTOP and requires
+Full-only AppDefaults and CLOCK.R4X; Test omits both. CLOCK is its timer
+producer. Since77, /SMOKE-WINDOW-IDLE is accepted only with a distinct native
+/OUTPUTS, /CURSOR, /SWAPCHAIN or /SCREEN-POWER purpose, never /CAPTURE.
+The SDK APPZCON /TRAYSMOKE path stays because it checks the console facade
+and an intentionally abandoned item after real process exit and WINSVC sweep;
+the common Spectra tray event/Remove check does not replace that assertion.
 
 Live HEADLESS-SUBSYSTEM, Terminal INPUTTEST, normal SNES-v2 Small/Maximized/
 OutputAnalysis readers and existing pixel/generation/Busy/lifecycle/native
-reference oracles remain. /SOFTWARE-PROFILE still calls the explicit background
-omission comparison, including productive coverage metadata and independent
-original painter pixels; it remains useful for Rust and later cost deltas.
+reference oracles remain. SPECTRA BENCH DESKTOP controls the original explicit
+background comparison, including productive coverage metadata and independent
+original painter pixels. SPECTRA BENCH SNES /WINDOW controls the fixed v2
+owner plus exact JSON generation trace; Core retains its native host runner.
+Those current commands replace removed /SOFTWARE-PROFILE-/PERF names for
+Rust and later cost comparisons. The current handoff is Spectra.txt/77.
 
 Only13 completed0.79.44 run-output files/140677Bytes were removed from Desktop/
 Distribution Tests/Reports. The professional summary/hashes in existing

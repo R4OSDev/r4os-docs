@@ -39,8 +39,8 @@ fallback.
 path, name and payload into caller-provided storage. `Registry.applyBatch`
 returns both the raw Registry result and `RegistryBatchResult`, including the
 before/after generation, failed index and atomic commit status. The Zig and C
-facades neither allocate nor retain those buffers. Old typed Set/Delete
-methods remain available for kernels without the optional batch slot.
+facades neither allocate nor retain those buffers. Individual typed Set/Delete methods remain separate explicit operations;
+they do not emulate a missing atomic batch operation.
 
 Implementations are in `Repositories/SDK/r4os/app_storage.zig`, the matching
 C headers under `Repositories/SDK/Shared/C/` and the independent R4STD unit
@@ -220,3 +220,18 @@ previous view. Shortcuts keep their existing title/icon resolution policy.
 A2-0013: R4SYS v25 haengt directory_next an Slot 155 an, alte Slots/Signaturen bleiben unveraendert. 1088-Byte-Cursor im Aufrufer bindet logischen Thread/Generation, Mount, Verzeichnis und Aenderungssequenz; keine permanente Kernelallokation oder Closepflicht. Maximal 256 physische Eintraege pro Aufruf, Fortschrittsrueckgabe statt langem Gatebesitz; FAT haelt Cluster/Slot/LFN, NTFS einen I30-Stack von maximal acht Ebenen. Mutationen, History-Overflow, Owner-/Mount-/Pfadwechsel verlangen expliziten Neustart und Verwerfen der Teilgeneration; Fehler liefern kein EOF. Namen und FileInfo kommen gemeinsam aus demselben Eintrag. Zig- und C-Iteratoren verwenden den optionalen Tail mit altem ABI-Fallback; explizite Delete-Iteration behaelt nach revisitAfterRemoval die bisherige Live-Indexsemantik. Explorer 0.1.19 baut eine vollstaendige sortierte Kandidatensicht auf (maximal 16 MB je Generation), publiziert erst nach EOF/Aenderungspruefung und nutzt danach binaere Seitensuche ohne erneute Enumeration. OOM/Lese-/Mutationsfehler behalten die letzte vollstaendige Sicht. Vorherige und neue Generation koennen waehrend des Aufbaus nebeneinander leben; 16 MB ist keine Zusage fuer Gesamt-/Spitzenspeicher. Kein stiller Erfolgsbeschnitt. Kernel 0.1.229; Recovery/Kernel 0.1.61, Menu 0.1.23 mit kompatibler Owneruebernahme, eingefrorenem Scheduler und unveraenderten 39 importierten Runtime-Modulen. Recovery nimmt erforderliche FAT-LFN-/Wachstumsregeln und VFS-Aenderungsbenachrichtigungen mit; fehlende optionale R4SYS-Tails bleiben Null. Kontrollierte Contract-Baselines nach Signatur-/Slotpraefixvergleich neu erzeugt; keine andere Plattformgruppe erweitert.
 
 Nachweise: bestehender NTFS-Tree-Hostlauf PASS (1700 Dateien/1905 physische Cursorbesuche statt mindestens 1445850 Namen bei wiederholter Praefixauswahl; lange Namen, mehrstufige Indizes, halbe/vollstaendige Loeschung, 2000 Mutationen und 5x40 Crashbudgets). Aktuelle FAT-Cursor-/LFN-Funktionskoerper mit RAMsektoren: 2000 Dateien/2001 Slotbesuche und 126 Cluster, 255 UTF16-Einheiten ueber Cluster-/256er-Grenzen, EOF, IO, ungueltige FAT-Linien, Zyklen und LFN-Pruefsummen PASS (3 Faelle). Aktueller R4SYS-Funktionskoerper mit Gate-/Mountmocks: Fehler lassen Cursor/Output unveraendert, Restart nach Owner/Mount/Knoten/Mutation/Overflow, Fortschritt/EOF und kein verbliebener Mountpin PASS. Bestehende Zig-Storagefacade 4/4 und C-Facade mit neuem/kleinem Table, Restart/Metadaten/EOF/Removal PASS. Aktuelle Explorer-Seitenfunktion mit injiziertem Allokator und R4SYS-Mocks: 130 Eintraege einmal (131 Aufrufe), mehrere Seiten ohne weitere Enumeration/Metadatareads, IO/Mutation/OOM erhalten vorherige Ansicht PASS. Vorhandene Storagebesitzertests 18/18, Contract-Generator 26/26 Mutationen plus Zig/C-Layouts PASS. Normale Kernel-/Explorer- und Recovery-Builds PASS. Kein neuer Dauer-Gate, kein Hardware-/QEMU-Test, keine Laufzeit-/FPS-Zusage. Belege Temp/Astra2/Implementation/*-26-*.log. Astra2.json historisch unveraendert.
+
+Capture stage admission (0.86.85)
+--------------------------------
+The current provider distinguishes ordinary `file_stream_open_create` from
+`create | lease`: ordinary CREATE atomically refuses an existing file;
+lease-open may replace an existing unclaimed private stage. The latter
+requires a namespace the caller is already entitled to replace. The Zig
+`Files.ownedCreateWriter` uses lease-open and does not by itself protect a
+foreign pre-existing stage. Capture instead opens with CREATE alone, keeps
+its path in the existing SDK `OwnedStageWriter`, then calls
+`finishKeepOwnership` and create-only/owned-stage atomic publication.
+Current atomic publication requires short 8.3 stage and backup names in the
+same directory; a long final target is supported on NTFS. Only a real
+publication or abort receipt releases ownership. A failed abort keeps the
+exact owner; a missing stream is not a file-deletion receipt.

@@ -84,8 +84,10 @@ catalog generation so cache identities cannot silently reuse stale fonts.
 Unicode input requires read_key_codepoint, without consuming read_key on
 absence. Network requests require the generation-bound net_service_request,
 without building or polling a separate Raw-IPC protocol. Default program
-storage summaries require the complete V2 callback; explicit V1 diagnostics
-remain separate until the coupled provider migration in0.86.80. Paint requires
+storage and registry summaries require the complete V2 callbacks. R4DEV35
+retires diagnostic V1 slots27/29/30 as permanent zero tombstones. Explicit
+registry V2 callers initialize version2 and the full224/136-byte capacities;
+invalid headers are refused without output changes. Paint requires
 the existing six-callback frame transaction. Exact per-slot bounds, optional
 groups/hardware and valid direct operations remain checked independently.
 
@@ -94,20 +96,26 @@ tiles and per-owner stream telemetry. `r4os.subsystem_host` uses the path for
 current XRGB32 producers: every changed frame is a complete independently
 readable state with exact damage, while the Desktop no longer replays
 superseded frame history or decomposes pixels into color-run rectangles.
-Older tables retain the bounded raster and damage-chain fallback.
+The R4OS subsystem adapter requires the current replacement/shared contract;
+missing current callbacks fail with NoFn/UnsupportedDrawContract.
 
 R4DRAW v9 adds generation-bound shared XRGB32, Indexed8 and Alpha8 raster
 resources. `r4os.subsystem_host` writes each changed guest surface once into
 one of three bounded buffers and emits only fixed 80-byte descriptors for the
 at-most-128x128 destination blocks. The Desktop holds an acquire lease until
-its snapshot is replaced; a busy triple buffer or missing v9 slot falls back
-for that frame to the existing copied representation. Presenter statistics
+its snapshot is replaced; a busy triple buffer can use the existing copied
+representation for that frame. Missing current callbacks are refused before
+starting a frame. Presenter statistics
 separate shared frames, descriptors, published bytes, backpressure and
 fallbacks. Guest scheduling, time and audio remain outside this video path.
 Source callers that construct `subsystem_host.Backend` themselves may omit the
 optional v8/v9 replacement, XRGB32 and shared-raster callbacks. Their defaults
 return `err_no_fn`, and the corresponding capability flags remain false, so a
-legacy backend keeps the copied full/damage fallback without source stubs.
+custom CPU backend keeps its explicitly selected copied full/damage path.
+Such callback backends are independent current implementations; the R4OS
+adapter does not simulate an older OS. Graphics payloads require their full
+current records: registration48/backend152/submission512/job296/color192/
+statistics136 bytes. Per-slot optional capability bounds remain independent.
 
 `ctx.allocator()` is the normal Zig `std.mem.Allocator` backed by the R4SYS VM
 calls. Small blocks use twenty bounded geometric free-size classes inside a

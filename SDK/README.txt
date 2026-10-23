@@ -69,17 +69,25 @@ persistent lifecycle Close flag is delivered once until cleared, so an
 application can keep a Save dialog responsive without repeatedly receiving
 the same Close. New queued GUI Close events remain observable.
 
-R4DRAW v6 exposes a fixed-capacity whole-glyph snapshot. Current kernels
-resolve the bounded font index once and return metrics plus all row masks in a
-single call. The SDK keeps older tables compatible through `font_glyph_row`;
-that fallback preserves pixels but can only report face-wide width and maximum
-advance for proportional fonts.
+Current font operations (SDK0.64.91 / 0.86.78)
+-------------------------------------------
+`font_glyph_bitmap` returns exact glyph metrics and all row masks in one
+current callback. Absence reports NoFn and preserves output; the SDK does
+not reconstruct a substitute bitmap from `font_glyph_row`. The explicit
+row operation remains independent. Font info/measurement/text similarly use
+their actual callbacks without invented Builtin8x8 data.
+`fontRevision()` returns the actual catalog generation, including zero for
+unknown/unavailable. A missing foreign bridge capability reports NoFn; no
+stable generation1 is invented. Current font reloads advance the real
+catalog generation so cache identities cannot silently reuse stale fonts.
 
-R4DRAW v7 appends `font_revision`. The nonzero catalog generation advances
-after every completed font reload, allowing layout and monochrome-coverage
-caches to key font id, revision and codepoint without retaining reused stale
-ids. The SDK returns the stable compatibility generation 1 when an older
-table has no revision slot.
+Unicode input requires read_key_codepoint, without consuming read_key on
+absence. Network requests require the generation-bound net_service_request,
+without building or polling a separate Raw-IPC protocol. Default program
+storage summaries require the complete V2 callback; explicit V1 diagnostics
+remain separate until the coupled provider migration in0.86.80. Paint requires
+the existing six-callback frame transaction. Exact per-slot bounds, optional
+groups/hardware and valid direct operations remain checked independently.
 
 R4DRAW v8 adds standalone replacement frames, native XRGB32 nearest-neighbor
 tiles and per-owner stream telemetry. `r4os.subsystem_host` uses the path for
@@ -147,8 +155,10 @@ choosing key-plus-text or single-text delivery and mapped or prefiltered
 pointers. Passive filter/drop counters remain available without hot logs;
 ignored deliveries never wake an event-only guest.
 
-Build the SDK with `Repositories\SDK\Build.bat test` or
-`Repositories/SDK/Build.sh test`, or as part of the matching central build.
+Build the SDK with `Repositories\SDK\Build.bat test` on Windows or
+`./Repositories/SDK/Build.sh test` on Linux, or through the matching workspace
+central build. The owner starters select the configured matched Zig and
+Contract. Focused tools also accept explicit component roots.
 
 Directory pages and change hints (0.78.26)
 -----------------------------------------
@@ -163,5 +173,5 @@ the initial enumeration. Files.pollDirectoryChanges consumes only RAM and
 returns 1 when the direct directory needs reloading, 0 if unchanged and a
 negative error if the cursor/mount is invalid. A copied cursor owns no kernel
 resource and needs no close. Consume it before reloading to retain changes
-that arrive during enumeration. An old provider without the two optional
-R4SYS tail slots reports the normal missing-function result.
+that arrive during enumeration. A missing optional R4SYS change-tracking callback reports the normal
+missing-function result without a substitute watcher or directory scan.

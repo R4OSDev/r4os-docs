@@ -69,8 +69,11 @@ that cursor would make the command invalid and discard the entire frame.
 
 All chunks remain private until the `PaintContext` commits. The first append,
 conversion or commit error is latched and cancels the complete transaction;
-no successful prefix becomes visible. On an older R4DRAW table the same
-Canvas transparently uses the previous draw calls and `gui_present`.
+no successful prefix becomes visible. Since SDK0.64.91, Zig and C beginPaint
+also require all six current frame callbacks, matching the shared Rust/C
+window-paint entry. A missing callback refuses admission; no older
+paint/present transaction is synthesized. Direct current drawing operations
+inside an admitted transaction and explicit immediate FrameCanvas use remain.
 `Canvas.frameCommand()` lets a prebuilt `gui_shapes` resource participate in
 the same ordering; shape commands require the current frame contract.
 

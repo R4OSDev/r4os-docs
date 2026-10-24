@@ -6,7 +6,7 @@ window composition, focus, z-order, taskbar, desktop items and user-facing
 input dispatch. The kernel provides the privileged display and event
 mechanisms but does not own desktop policy.
 
-Current source and OssiPC update (0.87.9)
+Current source and OssiPC update (0.87.10)
 --------------------------------------
 R4DESK0.1.162 keeps the provisional1280x720 layout during the native boot-
 display hold and adopts the actual dimensions through its topology owner.
@@ -105,6 +105,18 @@ quiet interval. Dormant caches/fronts remain quiet. Kernel384 already wakes
 Desktop after exact queue fence/resource publication; Desktop162/Explorer27
 are unchanged. Qualification and limits are recorded once in
 Repositories/Drivers/NVIDIA/DOCUMENTATION.de.txt, section0.87.9.
+
+Shared BSP work (0.87.10)
+------------------------
+NVIDIA333 limits each normal owned callback to8 device steps and a soft250us
+check between indivisible steps. Boot RAM shadow copies use16KB per phase.
+The exact completion and ticket release precede requeue behind other normal
+owners. Kernel384, Desktop162 and Explorer27 remain unchanged. OssiPC boots
+normally and passes the original Explorer/file-I-O overlap and full GPU/long
+mouse/resource-retirement cases. Host owner cases and the one KVM4 STANDARD
+with full DevCenter readback pass. Evidence and the observed408109ns budget
+checkpoint, including the absence of a hard phase latency promise, are recorded
+once in Repositories/Drivers/NVIDIA/DOCUMENTATION.de.txt, section0.87.10.
 
 Current released implementation (0.86.94)
 -----------------------------------------

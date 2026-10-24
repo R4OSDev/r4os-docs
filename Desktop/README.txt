@@ -6,9 +6,9 @@ window composition, focus, z-order, taskbar, desktop items and user-facing
 input dispatch. The kernel provides the privileged display and event
 mechanisms but does not own desktop policy.
 
-Current source and OssiPC update (0.87.2)
+Current source and OssiPC update (0.87.4)
 --------------------------------------
-R4DESK0.1.157 keeps the original provisional1280x720 layout while a native
+R4DESK0.1.158 keeps the original provisional1280x720 layout while a native
 driver holds the boot display. The Rust port's immediate failure on missing
 geometry is removed; the existing topology owner adopts the actual output
 dimensions. Automatic OssiPC boot with NVIDIA322 now retains the Desktop host
@@ -19,6 +19,13 @@ GPU/visibility receipts. Exact pending graphics retirement remains pending
 until the original owner acknowledges it; matching Spectra60 repeats only
 the idempotent final report within one bounded deadline. Hardware, original benchmarks, exact versions and
 comparison limits are recorded once in Diagnostics/SnesBenchmark.txt.
+Desktop158 also records actual per-output composition selection, exact target
+identity and the original admission masks/status in the SNES context. This
+is selection evidence, not a GPU/visibility receipt. The current physical
+detail run initially admits native GR, then observes a prior native failure
+and mixed primary-GR/managed-CPU paths. The originating runtime failure is
+open in0.87.5; no stable all-GR performance claim follows. R4SNES23 adds only
+explicit detail-mode task/raster observations with stable generations.
 The packaged Full/Slim release described below remains0.86.94.
 
 Current released implementation (0.86.94)

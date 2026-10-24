@@ -3,7 +3,7 @@
 <!-- R4OS-APIREF:BEGIN R4DESK (generiert von ApiContractGen aus ApiContract.json - NICHT von Hand editieren) -->
 ## Tabellen-Referenz R4DESK (generiert)
 
-Kernel-Gruppentabelle `R4XStartR4Desk` v15, 536 Bytes, 64 Funktionsfelder und 65 Slots insgesamt.
+Kernel-Gruppentabelle `R4XStartR4Desk` v17, 568 Bytes, 68 Funktionsfelder und 69 Slots insgesamt.
 Signatur-Wahrheit: `abi.R4DeskFns` (Feldname == Tabellenfeld).
 Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 
@@ -74,6 +74,10 @@ Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 | 62 | 512 | function | `remote_frame_source_reset` | `*const fn () callconv(.c) i32` |
 | 63 | 520 | function | `remote_frame_capture_stats` | `*const fn (*RemoteFrameCaptureStats) callconv(.c) i32` |
 | 64 | 528 | function | `desktop_activity_notify` | `*const fn () callconv(.c) i32` |
+| 65 | 536 | function | `console_read_events` | `*const fn ([*]ConsoleInputEvent, u32) callconv(.c) i32` |
+| 66 | 544 | function | `console_push_events` | `*const fn (*const ProgramProcessHandle, [*]const ConsoleInputEvent, u32) callconv(.c) i32` |
+| 67 | 552 | function | `console_text_info` | `*const fn (*const ProgramProcessHandle, *ConsoleTextInfo) callconv(.c) i32` |
+| 68 | 560 | function | `console_set_encoding` | `*const fn (*const ProgramProcessHandle, u32) callconv(.c) i32` |
 <!-- R4OS-APIREF:END R4DESK -->
 
 

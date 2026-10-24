@@ -43,7 +43,7 @@ gueltig; neue Leser pruefen den optionalen Slot154. Details und Grenzen:
 <!-- R4OS-APIREF:BEGIN R4SYS (generiert von ApiContractGen aus ApiContract.json - NICHT von Hand editieren) -->
 ## Tabellen-Referenz R4SYS (generiert)
 
-Kernel-Gruppentabelle `R4XStartR4Sys` v24, 1256 Bytes, 152 Funktionsfelder und 155 Slots insgesamt.
+Kernel-Gruppentabelle `R4XStartR4Sys` v29, 1320 Bytes, 160 Funktionsfelder und 163 Slots insgesamt.
 Signatur-Wahrheit: `abi.R4SysFns` (Feldname == Tabellenfeld).
 Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 
@@ -204,6 +204,14 @@ Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 | 152 | 1232 | function | `cpu_capacity` | `*const fn (*CpuCapacity) callconv(.c) i32` |
 | 153 | 1240 | function | `program_exit` | `*const fn (i32, u32) callconv(.c) i32` |
 | 154 | 1248 | function | `platform_input_snapshot` | `*const fn (*PlatformInputSnapshot) callconv(.c) i32` |
+| 155 | 1256 | function | `directory_next` | `*const fn ([*:0]const u8, *DirectoryScanCursor, [*]u8, u32, *FileInfo) callconv(.c) i32` |
+| 156 | 1264 | function | `thread_placement_get` | `*const fn (*const ProgramJoinHandle, *ThreadPlacementInfo, ?[*]u64, u32) callconv(.c) i32` |
+| 157 | 1272 | function | `thread_placement_set` | `*const fn (*const ProgramJoinHandle, *const ThreadPlacementRequest, ?[*]const u64, u32) callconv(.c) i32` |
+| 158 | 1280 | function | `system_power_transition` | `*const fn (u32, u64) callconv(.c) i32` |
+| 159 | 1288 | function | `entropy_source_info` | `*const fn (*EntropySourceInfo) callconv(.c) i32` |
+| 160 | 1296 | function | `entropy_fill` | `*const fn ([*]u8, u32) callconv(.c) i32` |
+| 161 | 1304 | function | `program_lifecycle_begin` | `*const fn (*ProgramInventoryCursor) callconv(.c) i32` |
+| 162 | 1312 | function | `program_lifecycle_programs` | `*const fn (*ProgramInventoryCursor, [*]ProgramLifecycleSnapshot, u32, *ProgramInventoryPageInfo) callconv(.c) i32` |
 <!-- R4OS-APIREF:END R4SYS -->
 
 Physische Storageoperationen verwenden das generationierte Inventar und

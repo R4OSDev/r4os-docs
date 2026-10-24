@@ -101,7 +101,7 @@ Details: [AMD-Laptopbedienung](../Drivers/AMDLaptop08035.txt).
 <!-- R4OS-APIREF:BEGIN R4DEV (generiert von ApiContractGen aus ApiContract.json - NICHT von Hand editieren) -->
 ## Tabellen-Referenz R4DEV (generiert)
 
-Kernel-Gruppentabelle `R4XStartR4Dev` v21, 536 Bytes, 63 Funktionsfelder und 65 Slots insgesamt.
+Kernel-Gruppentabelle `R4XStartR4Dev` v35, 728 Bytes, 84 Funktionsfelder und 89 Slots insgesamt.
 Signatur-Wahrheit: `abi.R4DevFns` (Feldname == Tabellenfeld).
 Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 
@@ -134,10 +134,10 @@ Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 | 24 | 208 | function | `boot_info_memory_entry` | `*const fn (u32, *BootInfoMemoryEntry) callconv(.c) i32` |
 | 25 | 216 | reserved | `reserved0` | - |
 | 26 | 224 | reserved | `reserved1` | - |
-| 27 | 232 | function | `program_instance_storage_summary` | `*const fn (*ProgramInstanceStorageSummary) callconv(.c) i32` |
+| 27 | 232 | tombstone | `reserved_program_instance_storage_summary_v1` | - |
 | 28 | 240 | function | `program_instance_storage_self_test` | `*const fn (*ProgramInstanceStorageSelfTestResult) callconv(.c) i32` |
-| 29 | 248 | function | `program_registry_summary` | `*const fn (*ProgramRegistrySummary) callconv(.c) i32` |
-| 30 | 256 | function | `program_registry_self_test` | `*const fn (*ProgramRegistrySelfTestResult) callconv(.c) i32` |
+| 29 | 248 | tombstone | `reserved_program_registry_summary_v1` | - |
+| 30 | 256 | tombstone | `reserved_program_registry_self_test_v1` | - |
 | 31 | 264 | function | `program_registry_summary_v2` | `*const fn (*ProgramRegistrySummaryV2) callconv(.c) i32` |
 | 32 | 272 | function | `program_registry_self_test_v2` | `*const fn (*ProgramRegistrySelfTestResultV2) callconv(.c) i32` |
 | 33 | 280 | function | `execution_inventory_summary` | `*const fn (*ProgramInventorySummary) callconv(.c) i32` |
@@ -172,4 +172,28 @@ Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 | 62 | 512 | function | `serial_status` | `*const fn (u64, *SerialStatus) callconv(.c) i32` |
 | 63 | 520 | function | `serial_cancel` | `*const fn (u64) callconv(.c) i32` |
 | 64 | 528 | function | `serial_close` | `*const fn (u64, u32, u64) callconv(.c) i32` |
+| 65 | 536 | function | `cpu_topology` | `*const fn (u32, *CpuTopologyInfo) callconv(.c) i32` |
+| 66 | 544 | function | `cpu_cache_topology` | `*const fn (u32, u32, *CpuCacheTopologyInfo) callconv(.c) i32` |
+| 67 | 552 | function | `cpu_lifecycle` | `*const fn (u32, u32, u64, *CpuLifecycleInfo) callconv(.c) i32` |
+| 68 | 560 | function | `kernel_cpu_lifecycle_check` | `*const fn (*ProgramKernelCpuLifecycleCheck) callconv(.c) i32` |
+| 69 | 568 | function | `cpu_capabilities` | `*const fn (u32, *CpuCapabilitiesInfo) callconv(.c) i32` |
+| 70 | 576 | function | `cpu_feature` | `*const fn (u32, u64, u32, *CpuFeatureInfo) callconv(.c) i32` |
+| 71 | 584 | function | `cpu_register_read` | `*const fn (u32, u64, u32, *CpuRegisterInfo) callconv(.c) i32` |
+| 72 | 592 | function | `kernel_cpu_register_check` | `*const fn (u32, u64, *ProgramKernelCpuRegisterCheck) callconv(.c) i32` |
+| 73 | 600 | function | `cpu_power_info` | `*const fn (u32, u64, *CpuPowerInfo) callconv(.c) i32` |
+| 74 | 608 | function | `cpu_power_capture` | `*const fn (u32, u64, *CpuPowerInfo) callconv(.c) i32` |
+| 75 | 616 | function | `cpu_performance` | `*const fn (*const CpuPerformanceRequest, *CpuPerformanceInfo) callconv(.c) i32` |
+| 76 | 624 | function | `cpu_cppc` | `*const fn (*const CpuPerformanceRequest, *CpuCppcInfo) callconv(.c) i32` |
+| 77 | 632 | function | `cpu_performance_hint` | `*const fn (u32, u64, *CpuPerformanceHintInfo) callconv(.c) i32` |
+| 78 | 640 | function | `cpu_firmware_performance` | `*const fn (*const CpuPerformanceRequest, *CpuFirmwareInfo) callconv(.c) i32` |
+| 79 | 648 | function | `cpu_idle_info` | `*const fn (u32, *CpuIdleInfo) callconv(.c) i32` |
+| 80 | 656 | function | `cpu_machine_info` | `*const fn (u32, *CpuMachineInfo) callconv(.c) i32` |
+| 81 | 664 | function | `cpu_machine_bank` | `*const fn (u32, u64, u64, u32, *CpuMachineBank) callconv(.c) i32` |
+| 82 | 672 | function | `cpu_microcode_info` | `*const fn (u32, *CpuMicrocodeInfo) callconv(.c) i32` |
+| 83 | 680 | function | `cpu_pmu_info` | `*const fn (u32, *CpuPmuInfo) callconv(.c) i32` |
+| 84 | 688 | function | `cpu_pmu_measure` | `*const fn (u32, u64, u32, u32, ?*const PmuWorkFn, u64, *CpuPmuResult) callconv(.c) i32` |
+| 85 | 696 | function | `cpu_pmu_result` | `*const fn (u32, u64, u64, *CpuPmuResult) callconv(.c) i32` |
+| 86 | 704 | function | `cpu_acceleration_info` | `*const fn (*CpuAccelerationInfo) callconv(.c) i32` |
+| 87 | 712 | function | `cpu_acceleration_work` | `*const fn (u32, u32, ?*const CpuPureWorkFn, u64, *CpuAccelerationWork) callconv(.c) i32` |
+| 88 | 720 | function | `fpu_observation` | `*const fn (*const FpuObservationRequest, *FpuObservationInfo) callconv(.c) i32` |
 <!-- R4OS-APIREF:END R4DEV -->

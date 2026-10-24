@@ -5,9 +5,9 @@ Diese Datei wird deterministisch aus `API/ApiContract.json` erzeugt. Manuelle Ä
 Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenzen und Conformance-Fixtures werden produktiv aus diesem Schema erzeugt; handgeschriebene Dateien bleiben nur Fassaden oder erklaerende Texte.
 
 - Schema: v11, Baseline `standalone-contract-0.64.11`
-- Reachability: 308 von 308 Typen aufgelöst oder explizit klassifiziert
+- Reachability: 369 von 369 Typen aufgelöst oder explizit klassifiziert
 - Zentrale SDK-only-Wurzeln: 0; Runtime-R4Ls besitzen libraryeigene Vertraege
-- Operationen: 0; Fehlerdomänen: 63; Konstanten: 1933; Limits: 109
+- Operationen: 0; Fehlerdomänen: 64; Konstanten: 2715; Limits: 111
 
 ## App-Profile
 
@@ -135,9 +135,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `ProgramInstanceStorageSelfTestResult` | extensible | extern_struct | 64/8 | 64/8 | 64/8 | 64/8 |
 | `ProgramProcessHandle` | fixed_layout | extern_struct | 16/8 | 16/8 | 16/8 | 16/8 |
 | `ProgramProcessCompletion` | fixed_layout | extern_struct | 128/8 | 128/8 | 128/8 | 128/8 |
-| `ProgramRegistrySummary` | extensible | extern_struct | 160/8 | 160/8 | 160/8 | 160/8 |
 | `ProgramRegistrySummaryV2` | extensible | extern_struct | 224/8 | 224/8 | 224/8 | 224/8 |
-| `ProgramRegistrySelfTestResult` | extensible | extern_struct | 64/8 | 64/8 | 64/8 | 64/8 |
 | `ProgramRegistrySelfTestResultV2` | extensible | extern_struct | 136/8 | 136/8 | 136/8 | 136/8 |
 | `ProgramJoinHandle` | fixed_layout | extern_struct | 32/8 | 32/8 | 32/8 | 32/8 |
 | `ProgramInventoryCursor` | extensible | extern_struct | 80/8 | 80/8 | 80/8 | 80/8 |
@@ -227,7 +225,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `GfxDriverDisplayApi` | extensible | extern_struct | 152/8 | 152/8 | 152/8 | 152/8 |
 | `DriverResourceInfo` | extensible | extern_struct | 32/8 | 32/8 | 32/8 | 32/8 |
 | `DriverFirmwareTableInfo` | extensible | extern_struct | 48/8 | 48/8 | 48/8 | 48/8 |
-| `DriverResourceApi` | extensible | extern_struct | 56/8 | 56/8 | 56/8 | 56/8 |
+| `DriverResourceApi` | extensible | extern_struct | 72/8 | 72/8 | 72/8 | 72/8 |
 | `DriverHeapAllocation` | extensible | extern_struct | 40/8 | 40/8 | 40/8 | 40/8 |
 | `DriverHeapStats` | extensible | extern_struct | 104/8 | 104/8 | 104/8 | 104/8 |
 | `DriverHeapApi` | extensible | extern_struct | 32/8 | 32/8 | 32/8 | 32/8 |
@@ -329,6 +327,69 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `ProgramInstrumentationInfo` | extensible | extern_struct | 48/8 | 48/8 | 48/8 | 48/8 |
 | `ProgramLockPerformanceInfo` | extensible | extern_struct | 120/8 | 120/8 | 120/8 | 120/8 |
 | `ProgramStackPerformanceInfo` | extensible | extern_struct | 144/8 | 144/8 | 144/8 | 144/8 |
+| `ProgramStackFaultInfo` | extensible | extern_struct | 192/8 | 192/8 | 192/8 | 192/8 |
+| `ProgramKernelHeapCheck` | fixed_layout | extern_struct | 168/8 | 168/8 | 168/8 | 168/8 |
+| `ProgramKernelSchedulerCheck` | fixed_layout | extern_struct | 128/8 | 128/8 | 128/8 | 128/8 |
+| `ProgramKernelSmpCheck` | fixed_layout | extern_struct | 224/8 | 224/8 | 224/8 | 224/8 |
+| `ProgramSmpTlbSnapshot` | fixed_layout | extern_struct | 184/8 | 184/8 | 184/8 | 184/8 |
+| `ProgramKernelBlockQueueCheck` | fixed_layout | extern_struct | 240/8 | 240/8 | 240/8 | 240/8 |
+| `ProgramKernelNvmeCheck` | fixed_layout | extern_struct | 296/8 | 296/8 | 296/8 | 296/8 |
+| `ProgramKernelUsbCheck` | fixed_layout | extern_struct | 32/4 | 32/4 | 32/4 | 32/4 |
+| `SerialConfig` | extensible | extern_struct | 32/4 | 32/4 | 32/4 | 32/4 |
+| `SerialPortInfo` | extensible | extern_struct | 128/8 | 128/8 | 128/8 | 128/8 |
+| `SerialTransfer` | extensible | extern_struct | 32/8 | 32/8 | 32/8 | 32/8 |
+| `SerialStatus` | extensible | extern_struct | 88/8 | 88/8 | 88/8 | 88/8 |
+| `SerialBackend` | extensible | extern_struct | 168/8 | 168/8 | 168/8 | 168/8 |
+| `DriverSerialApi` | extensible | extern_struct | 40/8 | 40/8 | 40/8 | 40/8 |
+| `CpuTopologyInfo` | fixed_layout | extern_struct | 112/8 | 112/8 | 112/8 | 112/8 |
+| `CpuCacheTopologyInfo` | fixed_layout | extern_struct | 64/8 | 64/8 | 64/8 | 64/8 |
+| `ThreadPlacementRequest` | fixed_layout | extern_struct | 32/8 | 32/8 | 32/8 | 32/8 |
+| `ThreadPlacementInfo` | fixed_layout | extern_struct | 64/8 | 64/8 | 64/8 | 64/8 |
+| `CpuLifecycleInfo` | fixed_layout | extern_struct | 128/8 | 128/8 | 128/8 | 128/8 |
+| `ProgramKernelCpuLifecycleCheck` | fixed_layout | extern_struct | 128/8 | 128/8 | 128/8 | 128/8 |
+| `CpuCapabilitiesInfo` | fixed_layout | extern_struct | 272/8 | 272/8 | 272/8 | 272/8 |
+| `CpuFeatureInfo` | fixed_layout | extern_struct | 112/8 | 112/8 | 112/8 | 112/8 |
+| `CpuRegisterInfo` | fixed_layout | extern_struct | 80/8 | 80/8 | 80/8 | 80/8 |
+| `ProgramKernelCpuRegisterCheck` | fixed_layout | extern_struct | 128/8 | 128/8 | 128/8 | 128/8 |
+| `CpuPowerInfo` | fixed_layout | extern_struct | 320/8 | 320/8 | 320/8 | 320/8 |
+| `CpuPowerBackend` | fixed_layout | extern_struct | 40/8 | 40/8 | 40/8 | 40/8 |
+| `DriverCpuPowerApi` | extensible | extern_struct | 184/8 | 184/8 | 184/8 | 184/8 |
+| `CpuPowerCounters` | fixed_layout | extern_struct | 64/8 | 64/8 | 64/8 | 64/8 |
+| `CpuPerformanceRequest` | fixed_layout | extern_struct | 64/8 | 64/8 | 64/8 | 64/8 |
+| `CpuPerformanceInfo` | fixed_layout | extern_struct | 176/8 | 176/8 | 176/8 | 176/8 |
+| `CpuPerformanceBackend` | fixed_layout | extern_struct | 32/8 | 32/8 | 32/8 | 32/8 |
+| `CpuRegisterWriteInfo` | fixed_layout | extern_struct | 72/8 | 72/8 | 72/8 | 72/8 |
+| `CpuCppcInfo` | fixed_layout | extern_struct | 192/8 | 192/8 | 192/8 | 192/8 |
+| `CpuCppcBackend` | fixed_layout | extern_struct | 32/8 | 32/8 | 32/8 | 32/8 |
+| `CpuPerformanceHint` | fixed_layout | extern_struct | 64/8 | 64/8 | 64/8 | 64/8 |
+| `CpuPerformanceHintInfo` | fixed_layout | extern_struct | 96/8 | 96/8 | 96/8 | 96/8 |
+| `PowerProfileRequest` | fixed_layout | extern_struct | 64/8 | 64/8 | 64/8 | 64/8 |
+| `PowerProfileInfo` | fixed_layout | extern_struct | 128/8 | 128/8 | 128/8 | 128/8 |
+| `PowerCpuProfileInfo` | fixed_layout | extern_struct | 160/8 | 160/8 | 160/8 | 160/8 |
+| `CpuFirmwareBackend` | fixed_layout | extern_struct | 32/8 | 32/8 | 32/8 | 32/8 |
+| `CpuFirmwareInfo` | fixed_layout | extern_struct | 192/8 | 192/8 | 192/8 | 192/8 |
+| `CpuIdleDescriptor` | fixed_layout | extern_struct | 96/8 | 96/8 | 96/8 | 96/8 |
+| `CpuIdlePolicy` | fixed_layout | extern_struct | 32/8 | 32/8 | 32/8 | 32/8 |
+| `CpuIdleInfo` | fixed_layout | extern_struct | 192/8 | 192/8 | 192/8 | 192/8 |
+| `CpuMachineInfo` | fixed_layout | extern_struct | 144/8 | 144/8 | 144/8 | 144/8 |
+| `CpuMachineBank` | fixed_layout | extern_struct | 112/8 | 112/8 | 112/8 | 112/8 |
+| `CpuMicrocodeInfo` | fixed_layout | extern_struct | 144/8 | 144/8 | 144/8 | 144/8 |
+| `CpuPmuInfo` | fixed_layout | extern_struct | 128/8 | 128/8 | 128/8 | 128/8 |
+| `CpuPmuResult` | fixed_layout | extern_struct | 256/8 | 256/8 | 256/8 | 256/8 |
+| `PmuWorkFn` | callback | c_callback | 8/8 | 8/8 | 8/8 | 8/8 |
+| `CpuAccelerationInfo` | fixed_layout | extern_struct | 128/8 | 128/8 | 128/8 | 128/8 |
+| `CpuAccelerationWork` | fixed_layout | extern_struct | 128/8 | 128/8 | 128/8 | 128/8 |
+| `CpuPureWorkFn` | callback | c_callback | 8/8 | 8/8 | 8/8 | 8/8 |
+| `EntropySourceInfo` | fixed_layout | extern_struct | 128/8 | 128/8 | 128/8 | 128/8 |
+| `EntropyDeviceReceipt` | fixed_layout | extern_struct | 128/8 | 128/8 | 128/8 | 128/8 |
+| `EntropyBackend` | fixed_layout | extern_struct | 64/8 | 64/8 | 64/8 | 64/8 |
+| `DriverEntropyApi` | fixed_layout | extern_struct | 32/8 | 32/8 | 32/8 | 32/8 |
+| `EntropyReadFn` | callback | c_callback | 8/8 | 8/8 | 8/8 | 8/8 |
+| `ConsoleInputEvent` | fixed_layout | extern_struct | 16/4 | 16/4 | 16/4 | 16/4 |
+| `ConsoleTextInfo` | fixed_layout | extern_struct | 32/4 | 32/4 | 32/4 | 32/4 |
+| `FpuObservationRequest` | fixed_layout | extern_struct | 48/8 | 48/8 | 48/8 | 48/8 |
+| `FpuObservationInfo` | fixed_layout | extern_struct | 128/8 | 128/8 | 128/8 | 128/8 |
+| `ProgramLifecycleSnapshot` | extensible | extern_struct | 40/8 | 40/8 | 40/8 | 40/8 |
 
 ## Typdetails
 
@@ -4023,43 +4084,6 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `reserved0` | 63 | 1 | 1 | `u8` | - |
 | `console_state` | 64 | 64 | 4 | `r4os.abi.ConsoleState` | - |
 
-### `ProgramRegistrySummary`
-
-- Quelle: `API/ApiContract.json`
-- Klasse: `extensible`
-- Repräsentation: `extern_struct`
-- Version/Größe/Alignment: 1 / 160 / 8
-
-| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
-|---|---:|---:|---:|---|---|
-| `version` | 0 | 4 | 4 | `u32` | - |
-| `size` | 4 | 4 | 4 | `u32` | - |
-| `chunk_slots` | 8 | 4 | 4 | `u32` | - |
-| `chunk_count` | 12 | 4 | 4 | `u32` | - |
-| `slot_capacity` | 16 | 4 | 4 | `u32` | - |
-| `free_slots` | 20 | 4 | 4 | `u32` | - |
-| `reserved_slots` | 24 | 4 | 4 | `u32` | - |
-| `live_slots` | 28 | 4 | 4 | `u32` | - |
-| `done_slots` | 32 | 4 | 4 | `u32` | - |
-| `retiring_slots` | 36 | 4 | 4 | `u32` | - |
-| `pinned_slots` | 40 | 4 | 4 | `u32` | - |
-| `warm_chunks` | 44 | 4 | 4 | `u32` | - |
-| `last_admission_error` | 48 | 4 | 4 | `i32` | - |
-| `flags` | 52 | 4 | 4 | `u32` | - |
-| `peak_chunks` | 56 | 8 | 8 | `u64` | - |
-| `peak_live` | 64 | 8 | 8 | `u64` | - |
-| `growth_attempts` | 72 | 8 | 8 | `u64` | - |
-| `growth_failures` | 80 | 8 | 8 | `u64` | - |
-| `forced_failures` | 88 | 8 | 8 | `u64` | - |
-| `publish_count` | 96 | 8 | 8 | `u64` | - |
-| `rollback_count` | 104 | 8 | 8 | `u64` | - |
-| `shrink_count` | 112 | 8 | 8 | `u64` | - |
-| `id_collisions` | 120 | 8 | 8 | `u64` | - |
-| `id_wraps` | 128 | 8 | 8 | `u64` | - |
-| `live_id_hash` | 136 | 8 | 8 | `u64` | - |
-| `live_address_hash` | 144 | 8 | 8 | `u64` | - |
-| `reserved0` | 152 | 8 | 8 | `u64` | - |
-
 ### `ProgramRegistrySummaryV2`
 
 - Quelle: `API/ApiContract.json`
@@ -4107,28 +4131,6 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `history_sequence` | 200 | 8 | 8 | `u64` | - |
 | `completion_peak` | 208 | 8 | 8 | `u64` | - |
 | `retire_retries` | 216 | 8 | 8 | `u64` | - |
-
-### `ProgramRegistrySelfTestResult`
-
-- Quelle: `API/ApiContract.json`
-- Klasse: `extensible`
-- Repräsentation: `extern_struct`
-- Version/Größe/Alignment: 1 / 64 / 8
-
-| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
-|---|---:|---:|---:|---|---|
-| `version` | 0 | 4 | 4 | `u32` | - |
-| `size` | 4 | 4 | 4 | `u32` | - |
-| `operation` | 8 | 4 | 4 | `u32` | - |
-| `flags` | 12 | 4 | 4 | `u32` | - |
-| `chunk_count_before` | 16 | 4 | 4 | `u32` | - |
-| `slot_capacity_before` | 20 | 4 | 4 | `u32` | - |
-| `free_slots_before` | 24 | 4 | 4 | `u32` | - |
-| `reserved0` | 28 | 4 | 4 | `u32` | - |
-| `growth_failures_before` | 32 | 8 | 8 | `u64` | - |
-| `growth_failures_after` | 40 | 8 | 8 | `u64` | - |
-| `forced_failures_before` | 48 | 8 | 8 | `u64` | - |
-| `forced_failures_after` | 56 | 8 | 8 | `u64` | - |
 
 ### `ProgramRegistrySelfTestResultV2`
 
@@ -6197,7 +6199,7 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 - Quelle: `API/ApiContract.json`
 - Klasse: `extensible`
 - Repräsentation: `extern_struct`
-- Version/Größe/Alignment: 2 / 56 / 8
+- Version/Größe/Alignment: 3 / 72 / 8
 
 | Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
 |---|---:|---:|---:|---|---|
@@ -6209,6 +6211,8 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `acpi_stat` | 32 | 8 | 8 | `u64` | - |
 | `acpi_read_at` | 40 | 8 | 8 | `u64` | - |
 | `platform_query` | 48 | 8 | 8 | `u64` | - |
+| `cpu_power_query` | 56 | 8 | 8 | `u64` | - |
+| `entropy_query` | 64 | 8 | 8 | `u64` | - |
 
 ### `DriverHeapAllocation`
 
@@ -8191,6 +8195,1797 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `release_cycles_total` | 128 | 8 | 8 | `u64` | - |
 | `release_cycles_max` | 136 | 8 | 8 | `u64` | - |
 
+### `ProgramStackFaultInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `extensible`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 192 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `cpu_index` | 8 | 4 | 4 | `u32` | - |
+| `flags` | 12 | 4 | 4 | `u32` | - |
+| `sequence` | 16 | 8 | 8 | `u64` | - |
+| `stack_kind` | 24 | 4 | 4 | `u32` | - |
+| `reason` | 28 | 4 | 4 | `u32` | - |
+| `vm_error` | 32 | 4 | 4 | `u32` | - |
+| `exception_vector` | 36 | 4 | 4 | `u32` | - |
+| `task_id` | 40 | 4 | 4 | `u32` | - |
+| `instance_id` | 44 | 4 | 4 | `u32` | - |
+| `thread_id` | 48 | 4 | 4 | `u32` | - |
+| `reserved0` | 52 | 4 | 4 | `u32` | - |
+| `task_generation` | 56 | 8 | 8 | `u64` | - |
+| `instance_generation` | 64 | 8 | 8 | `u64` | - |
+| `thread_generation` | 72 | 8 | 8 | `u64` | - |
+| `fault_address` | 80 | 8 | 8 | `u64` | - |
+| `interrupted_rsp` | 88 | 8 | 8 | `u64` | - |
+| `page_fault_error` | 96 | 8 | 8 | `u64` | - |
+| `reserve_base` | 104 | 8 | 8 | `u64` | - |
+| `reserve_bytes` | 112 | 8 | 8 | `u64` | - |
+| `committed_base` | 120 | 8 | 8 | `u64` | - |
+| `committed_bytes` | 128 | 8 | 8 | `u64` | - |
+| `guard_base` | 136 | 8 | 8 | `u64` | - |
+| `guard_bytes` | 144 | 8 | 8 | `u64` | - |
+| `stack_top` | 152 | 8 | 8 | `u64` | - |
+| `image_base` | 160 | 8 | 8 | `u64` | - |
+| `image_bytes` | 168 | 8 | 8 | `u64` | - |
+| `memory_tag` | 176 | 16 | 1 | `[16]u8` | - |
+
+### `ProgramKernelHeapCheck`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 168 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `status` | 8 | 4 | 4 | `u32` | - |
+| `flags` | 12 | 4 | 4 | `u32` | - |
+| `cases_completed` | 16 | 4 | 4 | `u32` | - |
+| `failed_case` | 20 | 4 | 4 | `u32` | - |
+| `churn_ops` | 24 | 4 | 4 | `u32` | - |
+| `acceptance_iterations` | 28 | 4 | 4 | `u32` | - |
+| `cleanup_errors` | 32 | 4 | 4 | `u32` | - |
+| `reserved0` | 36 | 4 | 4 | `u32` | - |
+| `run_id` | 40 | 8 | 8 | `u64` | - |
+| `before_used_bytes` | 48 | 8 | 8 | `u64` | - |
+| `after_used_bytes` | 56 | 8 | 8 | `u64` | - |
+| `before_active_blocks` | 64 | 8 | 8 | `u64` | - |
+| `after_active_blocks` | 72 | 8 | 8 | `u64` | - |
+| `owned_allocations` | 80 | 8 | 8 | `u64` | - |
+| `owned_releases` | 88 | 8 | 8 | `u64` | - |
+| `owned_live_blocks` | 96 | 8 | 8 | `u64` | - |
+| `owned_live_bytes` | 104 | 8 | 8 | `u64` | - |
+| `peak_owned_bytes` | 112 | 8 | 8 | `u64` | - |
+| `owned_allocation_bytes` | 120 | 8 | 8 | `u64` | - |
+| `expected_double_free_errors` | 128 | 8 | 8 | `u64` | - |
+| `expected_vm_errors` | 136 | 8 | 8 | `u64` | - |
+| `vm_reservations` | 144 | 8 | 8 | `u64` | - |
+| `vm_releases` | 152 | 8 | 8 | `u64` | - |
+| `vm_live_reservations` | 160 | 8 | 8 | `u64` | - |
+
+### `ProgramKernelSchedulerCheck`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 128 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `status` | 8 | 4 | 4 | `u32` | - |
+| `selected` | 12 | 4 | 4 | `u32` | - |
+| `passed` | 16 | 4 | 4 | `u32` | - |
+| `failed` | 20 | 4 | 4 | `u32` | - |
+| `unavailable` | 24 | 4 | 4 | `u32` | - |
+| `isolated` | 28 | 4 | 4 | `u32` | - |
+| `cleanup_errors` | 32 | 4 | 4 | `u32` | - |
+| `live_tasks` | 36 | 4 | 4 | `u32` | - |
+| `live_work` | 40 | 4 | 4 | `u32` | - |
+| `reserved0` | 44 | 4 | 4 | `u32` | - |
+| `run_id` | 48 | 8 | 8 | `u64` | - |
+| `tasks_created` | 56 | 8 | 8 | `u64` | - |
+| `tasks_reaped` | 64 | 8 | 8 | `u64` | - |
+| `work_submitted` | 72 | 8 | 8 | `u64` | - |
+| `work_released` | 80 | 8 | 8 | `u64` | - |
+| `event_iterations` | 88 | 8 | 8 | `u64` | - |
+| `if_checks` | 96 | 8 | 8 | `u64` | - |
+| `deadline_tasks` | 104 | 8 | 8 | `u64` | - |
+| `role_mask` | 112 | 8 | 8 | `u64` | - |
+| `unwind_checks` | 120 | 8 | 8 | `u64` | - |
+
+### `ProgramKernelSmpCheck`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 224 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `status` | 8 | 4 | 4 | `u32` | - |
+| `flags` | 12 | 4 | 4 | `u32` | - |
+| `online_count` | 16 | 4 | 4 | `u32` | - |
+| `fail_stage` | 20 | 4 | 4 | `u32` | - |
+| `worker_failures` | 24 | 4 | 4 | `u32` | - |
+| `clock_regressions` | 28 | 4 | 4 | `u32` | - |
+| `tlb_failures` | 32 | 4 | 4 | `u32` | - |
+| `owner_failures` | 36 | 4 | 4 | `u32` | - |
+| `cleanup_errors` | 40 | 4 | 4 | `u32` | - |
+| `isolated_mask` | 44 | 4 | 4 | `u32` | - |
+| `clock_source` | 48 | 4 | 4 | `u32` | - |
+| `clock_generation` | 52 | 4 | 4 | `u32` | - |
+| `run_id` | 56 | 8 | 8 | `u64` | - |
+| `online_mask` | 64 | 8 | 8 | `u64` | - |
+| `placement_mask` | 72 | 8 | 8 | `u64` | - |
+| `observed_mask` | 80 | 8 | 8 | `u64` | - |
+| `tlb_ready_mask` | 88 | 8 | 8 | `u64` | - |
+| `tlb_updated_mask` | 96 | 8 | 8 | `u64` | - |
+| `owner_done_mask` | 104 | 8 | 8 | `u64` | - |
+| `expected_checksum` | 112 | 8 | 8 | `u64` | - |
+| `actual_checksum` | 120 | 8 | 8 | `u64` | - |
+| `tlb_generation` | 128 | 8 | 8 | `u64` | - |
+| `tlb_target_mask` | 136 | 8 | 8 | `u64` | - |
+| `tlb_acknowledgement_mask` | 144 | 8 | 8 | `u64` | - |
+| `tlb_offline_mask` | 152 | 8 | 8 | `u64` | - |
+| `clock_registered_mask` | 160 | 8 | 8 | `u64` | - |
+| `tasks_created` | 168 | 8 | 8 | `u64` | - |
+| `tasks_reaped` | 176 | 8 | 8 | `u64` | - |
+| `retained_task_count` | 184 | 8 | 8 | `u64` | - |
+| `retained_frame_count` | 192 | 8 | 8 | `u64` | - |
+| `retained_allocation_count` | 200 | 8 | 8 | `u64` | - |
+| `mutex_operations` | 208 | 8 | 8 | `u64` | - |
+| `retained_range_count` | 216 | 8 | 8 | `u64` | - |
+
+### `ProgramSmpTlbSnapshot`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 184 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `flags` | 8 | 4 | 4 | `u32` | - |
+| `online_count` | 12 | 4 | 4 | `u32` | - |
+| `schedulable_count` | 16 | 4 | 4 | `u32` | - |
+| `clock_source` | 20 | 4 | 4 | `u32` | - |
+| `clock_generation` | 24 | 4 | 4 | `u32` | - |
+| `clock_flags` | 28 | 4 | 4 | `u32` | - |
+| `clock_fallback_reason` | 32 | 4 | 4 | `u32` | - |
+| `reserved0` | 36 | 4 | 4 | `u32` | - |
+| `online_mask` | 40 | 8 | 8 | `u64` | - |
+| `schedulable_mask` | 48 | 8 | 8 | `u64` | - |
+| `clock_registered_mask` | 56 | 8 | 8 | `u64` | - |
+| `clock_frequency_hz` | 64 | 8 | 8 | `u64` | - |
+| `clock_resolution_ns` | 72 | 8 | 8 | `u64` | - |
+| `max_cpu_skew_ns` | 80 | 8 | 8 | `u64` | - |
+| `calibration_error_ppm` | 88 | 8 | 8 | `u64` | - |
+| `tlb_requests` | 96 | 8 | 8 | `u64` | - |
+| `tlb_successes` | 104 | 8 | 8 | `u64` | - |
+| `tlb_timeouts` | 112 | 8 | 8 | `u64` | - |
+| `tlb_expected_timeouts` | 120 | 8 | 8 | `u64` | - |
+| `tlb_ipis_sent` | 128 | 8 | 8 | `u64` | - |
+| `tlb_acknowledgements` | 136 | 8 | 8 | `u64` | - |
+| `tlb_offline_exclusions` | 144 | 8 | 8 | `u64` | - |
+| `tlb_local_page_flushes` | 152 | 8 | 8 | `u64` | - |
+| `tlb_local_full_reloads` | 160 | 8 | 8 | `u64` | - |
+| `tlb_max_wait_spins` | 168 | 8 | 8 | `u64` | - |
+| `tlb_generation` | 176 | 8 | 8 | `u64` | - |
+
+### `ProgramKernelBlockQueueCheck`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 240 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `status` | 8 | 4 | 4 | `u32` | - |
+| `flags` | 12 | 4 | 4 | `u32` | - |
+| `selected_cases` | 16 | 4 | 4 | `u32` | - |
+| `passed_cases` | 20 | 4 | 4 | `u32` | - |
+| `failed_cases` | 24 | 4 | 4 | `u32` | - |
+| `attempted_cases` | 28 | 4 | 4 | `u32` | - |
+| `unavailable_cases` | 32 | 4 | 4 | `u32` | - |
+| `fail_stage` | 36 | 4 | 4 | `u32` | - |
+| `cleanup_errors` | 40 | 4 | 4 | `u32` | - |
+| `duplicate_disposition` | 44 | 4 | 4 | `u32` | - |
+| `run_id` | 48 | 8 | 8 | `u64` | - |
+| `tasks_created` | 56 | 8 | 8 | `u64` | - |
+| `tasks_reaped` | 64 | 8 | 8 | `u64` | - |
+| `retained_task_count` | 72 | 8 | 8 | `u64` | - |
+| `controllers_registered` | 80 | 8 | 8 | `u64` | - |
+| `controllers_unregistered` | 88 | 8 | 8 | `u64` | - |
+| `retained_controller_count` | 96 | 8 | 8 | `u64` | - |
+| `async_submissions` | 104 | 8 | 8 | `u64` | - |
+| `async_completions` | 112 | 8 | 8 | `u64` | - |
+| `completion_receipts` | 120 | 8 | 8 | `u64` | - |
+| `duplicate_rejections` | 128 | 8 | 8 | `u64` | - |
+| `late_rejections` | 136 | 8 | 8 | `u64` | - |
+| `cancel_requests` | 144 | 8 | 8 | `u64` | - |
+| `timeout_cancels` | 152 | 8 | 8 | `u64` | - |
+| `reset_cancels` | 160 | 8 | 8 | `u64` | - |
+| `resets` | 168 | 8 | 8 | `u64` | - |
+| `read_ops` | 176 | 8 | 8 | `u64` | - |
+| `write_ops` | 184 | 8 | 8 | `u64` | - |
+| `flush_ops` | 192 | 8 | 8 | `u64` | - |
+| `queue_high_water` | 200 | 8 | 8 | `u64` | - |
+| `in_flight_high_water` | 208 | 8 | 8 | `u64` | - |
+| `parallel_active_max` | 216 | 8 | 8 | `u64` | - |
+| `retained_request_count` | 224 | 8 | 8 | `u64` | - |
+| `retained_buffer_count` | 232 | 8 | 8 | `u64` | - |
+
+### `ProgramKernelNvmeCheck`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 296 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `status` | 8 | 4 | 4 | `u32` | - |
+| `flags` | 12 | 4 | 4 | `u32` | - |
+| `unavailable_reason` | 16 | 4 | 4 | `u32` | - |
+| `fail_stage` | 20 | 4 | 4 | `u32` | - |
+| `cleanup_errors` | 24 | 4 | 4 | `u32` | - |
+| `sector_size` | 28 | 4 | 4 | `u32` | - |
+| `device_slot` | 32 | 4 | 4 | `u32` | - |
+| `native_receipt_flags` | 36 | 4 | 4 | `u32` | - |
+| `observation_flags` | 40 | 4 | 4 | `u32` | - |
+| `controller_index` | 44 | 4 | 4 | `u32` | - |
+| `controller_generation` | 48 | 4 | 4 | `u32` | - |
+| `namespace_generation` | 52 | 4 | 4 | `u32` | - |
+| `namespace_id` | 56 | 4 | 4 | `u32` | - |
+| `namespace_slot` | 60 | 4 | 4 | `u32` | - |
+| `queue_id` | 64 | 4 | 4 | `u32` | - |
+| `command_id` | 68 | 4 | 4 | `u32` | - |
+| `hardware_status` | 72 | 4 | 4 | `u32` | - |
+| `driver_result` | 76 | 4 | 4 | `i32` | - |
+| `completed_bytes` | 80 | 4 | 4 | `u32` | - |
+| `irq_mode` | 84 | 4 | 4 | `u32` | - |
+| `driver_state_before` | 88 | 4 | 4 | `u32` | - |
+| `driver_state_after` | 92 | 4 | 4 | `u32` | - |
+| `run_id` | 96 | 8 | 8 | `u64` | - |
+| `device_generation` | 104 | 8 | 8 | `u64` | - |
+| `request_id` | 112 | 8 | 8 | `u64` | - |
+| `backend_handle` | 120 | 8 | 8 | `u64` | - |
+| `observed_handle` | 128 | 8 | 8 | `u64` | - |
+| `irq_generation` | 136 | 8 | 8 | `u64` | - |
+| `work_sequence` | 144 | 8 | 8 | `u64` | - |
+| `command_sequence` | 152 | 8 | 8 | `u64` | - |
+| `start_tick` | 160 | 8 | 8 | `u64` | - |
+| `finish_tick` | 168 | 8 | 8 | `u64` | - |
+| `data_checksum` | 176 | 8 | 8 | `u64` | - |
+| `tasks_created` | 184 | 8 | 8 | `u64` | - |
+| `tasks_reaped` | 192 | 8 | 8 | `u64` | - |
+| `retained_task_count` | 200 | 8 | 8 | `u64` | - |
+| `retained_device_pin_count` | 208 | 8 | 8 | `u64` | - |
+| `retained_buffer_count` | 216 | 8 | 8 | `u64` | - |
+| `callback_count` | 224 | 8 | 8 | `u64` | - |
+| `worker_requests_before` | 232 | 8 | 8 | `u64` | - |
+| `worker_requests_after` | 240 | 8 | 8 | `u64` | - |
+| `worker_completions_before` | 248 | 8 | 8 | `u64` | - |
+| `worker_completions_after` | 256 | 8 | 8 | `u64` | - |
+| `async_submissions_before` | 264 | 8 | 8 | `u64` | - |
+| `async_submissions_after` | 272 | 8 | 8 | `u64` | - |
+| `async_completions_before` | 280 | 8 | 8 | `u64` | - |
+| `async_completions_after` | 288 | 8 | 8 | `u64` | - |
+
+### `ProgramKernelUsbCheck`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 32 / 4
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `status` | 8 | 4 | 4 | `u32` | - |
+| `selected_cases` | 12 | 4 | 4 | `u32` | - |
+| `attempted_cases` | 16 | 4 | 4 | `u32` | - |
+| `passed_cases` | 20 | 4 | 4 | `u32` | - |
+| `failed_cases` | 24 | 4 | 4 | `u32` | - |
+| `reserved0` | 28 | 4 | 4 | `u32` | - |
+
+### `SerialConfig`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `extensible`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 32 / 4
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `baud_rate` | 8 | 4 | 4 | `u32` | - |
+| `data_bits` | 12 | 1 | 1 | `u8` | - |
+| `parity` | 13 | 1 | 1 | `u8` | - |
+| `stop_bits` | 14 | 1 | 1 | `u8` | - |
+| `flow_control` | 15 | 1 | 1 | `u8` | - |
+| `flags` | 16 | 4 | 4 | `u32` | - |
+| `reserved0` | 20 | 4 | 4 | `u32` | - |
+| `reserved1` | 24 | 4 | 4 | `u32` | - |
+| `reserved2` | 28 | 4 | 4 | `u32` | - |
+
+### `SerialPortInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `extensible`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 128 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `port_id` | 8 | 8 | 8 | `u64` | - |
+| `generation` | 16 | 8 | 8 | `u64` | - |
+| `com_number` | 24 | 4 | 4 | `u32` | - |
+| `flags` | 28 | 4 | 4 | `u32` | - |
+| `capabilities` | 32 | 8 | 8 | `u64` | - |
+| `name` | 40 | 16 | 1 | `[16]u8` | - |
+| `hardware_identity` | 56 | 64 | 1 | `[64]u8` | - |
+| `transport` | 120 | 4 | 4 | `u32` | - |
+| `reserved` | 124 | 4 | 4 | `u32` | - |
+
+### `SerialTransfer`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `extensible`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 32 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `requested` | 8 | 4 | 4 | `u32` | - |
+| `completed` | 12 | 4 | 4 | `u32` | - |
+| `status` | 16 | 4 | 4 | `i32` | - |
+| `flags` | 20 | 4 | 4 | `u32` | - |
+| `overflows` | 24 | 8 | 8 | `u64` | - |
+
+### `SerialStatus`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `extensible`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 88 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `flags` | 8 | 4 | 4 | `u32` | - |
+| `line_status` | 12 | 4 | 4 | `u32` | - |
+| `modem_status` | 16 | 4 | 4 | `u32` | - |
+| `rx_pending` | 20 | 4 | 4 | `u32` | - |
+| `tx_pending` | 24 | 4 | 4 | `u32` | - |
+| `baud_rate` | 28 | 4 | 4 | `u32` | - |
+| `rx_bytes` | 32 | 8 | 8 | `u64` | - |
+| `tx_bytes` | 40 | 8 | 8 | `u64` | - |
+| `rx_dropped` | 48 | 8 | 8 | `u64` | - |
+| `line_errors` | 56 | 8 | 8 | `u64` | - |
+| `tx_dropped` | 64 | 8 | 8 | `u64` | - |
+| `generation` | 72 | 8 | 8 | `u64` | - |
+| `last_error` | 80 | 4 | 4 | `i32` | - |
+| `reserved` | 84 | 4 | 4 | `u32` | - |
+
+### `SerialBackend`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `extensible`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 168 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `com_number` | 8 | 4 | 4 | `u32` | - |
+| `resource_kind` | 12 | 4 | 4 | `u32` | - |
+| `resource_base` | 16 | 8 | 8 | `u64` | - |
+| `resource_length` | 24 | 8 | 8 | `u64` | - |
+| `irq` | 32 | 4 | 4 | `u32` | - |
+| `capabilities` | 36 | 4 | 4 | `u32` | - |
+| `hardware_identity` | 40 | 64 | 1 | `[64]u8` | - |
+| `context` | 104 | 8 | 8 | `u64` | - |
+| `open` | 112 | 8 | 8 | `u64` | - |
+| `configure` | 120 | 8 | 8 | `u64` | - |
+| `read` | 128 | 8 | 8 | `u64` | - |
+| `write` | 136 | 8 | 8 | `u64` | - |
+| `drain` | 144 | 8 | 8 | `u64` | - |
+| `status` | 152 | 8 | 8 | `u64` | - |
+| `close` | 160 | 8 | 8 | `u64` | - |
+
+### `DriverSerialApi`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `extensible`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 40 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `register_port` | 8 | 8 | 8 | `u64` | - |
+| `unregister_port` | 16 | 8 | 8 | `u64` | - |
+| `notify` | 24 | 8 | 8 | `u64` | - |
+| `admission` | 32 | 8 | 8 | `u64` | - |
+
+### `CpuTopologyInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 112 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `cpu_index` | 8 | 4 | 4 | `u32` | - |
+| `apic_id` | 12 | 4 | 4 | `u32` | - |
+| `acpi_uid` | 16 | 4 | 4 | `u32` | - |
+| `flags` | 20 | 4 | 4 | `u32` | - |
+| `start_epoch` | 24 | 8 | 8 | `u64` | - |
+| `source_leaf` | 32 | 4 | 4 | `u32` | - |
+| `geometry_status` | 36 | 4 | 4 | `u32` | - |
+| `package_id` | 40 | 4 | 4 | `u32` | - |
+| `core_id` | 44 | 4 | 4 | `u32` | - |
+| `thread_id` | 48 | 4 | 4 | `u32` | - |
+| `smt_shift` | 52 | 4 | 4 | `u32` | - |
+| `package_shift` | 56 | 4 | 4 | `u32` | - |
+| `threads_per_core_bound` | 60 | 4 | 4 | `u32` | - |
+| `logical_per_package_bound` | 64 | 4 | 4 | `u32` | - |
+| `core_type_source` | 68 | 4 | 4 | `u32` | - |
+| `core_type` | 72 | 4 | 4 | `u32` | - |
+| `native_model_id` | 76 | 4 | 4 | `u32` | - |
+| `efficiency_rank` | 80 | 4 | 4 | `u32` | - |
+| `cache_source_leaf` | 84 | 4 | 4 | `u32` | - |
+| `cache_count` | 88 | 4 | 4 | `u32` | - |
+| `cache_status` | 92 | 4 | 4 | `u32` | - |
+| `vendor_name` | 96 | 12 | 1 | `[12]u8` | - |
+| `configured_cpus` | 108 | 4 | 4 | `u32` | - |
+
+### `CpuCacheTopologyInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 64 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `cpu_index` | 8 | 4 | 4 | `u32` | - |
+| `cache_index` | 12 | 4 | 4 | `u32` | - |
+| `start_epoch` | 16 | 8 | 8 | `u64` | - |
+| `source_leaf` | 24 | 4 | 4 | `u32` | - |
+| `kind` | 28 | 4 | 4 | `u32` | - |
+| `level` | 32 | 4 | 4 | `u32` | - |
+| `line_bytes` | 36 | 4 | 4 | `u32` | - |
+| `sharing_logical_bound` | 40 | 4 | 4 | `u32` | - |
+| `sharing_shift` | 44 | 4 | 4 | `u32` | - |
+| `cache_bytes` | 48 | 8 | 8 | `u64` | - |
+| `property_flags` | 56 | 4 | 4 | `u32` | - |
+| `reserved0` | 60 | 4 | 4 | `u32` | - |
+
+### `ThreadPlacementRequest`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 32 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `flags` | 8 | 4 | 4 | `u32` | - |
+| `work_class` | 12 | 4 | 4 | `u32` | - |
+| `preferred_cpu` | 16 | 4 | 4 | `u32` | - |
+| `reserved0` | 20 | 4 | 4 | `u32` | - |
+| `reserved1` | 24 | 8 | 8 | `u64` | - |
+
+### `ThreadPlacementInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 64 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `flags` | 8 | 4 | 4 | `u32` | - |
+| `work_class` | 12 | 4 | 4 | `u32` | - |
+| `preferred_cpu` | 16 | 4 | 4 | `u32` | - |
+| `home_cpu` | 20 | 4 | 4 | `u32` | - |
+| `running_cpu` | 24 | 4 | 4 | `u32` | - |
+| `cpu_word_count` | 28 | 4 | 4 | `u32` | - |
+| `request_revision` | 32 | 8 | 8 | `u64` | - |
+| `applied_revision` | 40 | 8 | 8 | `u64` | - |
+| `reserved0` | 48 | 8 | 8 | `u64` | - |
+| `reserved1` | 56 | 8 | 8 | `u64` | - |
+
+### `CpuLifecycleInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 128 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `cpu_index` | 8 | 4 | 4 | `u32` | - |
+| `state` | 12 | 4 | 4 | `u32` | - |
+| `flags` | 16 | 4 | 4 | `u32` | - |
+| `reason` | 20 | 4 | 4 | `u32` | - |
+| `configured_cpus` | 24 | 4 | 4 | `u32` | - |
+| `available_cpus` | 28 | 4 | 4 | `u32` | - |
+| `epoch` | 32 | 8 | 8 | `u64` | - |
+| `installed_epoch` | 40 | 8 | 8 | `u64` | - |
+| `capacity_generation` | 48 | 8 | 8 | `u64` | - |
+| `parked_epoch` | 56 | 8 | 8 | `u64` | - |
+| `withdrawn_epoch` | 64 | 8 | 8 | `u64` | - |
+| `stopped_epoch` | 72 | 8 | 8 | `u64` | - |
+| `tlb_generation` | 80 | 8 | 8 | `u64` | - |
+| `switch_serial` | 88 | 8 | 8 | `u64` | - |
+| `offline_cycles` | 96 | 8 | 8 | `u64` | - |
+| `tasks_migrated` | 104 | 4 | 4 | `u32` | - |
+| `irq_retargets` | 108 | 4 | 4 | `u32` | - |
+| `reserved0` | 112 | 4 | 4 | `u32` | - |
+| `reserved1` | 116 | 4 | 4 | `u32` | - |
+| `irq_epoch` | 120 | 8 | 8 | `u64` | - |
+
+### `ProgramKernelCpuLifecycleCheck`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 128 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `status` | 8 | 4 | 4 | `u32` | - |
+| `selected` | 12 | 4 | 4 | `u32` | - |
+| `passed` | 16 | 4 | 4 | `u32` | - |
+| `failed` | 20 | 4 | 4 | `u32` | - |
+| `cpu_index` | 24 | 4 | 4 | `u32` | - |
+| `reason` | 28 | 4 | 4 | `u32` | - |
+| `configured_cpus` | 32 | 4 | 4 | `u32` | - |
+| `available_before` | 36 | 4 | 4 | `u32` | - |
+| `available_offline` | 40 | 4 | 4 | `u32` | - |
+| `available_after` | 44 | 4 | 4 | `u32` | - |
+| `tasks_created` | 48 | 4 | 4 | `u32` | - |
+| `tasks_reaped` | 52 | 4 | 4 | `u32` | - |
+| `cleanup_errors` | 56 | 4 | 4 | `u32` | - |
+| `if_checks` | 60 | 4 | 4 | `u32` | - |
+| `old_epoch` | 64 | 8 | 8 | `u64` | - |
+| `new_epoch` | 72 | 8 | 8 | `u64` | - |
+| `capacity_before` | 80 | 8 | 8 | `u64` | - |
+| `capacity_after` | 88 | 8 | 8 | `u64` | - |
+| `parked_epoch` | 96 | 8 | 8 | `u64` | - |
+| `stopped_epoch` | 104 | 8 | 8 | `u64` | - |
+| `tlb_generation` | 112 | 8 | 8 | `u64` | - |
+| `switch_serial` | 120 | 8 | 8 | `u64` | - |
+
+### `CpuCapabilitiesInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 272 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `cpu_index` | 8 | 4 | 4 | `u32` | - |
+| `state` | 12 | 4 | 4 | `u32` | - |
+| `flags` | 16 | 4 | 4 | `u32` | - |
+| `feature_count` | 20 | 4 | 4 | `u32` | - |
+| `max_basic_leaf` | 24 | 4 | 4 | `u32` | - |
+| `max_extended_leaf` | 28 | 4 | 4 | `u32` | - |
+| `max_hypervisor_leaf` | 32 | 4 | 4 | `u32` | - |
+| `max_leaf7_subleaf` | 36 | 4 | 4 | `u32` | - |
+| `family` | 40 | 4 | 4 | `u32` | - |
+| `model` | 44 | 4 | 4 | `u32` | - |
+| `stepping` | 48 | 4 | 4 | `u32` | - |
+| `apic_id` | 52 | 4 | 4 | `u32` | - |
+| `configured_cpus` | 56 | 4 | 4 | `u32` | - |
+| `os_read_flags` | 60 | 4 | 4 | `u32` | - |
+| `epoch` | 64 | 8 | 8 | `u64` | - |
+| `capture_sequence` | 72 | 8 | 8 | `u64` | - |
+| `cr0` | 80 | 8 | 8 | `u64` | - |
+| `cr4` | 88 | 8 | 8 | `u64` | - |
+| `xcr0` | 96 | 8 | 8 | `u64` | - |
+| `efer` | 104 | 8 | 8 | `u64` | - |
+| `pat` | 112 | 8 | 8 | `u64` | - |
+| `base_mhz` | 120 | 4 | 4 | `u32` | - |
+| `maximum_mhz` | 124 | 4 | 4 | `u32` | - |
+| `bus_mhz` | 128 | 4 | 4 | `u32` | - |
+| `crystal_hz` | 132 | 4 | 4 | `u32` | - |
+| `tsc_denominator` | 136 | 4 | 4 | `u32` | - |
+| `tsc_numerator` | 140 | 4 | 4 | `u32` | - |
+| `pmu_version` | 144 | 4 | 4 | `u32` | - |
+| `pmu_counters` | 148 | 4 | 4 | `u32` | - |
+| `pmu_counter_width` | 152 | 4 | 4 | `u32` | - |
+| `clflush_line_bytes` | 156 | 4 | 4 | `u32` | - |
+| `legacy_inventory_msr_faults` | 160 | 4 | 4 | `u32` | - |
+| `raw_hypervisor_maximum` | 164 | 4 | 4 | `u32` | - |
+| `vendor_name` | 168 | 12 | 1 | `[12]u8` | - |
+| `hypervisor_name` | 180 | 12 | 1 | `[12]u8` | - |
+| `brand_name` | 192 | 48 | 1 | `[48]u8` | - |
+| `recovered_msr_faults` | 240 | 8 | 8 | `u64` | - |
+| `physical_address_bits` | 248 | 4 | 4 | `u32` | - |
+| `virtual_address_bits` | 252 | 4 | 4 | `u32` | - |
+| `supported_xcr0` | 256 | 8 | 8 | `u64` | - |
+| `enabled_xsave_bytes` | 264 | 4 | 4 | `u32` | - |
+| `maximum_xsave_bytes` | 268 | 4 | 4 | `u32` | - |
+
+### `CpuFeatureInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 112 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `cpu_index` | 8 | 4 | 4 | `u32` | - |
+| `feature_index` | 12 | 4 | 4 | `u32` | - |
+| `feature_id` | 16 | 4 | 4 | `u32` | - |
+| `flags` | 20 | 4 | 4 | `u32` | - |
+| `hardware_state` | 24 | 4 | 4 | `u32` | - |
+| `os_state` | 28 | 4 | 4 | `u32` | - |
+| `use_state` | 32 | 4 | 4 | `u32` | - |
+| `reason` | 36 | 4 | 4 | `u32` | - |
+| `source_leaf` | 40 | 4 | 4 | `u32` | - |
+| `source_subleaf` | 44 | 4 | 4 | `u32` | - |
+| `source_register` | 48 | 4 | 4 | `u32` | - |
+| `source_bit` | 52 | 4 | 4 | `u32` | - |
+| `raw_value` | 56 | 4 | 4 | `u32` | - |
+| `reserved0` | 60 | 4 | 4 | `u32` | - |
+| `epoch` | 64 | 8 | 8 | `u64` | - |
+| `control_value` | 72 | 8 | 8 | `u64` | - |
+| `name` | 80 | 24 | 1 | `[24]u8` | - |
+| `reserved1` | 104 | 8 | 8 | `u64` | - |
+
+### `CpuRegisterInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 80 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `cpu_index` | 8 | 4 | 4 | `u32` | - |
+| `register_id` | 12 | 4 | 4 | `u32` | - |
+| `flags` | 16 | 4 | 4 | `u32` | - |
+| `reserved0` | 20 | 4 | 4 | `u32` | - |
+| `epoch` | 24 | 8 | 8 | `u64` | - |
+| `value` | 32 | 8 | 8 | `u64` | - |
+| `capture_sequence` | 40 | 8 | 8 | `u64` | - |
+| `name` | 48 | 24 | 1 | `[24]u8` | - |
+| `reserved1` | 72 | 8 | 8 | `u64` | - |
+
+### `ProgramKernelCpuRegisterCheck`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 128 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `cpu_index` | 8 | 4 | 4 | `u32` | - |
+| `status` | 12 | 4 | 4 | `u32` | - |
+| `passed` | 16 | 4 | 4 | `u32` | - |
+| `failed` | 20 | 4 | 4 | `u32` | - |
+| `if_checks` | 24 | 4 | 4 | `u32` | - |
+| `reads` | 28 | 4 | 4 | `u32` | - |
+| `writes` | 32 | 4 | 4 | `u32` | - |
+| `faults` | 36 | 4 | 4 | `u32` | - |
+| `cleanup_errors` | 40 | 4 | 4 | `u32` | - |
+| `reserved0` | 44 | 4 | 4 | `u32` | - |
+| `reserved1` | 48 | 4 | 4 | `u32` | - |
+| `reserved2` | 52 | 4 | 4 | `u32` | - |
+| `reserved3` | 56 | 4 | 4 | `u32` | - |
+| `reserved4` | 60 | 4 | 4 | `u32` | - |
+| `epoch` | 64 | 8 | 8 | `u64` | - |
+| `capture_sequence` | 72 | 8 | 8 | `u64` | - |
+| `faults_before` | 80 | 8 | 8 | `u64` | - |
+| `faults_after` | 88 | 8 | 8 | `u64` | - |
+| `flags_before` | 96 | 8 | 8 | `u64` | - |
+| `flags_after` | 104 | 8 | 8 | `u64` | - |
+| `reserved5` | 112 | 8 | 8 | `u64` | - |
+| `reserved6` | 120 | 8 | 8 | `u64` | - |
+
+### `CpuPowerInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 320 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `cpu_index` | 8 | 4 | 4 | `u32` | - |
+| `state` | 12 | 4 | 4 | `u32` | - |
+| `profile` | 16 | 4 | 4 | `u32` | - |
+| `flags` | 20 | 4 | 4 | `u32` | - |
+| `valid_mask` | 24 | 4 | 4 | `u32` | - |
+| `fault_mask` | 28 | 4 | 4 | `u32` | - |
+| `unsupported_mask` | 32 | 4 | 4 | `u32` | - |
+| `clock_generation` | 36 | 4 | 4 | `u32` | - |
+| `clock_source` | 40 | 4 | 4 | `u32` | - |
+| `reserved0` | 44 | 4 | 4 | `u32` | - |
+| `epoch` | 48 | 8 | 8 | `u64` | - |
+| `provider_generation` | 56 | 8 | 8 | `u64` | - |
+| `sequence` | 64 | 8 | 8 | `u64` | - |
+| `captured_ns` | 72 | 8 | 8 | `u64` | - |
+| `previous_ns` | 80 | 8 | 8 | `u64` | - |
+| `interval_ns` | 88 | 8 | 8 | `u64` | - |
+| `active_hz` | 96 | 8 | 8 | `u64` | - |
+| `reference_hz` | 104 | 8 | 8 | `u64` | - |
+| `aperf` | 112 | 8 | 8 | `u64` | - |
+| `mperf` | 120 | 8 | 8 | `u64` | - |
+| `package_energy_raw` | 128 | 8 | 8 | `u64` | - |
+| `core_energy_raw` | 136 | 8 | 8 | `u64` | - |
+| `package_energy_uj` | 144 | 8 | 8 | `u64` | - |
+| `core_energy_uj` | 152 | 8 | 8 | `u64` | - |
+| `package_mask` | 160 | 8 | 8 | `u64` | - |
+| `core_mask` | 168 | 8 | 8 | `u64` | - |
+| `raw_microcode` | 176 | 8 | 8 | `u64` | - |
+| `raw_thermal_status` | 184 | 8 | 8 | `u64` | - |
+| `raw_temperature_target` | 192 | 8 | 8 | `u64` | - |
+| `raw_energy_unit` | 200 | 8 | 8 | `u64` | - |
+| `raw_reference` | 208 | 8 | 8 | `u64` | - |
+| `microcode_revision` | 216 | 4 | 4 | `u32` | - |
+| `package_energy_bits` | 220 | 4 | 4 | `u32` | - |
+| `core_energy_bits` | 224 | 4 | 4 | `u32` | - |
+| `energy_exponent` | 228 | 4 | 4 | `u32` | - |
+| `thermal_current` | 232 | 4 | 4 | `u32` | - |
+| `thermal_history` | 236 | 4 | 4 | `u32` | - |
+| `package_leader` | 240 | 4 | 4 | `u32` | - |
+| `core_leader` | 244 | 4 | 4 | `u32` | - |
+| `temperature_millic` | 248 | 4 | 4 | `i32` | - |
+| `reserved1` | 252 | 4 | 4 | `u32` | - |
+| `vendor_name` | 256 | 12 | 1 | `[12]u8` | - |
+| `profile_name` | 268 | 32 | 1 | `[32]u8` | - |
+| `reserved2` | 300 | 4 | 4 | `u32` | - |
+| `family` | 304 | 4 | 4 | `u32` | - |
+| `model` | 308 | 4 | 4 | `u32` | - |
+| `stepping` | 312 | 4 | 4 | `u32` | - |
+| `reserved3` | 316 | 4 | 4 | `u32` | - |
+
+### `CpuPowerBackend`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 40 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `context` | 8 | 8 | 8 | `u64` | - |
+| `snapshot` | 16 | 8 | 8 | `u64` | - |
+| `capture` | 24 | 8 | 8 | `u64` | - |
+| `flags` | 32 | 4 | 4 | `u32` | - |
+| `reserved0` | 36 | 4 | 4 | `u32` | - |
+
+### `DriverCpuPowerApi`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `extensible`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 6 / 184 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `register_backend` | 8 | 8 | 8 | `u64` | - |
+| `unregister_backend` | 16 | 8 | 8 | `u64` | - |
+| `current_cpu` | 24 | 8 | 8 | `u64` | - |
+| `capabilities` | 32 | 8 | 8 | `u64` | - |
+| `topology` | 40 | 8 | 8 | `u64` | - |
+| `register_read` | 48 | 8 | 8 | `u64` | - |
+| `clock` | 56 | 8 | 8 | `u64` | - |
+| `counters_read` | 64 | 8 | 8 | `u64` | - |
+| `feature` | 72 | 8 | 8 | `u64` | - |
+| `register_performance` | 80 | 8 | 8 | `u64` | - |
+| `control_acquire` | 88 | 8 | 8 | `u64` | - |
+| `control_release` | 96 | 8 | 8 | `u64` | - |
+| `register_compare_write` | 104 | 8 | 8 | `u64` | - |
+| `register_cppc` | 112 | 8 | 8 | `u64` | - |
+| `rank_publish` | 120 | 8 | 8 | `u64` | - |
+| `firmware_register` | 128 | 8 | 8 | `u64` | - |
+| `firmware_unregister` | 136 | 8 | 8 | `u64` | - |
+| `firmware_execute` | 144 | 8 | 8 | `u64` | - |
+| `firmware_control` | 152 | 8 | 8 | `u64` | - |
+| `firmware_cpu_info` | 160 | 8 | 8 | `u64` | - |
+| `idle_publish` | 168 | 8 | 8 | `u64` | - |
+| `idle_policy` | 176 | 8 | 8 | `u64` | - |
+
+### `CpuPowerCounters`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 64 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `cpu_index` | 8 | 4 | 4 | `u32` | - |
+| `flags` | 12 | 4 | 4 | `u32` | - |
+| `epoch` | 16 | 8 | 8 | `u64` | - |
+| `aperf` | 24 | 8 | 8 | `u64` | - |
+| `mperf` | 32 | 8 | 8 | `u64` | - |
+| `captured_ns` | 40 | 8 | 8 | `u64` | - |
+| `clock_generation` | 48 | 4 | 4 | `u32` | - |
+| `clock_source` | 52 | 4 | 4 | `u32` | - |
+| `capture_sequence` | 56 | 8 | 8 | `u64` | - |
+
+### `CpuPerformanceRequest`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 64 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `cpu_index` | 8 | 4 | 4 | `u32` | - |
+| `operation` | 12 | 4 | 4 | `u32` | - |
+| `epoch` | 16 | 8 | 8 | `u64` | - |
+| `lease` | 24 | 8 | 8 | `u64` | - |
+| `minimum` | 32 | 4 | 4 | `u32` | - |
+| `maximum` | 36 | 4 | 4 | `u32` | - |
+| `desired` | 40 | 4 | 4 | `u32` | - |
+| `epp` | 44 | 4 | 4 | `u32` | - |
+| `flags` | 48 | 4 | 4 | `u32` | - |
+| `reserved0` | 52 | 4 | 4 | `u32` | - |
+| `expected_revision` | 56 | 8 | 8 | `u64` | - |
+
+### `CpuPerformanceInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 176 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `cpu_index` | 8 | 4 | 4 | `u32` | - |
+| `state` | 12 | 4 | 4 | `u32` | - |
+| `flags` | 16 | 4 | 4 | `u32` | - |
+| `features` | 20 | 4 | 4 | `u32` | - |
+| `valid_mask` | 24 | 4 | 4 | `u32` | - |
+| `reserved0` | 28 | 4 | 4 | `u32` | - |
+| `epoch` | 32 | 8 | 8 | `u64` | - |
+| `provider_generation` | 40 | 8 | 8 | `u64` | - |
+| `lease` | 48 | 8 | 8 | `u64` | - |
+| `revision` | 56 | 8 | 8 | `u64` | - |
+| `raw_enable` | 64 | 8 | 8 | `u64` | - |
+| `raw_capabilities` | 72 | 8 | 8 | `u64` | - |
+| `raw_request` | 80 | 8 | 8 | `u64` | - |
+| `raw_package` | 88 | 8 | 8 | `u64` | - |
+| `baseline_request` | 96 | 8 | 8 | `u64` | - |
+| `last_written` | 104 | 8 | 8 | `u64` | - |
+| `package_mask` | 112 | 8 | 8 | `u64` | - |
+| `captured_ns` | 120 | 8 | 8 | `u64` | - |
+| `minimum` | 128 | 4 | 4 | `u32` | - |
+| `maximum` | 132 | 4 | 4 | `u32` | - |
+| `desired` | 136 | 4 | 4 | `u32` | - |
+| `epp` | 140 | 4 | 4 | `u32` | - |
+| `highest` | 144 | 4 | 4 | `u32` | - |
+| `guaranteed` | 148 | 4 | 4 | `u32` | - |
+| `efficient` | 152 | 4 | 4 | `u32` | - |
+| `lowest` | 156 | 4 | 4 | `u32` | - |
+| `last_error` | 160 | 4 | 4 | `i32` | - |
+| `attempted_id` | 164 | 4 | 4 | `u32` | - |
+| `package_leader` | 168 | 4 | 4 | `u32` | - |
+| `reserved1` | 172 | 4 | 4 | `u32` | - |
+
+### `CpuPerformanceBackend`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 32 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `context` | 8 | 8 | 8 | `u64` | - |
+| `execute` | 16 | 8 | 8 | `u64` | - |
+| `flags` | 24 | 4 | 4 | `u32` | - |
+| `reserved0` | 28 | 4 | 4 | `u32` | - |
+
+### `CpuRegisterWriteInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 72 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `cpu_index` | 8 | 4 | 4 | `u32` | - |
+| `register_id` | 12 | 4 | 4 | `u32` | - |
+| `epoch` | 16 | 8 | 8 | `u64` | - |
+| `lease` | 24 | 8 | 8 | `u64` | - |
+| `expected` | 32 | 8 | 8 | `u64` | - |
+| `requested` | 40 | 8 | 8 | `u64` | - |
+| `observed_before` | 48 | 8 | 8 | `u64` | - |
+| `observed_after` | 56 | 8 | 8 | `u64` | - |
+| `flags` | 64 | 4 | 4 | `u32` | - |
+| `last_error` | 68 | 4 | 4 | `i32` | - |
+
+### `CpuCppcInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 192 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `cpu_index` | 8 | 4 | 4 | `u32` | - |
+| `state` | 12 | 4 | 4 | `u32` | - |
+| `flags` | 16 | 4 | 4 | `u32` | - |
+| `features` | 20 | 4 | 4 | `u32` | - |
+| `valid_mask` | 24 | 4 | 4 | `u32` | - |
+| `raw_valid_mask` | 28 | 4 | 4 | `u32` | - |
+| `epoch` | 32 | 8 | 8 | `u64` | - |
+| `provider_generation` | 40 | 8 | 8 | `u64` | - |
+| `lease` | 48 | 8 | 8 | `u64` | - |
+| `revision` | 56 | 8 | 8 | `u64` | - |
+| `raw_enable` | 64 | 8 | 8 | `u64` | - |
+| `raw_capability1` | 72 | 8 | 8 | `u64` | - |
+| `raw_capability2` | 80 | 8 | 8 | `u64` | - |
+| `raw_request` | 88 | 8 | 8 | `u64` | - |
+| `raw_status` | 96 | 8 | 8 | `u64` | - |
+| `baseline_request` | 104 | 8 | 8 | `u64` | - |
+| `last_written` | 112 | 8 | 8 | `u64` | - |
+| `qualified_mask` | 120 | 8 | 8 | `u64` | - |
+| `captured_ns` | 128 | 8 | 8 | `u64` | - |
+| `minimum` | 136 | 4 | 4 | `u32` | - |
+| `maximum` | 140 | 4 | 4 | `u32` | - |
+| `desired` | 144 | 4 | 4 | `u32` | - |
+| `epp` | 148 | 4 | 4 | `u32` | - |
+| `highest` | 152 | 4 | 4 | `u32` | - |
+| `nominal` | 156 | 4 | 4 | `u32` | - |
+| `lowest_nonlinear` | 160 | 4 | 4 | `u32` | - |
+| `lowest` | 164 | 4 | 4 | `u32` | - |
+| `last_error` | 168 | 4 | 4 | `i32` | - |
+| `attempted_id` | 172 | 4 | 4 | `u32` | - |
+| `hint_sequence` | 176 | 8 | 8 | `u64` | - |
+| `clock_generation` | 184 | 4 | 4 | `u32` | - |
+| `clock_source` | 188 | 4 | 4 | `u32` | - |
+
+### `CpuCppcBackend`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 32 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `context` | 8 | 8 | 8 | `u64` | - |
+| `execute` | 16 | 8 | 8 | `u64` | - |
+| `flags` | 24 | 4 | 4 | `u32` | - |
+| `reserved0` | 28 | 4 | 4 | `u32` | - |
+
+### `CpuPerformanceHint`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 64 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `cpu_index` | 8 | 4 | 4 | `u32` | - |
+| `flags` | 12 | 4 | 4 | `u32` | - |
+| `epoch` | 16 | 8 | 8 | `u64` | - |
+| `captured_ns` | 24 | 8 | 8 | `u64` | - |
+| `scope_mask` | 32 | 8 | 8 | `u64` | - |
+| `core_mask` | 40 | 8 | 8 | `u64` | - |
+| `rank` | 48 | 4 | 4 | `u32` | - |
+| `scale` | 52 | 4 | 4 | `u32` | - |
+| `clock_generation` | 56 | 4 | 4 | `u32` | - |
+| `clock_source` | 60 | 4 | 4 | `u32` | - |
+
+### `CpuPerformanceHintInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 96 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `cpu_index` | 8 | 4 | 4 | `u32` | - |
+| `state` | 12 | 4 | 4 | `u32` | - |
+| `flags` | 16 | 4 | 4 | `u32` | - |
+| `source` | 20 | 4 | 4 | `u32` | - |
+| `clock_generation` | 24 | 4 | 4 | `u32` | - |
+| `clock_source` | 28 | 4 | 4 | `u32` | - |
+| `epoch` | 32 | 8 | 8 | `u64` | - |
+| `provider_generation` | 40 | 8 | 8 | `u64` | - |
+| `sequence` | 48 | 8 | 8 | `u64` | - |
+| `captured_ns` | 56 | 8 | 8 | `u64` | - |
+| `expires_ns` | 64 | 8 | 8 | `u64` | - |
+| `scope_mask` | 72 | 8 | 8 | `u64` | - |
+| `core_mask` | 80 | 8 | 8 | `u64` | - |
+| `rank` | 88 | 4 | 4 | `u32` | - |
+| `scale` | 92 | 4 | 4 | `u32` | - |
+
+### `PowerProfileRequest`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 64 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `profile` | 8 | 4 | 4 | `u32` | - |
+| `flags` | 12 | 4 | 4 | `u32` | - |
+| `expected_service_generation` | 16 | 8 | 8 | `u64` | - |
+| `expected_revision` | 24 | 8 | 8 | `u64` | - |
+| `cpu_index` | 32 | 4 | 4 | `u32` | - |
+| `reserved0` | 36 | 4 | 4 | `u32` | - |
+| `reserved1` | 40 | 8 | 8 | `u64` | - |
+| `reserved2` | 48 | 8 | 8 | `u64` | - |
+| `reserved3` | 56 | 8 | 8 | `u64` | - |
+
+### `PowerProfileInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 128 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `state` | 8 | 4 | 4 | `u32` | - |
+| `selected_profile` | 12 | 4 | 4 | `u32` | - |
+| `flags` | 16 | 4 | 4 | `u32` | - |
+| `configured_cpus` | 20 | 4 | 4 | `u32` | - |
+| `online_cpus` | 24 | 4 | 4 | `u32` | - |
+| `backend_cpus` | 28 | 4 | 4 | `u32` | - |
+| `service_generation` | 32 | 8 | 8 | `u64` | - |
+| `revision` | 40 | 8 | 8 | `u64` | - |
+| `applied_revision` | 48 | 8 | 8 | `u64` | - |
+| `provider_generation` | 56 | 8 | 8 | `u64` | - |
+| `owned_mask` | 64 | 8 | 8 | `u64` | - |
+| `applied_mask` | 72 | 8 | 8 | `u64` | - |
+| `pending_mask` | 80 | 8 | 8 | `u64` | - |
+| `supported_mask` | 88 | 8 | 8 | `u64` | - |
+| `last_error` | 96 | 4 | 4 | `i32` | - |
+| `last_cpu` | 100 | 4 | 4 | `u32` | - |
+| `config_revision` | 104 | 4 | 4 | `u32` | - |
+| `config_error` | 108 | 4 | 4 | `i32` | - |
+| `service_instance_id` | 112 | 4 | 4 | `u32` | - |
+| `worker_count` | 116 | 4 | 4 | `u32` | - |
+| `sticky_count` | 120 | 4 | 4 | `u32` | - |
+| `reserved0` | 124 | 4 | 4 | `u32` | - |
+
+### `PowerCpuProfileInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 160 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `cpu_index` | 8 | 4 | 4 | `u32` | - |
+| `backend` | 12 | 4 | 4 | `u32` | - |
+| `state` | 16 | 4 | 4 | `u32` | - |
+| `flags` | 20 | 4 | 4 | `u32` | - |
+| `profile` | 24 | 4 | 4 | `u32` | - |
+| `last_error` | 28 | 4 | 4 | `i32` | - |
+| `cpu_epoch` | 32 | 8 | 8 | `u64` | - |
+| `provider_generation` | 40 | 8 | 8 | `u64` | - |
+| `lease` | 48 | 8 | 8 | `u64` | - |
+| `revision` | 56 | 8 | 8 | `u64` | - |
+| `applied_revision` | 64 | 8 | 8 | `u64` | - |
+| `captured_ns` | 72 | 8 | 8 | `u64` | - |
+| `minimum` | 80 | 4 | 4 | `u32` | - |
+| `maximum` | 84 | 4 | 4 | `u32` | - |
+| `desired` | 88 | 4 | 4 | `u32` | - |
+| `epp` | 92 | 4 | 4 | `u32` | - |
+| `lowest` | 96 | 4 | 4 | `u32` | - |
+| `highest` | 100 | 4 | 4 | `u32` | - |
+| `efficient` | 104 | 4 | 4 | `u32` | - |
+| `nominal` | 108 | 4 | 4 | `u32` | - |
+| `baseline_request` | 112 | 8 | 8 | `u64` | - |
+| `last_written` | 120 | 8 | 8 | `u64` | - |
+| `observed_request` | 128 | 8 | 8 | `u64` | - |
+| `valid_mask` | 136 | 4 | 4 | `u32` | - |
+| `reserved0` | 140 | 4 | 4 | `u32` | - |
+| `worker_state` | 144 | 4 | 4 | `u32` | - |
+| `reserved1` | 148 | 4 | 4 | `u32` | - |
+| `service_generation` | 152 | 8 | 8 | `u64` | - |
+
+### `CpuFirmwareBackend`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 32 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `context` | 8 | 8 | 8 | `u64` | - |
+| `execute` | 16 | 8 | 8 | `u64` | - |
+| `flags` | 24 | 4 | 4 | `u32` | - |
+| `reserved0` | 28 | 4 | 4 | `u32` | - |
+
+### `CpuFirmwareInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 192 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `cpu_index` | 8 | 4 | 4 | `u32` | - |
+| `state` | 12 | 4 | 4 | `u32` | - |
+| `flags` | 16 | 4 | 4 | `u32` | - |
+| `backend` | 20 | 4 | 4 | `u32` | - |
+| `valid_mask` | 24 | 4 | 4 | `u32` | - |
+| `coordination` | 28 | 4 | 4 | `u32` | - |
+| `epoch` | 32 | 8 | 8 | `u64` | - |
+| `provider_generation` | 40 | 8 | 8 | `u64` | - |
+| `firmware_generation` | 48 | 8 | 8 | `u64` | - |
+| `lease` | 56 | 8 | 8 | `u64` | - |
+| `revision` | 64 | 8 | 8 | `u64` | - |
+| `domain_mask` | 72 | 8 | 8 | `u64` | - |
+| `captured_ns` | 80 | 8 | 8 | `u64` | - |
+| `minimum` | 88 | 4 | 4 | `u32` | - |
+| `maximum` | 92 | 4 | 4 | `u32` | - |
+| `desired` | 96 | 4 | 4 | `u32` | - |
+| `epp` | 100 | 4 | 4 | `u32` | - |
+| `lowest` | 104 | 4 | 4 | `u32` | - |
+| `highest` | 108 | 4 | 4 | `u32` | - |
+| `efficient` | 112 | 4 | 4 | `u32` | - |
+| `nominal` | 116 | 4 | 4 | `u32` | - |
+| `baseline_request` | 120 | 8 | 8 | `u64` | - |
+| `last_written` | 128 | 8 | 8 | `u64` | - |
+| `observed_request` | 136 | 8 | 8 | `u64` | - |
+| `domain_id` | 144 | 4 | 4 | `u32` | - |
+| `domain_cpus` | 148 | 4 | 4 | `u32` | - |
+| `pstate_count` | 152 | 4 | 4 | `u32` | - |
+| `package_revision` | 156 | 4 | 4 | `u32` | - |
+| `last_error` | 160 | 4 | 4 | `i32` | - |
+| `transport_spaces` | 164 | 4 | 4 | `u32` | - |
+| `reserved0` | 168 | 4 | 4 | `u32` | - |
+| `reserved1` | 172 | 4 | 4 | `u32` | - |
+| `descriptor_identity` | 176 | 8 | 8 | `u64` | - |
+| `reserved2` | 184 | 8 | 8 | `u64` | - |
+
+### `CpuIdleDescriptor`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 96 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `cpu_index` | 8 | 4 | 4 | `u32` | - |
+| `flags` | 12 | 4 | 4 | `u32` | - |
+| `epoch` | 16 | 8 | 8 | `u64` | - |
+| `firmware_generation` | 24 | 8 | 8 | `u64` | - |
+| `descriptor_identity` | 32 | 8 | 8 | `u64` | - |
+| `source` | 40 | 4 | 4 | `u32` | - |
+| `state_count` | 44 | 4 | 4 | `u32` | - |
+| `selected_index` | 48 | 4 | 4 | `u32` | - |
+| `cstate_type` | 52 | 4 | 4 | `u32` | - |
+| `entry_method` | 56 | 4 | 4 | `u32` | - |
+| `entry_hint` | 60 | 4 | 4 | `u32` | - |
+| `latency_us` | 64 | 4 | 4 | `u32` | - |
+| `min_residency_us` | 68 | 4 | 4 | `u32` | - |
+| `coordination` | 72 | 4 | 4 | `u32` | - |
+| `context_loss` | 76 | 4 | 4 | `u32` | - |
+| `declared_power_mw` | 80 | 4 | 4 | `u32` | - |
+| `reason` | 84 | 4 | 4 | `u32` | - |
+| `lpi_state_count` | 88 | 4 | 4 | `u32` | - |
+| `reserved0` | 92 | 4 | 4 | `u32` | - |
+
+### `CpuIdlePolicy`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 32 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `provider_generation` | 8 | 8 | 8 | `u64` | - |
+| `enabled` | 16 | 4 | 4 | `u32` | - |
+| `maximum_latency_us` | 20 | 4 | 4 | `u32` | - |
+| `residency_factor` | 24 | 4 | 4 | `u32` | - |
+| `reserved0` | 28 | 4 | 4 | `u32` | - |
+
+### `CpuIdleInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 192 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `cpu_index` | 8 | 4 | 4 | `u32` | - |
+| `state` | 12 | 4 | 4 | `u32` | - |
+| `epoch` | 16 | 8 | 8 | `u64` | - |
+| `firmware_generation` | 24 | 8 | 8 | `u64` | - |
+| `policy_generation` | 32 | 8 | 8 | `u64` | - |
+| `descriptor_identity` | 40 | 8 | 8 | `u64` | - |
+| `source` | 48 | 4 | 4 | `u32` | - |
+| `state_count` | 52 | 4 | 4 | `u32` | - |
+| `selected_index` | 56 | 4 | 4 | `u32` | - |
+| `cstate_type` | 60 | 4 | 4 | `u32` | - |
+| `entry_method` | 64 | 4 | 4 | `u32` | - |
+| `entry_hint` | 68 | 4 | 4 | `u32` | - |
+| `latency_us` | 72 | 4 | 4 | `u32` | - |
+| `min_residency_us` | 76 | 4 | 4 | `u32` | - |
+| `coordination` | 80 | 4 | 4 | `u32` | - |
+| `context_loss` | 84 | 4 | 4 | `u32` | - |
+| `declared_power_mw` | 88 | 4 | 4 | `u32` | - |
+| `reason` | 92 | 4 | 4 | `u32` | - |
+| `lpi_state_count` | 96 | 4 | 4 | `u32` | - |
+| `capability_flags` | 100 | 4 | 4 | `u32` | - |
+| `reserved0` | 104 | 4 | 4 | `u32` | - |
+| `reserved1` | 108 | 4 | 4 | `u32` | - |
+| `entry_attempts` | 112 | 8 | 8 | `u64` | - |
+| `hlt_fallbacks` | 120 | 8 | 8 | `u64` | - |
+| `cancelled_entries` | 128 | 8 | 8 | `u64` | - |
+| `elapsed_ns` | 136 | 8 | 8 | `u64` | - |
+| `last_elapsed_ns` | 144 | 8 | 8 | `u64` | - |
+| `active_entries` | 152 | 8 | 8 | `u64` | - |
+| `descriptor_revision` | 160 | 8 | 8 | `u64` | - |
+| `residency_ns` | 168 | 8 | 8 | `u64` | - |
+| `wake_latency_ns` | 176 | 8 | 8 | `u64` | - |
+| `energy_uj` | 184 | 8 | 8 | `u64` | - |
+
+### `CpuMachineInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 144 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `cpu_index` | 8 | 4 | 4 | `u32` | - |
+| `flags` | 12 | 4 | 4 | `u32` | - |
+| `epoch` | 16 | 8 | 8 | `u64` | - |
+| `sequence` | 24 | 8 | 8 | `u64` | - |
+| `mcg_cap` | 32 | 8 | 8 | `u64` | - |
+| `mcg_status` | 40 | 8 | 8 | `u64` | - |
+| `rip` | 48 | 8 | 8 | `u64` | - |
+| `rsp` | 56 | 8 | 8 | `u64` | - |
+| `rflags` | 64 | 8 | 8 | `u64` | - |
+| `origin` | 72 | 4 | 4 | `u32` | - |
+| `configured_cpus` | 76 | 4 | 4 | `u32` | - |
+| `apic_id` | 80 | 4 | 4 | `u32` | - |
+| `family` | 84 | 4 | 4 | `u32` | - |
+| `model` | 88 | 4 | 4 | `u32` | - |
+| `stepping` | 92 | 4 | 4 | `u32` | - |
+| `profile` | 96 | 4 | 4 | `u32` | - |
+| `bank_count` | 100 | 4 | 4 | `u32` | - |
+| `stored_banks` | 104 | 4 | 4 | `u32` | - |
+| `valid_banks` | 108 | 4 | 4 | `u32` | - |
+| `read_faults` | 112 | 4 | 4 | `u32` | - |
+| `bank_limit` | 116 | 4 | 4 | `u32` | - |
+| `vendor_name` | 120 | 12 | 1 | `[12]u8` | - |
+| `nested_errors` | 132 | 4 | 4 | `u32` | - |
+| `reserved0` | 136 | 8 | 8 | `u64` | - |
+
+### `CpuMachineBank`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 112 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `cpu_index` | 8 | 4 | 4 | `u32` | - |
+| `bank_index` | 12 | 4 | 4 | `u32` | - |
+| `epoch` | 16 | 8 | 8 | `u64` | - |
+| `sequence` | 24 | 8 | 8 | `u64` | - |
+| `flags` | 32 | 4 | 4 | `u32` | - |
+| `format` | 36 | 4 | 4 | `u32` | - |
+| `status_msr` | 40 | 4 | 4 | `u32` | - |
+| `reserved0` | 44 | 4 | 4 | `u32` | - |
+| `status` | 48 | 8 | 8 | `u64` | - |
+| `address` | 56 | 8 | 8 | `u64` | - |
+| `misc` | 64 | 8 | 8 | `u64` | - |
+| `config` | 72 | 8 | 8 | `u64` | - |
+| `ipid` | 80 | 8 | 8 | `u64` | - |
+| `syndrome` | 88 | 8 | 8 | `u64` | - |
+| `status_after` | 96 | 8 | 8 | `u64` | - |
+| `reserved1` | 104 | 8 | 8 | `u64` | - |
+
+### `CpuMicrocodeInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 144 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `cpu_index` | 8 | 4 | 4 | `u32` | - |
+| `flags` | 12 | 4 | 4 | `u32` | - |
+| `epoch` | 16 | 8 | 8 | `u64` | - |
+| `sequence` | 24 | 8 | 8 | `u64` | - |
+| `status` | 32 | 4 | 4 | `u32` | - |
+| `vendor` | 36 | 4 | 4 | `u32` | - |
+| `signature` | 40 | 4 | 4 | `u32` | - |
+| `platform_mask` | 44 | 4 | 4 | `u32` | - |
+| `before_revision` | 48 | 4 | 4 | `u32` | - |
+| `after_revision` | 52 | 4 | 4 | `u32` | - |
+| `target_revision` | 56 | 4 | 4 | `u32` | - |
+| `minimum_revision` | 60 | 4 | 4 | `u32` | - |
+| `package_id` | 64 | 4 | 4 | `u32` | - |
+| `package_bytes` | 68 | 4 | 4 | `u32` | - |
+| `read_faults` | 72 | 4 | 4 | `u32` | - |
+| `write_attempts` | 76 | 4 | 4 | `u32` | - |
+| `before_features_hash` | 80 | 8 | 8 | `u64` | - |
+| `after_features_hash` | 88 | 8 | 8 | `u64` | - |
+| `admitted_features_hash` | 96 | 8 | 8 | `u64` | - |
+| `package_sha256` | 104 | 32 | 1 | `[32]u8` | - |
+| `configured_cpus` | 136 | 4 | 4 | `u32` | - |
+| `reserved0` | 140 | 4 | 4 | `u32` | - |
+
+### `CpuPmuInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 128 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `cpu_index` | 8 | 4 | 4 | `u32` | - |
+| `flags` | 12 | 4 | 4 | `u32` | - |
+| `epoch` | 16 | 8 | 8 | `u64` | - |
+| `last_generation` | 24 | 8 | 8 | `u64` | - |
+| `last_epoch` | 32 | 8 | 8 | `u64` | - |
+| `profile` | 40 | 4 | 4 | `u32` | - |
+| `reason` | 44 | 4 | 4 | `u32` | - |
+| `pmu_version` | 48 | 4 | 4 | `u32` | - |
+| `counter_count` | 52 | 4 | 4 | `u32` | - |
+| `counter_width` | 56 | 4 | 4 | `u32` | - |
+| `fixed_count` | 60 | 4 | 4 | `u32` | - |
+| `fixed_width` | 64 | 4 | 4 | `u32` | - |
+| `event_mask` | 68 | 4 | 4 | `u32` | - |
+| `architectural_event_mask` | 72 | 4 | 4 | `u32` | - |
+| `signature` | 76 | 4 | 4 | `u32` | - |
+| `configured_cpus` | 80 | 4 | 4 | `u32` | - |
+| `state` | 84 | 4 | 4 | `u32` | - |
+| `inflight_generation` | 88 | 8 | 8 | `u64` | - |
+| `inflight_epoch` | 96 | 8 | 8 | `u64` | - |
+| `last_sequence` | 104 | 8 | 8 | `u64` | - |
+| `reserved0` | 112 | 16 | 8 | `[2]u64` | - |
+
+### `CpuPmuResult`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 256 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `cpu_index` | 8 | 4 | 4 | `u32` | - |
+| `flags` | 12 | 4 | 4 | `u32` | - |
+| `epoch` | 16 | 8 | 8 | `u64` | - |
+| `generation` | 24 | 8 | 8 | `u64` | - |
+| `sequence` | 32 | 8 | 8 | `u64` | - |
+| `event_id` | 40 | 4 | 4 | `u32` | - |
+| `profile` | 44 | 4 | 4 | `u32` | - |
+| `status` | 48 | 4 | 4 | `u32` | - |
+| `callback_result` | 52 | 4 | 4 | `i32` | - |
+| `counter_width` | 56 | 4 | 4 | `u32` | - |
+| `iterations` | 60 | 4 | 4 | `u32` | - |
+| `read_faults` | 64 | 4 | 4 | `u32` | - |
+| `write_attempts` | 68 | 4 | 4 | `u32` | - |
+| `raw_before` | 72 | 8 | 8 | `u64` | - |
+| `raw_after` | 80 | 8 | 8 | `u64` | - |
+| `delta_modulo` | 88 | 8 | 8 | `u64` | - |
+| `counter_mask` | 96 | 8 | 8 | `u64` | - |
+| `saved_control` | 104 | 8 | 8 | `u64` | - |
+| `saved_counter` | 112 | 8 | 8 | `u64` | - |
+| `saved_global` | 120 | 8 | 8 | `u64` | - |
+| `saved_status` | 128 | 8 | 8 | `u64` | - |
+| `observed_control` | 136 | 8 | 8 | `u64` | - |
+| `observed_counter` | 144 | 8 | 8 | `u64` | - |
+| `observed_global` | 152 | 8 | 8 | `u64` | - |
+| `observed_status` | 160 | 8 | 8 | `u64` | - |
+| `original_if` | 168 | 8 | 8 | `u64` | - |
+| `final_if` | 176 | 8 | 8 | `u64` | - |
+| `begin_ns` | 184 | 8 | 8 | `u64` | - |
+| `end_ns` | 192 | 8 | 8 | `u64` | - |
+| `signature` | 200 | 4 | 4 | `u32` | - |
+| `configured_cpus` | 204 | 4 | 4 | `u32` | - |
+| `counter_index` | 208 | 4 | 4 | `u32` | - |
+| `reserved0` | 212 | 4 | 4 | `u32` | - |
+| `event_select` | 216 | 8 | 8 | `u64` | - |
+| `reserved1` | 224 | 32 | 8 | `[4]u64` | - |
+
+### `PmuWorkFn`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `callback`
+- Repräsentation: `c_callback`
+- Version/Größe/Alignment: 1 / 8 / 8
+
+### `CpuAccelerationInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 128 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `cpu_index` | 8 | 4 | 4 | `u32` | - |
+| `flags` | 12 | 4 | 4 | `u32` | - |
+| `epoch` | 16 | 8 | 8 | `u64` | - |
+| `capture_sequence` | 24 | 8 | 8 | `u64` | - |
+| `hardware_mask` | 32 | 8 | 8 | `u64` | - |
+| `os_mask` | 40 | 8 | 8 | `u64` | - |
+| `common_hardware_mask` | 48 | 8 | 8 | `u64` | - |
+| `xcr0` | 56 | 8 | 8 | `u64` | - |
+| `signature` | 64 | 4 | 4 | `u32` | - |
+| `configured_cpus` | 68 | 4 | 4 | `u32` | - |
+| `common_known_count` | 72 | 4 | 4 | `u32` | - |
+| `feature_count` | 76 | 4 | 4 | `u32` | - |
+| `reserved0` | 80 | 48 | 8 | `[6]u64` | - |
+
+### `CpuAccelerationWork`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 128 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `cpu_index` | 8 | 4 | 4 | `u32` | - |
+| `flags` | 12 | 4 | 4 | `u32` | - |
+| `epoch` | 16 | 8 | 8 | `u64` | - |
+| `capture_sequence` | 24 | 8 | 8 | `u64` | - |
+| `work_kind` | 32 | 4 | 4 | `u32` | - |
+| `iterations` | 36 | 4 | 4 | `u32` | - |
+| `status` | 40 | 4 | 4 | `u32` | - |
+| `callback_result` | 44 | 4 | 4 | `i32` | - |
+| `original_if` | 48 | 8 | 8 | `u64` | - |
+| `final_if` | 56 | 8 | 8 | `u64` | - |
+| `begin_ns` | 64 | 8 | 8 | `u64` | - |
+| `end_ns` | 72 | 8 | 8 | `u64` | - |
+| `granted_mask` | 80 | 8 | 8 | `u64` | - |
+| `xcr0` | 88 | 8 | 8 | `u64` | - |
+| `clock_source` | 96 | 4 | 4 | `u32` | - |
+| `clock_generation` | 100 | 4 | 4 | `u32` | - |
+| `reserved0` | 104 | 24 | 8 | `[3]u64` | - |
+
+### `CpuPureWorkFn`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `callback`
+- Repräsentation: `c_callback`
+- Version/Größe/Alignment: 1 / 8 / 8
+
+### `EntropySourceInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 128 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `state` | 8 | 4 | 4 | `u32` | - |
+| `flags` | 12 | 4 | 4 | `u32` | - |
+| `generation` | 16 | 8 | 8 | `u64` | - |
+| `owner_epoch` | 24 | 8 | 8 | `u64` | - |
+| `owner` | 32 | 4 | 4 | `u32` | - |
+| `module_generation` | 36 | 4 | 4 | `u32` | - |
+| `pci_address` | 40 | 4 | 4 | `u32` | - |
+| `vendor_id` | 44 | 2 | 2 | `u16` | - |
+| `device_id` | 46 | 2 | 2 | `u16` | - |
+| `max_request_bytes` | 48 | 4 | 4 | `u32` | - |
+| `last_result` | 52 | 4 | 4 | `i32` | - |
+| `requests` | 56 | 8 | 8 | `u64` | - |
+| `completed_requests` | 64 | 8 | 8 | `u64` | - |
+| `completed_bytes` | 72 | 8 | 8 | `u64` | - |
+| `dma_submitted` | 80 | 8 | 8 | `u64` | - |
+| `dma_completed` | 88 | 8 | 8 | `u64` | - |
+| `short_completions` | 96 | 8 | 8 | `u64` | - |
+| `failed_requests` | 104 | 8 | 8 | `u64` | - |
+| `last_device_flags` | 112 | 4 | 4 | `u32` | - |
+| `reserved0` | 116 | 4 | 4 | `u32` | - |
+| `reserved1` | 120 | 8 | 8 | `u64` | - |
+
+### `EntropyDeviceReceipt`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 128 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `flags` | 8 | 4 | 4 | `u32` | - |
+| `status` | 12 | 4 | 4 | `u32` | - |
+| `requested_bytes` | 16 | 4 | 4 | `u32` | - |
+| `completed_bytes` | 20 | 4 | 4 | `u32` | - |
+| `last_used_length` | 24 | 4 | 4 | `u32` | - |
+| `last_descriptor` | 28 | 4 | 4 | `u32` | - |
+| `dma_submitted` | 32 | 8 | 8 | `u64` | - |
+| `dma_completed` | 40 | 8 | 8 | `u64` | - |
+| `short_completions` | 48 | 8 | 8 | `u64` | - |
+| `begin_ns` | 56 | 8 | 8 | `u64` | - |
+| `end_ns` | 64 | 8 | 8 | `u64` | - |
+| `request_generation` | 72 | 8 | 8 | `u64` | - |
+| `available_index_before` | 80 | 4 | 4 | `u32` | - |
+| `available_index_after` | 84 | 4 | 4 | `u32` | - |
+| `used_index_before` | 88 | 4 | 4 | `u32` | - |
+| `used_index_after` | 92 | 4 | 4 | `u32` | - |
+| `device_status` | 96 | 4 | 4 | `u32` | - |
+| `pci_command` | 100 | 4 | 4 | `u32` | - |
+| `clock_generation` | 104 | 4 | 4 | `u32` | - |
+| `clock_source` | 108 | 4 | 4 | `u32` | - |
+| `reserved0` | 112 | 16 | 8 | `[2]u64` | - |
+
+### `EntropyBackend`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 64 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `flags` | 8 | 4 | 4 | `u32` | - |
+| `max_request_bytes` | 12 | 4 | 4 | `u32` | - |
+| `context` | 16 | 8 | 8 | `u64` | - |
+| `pci_address` | 24 | 4 | 4 | `u32` | - |
+| `vendor_id` | 28 | 2 | 2 | `u16` | - |
+| `device_id` | 30 | 2 | 2 | `u16` | - |
+| `read` | 32 | 8 | 8 | `u64` | - |
+| `reserved0` | 40 | 24 | 8 | `[3]u64` | - |
+
+### `DriverEntropyApi`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 32 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `register_backend` | 8 | 8 | 8 | `u64` | - |
+| `unregister_backend` | 16 | 8 | 8 | `u64` | - |
+| `reserved0` | 24 | 8 | 8 | `u64` | - |
+
+### `EntropyReadFn`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `callback`
+- Repräsentation: `c_callback`
+- Version/Größe/Alignment: 1 / 8 / 8
+
+### `ConsoleInputEvent`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 16 / 4
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `kind` | 4 | 4 | 4 | `u32` | - |
+| `value` | 8 | 4 | 4 | `u32` | - |
+| `flags` | 12 | 4 | 4 | `u32` | - |
+
+### `ConsoleTextInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 32 / 4
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `encoding` | 8 | 4 | 4 | `u32` | - |
+| `transcript_encoding` | 12 | 4 | 4 | `u32` | - |
+| `pending_bytes` | 16 | 4 | 4 | `u32` | - |
+| `decode_errors` | 20 | 4 | 4 | `u32` | - |
+| `truncated_sequences` | 24 | 4 | 4 | `u32` | - |
+| `flags` | 28 | 4 | 4 | `u32` | - |
+
+### `FpuObservationRequest`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 48 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `operation` | 8 | 4 | 4 | `u32` | - |
+| `flags` | 12 | 4 | 4 | `u32` | - |
+| `token` | 16 | 8 | 8 | `u64` | - |
+| `task_generation` | 24 | 8 | 8 | `u64` | - |
+| `rip_begin` | 32 | 8 | 8 | `u64` | - |
+| `rip_end` | 40 | 8 | 8 | `u64` | - |
+
+### `FpuObservationInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 128 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `flags` | 8 | 4 | 4 | `u32` | - |
+| `task_id` | 12 | 4 | 4 | `u32` | - |
+| `task_generation` | 16 | 8 | 8 | `u64` | - |
+| `token` | 24 | 8 | 8 | `u64` | - |
+| `rip_begin` | 32 | 8 | 8 | `u64` | - |
+| `rip_end` | 40 | 8 | 8 | `u64` | - |
+| `timer_irqs` | 48 | 8 | 8 | `u64` | - |
+| `timer_preemptions` | 56 | 8 | 8 | `u64` | - |
+| `external_handlers` | 64 | 8 | 8 | `u64` | - |
+| `observed_cpus` | 72 | 8 | 8 | `u64` | - |
+| `last_rip` | 80 | 8 | 8 | `u64` | - |
+| `last_handler` | 88 | 8 | 8 | `u64` | - |
+| `last_irq` | 96 | 4 | 4 | `u32` | - |
+| `last_owner` | 100 | 4 | 4 | `u32` | - |
+| `last_cpu` | 104 | 4 | 4 | `u32` | - |
+| `reserved0` | 108 | 4 | 4 | `u32` | - |
+| `reserved1` | 112 | 8 | 8 | `u64` | - |
+| `reserved2` | 120 | 8 | 8 | `u64` | - |
+
+### `ProgramLifecycleSnapshot`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `extensible`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 40 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `handle` | 8 | 16 | 8 | `r4os.abi.ProgramProcessHandle` | - |
+| `task_id` | 24 | 4 | 4 | `u32` | - |
+| `role` | 28 | 1 | 1 | `u8` | - |
+| `app_class` | 29 | 1 | 1 | `u8` | - |
+| `state` | 30 | 1 | 1 | `u8` | - |
+| `flags` | 31 | 1 | 1 | `u8` | - |
+| `exit_code` | 32 | 4 | 4 | `i32` | - |
+| `window_id` | 36 | 4 | 4 | `i32` | - |
+
 ## Fehlerdomänen
 
 ### `arp`
@@ -8926,6 +10721,28 @@ Geltung: `storage`, Einheit: `status_code`, Stabilität: `fixed_contract`.
 | `storage_error_incomplete` | -10 | `i32` |
 | `storage_error_not_found` | -11 | `i32` |
 
+### `serial`
+
+Geltung: `serial`, Einheit: `status_code`, Stabilität: `fixed_contract`.
+
+| Name | Wert | Typ |
+|---|---:|---|
+| `serial_ok` | 0 | `i32` |
+| `serial_error_invalid` | -1 | `i32` |
+| `serial_error_not_found` | -2 | `i32` |
+| `serial_error_busy` | -3 | `i32` |
+| `serial_error_closed` | -4 | `i32` |
+| `serial_error_stale` | -5 | `i32` |
+| `serial_error_timeout` | -6 | `i32` |
+| `serial_error_cancelled` | -7 | `i32` |
+| `serial_error_no_memory` | -8 | `i32` |
+| `serial_error_hardware` | -9 | `i32` |
+| `serial_error_unsupported` | -10 | `i32` |
+| `serial_error_overflow` | -11 | `i32` |
+| `serial_error_would_block` | -12 | `i32` |
+| `serial_error_owner` | -13 | `i32` |
+| `serial_error_too_large` | -14 | `i32` |
+
 ## Konstanten
 
 | Name | Wert | Typ | Kategorie | Einheit | Geltung | Stabilität |
@@ -9084,7 +10901,7 @@ Geltung: `storage`, Einheit: `status_code`, Stabilität: `fixed_contract`.
 | `dns_flag_a_record` | `1` | `u32` | flag | bitmask | `dns` | fixed_contract |
 | `dns_op_build_a_query` | `1` | `u32` | identity | number | `dns_op` | fixed_contract |
 | `dns_op_handle_response` | `2` | `u32` | identity | number | `dns_op` | fixed_contract |
-| `driver_api_version` | `36` | `u32` | version | number | `driver_api` | fixed_contract |
+| `driver_api_version` | `37` | `u32` | version | number | `driver_api` | fixed_contract |
 | `driver_api_thread_work_version` | `35` | `u32` | version | number | `driver_api` | fixed_contract |
 | `driver_magic` | `826888260` | `u32` | magic | number | `driver` | fixed_contract |
 | `driver_work_flag_from_irq` | `1` | `u32` | flag | bitmask | `driver_work` | fixed_contract |
@@ -10863,6 +12680,788 @@ Geltung: `storage`, Einheit: `status_code`, Stabilität: `fixed_contract`.
 | `driver_work_owner_busy` | `-32000` | `i32` | value | status | `driver_work` | fixed_contract |
 | `window_graphics_headless` | `2` | `u32` | identity | number | `window_graphics` | fixed_contract |
 | `performance_irq_coverage_instrumentation_disabled` | `32` | `u32` | flag | bitmask | `performance_irq_timing` | fixed_contract |
+| `stack_fault_flag_task` | `1` | `u32` | flag | bitmask | `stack_fault` | fixed_contract |
+| `stack_fault_flag_instance` | `2` | `u32` | flag | bitmask | `stack_fault` | fixed_contract |
+| `stack_fault_flag_thread` | `4` | `u32` | flag | bitmask | `stack_fault` | fixed_contract |
+| `stack_fault_flag_bounds` | `8` | `u32` | flag | bitmask | `stack_fault` | fixed_contract |
+| `stack_fault_kind_unknown` | `0` | `u32` | value | number | `stack_fault` | fixed_contract |
+| `stack_fault_kind_program_main` | `1` | `u32` | value | number | `stack_fault` | fixed_contract |
+| `stack_fault_kind_program_thread` | `2` | `u32` | value | number | `stack_fault` | fixed_contract |
+| `stack_fault_kind_kernel_task` | `3` | `u32` | value | number | `stack_fault` | fixed_contract |
+| `stack_fault_kind_exception` | `4` | `u32` | value | number | `stack_fault` | fixed_contract |
+| `stack_fault_reason_unknown` | `0` | `u32` | value | number | `stack_fault` | fixed_contract |
+| `stack_fault_reason_reserve_exhausted` | `1` | `u32` | value | number | `stack_fault` | fixed_contract |
+| `stack_fault_reason_kernel_guard` | `2` | `u32` | value | number | `stack_fault` | fixed_contract |
+| `stack_fault_reason_physical_budget` | `3` | `u32` | value | number | `stack_fault` | fixed_contract |
+| `stack_fault_reason_vm_commit` | `4` | `u32` | value | number | `stack_fault` | fixed_contract |
+| `stack_fault_reason_growth_forbidden` | `5` | `u32` | value | number | `stack_fault` | fixed_contract |
+| `stack_fault_reason_protection` | `6` | `u32` | value | number | `stack_fault` | fixed_contract |
+| `stack_fault_reason_vm_guard` | `7` | `u32` | value | number | `stack_fault` | fixed_contract |
+| `stack_fault_reason_continuation_headroom` | `8` | `u32` | value | number | `stack_fault` | fixed_contract |
+| `kernel_heap_check_version` | `1` | `u32` | version | number | `kernel_heap_check` | fixed_contract |
+| `kernel_heap_check_status_unavailable` | `0` | `u32` | value | number | `kernel_heap_check` | fixed_contract |
+| `kernel_heap_check_status_passed` | `1` | `u32` | value | number | `kernel_heap_check` | fixed_contract |
+| `kernel_heap_check_status_failed` | `2` | `u32` | value | number | `kernel_heap_check` | fixed_contract |
+| `kernel_heap_check_status_busy` | `3` | `u32` | value | number | `kernel_heap_check` | fixed_contract |
+| `kernel_heap_check_status_cancelled` | `4` | `u32` | value | number | `kernel_heap_check` | fixed_contract |
+| `kernel_heap_check_flag_initialized` | `1` | `u32` | flag | bitmask | `kernel_heap_check` | fixed_contract |
+| `kernel_heap_check_flag_cleanup_complete` | `2` | `u32` | flag | bitmask | `kernel_heap_check` | fixed_contract |
+| `kernel_heap_check_case_none` | `0` | `u32` | value | number | `kernel_heap_check` | fixed_contract |
+| `kernel_heap_check_case_rust_allocator` | `1` | `u32` | value | number | `kernel_heap_check` | fixed_contract |
+| `kernel_heap_check_case_patterns` | `2` | `u32` | value | number | `kernel_heap_check` | fixed_contract |
+| `kernel_heap_check_case_alignment` | `3` | `u32` | value | number | `kernel_heap_check` | fixed_contract |
+| `kernel_heap_check_case_double_free` | `4` | `u32` | value | number | `kernel_heap_check` | fixed_contract |
+| `kernel_heap_check_case_churn` | `5` | `u32` | value | number | `kernel_heap_check` | fixed_contract |
+| `kernel_heap_check_case_acceptance` | `6` | `u32` | value | number | `kernel_heap_check` | fixed_contract |
+| `kernel_heap_check_case_resident_commit` | `7` | `u32` | value | number | `kernel_heap_check` | fixed_contract |
+| `kernel_heap_check_case_cleanup` | `8` | `u32` | value | number | `kernel_heap_check` | fixed_contract |
+| `kernel_scheduler_check_version` | `1` | `u32` | version | number | `kernel_scheduler_check` | fixed_contract |
+| `kernel_scheduler_check_status_unavailable` | `0` | `u32` | value | number | `kernel_scheduler_check` | fixed_contract |
+| `kernel_scheduler_check_status_passed` | `1` | `u32` | value | number | `kernel_scheduler_check` | fixed_contract |
+| `kernel_scheduler_check_status_failed` | `2` | `u32` | value | number | `kernel_scheduler_check` | fixed_contract |
+| `kernel_scheduler_check_status_busy` | `3` | `u32` | value | number | `kernel_scheduler_check` | fixed_contract |
+| `kernel_scheduler_check_status_cancelled` | `4` | `u32` | value | number | `kernel_scheduler_check` | fixed_contract |
+| `kernel_scheduler_check_case_sync` | `1` | `u32` | flag | bitmask | `kernel_scheduler_check` | fixed_contract |
+| `kernel_scheduler_check_case_unwind` | `2` | `u32` | flag | bitmask | `kernel_scheduler_check` | fixed_contract |
+| `kernel_scheduler_check_case_directed` | `4` | `u32` | flag | bitmask | `kernel_scheduler_check` | fixed_contract |
+| `kernel_scheduler_check_case_fairness` | `8` | `u32` | flag | bitmask | `kernel_scheduler_check` | fixed_contract |
+| `kernel_scheduler_check_case_inheritance` | `16` | `u32` | flag | bitmask | `kernel_scheduler_check` | fixed_contract |
+| `kernel_scheduler_check_case_deadlines` | `32` | `u32` | flag | bitmask | `kernel_scheduler_check` | fixed_contract |
+| `kernel_scheduler_check_case_fpu` | `64` | `u32` | flag | bitmask | `kernel_scheduler_check` | fixed_contract |
+| `kernel_scheduler_check_case_all` | `127` | `u32` | flag | bitmask | `kernel_scheduler_check` | fixed_contract |
+| `kernel_scheduler_check_isolated_timer_reprogram` | `1` | `u32` | flag | bitmask | `kernel_scheduler_check` | fixed_contract |
+| `kernel_scheduler_check_isolated_timeout_batch_64` | `2` | `u32` | flag | bitmask | `kernel_scheduler_check` | fixed_contract |
+| `kernel_scheduler_check_isolated_reserve_oom` | `4` | `u32` | flag | bitmask | `kernel_scheduler_check` | fixed_contract |
+| `kernel_scheduler_check_isolated_priority_boot` | `8` | `u32` | flag | bitmask | `kernel_scheduler_check` | fixed_contract |
+| `kernel_smp_check_version` | `1` | `u32` | version | number | `kernel_smp_check` | fixed_contract |
+| `kernel_smp_check_status_unavailable` | `0` | `u32` | value | number | `kernel_smp_check` | fixed_contract |
+| `kernel_smp_check_status_passed` | `1` | `u32` | value | number | `kernel_smp_check` | fixed_contract |
+| `kernel_smp_check_status_failed` | `2` | `u32` | value | number | `kernel_smp_check` | fixed_contract |
+| `kernel_smp_check_status_busy` | `3` | `u32` | value | number | `kernel_smp_check` | fixed_contract |
+| `kernel_smp_check_status_cancelled` | `4` | `u32` | value | number | `kernel_smp_check` | fixed_contract |
+| `kernel_smp_check_flag_work_complete` | `1` | `u32` | flag | bitmask | `kernel_smp_check` | fixed_contract |
+| `kernel_smp_check_flag_cleanup_complete` | `2` | `u32` | flag | bitmask | `kernel_smp_check` | fixed_contract |
+| `kernel_smp_check_isolated_tlb_timeout` | `1` | `u32` | flag | bitmask | `kernel_smp_check` | fixed_contract |
+| `kernel_smp_check_isolated_boot_extras` | `2` | `u32` | flag | bitmask | `kernel_smp_check` | fixed_contract |
+| `kernel_smp_check_stage_none` | `0` | `u32` | value | number | `kernel_smp_check` | fixed_contract |
+| `kernel_smp_check_stage_mapping` | `1` | `u32` | value | number | `kernel_smp_check` | fixed_contract |
+| `kernel_smp_check_stage_workers` | `2` | `u32` | value | number | `kernel_smp_check` | fixed_contract |
+| `kernel_smp_check_stage_tlb` | `3` | `u32` | value | number | `kernel_smp_check` | fixed_contract |
+| `kernel_smp_check_stage_clock` | `4` | `u32` | value | number | `kernel_smp_check` | fixed_contract |
+| `kernel_smp_check_stage_owner` | `5` | `u32` | value | number | `kernel_smp_check` | fixed_contract |
+| `kernel_smp_check_stage_cleanup` | `6` | `u32` | value | number | `kernel_smp_check` | fixed_contract |
+| `smp_tlb_snapshot_version` | `1` | `u32` | version | number | `smp_tlb_snapshot` | fixed_contract |
+| `smp_tlb_snapshot_flag_clock_available` | `1` | `u32` | flag | bitmask | `smp_tlb_snapshot` | fixed_contract |
+| `smp_tlb_snapshot_flag_tlb_registered` | `2` | `u32` | flag | bitmask | `smp_tlb_snapshot` | fixed_contract |
+| `smp_tlb_snapshot_flag_isolated_injection` | `4` | `u32` | flag | bitmask | `smp_tlb_snapshot` | fixed_contract |
+| `kernel_smp_check_flag_partial_snapshot` | `4` | `u32` | flag | bitmask | `kernel_smp_check` | fixed_contract |
+| `kernel_block_queue_check_version` | `1` | `u32` | version | number | `kernel_block_queue_check` | fixed_contract |
+| `kernel_block_queue_check_status_unavailable` | `0` | `u32` | value | number | `kernel_block_queue_check` | fixed_contract |
+| `kernel_block_queue_check_status_passed` | `1` | `u32` | value | number | `kernel_block_queue_check` | fixed_contract |
+| `kernel_block_queue_check_status_failed` | `2` | `u32` | value | number | `kernel_block_queue_check` | fixed_contract |
+| `kernel_block_queue_check_status_busy` | `3` | `u32` | value | number | `kernel_block_queue_check` | fixed_contract |
+| `kernel_block_queue_check_status_cancelled` | `4` | `u32` | value | number | `kernel_block_queue_check` | fixed_contract |
+| `kernel_block_queue_check_flag_work_complete` | `1` | `u32` | flag | bitmask | `kernel_block_queue_check` | fixed_contract |
+| `kernel_block_queue_check_flag_cleanup_complete` | `2` | `u32` | flag | bitmask | `kernel_block_queue_check` | fixed_contract |
+| `kernel_block_queue_check_flag_partial_snapshot` | `4` | `u32` | flag | bitmask | `kernel_block_queue_check` | fixed_contract |
+| `kernel_block_queue_check_case_parallel` | `1` | `u32` | flag | bitmask | `kernel_block_queue_check` | fixed_contract |
+| `kernel_block_queue_check_case_queue` | `2` | `u32` | flag | bitmask | `kernel_block_queue_check` | fixed_contract |
+| `kernel_block_queue_check_case_reordered` | `4` | `u32` | flag | bitmask | `kernel_block_queue_check` | fixed_contract |
+| `kernel_block_queue_check_case_lifetime` | `8` | `u32` | flag | bitmask | `kernel_block_queue_check` | fixed_contract |
+| `kernel_block_queue_check_case_reset` | `16` | `u32` | flag | bitmask | `kernel_block_queue_check` | fixed_contract |
+| `kernel_block_queue_check_case_timeout` | `32` | `u32` | flag | bitmask | `kernel_block_queue_check` | fixed_contract |
+| `kernel_block_queue_check_case_flush` | `64` | `u32` | flag | bitmask | `kernel_block_queue_check` | fixed_contract |
+| `kernel_block_queue_check_case_batch` | `128` | `u32` | flag | bitmask | `kernel_block_queue_check` | fixed_contract |
+| `kernel_block_queue_check_cases_all` | `255` | `u32` | flag | bitmask | `kernel_block_queue_check` | fixed_contract |
+| `kernel_block_queue_check_stage_cleanup` | `9` | `u32` | value | number | `kernel_block_queue_check` | fixed_contract |
+| `kernel_nvme_check_version` | `1` | `u32` | version | number | `kernel_nvme_check` | fixed_contract |
+| `kernel_nvme_check_status_unavailable` | `0` | `u32` | value | number | `kernel_nvme_check` | fixed_contract |
+| `kernel_nvme_check_status_passed` | `1` | `u32` | value | number | `kernel_nvme_check` | fixed_contract |
+| `kernel_nvme_check_status_failed` | `2` | `u32` | value | number | `kernel_nvme_check` | fixed_contract |
+| `kernel_nvme_check_status_busy` | `3` | `u32` | value | number | `kernel_nvme_check` | fixed_contract |
+| `kernel_nvme_check_status_cancelled` | `4` | `u32` | value | number | `kernel_nvme_check` | fixed_contract |
+| `kernel_nvme_check_flag_work_complete` | `1` | `u32` | flag | bitmask | `kernel_nvme_check` | fixed_contract |
+| `kernel_nvme_check_flag_cleanup_complete` | `2` | `u32` | flag | bitmask | `kernel_nvme_check` | fixed_contract |
+| `kernel_nvme_check_flag_partial_snapshot` | `4` | `u32` | flag | bitmask | `kernel_nvme_check` | fixed_contract |
+| `kernel_nvme_check_unavailable_none` | `0` | `u32` | value | number | `kernel_nvme_check` | fixed_contract |
+| `kernel_nvme_check_unavailable_device` | `1` | `u32` | value | number | `kernel_nvme_check` | fixed_contract |
+| `kernel_nvme_check_unavailable_backend` | `2` | `u32` | value | number | `kernel_nvme_check` | fixed_contract |
+| `kernel_nvme_check_unavailable_observation` | `3` | `u32` | value | number | `kernel_nvme_check` | fixed_contract |
+| `kernel_nvme_check_unavailable_geometry` | `4` | `u32` | value | number | `kernel_nvme_check` | fixed_contract |
+| `kernel_nvme_check_unavailable_irq` | `5` | `u32` | value | number | `kernel_nvme_check` | fixed_contract |
+| `kernel_nvme_check_unavailable_context` | `6` | `u32` | value | number | `kernel_nvme_check` | fixed_contract |
+| `kernel_nvme_check_stage_none` | `0` | `u32` | value | number | `kernel_nvme_check` | fixed_contract |
+| `kernel_nvme_check_stage_binding` | `1` | `u32` | value | number | `kernel_nvme_check` | fixed_contract |
+| `kernel_nvme_check_stage_buffer` | `2` | `u32` | value | number | `kernel_nvme_check` | fixed_contract |
+| `kernel_nvme_check_stage_read` | `3` | `u32` | value | number | `kernel_nvme_check` | fixed_contract |
+| `kernel_nvme_check_stage_observation` | `4` | `u32` | value | number | `kernel_nvme_check` | fixed_contract |
+| `kernel_nvme_check_stage_irq` | `5` | `u32` | value | number | `kernel_nvme_check` | fixed_contract |
+| `kernel_nvme_check_stage_cleanup` | `6` | `u32` | value | number | `kernel_nvme_check` | fixed_contract |
+| `kernel_nvme_check_receipt_runtime` | `1` | `u32` | flag | bitmask | `kernel_nvme_check` | fixed_contract |
+| `kernel_nvme_check_receipt_asynchronous` | `2` | `u32` | flag | bitmask | `kernel_nvme_check` | fixed_contract |
+| `kernel_nvme_check_receipt_completed` | `4` | `u32` | flag | bitmask | `kernel_nvme_check` | fixed_contract |
+| `kernel_nvme_check_receipt_clean` | `8` | `u32` | flag | bitmask | `kernel_nvme_check` | fixed_contract |
+| `storage_observation_version` | `1` | `u32` | version | number | `storage` | fixed_contract |
+| `storage_request_flag_observation` | `1` | `u32` | flag | bitmask | `storage_request` | fixed_contract |
+| `storage_observation_flag_irq` | `1` | `u32` | flag | bitmask | `storage_observation` | fixed_contract |
+| `storage_observation_flag_worker` | `2` | `u32` | flag | bitmask | `storage_observation` | fixed_contract |
+| `storage_observation_flag_cqe` | `4` | `u32` | flag | bitmask | `storage_observation` | fixed_contract |
+| `storage_observation_flag_dma_released` | `8` | `u32` | flag | bitmask | `storage_observation` | fixed_contract |
+| `storage_observation_flag_poll` | `16` | `u32` | flag | bitmask | `storage_observation` | fixed_contract |
+| `storage_observation_flag_cancel` | `32` | `u32` | flag | bitmask | `storage_observation` | fixed_contract |
+| `storage_observation_flag_epoch_changed` | `64` | `u32` | flag | bitmask | `storage_observation` | fixed_contract |
+| `storage_observation_flag_not_submitted` | `128` | `u32` | flag | bitmask | `storage_observation` | fixed_contract |
+| `storage_observation_irq_none` | `0` | `u32` | value | number | `storage_observation` | fixed_contract |
+| `storage_observation_irq_msi` | `1` | `u32` | value | number | `storage_observation` | fixed_contract |
+| `storage_observation_irq_msix` | `2` | `u32` | value | number | `storage_observation` | fixed_contract |
+| `storage_backend_status_observation_supported` | `131072` | `u32` | flag | bitmask | `storage_backend_status` | fixed_contract |
+| `storage_backend_status_cleanup_retained` | `262144` | `u32` | flag | bitmask | `storage_backend_status` | fixed_contract |
+| `kernel_usb_check_version` | `1` | `u32` | version | number | `kernel_usb_check` | fixed_contract |
+| `kernel_usb_check_status_unavailable` | `0` | `u32` | value | number | `kernel_usb_check` | fixed_contract |
+| `kernel_usb_check_status_passed` | `1` | `u32` | value | number | `kernel_usb_check` | fixed_contract |
+| `kernel_usb_check_status_failed` | `2` | `u32` | value | number | `kernel_usb_check` | fixed_contract |
+| `kernel_usb_check_case_ring` | `1` | `u32` | flag | bitmask | `kernel_usb_check` | fixed_contract |
+| `kernel_usb_check_case_router` | `2` | `u32` | flag | bitmask | `kernel_usb_check` | fixed_contract |
+| `kernel_usb_check_cases_all` | `3` | `u32` | flag | bitmask | `kernel_usb_check` | fixed_contract |
+| `serial_resource_io` | `1` | `u32` | value | number | `serial` | fixed_contract |
+| `serial_resource_mmio` | `2` | `u32` | value | number | `serial` | fixed_contract |
+| `serial_resource_opaque` | `3` | `u32` | value | number | `serial` | fixed_contract |
+| `serial_cap_rx` | `1` | `u32` | value | number | `serial` | fixed_contract |
+| `serial_cap_tx` | `2` | `u32` | value | number | `serial` | fixed_contract |
+| `serial_cap_rts_cts` | `4` | `u32` | value | number | `serial` | fixed_contract |
+| `serial_cap_line_status` | `8` | `u32` | value | number | `serial` | fixed_contract |
+| `serial_cap_irq` | `16` | `u32` | value | number | `serial` | fixed_contract |
+| `serial_port_present` | `1` | `u32` | value | number | `serial` | fixed_contract |
+| `serial_port_open` | `2` | `u32` | value | number | `serial` | fixed_contract |
+| `serial_port_debug_reserved` | `4` | `u32` | value | number | `serial` | fixed_contract |
+| `serial_port_closing` | `8` | `u32` | value | number | `serial` | fixed_contract |
+| `serial_port_hardware_error` | `16` | `u32` | value | number | `serial` | fixed_contract |
+| `serial_port_fifo` | `32` | `u32` | value | number | `serial` | fixed_contract |
+| `serial_event_rx` | `1` | `u32` | value | number | `serial` | fixed_contract |
+| `serial_event_tx` | `2` | `u32` | value | number | `serial` | fixed_contract |
+| `serial_event_state` | `4` | `u32` | value | number | `serial` | fixed_contract |
+| `serial_event_error` | `8` | `u32` | value | number | `serial` | fixed_contract |
+| `serial_event_modem` | `16` | `u32` | value | number | `serial` | fixed_contract |
+| `serial_transfer_overflow` | `1` | `u32` | value | number | `serial` | fixed_contract |
+| `serial_transfer_line_error` | `2` | `u32` | value | number | `serial` | fixed_contract |
+| `serial_transfer_partial` | `4` | `u32` | value | number | `serial` | fixed_contract |
+| `serial_close_abort` | `1` | `u32` | value | number | `serial` | fixed_contract |
+| `serial_flow_none` | `0` | `u32` | value | number | `serial` | fixed_contract |
+| `serial_flow_rts_cts` | `1` | `u32` | value | number | `serial` | fixed_contract |
+| `serial_parity_none` | `0` | `u32` | value | number | `serial` | fixed_contract |
+| `serial_parity_odd` | `1` | `u32` | value | number | `serial` | fixed_contract |
+| `serial_parity_even` | `2` | `u32` | value | number | `serial` | fixed_contract |
+| `serial_parity_mark` | `3` | `u32` | value | number | `serial` | fixed_contract |
+| `serial_parity_space` | `4` | `u32` | value | number | `serial` | fixed_contract |
+| `driver_api_serial_version` | `37` | `u32` | version | number | `serial` | fixed_contract |
+| `cpu_topology_result_ok` | `1` | `i32` | value | number | `cpu_topology` | fixed_contract |
+| `cpu_topology_result_end` | `0` | `i32` | value | number | `cpu_topology` | fixed_contract |
+| `cpu_topology_result_invalid` | `-1` | `i32` | value | number | `cpu_topology` | fixed_contract |
+| `cpu_topology_result_busy` | `-2` | `i32` | value | number | `cpu_topology` | fixed_contract |
+| `cpu_topology_flag_captured` | `1` | `u32` | value | number | `cpu_topology` | fixed_contract |
+| `cpu_topology_flag_geometry` | `2` | `u32` | value | number | `cpu_topology` | fixed_contract |
+| `cpu_topology_flag_acpi_uid` | `4` | `u32` | value | number | `cpu_topology` | fixed_contract |
+| `cpu_topology_flag_online` | `8` | `u32` | value | number | `cpu_topology` | fixed_contract |
+| `cpu_topology_flag_schedulable` | `16` | `u32` | value | number | `cpu_topology` | fixed_contract |
+| `cpu_topology_flag_bsp` | `32` | `u32` | value | number | `cpu_topology` | fixed_contract |
+| `cpu_topology_flag_core_type` | `64` | `u32` | value | number | `cpu_topology` | fixed_contract |
+| `cpu_topology_flag_efficiency` | `128` | `u32` | value | number | `cpu_topology` | fixed_contract |
+| `cpu_topology_flag_heterogeneous` | `256` | `u32` | value | number | `cpu_topology` | fixed_contract |
+| `cpu_topology_flag_asymmetric` | `512` | `u32` | value | number | `cpu_topology` | fixed_contract |
+| `cpu_topology_flag_qualified` | `1024` | `u32` | value | number | `cpu_topology` | fixed_contract |
+| `cpu_topology_flag_acpi_conflict` | `2048` | `u32` | value | number | `cpu_topology` | fixed_contract |
+| `cpu_topology_geometry_unavailable` | `0` | `u32` | value | number | `cpu_topology` | fixed_contract |
+| `cpu_topology_geometry_known` | `1` | `u32` | value | number | `cpu_topology` | fixed_contract |
+| `cpu_topology_geometry_malformed` | `2` | `u32` | value | number | `cpu_topology` | fixed_contract |
+| `cpu_topology_geometry_identity` | `3` | `u32` | value | number | `cpu_topology` | fixed_contract |
+| `cpu_topology_geometry_legacy_model` | `4` | `u32` | value | number | `cpu_topology` | fixed_contract |
+| `cpu_topology_geometry_unqualified` | `5` | `u32` | value | number | `cpu_topology` | fixed_contract |
+| `cpu_topology_geometry_inconsistent` | `6` | `u32` | value | number | `cpu_topology` | fixed_contract |
+| `cpu_topology_geometry_starting` | `7` | `u32` | value | number | `cpu_topology` | fixed_contract |
+| `cpu_topology_cache_unavailable` | `0` | `u32` | value | number | `cpu_topology` | fixed_contract |
+| `cpu_topology_cache_complete` | `1` | `u32` | value | number | `cpu_topology` | fixed_contract |
+| `cpu_topology_cache_invalid` | `2` | `u32` | value | number | `cpu_topology` | fixed_contract |
+| `cpu_topology_cache_truncated` | `3` | `u32` | value | number | `cpu_topology` | fixed_contract |
+| `cpu_topology_cache_kind_data` | `1` | `u32` | value | number | `cpu_topology` | fixed_contract |
+| `cpu_topology_cache_kind_instruction` | `2` | `u32` | value | number | `cpu_topology` | fixed_contract |
+| `cpu_topology_cache_kind_unified` | `3` | `u32` | value | number | `cpu_topology` | fixed_contract |
+| `thread_placement_version` | `1` | `u32` | value | number | `thread_placement` | fixed_contract |
+| `thread_placement_cpu_none` | `4294967295` | `u32` | value | number | `thread_placement` | fixed_contract |
+| `thread_placement_flag_default_cpus` | `1` | `u32` | value | number | `thread_placement` | fixed_contract |
+| `thread_placement_flag_pending` | `2` | `u32` | value | number | `thread_placement` | fixed_contract |
+| `thread_placement_flag_parallel` | `4` | `u32` | value | number | `thread_placement` | fixed_contract |
+| `thread_placement_flag_internal_fixed` | `8` | `u32` | value | number | `thread_placement` | fixed_contract |
+| `thread_placement_class_interactive` | `0` | `u32` | value | number | `thread_placement` | fixed_contract |
+| `thread_placement_class_batch` | `1` | `u32` | value | number | `thread_placement` | fixed_contract |
+| `thread_placement_class_preferred` | `2` | `u32` | value | number | `thread_placement` | fixed_contract |
+| `thread_placement_error_capacity` | `-11` | `i32` | value | number | `thread_placement` | fixed_contract |
+| `thread_create_flag_compute_worker` | `1` | `u32` | flag | bitmask | `thread_create` | fixed_contract |
+| `thread_flag_compute_worker` | `8` | `u32` | flag | bitmask | `thread` | fixed_contract |
+| `cpu_lifecycle_version` | `1` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_op_query` | `0` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_op_offline` | `1` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_op_online` | `2` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_ok` | `0` | `i32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_error_invalid` | `-1` | `i32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_error_busy` | `-2` | `i32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_error_index` | `-3` | `i32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_error_epoch` | `-4` | `i32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_error_context` | `-5` | `i32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_error_qualification` | `-6` | `i32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_error_state` | `-7` | `i32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_state_absent` | `0` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_state_detected` | `1` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_state_starting` | `2` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_state_entered` | `3` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_state_online` | `4` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_state_terminal_pending` | `5` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_state_terminal` | `6` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_state_failed` | `7` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_state_qualified` | `8` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_state_draining` | `9` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_state_parked` | `10` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_state_offline` | `11` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_state_stop_pending` | `12` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_reason_none` | `0` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_reason_fixed` | `1` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_reason_kernel_context` | `2` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_reason_resources` | `3` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_reason_task_budget` | `4` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_reason_page_owner` | `5` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_reason_tlb` | `6` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_reason_irq` | `7` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_reason_timer` | `8` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_reason_timeout` | `9` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_reason_qualification` | `10` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_reason_busy` | `11` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_reason_caller` | `12` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_reason_index` | `13` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_reason_epoch` | `14` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_reason_state` | `15` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_reason_terminal` | `16` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_flag_online` | `1` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_flag_schedulable` | `2` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_flag_parked` | `4` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_flag_tlb_enrolled` | `8` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_flag_reusable` | `16` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_flag_current_receipt` | `32` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_flag_terminal` | `64` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_check_status_unavailable` | `0` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_check_status_passed` | `1` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_check_status_failed` | `2` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_check_status_busy` | `3` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_check_case_fixed` | `1` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_check_case_kernel` | `2` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_check_case_page_owner` | `4` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_check_case_cycle` | `8` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_check_case_stale_epoch` | `16` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_check_case_runtime_tlb` | `32` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_lifecycle_check_case_all` | `63` | `u32` | value | number | `cpu_lifecycle` | fixed_contract |
+| `cpu_capabilities_version` | `1` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_ok` | `0` | `i32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_end` | `1` | `i32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_error_invalid` | `-1` | `i32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_error_busy` | `-2` | `i32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_error_index` | `-3` | `i32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_error_epoch` | `-4` | `i32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_error_context` | `-5` | `i32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_error_offline` | `-6` | `i32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_error_unsupported` | `-7` | `i32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_error_fault` | `-8` | `i32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_flag_captured` | `1` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_flag_online` | `2` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_flag_schedulable` | `4` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_flag_signature` | `8` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_flag_brand` | `16` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_flag_hypervisor_present` | `32` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_flag_hypervisor_valid` | `64` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_flag_invalid_basic` | `128` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_flag_invalid_extended` | `256` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_flag_invalid_hypervisor` | `512` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_flag_legacy_kvm_maximum` | `1024` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_flag_nominal_frequency` | `2048` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_flag_tsc_ratio` | `4096` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_flag_pmu` | `8192` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_os_cr0` | `1` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_os_cr4` | `2` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_os_xcr0` | `4` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_os_efer` | `8` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_os_pat` | `16` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_os_mtrr_default` | `32` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_capabilities_os_msr_fault` | `64` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_flag_raw` | `1` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_flag_module_required` | `2` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_flag_control` | `4` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_hardware_unknown` | `0` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_hardware_absent` | `1` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_hardware_present` | `2` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_os_unknown` | `0` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_os_disabled` | `1` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_os_enabled` | `2` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_os_not_applicable` | `3` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_use_unknown` | `0` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_reason_no_owner` | `0` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_reason_missing_leaf` | `1` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_reason_vendor` | `2` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_reason_absent` | `3` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_reason_dependency` | `4` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_reason_control_unknown` | `5` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_reason_disabled` | `6` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_reason_no_os_control` | `7` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_x87` | `1` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_msr` | `2` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_fxsr` | `3` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_sse` | `4` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_sse2` | `5` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_sse3` | `6` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_ssse3` | `7` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_sse41` | `8` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_sse42` | `9` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_xsave` | `10` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_avx` | `11` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_avx2` | `12` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_avx512f` | `13` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_amx_tile` | `14` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_aes` | `15` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_pclmulqdq` | `16` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_vaes` | `17` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_vpclmulqdq` | `18` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_rdrand` | `19` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_rdseed` | `20` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_tsc` | `21` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_invariant_tsc` | `22` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_pat` | `23` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_mtrr` | `24` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_nx` | `25` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_page1gb` | `26` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_pcid` | `27` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_invpcid` | `28` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_fsgsbase` | `29` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_smep` | `30` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_smap` | `31` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_la57` | `32` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_clflush` | `33` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_clflushopt` | `34` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_clwb` | `35` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_monitor_mwait` | `36` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_arat` | `37` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_aperf_mperf` | `38` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_intel_dts` | `39` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_intel_turbo` | `40` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_intel_hwp` | `41` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_intel_hwp_epp` | `42` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_intel_hwp_package` | `43` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_intel_hw_feedback` | `44` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_intel_pmu` | `45` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_amd_cpb` | `46` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_amd_cppc` | `47` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_amd_effective_frequency_ro` | `48` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_amd_pmu` | `49` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_x2apic` | `50` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_tsc_deadline` | `51` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_id_efer` | `1` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_id_apic_base` | `2` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_id_pat` | `3` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_id_mtrr_cap` | `4` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_id_mperf` | `5` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_id_aperf` | `6` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_id_intel_platform_info` | `7` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_flag_raw` | `1` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_check_status_unavailable` | `0` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_check_status_passed` | `1` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_check_status_failed` | `2` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_check_case_read_on` | `1` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_check_case_write_on` | `2` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_check_case_read_off` | `4` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_check_case_write_off` | `8` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_check_case_all` | `15` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_cx8` | `52` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_cmov` | `53` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_mmx` | `54` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_long_mode` | `55` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_power_version` | `1` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_cpu_none` | `4294967295` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_state_no_provider` | `0` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_state_no_sample` | `1` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_state_observed` | `2` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_state_stale` | `3` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_state_unsupported` | `4` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_state_virtual` | `5` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_profile_unsupported` | `0` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_profile_virtual` | `1` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_profile_intel_haswell` | `2` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_profile_amd_milan_b1` | `3` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_flag_installed` | `1` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_flag_sampled` | `2` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_flag_virtual` | `4` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_flag_stale` | `8` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_flag_energy_discontinuity` | `16` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_flag_package_shared` | `32` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_flag_core_shared` | `64` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_valid_active_hz` | `1` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_valid_reference_hz` | `2` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_valid_aperf` | `4` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_valid_mperf` | `8` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_valid_temperature` | `16` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_valid_microcode` | `32` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_valid_energy_unit` | `64` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_valid_package_energy` | `128` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_valid_core_energy` | `256` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_valid_package_scope` | `512` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_valid_core_scope` | `1024` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_valid_thermal_status` | `2048` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_backend_flag_parallel` | `1` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_register_id_microcode` | `8` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_id_intel_temperature_target` | `9` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_id_intel_thermal_status` | `10` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_id_intel_energy_unit` | `11` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_id_intel_package_energy` | `12` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_id_intel_core_energy` | `13` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_id_amd_pstate0` | `14` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_id_amd_energy_unit` | `15` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_id_amd_package_energy` | `16` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_id_amd_core_energy` | `17` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_performance_op_inspect` | `0` | `u32` | value | number | `cpu_performance` | fixed_contract |
+| `cpu_performance_op_apply` | `1` | `u32` | value | number | `cpu_performance` | fixed_contract |
+| `cpu_performance_op_release` | `2` | `u32` | value | number | `cpu_performance` | fixed_contract |
+| `cpu_performance_op_enable` | `3` | `u32` | value | number | `cpu_performance` | fixed_contract |
+| `cpu_performance_state_unsupported` | `0` | `u32` | value | number | `cpu_performance` | fixed_contract |
+| `cpu_performance_state_disabled` | `1` | `u32` | value | number | `cpu_performance` | fixed_contract |
+| `cpu_performance_state_ready` | `2` | `u32` | value | number | `cpu_performance` | fixed_contract |
+| `cpu_performance_state_owned` | `3` | `u32` | value | number | `cpu_performance` | fixed_contract |
+| `cpu_performance_state_restored` | `4` | `u32` | value | number | `cpu_performance` | fixed_contract |
+| `cpu_performance_state_uncertain` | `5` | `u32` | value | number | `cpu_performance` | fixed_contract |
+| `cpu_performance_state_conflict` | `6` | `u32` | value | number | `cpu_performance` | fixed_contract |
+| `cpu_performance_request_flag_epp` | `1` | `u32` | value | number | `cpu_performance` | fixed_contract |
+| `cpu_performance_request_flag_sticky_enable` | `2` | `u32` | value | number | `cpu_performance` | fixed_contract |
+| `cpu_performance_flag_epp` | `1` | `u32` | value | number | `cpu_performance` | fixed_contract |
+| `cpu_performance_flag_sticky_enabled` | `2` | `u32` | value | number | `cpu_performance` | fixed_contract |
+| `cpu_performance_flag_parameters_restored` | `4` | `u32` | value | number | `cpu_performance` | fixed_contract |
+| `cpu_performance_flag_virtual` | `8` | `u32` | value | number | `cpu_performance` | fixed_contract |
+| `cpu_performance_valid_enable` | `1` | `u32` | value | number | `cpu_performance` | fixed_contract |
+| `cpu_performance_valid_capabilities` | `2` | `u32` | value | number | `cpu_performance` | fixed_contract |
+| `cpu_performance_valid_request` | `4` | `u32` | value | number | `cpu_performance` | fixed_contract |
+| `cpu_performance_valid_package` | `8` | `u32` | value | number | `cpu_performance` | fixed_contract |
+| `cpu_performance_valid_scope` | `16` | `u32` | value | number | `cpu_performance` | fixed_contract |
+| `cpu_performance_valid_time` | `32` | `u32` | value | number | `cpu_performance` | fixed_contract |
+| `cpu_register_write_flag_before` | `1` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_write_flag_attempted` | `2` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_write_flag_after` | `4` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_write_flag_written` | `8` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_id_intel_hwp_enable` | `18` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_id_intel_hwp_capabilities` | `19` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_id_intel_hwp_request` | `20` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_id_intel_hwp_package` | `21` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_cppc_flag_rank_published` | `16` | `u32` | value | number | `cpu_cppc` | fixed_contract |
+| `cpu_cppc_valid_range` | `1` | `u32` | value | number | `cpu_cppc` | fixed_contract |
+| `cpu_cppc_valid_request` | `2` | `u32` | value | number | `cpu_cppc` | fixed_contract |
+| `cpu_cppc_valid_enable` | `4` | `u32` | value | number | `cpu_cppc` | fixed_contract |
+| `cpu_cppc_valid_status` | `8` | `u32` | value | number | `cpu_cppc` | fixed_contract |
+| `cpu_cppc_valid_current_limit` | `16` | `u32` | value | number | `cpu_cppc` | fixed_contract |
+| `cpu_cppc_valid_scope` | `32` | `u32` | value | number | `cpu_cppc` | fixed_contract |
+| `cpu_cppc_valid_time` | `64` | `u32` | value | number | `cpu_cppc` | fixed_contract |
+| `cpu_cppc_valid_rank` | `128` | `u32` | value | number | `cpu_cppc` | fixed_contract |
+| `cpu_cppc_raw_enable` | `1` | `u32` | value | number | `cpu_cppc` | fixed_contract |
+| `cpu_cppc_raw_capability1` | `2` | `u32` | value | number | `cpu_cppc` | fixed_contract |
+| `cpu_cppc_raw_capability2` | `4` | `u32` | value | number | `cpu_cppc` | fixed_contract |
+| `cpu_cppc_raw_request` | `8` | `u32` | value | number | `cpu_cppc` | fixed_contract |
+| `cpu_cppc_raw_status` | `16` | `u32` | value | number | `cpu_cppc` | fixed_contract |
+| `cpu_performance_hint_state_unknown` | `0` | `u32` | value | number | `cpu_performance_hint` | fixed_contract |
+| `cpu_performance_hint_state_current` | `1` | `u32` | value | number | `cpu_performance_hint` | fixed_contract |
+| `cpu_performance_hint_state_stale` | `2` | `u32` | value | number | `cpu_performance_hint` | fixed_contract |
+| `cpu_performance_hint_flag_valid` | `1` | `u32` | value | number | `cpu_performance_hint` | fixed_contract |
+| `cpu_performance_hint_flag_group_ready` | `2` | `u32` | value | number | `cpu_performance_hint` | fixed_contract |
+| `cpu_performance_hint_source_cppc` | `1` | `u32` | value | number | `cpu_performance_hint` | fixed_contract |
+| `cpu_performance_hint_max_age_ns` | `1000000000` | `u64` | value | number | `cpu_performance_hint` | fixed_contract |
+| `cpu_register_id_amd_cppc_capabilities1` | `22` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_id_amd_cppc_enable` | `23` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_id_amd_cppc_capabilities2` | `24` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_id_amd_cppc_request` | `25` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_register_id_amd_cppc_status` | `26` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `power_profile_firmware` | `0` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_balanced` | `1` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_performance` | `2` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_saving` | `3` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_op_status` | `1` | `u16` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_op_select` | `2` | `u16` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_op_cpu` | `3` | `u16` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_op_quiesce` | `4` | `u16` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_op_resume` | `5` | `u16` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_op_reload` | `6` | `u16` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_request_flag_sticky_enable` | `1` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_state_firmware` | `0` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_state_unsupported` | `1` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_state_disabled` | `2` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_state_applying` | `3` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_state_applied` | `4` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_state_returning` | `5` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_state_retained` | `6` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_state_partial` | `7` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_state_quiesced` | `8` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_backend_none` | `0` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_backend_hwp` | `1` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_backend_cppc` | `2` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_flag_provider` | `1` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_flag_applied_complete` | `2` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_flag_pending_return` | `4` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_flag_quiesced` | `8` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_flag_config_valid` | `16` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_flag_sticky_enabled` | `32` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_cpu_flag_owned` | `1` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_cpu_flag_confirmed` | `2` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_cpu_flag_sticky_enabled` | `4` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_cpu_flag_foreign_control` | `8` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_cpu_flag_worker_retained` | `16` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_cpu_valid_request` | `1` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_cpu_valid_range` | `2` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_cpu_valid_time` | `4` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_cpu_valid_epp` | `8` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_worker_absent` | `0` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_worker_starting` | `1` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_worker_idle` | `2` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_worker_applying` | `3` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_worker_active` | `4` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_worker_returning` | `5` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_worker_held` | `6` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_worker_complete` | `7` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_transition_action_halt` | `0` | `u32` | value | number | `power_transition` | fixed_contract |
+| `power_transition_action_reboot` | `1` | `u32` | value | number | `power_transition` | fixed_contract |
+| `power_transition_action_poweroff` | `2` | `u32` | value | number | `power_transition` | fixed_contract |
+| `power_transition_error_invalid` | `-1` | `i32` | value | number | `power_transition` | fixed_contract |
+| `power_transition_error_context` | `-2` | `i32` | value | number | `power_transition` | fixed_contract |
+| `power_transition_error_busy` | `-3` | `i32` | value | number | `power_transition` | fixed_contract |
+| `power_transition_error_retained` | `-4` | `i32` | value | number | `power_transition` | fixed_contract |
+| `cpu_firmware_backend_none` | `0` | `u32` | value | number | `cpu_firmware` | fixed_contract |
+| `cpu_firmware_backend_cppc` | `1` | `u32` | value | number | `cpu_firmware` | fixed_contract |
+| `cpu_firmware_backend_pss` | `2` | `u32` | value | number | `cpu_firmware` | fixed_contract |
+| `cpu_firmware_valid_range` | `1` | `u32` | value | number | `cpu_firmware` | fixed_contract |
+| `cpu_firmware_valid_request` | `2` | `u32` | value | number | `cpu_firmware` | fixed_contract |
+| `cpu_firmware_valid_time` | `4` | `u32` | value | number | `cpu_firmware` | fixed_contract |
+| `cpu_firmware_valid_epp` | `8` | `u32` | value | number | `cpu_firmware` | fixed_contract |
+| `cpu_firmware_valid_domain` | `16` | `u32` | value | number | `cpu_firmware` | fixed_contract |
+| `power_profile_backend_acpi_cppc` | `3` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `power_profile_backend_acpi_pss` | `4` | `u32` | value | number | `power_profiles` | fixed_contract |
+| `cpu_idle_reason_none` | `0` | `u32` | value | number | `cpu_idle` | fixed_contract |
+| `cpu_idle_reason_absent` | `1` | `u32` | value | number | `cpu_idle` | fixed_contract |
+| `cpu_idle_reason_malformed` | `2` | `u32` | value | number | `cpu_idle` | fixed_contract |
+| `cpu_idle_reason_coordination` | `3` | `u32` | value | number | `cpu_idle` | fixed_contract |
+| `cpu_idle_reason_lpi_context` | `4` | `u32` | value | number | `cpu_idle` | fixed_contract |
+| `cpu_idle_reason_entry_method` | `5` | `u32` | value | number | `cpu_idle` | fixed_contract |
+| `cpu_idle_reason_withdrawn` | `6` | `u32` | value | number | `cpu_idle` | fixed_contract |
+| `cpu_idle_reason_hypervisor` | `7` | `u32` | value | number | `cpu_idle` | fixed_contract |
+| `cpu_idle_reason_vendor` | `8` | `u32` | value | number | `cpu_idle` | fixed_contract |
+| `cpu_idle_reason_monitor` | `9` | `u32` | value | number | `cpu_idle` | fixed_contract |
+| `cpu_idle_reason_arat` | `10` | `u32` | value | number | `cpu_idle` | fixed_contract |
+| `cpu_idle_reason_invariant_tsc` | `11` | `u32` | value | number | `cpu_idle` | fixed_contract |
+| `cpu_idle_reason_substate` | `12` | `u32` | value | number | `cpu_idle` | fixed_contract |
+| `cpu_idle_reason_monitor_fsm` | `13` | `u32` | value | number | `cpu_idle` | fixed_contract |
+| `cpu_idle_reason_clock` | `14` | `u32` | value | number | `cpu_idle` | fixed_contract |
+| `cpu_idle_reason_timer` | `15` | `u32` | value | number | `cpu_idle` | fixed_contract |
+| `cpu_idle_reason_epoch` | `16` | `u32` | value | number | `cpu_idle` | fixed_contract |
+| `cpu_idle_reason_policy` | `17` | `u32` | value | number | `cpu_idle` | fixed_contract |
+| `cpu_idle_reason_short_budget` | `18` | `u32` | value | number | `cpu_idle` | fixed_contract |
+| `cpu_machine_flag_mce` | `1` | `u32` | value | number | `cpu_machine` | fixed_contract |
+| `cpu_machine_flag_mca` | `2` | `u32` | value | number | `cpu_machine` | fixed_contract |
+| `cpu_machine_flag_msr` | `4` | `u32` | value | number | `cpu_machine` | fixed_contract |
+| `cpu_machine_flag_mce_enabled` | `8` | `u32` | value | number | `cpu_machine` | fixed_contract |
+| `cpu_machine_flag_cap_valid` | `16` | `u32` | value | number | `cpu_machine` | fixed_contract |
+| `cpu_machine_flag_status_valid` | `32` | `u32` | value | number | `cpu_machine` | fixed_contract |
+| `cpu_machine_flag_truncated` | `64` | `u32` | value | number | `cpu_machine` | fixed_contract |
+| `cpu_machine_flag_read_fault` | `128` | `u32` | value | number | `cpu_machine` | fixed_contract |
+| `cpu_machine_flag_smca_advertised` | `256` | `u32` | value | number | `cpu_machine` | fixed_contract |
+| `cpu_machine_flag_virtual` | `512` | `u32` | value | number | `cpu_machine` | fixed_contract |
+| `cpu_machine_flag_unsupported` | `1024` | `u32` | value | number | `cpu_machine` | fixed_contract |
+| `cpu_machine_flag_prepared` | `2048` | `u32` | value | number | `cpu_machine` | fixed_contract |
+| `cpu_machine_bank_status_read` | `1` | `u32` | value | number | `cpu_machine` | fixed_contract |
+| `cpu_machine_bank_status_valid` | `2` | `u32` | value | number | `cpu_machine` | fixed_contract |
+| `cpu_machine_bank_address_read` | `4` | `u32` | value | number | `cpu_machine` | fixed_contract |
+| `cpu_machine_bank_misc_read` | `8` | `u32` | value | number | `cpu_machine` | fixed_contract |
+| `cpu_machine_bank_config_read` | `16` | `u32` | value | number | `cpu_machine` | fixed_contract |
+| `cpu_machine_bank_ipid_read` | `32` | `u32` | value | number | `cpu_machine` | fixed_contract |
+| `cpu_machine_bank_syndrome_read` | `64` | `u32` | value | number | `cpu_machine` | fixed_contract |
+| `cpu_machine_bank_unstable` | `128` | `u32` | value | number | `cpu_machine` | fixed_contract |
+| `cpu_machine_bank_read_fault` | `256` | `u32` | value | number | `cpu_machine` | fixed_contract |
+| `cpu_machine_bank_status_after_read` | `512` | `u32` | value | number | `cpu_machine` | fixed_contract |
+| `cpu_machine_bank_limit` | `64` | `u32` | value | number | `cpu_machine` | fixed_contract |
+| `cpu_power_flag_mca_model` | `128` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_power_flag_smca_model` | `256` | `u32` | value | number | `cpu_power` | fixed_contract |
+| `cpu_microcode_flag_before_valid` | `1` | `u32` | value | number | `cpu_microcode` | fixed_contract |
+| `cpu_microcode_flag_after_valid` | `2` | `u32` | value | number | `cpu_microcode` | fixed_contract |
+| `cpu_microcode_flag_bundle_valid` | `4` | `u32` | value | number | `cpu_microcode` | fixed_contract |
+| `cpu_microcode_flag_matched` | `8` | `u32` | value | number | `cpu_microcode` | fixed_contract |
+| `cpu_microcode_flag_payload_verified` | `16` | `u32` | value | number | `cpu_microcode` | fixed_contract |
+| `cpu_microcode_flag_virtual` | `32` | `u32` | value | number | `cpu_microcode` | fixed_contract |
+| `cpu_microcode_flag_update_attempt` | `64` | `u32` | value | number | `cpu_microcode` | fixed_contract |
+| `cpu_microcode_flag_post_features_fresh` | `128` | `u32` | value | number | `cpu_microcode` | fixed_contract |
+| `cpu_microcode_flag_features_changed` | `256` | `u32` | value | number | `cpu_microcode` | fixed_contract |
+| `cpu_microcode_flag_post_baseline` | `512` | `u32` | value | number | `cpu_microcode` | fixed_contract |
+| `cpu_microcode_flag_initial_boot` | `1024` | `u32` | value | number | `cpu_microcode` | fixed_contract |
+| `cpu_microcode_status_not_prepared` | `0` | `u32` | value | number | `cpu_microcode` | fixed_contract |
+| `cpu_microcode_status_package_missing` | `1` | `u32` | value | number | `cpu_microcode` | fixed_contract |
+| `cpu_microcode_status_unsupported_cpu` | `2` | `u32` | value | number | `cpu_microcode` | fixed_contract |
+| `cpu_microcode_status_virtual_cpu` | `3` | `u32` | value | number | `cpu_microcode` | fixed_contract |
+| `cpu_microcode_status_already_current` | `4` | `u32` | value | number | `cpu_microcode` | fixed_contract |
+| `cpu_microcode_status_updated` | `5` | `u32` | value | number | `cpu_microcode` | fixed_contract |
+| `cpu_microcode_status_firmware_prerequisite` | `6` | `u32` | value | number | `cpu_microcode` | fixed_contract |
+| `cpu_microcode_status_package_rejected` | `7` | `u32` | value | number | `cpu_microcode` | fixed_contract |
+| `cpu_microcode_status_revision_unavailable` | `8` | `u32` | value | number | `cpu_microcode` | fixed_contract |
+| `cpu_microcode_status_load_failed` | `9` | `u32` | value | number | `cpu_microcode` | fixed_contract |
+| `cpu_microcode_status_revision_mismatch` | `10` | `u32` | value | number | `cpu_microcode` | fixed_contract |
+| `cpu_microcode_status_restart_verified` | `11` | `u32` | value | number | `cpu_microcode` | fixed_contract |
+| `cpu_microcode_status_restart_requires_update` | `12` | `u32` | value | number | `cpu_microcode` | fixed_contract |
+| `cpu_microcode_status_identity_changed` | `13` | `u32` | value | number | `cpu_microcode` | fixed_contract |
+| `cpu_pmu_flag_exposed` | `1` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_flag_virtual` | `2` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_flag_qualified` | `4` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_flag_online` | `8` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_flag_busy` | `16` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_flag_quarantined` | `32` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_flag_last_result` | `64` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_flag_modulo_only` | `128` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_result_flag_raw_before` | `1` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_result_flag_raw_after` | `2` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_result_flag_callback_started` | `4` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_result_flag_callback_returned` | `8` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_result_flag_restored` | `16` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_result_flag_absolute_count` | `32` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_result_flag_modulo_delta` | `64` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_result_flag_overflow` | `128` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_result_flag_identity_valid` | `256` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_result_flag_snapshot_valid` | `512` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_result_flag_if_preserved` | `1024` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_result_flag_untouched` | `2048` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_result_flag_full_width` | `4096` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_result_flag_within_budget` | `8192` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_profile_unknown` | `0` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_profile_intel_arch` | `1` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_profile_amd_milan_b1` | `2` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_reason_none` | `0` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_reason_no_pmu` | `1` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_reason_virtual_cpu` | `2` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_reason_unsupported_layout` | `3` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_reason_unsupported_model` | `4` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_reason_malformed` | `5` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_reason_no_msr` | `6` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_reason_offline` | `7` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_reason_quarantined` | `8` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_state_idle` | `0` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_state_active` | `1` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_state_quarantined` | `2` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_status_completed` | `0` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_status_busy` | `1` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_status_read_failed` | `2` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_status_write_failed` | `3` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_status_overflow` | `4` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_status_callback_aborted` | `5` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_status_identity_changed` | `6` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_status_restore_failed` | `7` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_status_clock_invalid` | `8` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_event_cycles` | `0` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_event_instructions` | `1` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_event_branches` | `2` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_event_branch_misses` | `3` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_event_cache_references` | `4` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_event_cache_misses` | `5` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_max_iterations` | `4096` | `u32` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_pmu_max_window_ns` | `2000000` | `u64` | value | number | `cpu_pmu` | fixed_contract |
+| `cpu_feature_id_sha` | `56` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_erms` | `57` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_fsrm` | `58` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_bmi1` | `59` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_bmi2` | `60` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_feature_id_adx` | `61` | `u32` | value | number | `cpu_capabilities` | fixed_contract |
+| `cpu_accel_feature_sha` | `1` | `u32` | value | number | `cpu_acceleration` | fixed_contract |
+| `cpu_accel_feature_erms` | `2` | `u32` | value | number | `cpu_acceleration` | fixed_contract |
+| `cpu_accel_feature_fsrm` | `4` | `u32` | value | number | `cpu_acceleration` | fixed_contract |
+| `cpu_accel_feature_bmi1` | `8` | `u32` | value | number | `cpu_acceleration` | fixed_contract |
+| `cpu_accel_feature_bmi2` | `16` | `u32` | value | number | `cpu_acceleration` | fixed_contract |
+| `cpu_accel_feature_adx` | `32` | `u32` | value | number | `cpu_acceleration` | fixed_contract |
+| `cpu_accel_info_flag_virtual` | `1` | `u32` | value | number | `cpu_acceleration` | fixed_contract |
+| `cpu_accel_info_flag_online` | `2` | `u32` | value | number | `cpu_acceleration` | fixed_contract |
+| `cpu_accel_info_flag_common_complete` | `4` | `u32` | value | number | `cpu_acceleration` | fixed_contract |
+| `cpu_accel_info_flag_baseline_ready` | `8` | `u32` | value | number | `cpu_acceleration` | fixed_contract |
+| `cpu_accel_work_flag_callback_started` | `1` | `u32` | value | number | `cpu_acceleration` | fixed_contract |
+| `cpu_accel_work_flag_callback_returned` | `2` | `u32` | value | number | `cpu_acceleration` | fixed_contract |
+| `cpu_accel_work_flag_identity_valid` | `4` | `u32` | value | number | `cpu_acceleration` | fixed_contract |
+| `cpu_accel_work_flag_if_preserved` | `8` | `u32` | value | number | `cpu_acceleration` | fixed_contract |
+| `cpu_accel_work_flag_clock_valid` | `16` | `u32` | value | number | `cpu_acceleration` | fixed_contract |
+| `cpu_accel_work_flag_within_budget` | `32` | `u32` | value | number | `cpu_acceleration` | fixed_contract |
+| `cpu_accel_work_flag_feature_granted` | `64` | `u32` | value | number | `cpu_acceleration` | fixed_contract |
+| `cpu_accel_work_flag_virtual` | `128` | `u32` | value | number | `cpu_acceleration` | fixed_contract |
+| `cpu_accel_work_kind_baseline` | `0` | `u32` | value | number | `cpu_acceleration` | fixed_contract |
+| `cpu_accel_work_kind_sha256` | `1` | `u32` | value | number | `cpu_acceleration` | fixed_contract |
+| `cpu_accel_work_status_completed` | `0` | `u32` | value | number | `cpu_acceleration` | fixed_contract |
+| `cpu_accel_work_status_callback_aborted` | `1` | `u32` | value | number | `cpu_acceleration` | fixed_contract |
+| `cpu_accel_work_status_identity_changed` | `2` | `u32` | value | number | `cpu_acceleration` | fixed_contract |
+| `cpu_accel_work_status_clock_unavailable` | `3` | `u32` | value | number | `cpu_acceleration` | fixed_contract |
+| `cpu_accel_work_status_clock_regressed` | `4` | `u32` | value | number | `cpu_acceleration` | fixed_contract |
+| `cpu_accel_work_status_over_budget` | `5` | `u32` | value | number | `cpu_acceleration` | fixed_contract |
+| `cpu_accel_max_iterations` | `64` | `u32` | value | number | `cpu_acceleration` | fixed_contract |
+| `cpu_accel_max_window_ns` | `2000000` | `u64` | value | number | `cpu_acceleration` | fixed_contract |
+| `cpu_accel_feature_rdrand` | `64` | `u32` | value | number | `entropy` | fixed_contract |
+| `cpu_accel_work_kind_rdrand` | `2` | `u32` | value | number | `entropy` | fixed_contract |
+| `entropy_max_request_bytes` | `4096` | `u32` | value | number | `entropy` | fixed_contract |
+| `entropy_max_window_ns` | `250000000` | `u64` | value | number | `entropy` | fixed_contract |
+| `entropy_state_unavailable` | `0` | `u32` | value | number | `entropy` | fixed_contract |
+| `entropy_state_ready` | `1` | `u32` | value | number | `entropy` | fixed_contract |
+| `entropy_state_closed` | `2` | `u32` | value | number | `entropy` | fixed_contract |
+| `entropy_state_retained` | `3` | `u32` | value | number | `entropy` | fixed_contract |
+| `entropy_state_removed` | `4` | `u32` | value | number | `entropy` | fixed_contract |
+| `entropy_source_flag_registered` | `1` | `u32` | value | number | `entropy` | fixed_contract |
+| `entropy_source_flag_virtual` | `2` | `u32` | value | number | `entropy` | fixed_contract |
+| `entropy_source_flag_device` | `4` | `u32` | value | number | `entropy` | fixed_contract |
+| `entropy_source_flag_verified_receipt` | `8` | `u32` | value | number | `entropy` | fixed_contract |
+| `entropy_source_flag_quiesced` | `16` | `u32` | value | number | `entropy` | fixed_contract |
+| `entropy_receipt_flag_started` | `1` | `u32` | value | number | `entropy` | fixed_contract |
+| `entropy_receipt_flag_used` | `2` | `u32` | value | number | `entropy` | fixed_contract |
+| `entropy_receipt_flag_length_verified` | `4` | `u32` | value | number | `entropy` | fixed_contract |
+| `entropy_receipt_flag_within_budget` | `8` | `u32` | value | number | `entropy` | fixed_contract |
+| `entropy_receipt_flag_quiesced` | `16` | `u32` | value | number | `entropy` | fixed_contract |
+| `entropy_receipt_flag_cancelled` | `32` | `u32` | value | number | `entropy` | fixed_contract |
+| `entropy_receipt_flag_retained` | `64` | `u32` | value | number | `entropy` | fixed_contract |
+| `entropy_receipt_flag_virtual` | `128` | `u32` | value | number | `entropy` | fixed_contract |
+| `entropy_device_status_completed` | `0` | `u32` | value | number | `entropy` | fixed_contract |
+| `entropy_device_status_unavailable` | `1` | `u32` | value | number | `entropy` | fixed_contract |
+| `entropy_device_status_timeout` | `2` | `u32` | value | number | `entropy` | fixed_contract |
+| `entropy_device_status_bad_completion` | `3` | `u32` | value | number | `entropy` | fixed_contract |
+| `entropy_device_status_stopping` | `4` | `u32` | value | number | `entropy` | fixed_contract |
+| `entropy_device_status_lost` | `5` | `u32` | value | number | `entropy` | fixed_contract |
+| `entropy_device_status_retained` | `6` | `u32` | value | number | `entropy` | fixed_contract |
+| `entropy_error_invalid` | `-1` | `i32` | value | number | `entropy` | fixed_contract |
+| `entropy_error_busy` | `-2` | `i32` | value | number | `entropy` | fixed_contract |
+| `entropy_error_unavailable` | `-3` | `i32` | value | number | `entropy` | fixed_contract |
+| `entropy_error_stale` | `-4` | `i32` | value | number | `entropy` | fixed_contract |
+| `entropy_error_timeout` | `-5` | `i32` | value | number | `entropy` | fixed_contract |
+| `entropy_error_context` | `-6` | `i32` | value | number | `entropy` | fixed_contract |
+| `entropy_error_device` | `-7` | `i32` | value | number | `entropy` | fixed_contract |
+| `entropy_error_cancelled` | `-8` | `i32` | value | number | `entropy` | fixed_contract |
+| `entropy_error_retained` | `-9` | `i32` | value | number | `entropy` | fixed_contract |
+| `console_input_event_text` | `1` | `u32` | value | number | `console_input` | fixed_contract |
+| `console_input_event_key` | `2` | `u32` | value | number | `console_input` | fixed_contract |
+| `console_input_event_utf8_byte` | `3` | `u32` | value | number | `console_input` | fixed_contract |
+| `console_input_event_batch_max` | `64` | `u32` | value | number | `console_input` | fixed_contract |
+| `console_input_key_up` | `128` | `u32` | value | number | `console_input` | fixed_contract |
+| `console_input_key_down` | `129` | `u32` | value | number | `console_input` | fixed_contract |
+| `console_input_key_f3` | `130` | `u32` | value | number | `console_input` | fixed_contract |
+| `console_text_utf8` | `65001` | `u32` | value | number | `console_text` | fixed_contract |
+| `console_text_cp437` | `437` | `u32` | value | number | `console_text` | fixed_contract |
+| `console_text_windows1252` | `1252` | `u32` | value | number | `console_text` | fixed_contract |
+| `console_text_closed` | `1` | `u32` | value | number | `console_text` | fixed_contract |
+| `fpu_observation_version` | `1` | `u32` | value | number | `fpu_observation` | fixed_contract |
+| `fpu_observation_capabilities` | `0` | `u32` | value | number | `fpu_observation` | fixed_contract |
+| `fpu_observation_begin` | `1` | `u32` | value | number | `fpu_observation` | fixed_contract |
+| `fpu_observation_end` | `2` | `u32` | value | number | `fpu_observation` | fixed_contract |
+| `fpu_observation_flag_available` | `1` | `u32` | value | number | `fpu_observation` | fixed_contract |
+| `fpu_observation_flag_active` | `2` | `u32` | value | number | `fpu_observation` | fixed_contract |
+| `fpu_observation_flag_closed` | `4` | `u32` | value | number | `fpu_observation` | fixed_contract |
+| `fpu_observation_max_window_bytes` | `65536` | `u64` | value | number | `fpu_observation` | fixed_contract |
+| `fpu_observation_error_invalid` | `-1` | `i32` | value | number | `fpu_observation` | fixed_contract |
+| `fpu_observation_error_unavailable` | `-2` | `i32` | value | number | `fpu_observation` | fixed_contract |
+| `fpu_observation_error_busy` | `-3` | `i32` | value | number | `fpu_observation` | fixed_contract |
+| `fpu_observation_error_stale` | `-4` | `i32` | value | number | `fpu_observation` | fixed_contract |
+| `fpu_observation_error_exhausted` | `-5` | `i32` | value | number | `fpu_observation` | fixed_contract |
+| `program_inventory_kind_lifecycle` | `4` | `u8` | value | enum_value | `program_inventory` | fixed_contract |
+| `program_inventory_cursor_flag_lifecycle` | `2` | `u32` | value | bit | `program_inventory` | fixed_contract |
 
 ## Limits
 
@@ -10977,3 +13576,5 @@ Geltung: `storage`, Einheit: `status_code`, Stabilität: `fixed_contract`.
 | `tray_max_items` | `16` | `usize` | count | `tray_registry` | fixed_contract |
 | `tray_max_owners` | `16` | `usize` | count | `tray_registry` | fixed_contract |
 | `tray_tooltip_bytes` | `64` | `usize` | bytes | `tray_item` | fixed_contract |
+| `serial_max_transfer_bytes` | `2147483647` | `u32` | bytes | `serial` | fixed_contract |
+| `serial_bounce_bytes` | `256` | `u32` | bytes | `serial` | fixed_contract |

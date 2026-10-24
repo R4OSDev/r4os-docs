@@ -1,6 +1,6 @@
 SNES-Benchmark: Mess- und Vergleichsvertrag
 ==========================================
-Stand: 0.87.1, Vertrag r4os.subsystem-benchmark / Schema 1.
+Stand: 0.87.5, Vertrag r4os.subsystem-benchmark / Schema 1.
 
 Gemeinsamer Gastaufruf seit0.86.76
 ---------------------------------
@@ -1363,3 +1363,151 @@ Kein neuer physischer STANDARD, Windows-, optischer GPU-/FPS-/Audiobeleg.
 Der normale Desktop ist nach beiden Reihen wirklich wiederhergestellt;
 final65/65 mit aktiver persistenter NVIDIA-Ausgabe und ohne pending/retained
 BOs. Kompakte Originale bleiben; abgeschlossene grosse Hilfskopien entfallen.
+
+
+0.87.5: nativen Capture und initialen Framepool reparieren (24.10.2026)
+------------------------------------------------------------------------
+OssiPC startet Release0.87.5 / Kernel0.1.384 mit Desktop0.1.159 und
+NVIDIA0.1.326 wieder automatisch in den normalen nativen Desktop. Der User
+bestaetigt dessen sichtbares Bild am Fernseher. Der finale SNES-Lauf bleibt
+durchgehend bei verwaltetem nativen GR und besitzt echte Owner-Abschluesse.
+Das Profil bleibt nativ langsamer; die Messwerte stehen unten unverkuerzt.
+
+Ursache und Besitzer
+--------------------
+Der Rust-Outputowner behandelte in outputs/native.rs::capture auch den noch
+sichtbaren Frontpuffer als Capture-Sperre: busy() schliesst engine.pending()
+ein. Der erste Frame war abgeschlossen, der zweite freie Backbuffer durch
+available() zugelassen; capture() lehnte trotzdem mit State ab. Der vorhandene
+Originalfall reproduziert dies vor der Korrektur. Capture sperrt nun nur
+Vorbereitung/ausstehende Sichtbarkeit; Engine-/Readledger-/Session-/Swapchain-
+Zulassung pruefen weiter den genauen freien Backbuffer. Die umfassendere
+busy()-Pruefung fuer Close/Retirement bleibt unveraendert.
+
+Manager::owns_output_route bindet auch belegte/auslaufende Slots und bekannte
+native Ausgaben ohne fertiges Layout. primary.poll oeffnet waehrenddessen
+keinen zweiten privaten nativen Ausgabepfad. Legitime CPU-/Policyoptionen und
+Fehlerbehandlung bleiben erhalten; der gescheiterte Fallback wird nicht durch
+Abschalten seiner Schutzpruefung als erfolgreich ausgegeben.
+
+Der folgende physische Startfehler gehoert zum NVIDIA-Ausgabeowner. Der erste
+Upload mit Producer1/3/1 ist Kernel queue_resources::DISPLAY_OWNER, kein
+Desktop-Assetupload. presentationWaiting stellt ihn bis zum privaten Framepool
+zurueck; dessen Aufbau wartete hinter der vollstaendigen optionalen EDID-
+Moduskatalogarbeit. Die Originalfrist lief ohne GPU-Ticket/Mapping ab.
+Eine spaete CopyJob-Anlage kann das Wiederaufnehmen eines solchen Deferred-
+Jobs sein und beweist keinen erst dann erfolgten ersten queue.take.
+NVIDIA326 baut den notwendigen Pool zwischen catalog_next/query/wait-RPCs
+auf. Bestehende RM-Zulassung, SYSTEM-Importe, Clear-/CE-/BEGUN-/FINISHED-
+Quittungen und Originalfristen bleiben verbindlich. Keine Fristverlaengerung,
+keine CPU-Abschlussquittung und kein erneutes privates Oeffnen ersetzen sie.
+
+Kernel384 macht die drei gemeinsamen Grafik-Work-Notifier fuer Queue, BO-
+und VA-Abschluss nicht wartend; die bestehenden genauen Wake-/Retrypfade
+behalten offene Arbeit. Diese Aenderung allein loeste den nativen Startfehler
+nicht:384/NVIDIA324 wiederholte denselben abgelaufenen Upload. Die konkrete
+Framepool-Korrektur bleibt beim NVIDIA-Treiber; API/ABI/SDK bleiben gleich.
+Die begrenzten Fehlerdaten beobachten nur vorhandene Metadaten und die Uhr,
+keine neuen GPU-Proben oder erfundenen Fertigmeldungen. Originale:
+Temp/0875-driver325-copy-admission.json und Temp/0875f-copy-admission.json.
+
+Abnahme und Ausfuehrungsbeleg
+-----------------------------
+Desktop159 exportiert im vorhandenen SNES-Kontext die genaue Deviceadresse,
+Handle-/Backend-/Resetgeneration und vorhandene Owner-/Provider-Abschluesse.
+Dynamische Zaehler aktualisieren dieselbe Auswahlzeile; eine neue genaue
+Owneridentitaet erhaelt eine neue Zeile. Nicht verfuegbare Felder bleiben null.
+Der Scope ist das ganze Ownerleben einschliesslich Hintergrund/Warmlauf,
+kein GPU- oder Sichtbarkeitsbeleg fuer eine einzelne SNES-Fenstergeneration.
+
+Im finalen Original nur eine Auswahlzeile: native-gr, Generation1--736,
+Ziel16779520/2048/Head0, Device2/Connection9/Display2, erforderlich26,
+zugelassen1023; keine Fehlerzeile, kein managed-cpu oder primary-native-gr.
+Genauer Devicehandle1, Backend2/Reset1:207 abgeschlossene und207 sichtbare
+Ownerframes,3030 angenommene Renderjobs/1755 Primitivejobs, letzter Frame207,
+Result1/Phase4. Die echten Zeiten liegen bei Render-Ende289892718311ns,
+Copy289921101096ns und Sichtbarkeit289930057451ns. Annahmezaehler allein
+werden nicht als GPU-Abschluss bewertet. Native per-window records bleiben
+leer, presentation_receipts und physical_visibility bleiben null.
+Die separate Userbestaetigung gilt fuer den normalen nativen Desktop.
+
+Der normale Desktop63/63 ist nach dem Benchmark wieder verfuegbar, keine
+fremden sichtbaren GUI-Fenster; native Ausgabe und produktive Dienste bleiben
+aktiv. Installation NVIDIA326: Batch33/Transaktion34 nach frischem Boot,
+geladener Owner8/Drivergeneration7/Modulgeneration1, Firmware570.144.
+Die vorherige sichtbare Bootscreenstoerung mit325 wurde zunaechst ueber
+Softwarebatch32/Transaktion33 zurueckgenommen; nach begrenztem Ruecklauf und
+einer freigegebenen Hardwarewiederherstellung bestaetigte der User den
+Softwaredesktop. Dieser Zwischenstand ersetzt keine native Abnahme.
+
+Finaler physischer Software-/NVIDIA-Vergleich
+--------------------------------------------
+Beide Originalexporte completed/valid mit fuenf Messbatches und ihren
+Warmlaeufen, unveraendert importiert und vollstaendig aus DevCenter gelesen:
+  Software: f0111753-60a5-4c78-b47e-688b8d436e98
+    Median3044884353ns; min3039847971ns, max3045053002ns.
+  NVIDIA:   ec7ac7c7-4f23-49ea-bb58-44d0117dbe59
+    Median7572001748ns; min7292363680ns, max8931756631ns.
+  Native/Software-Median2.48679452818614 (+148.6794528 Prozent).
+Kanonische vollstaendige Dateien jeweils:
+Artifacts/Distribution/Diagnostics/SubsystemBenchmarks/<run_id>/run.json
+und original.jsonl. Kompakte Readbacks/Vergleich:
+Temp/0875f-{software,native}-devcenter-receipt.json,
+Temp/0875f-native-comparison.json und Temp/0875-final-physical-proof.json.
+
+Gleich:16 verfuegbare CPUs, Kernel384, Desktop159, R4SNES23, Spectra60,
+WINSVC17/AUDSVC13 und die tatsaechlichen sieben App-/Librarydateien samt Hash;
+R4GFX38/R4NV19 unveraendert. NTSC/Detail/Small/Window/Audio, identische Screen-,
+Frame-,Client-/Viewportgeometrie und Work-/ROM-/Start-/State-/Frame-/PCM-
+Orakel. Je Messung3000000000ns Gastarbeit,64431816 Masterzyklen,180 Beamframes,
+131 erzeugte/abgegebene Frames,1260 DMA-Operationen, kein Masterrest. CPU-
+Owneroperationszahlen schneiden WAI nach dem jeweiligen Restgrant und sind
+kein Retired-Instruction-Orakel. Der Native-Treiber ist vollstaendig aus dem
+Gast zurueckgelesen:326, SHA256
+c721d898737abbee196486c213f0a27e1a342cbf853b8a8130f447db00b8ea2a.
+Der vorherige Softwareexport5b4f79e1-836b-438b-a53c-301e4f36c13f bleibt ein
+qualifizierter Kernel383-Zwischenbeleg und ist nicht der finale Vergleich.
+
+Die Backendbedingungen unterscheiden sich absichtlich. DevCenter gibt deshalb
+korrekt different_measurement_conditions ohne vergleichbaren Score zurueck.
+Diese A/B-Wallzeit ist kein isolierter GPU-Speedup, keine optische Fenster-
+FPS-/Latenz- oder physische Audioquittung. Der verbliebene native Mehrbedarf
+ist belegt; seine Performanceursache ist durch diese Korrektur nicht bestimmt.
+
+Gezielte vorhandene Pruefungen und Versionsschnitt
+--------------------------------------------------
+- Desktop Original-Outputworker: vor der Capture-Korrektur State; danach
+  zwei verschiedene64-Pixel-Szenen mit gehaltenem Frontpuffer, zwei vom
+  Originalprovider quittierten Modellframes und gehaltenem Target ohne privaten
+  Doppelpfad. Drei Geometriefaelle plus ein Ownerfall bestanden.
+- Bestehende SNES-Diagnostik: sechs Faelle plus drei Geometriefaelle bestanden,
+  einschliesslich Zaehleraktualisierung und neuer Handleidentitaet.
+- Lokaler KVM4 Normal-/CHECK mit Desktop159, damals Kernel383: Control,
+  Originalreport, Reap und erwartete null-Detailfelder bestanden.
+- NVIDIA Original-Complete-run: der erste kalte Moduskatalogfall scheitert
+  vor326 ohne privaten Pool. Danach1/1 Gruppe bestanden, beide kalten Jobs-
+  und Timeoutfaelle mit Pool vor weiteren Katalog-RPCs, allen bisherigen
+  Pixel-/CE-/BEGUN-/FINISHED-/Retirementorakeln; Katalog danach abgeschlossen.
+  Temp/0875-catalogue-pool-test-receipt.json und zugeordnete Originallogs.
+- Kernel384 Build/fmt/Clippy und neuer KVM4-Quick bestanden. Aktuelles finales
+  Testimage erneut gebaut, /boot/r4os.elf direkt aus der FAT32-BOOTpartition
+  gelesen:24541008 Bytes, SHA256
+  d554519cbcc15a13a4dbb1eb013a7df513a3672a563fb4acc147f2958e8552ca.
+  Temp/0875-final-boot-kernel.json; die physische Kernelinstallation ist
+  separat ueber verifiziertes Paket/Installation und aktive Version gebunden.
+- Genau ein finaler normaler KVM4-STANDARD/Suite3 bestanden:
+  2afe398c-16c4-4a56-9a6d-032c7a2cc56f, host hetzner-qemu, Release0.87.5,
+  30 Rohsamples, je worker_count=completed_workers=4, sechs gueltige Scores,
+  Gesamtindex130.622570. Originalexport unter
+  Artifacts/Distribution/Diagnostics/SpectraStandard/<run_id>/run.json,
+  SHA2563c2a0527e9f39d0347b4993c7de81903ab1f42e78e8b870287c4749aeca39644.
+  Unveraendertes PUT und vollstaendiges normalisiertes GET einschliesslich
+  aller Rohdaten/sechs score_validation-Bereiche bestanden. Kompaktbeleg:
+  Temp/standard-2afe398c-16c4-4a56-9a6d-032c7a2cc56f-receipt.json.
+  Der Benchmarkrunner bestaetigt BOOT-ELF d554...52ca erneut und entfernt
+  seine abgeschlossenen Source-/Gastkopien; keine weitere STANDARD-Wiederholung.
+
+Release0.87.5, geaenderte Artefakte Desktop159/NVIDIA326/Kernel384. R4SNES23,
+Spectra60, SDK/Contract/Libraries bleiben in ihrem vorhandenen Versionsschnitt.
+Veroeffentlichte Full/Slim0.86.94 mit Softwaregrafik/Recovery65 bleiben der
+separate Paketstand. Keine neue Windows-/HDR-/VRR-/andere Receiverabnahme.

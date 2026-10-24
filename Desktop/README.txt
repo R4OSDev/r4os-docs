@@ -1,4 +1,4 @@
-﻿R4OS Desktop
+R4OS Desktop
 ============
 
 The desktop is an R4X application in `Repositories/Apps/Desktop/`. It owns
@@ -6,26 +6,33 @@ window composition, focus, z-order, taskbar, desktop items and user-facing
 input dispatch. The kernel provides the privileged display and event
 mechanisms but does not own desktop policy.
 
-Current source and OssiPC update (0.87.4)
+Current source and OssiPC update (0.87.5)
 --------------------------------------
-R4DESK0.1.158 keeps the original provisional1280x720 layout while a native
-driver holds the boot display. The Rust port's immediate failure on missing
-geometry is removed; the existing topology owner adopts the actual output
-dimensions. Automatic OssiPC boot with NVIDIA322 now retains the Desktop host
-and one real logical output, without a manual restart of the application.
-The SNES control boundary binds its source to the first actual observation
-of the exact active child and retains managed context without invented copy/
-GPU/visibility receipts. Exact pending graphics retirement remains pending
-until the original owner acknowledges it; matching Spectra60 repeats only
-the idempotent final report within one bounded deadline. Hardware, original benchmarks, exact versions and
-comparison limits are recorded once in Diagnostics/SnesBenchmark.txt.
-Desktop158 also records actual per-output composition selection, exact target
-identity and the original admission masks/status in the SNES context. This
-is selection evidence, not a GPU/visibility receipt. The current physical
-detail run initially admits native GR, then observes a prior native failure
-and mixed primary-GR/managed-CPU paths. The originating runtime failure is
-open in0.87.5; no stable all-GR performance claim follows. R4SNES23 adds only
-explicit detail-mode task/raster observations with stable generations.
+R4DESK0.1.159 keeps the provisional1280x720 layout during the native boot-
+display hold and adopts the actual dimensions through its topology owner.
+Its native capture admits an available backbuffer while the visible front
+remains retained; preparation, visibility, Engine/Readledger/Session checks
+and exact close/retirement barriers remain with their owners. Output-manager
+ownership also covers held/retiring targets and known native routes without
+a ready layout, preventing a second private native renderer during that gap.
+Legitimate software-policy and hardware CPU paths remain available.
+
+The existing SNES context records actual composition selection, exact target
+and native-owner identity, admitted render jobs and real provider frame
+receipts. Lifetime counters include background/warmup work and do not grant
+per-window GPU or optical receipts. Stable detail task/raster observations
+remain with R4SNES23; the normal path adds no task-observation queries.
+The SNES control boundary retains the exact active child and idempotent final
+report/retirement acknowledgements with matching Spectra60.
+
+OssiPC Kernel384/NVIDIA326 starts automatically into the normal native
+Desktop; the user confirms its TV picture. The driver builds its initial
+private framepool before optional mode enumeration can consume the first
+console-upload deadline. The final SNES run keeps one managed native-GR
+choice with real owner completion/visibility, and the normal Desktop returns
+afterward. Native remains slower than software in this measured profile.
+Original comparisons, exact versions and bounded qualifications are recorded
+once in Diagnostics/SnesBenchmark.txt, section0.87.5.
 The packaged Full/Slim release described below remains0.86.94.
 
 Current released implementation (0.86.94)

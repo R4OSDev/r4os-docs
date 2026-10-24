@@ -6,7 +6,7 @@ window composition, focus, z-order, taskbar, desktop items and user-facing
 input dispatch. The kernel provides the privileged display and event
 mechanisms but does not own desktop policy.
 
-Current source and OssiPC update (0.87.8)
+Current source and OssiPC update (0.87.9)
 --------------------------------------
 R4DESK0.1.162 keeps the provisional1280x720 layout during the native boot-
 display hold and adopts the actual dimensions through its topology owner.
@@ -96,6 +96,15 @@ with30 raw samples, four workers each and six valid scores (overall149.286173).
 The unchanged original export has a complete DevCenter raw-data readback
 with all six score areas valid;
 this headless phase measures no physical NVIDIA/GUI latency. No new Full/Slim publication is claimed here.
+
+GPU pacing (0.87.9)
+--------------------
+NVIDIA332 binds native BO/VA notifications to the existing coalesced pacing
+wake and keeps pending cursor/display/RM/native-consumer work out of the
+quiet interval. Dormant caches/fronts remain quiet. Kernel384 already wakes
+Desktop after exact queue fence/resource publication; Desktop162/Explorer27
+are unchanged. Qualification and limits are recorded once in
+Repositories/Drivers/NVIDIA/DOCUMENTATION.de.txt, section0.87.9.
 
 Current released implementation (0.86.94)
 -----------------------------------------

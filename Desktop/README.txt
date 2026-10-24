@@ -6,9 +6,9 @@ window composition, focus, z-order, taskbar, desktop items and user-facing
 input dispatch. The kernel provides the privileged display and event
 mechanisms but does not own desktop policy.
 
-Current source and OssiPC update (0.87.7)
+Current source and OssiPC update (0.87.8)
 --------------------------------------
-R4DESK0.1.160 keeps the provisional1280x720 layout during the native boot-
+R4DESK0.1.162 keeps the provisional1280x720 layout during the native boot-
 display hold and adopts the actual dimensions through its topology owner.
 Its native capture admits an available backbuffer while the visible front
 remains retained; preparation, visibility, Engine/Readledger/Session checks
@@ -40,6 +40,62 @@ afterward. Native remains slower than software in that measured0.87.5 profile.
 Original comparisons, exact versions and bounded qualifications are recorded
 once in Diagnostics/SnesBenchmark.txt, section0.87.5.
 The packaged Full/Slim release described below remains0.86.94.
+
+Incremental GUI work (0.87.8)
+----------------------------
+Owners: R4DESK162 and EXPLORER27. Kernel384, Contract and R4GFX38 are unchanged.
+Explorer publishes selection label/status deltas after a successful complete
+frame, at most eight before a complete frame. Scroll, resize, Select All,
+menus/dialogs, folder changes and refresh retain complete publication. Failure
+preserves the old immutable frame and forces complete publication next time.
+
+The native recorder groups compatible primitives across at most16 disjoint
+write footprints, preserving all overlapping/alpha order and exact sample
+grids. Resident layer comparison limits raster work to changed old/new command
+and asset footprints. Changed command counts may use the existing exact output
+damage on the same resident image. Capacity growth preserves the old complete
+snapshot. New images, view invalidation and absent damage/snapshots require
+full raster work. Staging waits for real retirement; separate layer writers
+have separate fence chains. Linear composition joins all primitive completion
+before its own ordered writes. External producer/read/consumer leases retain
+their exact physical receipts. No parallel GR execution is claimed.
+
+The existing native runner passes20 focused Desktop cases plus3 original
+R4GFX geometry and1 SDK clock case. This includes the original GPU/pool/cancel,
+FIFO/readback, two-reader/grid/rotation/alpha, GUI-generation and complete-scene
+pixel oracles, plus one changed-footprint/count/disjoint-batch gap. Its first
+scene needs2 primitive jobs for4 draws; the same image changing one pixel
+needs2 draws, an added command inside2x2 damage needs3, unchanged alpha texture
+upload stays zero. The Explorer dialog/text owner and both artifact builds
+also pass. Native models do not prove a physical frame or latency.
+
+OssiPC was updated through SYSUPD and a fresh regular boot to the final pair,
+with NVIDIA331 and actual native-renderer readiness; no restartwake was used.
+The same normal Run-launched C: Explorer selection sequence had131 commands
+and31221-31225 resource bytes per old full frame. Final ordinary deltas have7
+commands and26-30 bytes; the ninth action's bounded full frame still has131/31225. Across
+the identical ten actions this is1310->194 commands and312230->31475 resource
+bytes, including that full frame. Initial publication and refresh retain the
+same complete content. D:/C: navigation produces complete generations; End/
+Home produce bounded deltas. Another384 mouse positions and final refresh
+complete; Desktop retires the exact new child without forced kill. The final
+external observer reports that Desktop reaped first, and does not invent an
+Exit receipt it did not observe. The prior unchanged0.87.7 normal GUI case
+also passed once readiness meant a published frame, resolving the earlier
+revision2 observation as insufficient evidence of a driver stall.
+
+These are publication/work and completion observations. They do not measure
+folder-I/O latency, private Desktop GPU timings, TV pixel correctness or input
+latency. Original host pixel/geometry/retirement oracles qualify those code
+boundaries separately. The quiet original SPECTRA CHECK DESKTOP passes with cleanup acknowledged.
+Afterward native state has no fallback error and zero pending allocation,
+destruction or retained BO bytes. Complete installed Desktop/Explorer readbacks
+match the built artifacts. Hardware cursor234/234 stays visible without an
+error; the driver has no stop-work entry. Final KVM4 STANDARD0b7384c3-cb3c-4b69-8677-97e6b4b78bb4 passes suite3
+with30 raw samples, four workers each and six valid scores (overall149.286173).
+The unchanged original export has a complete DevCenter raw-data readback
+with all six score areas valid;
+this headless phase measures no physical NVIDIA/GUI latency. No new Full/Slim publication is claimed here.
 
 Current released implementation (0.86.94)
 -----------------------------------------

@@ -6,9 +6,9 @@ window composition, focus, z-order, taskbar, desktop items and user-facing
 input dispatch. The kernel provides the privileged display and event
 mechanisms but does not own desktop policy.
 
-Current source and OssiPC update (0.87.10)
+Current source and OssiPC update (0.87.11)
 --------------------------------------
-R4DESK0.1.162 keeps the provisional1280x720 layout during the native boot-
+R4DESK0.1.163 keeps the provisional1280x720 layout during the native boot-
 display hold and adopts the actual dimensions through its topology owner.
 Its native capture admits an available backbuffer while the visible front
 remains retained; preparation, visibility, Engine/Readledger/Session checks
@@ -117,6 +117,42 @@ mouse/resource-retirement cases. Host owner cases and the one KVM4 STANDARD
 with full DevCenter readback pass. Evidence and the observed408109ns budget
 checkpoint, including the absence of a hard phase latency promise, are recorded
 once in Repositories/Drivers/NVIDIA/DOCUMENTATION.de.txt, section0.87.10.
+
+Local GPU admission budget (0.87.11)
+-----------------------------------
+R4DESK163 samples its own monotonic entry before presentation/completion
+polling. Engine.advance no longer accepts the earlier Desktop round clock.
+Input/topology/service work cannot consume the GPU turn's local250us budget;
+its initial completion scan does count. The64-step limit, actual absolute
+job deadline, hardware/owner Busy and physical Drain/consumer receipts remain.
+Budget exhaustion still requests immediate coordinated continuation; actual
+hardware waiting does not become productive work or an unbounded yield loop.
+
+The extended original1536-command scheduling case reproduces exactly1 rather
+than64 steps before this fix when the round clock is1 and actual GPU entry
+is1000001ns. Afterwards it admits64 at a stationary local clock. The original
+100us-per-clock case still reaches the time bound, asynchronous hardware and
+finite24-receipt-pool cases retain their own waits/retirement. An actual model
+completion arriving on the first GPU clock is collected by the introductory
+scan; an entry at the original1000000000ns deadline admits no new render job
+and drains with Deadline. Seven affected Desktop owner cases plus the three
+shared geometry cases and one SDK precise-clock case pass; no original pixel,
+resource or deadline oracle was loosened. The artifact builds successfully.
+OssiPC installs the completely read-back5158218-byte package (SHA256
+385cccb9c1da8bd05c798fd3d7f779ad4a8c1b2b9d893b13d9ef394d63bdc242), then
+boots normally with Kernel384/NVIDIA333 and actual native-renderer readiness.
+The installed R4DESK163 file matches the built artifact byte for byte; compact
+receipt Temp/08711-native-receipt.json. Normal Run-launched Explorer completes
+its15 selection/refresh/folder/navigation actions,384 mouse positions and
+exact child retirement. Quiet original Desktop check passes with cleanup ACK;
+cursor197/197 remains visible/error0, BO allocation/destruction/retained0 and
+no stop-work entry. These are finite progress/ownership cases, no optical or
+input/folder-latency measurements. Exactly one final KVM4 STANDARD9f4b0978-89ce-43f5-97d9-0490b8206f9f passes
+suite3/30 samples/four workers each/six valid scores, overall147.413615.
+Original export SHA25671d9d1f5ffb4fdc50b51d4b2b5055a7136859a2c07edd5fccfdeaff5ed22419b,
+unchanged full DevCenter readback and all six score areas verified. This
+headless phase supplies no physical GPU/input measurement. Kernel384,
+NVIDIA333, Explorer27, R4GFX38 and R4NV19 retain their existing versions.
 
 Current released implementation (0.86.94)
 -----------------------------------------

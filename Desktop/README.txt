@@ -6,7 +6,7 @@ window composition, focus, z-order, taskbar, desktop items and user-facing
 input dispatch. The kernel provides the privileged display and event
 mechanisms but does not own desktop policy.
 
-Current source and OssiPC update (0.87.6)
+Current source and OssiPC update (0.87.7)
 --------------------------------------
 R4DESK0.1.160 keeps the provisional1280x720 layout during the native boot-
 display hold and adopts the actual dimensions through its topology owner.
@@ -20,7 +20,7 @@ The productive cursor coordinator now checks the canonical gfx_output_ok=1.
 The Rust port had checked0, forcing software cursor drawing despite available
 hardware. The existing cursor owner keeps latest-position coalescing and the
 exact clean-frame, image, position and close barriers. The shared0.87.6 proof
-and its native/host limits belong to
+and the NVIDIA331 packet/section change with its native/host limits belong to
 Repositories/Drivers/NVIDIA/DOCUMENTATION.de.txt.
 
 The existing SNES context records actual composition selection, exact target

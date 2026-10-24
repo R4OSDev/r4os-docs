@@ -24,6 +24,54 @@ regular shutdown checks. Historical native/physical qualifications retain
 their original artifact and hardware scope. The Windows check was explicitly
 skipped by the user; the port does not renew that qualification.
 
+Subsystem launch correction (0.87.1)
+-----------------------------------
+R4DESK0.1.154 resolves installed /R4OS/... image targets on C: at its
+program-start boundary, then uses the unchanged strict SDK FilePath parser.
+The Rust port had passed these catalog targets directly to that parser,
+which rejects a leading separator without a drive. Explorer requests then
+failed before classification or loader admission. BASIC, Game Boy and SNES
+shared this regression. MODULES.JSON and ASSOC.R4S retain their contracts;
+guest paths and R4SUBSYS1 envelopes remain byte-exact, including spaces.
+
+Desktop keeps path, header-classification, window-capacity, loader and
+attachment failures distinct. Only genuine loader errors use the general
+loader message. Classification's -1/missing and -2/invalid-header contract
+stays separate from process-handle error codes; error reporting performs no
+second file classification. The Kernel and subsystem artifacts are unchanged.
+
+Three focused launch-owner cases and the existing association/editor case
+passed through the original native SDK provider and RustNative.ps1, with its
+shared geometry3/clock1 checks. No full native suite or new runner was added.
+
+Runtime acceptance used the same production artifact in a private KVM/SMP4
+Test installation with software graphics, the canonical product ASSOC.R4S
+and the generated catalog. Original Explorer Enter opened the DOS Calculator
+control and spaced BASIC/GB/SNES guest names. Original owner ROM fixtures
+were used; the static GB image was not required to publish changing frames.
+SNES continued publishing frames. After closing the first Explorer, a fresh
+Explorer's Open With launched a second distinct SNES generation while the
+first remained alive. Closing the second preserved the first; both SNES
+hosts and the remaining Explorer retired. The owned Desktop completed/reaped with exit0 and
+QEMU shut down normally with exit0. No installed catalog workaround was used.
+
+Exactly one final Spectra STANDARD suite3 run on KVM/SMP4 passed:
+49aff1c6-abba-4422-8a24-0d4778176c5f. The unchanged original export was uploaded
+to DevCenter and fully read back: five areas, 30 raw samples, four completed
+workers per sample and six valid score areas. No baseline was changed.
+
+OssiPC received the targeted Desktop R4U through SYSUPD. Post-boot
+RESUME-BATCH reported installed; the entire installed R4DESK.R4X matched
+the accepted 5136271-byte artifact, SHA256
+e5f5994ce8182ce0631252fffdff091679a7a9e4c236a2d7a0c35ad45d0be9fc.
+Only its R4DESK record changed in the 109-entry schema4 Full catalog.
+Original Explorer opened D:\Roms\SNES\Super Mario World (Europe).sfc:
+R4SNES - SUPER MARIOWORLD, exact host27/generation27, with continuing guest
+frames. Explorer26/generation26 retired; the game window was left open.
+This qualifies real ROM startup/execution, not physical picture or audio
+quality, native NVIDIA graphics or an updated emulator. The public Full/Slim
+images remain0.86.94; OssiPC's targeted installation is release0.87.1.
+
 Current direct entries are normal startup, /CHECK-ISOLATED, /INPUTTEST and
 /HEADLESS-SUBSYSTEM. Former embedded /SMOKE variants are retired; useful
 original native/offscreen/pixel/output oracles remain in Tests/Original and

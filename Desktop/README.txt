@@ -6,6 +6,21 @@ window composition, focus, z-order, taskbar, desktop items and user-facing
 input dispatch. The kernel provides the privileged display and event
 mechanisms but does not own desktop policy.
 
+Current source and OssiPC update (0.87.2)
+--------------------------------------
+R4DESK0.1.157 keeps the original provisional1280x720 layout while a native
+driver holds the boot display. The Rust port's immediate failure on missing
+geometry is removed; the existing topology owner adopts the actual output
+dimensions. Automatic OssiPC boot with NVIDIA322 now retains the Desktop host
+and one real logical output, without a manual restart of the application.
+The SNES control boundary binds its source to the first actual observation
+of the exact active child and retains managed context without invented copy/
+GPU/visibility receipts. Exact pending graphics retirement remains pending
+until the original owner acknowledges it; matching Spectra60 repeats only
+the idempotent final report within one bounded deadline. Hardware, original benchmarks, exact versions and
+comparison limits are recorded once in Diagnostics/SnesBenchmark.txt.
+The packaged Full/Slim release described below remains0.86.94.
+
 Current released implementation (0.86.94)
 -----------------------------------------
 R4DESK 0.1.153 is implemented in modular Rust with no_std and alloc. Its

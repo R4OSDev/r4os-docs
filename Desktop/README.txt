@@ -6,9 +6,9 @@ window composition, focus, z-order, taskbar, desktop items and user-facing
 input dispatch. The kernel provides the privileged display and event
 mechanisms but does not own desktop policy.
 
-Current source and OssiPC update (0.87.5)
+Current source and OssiPC update (0.87.6)
 --------------------------------------
-R4DESK0.1.159 keeps the provisional1280x720 layout during the native boot-
+R4DESK0.1.160 keeps the provisional1280x720 layout during the native boot-
 display hold and adopts the actual dimensions through its topology owner.
 Its native capture admits an available backbuffer while the visible front
 remains retained; preparation, visibility, Engine/Readledger/Session checks
@@ -16,6 +16,12 @@ and exact close/retirement barriers remain with their owners. Output-manager
 ownership also covers held/retiring targets and known native routes without
 a ready layout, preventing a second private native renderer during that gap.
 Legitimate software-policy and hardware CPU paths remain available.
+The productive cursor coordinator now checks the canonical gfx_output_ok=1.
+The Rust port had checked0, forcing software cursor drawing despite available
+hardware. The existing cursor owner keeps latest-position coalescing and the
+exact clean-frame, image, position and close barriers. The shared0.87.6 proof
+and its native/host limits belong to
+Repositories/Drivers/NVIDIA/DOCUMENTATION.de.txt.
 
 The existing SNES context records actual composition selection, exact target
 and native-owner identity, admitted render jobs and real provider frame
@@ -25,12 +31,12 @@ remain with R4SNES23; the normal path adds no task-observation queries.
 The SNES control boundary retains the exact active child and idempotent final
 report/retirement acknowledgements with matching Spectra60.
 
-OssiPC Kernel384/NVIDIA326 starts automatically into the normal native
-Desktop; the user confirms its TV picture. The driver builds its initial
+The last SNES comparison0.87.5 used OssiPC Kernel384/NVIDIA326 and the normal
+native Desktop; the user confirmed its TV picture. The driver builds its initial
 private framepool before optional mode enumeration can consume the first
 console-upload deadline. The final SNES run keeps one managed native-GR
 choice with real owner completion/visibility, and the normal Desktop returns
-afterward. Native remains slower than software in this measured profile.
+afterward. Native remains slower than software in that measured0.87.5 profile.
 Original comparisons, exact versions and bounded qualifications are recorded
 once in Diagnostics/SnesBenchmark.txt, section0.87.5.
 The packaged Full/Slim release described below remains0.86.94.

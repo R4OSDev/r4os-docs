@@ -6,11 +6,35 @@ window composition, focus, z-order, taskbar, desktop items and user-facing
 input dispatch. The kernel provides the privileged display and event
 mechanisms but does not own desktop policy.
 
+Current released implementation (0.86.94)
+-----------------------------------------
+R4DESK 0.1.153 is implemented in modular Rust with no_std and alloc. Its
+manifest and Cargo graph belong to r4os-app-desktop; general platform and
+library operations remain with the SDK and their original owners. The two
+small C companions provide BLAKE3 and compiler floating point intrinsics.
+The owner README describes current source boundaries, builds and focused
+checks: Repositories/Apps/Desktop/README.md. Migration and subsequent
+optimizations are qualified in Desktop/RustMigration08686.json and
+Desktop/RustOptimierungen086.json.
+
+Full and Slim 0.86.94 contain this Desktop and start in software graphics:
+https://github.com/R4OSDev/r4os-distribution/releases/tag/v0.86.94
+Both actual packaged images passed KVM/SMP4 desktop, GUI Terminal/VER and
+regular shutdown checks. Historical native/physical qualifications retain
+their original artifact and hardware scope. The Windows check was explicitly
+skipped by the user; the port does not renew that qualification.
+
+Current direct entries are normal startup, /CHECK-ISOLATED, /INPUTTEST and
+/HEADLESS-SUBSYSTEM. Former embedded /SMOKE variants are retired; useful
+original native/offscreen/pixel/output oracles remain in Tests/Original and
+Tests/RustNative. The historical acceptance sections below describe their
+original versions, rather than additional current command-line entries.
+
 Explicit functional diagnostics are orchestrated by SPECTRA CHECK DESKTOP
 since 0.86.75. Spectra owns its two GUI children, tray item, deadlines,
 assertions and completion/reap; Desktop keeps only scene operations and the
 productive screenshot worker. The bounded byte contract is
-Apps/Desktop/Contract/desktop_check_v1.zig, carried by the existing WINSVC
+Repositories/Apps/Desktop/Contract/desktop_check_v2.zig, carried by the existing WINSVC
 tray exchange. SPECTRA CHECK REMOTEFRAME owns the single public snapshot
 oracle; the RFDIAG module/build is retired since0.86.77. /CANCEL tests real
 cooperative child cleanup. Restart, master-audio and synthetic-capture
@@ -79,10 +103,11 @@ or an available analog output. Volume and mute remain independent controls.
 Saving and persistence failures are shown in the popup. Device state is
 refreshed only while the popup is open, using the existing volume poll.
 
-The bounded /SMOKE-AUDIO-OUTPUT path reuses the volume contract check and
-exercises real popup hit targets, selection through AUDSVC, automatic mode,
-and preservation of volume/mute before shutting down. It is intended for a
-private SMP4 image with two available HDA outputs.
+Output-selection hit targets, automatic mode and volume/mute preservation
+retain their original owner oracles in Tests/Original and Tests/RustNative.
+The current explicit master-volume/mute/restore check is SPECTRA CHECK DESKTOP
+/AUDIO and requires an isolated host. There is no current standalone
+/SMOKE-AUDIO-OUTPUT entry.
 
 R4DESK owns the notification area's visual mirror, layout, rendering, damage
 tracking and input dispatch. Providers never draw into the taskbar and a tray
@@ -251,8 +276,8 @@ metadata and sibling cleanup. It also confirms fresh Save As of a Notepad
 prefix through the create-only atomic path. Both product modules build.
 
 
-Desktop current contract and diagnostic cleanup (0.86.73)
----------------------------------------------------------
+Historical contract cleanup and diagnostic handoff (0.86.73)
+----------------------------------------------------------
 Desktop138 removes the three preparation_query/preparation_busy_queries/
 preparation_changed_queries fields: the current full owner/caller search
 found only declarations and writes. presentation_info, exact Busy/geometry/
@@ -268,14 +293,16 @@ missing-region full-frame substitute and missing-stride row-loop substitute
 are removed. Real full snapshots after a valid delta failure, software/bootfb,
 optional native backends, reconnect/retry and exact cleanup remain supported.
 
-All33 existing Desktop inventory entries retain their distinct useful scope.
-The explicit /SMOKE and /SMOKE-R4X still exercise actual menu/app/terminal
-lifecycles against current Full paths; they are manual/private poweroff runs.
-/SMOKE-KLICKIFAX additionally needs the on-demand browser explicitly staged.
+The33 Desktop inventory entries of that version retained their useful scope.
+At that stage, /SMOKE and /SMOKE-R4X exercised menu/app/terminal lifecycles
+against the then-current Full paths; /SMOKE-KLICKIFAX additionally needed
+the on-demand browser explicitly staged. Those embedded entries were later
+retired by the Rust migration; they are not current startup options.
 The general window/idle check is now SPECTRA CHECK DESKTOP and requires
 Full-only AppDefaults and CLOCK.R4X; Test omits both. CLOCK is its timer
-producer. Since77, /SMOKE-WINDOW-IDLE is accepted only with a distinct native
-/OUTPUTS, /CURSOR, /SWAPCHAIN or /SCREEN-POWER purpose, never /CAPTURE.
+producer. The77 handoff temporarily retained /SMOKE-WINDOW-IDLE only for
+distinct native /OUTPUTS, /CURSOR, /SWAPCHAIN or /SCREEN-POWER purposes.
+Their useful original assertions now remain as owner oracles.
 The SDK APPZCON /TRAYSMOKE path stays because it checks the console facade
 and an intentionally abandoned item after real process exit and WINSVC sweep;
 the common Spectra tray event/Remove check does not replace that assertion.

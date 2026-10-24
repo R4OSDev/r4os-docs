@@ -6,9 +6,9 @@ window composition, focus, z-order, taskbar, desktop items and user-facing
 input dispatch. The kernel provides the privileged display and event
 mechanisms but does not own desktop policy.
 
-Current source and OssiPC update (0.87.11)
+Current source and OssiPC update (0.87.12)
 --------------------------------------
-R4DESK0.1.163 keeps the provisional1280x720 layout during the native boot-
+R4DESK0.1.164 keeps the provisional1280x720 layout during the native boot-
 display hold and adopts the actual dimensions through its topology owner.
 Its native capture admits an available backbuffer while the visible front
 remains retained; preparation, visibility, Engine/Readledger/Session checks
@@ -31,14 +31,17 @@ remain with R4SNES23; the normal path adds no task-observation queries.
 The SNES control boundary retains the exact active child and idempotent final
 report/retirement acknowledgements with matching Spectra60.
 
-The last SNES comparison0.87.5 used OssiPC Kernel384/NVIDIA326 and the normal
-native Desktop; the user confirmed its TV picture. The driver builds its initial
-private framepool before optional mode enumeration can consume the first
-console-upload deadline. The final SNES run keeps one managed native-GR
-choice with real owner completion/visibility, and the normal Desktop returns
-afterward. Native remains slower than software in that measured0.87.5 profile.
-Original comparisons, exact versions and bounded qualifications are recorded
-once in Diagnostics/SnesBenchmark.txt, section0.87.5.
+The final same-artifact SNES comparison0.87.12 uses Kernel384/Desktop164/
+NVIDIA333 on OssiPC16. Both original five-batch exports and complete DevCenter
+readbacks pass, with matching fixed work/state/frame/PCM/geometry. Native
+median4.772280697s versus Software3.045325763s remains56.7084% longer;
+the native0.87.5 reference was7.572001748s (36.9746% less wall time now).
+One actual managed native-GR owner has real completion/visibility receipts;
+the original normal native configuration and Desktop return afterward.
+Output-backend conditions differ; there is no same-condition score, isolated
+GPU causality or new optical/input-latency receipt. The user-confirmed TV
+picture belongs to0.87.5. Original data, exact versions and remaining bounds
+are recorded once in Diagnostics/SnesBenchmark.txt, section0.87.12.
 The packaged Full/Slim release described below remains0.86.94.
 
 Incremental GUI work (0.87.8)
@@ -153,6 +156,87 @@ Original export SHA25671d9d1f5ffb4fdc50b51d4b2b5055a7136859a2c07edd5fccfdeaff5ed
 unchanged full DevCenter readback and all six score areas verified. This
 headless phase supplies no physical GPU/input measurement. Kernel384,
 NVIDIA333, Explorer27, R4GFX38 and R4NV19 retain their existing versions.
+
+Compatible opaque SDR composition (0.87.12)
+---------------------------------------------------------------------
+R4DESK164 uses the existing R4GFX38/R4NV19 contracts. It may compose straight
+into an XR24 output only when its entire participating layer set is proven
+opaque and the output exactly matches the default full-range8-bit sRGB color
+description, including white/peak/black, alpha and flags. External images
+additionally require XRGB and that same opaque description. HDR, nondefault
+profiles/transfers/ranges/precision and unproven/translucent layers keep the
+original linear FP16 and output-transform/dither path. The proof is deliberately
+conservative: a genuinely opaque shell layer without a complete captured
+coverage proof can still retain FP16; a global native performance gain is not
+promised by this gate.
+
+Asset conversion records actual opacity per interned source rectangle while
+already producing its pixels. A cache hit retains that exact entry's proof;
+transparent unused pixels on the same atlas page do not revoke it. Ordered
+captured full opaque fills establish layer coverage; over preserves it, an
+unproven replacement revokes it. Geometry, overlapping order and exact sample
+grids remain unchanged. A separate opaque color view explicitly binds this
+proof to R4GFX's native color/alpha validation; a raw electrical-alpha ARGB
+resource cannot be relabeled by simply choosing a blit. No R4GFX validator or
+pixel oracle was relaxed, and no Library/Contract/Kernel/NVIDIA artifact changes.
+
+The admitted path draws to the existing output images, skips FP16 allocation
+and the final encode job, and keeps the original producer/layer/composition/
+Present/consumer fence chains. Mode changes wait for the existing physical
+Drain, release unused working images and invalidate output generations before
+reuse. Both color views retain their actual parent until their own releases.
+Precise unchanged-asset and dirty-region staging from0.87.8 remains in force;
+there is no new per-frame scan of image pixels or unconditional upload.
+
+Fourteen focused original Desktop cases plus three geometry cases and one
+SDK clock case pass. The existing changed-footprint scene keeps every pixel,
+unchanged-asset upload and partial-raster oracle while requiring one composition
+job per frame (primitive jobs separate), an actual Present and no FP16 image.
+The previous path required composition plus encode. A separately translucent
+layer returns to FP16 and the independent0xbcbcbc linear-alpha pixel; returning
+to opacity releases the workspace and reproduces all64 pixels. Nondefault
+transfer/profile flags/white/range deny direct admission. Atlas entry/cache-hit
+opacity distinguishes ARGB and XRGB sharing the same page. The existing
+original two-reader case now also exercises coherent XRGB/opaque producer
+metadata through its actual broker, all four150-scale rotations, pending
+producer fences, retained imports, lost Return and exact final zero resources.
+The translucent ARGB variant keeps its unchanged0xbcbcbc oracle; opaque XRGB
+expects0x808080 from its same underlying bytes. No shader/sample formula or
+original deadline/retirement/pixel tolerance changed. External identity grids
+use the existing COLOR_GRID operation with zero transform flags and opaque
+replace semantics directly into the output, preserving its validated native
+color contract. The final artifact build passes; source/versions are frozen.
+OssiPC installs the fully read-back5166547-byte package (SHA256
+78132874113d1345bb0040add138e6c579cf91266175dfd0187abe2dd468d3e5), then
+boots regularly to actual native renderer readiness with164/Kernel384/NVIDIA333.
+The quiet original Desktop/Cleanup check passes, no BO allocation/destruction/
+retained remainder. Its normal-shell device charge remains98566144 bytes;
+no measured whole-shell memory reduction is claimed. The gate retains its
+conservative eligibility and no optical qualification is inferred. Software comparison uses explicit GRAPHICS=SOFTWARE and no NVIDIA load line;
+all other current configuration bytes are retained. Its2304-position mouse
+case and normal15-action Explorer/384-position/retirement sequence pass, as
+does the quiet Desktop/Cleanup check. Direct GUI probes now pair guiPushEvent
+with desktopActivityNotify, exactly as the existing kernel acceptance caller.
+The earlier helper omitted this separate notification: even with an empty
+input queue its second selection stayed asleep in software; native GPU wakes
+had hidden that harness defect. The corrected helper keeps the original10s
+frame oracle and all actions. No product/Kernel/Explorer change was needed.
+The matching native2304-position/15-action Explorer/384-position/retirement
+and quiet Desktop cases also pass. Both modes have identical per-action
+publication counts; first ten actions201commands/31487resource bytes with the
+same current full-frame138-command content. The actual native cursor is
+1438/1438 visible/error0, BO pending0 and no stop-work entry. Exactly one final
+SNES pair is fully read back from DevCenter, with real native owner execution
+and exact restoration of the original native configuration. Results and
+remaining overhead are recorded once in Diagnostics/SnesBenchmark.txt,0.87.12.
+Exactly one final KVM4 STANDARD3a6a43f7-61c0-4e50-9f9b-6841e0f75059 passes
+suite3/30 raw samples/four completed workers each/six valid scores, overall
+130.333195. Original export SHA256034c6c6b7fa14f2c59af0400919064288a829e6d9038537f469aaf583c8b6618,
+unchanged full DevCenter payload readback and all six valid score areas.
+BOOT kernel hashd554519cbcc15a13a4dbb1eb013a7df513a3672a563fb4acc147f2958e8552ca
+matches Kernel384. No native NVIDIA timing is measured by this headless phase.
+Current Full/Slim0.86.94 and Recovery65 remain separate from this source/
+remote-update qualification; Windows/HDR/VRR/other receivers are not renewed.
 
 Current released implementation (0.86.94)
 -----------------------------------------

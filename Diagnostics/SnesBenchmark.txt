@@ -1105,8 +1105,8 @@ Dies ist ein Ausgabepfad-A/B im durch Echtzeitvorgaben begrenzten Fenster-/
 Audioprofil. Der bewusste Grafikunterschied fuehrt im strikten DevCenter-
 Vergleicher zu incompatible/different_measurement_conditions und wird nicht
 umetikettiert. Kein isolierter GPU-Score, physischer FPS-/Audiobeleg oder
-Beleg einer allgemeinen Emulations-/Kernelregression. Die Rueckstauursache
-bleibt offen und ist als Analyse0.87.3 beim fachlichen Besitzer geplant.
+Beleg einer allgemeinen Emulations-/Kernelregression. Die folgende
+Analyse0.87.3 grenzt den Rueckstau und die verbleibende Messluecke ein.
 
 Abnahme: vier gezielte Rust-SNES-Faelle und drei originale Geometriefaelle,
 zwei begrenzte Abschlusskontrollfaelle im bestehenden desktop-test, vorhandene
@@ -1130,3 +1130,120 @@ unveraenderter Folgegast mit Originalcapture sowie der neue157/60-Gast
 bestanden. Ursache des ersten kurzen Fehlers ist nicht isoliert belegt;
 kein Orakel wurde dafuer abgeschwaecht. Alle abgeschlossenen privaten
 Gast-/Quellkopien sind entfernt; kompakte Originalexporte bleiben erhalten.
+
+0.87.3: Rueckstauanalyse und genaue Messgrenze (24.10.2026)
+---------------------------------------------------------
+Die normalen Originale aus0.87.2 bleiben unveraendert. In allen zehn Batches
+sind ROM/Initialzustand/Endzustand/Bild, feste Masterarbeit,180 Beamframes,
+131 erzeugte und131 publizierte Bilder sowie96000 native APU-Frames gleich.
+Kein Bild wird vom SNES-Aufrufer als dropped/unchanged gemeldet. Dies sind
+Publikationen, keine vollstaendigen Desktop-/GPU-/optischen Bildquittungen.
+Beide Reihen enden mit pending_master_cycles=0 und wirklichem Ressourcenabbau.
+
+Der Unterschied erscheint bereits beim250ms-Gastwarmlauf: Software
+250.036098–251.065740ms, nativ400.945072–663.981316ms. In der Messphase
+steigt der maximale Masterrueckstau von10187 auf40117857–46671481 Zyklen.
+Explizite host-wait-Aufrufe fallen von1392–1441 auf0–10 je Batch. Der native
+Lauf verliert also Gastfortschritt, obwohl er fast nie ausdruecklich auf
+seine Echtzeitfrist wartet. Grobe Schedulerzuteilung: Software657–681,
+nativ974–2183 Ticks bei1000Hz. Das sind keine phasenweisen CPU-Zeiten.
+Audiofehler bleiben0; die erhaltenen verworfenen Bytes sind oben ausgewiesen.
+
+Die Kennung native-cpu kommt aus dem allgemeinen Kernel-Ausgabebesitzer:
+Kernel/Rust/program/r4dev/display.rs versieht jede aktive native Ausgabe mit
+CPU-Fallbackfaehigkeit mit diesem Namen. display/manager/presentation.rs
+meldet damit die allgemeine CPU-Praesentationsfaehigkeit bzw. eine dort
+wirklich ausgefuehrte Kopie. DISPLAYD /STATE meldet keinen gemessenen
+Desktop-Kompositionsentscheid. NVIDIA/gsp_native_output.zig publiziert
+software-native nach bestaetigter Uebernahme seines SYSTEM-Shadows und
+VRAM-Scanouts. Diese Zustaende verbieten keine getrennte R4GFX-Nutzung.
+Alle Quellen liegen bei Repositories/Kernel bzw. Repositories/Drivers/NVIDIA.
+
+Desktop/src/rust/outputs/manager.rs waehlt separat Resource::Native oder
+Resource::Cpu; runtime/desktop.rs rendert danach ueber den jeweiligen Owner.
+Auch der CPU-Owner komponiert in System-RAM und praesentiert ueber eine
+native Swapchain (outputs/cpu_frame.rs). Deshalb belegt selbst der vorhandene
+NVIDIA-Praesentationspfad composition-copy+flip nicht, ob Desktop-Primitiven
+mit GR oder auf der CPU zusammengesetzt wurden. Diese genaue Auswahl fehlt
+im bisherigen managed-output-context-only-Bericht; sie bleibt ausdruecklich
+offen. Aus native-cpu wird weder CPU-Komposition noch fehlende GPU-Arbeit
+abgeleitet.
+
+Echte passive OssiPC-Snapshots vor/nach dem Diagnoselauf: DISPLAYD /STATS
+meldet path=1,16666666ns Intervall, Adapter16779520/device2/reset1, lost=0,
+pending=0 und rejected=0. acquired/rendered/submitted/visible/released steigen
+von jeweils131 auf229. Die Quittung enthaelt wirkliche Queue-/Render-/Window-
+Punkte und einen GPU-Zeitstempel. Sie belegt beteiligte native GPU-Kopie und
+Bildwechsel, aber keinen GR-Kompositor oder einen einzelnen SNES-Batch.
+Die globalen Zaehler umfassen auch Desktopwechsel und Warmlaeufe; keine
+optische Sichtbarkeit und keine SNES-FPS aus ihrer Differenz berechnen.
+
+Genau eine neue endliche Messung schliesst die fehlenden aeusseren Zeitspannen:
+SPECTRA BENCH SNES /NTSC /DETAIL /SMALL /OWN-DESKTOP /JSON mit explizitem Export.
+Fuenf Batches gleicher3s-Gastarbeit samt fuenf echten250ms-Gastwarmlaeufen,
+16 CPUs, unveraenderte produktive Module. Alle acht installierten Programm-/
+Library-/Treiberdateien wurden vollstaendig rueckgelesen und stimmen mit dem
+nativen Normaloriginal ueberein; CONFIG-Hash und geladene NVIDIA-Generationen
+bleiben gleich. Der normale Desktop63/63 wurde vor der isolierten Arbeit
+beendet und danach als93/93 wirklich wiederhergestellt. Keine IPC-Abfragen
+des Spectra-Elternprozesses waehrend der Childmessung, kein Neustart.
+
+Original und vollstaendiger Schema-1-Export:
+  421d173b-53c5-4916-a6fe-508f546931bc
+  Artifacts/Distribution/Diagnostics/SubsystemBenchmarks/<run_id>/
+  run.json und original.jsonl
+DevCenter: completed/validation=valid,5 Batches; unveraenderte Originalbytes,
+alle Rohdaten und Metadaten nach dem Upload vollstaendig normalisiert
+rueckgelesen. Detailprofil ist eine eigene Messbedingung. Seine Werte sind
+kein Ersatz fuer den normalen A/B-Vergleich und kein isolierter GPU-Score.
+Auch diese fuenf Batches bestehen dieselben Work-/State-/Frame-/APU-Orakel;
+67727 CPU- und1260 DMA-Operationen sowie64431816 beobachtete Masterzyklen
+bleiben zwischen allen Detailsamples gleich. Audiofehler/verworfen jeweils0.
+
+Gemessene aeussere Wandzeitspannen, Sekunden je Detailbatch:
+  Batch   gesamt       guest-step    video-submit   audio-service
+    1     7.434870035  4.195057211   0.008773550    1.556606609
+    2     8.304048263  4.924645168   0.017616252    1.486053348
+    3     9.287441559  5.628908757   0.018094319    1.576584088
+    4     7.590913479  4.289796270   0.020292197    1.602457204
+    5     8.793344195  5.012177038   0.368014870    1.572185092
+Die gemessenen131 video-submit-Aufrufe je Batch sind damit nicht der
+ueberwiegende direkte Wandzeitanteil. guest-step umfasst die ganze bestehende
+Gastschrittfunktion, audio-service deren wirklichen Sinkaufruf; beide Spannen
+enthalten Unterbrechungen und Descheduling. PCM-Render, Host-Poll und Host-Wait
+sind separat im Original erhalten. Nach Abzug aller sechs aeusseren Spannen
+bleiben1.652107826–2.060693391s Laufzeitorchestrierung und Messrandarbeit;
+dieser Rest ist ebenfalls keine gemessene CPU-, GPU- oder Wartezeit.
+Die inneren gesampelten Phasenspannen sind geschachtelt und werden nicht
+nochmals zu den aeusseren Spannen addiert. Persistenzzeitaufrufe bleiben0.
+
+Verbleibende Grenze: langsame On-CPU-Emulation, Scheduler-/IRQ-Verzoegerung,
+indirekte Grafikarbeit und die Audiodienstwarteanteile lassen sich aus diesen
+Spannen noch nicht sicher auseinanderhalten. assigned_runtime_ticks liegt
+im Detail bei905–2281, ist aber nur grobe Schedulerzuteilung. Eine endliche
+passive Zwei-Snapshot-Taskabfrage nach dem Lauf liefert stabile Inventare mit
+je70 Tasks; die bereits beendete SNES-Instanz fehlt erwartungsgemaess. Sie
+liefert keine nachtraegliche Batchzuordnung. last/max-Latenzen gelten fuer
+die Tasklebenszeit; blocked_ticks beschreibt den aktuellen Wartezustand und
+ist kein kumulativer Wartezeitzaehler. Kein CPU-Prozentwert oder pauschaler
+Kernel-/Portierungsfehler wird daraus behauptet.
+
+Konkrete Folge0.87.4: Diagnose bei R4SNES an die exakten Task- und
+Prozessgenerationen vor/nach jedem Detailbatch binden; vorhandene Host-/
+Rasterzaehler fuer Publikation, Backpressure und Fallback als Batchdeltas
+aufnehmen. Desktop muss den wirklich gewaehlten Kompositionsowner pro
+Ausgabeziel beim bestehenden Kontextbesitzer angeben. Bestehende APIs zuerst
+nutzen; keine vorausgesetzte Kernel-, Scheduler- oder Treiberaenderung.
+Identitaets-/Epochdrift bleibt unavailable, Lebenszeitwerte bleiben als solche
+benannt. Abnahme: gezielte Besitzerfaelle, endlicher Software-/NVIDIA-
+Detailvergleich mit gleichen finalen Artefakten und16 CPUs, vollstaendiger
+DevCenter-Readback, normale native Desktoprueckkehr und genau ein finaler
+KVM4-STANDARD fuer die dann geaenderten Laufzeitartefakte.
+
+Diese Unterversion ist ausschliesslich Analyse, vorhandene Diagnose und
+Planung. Kein Laufzeitartefakt wurde geaendert; deshalb kein neuer Build oder
+Pflicht-STANDARD. Repository-Release wird0.87.3; OssiPC bleibt wirklich0.87.2
+mit den oben qualifizierten Artefakten. Kernel-/Modulversionen bleiben gleich.
+Abgeschlossene Hilfskopien werden entfernt; kompakte Originalexporte und ihre
+Readbacks bleiben erhalten. Der verbindliche Abschluss-STANDARD des aktuellen
+Laufzeitstands ist weiterhin der oben referenzierte0.87.2-Lauf.

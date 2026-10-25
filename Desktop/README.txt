@@ -6,6 +6,92 @@ window composition, focus, z-order, taskbar, desktop items and user-facing
 input dispatch. The kernel provides the privileged display and event
 mechanisms but does not own desktop policy.
 
+Asynchronous audio display and controls (0.87.26)
+-----------------------------------------------
+Desktop170 moves ordinary master reads/writes and output queries/selections
+into runtime/audio_io.rs over the existing SDK Resources::io_service owner.
+There is at most one admitted request, using three fixed payload pools for
+empty master reads,32-byte master writes and96-byte output requests. Replies
+are128/1520bytes. Admission and status polling never call the synchronous
+AUDSVC facade. The existing100ms/1500ms service timeouts remain; one delayed
+output request can delay another audio action, while Desktop input, cursor
+and composition continue. Work-queue scheduling remains its existing owner.
+
+The client retains the exact service process handle/generation alongside the
+endpoint; payload service_epoch is the AUDSVC instance ID, not that lifecycle
+generation. I/O request/owner/kind, header, payload geometry/versions/epoch
+and output page are validated. A terminal status or timeout does not release
+buffers: native Close must acknowledge before parsing or reuse. Service
+Close is separate. Teardown and the explicit terminal-test handoff stop new
+admission and drain that exact outstanding request and connection.
+
+shell/audio.rs retains the last complete master/output view while pending.
+Popup open/close, requested page and new output selection advance the view
+generation. Delayed replies cannot republish a closed/reopened popup or an
+old page. Volume/mute intents coalesce in order; an older read/write reply
+cannot overwrite newer optimistic input. Every selected output first gets a
+fresh catalogue bound to the exact current provider and revision. A newer
+selection can wait behind an admitted one; its request uses a fresh catalogue
+after that completion. An admitted mutation is never automatically replayed
+after a timeout. New, not-yet-admitted intents survive reconnect only when a
+fresh master read proves the same provider generation; a new service drops
+the old intents. Closing the popup discards late display results, while an
+already requested selection may still finish. Shutdown stops all admission.
+
+Polling remains at500ms; due requests coalesce while an existing snapshot is
+pending. A newly accepted current snapshot satisfies that demand. The normal
+activity wait is capped at one tick while I/O retires, and also respects the
+next refresh/send time. Popup RPC progress and errors have their own display
+state, separate from configuration persistence. A failed query retains old
+rows; a failed selection reports an unconfirmed switch with a refreshed list
+only after an actual fresh read.
+
+The existing isolated SPECTRA CHECK DESKTOP /AUDIO retains its explicit
+master-volume/mute restoration and now waits across ordinary Desktop rounds
+for a real current output snapshot. It owns one temporary popup generation,
+checks the exact work/caller/broker/deadline/input context, and restores only
+its own popup. Caller loss, replacement work or user input cancels the probe;
+normal startup never launches it. The synchronous restoration helper is used
+only by this explicit diagnostic. There is no new AUDSVC/Kernel/SDK ABI,
+background diagnostic or production module.
+
+Qualification on25.10.2026:3native audio owner cases cover1000delayed master
+rounds and1000delayed output rounds without a synchronous service call,
+admission Busy, exact buffers/timeouts, late/stale replies, rapid selections,
+timeout after an applied mutation without replay, provider replacement,
+malformed replies and Close Busy before real retirement. Due refreshes
+coalesce. The original24whole-canvas references also pass:4Desktop cases,
+3original geometry cases and1SDK clock case in the focused final native run.
+
+Desktop170 builds successfully. Fresh software KVM4/1GB runs the existing
+SPECTRA CHECK DESKTOP /HOST /RESTART /AUDIO, including the actual async output
+snapshot and original volume restoration. Desktop24:24 and children25:25/
+26:26 complete and reap with exit0; cleanup acknowledged. Idle revisions stay
+7/7, timer revisions advance5->7, WINSVC handle11->13. REMOTEFRAME passes,
+SMP/CLOCK/12lock checks pass, QEMU powers off normally with exit0. The exact
+BOOT kernel and installed Desktop/WINSVC/AUDSVC/Spectra artifacts were checked.
+Kernel389 SHA256:
+88c22d5d289cdff5030b7cb8809a8e0f475d00f3b5fb9ebb27656019cc8a6635
+Desktop170 SHA256:
+bd2aa7e22c6c6815312cf6b8e72fc4ad6dad19b33dc362d757f1a93bfd841635
+Original Desktop JSONL SHA256:
+ca4625d222cf9a9970e88b2829dc1ef7125f14ad4ab0eee4628d41b9579bca08
+
+Exactly one final KVM4 STANDARD Suite3 on the final artifacts:
+85f77518-e131-4f46-ae5e-555a69f4520a, original export SHA256
+1326296b44631984a8c1f9d72d41eaec4968e0d9cd97204fb32876abb674b437.
+All30raw samples have4completed workers; unchanged DevCenter import and
+complete normalized readback agree, all6score areas valid. Scores:
+scheduler_sync36.154304, memory229.034331, ipc782.227760,
+lifecycle594.837325, filesystem_io144.364071, overall223.383057.
+The full export/receipt remain; completed guest/source/work copies are removed.
+
+Scope: controlled native peers qualify delayed/stale/error behavior; the real
+KVM guest qualifies the installed software Desktop/service flow and cleanup.
+Neither measures physical audio, NVIDIA, cursor/Explorer latency or an isolated
+speedup. AUDSVC14/WINSVC19/Spectra65/Kernel389/SDK96 are unchanged. Release26
+contains Desktop170; published Full/Slim14 and OssiPC12 remain separate.
+
 Window-image polling (0.87.25)
 ----------------------------------------------------
 Desktop169/WINSVC19 exchange exact per-surface image revisions. Command-only

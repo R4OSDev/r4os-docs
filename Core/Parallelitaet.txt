@@ -1,6 +1,141 @@
 ﻿R4OS concurrency and responsiveness
 ===================================
 
+0.87.30: bounded priority inheritance through existing Mutex waits
+----------------------------------------------------------------
+Release0.87.30 / Kernel0.1.393. SPEED-036 belongs to the kernel Mutex,
+Wait and Task/Scheduler owners. A late donation previously reached only
+an immediate owner; an already blocked owner did not update its outgoing
+wait. Directed selection used only the original role. The old minimum
+also discarded masked contributions and did not transfer remaining
+waiters' urgency to a new mutex owner.
+
+Each actual blocked Task now binds an exact Mutex/queue-generation edge
+and its cached wake rank. Four per-Mutex waiter counts retain all admitted
+edges, including currently masked urgency. A mutex contributes its minimum
+useful rank to its exact held owner; final unlock withdraws that contribution
+before owner release, and handoff installs the remaining waiters' minimum
+before Ready publication. A held-lock count retains the cached owner Task;
+its exact ID/generation is checked under the same Runtime admission.
+
+Any priority-affecting mutation marks an existing outgoing edge, including
+a role change whose dispatch rank stays unchanged. Direct saved-waiter
+placement/class changes mark their edge at configure_role as well. An intrusive, deduplicated
+Task queue performs at most eight updates per pump, with four waiter buckets
+per update and the existing Task rank-index/publication work. No allocation,
+registry scan or recursion is used for propagation. Normal sync boundaries,
+scheduler selection and real timer ticks continue unfinished work. Both
+ordinary and final MONITOR/MWAIT idle admission reject pending work. Empty
+queues need only the existing fast pointer check; no diagnostic worker,
+periodic global scan or ordinary-boot test has been added.
+
+New edges use at most64 forward owner/edge checks. An actual cycle, invalid
+edge or unproven longer path fails the existing bool lock admission through
+a normal Failed wait/park repair. Reaching the bound is not called a proven
+cycle. Tail growth can still produce longer acyclic components; pending work
+is therefore retained rather than discarded at the eight-step limit. This
+covers Mutex dependencies, not arbitrary Event/UnwindGuard relationships.
+Blocking production callers already handle failure or explicitly retry;
+try-only acquisition keeps its existing behavior.
+
+Directed wake rank combines the expected fresh original role activation
+with inherited urgency only while both donation budgets remain nonzero.
+It is not an exhausted dispatch-rank snapshot. Atomic contribution replacement
+preserves the shared four-tick/four-dispatch budgets: only a newly stronger
+best rank refreshes them. Removing the strongest source in favor of a weaker
+remaining source does not create an intermediate empty-budget renewal.
+An unchanged best rank also does not renew its budget. Ready/running rank
+changes use the0.87.28 CPU publication owner and existing switch/IF guards.
+
+Timeout, kill, queue close, selected handoff and explicit detach clear the
+Task edge and queued update before its real node is unlinked. Close advances
+the queue generation before draining; the old enrolled contribution is still
+withdrawn using its exact node binding. Reopen cannot retain an old edge.
+Queued work holds no raw mutex beyond that node lifetime, allocates nothing
+and cannot release a last task pin/heap from IRQ context. Task retirement
+also requires an empty edge and no pending membership.
+
+All changed layouts are kernel private: Mutex88->128bytes, its queue remains
+at offset40; embedded Endpoint/Console/Gui size and offset assertions follow
+the same40byte delta. Typed access and sizeof-based allocations retain their
+owners. WaitRequest remains72bytes, WaitQueue40, UnwindGuard80; no module or
+platform contract ABI changes. Exact donation counters are u64; direct private
+donations reserve u32::MAX count space for the maximum possible held Mutex
+sources, so a later replacement needs neither a lossy saturation nor an
+unbounded waiter scan. The unused private count projection follows u64.
+
+The existing explicit THREAD /KERNEL inheritance case adds31 own BSP Tasks:
+four two-lock scenarios (late Input vs earlier Interactive, timeout, real
+blocked kill, close/reopen with a new waiter), one rejected two-owner cycle,
+and a twelve-owner chain. The normal pair retains a masked Interactive
+source across stronger-source withdrawal, checks remaining-waiter handoff,
+and consumes the inherited dispatch budget through four real sleep/wake
+redispatches. The close case also changes a saved root waiter through the
+actual placement owner (Batch, then ShortCompletion), checking both changes
+along the existing chain before closing and reopening its queue.
+The long-chain controller makes one exact private donation/removal under
+Runtime, observes pending work and the not-yet-updated tail after eight
+steps, then requires normal scheduler continuation in both directions.
+Original real Mutex triggers remain covered by the four pair scenarios.
+Cleanup checks exact nodes, counts, held locks, Task generations and actual
+reaping before reusing resident fixtures. Only the diagnostic receipt ledger
+grows128->192; it is not the system task capacity. The combined original
+Sync/Scheduler/FPU/DriverWork cases and Desktop remain the guest qualification.
+
+Final focused KVM4 qualification25.10.2026: normal owner build/fmt/Clippy
+and a fresh Test image pass. The private guest reads back the actual BOOT
+kernel plus Spectra/Desktop/WINSVC/AUDSVC and both original fixture artifacts.
+VER reports Release30, active and installed Kernel393. BOOT ELF SHA256:
+ ffe6aef422c7e3a4a9ca06e0b49667838175e9055a050b169156796c5e907c05
+Combined SPECTRA CHECK THREAD /KERNEL has selected=passed127, failed/
+unavailable/cleanup/live task/live work all0,141/141 real Task retirements,
+2/2 exact DriverWork releases,200 event iterations,4 IF checks,2 Unwind
+checks,65 deadline Tasks and role_mask15. All six MUTEX08730 scenarios
+pass with individual result=1/clean=1/actor failures0. Normal/reopened
+handoff chooses the inherited Batch owner first; timeout/kill chooses the
+original Interactive waiter first. The masked source and real inherited
+budget exhaustion are both observed. Role-change and deferred twelve-owner
+propagation/withdrawal finish with no retained nodes, donation counts or locks.
+The original rank-publication, local fairness, four real Park/queue-reuse
+cases, SMP/TLB/12-owner tests and actual R4L Timer/IPI preemption remain
+successful. The FPU work reports its existing guard-roundtrip scope for
+both lanes; it does not manufacture an extra hardware IRQ receipt.
+
+Desktop HOST/RESTART, REMOTEFRAME and both exact children26:26/27:27 plus
+host25:25 complete/reap with exit0 and cleanup acknowledged. Normal QEMU
+poweroff0. No physical visibility/cursor latency is reported by that export.
+The guest uses AHCI and has no NVMe device; no new NVMe qualification follows.
+Original combined THREAD export SHA256:
+ 23ce936307bf73bb420fb3fd0eac32fe865f63327b1fb2e88de60b87fb42630b
+Original Desktop export SHA256:
+ b531fcf591ede8702154a319812c01b683993f30c46fb64b0dde79e8bfcb76cf
+Final guest serial SHA256:
+ 8d88a030ef30b1147d5ef9338aea687e01747fad3ce9970caecb7c1b46a829c6
+
+The initial new mode0 observation returned false with zero actor failures;
+its49Tasks were all reaped, and the original aggregate did not identify the
+failing subcondition. Review replaced an unjustified assumption that four
+yields guarantee four redispatches with four real timed sleep/wake returns,
+and added individual observation/cleanup fields. The final mode0 explicitly
+confirms first=2, masked=1 and exhausted=1. No product defect or acceleration
+is inferred from that initial aggregate failure. Compile-time embedded-layout
+assertions were updated with their private Mutex-size change before any
+successful guest; no older image is counted as final qualification.
+
+Exactly one final normal Suite3 STANDARD uses the same final Kernel393,
+with its BOOT readback matched to the above ELF hash. All30 raw samples
+retain worker_count=completed_workers=4, with six valid score areas. The
+unchanged complete Schema1 export was PUT to DevCenter and its complete
+normalized GET contents, all samples and validation areas checked:
+ fda10337-4c5a-4c8f-8510-b4037aa7770b
+ Original SHA256 5d483411e411275e41e4cb048018132b7bc75924698f14acc324366ae047a612
+ scheduler_sync38.492175 / memory230.312651 / ipc730.653280
+ lifecycle592.914083 / filesystem_io145.584300 / overall223.615333.
+No repeated score selection or isolated speedup claim. The native OssiPC,
+published Full/Slim packages and physical NVIDIA/audio/input/window latency
+retain their separately documented state. Only Kernel and release metadata
+artifacts change; no new public module or Contract/SDK artifact is required.
+
 0.87.29: CPU-local successful-selection fairness
 ------------------------------------------------
 Release0.87.29 / Kernel0.1.392. SPEED-035: the global priority_selects

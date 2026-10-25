@@ -1,6 +1,117 @@
 ﻿R4OS concurrency and responsiveness
 ===================================
 
+0.87.34: epoch-bound remote reschedule doorbells
+----------------------------------------------
+Release0.87.34 / Kernel0.1.397, SPEED-040. Scheduling pending remains the
+Scheduler's reconsideration request. A separate resident per-CPU SMP gate
+records one delivered but not yet consumed0xf0 doorbell, keyed by the full
+dense CPU index/APIC ID/execution epoch from the canonical admission owner.
+Live and draining sends validate their own exact current destination under
+Runtime. A new epoch cannot inherit old transport credit. Repeated requests
+for that outstanding identity share the existing delivery; failed ICR write/
+bounded delivery releases its credit so a subsequent request can retry.
+ICR success still proves transport delivery only, never execution/quiescence.
+
+Actual0xf0 entry consumes that exact current CPU's credit under the existing
+outer Scheduler Runtime admission, before deciding whether IRQ preemption
+is safe. This adds no second global admission at vector receipt and keeps
+the physical switch's original depth/release boundary. Synthetic Scheduler
+control/safe points cannot consume a transport credit. A later urgent enqueue
+must send again after receipt even if scheduling pending remains true in a
+kernel/guarded context. An old-epoch receipt/failure cannot clear new credit.
+The vector carries no epoch payload: receipt means this current CPU entered
+the real handler and can observe prior publications, not one-to-one packet
+identity. Canonical lifecycle park/stop/rearm receipts remain mandatory.
+
+Ready notification now requests a remote scheduling wake for an idle,
+nonrunning or absent current Task, or for a strictly better dispatch rank.
+Equal/lower-ranked work on a productive CPU follows its ordinary slice and
+safe points. Ready publication, exact rank indexing and Task lifetime remain
+under their existing owner. Placement, CPU drain, monitor exit and AP-to-BSP
+earlier-deadline sends bypass this urgency filter; all share the transport
+gate. TLB/stop vectors, real timer deadlines, pending accounting and normal
+same-CPU admission retain their independent contracts. The bounded records
+add no periodic worker, scan, public ABI or automatic diagnostic workload.
+
+Five standalone cases execute the actual pure gate: burst/receipt/rearm,
+pending-independent second request, failed delivery retry, fresh epoch with
+stale receipt/failure, and full identity/independent CPU slots. The existing
+THREAD /KERNEL fairness group adds eight pinned owned AP Tasks: four Batch
+publications under one Runtime admission require one actual LAPIC send and
+three merges; equal-rank enqueue on the running Batch actor requires zero
+sends/merges; two urgent Inputs require separate real sends/receipts while
+scheduling pending stays true; after seven exact retirements an idle rearm
+requires a fresh eighth Task and actual vector receipt. No fabricated IRQ,
+foreign queue mutation, clock override or production probe hook is involved.
+The existing CHECK SMP /LIFECYCLE native cycle additionally requests a real
+doorbell after its actual INIT/SIPI epoch change and requires the new identity,
+fresh delivery or already outstanding NEW-epoch credit, and real IRQ receipt.
+Its original five native Tasks and module YMM/wait/I/O cases remain required.
+The first private AHCI-only guest stops at the pre-existing Slice preparation
+before admitting its second actor/measurement: no work sample, passed7 of127
+selected Kernel bits, failed fairness bit8,33/33 Tasks retired without leaks.
+The exact admission subcondition was not captured. The explicit Slice output
+now includes a bounded passive admission mask/Ready count. No production fix
+or identified root cause is inferred from that first failure. Its subsequent
+native lifecycle cycle already passes63/63 with epoch1->2 and5/5 Tasks; the
+later module case fails because its mandatory NVMe fixture was absent.
+The private runner now supplies the canonical disposable zero-filled16MB
+NVMe namespace. That missing device is a fixture error, not an unavailable
+case silently accepted as passed. All original criteria remain unchanged.
+
+One focused current KVM4 SCHED check passes selected=passed60,150/150 Tasks,
+65 deadline Tasks, role_mask15, no live resources/cleanup errors. Then the
+combined final check passes selected=passed127,173/173 Tasks,2/2 DriverWork
+releases,200 Event iterations,4 IF checks,2 Unwind groups and65 deadline
+Tasks. Original rank/PI/Guard/Park/fairness and all eight new IPI actors pass.
+The three Slice admissions are mask15/Ready0; first Ready latencies7/3/29
+ticks for Interactive/ShortCompletion/Batch, equal original work/checksum.
+These are context observations, not a new isolated speedup comparison.
+SMP/TLB, all12 lock owners, Clock and original real module R4L Timer/IPI pass;
+the latter has one real switch each and both exits0. Native CPU lifecycle
+passes63/63,5/5 Tasks,3 IF checks and real epoch1->2/new-identity IPI receipt.
+Original module YMM/wait migration, actual joins, offline NVMe512-byte
+completion with1/1 Task/one callback/native receipt flags15, and re-online
+to epoch3 all pass; the foreground child commits its success receipt. Normal
+poweroff0, no panic, cleanup/live resources0. Pure kernel instructions keep
+their ordinary IRQ deferral; receipt alone never substitutes for completion.
+
+Final owner build/fmt/Clippy pass. Release34/Kernel397 BOOT readback SHA256:
+ d7fcbe89bd97a7f3c960adf87545d0532b167507dd00870e52631ebe50cf29c7
+Installed Spectra/Desktop/WINSVC/AppDefaults/Clock bytes match their current
+artifacts. Final Kernel / CPU-lifecycle export / serial SHA256, respectively:
+ 69c9f5f0ce008206fcbd90f2f01773e54db8cf4a61c9c6135a292216b0219b91
+ 0de137d9148ebeccc3147582b8626e24f2f47dec8f8a42016beaa1423fced3c8
+ 15c80bab7b0c086dbe70750c1392d711414dd488b15fb561d4a74305db84ddf0
+The focused SCHED export SHA256 is
+ 1cc43f8ce62fd2aa722e747de8c9ecab312088fc669c95910aeef0ece5341817
+The earlier artifact before passive admission output is
+ 015ac93c2dfa9c63c365a372637198436d53e842f79071d4f8518be8d8fd44e9
+Its failed preparation is retained as a compact context at the existing37
+investigation, with no regression/noise/root-cause claim or retry-for-score.
+The current canonical-fixture qualification above does not explain that
+earlier admission failure. No extra global diagnosis or measurement suite
+is introduced. Full/Slim14 and OssiPC12 stay separate and untouched; no
+physical NVIDIA/audio/input/folder-latency receipt follows from KVM4.
+Exactly one final Suite3 STANDARD uses that same final Kernel397 BOOT hash:
+ run_id77234b14-35a1-4efd-b9f1-40cf2172e5af
+ original run.json SHA256
+ 05a9a8cdbd6e95813b3e78b5d618f0c6e2e18d11ed75fd11f67e0bd1647036e6
+Host hetzner-qemu, KVM4;30 original samples, all worker_count and completed
+workers4. Unchanged original import and full normalized DevCenter GET equality
+confirm all raw data and six valid score_validation areas. Scores:
+ scheduler_sync51.004961 memory227.004556 ipc733.179270
+ lifecycle561.863740 filesystem_io146.456584 overall233.797259
+The IPC index is again near32's740.528989, after33's505.869041. The direct
+STANDARD DNS-status route still uses Kernel service IPC, not the Async pool.
+This is no isolated explanation of the old IPC/host/layout/wait context;
+that existing question remains at37 with the READERS observation. No score
+rerun, causal speedup claim or physical response-time claim is made.
+Completed private source/work images and closed own logs/exports are removed;
+the compact unresolved preparation context and reusable native recipe remain.
+User25.10.2026 requests a pause after this subversion;35 is not begun.
+
 0.87.32: shorter interactive slices with the same safety boundaries
 ------------------------------------------------------------------
 Release0.87.32 / Kernel0.1.395, SPEED-025. The Scheduler owner uses8ms for

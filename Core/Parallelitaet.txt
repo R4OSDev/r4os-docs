@@ -1,6 +1,111 @@
 ﻿R4OS concurrency and responsiveness
 ===================================
 
+0.87.36: indexed exact Task identity at the existing lifetime owner
+-----------------------------------------------------------------
+Release0.87.36 / Kernel0.1.399, SPEED-027. Current Mutex/UnwindGuard PI
+already keeps owner_task under the exact held-lock/unwind/offer lifetime,
+validates ID/generation under Runtime and calls replace_donation_owned with
+that same Task. Its current production path has no pin_identity/donate/
+unpin registry-search chain. This part of the original analysis was already
+satisfied by the earlier PI work; this version preserves that owner path.
+
+External task-ID resolution and pointer membership still scanned the full
+registered list. Two additional intrusive AVL views now use the existing
+allocation-free task_index owner. One orders the live record's ID/generation
+with its stable address as tiebreak; exact lookup compares the complete
+identity and ID-only lookup selects the newest resident generation. The
+other orders addresses and compares an untrusted candidate address without
+dereferencing that candidate. All comparisons/lookup/mutations retain the
+original Scheduler Runtime admission. There is no separate saved ID or
+lifetime table and no new global admission, periodic worker or poll.
+
+Canonical link_registry publishes both views with its existing list/count/
+epoch change. unlink_registry removes them before metadata free or critical
+reserve reset; a failed metadata free rejoins through that same canonical
+publication. Dead pinned records keep lookup visibility until their actual
+release eligibility/receipt permits removal. Existing pin counts, generation
+exhaustion, allocation-ID wrap/zero exclusion, release token and rollback
+remain authoritative. Identity fields are immutable while registered; the
+trusted private field setter now checks its existing immutable-ID contract
+before an ID/generation write. Both index views read the actual live TaskCore
+fields. Index links are independent from Ready/timeout/reap links. Ready
+FIFO/rank selection and scalar Scheduler views keep their prior indexes;
+this is not an O(taskcapacity) change to every Scheduler tick.
+
+Scalar lookup follows one balanced path. Three standalone host cases execute
+the actual production AVL code:257 ordered records require at most10 visits
+per successful lookup, with missing IDs/generations and existing predecessor/
+successor semantics; same-address reuse rejects an old generation and an ID
+prefix selects the newest resident generation; both identity/address views
+survive remove/reinsert/rotations and a foreign address query.3/3 pass with
+the pinned Rust toolchain and -D warnings. This proves bounded algorithm
+behavior, not elapsed-time or native-lifetime performance. Owner build,
+checked Clippy and fmt pass. Public Contract/SDK/module layouts are unchanged.
+
+The original two critical-reserve/FPU cycles now also request IDu32::MAX
+under one outer Runtime admission and restore the allocator cursor before
+other creators can observe it. Real native allocation wraps its cursor to1;
+after the first exact reserve-reset receipt the second cycle reuses that
+same ID/address with a fresh unmodified global generation. Extra exact pins
+must retain Dead metadata, old generations/foreign addresses are rejected,
+and both views must agree with the canonical count after release. Original
+one-shot normal metadata-admission failure, FPU storage reuse and normal
+metadata recovery stay required. No extra actor, fabricated IRQ/clock or
+foreign queue mutation is introduced; this runs only through the existing
+explicit TASKREGISTRY selftest=fpu-work/yes boot selection. Native current-image
+receipts and final STANDARD are recorded below after qualification.
+
+Current fresh KVM4 passes original THREAD /KERNEL selected=passed127,
+173/173 Tasks and2/2 DriverWork with live/cleanup errors0, including original
+Mutex/Guard PI/rank, fairness, park, Deadline, IF and Unwind oracles. Native
+CPU lifecycle passes63/63,5/5 Tasks,3 IF checks and real epoch1->2; original
+module YMM/wait migration, actual NVMe512-byte completion with1/1 Task,
+fresh re-online epoch3 and foreground success receipt remain valid. Both
+SMP/lock/clock and owned GUI/CLIPSVC boot probes pass. The first private
+wrapper additionally expected the reserve marker outside its selected
+scope; all original exports were already successful and were post-validated
+unchanged. The separate existing TASKREGISTRY selftest=fpu-work selection
+then passes the actual2 reserve cycles, cursor wrap, same ID/address/fresh
+generation, rejected old generation/foreign address, retained Dead pin and
+both cleared lookup views. Original OOM/FPU storage/guard/recovery receipt
+passes; normal poweroff0 in both guests. Previously passed THREAD/CPU commands are not rerun; the targeted boot
+retains its original boot baselines.
+
+Current BOOT ELF SHA256, verified from both private images:
+ 6793de8643b51bcc124fac23bb898e661258e7bf1432e54369e8ef74ba514329
+Original Kernel / foreground CPU export SHA256, respectively:
+ 69c9f5f0ce008206fcbd90f2f01773e54db8cf4a61c9c6135a292216b0219b91
+ 0de137d9148ebeccc3147582b8626e24f2f47dec8f8a42016beaa1423fced3c8
+Original Kernel/CPU guest serial / reserve guest serial SHA256:
+ b0bfc98425162507f60d7b086d60ae23ba0048c580d0638a14e78a0a8a9503d2
+ ab922b8f40fc8fb98ab9cb446fabd3ef12b1887bc20bdbf46b6528f46b9ff7dd
+All151 module artifacts remain byte-equal to completed35; no module version,
+SDK/Contract API, CPU profile or public Full/Slim package is republished.
+Only Release36/Kernel399 change. These current KVM receipts establish exact
+software identity/lifetime behavior, not physical hardware latency or an
+isolated speedup. The final fixed-work STANDARD remains separate below.
+
+Exactly one final Spectra66 STANDARD Suite3 KVM4 passes:
+ 376129c1-3a74-47d6-aa39-182247d6772b
+Original run.json SHA256:
+ a316538e5dc9b961faeeb2b60d95a99a8d34b567c6948c73811cae8f2f2257ff
+Status: lokal validiert; DevCenter ausstehend. Complete unchanged schema1
+original, pinned reference/scoring source, local validation, SHA256SUMS and
+compact native/151-module/previous-state context are stored in
+ExFiles/Reports/Benchmarks/<run_id>/. All30 samples have4/4 workers, full
+raw work and clock context;5 metric aggregates and6 valid scores are
+recomputed from the canonical fixed reference. Current runtime artifact
+hashes match. Comparison key and all module bytes equal35; the kernel is
+changed. No upload or remote readback is claimed.
+Scores: Scheduler50.565200, Memory229.039707, IPC411.539268,
+Lifecycle495.324174, FS148.827822, Overall203.774336. IPC falls from35's
+735.663225, while Lifecycle is495.324174 versus35 484.729551 and34 561.863740.
+The IPC difference remains open at37 with the earlier IPC/FS/Lifecycle
+contexts. No noise dismissal, proved isolated index/Async regression or
+score rerun. Logarithmic lookup and functional identity correctness are
+established; a measured general speedup is not established by this result.
+
 0.87.35: per-program GUI activity channels
 ------------------------------------------
 Release0.87.35 / Kernel0.1.398, SPEED-039. Each existing GUI payload now

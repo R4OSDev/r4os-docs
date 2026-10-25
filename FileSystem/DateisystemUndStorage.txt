@@ -1,6 +1,74 @@
 ﻿R4OS filesystems and storage
 ============================
 
+NTFS read views and operation timestamps (0.87.21)
+-------------------------------------------------
+Kernel387 separates ntfs_adapter_state::build from explicit build_write /
+with_write_time. Read-only path resolution, child/identity lookup, whole and
+range reads, directory enumeration/DirectoryNext, canonical name comparison,
+child-size and free-space queries never acquire the calendar for their Volume
+view. The productive DirectoryNext path may still resolve its parent first;
+neither of those two adapter entries samples the calendar. Mount/cache setup,
+flush, deletes and exact recovery deletes likewise need no new timestamp.
+The cache's existing monotonic tick age remains independent.
+
+File create/write/append, directory create, rename/move, atomic publication /
+replacement and growing/replacing range writes explicitly admit one current
+calendar via platform/time and the canonical RTC owner before mutation.
+ntfs_adapter_time converts that validated calendar to FILETIME. The copied
+Volume carries the same admitted operation time through its record/index/
+name updates; there is no second mount-wide clock or permanently old value.
+Read views use a non-published zero placeholder, which cannot enter the
+listed timestamp-writing callbacks without successful admission. An invalid
+calendar returns the existing IO/error status before those callbacks; range
+writes report zero completed bytes and no uncertainty at that admission edge.
+Exact flush/delete cleanup remains available without a calendar. Existing
+in-place sparse-write metadata behavior, ownership, writeback, recovery and
+public ABI/layout contracts are unchanged.
+
+SPEED-047 originally described repeated physical CMOS work. Kernel386's RTC
+cache already bounds physical samples; this change additionally removes the
+unnecessary RTC-owner and calendar-conversion work from every read view.
+It does not reduce Explorer's separate parent/path/enumeration calls; those
+remain planned separately. No physical PIO timing or folder-latency ratio
+is inferred from the static absence of these calls.
+
+Three focused native cases compile the actual NTFS converter with the RTC
+owner: independent FILETIME constants for1980/leap-day2000/current/2099,
+invalid date/time rejection, and new operations following canonical clock
+advancement/set/expired-invalid state. The existing Test-Rtc.ps1 accepts an
+optional filter, so the six unchanged RTC cases need not be repeated.
+Spectra63 extends its existing CHECK FILESYSTEM /NTFS metadata case with
+real current create timestamps, unchanged warm read metadata, and append
+in a later two-second FileInfo quantum while preserving creation time.
+It uses the original R4STD UTC/FAT decoding as its oracle. The bounded2100ms
+wait belongs only to this explicit diagnostic, never boot or STANDARD work.
+Original cache, rename/delete, same-volume move identity/replacement and
+cross-volume content assertions remain active. Kernel build and Clippy pass;
+Spectra63 also builds successfully. Fresh KVM4 CHECK FILESYSTEM /NTFS
+passes create=1/read_unchanged=1/append_current=1. Existing cache cases pass
+with22 targeted invalidations, zero global mutation invalidations and stable
+content generation2; original1-MB move retains identity/content/replacement/
+cross-volume behavior (40,960 backend read bytes for1,048,576 payload bytes).
+Original SMP/LOCK/CLOCK probes pass: four CPUs,12 named owner classes,
+zero owner-order/stress failures and zero clock regressions. Regular shutdown
+and QEMU exit0; no crash. The private source/guest is removed after export.
+Actual BOOT and installed Spectra were byte-checked against their artifacts:
+  Kernel SHA256 beb3e97edae9689733ca8bd190c82dc259005c48df44b86cc85ffc212aa2cebc
+  Spectra SHA256 74491a1b6669c7fc91d59d47cdff96b0d03c078072320b698732fb5c1b709e99
+  Serial SHA256 1aa6034aade20a02650b1a46affe61a0fab50f7099886052baa6d01252c142ad
+One final Suite3 STANDARD e5aedd0f-3a71-4e7a-b83e-dc6c983018cb passes with
+30 raw samples,4/4 workers per sample and6 valid scores; overall223.488997,
+filesystem_io134.037422. Original run.json SHA256
+eea0953a76a50784e72a252da48e98f8dce4847a5dde565cb2f0d6911b354240.
+The unchanged complete DevCenter export has a matching normalized readback
+and all six score areas validate. The filesystem index is below the previous
+0.87.20 run149.335312; this one complete run does not establish an isolated
+clock-removal speedup or its causal contribution. No repeat solely for a
+better score; host/context questions remain separate. Public Full/Slim0.87.14
+and OssiPC0.87.12 remain separate; no physical storage/NVIDIA/audio/GUI
+latency improvement is claimed from this local acceptance.
+
 Layers
 ------
 

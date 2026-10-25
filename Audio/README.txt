@@ -32,6 +32,52 @@ generation. One bounded paged inventory traversal serves all open sessions
 in a cleanup round. An incomplete or changed inventory defers cleanup;
 a reused ID cannot keep a stream from the previous generation alive.
 
+Backend status without system diagnostics (0.87.16)
+--------------------------------------------------
+AUDSVC0.1.14 derives backend presence directly from its existing selected,
+available output. Normal MasterState/Status requests, stream materialization
+and session reaping no longer call the system-wide R4DEV performance summary.
+The unused Devices context and module R4DEV import are removed. Kernel384,
+the platform contract and the explicit Spectra SUMMARY collector are unchanged.
+
+There is no second backend-presence cache. The existing output catalog has
+a500ms refresh interval, service epoch and revision. Output changes also
+advance the service status revision; master revision still describes gain
+and mute. An incomplete/failed catalog keeps its old display data but cannot
+confirm an active backend. An actual stream NoEndpoint clears the current
+active route and forces the next catalog refresh, preserving the desired
+selection. Removal and a later provider with the same persistent ID publish
+fresh catalog revisions. Availability is a bounded status observation, never
+a stream or driver lease; the kernel still validates exact live owners at
+Open/Write/Close and excludes closing backends from its output catalog.
+
+The existing owner step passes9 cases, including the real output consumer
+through its R4AUDIO facade: pending/ready outputs, fallback and preferred
+output return,499 cached observations without extra queries, failed catalog
+and cached failure, removal/re-registration, NoEndpoint invalidation and
+recovery. No physical HDMI, audible output or latency result follows from
+these host cases.
+
+The final KVM4 guest runs the original AUDSVC /SELFTEST: master volume/mute,
+two streams, common gain fanout, lazy/silent/active behavior, persistence over
+the real service restart and restoration pass with ERRORLEVEL0. Explicit
+SPECTRA METRICS SUMMARY remains complete with a stable clock,1 registered/
+active backend and0 open kernel streams afterward. Normal poweroff exits0.
+Installed AUDSVC bytes match the final artifact, SHA256
+c56566305a77675b0b831ebc508789b518b7efac0601ef7ac5b4ecc0c8df13a4;
+BOOT matches unchanged Kernel384,
+d554519cbcc15a13a4dbb1eb013a7df513a3672a563fb4acc147f2958e8552ca.
+Private guest/source copies are removed. Desktop166/Spectra60, public
+Full/Slim14 and native OssiPC12 are unchanged by this service release.
+
+Exactly one final Suite3 STANDARD a2e00867-7406-4bf9-9199-c90758d4f92c
+passes with30 samples,4 completed workers each and6 valid scores
+(overall150.495837). Original run.json SHA256
+25282c06fd7ffed7e4305e13ef1c393921e75396ea3895ae637c5239887ef071
+was uploaded unchanged; the complete normalized DevCenter readback matches
+all fields and all six score areas validate. STANDARD has no Desktop workload
+and establishes no isolated audio/UI latency or physical playback improvement.
+
 Output selection (0.78.17)
 -------------------------
 

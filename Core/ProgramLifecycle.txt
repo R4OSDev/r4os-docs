@@ -1,6 +1,100 @@
 R4OS program lifecycle
 ======================
 
+0.87.33: proportional Async worker admission
+--------------------------------------------
+Release0.87.33 / Kernel0.1.396, SPEED-044. File and service lanes retain
+four permanent BSP workers each and the shared64-request admission table.
+Async admission now owns one counted queued demand and disjoint waiting/
+notified receiver masks per lane. A queued request has one private enqueued
+flag; publication, claim, cancellation, purge and reset transfer that count
+exactly once under the existing Async mutex. Unpublished validation/spawn
+failures never increment it. Terminal reset first returns any remaining count.
+
+A lane reserves at most one pending work opportunity for each notified
+receiver. Its bounded rotating four-slot chooser only signals enough empty
+receivers for uncovered queued demand. Active/generation/retiring/request
+identity still comes from the canonical Worker records. A busy worker is
+never signaled for future work. On resumption the exact receiver returns its
+credit before claiming; other running workers may claim only demand exceeding
+the remaining credits. They cannot consume the last opportunities covered
+by already-notified peers. A burst can therefore activate all four workers,
+while a single request from a fully waiting lane signals exactly one.
+
+Empty predicate and logical receiver enrollment share the Async owner.
+After unlock the existing resident AUTO Event covers signal-before-physical-
+wait as well as a normally parked Task. There is no periodic poll. With no
+unreserved demand the worker also skips its previous64-slot empty search.
+Four live slots bound each wake pass; notification cannot change this lane
+again until the same mutex is released. File/service masks never overlap.
+
+A wake credit is scheduling metadata, not request/borrow ownership or a
+completion receipt. The original exact claim still binds Request state2,
+Task ID/generation and the atomic current-request pointer. Original content,
+caller-buffer, completion, stream and endpoint contracts remain unchanged.
+Queued cancellation removes its count before the original cancelled result;
+an already-notified receiver may then return with no work and park normally.
+Retirement excludes the exact worker, returns only its receiver bit and may
+notify a valid replacement. Physical Task retirement still runs outside the
+Async mutex; only its exact acknowledgement permits slot reuse and resetting
+that slot's old Event signal. No unrelated task/queue, generic forced kill,
+new public API, stack size, pool capacity or worker placement is introduced.
+
+Seven host cases execute the same production Lane implementation, including
+single/burst admission, protected credits, both enrollment orders, cancellation,
+replacement and lane isolation/rotation. An independent count bound covers
+all84240 combinations of0..64 queued demand, disjoint waiting/notified masks
+and four-bit active masks. Those cases prove scheduling metadata; real Event,
+request-buffer and retirement behavior is covered separately in the guest.
+Invocation, Windows uses Rust.bat and an .exe destination:
+ ./DevKit/Setup/Rust.sh rustc --edition 2024 --test Repositories/Kernel/Rust/program/async_io/dispatch.rs -O -D warnings -o Temp/08733-dispatch-check
+ ./Temp/08733-dispatch-check --test-threads=1
+All seven pass; owner build/fmt/Clippy pass. No host case or diagnostic scan runs on
+ordinary R4OS boot or request admission.
+
+Final KVM4 qualification25.10.2026 reports Release33 and active/installed396.
+Actual fresh private BOOT readback SHA256:
+ f258545e31cb6d76035ff522d9a3070bfd594901f024284a85ae83b5ac523fb1
+Installed Spectra/Desktop/WINSVC/AppDefaults/Clock bytes match their current
+artifacts. Original CHECK ASYNC_IO /POOL completes128 requests using all four
+file workers, full64-slot admission, overload refusal, stale-ID rejection and
+file/stream content checks. Original single-request stress completes512 reads.
+CHECK LIFECYCLE /ASYNCQUICK passes all four cycles, each with eight requests
+(four running/four queued) and three caller threads: exact owner gone and
+endpoint empty. Every original result is success/exit0. Captured message text
+is verified from the unchanged JSON exports as well as the serial stream;
+no guest is repeated for the temporary host runner's serial-only marker error.
+SMP/lock/clock probes and regular poweroff0 pass. Private geometry16GB/10GB
+SYSTEM, AHCI and four KVM CPUs; the original prior Scheduler qualification
+is reused, no unrelated full kernel/desktop catalogue is repeated.
+Original POOL / single / lifecycle / serial SHA256, respectively:
+ 7c797f778d7093a9f63f204e449fb2136a48ec924607f48abc069d2cb5199237
+ d0e1bcbc40527163e4bdfec931db9bcbdbc0b6dc2346c1a3eb679b61995a5368
+ b9ab5a982f6533c566b4298c6d004117d6e0031a33bcb4a6530a5b773b29958a
+ 0ef8321d0801947ac831fc18cb2dc9f37cebd831f14ac1f0dab687af73d482d1
+Exactly one final Suite3 STANDARD uses the final Kernel396 BOOT hash above:
+ run_id97e015b2-5b31-4baf-ba97-661d7bae3d5a
+ original run.json SHA256
+ db2401431967cde755341f88439f212538a3c3ad4aaffc9bf7231f9d1b7ca1b5
+All30 samples have worker_count=completed_workers=4; unchanged full PUT and
+complete normalized DevCenter GET agree, all six score areas valid.
+Scores: scheduler_sync37.280236, memory233.524514, ipc505.869041,
+lifecycle485.207968, filesystem_io154.896377, overall201.355587.
+The32 IPC index was740.528989 and overall211.901443. IPC measurements now
+span27928.323120..30839.541870ns/op against19725.246994..20497.207778 in32.
+The source path is standard_workloads.ipc -> R4NET.net_service_request ->
+network_api -> net/ipc_services -> service::ipc::request, not the AsyncIo
+worker API. That excludes a direct call into the changed pool, not indirect
+context/layout/background effects. The cause remains open with the existing
+37 host/CPU/wait-context investigation; both original complete runs remain.
+It is not dismissed as noise and no repeated score selection is used.
+The directed-wake contract is qualified, no throughput improvement is claimed.
+No isolated speedup,
+physical GPU/audio/input/Explorer-latency or OssiPC qualification follows.
+Completed private source/work images are removed; the reusable runner and
+compact STANDARD comparison exports remain separate.
+
+
 Identity and storage
 --------------------
 
@@ -80,7 +174,8 @@ completion, so Close can recycle it without retiring a Task or stack.
 
 The existing 64 asynchronous request slots are served by at most eight BSP
 workers, four for files/streams and four for service replies. Each lane scans
-pending slots round-robin and sleeps on events when empty. Queue residence
+pending slots round-robin, uses the proportional receiver admission above,
+and sleeps on events when empty. Queue residence
 counts against finite service timeouts. Normal completion retains the worker;
 hard cancellation stops only the exact worker handling that request and
 replaces it after retirement. The cancellation claim excludes pickup of a

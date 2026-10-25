@@ -1,5 +1,113 @@
-﻿Aktueller Stand – 0.82.27
-=========================
+﻿Aktueller Stand - 0.87.25
+=================================================
+Desktop169/WINSVC19 verbinden den vorhandenen Bildtransport mit einem
+privaten kopierten Aenderungskatalog. Besitzer ist WINSVC, Contract
+Repositories/Services/WindowService/Contract/desktop_graphics_v1.zig;
+Desktop dekodiert ihn in runtime/graphics_wire.rs. Opcode4752 nimmt den
+exakten Desktophandle (16Bytes) und liefert RIG1/v1,688Bytes:48Headerbytes
+und hoechstens16Zeilen zu40Bytes. Dienst-/Desktopgeneration binden die
+Tabelle, Produzentengeneration/Fenster/SurfaceSerial jede Zeile. Restbytes,
+Kapazitaet, Versionen, doppelte Serials und reservierte Felder werden geprueft.
+Das ist ein privater aktueller Besitzervertrag ohne neue Kernel-/SDK-ABI.
+
+Jede Surface hat eine eigene Bildrevision und ein Kennzeichen fuer aktive
+native Bildketten. Erst Publikation/Geometrie/Sichtbarkeit, CreateChain,
+Present, Close/Invalidation/Removal veraendern diesen Marker. Attach,
+Acquire, CancelAcquire, Take, erfolgreicher Return und release_fence ohne
+Zustandsfehler sind keine neue Bildpublikation. Globale Brokerrevision und
+Producer-Wait bleiben fuer ihren bisherigen Fortschrittsvertrag bestehen.
+Desktopbenachrichtigungen verwenden die eigene Bildrevision und weiterhin
+Modeaenderungen; reine Consumerbuchhaltung erzeugt keinen Bild-Wake.
+
+Desktop liest einen gemeinsamen Katalog vor seinen Fensterpolls, wenn sich
+die beobachtete Aktivitaetssequenz geaendert hat oder eine genaue Surface
+noch fehlt. Bereits geschlossene oder im Abbau gehaltene Surfaces fordern
+keine neuen Kataloge an; ihre Ressourcen bleiben im separaten Abbaupfad.
+Auch ein dauernd rendernder Desktop nimmt die Sequenz mit einem
+nicht wartenden ActivityWait(0) vor seinem bestehenden Yield auf. Der
+Katalogabruf ist unabhaengig vom50ms-Traytakt. Die vor dem RPC beobachtete
+Sequenz bleibt dessen Schluessel; eine waehrenddessen publizierte Aktivitaet
+bleibt fuer die naechste Runde sichtbar. Fremde Eingabe kann einen kleinen
+Katalogabruf ausloesen, aber niemals allein einen Take autorisieren.
+
+Reine Zeichenfenster ohne Bildkette stellen keinen Take. not_ready wird nur
+fuer die beim Erzeugen des unveraenderlichen Requests beobachtete genaue
+Bildrevision gespeichert. Eine verspaetete Leerantwort kann keine inzwischen
+bekannte neue Revision sperren. Busy/Capacity werden nicht als leere Queue
+behandelt. Nach erfolgreichem Take werden weitere vorhandene Bilder weiter
+uebernommen, bis eine echte Leerantwort vorliegt. u64-Maximalrevisionen
+werden nicht fuer die Leerwiederverwendung zugelassen. Rebinding, ungueltige
+oder fehlende Kataloge und Serviceverlust liefern keine Bildfreigabe.
+
+Revocation/Inspect, Return, release_fence, CPU-Unmap, Leser und letzte echte
+GPU-Quittungen bleiben eigene Fortschrittspfade. Eine Katalog-Removal ist
+keine Freigabequittung. Inspektion einer neuen Revision kann einen folgenden
+Take in derselben Runde zulassen; ein verlorenes Inspect behaelt den
+Fortschrittsbedarf. Dadurch verschiebt die neue Pruefung ankommende Bilder
+nicht absichtlich auf einen spaeteren Traytermin.
+
+Gezielte Abnahme: Tests/RustNative/window_graphics.rs, bestehender
+GPU-Leserfall und Host-Servicefaelle; WINSVCs bestehender Besitzercheck
+src/graphics_broker_test.zig. Neue wiederverwendbare Gastfixture beim
+Desktop: Tests/WindowImages/main.zig. Bau:
+  ./Repositories/Apps/Desktop/Build.sh window-images-fixture -Dhost-tests=true
+Sie startet ausschliesslich ohne fremden Desktop einen eigenen aktuellen
+/CHECK-ISOLATED-Host, bindet ein eigenes GUI-Child ueber den bestehenden
+Diagnosevertrag und publiziert zwei echte CPU-Queue-Bilder. Zwischen den
+Bildern erzeugt sie30fremde Aktivitaeten bei unveraenderter GUI-Zeichenrevision.
+Sie prueft exakte Leihen, Wiederverwendung erst nach Return, CloseChain-
+Quittung sowie echte Child-/Hostcompletions und Reap. Kein neues Bootgate,
+kein installiertes Produktmodul und keine permanente Laufzeitdiagnose.
+
+Arbeitsgrenze: Der kleine Katalog-RPC kann bei aktiven nativen Bildketten
+zusaetzlich zum erfolgreichen Take erforderlich sein. Dieser Umbau belegt
+weniger redundante erfolglose Takes, keinen isolierten FPS-/Latenzgewinn.
+Die native Gesamtwirkung wird erst in den geplanten Hardwareversionen
+verglichen. Ein STANDARD ohne Desktop misst diesen Bildtransport nicht.
+Abnahme25.10.2026: WINSVC19-Build und bestehende Broker-Testgruppe bestanden;
+Desktop169-Build sowie11native Desktopfaelle (8WindowGraphics,1originaler
+GPU-Zweileser-/Rotationsfall,2Host-Servicefaelle),3Geometrie und1SDK-Clock
+bestanden. Je1000command-only bzw. fremde Revisionsrunden belegen0Takes bzw.
+keine Wiederholung nach dem ersten not_ready. Verspaetete Leerantwort,
+Busy, fehlende/gesaettigte Marker und Revocation bleiben getrennt geprueft.
+Diese exakten Aufrufzaehler stammen aus dem nativen kontrollierten Peer.
+
+Die reale WINIMAGE-Fixture besteht mit Desktop24/Child25, beide Exit/Reap0:
+zwei echte CPU-Fences und Bildleihen,30fremde Aktivitaeten, Wiederverwendung
+mit frischem Token erst nach Return, vollstaendige CloseChain-Quittung,
+Fence-/Queue-/BO-Abbau und regulaeres Poweroff0. Der normale aktuelle
+SPECTRA CHECK DESKTOP /HOST /RESTART besteht separat: Drag/Resize708x422,
+Fokus, statische GUI7->7 bei laufender CLOCK5->7,137Idle-Timeouts, Tray-
+Aktivierung/Remove, WINSVC11->13, beide Child-Reaps und Desktop-Reap0,
+RemoteFrame mit unveraenderlichen Lesern/echtem Cleanup. Beide privaten
+Gaeste: KVM4/1GB, exakter installierter BOOT-/Modulsatz, SMP/CLOCK/LOCK12
+bestanden, keine Lockreihenfolge-/Stressfehler. Keine NVMe-IRQ-Abnahme
+abgeleitet: das verwendete Standardprofil hat kein NVMe-Geraet.
+
+Installierte SHA256-Bindungen:
+  Kernel389 88c22d5d289cdff5030b7cb8809a8e0f475d00f3b5fb9ebb27656019cc8a6635
+  Desktop169 3e3ff409b6d02d1a4342a2e42dd3390fd55908eb1c71ba4c20b25d610aac7e49
+  WINSVC19 8b6fc0811e6611c9345745afe0323077836524a3be6234716b8644bdf63609e6
+  Spectra65 873b55ef45361bbbc8ada347a2264d48de3ecc88022465972f5a8fed97faeead
+  WINIMAGE 658369eb9c6b46d6ed0741b3ace3a8674344a920c62f91705da86eb74cca3770
+  WINIMAGE-Serial0781e06f17f98ec8d00882a0c62ba0d2d7b536934517e3bdb711a9b411704a14
+  Desktop-Export a6f89b00274aaa4e8eb9e3b7711478a5caf39653ed436b17c3d2828c74fb92da
+  Desktop-Serial 3ede7c602666aaadcd1dce765d114e63ba64e7813e0e2eb9c3e777561b2c8121
+
+Genau ein finaler Suite3-STANDARD: b7a9d414-93e8-4f6a-b684-36483a200162,
+Release0.87.25/Kernel389/Spectra65, KVM4. Unveraendertes run.json SHA256:
+78a07b3a54a1e36ac9c6a19d851c4dee8e6d179bc57241035947a06d27880ca8.
+Vollstaendiger normalisierter DevCenter-Readback identisch:5Metriken,
+30Rohsamples,4/4Worker je Sample,6gueltige Scorebereiche. Scores:
+Scheduler36.193915, Memory229.591703, IPC769.968615, Lifecycle587.181252,
+Filesystem147.636614, Overall223.257576. Der Lauf enthaelt keinen Desktop;
+sein Score und seine Differenz zu.24 belegen keinen isolierten Grafikgewinn.
+Keine neue physische NVIDIA-/OssiPC-/Audio-/Eingabelatenz- oder Windows-
+Abnahme. Full/Slim0.87.14 und das reale OssiPC-Release0.87.12 bleiben der
+separate veroeffentlichte bzw. installierte Stand.
+
+Historischer Stand - 0.82.27
+---------------------------
 WINSVC12/R4VK33/Desktop101/Kernel239 qualifizieren echte anzeigeunabhaengige
 GA106-Produzenten und den regulaeren Desktopzyklus. Flag headless erlaubt
 explizit Adapter0 mit Ausgabe-ID0, originalem8/sRGB/10/FP16-System-BO und

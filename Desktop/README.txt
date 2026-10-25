@@ -6,6 +6,17 @@ window composition, focus, z-order, taskbar, desktop items and user-facing
 input dispatch. The kernel provides the privileged display and event
 mechanisms but does not own desktop policy.
 
+Window-image polling (0.87.25)
+----------------------------------------------------
+Desktop169/WINSVC19 exchange exact per-surface image revisions. Command-only
+windows issue no Take; an unchanged not_ready revision suppresses redundant
+Take RPCs. Pending requests retain the marker captured at creation, and
+Return/Inspect/fence retirement remain independent. One copied688-byte table
+is refreshed on activity before polling, outside the50ms tray cadence.
+Owner checks, real KVM4 two-image/normal Desktop-restart cleanup and exactly
+one final STANDARD with full DevCenter readback pass. Full contract, evidence
+and limits: GrafikFenstertransport07937.txt.
+
 Complete lifecycle snapshot reuse (0.87.24)
 -----------------------------------------
 Desktop168 renews its last complete process snapshot when the cheap lifecycle

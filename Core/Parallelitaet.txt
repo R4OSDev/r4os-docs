@@ -1,6 +1,137 @@
 ﻿R4OS concurrency and responsiveness
 ===================================
 
+0.87.32: shorter interactive slices with the same safety boundaries
+------------------------------------------------------------------
+Release0.87.32 / Kernel0.1.395, SPEED-025. The Scheduler owner uses8ms for
+effective dispatch ranks0..2 and retains30ms for Batch/rank3. This includes
+exhausted Input/ShortCompletion activations and temporarily donated urgency;
+it introduces no permanent role boost. Timer admission and safe_reschedule
+query the same scalar policy from the exact current Task under Runtime.
+Higher-rank wakes, voluntary blocking/yield, owner/IF/preemption guards and
+pending placement/drain retain their existing independent admission paths.
+Selection still uses the0.87.29 local fairness debt; lower-ranked work keeps
+its conditional successful-choice progress. Placement and periodic balancing
+keep the30-ms cooldown, independently of the shorter interactive slice.
+
+Overrun accounting uses the current dispatch policy rather than a fixed30-ms
+threshold. The existing fixed preemption_quantum_ticks diagnostic field
+continues to report the30-tick base/maximum; it is not every Task's current
+limit. No public ABI, timer frequency, task layout, queue scan, new periodic
+worker or ordinary-boot diagnostic work is added.
+
+The boundary is schedulable elapsed ticks since last dispatch, not a wall-time
+or per-wake guarantee. An already queued equal-rank Task is considered at the
+next permitted selection after expiry; existing FIFO/rank/fairness selection
+still decides which Task runs. IRQ/owner deferral, CPU affinity and competing
+Tasks can add delay. Pure kernel instructions retain IRQ deferral and need
+their actual safe checkpoints;8ms cannot interrupt an arbitrary kernel loop.
+An initial diagnostic without such checkpoints correctly observed no timer
+switch and was rejected. It was corrected to exercise native cooperative
+work; real module Timer/IPI behavior retains the original boot acceptance.
+
+The existing explicit THREAD /KERNEL fairness group adds three pairs of
+exact owned AP actors: Interactive, ShortCompletion and Batch. Each pair
+performs134217728 dependent integer mix steps with equal final checksums,
+the same8192-step safe-checkpoint spacing, observed publication-to-first-
+dispatch ticks and
+full retirement. The measured interval excludes creation, uses the functional
+clock and ends at the last actor's actual work completion. Task switches are
+the two exact Tasks' cumulative dispatch counts; FPU saves/restores are
+explicitly global interval observations, including timer/background work.
+They do not isolate the cost of one context save or physical audio latency.
+The5-second cancellation bound and the existing diagnostic ledger retain
+all task/resource receipts. No hot-path override or new general suite exists.
+
+The broader check exposed an old rank-probe isolation assumption. A lower-
+rank remote wake arrived during its IF-off window: before-mask28, two Ready
+Tasks and pending=true. The original two-tick debit was not even attempted.
+A quiet AP snapshot did not prevent later unrelated wakes. The diagnostic
+now validates its exact own Running/Ready pair without requiring the whole
+Ready queue to contain only that peer. At the current CPU's normal Scheduler
+owner it consumes only non-urgent pending work, then still requires a false
+baseline, real elapsed-time debit and a new true publication together under
+uninterrupted Runtime. No direct Pending reset or foreign queue mutation.
+One extra owned Batch Task deterministically reproduces that remote enqueue
+while local IRQs are masked. All seven rank-fixture Tasks require exact
+retirement. Production wake/IPI policy is unchanged; its planned owner work
+remains separate. The fixed-work measurements precede this rank fixture.
+
+The30-ms control uses Release31/Kernel394 with the same fixed-work slice
+probe, before the rank-fixture correction. Its ELF is not the earlier
+accepted31 artifact:
+ a091eb377087ad5ada6d84f62579febd8a8f0173caaa57582152797489a1d974
+Fresh private BOOT and all installed fixture/module hashes are verified.
+KVM4 SCHED selected=passed60,141/141 Tasks,65 deadline Tasks, role_mask15;
+no failure/unavailable/live resources/cleanup error. Original real module
+Timer/IPI acceptance reports one switch each and both exits0; poweroff0.
+Each following row reports first Ready ticks / elapsed ns / two-Task dispatches
+/ cooperative switches / global FPU saves / global FPU restores:
+ Interactive       29 /192974583 /8 /6 /1223 /1415
+ ShortCompletion    3 /194196495 /9 /7 /1235 /1428
+ Batch             29 /193302999 /8 /6 /1228 /1422
+Each actor completes the same67108864 mix steps and checksum
+9577142770428874531. The ShortCompletion first switch already follows its
+finite fresh boost; its initial latency is not a30-ms policy effect.
+Control THREAD export SHA256:
+ 251d3154754369de15c7dffb63b21f01fcd89eab7e22ddc384fe55a196ec6588
+Three8-ms work observations complete during the subsequent qualification;
+the first two broader checks stop at the rank-fixture assumption above.
+No work observation is discarded in favor of a faster run. Same row fields:
+ Interactive A      7 /196959645 /26 /24 /1257 /1453
+ Completion A       4 /193276562 /26 /24 /1242 /1435
+ Batch A           29 /192688419 / 8 / 6 /1217 /1409
+ Interactive B      7 /199193668 /26 /24 /1283 /1482
+ Completion B       3 /196737611 /26 /24 /1264 /1460
+ Batch B           29 /194781699 / 8 / 6 /1231 /1425
+ Interactive final  7 /191914652 /26 /24 /1233 /1424
+ Completion final   3 /195412153 /26 /24 /1258 /1454
+ Batch final       29 /193789191 / 8 / 6 /1225 /1419
+All have the same work/checksum, actual retirement and no native timer switch;
+these are real safe checkpoints. Interactive first-dispatch delay consistently
+falls29->7 ticks while its dispatches rise8->26. Work wall times vary around
+the control (roughly-0.55% to+3.22% for Interactive), with no isolated cost or
+speedup claim. Batch retains its observed29-tick delay and eight dispatches.
+This supports the8-ms latency/cost choice; it is not a statistical throughput
+comparison, STANDARD index or physical input/audio/window measurement.
+
+Final qualification25.10.2026: owner build/fmt/Clippy pass. Release32 and
+active/installed Kernel395; fresh private BOOT readback SHA256:
+ 5e317af1715ae5c1fd661434965b64bf8ea4db9f13f50e00bc8fd8dc7643a180
+Installed Spectra/Desktop/WINSVC/AppDefaults/Clock bytes match their current
+artifacts. THREAD /KERNEL selected=passed127; failed/unavailable/cleanup/live
+Task/live Work all0;165/165 exact Tasks and2/2 DriverWork releases,200 Event
+iterations,4 IF checks,2 Unwind groups,65 deadline Tasks, role_mask15.
+The deterministic third-Task rank case and all original mixed Guard/Mutex,
+budgets, placement/fairness, four Park/reuse, SMP/TLB/12-owner cases pass.
+Original real R4L Timer/IPI acceptance again has one switch each and exits0.
+Desktop HOST/RESTART, exact children26:26/27:27 and host25:25 completion/reap0,
+REMOTEFRAME bounds/multireader/stale-token and cleanup all pass; poweroff0.
+The temporary runner originally counted embedded REMOTEFRAME as a second
+DESKTOP result after the successful guest. Filtering by the actual group
+validates the unchanged exports; no extra guest is run for this host mistake.
+Final THREAD / Desktop / serial SHA256, respectively:
+ 9a7fa679f773086a42f9bafcece7f5fb5dd79de344bccdc85f52bb5f676b3bf8
+ 816c065a6b23cc558537179c40ac8a6e01dd1502ba9123bd8f8a97f8851130ba
+ ca7e3e92fc93d68d8db2ad89ca6e38c4845c2834a95fa7344c0f72c6b6e1ecea
+Exactly one final Suite3 STANDARD uses the final Kernel395 BOOT hash above:
+ run_id2036906b-e020-4df7-a0b4-164f86900b3c
+ original run.json SHA256
+ b289cf6dfb8c7efc9fa278790330a3f6e4dc71a72aaf3c56fb1cbee63bb9c619
+All30 raw samples have worker_count=completed_workers=4. The unchanged full
+PUT and complete normalized DevCenter GET agree; all six score areas valid.
+Scores: scheduler_sync36.095710, memory222.222427, ipc740.528989,
+lifecycle527.792569, filesystem_io136.276431, overall211.901443.
+The previous31 overall index was215.728199. This one final run does not
+establish a throughput improvement; the accepted change trades more frequent
+interactive dispatch for shorter observed response. No repeated STANDARD or
+isolated performance factor is claimed. Compact original run/receipt remain;
+completed private images and temporary work copies are removed.
+AHCI KVM4 scope only; no new NVMe,
+physical NVIDIA/audio/input/Explorer-latency or OssiPC qualification. The
+separate open FS READERS observation remains recorded at31/37.
+
+
 0.87.31: abortable directed UnwindGuard handoff
 ----------------------------------------------
 Release0.87.31 / Kernel0.1.394, SPEED-026. Final guard release previously

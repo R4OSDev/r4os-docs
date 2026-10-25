@@ -1,0 +1,125 @@
+Kalenderzeit und RTC-Besitz - 0.87.19
+===================================
+
+Anlass: SPEED-048. Die beiden CMOS-Ports70h/71h waren ohne gemeinsamen
+Besitzer erreichbar. Parallele Kalenderleser/Setzer konnten die fremde
+Registerauswahl treffen; nach wiederholt instabilen Samples wurde trotzdem
+das letzte Sample als gueltig behandelt. Eine gemessene Beteiligung dieses
+Fehlers an der Desktopverzoegerung ist damit nicht belegt.
+
+Besitzer und oeffentlicher Vertrag
+---------------------------------
+Kernel Rust/arch/rtc.rs besitzt Hardware, zusammenhaengende Kalenderwrites
+und Cache unter demselben kurzen RTC-Leafowner (Klasse11, Rang86). Damit
+gibt es zwoelf benannte Ownerklassen, zusammen mit Runtime13 Lockgruppen.
+Der Owner wahrt den IF-Zustand und bleibt CPU-gebunden. Kein Schlafen,
+Callback, Heapzugriff oder neuer RuntimeGuard innerhalb der RTC-Transaktion.
+Die dort genutzte monotone Uhr liest atomare/Hardwarewerte; auch HPET- und
+periodischer Timer-Rueckfall nehmen dabei keinen RuntimeGuard auf.
+
+platform/time.rs fuehrt R4SYS time_state, seconds_since_midnight und
+time_set_state sowie interne Kalenderleser auf diesen Besitzer. Eingaben
+werden vor der RTC-Aufnahme kopiert, Ausgaben nach dessen Freigabe.
+DateTime12/TimeState32 und die API-Slots bleiben unveraendert. Gueltige
+Kalenderdaten liegen in1980..2099; Wochentag wird aus dem Datum berechnet
+und folgt dem bestehenden Public-/R4STD-Vertrag Sonntag0..Samstag6.
+Setzen liefert0 bei verifizierter Uebernahme, -1 bei ungueltigem Datum und
+-2 bei momentan nicht moeglicher/nicht verifizierter Hardwaretransaktion.
+Ungueltige Eingaben schreiben nichts. Private unbenutzte RTC-C-Wrapper
+wurden nach Definition-/Aufrufersuche entfernt; keine Public-ABI entfernt.
+
+Index/Data und Stabilitaet
+-------------------------
+Jeder Porttransfer verlangt denselben Guard; ganze Reads/Writes schliessen
+einander aus. Die bisherige NMI-Indexpolicy bleibt ausdruecklich erhalten:
+Indexbit7=1. Port70 wird nicht als angeblich lesbarer alter Index verwendet.
+Es gibt keinen RTC-Aufruf im NMI-Pfad; kein neuer NMI-Handler oder physischer
+NMI-Nachweis. FADT-Centuryregister0Eh..7Fh, sonst32h; ohne auswertbares
+Jahrhundert Pivot80. Status-D-bit7 ist eine Verfuegbarkeitsbedingung, keine
+plattformuebergreifende Messung der Batteriespannung.
+
+Ein Read hat genau einen begrenzten Versuch: Sekunden vor UIP lesen,
+UIP pruefen, zwei komplette Samples einschliesslich Jahrhundert/Modus
+vergleichen, Sekunden und UIP am Ende bestaetigen. Kein Poll bis zur
+naechsten RTC-Sekunde und kein letztes instabiles Sample als Erfolg.
+BCD,12h/24h, reale Monatslaengen und Schaltjahre werden validiert.
+
+Setzen prueft UIP/Valid/SET, invalidiert vor der ersten Hardwaremutation den
+Cache, friert mit RegisterB.SET ein, schreibt/verifiziert alle Kalender-
+felder und stellt RegisterB auf jedem Pfad wieder her. UIE wird waehrend
+SET ausdruecklich geloescht (auch das MC146818-Modell tut dies), danach
+wieder mit dem urspruenglichen Steuerbyte hergestellt. Erfolg verlangt
+auch dessen Readback. Busy vor Mutation laesst den alten Cache bestehen;
+ein ungewisser/teilweiser Schreibfehler laesst ihn ungueltig. Er behauptet
+keine Ruecknahme bereits akzeptierter Hardwarefelder.
+
+Cache und Zeitgrenzen
+---------------------
+Ein kohaerenter Kalenderwert und sein monotoner Anker bilden eine Generation
+unter dem RTC-Owner; es gibt keinen asynchronen Refresh, der einen juengeren
+Setzer ueberschreiben kann. Haeufige Leser schreiben volle monotone Sekunden
+fort, einschliesslich Tages-/Monats-/Jahreswechsel, ohne CMOS-Zugriff.
+Normaler Abgleich60s; nach fehlgeschlagenem Sample fruehestens10ms erneut.
+Ein letzter kohaerenter Anker darf hoechstens300s fortgeschrieben werden;
+danach bleibt valid=false bis zu einem erfolgreichen Hardwareabgleich.
+Fehlende/rueckwaerts laufende monotone Uhr und ein geaenderter Century-
+Eingang verwerfen die alte Bindung. Ohne monotone Uhr nur frische Hardware,
+kein beliebig lange eingefrorener Kalendercache. Anker stammt jeweils nach
+dem Hardwarezugriff; die Uhr ist kein Subsekunden-/UTC-Synchronisationsdienst.
+Physischer Abgleich und ausdrueckliches Stellen duerfen Wallclock korrigieren.
+Deadlines muessen weiterhin die monotone Uhr verwenden.
+
+Gezielte Qualifikation
+---------------------
+Kernel/Tools/Test-Rtc.ps1 baut den echten RTC-Code mit der Portfixture und
+festem Rusttoolchainpfad: sechs native Faelle fuer Kalendergrenzen, Cache-
+Alter/Uhrverlust,1000 portfreie Hotreads, UIP/unstabile Centurydaten, SET/
+Teilfehler/UIE-Restauration sowie vier konkurrierende Leser/Setzer. Die
+Hostfixture erzwingt Indexinterleaving und Guardbesitz. Sie ersetzt nur
+Ports/Uhr/Owneraufnahme; echte IF-/SMP-Eigenschaften prueft der Gastfall.
+
+SPECTRA CHECK THREAD /RTC ist ein ausdruecklicher isolierter Gasttest:
+Er veraendert voruebergehend die systemweite Kalenderzeit. Parent speichert
+Datum+monotonen Anker, startet ein genau gebundenes Kind, wartet begrenzt
+und reap't es vor der Restauration der Uhr inklusive verstrichener Zeit.
+Kein Restore-Erfolg bei lebendem/unquittiertem Kind. Vier fest zugelassene
+CPUs, zwei Setzer mit200Writes insgesamt, zwei Leser mit mindestens1000Reads
+je Leser, ganze Generationen/weekday/seconds_since_midnight, IF-on/off,
+ungueltiges Datum und drei genaue Threadjoins werden geprueft. Kein
+automatischer Start bei METRICS, STANDARD oder produktivem Boot.
+
+Native6/6, Normalbuild und Clippy bestanden. Frisches Testimage und privater
+KVM4-Gast mit geprueften BOOT-/Modulbytes: Release0.87.19, Kernel0.1.386,
+Spectra0.1.62. Originale SMP-/LOCK-/CLOCK-Proben bestanden,12 Ownerklassen,
+order_violations=0/stress_failures=0. RTC-Kind:4CPUs/Mask0xF,200Writes,
+2000Reads,IF preserved,3Joins; Parent child_reaped=yes/restored=yes.
+CHECK und anschliessender vollstaendiger CLOCK-Export:ERRORLEVEL0,
+regulaerer Poweroff0. TSC-Monotonie,1GHz-Nanosekundenskala,1000Hz-Ereignisse.
+BOOT-Kernel SHA256:81952cf82d750dbbd104ef712952fe456be1d0a5eba4b0802cf10b6e4fd3d7d1
+Spectra SHA256:7a5316258175eb0c9b7b4b22ca1ae490dc2fd6a88aa6689bf7e01e547d3a7994
+Serial SHA256:6262d5f523e55453d441efa0b57696571cace0d5e79417eb80f1bcfb21313744
+Genau ein finaler STANDARD (Suite3/KVM4):dac75a4f-75be-42ac-80f0-10e80b338d52
+Originalexport SHA256:c32e75e38d5bb0dc7475761d4eab1edcfbd3692c1b29f5455da6357eec901576
+30 Rohsamples, je4/4Worker, sechs gueltige Scorebereiche; unveraenderter
+DevCenter-Import und vollstaendiger normalisierter Rohdaten-Readback bestanden.
+Scores: Scheduler39.376628, Memory223.928491, IPC762.284505,
+Lifecycle634.373124, Filesystem155.105336, Overall231.252958.
+Median ns/Operation: Scheduler18752.721343, Memory184926.324218,
+IPC19412.382492, Lifecycle575549.281250, Filesystem28885015.656250.
+Guenstigerer lokaler Vollrun als0.87.18, kein isolierter RTC-Speedup oder
+physischer Latenzbeleg. Die offene IPC-Kontextfrage aus0.87.18 bleibt bei37;
+der einzelne neue Lauf erklaert weder alte Streuung noch jeden Teilgewinn.
+Keine Aenderung des veroeffentlichten Full-/Slim0.87.14 oder von OssiPC.
+OssiPC/physische RTC, NMI-Hardware und optische Latenz bleiben unqualifiziert.
+
+Hardwarequellen (am25.10.2026 geprueft)
+-------------------------------------
+Intel7-Series-PCH Datasheet,13.6.2/13.7.2: RTC-Steuerfelder, SET/UIP und
+Index/NMI. Intel500-Series Datasheet26.1.2:70h im normalen Modus write-only.
+https://www.intel.com/content/dam/www/public/us/en/documents/datasheets/7-series-chipset-pch-datasheet.pdf
+https://cdrdv2-public.intel.com/631120/631120-002.pdf
+Offizielles QEMU MC146818-Modell: SET loescht UIE, Unfreeze uebernimmt Zeit.
+https://raw.githubusercontent.com/qemu/qemu/master/hw/rtc/mc146818rtc.c
+Linux RTC-Referenz: gemeinsamer IRQ-erhaltender Portbesitz, Sekundenpruefung
+vor/nach UIP, SET-Transaktion; R4OS benutzt einen eigenen einzelnen Versuch.
+https://raw.githubusercontent.com/torvalds/linux/master/drivers/rtc/rtc-mc146818-lib.c

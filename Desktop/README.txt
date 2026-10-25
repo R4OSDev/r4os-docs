@@ -6,7 +6,60 @@ window composition, focus, z-order, taskbar, desktop items and user-facing
 input dispatch. The kernel provides the privileged display and event
 mechanisms but does not own desktop policy.
 
-Current source and OssiPC update (0.87.12)
+Tray visibility publication (0.87.15)
+-----------------------------------
+R4DESK0.1.166 publishes tray visibility only when its copied registry or
+layout changes, after the current layout has been applied. A receipt binds
+the registry revision, provider process/generation, item ID/revision/local
+identity and visible state. Geometry-only changes reuse matching receipts.
+Unchanged input/GPU rounds make no visibility RPCs. The normal20Hz WINSVC
+snapshot/mailbox poll remains available for tray, diagnostics and DESKRUN.
+
+Each changed item invalidates its previous receipt before sending: a timed
+out request may already have changed WINSVC. A later layout returning to an
+old state therefore cannot reuse an ambiguous old receipt. Confirmed earlier
+items survive a later failure. Failed publication remains dirty and retries
+at most once per20Hz interval, using the latest layout. A new registry or
+service reset invalidates receipts; removed items are never sent again from
+the replacement snapshot. WINSVC's existing wire, activation/event ownership
+and exact process cleanup are unchanged. No kernel or contract change.
+
+Native owner checks cover unchanged nonempty rounds, partial failure, lost
+responses followed by layout reversal, stale registry/desktop/visibility
+responses, removal, registration and service reset. They prove RPC omission
+and owner behavior; they do not measure physical input or folder latency.
+
+Final native selection shell::tray passes6 Desktop cases,3 original geometry
+cases and1 SDK clock case. The original KVM4 software check
+SPECTRA CHECK DESKTOP /HOST /RESTART confirms the exact tray event/Remove,
+100 drag updates and resize, unchanged idle content and progressing CLOCK,
+new WINSVC handle, both child completions/reaps, RemoteFrame cleanup and exact
+Desktop completion/reap. Every result succeeds; normal QEMU poweroff exits0.
+The installed R4DESK bytes match the final artifact, SHA256
+abf91174dc750c349cbdfcf364c7285bfb51f207975f1530629461c85444a383.
+The BOOT readback matches unchanged Kernel384, SHA256
+d554519cbcc15a13a4dbb1eb013a7df513a3672a563fb4acc147f2958e8552ca.
+The private guest and source image are removed after export. WINSVC18 and
+Spectra60 are unchanged; public Full/Slim14 and OssiPC12 remain separate.
+
+The host STANDARD runner now regenerates the Test plan before freezing image
+inputs: a later Full/Slim plan can replace the shared generated MODULES.JSON.
+The first local run22bbfac2-db4d-425e-8ef9-442c692e04ce used that Full catalog
+after the functional guest and is not the final qualification or uploaded
+comparison. This concrete image-input mismatch requires a corrected final
+run; the guest benchmark workloads and scoring algorithm are unchanged.
+Direct NTFS readback of the corrected source image confirms the exact current
+Test catalog with120 entries before QEMU. No second functional guest is needed.
+
+Final STANDARD aae6db9b-5b13-481f-ad11-e900dc72d75c passes Suite3 with30
+samples,4 completed workers each and6 valid scores (overall149.371984).
+Unchanged run.json SHA256
+799b827fb3203385df02e8b0dd2bbcde93b72d578b2342d892bfe21c26243cdc
+was imported into DevCenter; the complete normalized readback matches every
+field and all six score areas are valid. This no-Desktop benchmark does not
+measure the eliminated tray RPCs or establish a GUI/NVIDIA latency speedup.
+
+OssiPC source and update (0.87.12)
 --------------------------------------
 R4DESK0.1.164 keeps the provisional1280x720 layout during the native boot-
 display hold and adopts the actual dimensions through its topology owner.
@@ -42,7 +95,9 @@ Output-backend conditions differ; there is no same-condition score, isolated
 GPU causality or new optical/input-latency receipt. The user-confirmed TV
 picture belongs to0.87.5. Original data, exact versions and remaining bounds
 are recorded once in Diagnostics/SnesBenchmark.txt, section0.87.12.
-The packaged Full/Slim release described below remains0.86.94.
+The current public Full/Slim release is0.87.14; exact package qualifications
+are in Deployment/Release08714.txt. The older package sections below retain
+their historical scope. OssiPC remains on the qualified0.87.12 artifacts.
 
 Incremental GUI work (0.87.8)
 ----------------------------

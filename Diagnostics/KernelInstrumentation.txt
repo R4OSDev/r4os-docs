@@ -1,4 +1,4 @@
-﻿Kernelinstrumentierung und Spectra - 0.86.3
+﻿Kernelinstrumentierung und Spectra - 0.87.18
 ===========================================
 
 SPECTRA METRICS/LOGS/CHECK/BENCH ist der kanonische Kernelzugriff;
@@ -6,6 +6,138 @@ Bedienung und Verfuegbarkeit: Spectra.txt. Die Messpolitik unten gilt weiter.
 Boot-/Loaderinstrumentierung, Ausgaberouting, LOG1 und alle R4DEV-Einstiege
 liegen seit 0.83.26 nativ in Rust. Aktuelle Besitzer und Abnahme:
 Core/KernelRustInstrumentation.txt und KernelRustInstrumentation08326.json.
+
+Loader-Metadaten ab0.87.18 (SPEED-013)
+-------------------------------------
+Kernel0.1.385 behaelt die Betriebs-/Fehlerzaehler des Dateiladers, darunter
+Reader-Initialisierungen, wirkliche range_reads und deren Bytes, Reserve-/
+Commit-/Read-/Short-/Releasefehler sowie Ressourcen-/Druckzaehler. Die sieben
+metadata-Detailfelder logical_reads, logical_bytes, window_hits, window_fills,
+window_fill_bytes, direct_reads und direct_bytes folgen jetzt DETAILED beziehungsweise
+-Dmetrics. Im Normalbuild werden sie nicht erhoben; exportierte0 bedeuten
+nicht erfasst. Spectra METRICS SUMMARY kennzeichnet die Felder als unavailable bzw.
+JSON value=null mit unavailable=detail-disabled. Der bestehende
+performance_instrumentation-Modus bleibt die
+Auskunft, kein neues ABI-Feld oder neuer periodischer Diagnoseauftrag.
+
+Ein Detailreader sammelt diese Werte privat und publiziert sie einmal beim
+Abschluss unter dem Runtime-Owner. Noch laufende Reader sind darin nicht
+enthalten; Reader-Initialisierungen und wirkliche I/O-Zaehler koennen deshalb
+bereits neuer sein. Fehlerzaehler werden weiterhin unmittelbar publiziert.
+Erfolgreiche Cachehits brauchen keinen globalen Statistik-Eintritt. Kein
+Runtime-Owner oder exklusiver Rust-Windowborrow bleibt ueber Dateicallbacks.
+Die Publikationsguards enden auch bei Abbruch vor Scratch-Freigabe, Uebertrag
+oder Commit; der bisherige Kill-/Unwindpin reicht bis zur Speicherquittung.
+Scratch selbst ruft weiterhin keinen Destruktor seines Nutztyps auf.
+
+R4X sowie dateibasierte R4L/R4D/R4P dekodieren Relocations in17er-Gruppen
+(408Bytes; zehn Gruppen passen in dasselbe170-Record-Metadatenfenster).
+Der begrenzte Cursor benoetigt keine weitere Heapallokation und keinen
+4-KB-Stackpuffer. Teilreads publizieren keine Bytes, Cursor/Output bleiben
+bis zum Erfolg unveraendert. Tabellen-/Dateigrenzen, der urspruengliche
+24-Byte-Decoder und alle Import-/Patch-/Sektionspruefungen bleiben wirksam.
+Der direkte Speichercontainerpfad bleibt unveraendert. logical_reads zaehlt
+jetzt Callbackanforderungen fuer Gruppen, nicht einzelne Relocationrecords;
+keinen direkten Zaehlervergleich mit dem alten Readvertrag ableiten.
+
+Spectra0.1.61 unterscheidet dies in CHECK LOADER und CHECK PERFORMANCE:
+Normalmodus verlangt die nicht erfassten Detailnullen, Detailmodus die
+abgeschlossenen Summen und begrenzten gruppierten Reads. Betriebs-I/O,
+Loaderzulassung, negative Importe/Container und genaue Child-/Taskfreigabe
+behalten ihre vorhandenen Anforderungen. Besitzer: Rust/loader/file.rs,
+file_stats.rs, r4m.rs, registry_loader.rs sowie Rust/program/launch.rs/image.rs.
+Native gezielte Pruefung: pwsh -File Repositories/Kernel/Tools/Test-LoaderRecords.ps1;
+vier Faelle fuer originale Recordwerte, Block-/Tabellenenden, Teilread-/EOF-
+Retry ohne Cursor-/Outputaenderung sowie Summen/saettigende Publikation.
+
+Fachabnahme25.10.2026: vier native Besitzerfaelle bestanden. Kernelbuilds
+fuer Normal- und Detailmodus sowie Clippy mit -Dwarnings erfolgreich; Spectra
+regulaer gebaut. Frisches kanonisches Testimage nach dem finalen Normalbuild.
+Beide privaten KVM4-Gaeste fuehren das originale SPECTRA CHECK LOADER und
+einen vollstaendigen expliziten SUMMARY-Export aus, ERRORLEVEL0/Poweroff0.
+Beide bestaetigen1.530R4TLS-Relocations bei15wirklichen Dateireads; Detail:
+110logische Reads/98Hits/12Fills inklusive sonstiger Metadaten. Normal:
+alle sieben Detailfelder0 bei weiter vorhandenen I/O-/Initialisierungswerten.
+Vier parallele LSTRX-Starts in beiden Modi:28Reads/1.624.600Bytes, genaue
+4/4Taskfreigaben und Exit0. Positive/negative Loader-/Import-/Protokollfaelle,
+Ressourcenbaselines und Fehlerzaehler bestehen; beide Exporte vollstaendig
+mit stabiler Clock und ohne Read-/Short-/Releasefehler. Direkte installierte
+Artefakt- und BOOT-Readbacks binden die Pruefung an diese Bytes:
+  Kernel385 normal:4155649c99b7f78a4c913cc3f85fcbbdbb0f4cf038f29fa6d63fe1f5a0e9b9d2
+  Kernel385 detail:3156d2de302d0672a89cb4d89b46b447f085c0dc07f72c4e96bd640a135f9fae
+  Spectra61:c5b3ab6307e30b28a40ebd55e38edc6d446edb810c3ffc27f009d5fd8004c7ce
+Die detaillierte Gesamt-Summary entsteht nach einem weiteren Spectra-Start
+und ist daher neuer als der Loadercheck-Snapshot; kein atomarer Vergleich
+ueber diese zwei Befehle. Fachtests ersetzen keinen Laufzeitanteilsnachweis.
+
+STANDARD und Vergleichsgrenze0.87.18:
+Der erste volle KVM4-Suite3-Lauf55362954-1012-4816-ba07-30650c2ada3a
+(SHA256:2af7291f8818cc2d4215bf513652f695e6d7f3c72ca7eb44531ea5cc0b5ba170)
+enthaelt30Rohsamples, je4/4Worker und sechs gueltige Scorebereiche. Der
+unveraenderte Export ist in DevCenter importiert und vollstaendig normalisiert
+zurueckgelesen; Gesamtindex135.099216. Der IPC-Median betraegt44.861388us,
+im vorherigen gleich qualifizierten vollen Lauf88e9d762-f689-4199-8fb4-e6a35b3be0fc
+27.633306us. Alle fuenf IPC-Messungen des neuen Laufs sind hoeher. Der volle
+Lauf bleibt unveraendert erhalten; kein allgemeiner Speedup oder entkraefteter
+Performancebefund wird daraus abgeleitet.
+
+Gezielte STANDARD /AREA:ipc-Kontrollen (keine weiteren vollen STANDARDs):
+Private frische Testgaeste, Q35/KVM4/1GB, originale Services, Terminal, kein
+SMP-Selbsttest/Netz/Hostaudio;22.528MB-Image/16.384MB-SYSTEM, ohne NVMe-Fixture.
+Dieser Kontext unterscheidet sich vom vollen STANDARD. Pro Aufruf ein aktiver
+Warmlauf und fuenf Messungen, jeweils4/4Worker, Clock/Arbeit/Cleanup gueltig,
+ERRORLEVEL0/Poweroff0. Nur IPC ist ausgefuehrt; Gesamtstatus incomplete ist
+beabsichtigt und liefert keinen Gesamtindex oder DevCenter-Vollimport.
+Die ersten drei Aufrufe liefen in einem Gast. Der zunaechst geplante Vergleich
+61/60/61 ist ungueltig: standard_launch startet den Worker immer vom kanonischen
+Installationspfad, also dreimal61. Die folgenden Einzelgaeste installieren60
+dort; Header des echten Workers und direkte Artefakt-/BOOT-Hashes sind geprueft.
+Original60 und Kernel384 wurden bytegleich aus dem veroeffentlichten Release14
+gelesen; keine Produktionsartefakte oder Versionsdateien dafuer zurueckgesetzt.
+  Spectra60:8fa06e2cc52ab5845ca266a43057b3ae6543ee2a2196d186cb591c3d0356264e
+  Kernel384:d554519cbcc15a13a4dbb1eb013a7df513a3672a563fb4acc147f2958e8552ca
+Auswahl aus den unveraenderten Teil-Exporten, Werte in ns/Operation:
+  385/61 erster Aufruf: Median=41700.748504
+    Warm=42630.978932; Messungen=41700.748504,44849.032867,40980.417144,47836.545684,40485.159973
+    Export-SHA256=3030a5e5c554b51635296d2c39f1f5a54c8f3478dd9dd562560fd27387041563
+  385/61 zweiter Aufruf (Dateiname60 ist irrefuehrend): Median=39275.362960
+    Warm=38689.558100; Messungen=42516.608779,41691.739654,39122.945007,39275.362960,37877.184112
+    Export-SHA256=e9595014f542656521a2fd4c103c576899860b2ea3c904963803313f5a0eb6fb
+  385/61 dritter Aufruf: Median=43692.118240
+    Warm=37263.032328; Messungen=43692.118240,46215.017623,44589.258178,41075.801162,42068.140289
+    Export-SHA256=99d02c3c5d040a2755c8173df2239724dc3bb1788fdabab7ac34cc190b8bb664
+  385/60 eigener Gast: Median=44025.578826
+    Warm=47173.257573; Messungen=42955.242126,45570.244689,42482.961715,47716.885543,44025.578826
+    Export-SHA256=8f0ca2a42f5cc5246aeb57289d8c570e175aefb3022cab3b8ef8c076aba3ef93
+  384/60 eigener Gast: Median=49642.878311
+    Warm=48063.333755; Messungen=49688.799362,48370.557006,47897.157287,49895.031356,49642.878311
+    Export-SHA256=89f2a1c2fbb6d111de84b1e5cb7bca90edbfb212e9b8b6e8f5a2dac819fb7d0e
+Auch das bytegleiche bisherige Kernel-/Spectra-Paar zeigt im Kontrollkontext
+49.642878us. Die langsamen Werte sind somit nicht auf Kernel385 oder Spectra61
+beschraenkt. Das beweist weder gleiche Hostbedingungen ueber die frueheren
+vollen Laeufe noch die Abwesenheit jeder neuen Layout-/Schedulingwirkung.
+Eine Ursache und ein isolierter Loader-Performancefaktor sind nicht belegt.
+Diese Vergleichsfrage bleibt fuer die geplanten Scheduler-/Wait-Arbeiten
+offen; dort Kontext, CPU-Zuordnung und Warte-/Wakeverhalten getrennt erfassen.
+Funktionale18-Abnahme und eingesparte globale Eintritte sind davon getrennt.
+Keine physische NVIDIA-/Audio-/Ordnerlatenzquittung aus diesen Gaesten.
+
+Abschluss nach Ausgabekorrektur: Spectra61 kennzeichnet jetzt auch die sieben
+neuen Detailfelder in METRICS SUMMARY als unavailable/null. Deshalb ist der
+obige erste volle Lauf ein qualifizierter Zwischenstand; sein Export bleibt
+erhalten. Kein Kernel-/Workload-/Scoringwechsel bei der Ausgabekorrektur.
+Finales Spectra-Artefakt:
+  563fdf408e0d87da2afb24bce8154724cfe7d0e0663ef934d654cbea3c471f45
+Direkter Readback dieses Artefakts im frischen KVM4-Gast, vollstaendiger stabiler
+SUMMARY, alle sieben Felder value=null/unavailable=detail-disabled;134Reader-
+initialisierungen und6591wirkliche Reads bleiben sichtbar. ERRORLEVEL0/Shutdown0.
+Genau ein STANDARD auf diesem finalen Stand:
+  93f82508-a125-4fb9-9266-fced42d47c48
+  SHA256:b58ca88fc3623fe7a757b06885e7619ff9641667605ce6005e4814d9f233ccab
+30Samples/4Worker/6gueltige Scorebereiche, Originalupload und vollstaendiger
+DevCenter-Readback; Gesamtindex138.190122. IPC-Median40590.854766ns/Operation.
+Der offene Vergleichsbefund und die obigen Grenzen gelten weiter. Abschluss-
+Artefakte: Release0.87.18, Kernel0.1.385, Spectra0.1.61; kein Paket-/Hardwareupdate.
 
 Die folgenden alten Quell-/Verbrauchernamen und der A/B-Vergleich beschreiben
 ausdruecklich 0.83.1. Verbraucherzuordnung: SpectraMigration.json.

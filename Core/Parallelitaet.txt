@@ -1,6 +1,155 @@
 ﻿R4OS concurrency and responsiveness
 ===================================
 
+0.87.31: abortable directed UnwindGuard handoff
+----------------------------------------------
+Release0.87.31 / Kernel0.1.394, SPEED-026. Final guard release previously
+woke every contender under Runtime. The new sync_guard owner selects only
+the FIFO head in constant queue work, without scanning ranks or draining
+other waiters. This is a reservation, identified by exact Task ID/generation,
+guard pointer, queue generation and handoff epoch. depth=0 distinguishes an
+offer from actual held ownership; guard_owned remains false until claim.
+The old owner's contribution is withdrawn before selecting the successor.
+Other waiters remain Blocked and donate their useful urgency to that exact
+successor. FIFO is deliberate: no unbounded rank scan is added to guard
+release. The finite inherited budget does not promise physical latency.
+
+The selected task remains killable when it has no other held resources.
+The reservation itself does not increment unwind_guard_count. The common
+Task terminal transition cancels its offer before Dead/retirement and selects
+one successor; explicit cancellation does the same. The original absolute
+deadline stays in the existing ordered timeout index after Ready publication
+and through the short resumed interval before claim. Timer/idle timeout work
+therefore also cancels a Ready offer, without a second Ready insertion or
+role activation. Its existing64-candidate limit bounds a chain of expired
+offers. Claim rechecks the deadline and queue epoch under Runtime before
+incrementing the real guard count and removing the timeout. No stale guard
+pointer is read after cancellation; no last-pin release or heap work runs
+inside Runtime/IRQ cleanup. Retirement requires an empty offer and PI edge.
+Actual guard ownership, recursion and the prior kill/unwind deferral remain.
+
+Mutex and Guard edges share the0.87.30 four-rank contribution accounting,
+eight-edge continuation pump and64-edge conservative forward validation.
+Mixed chains propagate late urgency in either direction; a new mixed cycle
+fails ordinary lock admission. An unproven path beyond64 is not called a
+proven cycle. Tail-grown longer components retain their pending continuation.
+Budget masking/withdrawal and0.87.28 Ready/running publication remain shared.
+Direct private donations now reserve space for up to2*u32::MAX+1 counted
+sources (held mutexes, held guards, one offer). No separate polling worker,
+global registry scan, automatic diagnostic work or public ABI is introduced.
+
+Callers retain guard storage for the entire admission, as already required
+by the old wait/try loop. FS drive/mutation guards remain resident lane
+objects; request admission retains its original Unwind token, volume Uses,
+access owner and exact lane plan. Rollback/finish retain reverse lane release,
+real Uses and final token return. GUI Producer keeps threads::Operation and
+the exact payload through operation_gate admission; Drop releases that guard
+before the Operation. Frame storage still acquires operation_gate before the
+frame Mutex and releases in reverse order. Existing retained resources can
+still defer a Kill even while a guard offer is pending. The common Task cleanup
+handles terminal offers; module fault/program-exit boundaries reject pending
+kernel handoffs rather than abandoning their owner. No new forced module
+fault or physical driver-unwind qualification is claimed. FS/GUI hold ranges
+are unchanged and remain the separately planned owner work.
+
+Layouts are private: UnwindGuard80->136bytes, queue offset40 unchanged;
+the typed Gui payload gains56bytes and its size/offset assertions follow.
+WaitQueue40, WaitRequest72 and Mutex128 remain unchanged. Constructors for
+all embedded/static guard owners initialize the same native state. Existing
+Task deadline diagnostics recognize the ready/running offer interval.
+
+The original explicit THREAD /KERNEL Sync case adds17 own BSP actors in six
+scenarios: three queued contenders with selected exact Kill (wrong generation
+rejected), explicit cancellation and a real timer-IRQ timeout; two opposite
+three-actor Mutex/Guard chains; one rejected mixed two-owner cycle. Runtime
+observations require exactly one reservation, remaining Blocked nodes,
+no Wake-all or directed rank scan, valid Ready/timeout projections, inherited
+urgency and correct withdrawal. The timeout controller disables only its own
+preemption during a bounded IF-on real-clock interval; Runtime stays free and
+no global clock/foreign queue is modified. Original recursive guard and held-
+guard kill-deferral cases remain. Every fixture requires actual own task
+retirement before reuse; the existing192-receipt ledger remains sufficient.
+The production path has no diagnostic hook.
+
+Qualification25.10.2026: owner build, fmt and Clippy pass.
+A fresh Test image and actual private BOOT readback use
+Kernel394 SHA256:
+ 4d0b6aedf2dcd18e99f3363f6486b3acd350d8359a97ea2d40f147344c323333
+VER confirms active/installed394 and Release31. THREAD /KERNEL reports
+selected=passed127, failed/unavailable/cleanup/live Tasks/live Work all0;
+158/158 Tasks,2/2 DriverWork releases,200 Event iterations,4 IF checks,
+2 original Unwind groups,65 deadline Tasks and role_mask15. All six new
+GUARD08731 cases have failures0/cleanup1. Previous Mutex chains/masked budgets,
+rank publication, local fairness, four Park/reuse cases, real Timer/IPI
+preemption and SMP/TLB/12-owner checks remain successful. The FPU work keeps
+its actual guard-roundtrip scope; this is not a new physical IRQ claim.
+Original THREAD export SHA256:
+ d1a5b8457db6ba4316195ce7cc8c7d5dcd3efd3b847534c76f60aaf13d92fcc4
+
+Additional existing FILESYSTEM /READERS does NOT pass its overlap criterion
+in the ordinary current guest: C: reports overlap=no, data=yes, all three
+real worker joins, notifications closed and writer overwrite/truncate/rename
+correct. The test stops before its FAT phase; C: busyUse/mountGeneration are
+its unconditional C: branch, not a new C: unmount proof. A control from the
+committed Kernel393 is byte-identical to the accepted0.87.30 ELF
+(ffe6aef422c7e3a4a9ca06e0b49667838175e9055a050b169156796c5e907c05)
+and produces the same failed C: criterion with the same private file data.
+A single current394 control with both virtual disks limited to1048576 read
+bytes/s also leaves overlap=no/data=yes. The strict test was not weakened
+or retried until a green sample. These observations establish that the
+failure can occur before31, but do not distinguish observer/scheduling effects
+from actual FS serialization. Cause and actual overlap remain open with the
+existing37 context investigation; no parallel-read acceleration is claimed.
+The old-kernel control used current userland and a private matching kernel
+manifest. Completed source/build/image copies are removed.
+
+Desktop HOST/RESTART and REMOTEFRAME pass on394, including the controlled
+I/O guest: exact children26:26/27:27 and host25:25 complete/reap with exit0;
+cleanup acknowledged, original remote-frame/bounds/stale-token cases pass.
+All observed guests shut down normally with QEMU exit0. This does not turn
+the separate failed READERS criterion into a passing test. AHCI only; no
+NVMe, physical NVIDIA/display/audio/input/Explorer-latency qualification.
+
+
+Existing FILESYSTEM owner cases on the ordinary394 KVM4 profile pass:
+/NTFS timestamps, metadata cache and1-MB move preserve identity/content,
+replacement and cross-volume behavior; /FATDIR validates full-cluster atomic
+replacement,255-character LFN, both mirrors,30 neighboring files and complete
+four-cluster cleanup. /WRITEPOSITIONS passes both contiguous and fragmented
+1-MB cases:32 writes each, repeat/reverse/random coverage, truncation and
+replacement, byte checks, exact async request wait/close and actual remount.
+This qualifies their ownership/data contracts independently of the unresolved
+READERS overlap observation. No further full Kernel case was repeated.
+Original export SHA256, respectively NTFS / FATDIR / WRITEPOSITIONS:
+ f5dbcc03b925bc5b3a630b59e245cc33e5e790d1c1175d0fba8b643aaab5a6bc
+ a106eed5fac41a5db5df259c784885c3d5a1872246ce65d206c71d706a2bd800
+ ac742b48640cab52f6f7245489e1192639a42a3ee7791fb19963f712470230c5
+Desktop HOST/RESTART original export SHA256:
+ 40d4370376fda4552fec1202fd5cca27aad6abc6d295c3bd4e3080ce1ad5ee5b
+Initial failed READERS export SHA256:
+ 2b178e995865d9212bb6767892c34fca0e4cf749b94e979d76006ca61ae79ed0
+Old393 and bounded-I/O394 controls produce byte-identical READERS exports:
+ 97de89598873f49f14dd7988c97a34351cc2893c45d14cdc65d21201d0a3dae0
+Only those small open-analysis exports/context and the reusable private FS
+runner remain in Temp for37. Completed guest/source/build copies and other
+finished diagnostic logs/exports are removed after canonical qualification.
+
+Exactly one final Suite3 STANDARD on ordinary KVM4, without the diagnostic
+disk read limit, completes on the same final Kernel394 BOOT hash:
+ run_id 7d3e9c89-5758-4ca9-b714-ee0bbf598f2c
+ original run.json SHA256
+ ac4fdbc87aaf285f3530ab9e3e0e6226b2d70e21a26d1d23fd27f91c6dcdeccf
+All30 raw samples have worker_count=completed_workers=4. The unchanged full
+export is imported into DevCenter for hetzner-qemu; the complete normalized
+GET matches all original data and all six score_validation areas are valid.
+Scores: scheduler_sync37.936273, memory225.540575, ipc754.220599,
+lifecycle533.698279, filesystem_io135.662886, overall215.728199.
+These are the fixed Suite3 baseline indices, not an isolated guard speedup
+or a physical interaction-latency result. The original export and compact
+readback receipt remain available for subsequent STANDARD comparisons.
+User instruction25.10.2026: pause after closing31;32 has not been started.
+
+
 0.87.30: bounded priority inheritance through existing Mutex waits
 ----------------------------------------------------------------
 Release0.87.30 / Kernel0.1.393. SPEED-036 belongs to the kernel Mutex,

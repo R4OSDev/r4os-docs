@@ -6,6 +6,84 @@ window composition, focus, z-order, taskbar, desktop items and user-facing
 input dispatch. The kernel provides the privileged display and event
 mechanisms but does not own desktop policy.
 
+Complete lifecycle snapshot reuse (0.87.24)
+-----------------------------------------
+Desktop168 renews its last complete process snapshot when the cheap lifecycle
+Begin reports exactly the same nonzero program_epoch. It issues no pages in
+that case, including for an empty complete list. The key is the registry's
+epoch, not the separate generation of a full diagnostic snapshot. A changed
+epoch starts the original bounded acquisition (at most8restarts); only EOF
+publishes the staging rows. Begin/Page Busy, failure, invalid/changing cursor,
+mixed generation, zero progress or allocation failure revoke both authority
+and reuse. Old rows remain visible only. A later equal epoch still requires
+a fresh complete acquisition after failure. Current handles and close/reap/
+retirement checks are unchanged.
+
+The Tasks dialog keeps its explicit full inventory and250ms cadence; each
+due diagnostic capture reads all pages even at an unchanged lifecycle epoch.
+Dynamic memory values are not inferred from that epoch. Normal progress still
+checks the current epoch on every refresh; it adds no timer, wake or polling
+task. Cache validity is the Begin observation, not a promise that no process
+can change immediately afterwards; exact process operations retain their own
+generation/status validation.
+
+Kernel389 closes three missing publication paths: GUI window bindings (both
+handle and ID APIs), console host changes and desktop_requested. A visible
+change and epoch increment share Registry admission. Repeating a value does
+not invalidate the cache. Window setters retain an exact lease, allocate GUI
+storage before Registry, then revalidate the live slot and take Guard(0).
+Registry is never acquired while Guard(0) is held. Desktop requests copy the
+exact redirected/current console handle before pinning; no cooperative raw
+pointer crosses the new wait. Notification occurs after Registry release,
+with the target still pinned. The existing input wait shares that handle
+selection without changing its keyboard/close semantics.
+
+Publication/activation, close, exit, completion readiness and removal already
+advance the epoch under Registry. Role/class/task/desktop-host initialization
+precedes publication. Retired rows come from the completion owner, so releasing
+private GUI/console payloads does not silently mutate cached live metadata.
+No public ABI/SDK change, independent registry mirror or new Kernel subsystem.
+
+Native owner qualification:7Desktop inventory cases,3original geometry cases
+and1SDK precise-clock case pass.1000unchanged Begins make no Page calls;
+full diagnostic refresh at the same epoch still updates memory fields. Tests
+also cover changed/empty snapshots, Busy/restart recovery, invalid/mixed
+cursors, partial pages and stale generation lookup. Kernel build/Clippy,
+Desktop and Spectra65 builds pass. The focused real KVM4/1GB guest verifies
+the exact installed BOOT/Spectra/Desktop and unchanged APPDEF11/CLOCK7 bytes.
+CHECK LIFECYCLE /METADATAEPOCH passes both window setters, console host,
+Desktop request, same-value stability, atomic old-cursor restart and true
+Close/Done/Reap/stale-handle rejection. Its private console and GUI children
+finish/reap normally; no repeated global-memory benchmark is embedded.
+
+The original CHECK DESKTOP /HOST /RESTART also passes drag/resize/focus,
+idle GUI revision7->7 while CLOCK advances5->7 with137idle timeouts, tray
+event/Remove, WINSVC11->13, both fixture completions/reaps, RemoteFrame's
+immutable-reader cleanup and exact Desktop completion/reap. All exit codes0,
+SMP/CLOCK/LOCK probes pass (4CPUs/12owner classes, no order/stress error),
+regular QEMU poweroff0. The initial private image-plan attempt exceeded the
+catalog's explicit-include limit before any guest ran; the corrected plan
+uses only differences from the automatic Test set plus its2Full fixtures.
+No production profile or module catalog was changed for that fixture.
+
+Installed artifact SHA256 values:
+  Kernel389 88c22d5d289cdff5030b7cb8809a8e0f475d00f3b5fb9ebb27656019cc8a6635
+  Desktop168 80528d142476934b456da3637ff554f160da613624a2423a3fd9e6edee8e2521
+  Spectra65 873b55ef45361bbbc8ada347a2264d48de3ecc88022465972f5a8fed97faeead
+  Desktop export 423a556137be81754444f0c6c01f7449f8bf7165215842c4ae8ef978208df9da
+  Serial 4bf7caa59aa3d42bc5bbc049e8083cb00ddce051b510515360b2f0e8d19dbee1
+Exactly one final Suite3 STANDARD, a125cb94-9d07-43e8-8990-f16a83610230,
+passes on the same Kernel389/Spectra65 and Release0.87.24 in fresh KVM4.
+The unchanged original run.json SHA256 is
+13bdabced88b6309096a9996079a10c255d53d30b519a3a473b776d28ffcbee8.
+The complete normalized DevCenter readback matches all5metrics/30samples,
+4/4workers per sample and6valid score areas. Scores: scheduler36.955472,
+memory230.844735, IPC780.387619, lifecycle610.899442, filesystem149.532353,
+overall227.406460. This general run has no Desktop: neither the overall
+score nor its difference from .23 measures an isolated inventory/GUI gain.
+No new physical OssiPC/NVIDIA/input/audio/latency or Windows evidence,
+SDK package publication or Full/Slim release is implied.
+
 Monotonic progress and calendar refresh (0.87.20)
 -----------------------------------------------
 Desktop167 reads ticks and the admitted monotonic clock for each progress

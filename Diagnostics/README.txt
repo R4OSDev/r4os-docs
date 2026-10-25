@@ -47,8 +47,7 @@ Kernel boot/loader, scheduler/waits/locks, clocks/IRQs, memory, lifecycle, IPC,
 work and filesystem/I/O probes belong here. The provider API alone does not
 change a driver/service diagnostic into a kernel diagnostic. All queries
 respect the normal/detail build mode; they do not enable traces or benchmarks.
-The separate private DevCenter stores the complete standard benchmark runs
-and remains outside the R4OS build and inventories.
+Complete standard benchmark runs are retained as unchanged local exports.
 
 Spectra standard benchmark and result data (0.84.47, Suite 3)
 -----------------------------------------------------------
@@ -66,17 +65,12 @@ The regular SMP4 runner has one bounded Terminal boot phase before its existing
 acceptance. Quick probes and pure builds retain their scope. The central Spectra
 owner also supplies the offline Schema-1 exporter and strict reference scorer;
 no database service is required. Exact workloads, CLI/host calls, frozen reference,
-comparison limits, lossless raw fields and the current API contract are documented
+comparison limits, lossless raw fields and the complete export contract are documented
 in SpectraStandardBenchmark.txt. Current qualification and run identities are in
 SpectraAllCpu08447.json. Spectra0833.json retains the original Suite-1
 qualification; historical suites are never rescored as Suite 3. QEMU here
 remains SMP4; native hardware uses its full available CPU capacity.
-The separate private DevCenter implementation stays outside
-this roadmap and its synthetic contract fixtures are never production imports.
-
-Performance benchmark history now uses only this standard suite and DevCenter.
-Import the original complete run.json with its UUID, registered host and reference;
-then read it back and check all five metrics, 30 raw samples and six validated
-scores. The measurement runner does not upload automatically. The short workflow
-is in Agents/Benchmark.txt; private host/authentication operations are in
-Agents/DevCenter.txt.
+Performance benchmark history uses this standard suite and complete local
+exports. Keep the original run.json with its UUID, host, context and SHA-256;
+check all five metrics, 30 raw samples and six scores against the frozen
+reference and comparison contract. The short workflow is in Agents/Benchmark.txt.

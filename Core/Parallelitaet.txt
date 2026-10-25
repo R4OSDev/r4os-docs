@@ -1,6 +1,79 @@
 ﻿R4OS concurrency and responsiveness
 ===================================
 
+0.87.29: CPU-local successful-selection fairness
+------------------------------------------------
+Release0.87.29 / Kernel0.1.392. SPEED-035: the global priority_selects
+statistic previously also supplied ordinal%8 for local FIFO selection.
+Other CPUs, empty attempts and urgent selections consumed that phase.
+The earlier text's eighth-non-urgent contract was therefore not implemented.
+
+CpuState now retains its own one-byte Fairness policy. Seven successful
+non-urgent rank selections owe a FIFO selection. The next successful
+non-urgent selection takes the raw head of that CPU's Ready queue and
+resets only that CPU's phase. Empty attempts and urgent selections leave
+its phase/debt unchanged. Urgent selections still choose the highest rank,
+even when FIFO is due; the first later non-urgent opportunity pays it.
+Scheduler initialization and a newly initialized AP epoch begin at phase0.
+The global attempt counter retains its original diagnostic meaning.
+
+The typed selection owner receives a copied local policy and actual Task
+FIFO/rank-head queries under the existing uninterrupted Runtime admission.
+It returns the candidate and next policy; no mutable Scheduler borrow spans
+a Task query. Each choice still visits at most four rank heads or one raw
+FIFO head. There is no queue scan, allocation, clock read, extra IPI or
+public ABI. Role budgets, rank notifications, within-rank FIFO, deadlines,
+hard CPU eligibility and the exact physical switch/IF/lock guards keep
+their existing owners. Other module artifacts are unchanged.
+
+The bound is in successful non-urgent choices, not wall time. With two
+older queued Batch tasks and replenished Input work, FIFO chooses the old
+tasks on choices8 and16 (then24 and32 when both requeue). Urgent insertions
+can postpone these opportunities but cannot erase their debt. This does
+not promise progress during an unbounded stream of exclusively urgent
+selections, or a physical input/audio latency. Interactive slice policy
+remains the separate planned0.87.32 work.
+
+Three checks exercise the actual chooser with independent fixed Ready
+head fixtures: every one of eight initial phases with foreign CPU choices,
+empty attempts and urgent insertions; two old Batch tasks against repeated
+Input work; and best-rank/same-rank FIFO order. These same bodies extend
+the existing explicit roles::fairness case, without new tasks, a new
+suite or a production diagnostic hook. Queue/CPU fixture boundaries are
+explicit: the guest also retains the real original role/placement/retirement,
+rank-publication, IF, Timer/IPI and Desktop checks.
+Native invocation (Windows uses Rust.bat and an .exe output):
+ ./DevKit/Setup/Rust.sh rustc --edition 2024 --test Repositories/Kernel/Rust/sched/scheduler/selection.rs -O -D warnings -o Temp/selection-check
+ ./Temp/selection-check --test-threads=1
+Remove the completed temporary executable. All three native cases and
+normal build/fmt/Clippy pass. Final KVM4 qualification25.10.2026:
+VER reports Release29 and both active/installed Kernel392. Actual BOOT
+readback SHA256 20d628ba5fcd1ab3d103cc8069c7a586eb2d61e80ab10d585fb168e4c4f1fd35.
+The existing SCHED report has selected=passed60, role_mask15,65 real
+Deadline tasks and104/104 exact retirements, no live task/work or cleanup
+failure. All three phase groups and the three0.87.28 rank-publication
+cases pass; the elapsed owner again reports2ticks and actual pending.
+SYNC has selected=passed3,200 event iterations,4 IF checks,2 Unwind checks,
+7/7 exact retirements. Original SMP/TLB/12-owner/Park cases and R4L Timer/
+IPI preemption (one each, both exits0) remain successful. Desktop HOST/
+RESTART, both exact children and host completion/reap0, REMOTEFRAME and
+cleanup succeed; regular QEMU poweroff0. The AHCI guest has no NVMe device,
+and does not provide a new NVMe or physical latency qualification.
+SCHED/SYNC exports from this fresh guest share the0.87.28 report hashes
+listed below. This execution has its own exact BOOT and serial receipt.
+Desktop export SHA256 19604256f0100e6df514807ac96dbd1a01ab9478e7ab795607b464cc3208bd52
+Serial SHA256 9d9e02595452fc6a1a3e465aa8c0b23d2dc91fdd2c4e6caf1b0af2554117dcdc
+Exactly one final normal Suite3 STANDARD on the same Kernel392, four
+workers,30 raw samples and six valid score areas; unchanged complete
+DevCenter PUT and full normalized GET equality:
+ aafb8c3d-91fc-4373-8c7c-9fb221e094ed
+ Original SHA256 228fe15448ea09817115d5156ce8037655d2f2f075c95cde1f8cb50f82dc0d02
+ scheduler_sync39.423256 / memory223.309170 / ipc686.458947
+ lifecycle599.083504 / filesystem_io137.900615 / overall218.607690.
+No repeated score selection or isolated speedup claim. OssiPC, published
+Full/Slim packages and physical input/audio/window qualification stay at
+their separately documented state.
+
 0.87.28: publish effective rank changes before the next quantum
 ---------------------------------------------------------------
 Release0.87.28 / Kernel0.1.391. SPEED-034 belongs to the kernel Scheduler
@@ -560,8 +633,11 @@ four Ready-rank AVL indices, the finite-deadline AVL with its ordered list,
 and deferred-reap candidates. Index nodes live inside their stable Task;
 mutation never allocates or swaps Task payloads. Rank selection visits at
 most four cached heads. Each rank is ordered by original Ready enrollment,
-so donation or budget changes preserve the former FIFO tie rule. Every eighth
-non-urgent selection still uses the global FIFO head in constant time.
+so donation or budget changes preserve the former FIFO tie rule. Since
+0.87.29 every eighth successful non-urgent selection of the same CPU uses
+that CPU's raw Ready FIFO head in constant time; empty/urgent/foreign
+attempts cannot consume its phase. The former global-counter gap is
+qualified in the0.87.29 section above.
 
 Ready insertion/removal, rank changes and deadline insertion/removal take
 logarithmic index work. Deadline neighbors maintain the existing list;
@@ -620,7 +696,8 @@ Input activations receive 2 run ticks and 4 dispatches of rank-0 budget; short
 completions receive 4 and 4 at rank 1. Consuming either bound demotes that
 activation to interactive rank 2 until it blocks and is woken again. Batch is
 rank 3. Selection takes the first task of the best rank from the Ready FIFO,
-while every eighth non-urgent selection takes the raw FIFO head to preserve
+while, since0.87.29, every eighth successful non-urgent local selection
+takes that CPU's raw FIFO head to preserve
 cross-role NORMAL/LOW progress. A contended mutex may donate the waiter's rank
 to its owner for at most 4 ticks and 4 dispatches; donation is removed on the
 final unlock and cannot create an unbounded high lane.

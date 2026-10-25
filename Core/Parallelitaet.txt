@@ -1,6 +1,96 @@
 ﻿R4OS concurrency and responsiveness
 ===================================
 
+0.87.28: publish effective rank changes before the next quantum
+---------------------------------------------------------------
+Release0.87.28 / Kernel0.1.391. SPEED-034 belongs to the kernel Scheduler
+and Task rank-index owners. A running Input/Completion task can lose its
+boost through actual elapsed ticks; a Ready mutex owner can gain urgency
+through a donation. Previously these changed ranks without publishing a
+new CPU pending request, so pre-quantum decisions could miss higher Ready
+work until an unrelated wake or the ordinary30ms quantum.
+
+After an actual rank change, adjust_rank first completes the existing
+Ready tree/count update under Runtime. The scheduler then validates the
+exact current or physically saved Ready task, home/running CPU, schedulable
+initialized destination and higher Ready work using the four rank counts.
+Running demotion or Ready promotion sets that CPU's pending; a remote CPU
+also receives the existing reschedule IPI. This neither enqueues/migrates
+again nor extends budgets or changes the wake counters. No new scan,
+allocation, diagnostic sampling, API or module artifact is introduced.
+
+consume_run now publishes its actual before/after rank. A last dispatch
+boost can also expire before the selected task becomes current: yield and
+IRQ dispatch capture the old rank, then publish after Running/current and
+unwind binding. The early-wake standalone park repair uses the same edge.
+Unchanged-rank FIFO selections retain their existing fairness policy.
+Timer and safe-reschedule remain responsible for the actual decision;
+IF, held locks, handoff, preemption depth, stack/FPU and lifetime guards are
+unchanged. Kernel/driver code is not made forcibly preemptible.
+
+The existing explicit SPECTRA CHECK THREAD /KERNEL:SCHED inheritance case
+retains the real mutex/waiter donation and balanced return. A private
+scheduler/rank_probe child adds three missing owner cases, six exact pinned
+AP tasks in the existing128-record session ledger:
+- Fresh real elapsed-time debit exhausts the Input two-tick budget with
+  Completion already Ready, through the same Task owner entry as on_tick.
+  Local IF is preserved across this bounded observation; Runtime is free
+  while waiting for real time. Initial rank/pending and the actual debit
+  are checked in one Runtime admission: no unrelated wake can supply the
+  required false->true edge. After restoring IF the real safe point runs
+  that peer. Actual elapsed ticks are reported; global time is never set.
+- An ordinary yield with no pending selects a Completion task with one
+  remaining dispatch. Only this own unstarted fixture's tick budgets are
+  extended to isolate dispatch exhaustion. Its new Running state must
+  publish pending for the Ready Input task; a real safe switch follows.
+- The BSP donates to its exact Ready Batch task while an Interactive peer
+  runs on an AP. Pending changes false->true under the same Runtime owner,
+  without an intervening wake or physical switch. The actual AP safe point
+  runs the promoted peer; returning the donation publishes its demotion.
+
+The checks inspect actual queue/current/pending identities, use atomics
+across CPUs, never reset foreign queues or alter global time, and retire
+all own generations before reuse. The remote extension explicitly needs
+an AP. The original real mutex case covers the lock-to-donation path; the
+controlled remote case invokes that same registry owner directly. This
+is functional evidence, not an IPI-volume or physical latency benchmark.
+An initial asynchronous observation rejected its combined queue/pending/
+pre-quantum predicate without enough detail to isolate that rejection. It
+is not a successful receipt. The following guest passed all three cases,
+but its host wrapper incorrectly expected a text message suppressed by
+/JSON /EXPORT. The final owner observation makes notification causality
+explicit, and the wrapper checks the original exports instead.
+Final normal KVM4 qualification25.10.2026: build/fmt/Clippy pass. The
+actual BOOT readback matches Kernel391 SHA256
+ a441f189cd3b737cb1e5feb51fe123c284514ce70f5a1a37a79995502be0b687.
+Original SCHED JSON: selected=passed60, role_mask15,65 real deadlines,
+104/104 exact task retirements, no live work/tasks or cleanup failures.
+All three new cases pass; elapsed owner reports2ticks and pending=published,
+with six exact task retirements. Existing four AP park wake/close cases,
+real mutex donation/return, SMP/TLB and12 lock-owner classes pass.
+Original SYNC JSON: selected=passed3,200 events,4 IF checks,2 Unwind checks,
+7/7 exact task retirements. Original R4L probe records one real Timer and
+one IPI preemption, both module exits0. No synthetic Timer/IPI receipt.
+Desktop HOST/RESTART also passes: exact host26:26 and children27:27/28:28
+complete/reap0, REMOTEFRAME and cleanup acknowledged, regular poweroff0.
+Desktop170, WINSVC19, AUDSVC14 and Spectra65 remain the same artifacts.
+This private AHCI guest has no NVMe device; its device-missing probe is
+not an NVMe qualification.
+Original compact report SHA256:
+ SCHED e4c445a4da2216cc07b5c0b9494032d223c35981d4d10c858bb5a928693d343e
+ SYNC c413b2d792b23558b951e797619dfa0c9b1a2813fe9a20a14b58e93d1620dfd1
+ DESKTOP d074df6a0eef86ee1133f1937433566fb61f5258f2f44a9ea1e3549a2af35f1d
+ Serial 6607152f5528bcd220a9db214e407b032997eea40c3b8913b641b1137a440225
+Exactly one final normal Suite3 STANDARD, all four workers,30 raw samples
+and six valid score areas, with unchanged complete DevCenter PUT/GET equality:
+ afff04ed-94c2-4dc1-990d-0287a9c65ee3
+ Original SHA256 87e7bda511dd56b8fc592fa6c0f9277b01da2978c0d341fc18e6456c88d19a65
+ scheduler_sync38.671251 / memory228.387649 / ipc739.177918
+ lifecycle627.275565 / filesystem_io148.794335 / overall227.494508.
+The benchmark BOOT readback is the same final Kernel391 above. No rerun
+for score selection. OssiPC and published packages are unchanged; no
+physical input/audio/window latency or general speedup is inferred.
+
 0.86.11: residual contention and local-owner decision
 -----------------------------------------------------
 One bounded existing scheduler-area observation on the unchanged normal

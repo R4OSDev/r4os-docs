@@ -1,11 +1,113 @@
 ﻿R4OS display architecture
 =========================
 
-Current GUI-accounting checkpoint: 0.87.23. The 0.79.44 rendering integration
+Current GUI allocation/release checkpoint: 0.87.27. The 0.79.44 rendering integration
 in GrafikIntegration07944.txt/.json remains historical. Current native
 NVIDIA qualification and its limits are documented in Desktop/README.txt
 and the NVIDIA owner's DOCUMENTATION.de.txt, including the separate OssiPC
 0.87.12 state. The local change below does not renew physical GPU evidence.
+
+Private GUI blobs and explicit heap poisoning — 0.87.27
+-----------------------------------------------------
+SPEED-049, Kernel390: the explicit GUI batch passes each admitted resource
+chunk (at most65536bytes) to prepare_blob. ResourceInit::Copied first creates
+valid zeroed metadata, then copies the entire payload once from the caller's
+readable source. The constructor returns only complete storage; commit_resource
+links it afterwards. No uninitialized reservation crosses that boundary.
+Failed allocation never links a node. Failed later chunks or command/pin
+admission release the private delta through the original reverse-order owner;
+only the final splice changes the accepted building frame. Reader leases,
+SharedRaster references, exact generations and retired-frame release remain.
+
+ResourceInit::Zeroed preserves the other current initialization contracts:
+legacy text/raster/alpha reservations and implicit clone, command capacity,
+SharedRaster/device memory and the separate SDK application heap are not
+blanket-changed. Empty/overflow/resource-kind checks, injection seams,
+allocation accounting, owner/header validation and quarantine remain.
+
+The kernel allocator's full0xdd release fill is now an explicit compile-time
+option, -Dheap-poison=true. Default=false, independent of -Dmetrics. Both locked
+small/realloc-tail and large retiring releases keep boundary tags, requested-
+size checks, Heap-owner admission, coalescing, exact retiring tickets, header/footer
+revalidation and VM tail-uncommit receipts. Full diagnostic fills still drop
+and reacquire the Heap owner only where the original context permits. With
+the option off, the same retiring identity is checked without a fill/handoff;
+no released payload becomes available before publish_free. Invalid/double
+free, size mismatch and partial-uncommit retention are unchanged.
+
+BuildOptions.json and the hashed build metadata bind the option (flag bit18).
+HEAPPROBE reports poison_mode=off/full with the actual poison_bytes. The
+existing16x192KB acceptance requires exactly0fill bytes when off and at least
+its own full payload amount when on. All other growth, retention, accounting
+and resident257-page checks remain. The host marker parser requires a known
+explicit mode and rejects missing/contradictory mode/count combinations.
+No query enables this work and no automatic diagnostic is added.
+
+The existing atomic-growth case now also copies a successful65537-byte blob,
+changes the entire caller source afterwards and reads every original byte
+through the independent resource view, including the chunk boundary. The old
+published frame must remain byte-identical until the private batch is cancelled.
+Its original five allocation failures, cleanup baseline and all other37
+PROGRAMSTORAGE cases retain their oracles; this is no new test suite.
+
+I/O staging was audited: page_cache_read already reuses its bounded resident
+buffer within one admitted read, and writes retain their own exact operation
+and completion. No cross-operation or global pool is introduced here. Those
+owners still release through the real heap path and gain the skipped optional
+poison fill. Device/I/O completion is never inferred from a free counter.
+
+Qualification25.10.2026: both Kernel390 configurations build; the final normal
+configuration passes Clippy. The existing QEMU clock-smoke and standard SMP4
+marker self-tests pass, including explicit off/full and contradictory, missing,
+unknown and uppercase-full/zero rejection. Fresh actual software KVM4/1GB
+Test guests use each exact BOOT ELF and checked installed module hashes.
+Both execute the same7KERNELHEAP cases:1069owned allocations/releases,
+4VM reservations/releases, zero live blocks/reservations and cleanup errors,
+2000churn operations,16acceptance iterations and expected duplicate/VM errors.
+Their original heap JSONL is byte-identical, SHA256:
+bc9862519f07a03f15bfed425c7e6c10e739984a3e8a35389598b388a269576a.
+HEAPPROBE confirms poison_mode=off/poison_bytes=0 in the normal build and
+full/3145856 in the explicit diagnostic; functional checks pass in both.
+
+Both PROGRAMSTORAGE runs pass all37owner cases, independent accounting/peak
+oracles and exact baselines. The real4116-command/138-resource-byte snapshot,
+atomic short buffers, cancellation, forced ID reuse,2parallel GUIs, retained
+reader/kill handling,72blocked Kill/Wait/Reap cases and18mixed churn cycles
+pass; churn returns90of90allocations with PMM/VM/registry/storage equality.
+The private fixture explicitly enables PROGRAMLIFECYCLE selftest and SVCSTALL;
+production configuration is unchanged. Both then pass ordinary Desktop
+HOST/RESTART and REMOTEFRAME: host129:131 and children130:132/131:133 complete
+and reap with exit0 and exact cleanup. SMP/CLOCK/12lock-owner probes pass;
+both guests power off normally with QEMU exit0. The AHCI fixture has no NVMe.
+
+Kernel390 normal BOOT SHA256:
+c354c33830e030b9dd05c99e2844ff8a32fdd4777feb97333d1dfcb2f2c24cac
+Kernel390 heap-poison=true BOOT SHA256:
+c2ac02046d53927c1c57b69f36460de789fc4c92c4543d9b0c76141dc7bb4ab3
+Normal/diagnostic serial SHA256 respectively:
+096fc82b8610a0218366f0d32a2463f353c12a2d5cef1f720c8826662b17306a
+d03b84c4dede82dbec5220713a96d4a669527d6f79b0dcaf517756f2804542f3
+Original normal/diagnostic Desktop JSONL SHA256 respectively:
+e9ea4e61d2255819027830b9ccebe5ee1cbdefad4d0bca546c6468f36079ec57
+84107dfb04d37c09cabe5b5be304e6aa5432266e4cbc66d6643222130f54657b
+Desktop170/Spectra65 and all other module artifacts are unchanged; no ABI,
+SDK or public module version changes. Release27 uses the normal Kernel390.
+
+Exactly one final STANDARD Suite3 uses the normal final Kernel390 and
+Release27:3a03208b-9d3a-4ef3-9ce9-31dc1aa1e928. Original run.json SHA256:
+570dfc0924b771bb15ad044ef1eea051aa33242b5878cd9f152eea89b47a5266.
+All30raw samples complete on all4workers; unchanged DevCenter PUT and full
+normalized GET match all data, with6valid score areas. Scores:
+scheduler_sync38.064746, memory230.712106, ipc804.037135,
+lifecycle580.723491, filesystem_io139.572798, overall224.661120.
+The complete STANDARD export/receipt remain; completed private image/source/
+work copies and diagnostic ELF copies are removed after qualification.
+
+Scope: code removes two avoidable full payload writes from the successful
+explicit GUI-blob lifetime in the normal build: pre-copy zeroing and final
+poisoning. This is a count of memory passes, not a measured desktop speedup.
+Physical NVIDIA/audio/cursor/Explorer latency is outside this local change;
+published Full/Slim14 and OssiPC12 remain separate.
 
 GUI frame accounting — 0.87.23
 -----------------------------

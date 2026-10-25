@@ -6,6 +6,72 @@ window composition, focus, z-order, taskbar, desktop items and user-facing
 input dispatch. The kernel provides the privileged display and event
 mechanisms but does not own desktop policy.
 
+Monotonic progress and calendar refresh (0.87.20)
+-----------------------------------------------
+Desktop167 reads ticks and the admitted monotonic clock for each progress
+round; Environment::Time carries no calendar. SDK96 exposes the existing
+MonotonicClockInfo through Clock::monotonic with the same positive/VALID/
+nanosecond-frequency admission as precise_instant. event_requested_hz is
+the current logical ticks()/TimeState scale, not a permanently cached rate
+or the rounded physical event_effective_hz. No new platform ABI or kernel
+artifact; coarse Clock::instant retains its existing separate contract.
+
+The taskbar owner reads calendar and TIME.R4S only at its own monotonic
+one-second due. It retains presentation and a deadline, not another
+wallclock anchor. Kernel386 owns that anchor (Core/CalendarClock.txt).
+Clock setting, date changes and invalidity become visible at the next due;
+invalid/unavailable calendars display --:--. Actual R4STD timezone/DST and
+12/24-hour formatting remain in use. The activity wait includes the clock
+term converted with the current tick rate. Source regression admits a fresh
+sample immediately. Scheduling/blocked work can still delay execution;
+this is not a physical one-second response-time guarantee.
+
+The SDK C service timeout helper and its existing Rust binding now read the
+admitted monotonic event scale directly. Invalid/unavailable sources reject
+finite waits; Poll and Forever retain their existing frequency-independent
+meaning. No TimeState fallback or assumed constant-frequency cache. Other
+calendar consumers and resource/GUI facades remain separate owners.
+CNETD2 embeds the same changed C service wrapper; it is an explicit network
+diagnostic with IMAGE_SCOPE=none. No new module or runtime background test.
+
+Focused native qualification passes three actual Desktop clock-owner cases,
+three original geometry cases and the SDK precise-clock case. A thousand
+progress calls before the deadline invoke neither calendar nor configuration
+callbacks. Midnight/date jumps, invalid calendars, source regression, live
+1000/250-Hz waits and actual R4STD Berlin DST/12-hour formatting are covered.
+Original C/Zig service checks and the C-backed Rust service case pass;
+17,000,001ns maps to18 ticks at1000Hz and5 at250Hz with no calendar callback.
+SDK source evidence and the659-owner-file/35-scope/180-export drift check
+belong to SDK/LanguageParity.txt;656 watched inputs remain unchanged.
+Both Desktop167 and the explicitly selected CNETD2 build successfully.
+
+The original KVM4 CHECK DESKTOP /HOST /RESTART passes drag/resize/focus,
+unchanged idle GUI revision7 with132 activity timeouts while CLOCK advances
+5->7, tray event/Remove, WINSVC handle10->12, both child completions/reaps,
+RemoteFrame immutable-reader cleanup and exact Desktop completion/reap.
+All exit codes are0 and QEMU shuts down normally. Installed BOOT bytes match
+unchanged Kernel386 and the installed Desktop matches the final artifact:
+  R4DESK SHA256 d2013e823ad5095ade6f37c8520bcebe1501468356af70ee7b2250ff064ca58a
+  Kernel SHA256 81952cf82d750dbbd104ef712952fe456be1d0a5eba4b0802cf10b6e4fd3d7d1
+  Serial SHA256 b65ccdd47471a9cf1bd74d7dc17afbfbffc847f82a7802c058add2ec4ea5ba73
+The private Test guest explicitly includes the two unchanged Full-only
+APPDEF11/CLOCK7 fixtures and verifies their bytes before boot. The initial
+attempt omitted them; its repeated original export confirms exactly
+RequiredFullFixtureMissing with host exit0/cleanup. The runner now exports
+before checking ERRORLEVEL. Only the corrected complete check qualifies;
+no product code changed to resolve this fixture error. Private images and
+source copies are removed after the retained small exports.
+
+One final Suite3 STANDARD355fc176-fdd5-4f4b-8d2a-e06013dda08d passes with
+30 raw samples,4/4 workers per sample and6 valid scores (overall207.556011).
+The unchanged original run.json, SHA256
+ac0a937aa5d270a80a541e81c968c24b9be5405b637990d97b967228c4d2525d,
+has a complete matching normalized DevCenter readback and six valid score
+areas. STANDARD runs without a Desktop, so this score does not measure the
+omitted calendar calls or an isolated GUI speedup. No new physical
+NVIDIA/input/audio/RTC evidence, SDK package publication, Full/Slim release
+or OssiPC update is implied by these source/artifact changes.
+
 Tray visibility publication (0.87.15)
 -----------------------------------
 R4DESK0.1.166 publishes tray visibility only when its copied registry or

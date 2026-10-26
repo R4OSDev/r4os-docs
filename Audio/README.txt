@@ -287,3 +287,115 @@ overlap=no/data=yes bleibt bei55/57 offen; kein Score-Rerun.
 Keine OssiPC-Aktion, SDK-/Paketpublikation oder neue physische NVIDIA-,
 Audio-, Eingabe- oder Ordnerlatenzquittung. Full/Slim14 und OssiPC12 bleiben
 getrennte Staende; die integrierte Hardwareabnahme bleibt66.
+
+
+0.87.52: HDA-Control und PCM-/DMA-Streambesitz
+--------------------------------------------
+SPEED-016: HDA0.3.42 besitzt ELD-/Codec-Control im bestehenden normalen
+r4d-work-Kanal, getrennt vom Audio-Deadlineworker. Hoechstens ein physischer
+HDMI-Pin pro Callback, danach endliche Fortschreibung durch Produzent oder
+Ausgangsabfrage;250ms nach kompletter Runde. Kein periodischer Thread,
+keine PCM-/DMA-Sperre ueber Codec-I/O und keine neue API/ABI oder Kernelaenderung.
+Kernel410/Spectra78/Desktop172/Explorer32 und alle anderen Module bleiben.
+
+Control besitzt rohe Sinkbeweise, der Streambesitzer publiziert einen
+geprueften vollstaendigen Katalogsnapshot. Doppelte Zuordnungen zerstoeren
+keine Rohdaten; ELD-/Receiver-/Port-/Source-/Revision-/Head-/Device-Entry-
+Aenderungen sperren die alte aktive Route. Echte Wechsel stoppen DMA und
+reservieren die Route, bevor Codecprogrammierung ohne Streamlock beginnt.
+Explizite Auswahl prueft den aktuellen Receiver vor und nach Programmierung.
+PCM, Status und Refill nutzen nur den freigegebenen Zustand.
+
+Kontendierte Refiller warten auf echte Freigabe oder neue IRQ-Generation.
+Waiter vor Pending-Freigabe plus Owner-Recheck verhindert Lost-Wake-Rennen;
+kein sofortiger Nachfolger allein wegen desselben gehaltenen Locks. Stop
+und Shutdown joinen/releasen beide Arbeitsklassen. Cancel ohne Callback
+loescht dessen Pending-Claim erst nach der tatsaechlichen Quieszenz.
+Gemeinsam beobachtete Transport-/Fehlerzaehler sind atomar. Keine proVerb-/
+proWrite-/proIRQ-Logs oder Hintergrundsampler; neue HDA.CONTROL-Quittung
+nur im vorhandenen expliziten Close-/Shutdown-Diagnosepfad. Unveraenderte
+PCM-Geometrie, Fristen/Budgets, Drain, Timeouts und Hardwarebesitzgrenzen.
+
+66/66Owner-Hostfaelle einschliesslich Generation/Receiver/Port/Mehrdeutigkeit
+und Refill-Freigabe-/IRQ-/Stoprennen gruen. EchtesKVM4/Kernel410/HDA41/
+AudioDiag11: PCM8280Frames33120Bytes, Originalmaster-/Mute-/Restart-/
+2Stream- und4Close-Generationsfaelle, reale Audio-Deadlinearbeit,
+keine Dropped-/Underrun-/Treiber-/Backend-/Silencefehler, Miss/Overrun/
+Rejected0, regulaerer Shutdown0. Originaler44100Hz-WAV-Pruefer bestaetigt
+7607/7607Signaldauer, Continuous=true, kein480/544-Muster. BOOT und beide
+tatsaechlichen HDA-/AudioDiag-Dateien im Image bytegleich zur Quelle;
+Poolprobe/Export ebenfalls gruen. Temp/08752-kvm-readback.json.
+Die temporaere KVM-Zeile verwendete versehentlich /OUT: statt /OUT=;
+dadurch lief der regulaere AudioDiag-Fall ohne optionalen Dateiexport.
+Serial/WAV und Pool sind echte Nachweise; kein AudioDiag-Export behauptet.
+Die finalen42-Nachweise folgen nach der dokumentierten Zwischenkorrektur.
+
+Native Zwischenprobe41: echte PCM-/Master-/2Stream-/4Close- und IRQ-/
+Deadlinefaelle bestanden mit allen Fehlerdeltas0. Der ausdruecklich angeforderte
+Export blieb aber rot: candidates=0 trotz vorhandener Selection/Core/Runtime.
+Das seit unabhaengiger Controllerregistrierung unbefuellte Kandidatenarray
+wird in42mit den echten PCI-/Transport-/Codec-/Pin-/Konverter-/Routenbeweisen
+der jeweiligen Instanz befuellt; auch HDMI-Quiet-Idle wiederholt diese
+Beweise und HDA.CONTROL.41wird nicht als finaler Gesamtbeleg verwendet,
+AudioDiag11 und seine Pflichtpruefungen bleiben unveraendert. Neue finale
+KVM-/Native-Probe war erforderlich; der einzige STANDARD folgte erst danach.
+
+Finaler Stand42,26.10.2026
+-------------------------
+HDA.R4D2464168Bytes,
+SHA2562533aca578c98969b7bc34bcf42ccb6b0ceca8023dcabec8cbc06babdbf3992b.
+Alle150anderen Modulartefakte und Kernel410 unveraendert.66/66Hostfaelle
+erneut gruen. Finale echteKVM4-Dateien/BOOT52-410 vollstaendig geprueft;
+AudioDiag11 inklusive korrekt angefordertem /OUT= exportiert alle vier
+Pflichtklassen, Kandidaten6/Selection6/Core7/Runtime6. WAV7607/7607,
+4Close-Generationen,2Streams, Master/Mute, IRQ/Deadline/Pool und Shutdown0
+bestanden; alle Audiofehler-/Miss-/Overrun-/Rejektionsdeltas0.
+
+OssiPC tatsaechlich Release52/Kernel410/HDA42,16konfigurierte und16
+schedulierbareCPUs. Vorhandene NVIDIA333/R4NV19 und automatische native
+Grafikkonfiguration unveraendert. Neues HDA-Paket nur ueber Inbox/SYSUPD,
+vollstaendiger Transport- und installierter Dateireadback bytegleich.
+FinaleR4U2465331Bytes,
+SHA2560d7ade0e7bdb013cc7bdca38ca62bd9e0fe36de6b4f97a86b90f662dcd104826.
+FinalBatch3installed/Journalcleanup/transaction3/generation35/applied3/3;
+echter neuer Boot nach56.392s, kein restartwake. Alter COMMIT-SSH-Kanal
+endete124 mit nur teilweiser Fortschrittsausgabe; der echte neue Boot,
+installierte Dateihash und terminale Status belegen den Erfolg unabhaengig
+vom verlorenen Abschlusskanal. Kein COMMIT wiederholt.
+
+NativeAudioDiag: echter NVIDIA-HDMI-Controller09:00.1/10DE:228E,
+Codec0/10DE009F, Route6>8/HDMI/Stereo48k-S16/fmt0011, MSI undDMA+LPIB.
+PCM8280Frames33120Bytes, Master/Mute/2Streams/4Close-Generationen und
+vollstaendiger Export bestanden; alle Dropped-/Underrun-/Treiber-/Backend-/
+Silence-/FIFO-/Descriptor-/Position-/Recovery-/Timeout-/Drain-/Workdrop-
+Deltas0, AudioDeadline submitted1/started1/miss0/overrun0/rejected0.
+User bestaetigt Testton hoerbar und Desktop normal.
+
+Echter Hotplug: User zieht HDMI amTV etwa5s ab und steckt wieder ein;
+Desktop sichtbar. Derselbe echte Treiberport2048 liefert Receivergeneration
+9->22 bei Devicegeneration2. HDA.CONTROL revoked0->1: alte Route wirklich
+gesperrt. Danach erneute frische Wiedergabe/Master/4Close/IRQ/Deadline und
+vollstaendiger Export wieder gruen, alle Fehlerdeltas0. Native Runtime-
+Workbesitzbit ist nach Close frei; Systemhardware-/Backendbesitz bleibt
+beabsichtigt registriert. DISPLAYD reason=none/pending0/keineBO-Nachlaeufe,
+Desktop verfuegbar, Konfiguration bytegleich. Keine physische Latenz- oder
+integrierte SNES-/Desktopqualifikation vorweggenommen. Erfolgreiche native
+ELD-Antworten hatten Timeout0; gemessene PCM/Control-Ueberlappungs- und
+Parkzaehler0 sind kein beobachteter blockierter I/O-/Kontentionsfall.
+Die zugehoerigen Rennen pruefen die produktiven Host-Policyfaelle und
+Besitzgrenzen; kein Hard-Realtimeversprechen.
+
+Genau1finaler Spectra78 STANDARD3/KVM4:
+e747503f-801b-4cd3-896f-120953151828.30Originalsamples/je4vollstaendige
+Worker/5neuberechneteAggregate/6gueltigeScores. Vollstaendig lokal und in
+R4OSServer validiert, kompletter normalisierter Original- und echter
+ReferenzGET gleich. OriginalSHA256
+2a252feca69d174ee3a2d45ece9152aad35b5609bf279e83775b12647a8e3204.
+Gesamt206.017554/IPC474.951502 gegen51 222.194637/573.388903;
+gleicher Arbeitsvertrag, unisolierter VM-Vergleich. Keine isolierte
+HDA-Beschleunigung, Rauscheneinordnung oder geklaerte Regression behauptet;
+kein Score-Rerun. Vollstaendiger Original-/Referenz-/Artefakt-/Hardwarekontext:
+ExFiles/Reports/Benchmarks/e747503f-801b-4cd3-896f-120953151828/.
+Kompakte Qualifikation Temp/08752-qualification.json. OeffentlichesFull/Slim
+bleibt51, nativerOssiPCjetzt52; alsnaechstes53Wiedergabefortschritt/
+Quellfristen. READERS37/IPC55/FS57 und integrierte66-Abnahme bleiben offen.

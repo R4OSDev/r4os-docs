@@ -6,6 +6,99 @@ window composition, focus, z-order, taskbar, desktop items and user-facing
 input dispatch. The kernel provides the privileged display and event
 mechanisms but does not own desktop policy.
 
+Deferred Explorer free space (0.87.42)
+---------------------------------------------------------------
+Explorer29 uses scalar drive_info_geometry for the Computer list and every
+foreground navigation/preflight/status drive query. Geometry never executes
+FREE or reads its bitmap. It retains the existing exact mount/request owner;
+admission can still wait behind filesystem work. Existing NTFS free-count
+caching, mutation/mount invalidation and backend calculations stay unchanged.
+The separate long metadata/exclusive-lane work remains0.87.48.
+
+R4SYS30 appends the optional callback at1320, table1328. The full1320-byte
+prefix/all163 existing slots, Query:1 and DriveInfo56 stay in place; the other
+five groups are unchanged. Full drive_info marks reserved bit0 with the new
+canonical drive_info_flag_free_valid only when FREE actually supplied a value.
+A measured zero is valid; geometry or a missing backend result is unknown.
+Contract48 prefix proof/generation/Zig-C-Rust conformance pass. Published
+Contract source9414b489d9c0359f13629ac25e9d6dc2bbff7028 is pinned by Kernel404
+and SDK98; this controlled dependency publication is not a package release.
+
+A single copied BSP Job owns Context, request generation, drive identity and
+expected geometry plus the existing snapshot DirectoryChangeCursor. Its
+exact mount slot/generation and global mutation sequence survive the worker.
+The worker polls the RAM-only cursor before FREE; after native join the main
+owner atomically revalidates mount/history before accepting data. The kernel
+closes the former gap between mount lookup and history poll under one storage
+metadata guard. Changes anywhere in filesystem history conservatively discard
+the sample (also when directory-specific poll returns0), with at most three
+new samples per navigation. Retired/mismatched mounts stay unavailable. This
+is a validated snapshot at acceptance, not a continuously live counter. No
+extra foreground path lookup is needed: the UI already owns the snapshot
+cursor. It starts only after successful paint.present, never in
+init, enumeration or before directory content publication. Computer view
+needs no exact free-space job. Only actual completion plus native handle-join
+allows result access/free. Old navigation generations are discarded; a new
+published generation can resume after a stale job releases the lane. The
+worker never borrows mutable App/window/directory state. Pending/unknown and
+unavailable are explicit; ready zero prints0. Background results preserve a
+newer selection/dialog/operation status. Close cooperatively stops work not
+yet admitted and drains the actual native query/join before App/context exit.
+A one-millisecond finite event wait exists only while a Job remains; ordinary
+idle keeps its previous infinite wait. There is no new automatic diagnosis.
+
+Six host owner cases cover stale generation/Computer return, exact zero
+versus unknown, changed geometry/failed query, cross-directory mutation, same
+geometry on a new mount generation and the three-retry bound. The Unicode dialog
+owner case passes too. Kernel build/fmt/Clippy, Contract conformance and the
+SDK Rust bindings pass. LanguageParity review covers659owner files/35scopes/
+180exports, with explicit compile-only scope for the new Rust/C callers.
+
+Final KVM4 uses exact BOOT Kernel404 SHA256
+ cdb5187fc4712bec71fde23b84d527a416537b66bb7ba88c3ed69c5dfbae576f.
+Original Desktop APPDEF/CLOCK/restart/frame leases/host cleanup pass. Real
+DESKRUN /WAITFRAME starts CALC(content16) and Explorer(content18); each child
+survives helper reap and closes cooperatively before exact Desktop reap.
+Spawn marker4/scene inputs3/redraw18->19 and same-key identity pass. The marker
+brackets the spawn call, not individual kernel instructions or CPU parallelism.
+Existing EXPTEXT3 /SELFTEST /FILES verifies geometry C/D with unknown zero free
+fields, exact C geometry/full-value agreement and FREE-valid flag, then its
+original private file operations/cleanup. The EXPTEXT-only native owner probe
+collects a real joined FREE result, allocates a private64KB file, rejects the
+old result, and verifies the retry against a fresh exact query. Actual kernel
+stale-generation rejection and a post-join abort also pass. There is no real
+unmount/remount injection; same-geometry/new-generation policy and actual
+retired-reference lookup cover that boundary. The new native race workload is
+only in the console testfixture, not the productive Explorer artifact.
+All command ERRORLEVELs0, poweroff0.
+The earlier whole-selftest fixture lacked its own toolbar resources; only the
+relevant existing /FILES mode is used finally. The first preflight was missing
+the fixture altogether; neither harness issue is a product failure. Private
+fixture/image/source copies are removed; compact contexts remain separate.
+NVMEIRQPROBE reports device-missing because this bounded guest has no NVMe;
+this is not NVMe qualification. No cold-volume timing or physical input/folder/
+NVIDIA/audio latency, isolated speedup, SDK/package release or OssiPC claim.
+Preliminary STANDARD251b1d3f-a112-4845-9733-c116679e4c0d had already run when
+the acceptance audit found insufficient mount/mutation identity. Its original
+export/context remain separate; the source correction supersedes it, without
+a score-based rerun. Final STANDARD and original/context hashes follow below.
+
+Final0.87.42 STANDARD70aaced1-da52-4944-ad1a-06cf132933b3:30raw samples,
+all4workers/sample,5aggregates and6scores locally recomputed against the
+unchanged Suite3 reference. Original SHA256:
+e717f20c07928c0563b2c0e99d4a20d8483edf88840d4b9cb59fc12bfdff3c22.
+Scheduler49.988550, memory228.518640, IPC719.375453, lifecycle559.113217,
+filesystem161.511506, overall236.641114. IPC versus41 is748.369396->719.375453
+with the same comparison key; cause remains unisolated, not dismissed as noise
+or called a proved geometry/FS-poll regression. STANDARD does not drive
+Explorer, so no UI/cold-volume speedup is measured. Release42/Kernel404,
+Explorer29/EXPTEXT3/Spectra70, Contract48/SDK source98.148modules remain
+byte-identical to41; Desktop172 and WINSVC20 are unchanged. Contract source
+was published first to satisfy the checked Kernel dependency guard; matching
+final component commits/publication receipt are bound in source-commits.json. Local archive holds full original, reference,
+CPU/work/artifact/native/source context and SHA256.
+lokal validiert; DevCenter ausstehend. No SDK/package or OssiPC update.
+
 Asynchronous program starts (0.87.41)
 -----------------------------------
 Desktop172 copies each launch path/argument/title/policy and reserves one of

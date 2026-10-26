@@ -1098,3 +1098,28 @@ metadata, inventory and root cached-catalog fix belong to their owners;
 completed guest/image/source copies removed. Full/Slim42/OssiPC unchanged.
 Handoff to Spectra74–77: retain the listed current assertions/owner oracles
 until qualified replacements exist; Rust86 receives that released scope.
+
+0.87.43 - Explorer directory batches
+------------------------------------
+Explorer30/EXPTEXT4 use the current SDK99 iterator: four complete owned paths
+and metadata per bounded Kernel405 visit. Its captured logical owner, exact
+mount/node/parent watches and conditional ancestor-path validation reject
+stale scans before buffered publication. This adopts the filesystem owner;
+Main/worker/navigation/paint/free-space ownership from42 is unchanged.
+Other unmodified prebuilt applications are not implicitly rebuilt or claimed
+to use the new iterator. Desktop172/WINSVC20 stay byte-identical.
+
+Final private KVM4 case08743-bound: original CHECK DESKTOP /HOST /LAUNCH
+/RESTART, real CALC/Explorer content/close/reap and EXPTEXT /SELFTEST /FILES,
+including exact FREE worker identity/original operations, pass. Directory
+NTFS/FAT batches, mutation and real D remount pass separately in the same
+guest; exact BOOT Kernel405 9c672b5d1bf2850eb7df84035369102aed28da7665b55225f03811439421780a, ERRORLEVEL0/normal shutdown0.
+First private diagnostic remount attempt lacked the required fresh target;
+its consequent absent D caused geometry-d refusal. The corrected final case
+restores D before Explorer tests. No Explorer or kernel fix was inferred.
+
+One final STANDARD af5b55bc-e3f9-4464-9c6d-5b086890e74c, original dada1c887d0afe8cb7ec0c83b86001e130d0989d5b1964129e2654faf7ea62a3,
+30samples/4workers/5aggregates/6scores verified: lokal validiert; DevCenter ausstehend.
+No physical visible/latency/audio/hardware claim, isolated speedup, new
+SDK package/public Full/Slim release or OssiPC update. See filesystem43 and
+SDK LanguageParity43 for exact protocol, build/runtime scopes and artifacts.

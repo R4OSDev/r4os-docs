@@ -1190,3 +1190,77 @@ unisolated; no score rerun, noise dismissal or isolated Explorer speedup.
 KVM does not qualify physical folder/input/audio/NVIDIA latency. No OssiPC
 action, SDK publication or Full/Slim update; deployed14/Recovery65 and
 native OssiPC12 remain separate. Cancellation awaits real I/O/join boundaries.
+
+0.87.45 - Explorer owned shortcut icon cache
+--------------------------------------------
+Release45/Explorer32/EXPTEXT6/Spectra73. Kernel405/Desktop172/WINSVC20,
+SDK source99/Contract49 remain unchanged. Explorer owns this app-specific
+cache; the existing SDK ICO decoder and GUI pixel-copy contract are reused.
+
+Painting uses Main-owned decoded pixels only. Visible shortcuts request up
+to64 normalized, checked128-byte paths; oversized paths never alias clipped
+targets. The fixed64-slot LRU and one copied BSP native job bound storage
+(owner below512KB,32x32 pixels/image,4096 whole-file bytes/read). Main first
+publishes a standard icon, then admits work. Stable missing/invalid/oversize
+files in mounted drives have negative entries. Unknown/unmounted drive or
+failed job admission remains standard until an explicit view refresh; no
+busy retry loop. Empty shortcut demand performs no system metadata calls.
+
+Each loaded record retains full path, exact mounted root token, global
+directory publication sequence, and FileInfo drive/node/size/attributes/
+create/modify identity before/after read. Before painting, RAM-only
+directoryChangePoll checks the epoch plus each distinct cached mount token;
+any stale mount/publication clears positive and negative entries. A changed
+epoch escalates partial selection drawing to a full frame. Stale job retries
+are bounded to3. Unchanged paint performs no fileRead/fileInfo or ICO decode.
+The native job copies Sys/path/result, with no mutable App/window/snapshot
+borrow. Real join precedes result access, cache insertion and job free;
+cancellation/close drains that exact handle. Main alone mutates cached pixels
+outside painting. FrameCanvas copies pixels into command resources before
+return, and kernel coherent frame copies retain them independently of LRU.
+
+The44 title/icon/known-valid shortcut metadata is reused. Definition/caller
+search found the old drawDetails->drawEntryDetails->drawShortcutDetails
+chain unreachable from the current icon-view renderer; all5 associated
+details functions were removed. No live timing share is claimed for them.
+Explicit shortcut opening still rereads the target, outside painting.
+General folder/text/toolbar icons were already preloaded and retain their
+existing paths. This does not accelerate ordinary ROM directories by an
+assumed shortcut cost.
+
+Source review: storage_inventory calls ensure_records and can scan new
+device partition tables. The icon cache never calls it, even for paint
+validation.44 Computer inventory qualification was prewarmed KVM; it did
+not prove general cold/hotplug inventory latency. No inventory/kernel fix
+is claimed. Likewise fileRead is a whole-file contract: entry.size>buffer
+returns-5. A5000-byte ICO must use standard under the existing4096 budget;
+there is no valid prefix-read claim. An initially wrong test expectation was
+localized and corrected; final affected host/build/native cases repeated
+before any STANDARD. Compact failed-case contexts are retained with the run.
+
+Host13 direct cases pass:3 cache/negative-LRU/pixel-copy/no-demand tests,
+2 navigation sort/cancel,6 original FREE and2 actual view/dialog cases.
+Final private KVM4 case08745-final checks real product /HOST /NAV /ICONS:
+original2048-file/1024-link input replacement and close, plus a fourth
+Explorer with coherent R4DRAW frame resources,4 unchanged full repaints,
+same-size icon edit, deleted standard icon, recreated new pixels, and exact
+close/Desktop reap/fixture cleanup. Existing /HOST /LAUNCH /RESTART passes.
+EXPTEXT uses actual native jobs/joins:128 repeated lookups without a new job,
+late mutation refused, edit/delete negative16 no-new-job/recreate, forged
+second retained mount token refused by kernel RAM poll (not real remount),
+64/65 LRU,5000/4096 standard, copied pixels survive eviction, active cancel
+joins and all65 files/root clean up. Original /FILES/FREE/navigation owners
+pass; ERRORLEVEL0/poweroff0, exact unchanged Kernel405 SHA256
+9c672b5d1bf2850eb7df84035369102aed28da7665b55225f03811439421780a.
+
+Exactly1 final Suite3 KVM4 STANDARD 43879e0f-bb2c-4fa1-8829-1bda563d3479,30 raw samples,
+4 completed workers each,5 aggregates/6 scores locally recomputed:
+scheduler_sync=49.962754; memory=227.890132; ipc=713.536689; lifecycle=523.302682; filesystem_io=150.252103; overall=229.653117.
+Original SHA256 b58bd7f73e1d8b5bab3face8250744a8a8348364726da6ab31ef97d35de64bfc.
+Complete original/reference/validation/work/CPU/artifact/native/source and
+comparison context: ExFiles/Reports/Benchmarks/43879e0f-bb2c-4fa1-8829-1bda563d3479/.
+Status: lokal validiert; DevCenter ausstehend. IPC/FS changes are unisolated;
+no score rerun, noise dismissal or isolated icon/Explorer speedup claim.
+No physical NVIDIA/audio/input/folder timing, hotplug or forced I/O-kill
+qualification. No OssiPC, SDK publication or Full/Slim update; deployed14/
+Recovery65 and native OssiPC12 remain separate. NVMe fixture remains absent.

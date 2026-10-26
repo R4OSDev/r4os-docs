@@ -351,10 +351,10 @@ all reachable file chains. Interrupted reclamation still belongs to general
 FAT repair; cache ownership ordering does not journal every allocator write.
 
 Page-cache identities remain hash-addressed, while free slots and clean LRU
-and dirty FIFO candidates use intrusive bounded queues. The 512 resident
-metadata slots are a hard upper bound, but payload admission is adaptive. At
-boot, one 4-KB cache page is admitted per 128 free physical frames, clamped
-from 64 pages (256 KB) through 512 pages (2048 KB, or 2 MB). Current free-frame
+and dirty FIFO candidates use intrusive bounded queues. The8192 resident
+metadata slots are a fixed upper bound; payload is allocated lazily and its
+admission is adaptive. At boot, one4-KB cache page is admitted per128 free
+physical frames, clamped from64 pages (256KB) through8192 pages (32MB). Current free-frame
 pressure can reduce that RAM limit to 256 pages at 32 MB, 128 pages at 16 MB
 and the 64-page floor at 4 MB; clean pages above the active limit are reclaimed
 incrementally and dirty pages enter the existing writeback path. Clean and
@@ -1122,3 +1122,74 @@ Ursache unisoliert, kein isolierter Verzeichnis-/IPC-Speedup oder bewiesene
 Regression. Voller Originalexport/Kontext/Referenzen/SHA unter
 ExFiles/Reports/Benchmarks/af5b55bc-e3f9-4464-9c6d-5b086890e74c/: lokal validiert; DevCenter ausstehend.
 Keine physische Kaltlaufzeit-/OssiPC-/NVIDIA-/Audio-/Eingabelatenzabnahme.
+
+0.87.46 - RAM-bounded page cache and cold bulk admission
+--------------------------------------------------------
+Release46/Kernel406/Spectra74. Existing kernel block-cache owner; no new
+module, public API/ABI, SDK binding or filesystem format. Policy version3,
+maximum8192 lazy4KB payload pages/32MB, RAM reference_free_frames/128 with
+floor64; current pressure still limits to256/128/64 pages at32/16/4MB free.
+The fixed metadata ceiling is8192 entries,16384 hash buckets and a bounded
+intrusive index (8-byte links,65728-byte index). It does not shrink with
+payload pressure. Existing hash lookup reads scalar identity fields instead
+of copying a whole entry; normal lookup/slot/LRU/FIFO remains independent of
+a linear entry scan, selecting at most8 device shards. Explicit maintenance
+and exceptional invalidation scans remain bounded, not removed by claim.
+
+Bulk read requests>=32 sectors admit clean pages cold at the LRU head.
+The original16-page/64KB pinned fill window bounds their displacement of
+hot pages at full capacity. Ordinary reuse promotes to the tail; writes
+become ordinary dirty entries. Single-sector/smaller calls retain demand
+admission. This is request-based streaming protection, not a filesystem
+metadata tag or universal FAT/small-read scan detector. No uncached bypass,
+speculative read or new read-ahead is enabled. Exact device/page identity,
+valid/dirty sector masks, per-sector write owners/sequences, io_busy and
+live pins continue to govern reuse, completion, writeback and reclaim.
+
+The policy worker trims up to16 clean pages per group, returns ownership
+before each safe checkpoint, and promptly yields/resignals at10ms after a
+full trim group. Original dirty budget4 remains. BusyClean pages are excluded
+from reclaimable/PMM bytes. Error unpin visits owned set bits, preserving
+unknown/pinned identities. Capacity shrink never treats pins or unfinished
+I/O as reclaim acknowledgements; actual production reclaim remains bounded.
+
+Six host cases compile the actual policy/index source: RAM>2MB thresholds,
+16 cold pinned pages/1024 replacements retaining32 hot pages, reuse/dirty/
+busy states,8192->64 shrink preserving a live pin, device dirty FIFO/fairness,
+original16-page transfer bounds. Kernel owner build/Clippy/fmt pass. Final
+private KVM4 boots exact Kernel406 SHA256 b901bd9de642e970fce814b3aabb62b23ffc73927161cc2bbd84a894ac8eb727.
+Read-only40MB independently patterned input, full host image readback/SHA,
+640 hot4KB pages,37.5MB sequential64KB stream then actual reclaim:
+SPECTRA FILESYSTEM cache-budget: OK hot_pages=640 prime_entries=704 prime_payload_bytes=2883584 ram_limit=1875 stream_bytes=39321600 evictions=8429 hot_hits=5120 hot_misses=0 reclaimed=1811 remain=64
+This guest's measured RAM limit, not the32MB upper bound, is the native
+capacity witness. Original FAT /PAGECACHE,64KB NTFS multifill, selective
+writeback/foreign dirty ownership/autonomous progress/copy/retry checks,
+full CHECK PERFORMANCE, strict cold Desktop /HOST /LAUNCH /RESTART and
+EXPTEXT /FILES/FREE/navigation/icons pass; ERRORLEVEL0/shutdown0. Disposable
+64MB FAT512-byte clusters and actual virtual NVMe IRQ/async512B probe pass.
+Host pressure thresholds plus real native reclaim are qualified; no forced
+guest OOM, physical device failure or unmount-under-I/O proof is inferred.
+
+Two larger-cache diagnostic assumptions were corrected without changing
+the production kernel after its first native run. Read-through compares
+against its initial global dirty residency; unrelated existing dirty pages
+may remain, and reads must add none. Original byte/hit/error checks remain:
+  FS read-through context: dirty=1->1 reads=22 hits=9
+The former16 reclaim attempts could all return filesystem pages before
+reaching VM. The explicit VM check now budgets max_cache_pages/64+16 bounded
+attempts and still requires actual caller-owned nonresidency/backing slot,
+pinned first page, data reload and resource cleanup:
+  VM eviction: attempts=30 requested=17 returned=17 fs=16 vm=1 pageOut=1 vmFail=0 page=1 targetEvicted=yes
+Mixed common Spectra/perfdiag-v7 NDJSON is retained by the temporary collector;
+optional kind access is guarded, all final structured failures still fail.
+Compact unsuccessful native contexts and their corrections are retained.
+
+Exactly1 final Suite3 KVM4 STANDARD bea06965-0020-4c76-8673-1b00e3d5a5e6,30 samples/4 completed
+workers each;5 aggregates/6 scores recomputed locally: scheduler_sync=58.894458; memory=228.998086; ipc=464.057418; lifecycle=525.723725; filesystem_io=153.884739; overall=219.223055.
+Original SHA256 788acb6ef420dc8d83fb31f2fe23c5c9210677c5fa1fbd6f4a8489a70265ea45.
+Archive: ExFiles/Reports/Benchmarks/bea06965-0020-4c76-8673-1b00e3d5a5e6/ with complete original,
+reference/work/CPU/artifact/native/source/comparison context and SHA256.
+Status: lokal validiert; DevCenter ausstehend. IPC/FS variation is unisolated;
+no isolated cache/Explorer speedup, noise dismissal or score rerun. No OssiPC,
+physical NVIDIA/audio/input/folder-latency or package/SDK publication. Current
+Full/Slim14/Recovery65 and native OssiPC12 remain separate deployed states.

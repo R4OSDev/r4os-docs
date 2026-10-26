@@ -6,6 +6,90 @@ window composition, focus, z-order, taskbar, desktop items and user-facing
 input dispatch. The kernel provides the privileged display and event
 mechanisms but does not own desktop policy.
 
+Asynchronous program starts (0.87.41)
+-----------------------------------
+Desktop172 copies each launch path/argument/title/policy and reserves one of
+four exact generation-bound window slots before showing Starting program...
+The existing native Worker owner performs classification and Programs::spawn
+outside the Desktop turn. It has its own App/Programs facade and copied data;
+no mutable Desktop, Session or window borrow crosses the thread boundary.
+Workers remain BSP-bound under the existing native-thread admission rules.
+This changes ownership/turn placement, not the kernel loader's validation,
+imports, rollback, GUI entry or CPU eligibility. Kernel403 remains unchanged.
+
+Only the main Desktop turn adopts the actual process after a native join;
+GUI association, console binding, frame ownership and later reaping remain
+there. Focus/minimize changes during loading survive adoption. Pending
+single-instance starts coalesce; canceled starts cannot absorb a new intent.
+A closing window marks its exact reservation canceled and hides the pending
+view. It retains capacity until join; any child returned after cancellation
+passes to the existing bounded retrying kill/reap owner. Admission includes
+pending loads plus retained failed children, so all late handles have room.
+Desktop exit stops admission, requests cooperative stop, then drains workers
+and actual children before module return. Bootstrap and the explicit terminal
+mode handoff retain their existing synchronous path; the handoff requires no
+pending program starts.
+
+DESKRUN retains the original WINSVC request identity, absolute deadline and
+same-key deduplication. Worker completion updates only the matching receipt.
+The helper may leave or time out while a spawn already runs; that does not
+release the job, cancel an existing child or justify submitting a fresh key.
+A deadline checked immediately before spawn prevents new late admission.
+WINSVC pins a claimed mailbox and its bounded history entry through caller
+timeout until the actual completion. Pending timed-out claims count toward
+capacity and cannot be evicted by later history. Only actual completion or
+replacement of that exact Desktop generation settles them. Eight focused
+broker cases cover late result/duplicate ACK, history pressure, no-start ACK
+and exact Desktop replacement alongside the original five queue cases.
+Uncertain join/close acknowledgments retain ownership. Worker completion
+polls at one tick only while jobs exist, over the existing Desktop wait.
+There is no new permanent service, background test or diagnostic workload.
+
+Explicit CHECK DESKTOP /HOST /LAUNCH uses ordinary WINSVC requests and the
+real large installed SPECTRA image. New diagnostic launch_status opcode22
+keeps version2 and the80/144-byte layout: x=pending jobs, y=workers within
+productive spawn; it is passive. Spectra69 and WINSVC20 consume this Desktop-
+owned contract. No platform ABI, SDK version or public package changes.
+The local technical SDK97 host-tool profile was refreshed after the comment-
+only source correction from0.87.40; this is not an SDK publication or repin.
+
+Local KVM4 evidence: actual BOOT Kernel403 verified; three productive-spawn
+observations, three scene inputs, redraw18->19 while spawn remained active.
+The phase marker brackets Programs::spawn in its worker; it is not an
+instruction-level trace of kernel execution or simultaneous CPU use.
+Same-key Submit returns the identical child/window. Native join completes;
+the Desktop reaps that exact child. Real DESKRUN /WAITFRAME launches CALC,
+which survives helper reap and supplies content16 before Desktop-owned reap.
+The final native run uses the corrected WINSVC claim retention. The earlier
+run on the same Desktop/Spectra had four spawn observations; it preceded that
+broker correction and remains separate context. Original APPDEF/CLOCK scene,
+restart, frame reader/lease and host cleanup
+pass; normal poweroff0. Sixteen focused host cases cover reservation ABA,
+cancel/slot lifetime, pending-window binding and existing Worker/window owners;
+original geometry3 and precise-clock1 pass too. Cancellation while actually
+inside the loader was not separately forced; its branch is bounded by the
+same join/reservation/retained-child owners, not a forced thread kill.
+This proves software progress and lifecycle in KVM, not physical display/input
+latency, native NVIDIA/audio behavior or an isolated speedup. Final STANDARD
+and exact source/artifact context are archived locally under Reports/Benchmarks
+in ExFiles; DevCenter remains outstanding. See the final run identifier below.
+
+Final0.87.41 STANDARD08d19e13-4082-4473-9dc3-8963b2981ea3:30raw samples,
+all4workers/sample,5aggregates and6scores locally recomputed against the
+unchanged Suite3 reference. Original SHA256:
+2b9adbdaccc548f8f64cefae034f7c8fc2a017e203890dff9690dcbd2ea59476.
+Scheduler50.970947, memory234.593032, IPC748.369396, lifecycle535.031293,
+filesystem147.942363, overall234.447233. IPC versus40 is529.896395->748.369396
+with the same comparison key; cause remains unisolated. STANDARD does not
+drive Desktop, so this is no Desktop/broker speedup measurement. The earlier
+614afb28-0824-41bb-900f-08b233c81c9d was already running when the concrete
+broker timeout bug was found; its original/context remain separate and it is
+superseded by the fixed final source, not repeated for scores.148modules stay
+byte-identical to40; only Desktop/Spectra/WINSVC change. Release41/Kernel403,
+Desktop172/Spectra69/WINSVC20. Local archive includes original exports,
+references, CPU/work/artifact/native/source context and SHA256.
+lokal validiert; DevCenter ausstehend. No public package/SDK or OssiPC update.
+
 Asynchronous audio display and controls (0.87.26)
 -----------------------------------------------
 Desktop170 moves ordinary master reads/writes and output queries/selections

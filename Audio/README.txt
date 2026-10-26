@@ -1,9 +1,11 @@
 ﻿R4OS Audio
 ==========
 
-R4AUDIO is the public platform group for PCM streams, hardware status and
-synthesizer access. Applications request it through `module.R4MF` and use the
-SDK facade; optional functions are guarded with `hasFn`.
+R4AUDIO is the kernel platform group for PCM streams, hardware status and
+synthesizer access. Normal application PCM uses the SDK Audio facade and
+AUDSVC over R4SYS service IPC. AUDSVC owns the corresponding kernel streams;
+advanced direct platform functions are requested through `module.R4MF` and
+optional functions are guarded with `hasFn`.
 
 Hardware output is provided by loadable R4D drivers such as AC97 and HDA.
 SID, MIDI and OPL3 are separate driver/protocol components. The kernel keeps
@@ -13,7 +15,8 @@ platform contract.
 The normal ownership chain is:
 
 ```text
-R4X application -> R4AUDIO -> audio service/core -> active R4D backend
+R4X application -> SDK AudioStream/R4AudioSink -> R4SYS IPC -> AUDSVC
+AUDSVC -> R4AUDIO stream admission -> audio-progress worker -> R4D backend
 ```
 
 Drivers advertise capabilities and own hardware-specific conversion,
@@ -229,3 +232,52 @@ artifacts. Ordinary Idle may retain a silent carrier; route/owner teardown
 still requires Stop. Scoped original cases, one SMP4 audio guest and one
 STANDARD/DevCenter result, with physical/hearing/timeout limits, are bound in
 Core/KernelRustAudio.txt and KernelRustAudio08324.json.
+
+0.87.49 — asynchronous stream transport (SPEED-017)
+-------------------------------------------------
+SDK100 R4AudioSink submits/polls one owned native Async Service request.
+Input, guest slices and frame publication continue while it is pending.
+The existing two-quantum PCM budget stays; the copied in-flight prefix is
+still owned by the frozen queue head, not an additional backlog. Header,
+response and PCM storage survive terminal publication until actual ioClose.
+Aligned accepted prefixes advance once. BUSY keeps the remainder, unknown
+timed-out write acceptance is not replayed; Open/Close and generations are
+validated separately. Final shutdown drains buffers and requires real Close
+acknowledgement. A failed Close never reports resources=closed.
+
+Kernel409 write only performs bounded input conversion/ring admission and
+wakes its existing dedicated mixer. Backend dispatch stays on that worker.
+Close/tail/owner teardown holds existing exact stream transactions and drains
+the required streams; continuing unrelated PCM cannot prolong their Close.
+Output ownership, common mixing, read reservations and real Stop remain.
+
+The explicit AUDIOD producer now handles legal partial/BUSY admission using
+the existing frame cursor with a bounded retry. Its original8280frames/
+33120bytes, zero-loss/error, actual IRQ/deadline work and real drain remain
+required. Worker coalescing produces18 backend calls for21 input packets.
+The original WAV analyzer recognizes exactly7607 continuous frames at44100Hz,
+the expected resampling of8280frames, and no old480/544gap pattern. Analysis
+uses the unchanged contiguous first2seconds of the QEMU WAV; source length/
+SHA256 and selection are bound in the context, not physical hearing evidence.
+
+48 SDK owner cases, original C/Rust host interop with5 negatives, full SDK
+build113steps, Kernel build/fmt/Clippy and current real KVM4 artifacts pass.
+Original Async Service/pool caller-end and performance cases, SDK smoke,
+BASIC, both long GB/SNES pairs, persistence/close/reap and original full report
+contracts pass. Modeled native tables in3 transport cases are host models;
+they do not prove native IRQ timing. Details: Core/KernelRustAudio.txt.
+
+Genau ein finaler Spectra77 STANDARD3/KVM4: cf47d735-2d08-4ff6-ba58-c6304fb26a6b.
+30 Rohsamples, je4 vollstaendige Worker,5 neu berechnete Aggregate und6
+gueltige Scores; lokal und R4OS Server vollstaendig validiert. Der gesamte
+normalisierte Originalexport und die echte feste Referenz sind gleich dem
+Server-Readback. Original-SHA256: 015f174810950bfa54fde8e64722372ee3187933fc5e6bdc4fe62bc3ce1dd3d4.
+Kompakter Quellen-/Arbeits-/Artefakt-/Vergleichskontext und Rohdaten:
+ExFiles/Reports/Benchmarks/cf47d735-2d08-4ff6-ba58-c6304fb26a6b/.
+Gesamt239.749078, IPC769.315636 gegen48 Gesamt207.466609/IPC395.237827;
+gleicher Vergleichsschluessel, unisolierter VM-Vergleich. Keine isolierte
+Audioverbesserung oder geklaerte IPC-/FS-Ursache daraus ableiten. READERS37
+overlap=no/data=yes bleibt bei55/57 offen; kein Score-Rerun.
+Keine OssiPC-Aktion, SDK-/Paketpublikation oder neue physische NVIDIA-,
+Audio-, Eingabe- oder Ordnerlatenzquittung. Full/Slim14 und OssiPC12 bleiben
+getrennte Staende; die integrierte Hardwareabnahme bleibt66.

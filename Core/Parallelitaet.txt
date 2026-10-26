@@ -1,6 +1,91 @@
 ﻿R4OS concurrency and responsiveness
 ===================================
 
+0.87.51: Audio-Workfrist an der sicheren CPU-Auswahl (SPEED-043)
+---------------------------------------------------------------------
+Release0.87.51 / Kernel0.1.410 / Spectra0.1.78. Driver Work und Scheduler
+bleiben Kernelbesitzer: Die Auswahl einer Kernelcontinuation braucht dessen
+wirkliche Task-/Ready-/Runtime-Zulassung. Keine zusaetzliche Servicequeue,
+kein Thread und kein neuer oeffentlicher Contract/SDK-Import.
+
+Der bestehende Work-Owner publiziert bei erfolgreichem Enqueue/Start/Finish/
+Cancel die tatsaechliche Audioarbeit: Worker-ID/Taskgeneration, genaues
+generiertes Ticket, Modulowner/Geraetekennung, Frist und Originalbudget.
+Ohne laufenden Callback gilt derselbe stabile EDF-Kandidat wie beim Take;
+ein laufender Callback behaelt sein eigenes Ticket/Start/Budget, auch wenn
+eine fruehere weitere Arbeit eintrifft. Ownercleanup/Unload verwendet diese
+gleichen Cancel-/Finishrouten; Release bleibt nach echter terminaler Quittung.
+Ohne Mutation werden keine zusaetzlichen16-Slot-Scans ausgefuehrt.
+
+Eine atomare kopierte Mailbox wird noch unter dem alten Work-Owner geschrieben
+und unter bereits vorhandener Scheduler-Runtime gelesen. Ein einziger
+begrenzter Leseversuch; beschaeftigte/geaenderte Publikationen bevorzugen
+keinen alten Kandidaten. Kein zusaetzlicher globaler Runtime-Eintritt am
+IRQ-/Switchrand, kein Warten/Callback unter Work und keine &mut-Leihe ueber
+fremde Besitzer. Tasklookup prueft die exakte lebende BSP-ShortCompletion-
+Generation/Ready- oder Runninginstanz; keine rohe dauerhafte Taskzeigerliste.
+
+Ab Frist minus Budget kann dieser echte Ready-Worker vor gewoehnlichen
+Completion-Raengen ausgewaehlt werden, auch nach seinem normalen Rollenboost.
+Rang0 fuer Eingabe und Lockspende bleibt davor. Die zusaetzliche Bevorzugung
+hat hoechstens ein2ms-Zeitfenster je10ms. Neue Tickets, leere Queue und Cancel
+fuellen es nicht auf. Bei Ablauf oder fehlender Arbeit bekommt der bereits
+Ready FIFO-Kopf an der naechsten sicheren Auswahl eine echte Gelegenheit;
+die bestehenden sieben normalen Rangwahlen/eine FIFO-Wahl bleiben erhalten.
+Der Callback besitzt weiter sein urspruengliches verstrichenes Zeitbudget
+einschliesslich Waits. Start/Adoption verlaengert es nicht.
+
+Das begrenzt zusaetzliche Dringlichkeit, garantiert keinen harten CPU-Anteil
+oder echte Hardwarefrist. Native Kernel-/Treiberinstruktionen bleiben auf
+sichere Checkpoints angewiesen. Kein Hardware-/Owneraufruf wird mittendrin
+abgebrochen oder wiederholt. HDA/AC97-Fristen, Callbackbudgets, DMA-/Segment-
+geometrie, BSP-Bindung und die bestehenden Miss-/Overrunzaehler bleiben.
+HDA-Control unter Streamlock (.52/SPEED016), konkrete Callbackfortsetzung
+(SPEED023) und physische Audiofrist/SNES-Latenz bleiben eigene Schritte.
+
+Neun Hostfaelle verwenden den produktiven Policy-/Mailboxcode einschliesslich
+50000gleichzeitiger Publikationen, fehlenden Identitaeten, Deadlineablauf,
+verstrichenem laufendem Budget, Ticketflut, Cancel, FIFO-Rueckgabe und Wrap.
+Die neue explizite Liveprobe in CHECK THREAD /KERNEL:SCHED verwendet die
+wirkliche r4d-audio-Queue, zwei eigene Tasks und drei echte Tickets. Reihenfolge
+Eingabe1/Audio2/aeltereCompletion3/spaeteresEDFTicket4. Die Completion laeuft
+nachweislich vor Rueckkehr des6ms-Callbacks; das2ms-Budget wird nicht erneuert.
+Ein canceltes Ticket ruft den Callback nie auf; sein Slot wird mit neuer
+Generation wiederverwendet. Alle Quittungen gehen an echten Release/Join/Reap.
+Diese Arbeit laeuft ausschliesslich im angeforderten Livecheck.
+
+Erster Gast abgewiesen: Die Probe missverstand Wait=-7 samt Ergebnis=-7 fuer
+ein terminales Cancel und hielt dadurch ein Ticket. Nur die Probe korrigiert;
+kein produktiver Waitvertrag geaendert. Zweiter Gast: Kernelmask127/127,
+181/181Tasks,5/5Work und echte HDA OK, aber Spectra77 erwartete weiter nur2
+Tickets. Spectra78 prueft jetzt exakt ausgewaehlteFairness3 plusFPU2. Header,
+Masken, Ergebnis, echte Freigaben und Null lebende Ressourcen bleiben Pflicht.
+Beide ersten Laeufe sind keine Abschlussabnahme; kompakter Kontext erhalten.
+
+Danach frischer finaler KVM4-Gast, exaktes Boot-ELF/Spectra78-Readback:
+Kernelmask127/127,181/181Tasks,5/5Work, keinelebendenOwner;
+Originalrollen/Rangspenden/IPI-/Park-/YMM-/Wait-/Deadlinefaelle und normale
+HDA-Ausgabe/IRQ/Drain/Masterrestart/Replay4/Mehrfachstreams gruen.
+Im selben Gast lange Original-BASIC/GB/SNES-/Pause/Save-/Rejektionsfaelle,
+voller strenger Reportvertrag, genaue Joins/Reap und Shutdown0 bestanden.
+Keine Aufweichung des seit50 kanonischen423-Ausfuehrungsueberhangs oder der
+Grant-/Drift-/Frame-/PCM-/Daten-/Ressourcenkriterien. Kernelbuild/fmt/Clippy
+und Spectra-Eigenbuild gruen;150von151Modulen bytegleich (nurSpectra geaendert).
+
+Genau ein finaler STANDARD3/Spectra78/KVM4: 1a8dd630-2a91-4e6d-9201-29ccc8a16242;30Rohsamples,
+je4vollstaendigeWorker/5Aggregate/6Scores. Lokal und R4OS Server vollstaendig
+validiert: ganzes normalisiertes Original und echte feste Referenz entsprechen
+dem GET, alle6Scorebereiche valid/reported_matches. Original-SHA256:
+4e2b902dcec14aa7fc9f97c8913e262e56cdd9895fcc6a75769452df66969234.
+Original/Quelle/CPU/Work/151Artefakte/Native/Vertrag/SHA:
+ExFiles/Reports/Benchmarks/1a8dd630-2a91-4e6d-9201-29ccc8a16242/ (11Dateien nachQuellabschluss).
+Gesamt222.194637/IPC573.388903 gegen50 232.376652/764.508614
+bei gleichem Vergleichsschluessel, unisoliert. Kein isolierter Speedup,
+Regressionsbeweis, Abtun als Rauschen oder Score-Rerun. READERS37 overlap=no/
+data=yes und IPC-/FS-Kausalitaet bleiben55/57 offen. KeineOssiPC-Aktion,
+SDK-/Paketpublikation oder neue physische NVIDIA-/Sound-/Eingabe-/Ordner-
+latenzquittung; nativer Rest52-66 bleibt getrennt.
+
 0.87.39: bounded cooldown exception for a confirmed idle allowed core
 ---------------------------------------------------------------------
 Release0.87.39 / Kernel0.1.402, SPEED-037 (Medium). Normal migration cooldown

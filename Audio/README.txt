@@ -153,9 +153,15 @@ HDA and AC97 submit refill/status/recovery passes through DriverApi v20. Each
 request declares a 10 ms absolute deadline, a bounded callback budget and a
 stable device key. A separate EDF queue and one `r4d-audio` short-completion
 worker isolate those passes from normal Driver Work while globally
-serializing them. Normal admission reserves deadline capacity and the
-scheduler demotes the worker after its four-tick/four-dispatch boost, so audio
-cannot form an unbounded priority lane. The current HDA and AC97 DMA geometry
+serializing them. Normal admission reserves deadline capacity; the ordinary
+role boost remains four ticks/four dispatches. Since0.87.51, copied actual
+ticket/device/task-generation metadata also informs safe CPU selection near
+the deadline. Extra priority has a2ms window per10ms and cannot be renewed by
+ticket changes; expired/missing work owes an actual Ready FIFO opportunity.
+Input/rank-zero donation precedes it. The original elapsed callback budget,
+including waits, is retained. This is soft bounded urgency, not a hard CPU-
+share, callback interruption or physical audio deadline guarantee. See
+Core/Parallelitaet.txt,0.87.51, for actual native order/retirement and limits. The current HDA and AC97 DMA geometry
 is intentionally unchanged: the available cursor, queue, underrun and
 deadline evidence did not justify a period or segment-DMA change.
 

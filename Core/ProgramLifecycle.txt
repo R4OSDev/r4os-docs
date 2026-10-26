@@ -1,6 +1,108 @@
 R4OS program lifecycle
 ======================
 
+0.87.40: bounded Service continuations and one submission deadline
+----------------------------------------------------------------
+Release0.87.40 / Kernel0.1.403 / Spectra0.1.68, SPEED-045 (Medium).
+The current source already subtracted submitted_tick before service_core
+(commit10299aba,16.10.2026). The old analysis claiming unused queue time was
+incorrect for this source; no new queue-subtraction fix is claimed. What
+remained was a relative deadline re-projection and four Service workers held
+through endpoint admission/response waits.
+
+The exact Async Request now stores its finite absolute submission deadline.
+Initial queue, permit admission and reply continuation use that same value.
+Native typed endpoint admission checks it under the exact endpoint lock and
+again after copying pageable request bytes, before publishing to the server.
+Native reply poll checks it after acquiring that endpoint lock. Expired work
+is not newly admitted. Zero retains one nonblocking attempt; FOREVER retains
+an unbounded logical budget. A response/copy/drain already in progress still
+needs its real owner release; this is no hard wall-time return guarantee.
+
+Four existing BSP Service workers execute bounded attempts, then detach a
+pending continuation without publishing completion or releasing client
+buffers. No Task-bound unwind token or Async/endpoint mutex spans a response
+wait. A later worker restores the exact retained request/instance execution
+context before the next attempt. File workers/CPU eligibility/capacity and
+public ABI are unchanged. Native endpoint payloads are copied into owned
+slots; raw client headers/buffers stay with the Async Request until completion.
+
+Response, permit and endpoint lifetime changes notify existing resident AUTO
+Events without acquiring the lower-ranked Async mutex.64 small handle-hashed
+notification buckets coalesce changes; a collision causes only a bounded extra
+retry, never identity admission. Each request remembers its bucket generation
+BEFORE attempting its operation. This plus latched Events closes both the
+notification-to-detach and enrollment-to-physical-wait windows. Idle workers
+wait for an event or the earliest pending finite deadline; no periodic polling,
+new thread or background diagnosis. The bounded64-slot selector revalidates
+canonical request, cancellation, actual endpoint handle/ID and lifetime.
+
+Completion still detaches the worker before waking a caller. A detached
+pending Request remains state2 and Close returns BUSY. Public ProgramIoInfo's
+task_id remains the last worker ID; it is not a current worker/buffer-release
+witness. Caller/thread/instance
+cancellation also claims pending requests with no worker Task; it removes the
+actual endpoint ID before publishing exactly one terminal completion. Active
+worker retirement retains its existing exact Task/generation/drain contract.
+The ID is no longer erased before its cancellation acknowledgment. Service
+publication rechecks the instance done flag under the Async mutex, serializing
+an admission that waited for this lock against a completed cancellation pass.
+Purge
+rejects an unacknowledged pending Service continuation even with task_id0.
+No caller buffer may be freed merely because a finite caller wait expired.
+
+SDK source97 NetSocket helpers already wait for terminal completion and retry
+Close before dropping stack-local requests; this ownership behavior is kept.
+Their stale comment about a fresh worker timeout is corrected. The generated
+R4SdkNet NetSocket bridge delegates to that existing Zig owner. Separate
+synchronous ServiceConnection call paths gain no new facade guarantee here. No SDK/Contract ABI, wrapper logic,
+SDK package publication or blanket consumer repinning is introduced.
+Endpoint Task-wait counters continue to describe actual wait calls; detached
+Async continuations are event-driven work, not invented Task wait rounds.
+
+Native normal KVM4 passes the existing file POOL128/4 reused file workers/
+64 slots/overload/stale-ID/data/stream assertions. This first guest on403f414
+also passed four existing LIFECYCLE /ASYNCQUICK cycles, each8 pending requests/
+3 live child threads, actual Caller-Kill/owner disappearance/empty endpoint.
+Only its new Service setup failed: TestInjection already auto-starts the exact
+SVCAPPD echo fixture. That diagnostic now verifies the existing fixture path,
+identity/start/restart state and handles, uses it and preserves its running
+state. It removes only fixtures it installed. No unknown service is replaced.
+
+After the final under-lock done admission gate, fresh Test/BOOT readback gives
+Kernel403 SHA256 58e0b14b3b6f98d5e345d4845256608c156e574c4f94544ed4de041e81b51468.
+The targeted final guest passes all new SERVICE cases: four pending slow replies
+with BUSY Close/retained buffers while the independent fifth echo completes;
+full8-slot60-tick admission timeout with unchanged submitted server count;
+real permit release resumes a continuation under the original shared reply
+budget; zero is one terminal attempt; all exact requests close, owned fixtures
+stop/remove and preexisting fast identity/handles/running state remain intact.
+The relevant four Caller-Kill cycles/8 pending requests/3 threads also pass on
+this final Kernel and Spectra68. The file POOL is unchanged by this additional
+Service-only gate and is retained from its earlier passed original export.
+Both guests normally power off0, with actual BOOT/module readback and original
+GUI/Clipboard/SMP/Lock/Clock boot guards. Build/fmt/Clippy pass;150 module
+artifacts remain byte-identical to39, Spectra alone changes. Its final SHA256:
+ee10311465fcfe97d9362ffd58be4f39e860ad3ff685b785a0a388cedc9c769b.
+No original score rerun, fabricated load/worker/frame or private production
+instrumentation. The native case does not inject a page-in/lock-wait expiration
+inside payload copy; that final deadline check is an explicit owner/code gate.
+Exactly one final normal KVM4/Suite3 STANDARD:
+b48dcdb1-f4d2-452e-aeda-fc025e20d4f8,30full raw samples,4/4completed workers per sample,
+5recomputed aggregates and6valid recomputed scores. OriginalSHA256
+ffd160ffa25878fea3739e7efda1a920fad580e84ae1487531bcaa81f630d6b3.
+Scheduler54.198305 / Memory231.981149 / IPC529.896395 / Lifecycle514.172476 /
+Filesystem151.254296 / Overall220.236442.
+Full unchanged original/reference/scoring/validation/native/151module/source/
+CPU/work context andSHA256 under ExFiles/Reports/Benchmarks/b48dcdb1-f4d2-452e-aeda-fc025e20d4f8/
+Status: lokal validiert; DevCenter ausstehend. No upload/readback/score rerun.
+A whole-artifact score comparison is no isolated Service speedup or causal
+explanation for historical IPC/FS/lifecycle changes. IPC529.896395 is lower
+than39 706.680139 (and38 702.728370); the cause remains unisolated. Do not
+label it noise or a proved Service regression. STANDARD DNS uses direct Kernel
+IPC and is not a direct Async-pool measurement; indirect context remains open.
+No physical OssiPC/NVIDIA/audio/input/folder-latency qualification follows.
+
 0.87.33: proportional Async worker admission
 --------------------------------------------
 Release0.87.33 / Kernel0.1.396, SPEED-044. File and service lanes retain

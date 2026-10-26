@@ -480,18 +480,14 @@ durability, autonomous dirty progress, cold NTFS reads, reclaim and 1-MB
 move/replace/cross-volume checks. TestInjection was restored and the regular
 kernel rebuilt without the optional block selftest flag. No hardware run.
 
-Speculative read-ahead is deliberately disabled in 0.75.6. Adaptive and
-single-page variants were exercised against the subsystem/AUTOEXEC workload
-after contiguous demand fills were introduced; every variant reproducibly
-stalled that workload, while two-page demand-only fills completed it and
-combined 256 cold pages into 128 backend requests. R4DEV therefore reports both read-ahead
-window values and all activity counters as zero. The bounded sequential model
-remains unit-tested but is not allowed to issue I/O until a future change can
-explain and eliminate the interaction. Dirty progress and capacity contraction
-remain the only page-cache worker jobs.
-The 16-page demand cap introduced in 0.84.29 does not re-enable that worker.
-Its focused current-source/native evidence and the untested historical long-
-workload boundary are recorded in Docs/Core/KernelFileCache08429.json.
+Historical boundary: speculative read-ahead was disabled in0.75.6 after
+adaptive/single-page variants stalled the larger subsystem/AUTOEXEC workload.
+The cause was not root-caused then or by0.84.29. Its16-page demand cap did
+not enable speculation; the productive speculative executor was absent
+since0.84.17. Historical counter windows/activity were therefore zero.
+0.87.47 below supplies a new bounded executor and qualifies the current
+canonical long workload; this does not prove the old implementation's cause.
+Historical demand-only evidence remains in Core/KernelFileCache08429.json.
 
 Regular FAT32 mutations tag every cached dirty sector with an operation-local
 write batch. Their commit writes only that batch, including selected sectors
@@ -1193,3 +1189,102 @@ Status: lokal validiert; DevCenter ausstehend. IPC/FS variation is unisolated;
 no isolated cache/Explorer speedup, noise dismissal or score rerun. No OssiPC,
 physical NVIDIA/audio/input/folder-latency or package/SDK publication. Current
 Full/Slim14/Recovery65 and native OssiPC12 remain separate deployed states.
+
+0.87.47 - Bounded sequential prefetch with exact mounted ownership
+------------------------------------------------------------------
+Release47/Kernel407/Spectra75, policy4. Existing kernel block-cache owner;
+no new public ABI, module/SDK binding or filesystem format. Default product
+code enables bounded read-ahead. Existing demand16-page fills remain a
+separate caller-requested path. The unused speculative bulk-fill branch was
+removed after the sole actual demand caller was proven; one productive
+speculative owner lives in page_cache_prefetch.rs.
+
+Only a real demand miss or consumed prefetched page contributes a stream
+observation; pure cache hits do not schedule I/O. Two adjacent aligned4KB
+physical observations establish a stream; windows grow1/2/4pages. No logical
+file/fragmented/sparse prediction is implied. Confirmed512B/max-sector
+capability, exact mounted region and device generation bound every request.
+There is one pending request/device, at most4 resident speculative pages per
+device across the8-device cache and one worker/16KB resident aligned buffer.
+No autonomous chain: only later demand can schedule another future window.
+Unused pages retire at a worker opportunity after250ms. Any pressure level
+disables speculation; spare admission retains demand headroom, full-budget
+reuse selects only cold clean heads (at most8), never hot/dirty/busy pages.
+Existing dirty budget4 and clean trim16 remain.
+
+The original16-slot device queue owns all requests. An optional copied
+speculative ID requires idle admission and normal FIFO requests are selected
+first. Before speculative dispatch, a bounded same-controller scan rejects
+outstanding ordinary requests. Normal hot dispatch adds only its optional ID
+check; no new global demand counter or active backend preemption. Audio and
+interactive block requests use the same ordinary priority. A running physical
+transfer still must finish; no hard audio-latency guarantee is inferred.
+
+A native task admission outlives all waits. An exact copied mount/device/
+region becomes a real mounted-use token before I/O, so unmount/raw exclusive
+claim cannot remove it until the actual physical completion and cache return.
+An active use may return Busy to such an operation; it is never a false drain
+acknowledgement. The existing exact device pin and resident direct-buffer
+waiter are reused; detached static-buffer return is rejected. Cache writes
+and reclaim cancel pending generations; a stale inflight result is drained,
+then rejected without publication. VFS unbind cancels exact bound unused
+pages. Dirty masks/owner sequences/io_busy pins retain their original owners.
+The worker uses copied metadata across waits; no shared mutable cache borrow.
+Round-robin device selection and resignal on every early skip retain other
+devices' coalesced work. Mount-use/cache owners return before rescheduling.
+
+Eight actual policy/index host cases plus3 actual queue/mounted-state cases
+pass. They cover original RAM/8192->64/live pin/cold window/dirty FIFO, adaptive
+sequential/random/pressure, canceled generation versus real completion, normal
+FIFO ahead of older speculative ID, active versus consumed completion and
+mounted-use/claim/unmount/stale-owner/ref. Host admission stubs stand in for
+IRQ/runtime primitives; they do not claim actual hardware dispatch. Kernel
+owner build/Clippy/fmt pass. Exact final Kernel407 SHA256
+a917652aa376928b117a80c56ee8e92b980596ed1a6caf5a05f0a2394021b95f.
+
+Explicit private KVM4 processing witness, same current production binaries:
+SPECTRA FILESYSTEM readahead: OK chunks=32 processing_with_checkpoints=9 issued_pages=31 useful_hits=29 random_scheduled=0 expiry_payload=67->66 mutation=fresh digest=11333088405097900544 physical_parallelism=unqualified
+Only this case uses a copied virtual main-disk config with read bandwidth
+2097152bytes/s (2MB/s). Processing hashes real page data512rounds with
+cooperative checkpoints; the strict counter gate requires actual completed
+lookahead during processing, useful hits, random scheduled0, physical payload
+retirement after expiry, fresh same-size whole-file mutation and own cleanup.
+No fake worker, product sleep or physical HDD/USB parallelism claim. The first
+unthrottled attempt had29hits/31issued but0 completions between its processing
+probes; that failed witness is retained. It was not declared green.
+
+Unthrottled current Kernel/Spectra bytes independently pass original full
+FAT /PAGECACHE/NTFS16-page fill/selective foreign-dirty writeback/autonomous
+progress/copy/retry/reclaim,640-hot40MB input, true D: remount/exact generation/
+foreign caller refusal, full CHECK PERFORMANCE/actual VM pin+reload and strict
+cold Desktop /HOST /LAUNCH /RESTART plus original EXPTEXT /FILES/FREE/Nav/Icon:
+SPECTRA FILESYSTEM cache-budget: OK hot_pages=640 prime_entries=706 prime_payload_bytes=2891776 ram_limit=1875 stream_bytes=39321600 evictions=6316 hot_hits=5120 hot_misses=0 reclaimed=1811 remain=64
+All ERRORLEVEL0/shutdown0. The working policy4 was initially overwritten to3
+by boot reset; all reset reporters were corrected and final bytes requalified.
+The legacy diagnostic word readAhead=off now accurately says bounded.
+
+The concrete historical0.75.6 long-stall boundary additionally justifies one
+existing canonical CONFIG /HEADLESS-SUBSYSTEM plus exact1828-byte AUTOEXEC
+run at the same final bytes: existing complete Test-QemuApiMarkers and actual
+image subsystem/registry/persistence receipts pass, shutdown0. This is current
+replacement qualification; the old cause and exhaustive intermittent/hardware
+coverage remain unproved. It does not close37 READERS overlap=no/data=yes
+or IPC causality at55/57. No physical unplug/forced in-flight failure proof.
+
+Exactly1 final unthrottled Suite3 KVM4 STANDARD 4938cc13-1d0f-4f75-8b8a-3c5cc4d7f4fb,30samples/4
+completed workers each,5aggregates/6scores locally recomputed: scheduler_sync=61.736669; memory=226.695532; ipc=330.168921; lifecycle=518.098214; filesystem_io=141.875550; overall=202.399017.
+Original SHA256 4f679006a8b201e359b14ed7bdfbcac1da9f0d36d3b955608aac0ca3e91892a3.
+Complete original/reference/work/CPU/151artifact/native/profile/source and
+comparison context: ExFiles/Reports/Benchmarks/4938cc13-1d0f-4f75-8b8a-3c5cc4d7f4fb/.
+Status: lokal und R4OS Server vollstaendig validiert. IPC/FS variation is unisolated;
+no isolated prefetch speedup, noise dismissal or score rerun. No OssiPC action
+in this task, physical NVIDIA/audio/input/folder qualification or SDK/Full/Slim
+publication. Concurrent user server/AGENTS work remains independently owned.
+
+User26.10.2026: Uploads wieder verfuegbar. Derselbe Originalexport wurde
+mit gepruefter CA/Server-IP nach LAN-Registrierung an R4OS Server importiert.
+Vollstaendiger normalisierter GET einschliesslich30Samples/5Metriken/6Scores/
+Work/CPU/Artefakten und Referenz stimmt mit den lokalen Originalen ueberein;
+alle6 score_validation-Bereiche valid/reported_matches=true. OriginalSHA
+unveraendert. server-import/readback/validation und reference-server-readback
+sind zusaetzlich im selben Archiv. Lokale Abschlussausnahme bleibt erlaubt.

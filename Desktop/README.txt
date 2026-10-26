@@ -1123,3 +1123,70 @@ One final STANDARD af5b55bc-e3f9-4464-9c6d-5b086890e74c, original dada1c887d0afe
 No physical visible/latency/audio/hardware claim, isolated speedup, new
 SDK package/public Full/Slim release or OssiPC update. See filesystem43 and
 SDK LanguageParity43 for exact protocol, build/runtime scopes and artifacts.
+
+0.87.44 - Explorer generation-owned navigation
+----------------------------------------------
+Release44/Explorer31/EXPTEXT5/Spectra72. Kernel405, Desktop172, WINSVC20,
+SDK source99 and Contract49 remain unchanged. Explorer owns the new work;
+no new kernel scheduler, API, service or AP filesystem admission is added.
+
+Every folder/drive/history/sort request gets a nonzero generation. Main
+publishes Loading folder before a copied BSP native job is admitted. It
+keeps the committed old location/list usable. A newer request coalesces
+behind cancellation and exact native join of the older job; a done flag or
+timeout never authorizes reuse/free. Main drains joins before snapshot exit.
+One raw directory_batch visit returns at most4 entries with the existing
+backend256-step budget; sort advances at most32 logarithmic heap roots per
+checkpoint. Failed/changed/OOM work retains the last complete view.
+
+The first complete, sorted base snapshot never reads shortcut contents.
+After that view is published, a separate metadata job copies its immutable
+items, resolves one shortcut per checkpoint and sorts its private result.
+The serial owner pins the published source through exact native join; no
+mutable App/window/facade borrow crosses the worker. Max16MB per snapshot,
+published plus one private candidate, no partial/unsorted publication.
+Unknown shortcut metadata is shown as Shortcut, distinct from known Bad link.
+
+Adoption revalidates the mount/directory watch and exact global publication
+sequence in RAM; Computer uses inventory generation. Conservative stale
+retries are bounded to3. Base adoption alone commits location/history;
+metadata retries cannot repeat push/back/forward actions. Selection follows
+full path/kind/cluster/size/time identity through resort/page movement.
+Changed identity cannot inherit old selection merely through a matching
+path. Name/delete/paste/Open With state is cleared at base adoption; stale
+entry operations refresh before acting. Post-create selection intent is
+bound to its requested generation. Existing snapshots support paging.
+
+Host:10 affected cases pass:2 bounded-sort/cancellation-owner,6 original
+FREE-owner,1 original Unicode dialog,1 actual page/selection owner. The
+latter covers70 entries,64/6 page boundaries, back-page movement, a selected
+shortcut title resort across pages and replaced on-disk identity refusal.
+Final private KVM4 case08744-navigation uses exact Kernel405 SHA256
+9c672b5d1bf2850eb7df84035369102aed28da7665b55225f03811439421780a.
+Real2048-file NTFS folder includes1024 links. Existing DESKRUN WAITFRAME and
+R4DESK event queue observe admitted base/details work, inject D, and retain
+D:\ instead of accepting the old generation. Revisions8->12 and11->17;
+first content8/14; a third window content22 closes during base work. All
+three cooperate and the Desktop reaps exact generations. Loading-frame
+publication precedes worker/EOF by source order; observation of the title
+does not assert overlap with a particular backend instruction.
+Same-source EXPTEXT uses actual native joins: completed old generation
+superseded before collection, newest target only, Alpha/Beta metadata sort,
+immutable published source, post-join mutation rejection and cancel/drain.
+Original CHECK DESKTOP /HOST /LAUNCH /RESTART, EXPLORER /SELFTEST /FILES and
+FREE-owner race cases pass; ERRORLEVEL0/poweroff0. Final test-only source
+addition rebuilt the three changed artifacts byte-identically to those
+native-qualified files. NVMEIRQPROBE device-missing is expected without its
+fixture and provides no NVMe qualification.
+
+Exactly1 final Suite3 KVM4 STANDARD f9da6100-1aa2-44da-86c1-9e6c7a3e765e,30 raw samples,
+4 completed workers each,5 aggregates/6 scores locally recomputed:
+scheduler_sync=54.905691; memory=228.811739; ipc=506.688171; lifecycle=474.627455; filesystem_io=158.230192; overall=216.718371.
+Original SHA256 a2876ad330ce6e1ec0bd73cacde7f0e534a2740daba133f2030de7babbc8eb44.
+ExFiles/Reports/Benchmarks/f9da6100-1aa2-44da-86c1-9e6c7a3e765e/ retains original, reference,
+validation, complete work/CPU/artifact/native/baseline context and hashes.
+Status: lokal validiert; DevCenter ausstehend. IPC/FS changes against43 are
+unisolated; no score rerun, noise dismissal or isolated Explorer speedup.
+KVM does not qualify physical folder/input/audio/NVIDIA latency. No OssiPC
+action, SDK publication or Full/Slim update; deployed14/Recovery65 and
+native OssiPC12 remain separate. Cancellation awaits real I/O/join boundaries.

@@ -1,6 +1,93 @@
 ﻿R4OS concurrency and responsiveness
 ===================================
 
+0.87.39: bounded cooldown exception for a confirmed idle allowed core
+---------------------------------------------------------------------
+Release0.87.39 / Kernel0.1.402, SPEED-037 (Medium). Normal migration cooldown
+remains30ms. One shared native task/migration owner now admits an early move
+only for Interactive or ShortCompletion work, with another real task competing
+on its prior CPU and a confirmed entirely idle allowed destination core.
+Interactive is the canonical normal, unmetered role (boost counters0/0);
+ShortCompletion additionally needs both remaining boost ticks and dispatches.
+Neither role is promoted and migration never replenishes those budgets.
+An independent per-Task last-exception timestamp limits each role to one early
+exception per30ms. A normal/policy move or role change does not clear that cap.
+The cap is consumed only when an actual different destination is committed.
+
+The target must belong to the current hard CPU set and a known topology core.
+Every confirmed member of that core must still be schedulable, have an actual
+physical idle current and an empty Ready queue. An unknown/partially offline
+core, busy SMT sibling or physically departing non-idle stack is insufficient.
+The source check excludes the candidate itself; topology/cache/rank preference
+alone never opens this exception. Ordinary post-cooldown placement is retained.
+
+Wake home selection and bounded Ready transfer use these same facts/policy.
+The singleton shortcut may reject a bound/unsafe task or unavailable budget,
+but must leave a possible exception for the existing bounded target search.
+Current-task exclusion, saved RSP/FPU image, exact owner/lifetime, preempt depth,
+held Mutex, guard-offer/handoff, wait/timeout and CPU-mask barriers are unchanged.
+Ready order/time, role/donation budget and fairness remain at their native
+owners. The Task-local extra timestamp is not a second identity/lifetime table;
+public ABI/module contracts remain unchanged. No additional global admission,
+worker, background scan or CPU-capacity limit is introduced.
+
+The pure actual policy passes four host cases: alternating competing cores
+cannot replenish the rate cap; exhausted boost/invalid time cannot grant it;
+the unmetered normal Interactive role still has the migration cap; and unknown,
+partial or busy SMT cores fail physical-idle admission, including siblings
+outside the candidate's hard set. Existing real placement cases are extended
+with two producer modes: a real initial migration, short blocking/wake, one
+exception and a further wake with the exception budget already consumed.
+Each suspends/resumes a full YMM vector and the exact task-bound unwind token.
+The existing YMM store helper executes vzeroupper, so each new wait reloads its
+full test vector; this is a test precondition, not a new FPU production fix.
+Busy peers are actual owned Input tasks on their actual CPUs. They are released
+at the bounded control cutoff and retired through the existing ledger; no
+foreign queue/load/frame is rewritten to manufacture an idle target.
+
+Native normal KVM4: original SCHED selector60/60,156/156 created/reaped
+Tasks,65 deadline tasks, zero live Tasks/Work or cleanup errors. Both new modes
+PASS: actual first CPU1 -> CPU2 exception, bypass0 ticks against control30;
+exactly one early exception, no replenished role budget, three YMM/unwind
+suspensions each, actual peer retirement. Subsequent eligible early wake stays
+on its prior home even with another free core. Existing pinned, occupied-core,
+singleton, Ready age, park handoff, donation/PI and timeout cases still pass.
+The independent FPU selector64/64 on the final ELF has1/1 Task and2/2 Work,
+no leaked resources. Sync1/Unwind2 and directed4 had already passed with the
+same production policy before the new fixture's per-wait YMM reload correction;
+CPU lifecycle also passed there (real wait/YMM/NVMe512B/offline-online epochs).
+This is combined bit coverage127, not a claimed single final127/127 run.
+All guests normally power off0. BOOT readback on the final SCHED/FPU guests:
+543679ff1aa65b48baaa1152d6ee510092f5b9e3e519669a27dbcafe275d481a.
+All151 module artifacts remain byte-identical to38. Kernel build/fmt/Clippy
+and the four pure policy cases pass. The first fixture incorrectly demanded
+boost counters from unmetered Interactive; the next failed after its own YMM
+read/vzeroupper. Both original failure exports were preserved until resolved.
+A stale SYNCCHECK marker in the SCHED-only host selector was removed and that
+unchanged successful export revalidated, without another guest run. Generated
+contract flags are Sync1,Unwind2,Directed4,Fairness8,Inheritance16,Deadlines32,
+FPU64; the host's earlier120 interpretation was corrected to SCHED60.
+The fixture demonstrates this specific30-tick policy delay and one extra move.
+It does not measure cache cost or establish a general speedup. Normal small
+load/preference changes and busy/unknown/partial cores retain cooldown.
+The redundant outer38 Ready-time Option is removed: pull_prepared already
+memoizes its clock supplier once. Supplied IRQ time and the38 timeout cutoff
+remain. The38 historical description is corrected; original38 bytes and score
+export are retained without a rerun or an invented per-candidate improvement.
+Exactly one final normal KVM4/Suite3 STANDARD:
+2b00a6fd-c989-4483-be04-2e567f7e4583,30 full raw samples,4/4 completed workers
+per sample,5 recomputed aggregates and6 valid recomputed scores. Original SHA256
+8b4227668efd549c660f05b140aaff38a0187d347058ac1aa4ca384b2c6772c4.
+Scheduler52.906478 / Memory230.648592 / IPC706.680139 / Lifecycle554.066056 /
+Filesystem164.456168 / Overall239.364010. Full unchanged original/reference/
+scoring sources, validation,151-module/native/build/CPU/work context and SHA256
+under ExFiles/Reports/Benchmarks/2b00a6fd-c989-4483-be04-2e567f7e4583/.
+Status: lokal validiert; DevCenter ausstehend. No upload/readback or repeat.
+The whole-artifact comparison is not an isolated cooldown speedup or a new
+causal explanation for historical IPC/FS comparisons.
+This local fixture does not qualify physical SMT/NUMA/energy/NVIDIA/audio/input/
+folder latency. BSP Async File execution still requires the55/57 work.
+
 0.87.38: reuse resolved clock cutoffs inside one bounded scheduler owner
 ------------------------------------------------------------------------
 Release0.87.38 / Kernel0.1.401, SPEED-041 (Low). The global clocksource
@@ -16,13 +103,19 @@ cancellation retains its existing separate handoff/cancellation path. Ordinary
 individual wakes still read fresh time at their original decision point.
 
 One resident Ready-refill attempt visits at most eight candidates from one
-donor. Its clock supplier now captures lazily once when a cooldown/move needs
-time. Candidates needing no clock still cause no clock query. An idle timer
-turn supplies its already resolved IRQ time to the same refill owner. Local
-snapshot storage ends with the attempt, before any physical switch; no value
-crosses wait, Runtime release or migration. The fixed cutoff can conservatively
-leave a just-expiring cooldown to the next attempt; it never admits it early.
-Existing timer periodic balance already used its supplied time and is retained.
+donor. Its inner pull_prepared owner ALREADY memoized clock time before38.
+The newly added outer lazy Option therefore gives no additional per-candidate
+publication reduction; this was identified during39's deeper owner review.
+The actual new refill saving is the idle timer turn supplying its already
+resolved IRQ time to that existing owner instead of another global projection.
+Candidates needing no clock still cause no clock query. Snapshot storage ends
+with the bounded attempt, before any physical switch; no value crosses wait,
+Runtime release or migration. A fixed cutoff can conservatively leave a
+just-expiring cooldown to the next attempt; it never admits it early. Existing
+periodic balance already used its supplied time and is retained. The extra
+outer memoization is redundant and is removed with39. These
+clarifications do not change38's recorded artifact, native results or original
+benchmark; no rerun or isolated per-candidate gain is inferred.
 
 Driver Work and Kernel IPC detail-duration owners already use native monotonic
 Capture/Resolve stamps (and their existing gates). This part was satisfied by

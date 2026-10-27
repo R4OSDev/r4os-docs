@@ -1,6 +1,120 @@
 ﻿R4OS concurrency and responsiveness
 ===================================
 
+0.87.55: Begrenzte HDA-Fortsetzungen; allgemeine Kernelpreemption bleibt zu
+-------------------------------------------------------------------------
+Kernel413/HDA44/Contract52(DriverApi38)/SDK103/Spectra80. Gegenstand sind
+laufende Standard-ELD-Kontrollabfragen auf der
+normalen BSP-Driver-Workqueue. Kein neuer Thread und keine allgemeine
+IRQ-RIP-Zulassung fuer Kernel, R4D oder RM-Bibliotheken.
+
+Inventar/Entscheidung: peer_preemptible verlangt weiterhin die exakte laufende
+R4X-/zugelassene Libraryinstanz; defer_critical behaelt seine Kernel-IP-Sperre.
+Bestehende VM-, FS-, Block-, RX- und IPC-Checkpoints bleiben bestehen.
+Fileworker haben weiterhin keine pauschale AP-Zulassung; READERS37 und die
+FS-Besitz-/Parallelitaetsfrage gehoeren zur getrennten Qualifikation55/57.
+NVIDIA prueft bereits8Schritte/250us zwischen Device-Schritten; dies bleibt
+keine harte Obergrenze einer nativen Einzelinstruktion oder RM-Operation.
+FirmwareLoad prueft den SHA bereits inkrementell. Diese vorhandenen Pfade
+werden nicht durch eine zweite globale IRQ-/Switchadmission ersetzt.
+
+Konkreter Rest war HDAcontrolWork: ein vollstaendiger Standard-ELD-Read mit
+bis256Bytekommandos im selben Callback. Nun hoechstens16Codecverben pro
+Fortsetzung; private Bytes/Cursor bleiben im lebenden Controller. Nur nach
+vollstaendiger End-Pinsense-, ELD- und Displayownerpruefung entsteht dieselbe
+publizierbare Sinkquittung. Neuere explizite Routengenerationen verwerfen
+alten Teilscratch. AMDs anderer Empfaengerpfad, Initialinventar, explizite
+Routenauswahl und notwendiger physischer DMA-Stopp bleiben eigene Operationen.
+
+Auch ein einzelnes CORB-Kommando umgeht die CPU-Grenze nicht durch eine
+volle RIRB-Runde je Kurzpoll: vor dem echten bestehenden waitTicks(1) gelten
+jetzt insgesamt64Kurzpolls UND64dekodierte DMA-Antworten. Fehlende Antworten
+behalten danach ihre einmal-pro-Tick-Wartefolge und urspruengliche100ms-
+Kommandofrist. Die separate urspruengliche100ms-ELD-Bytefrist umfasst alle
+Work-Turns und Queuewartezeit. Dies sind Grenzen der beschaeftigten Arbeit,
+keine250us-Wallzeit- oder harte Echtzeitgarantie fuer Hardwarezugriffe.
+Ein Hardwaretimeout darf weiterhin verstrichene Zeit kosten; er wird weder
+als erfolgte Antwort noch als Ressourcenfreigabe quittiert.
+
+Das ausdrueckliche continuation-Flag gilt nur fuer normale, unowned Task-
+Work. Callback-Rueckkehr fuehrt denselben Slot samt Generation/Modulowner
+ans FIFO-Ende; wait verschiebt nur dessen naechste Zulaessigkeit um einen
+Tick. Urspruengliche Einreichungs-/Startzeit bleiben erhalten, started zaehlt
+Tickets, long_callbacks dagegen echte einzelne Callbackaufrufe. Abschluss,
+Waiterwecken und Release erfolgen ausschliesslich terminal. IRQ-/owned-
+und Audio-EDF-Aufnahmen nehmen das Flag nicht an; deren Budget bleibt gleich.
+Unmarkierte negative Resultate bleiben terminal. Die reale Vier-IRQ-
+Fairnessgelegenheit wird durch einen noch nicht faelligen Task nicht verbraucht.
+
+Vor dem Checkpoint sind Kontrolllock und callback-lokale Leihen beendet.
+safe_reschedule prueft unveraendert Memoryowner/IF/Preempttiefe/Tasklocks/
+Handoff und sichert den vollen Task-/FPU-Zustand. Der vorhandene Worker
+wartet bei nur spaeter faelliger Arbeit mit seinem bestehenden Event/Timeout;
+kein Pollthread und kein zusaetzlicher globaler IRQ-/SMP-Scan. Nur bei
+vorhandener, aber noch nicht zulaessiger normaler Arbeit wird die feste
+16-Slot-Liste fuer die naechste Wartefrist gelesen. HDA.COOP meldet wirkliche
+Turns, Fortsetzungen und maximale Verben; kein angenommenes Timing.
+
+Lokale Qualifikation:5echte Queuefaelle/50000besessene Turns, HDA75/75,
+Contract26Negativmutationen sowie aktuelle C-/Rust-/Zig-Host-/Barelayouts und
+native Callbackrunden; unveraenderte664Byte/498Slots/380Payloads. Fmt/Clippy/
+Build gruen. Die neue Eligibilityauswahl hatte zunaechst nach4IRQ-Auftraegen
+bei nur verschobenen Taskheads bereite IRQ-Arbeit verdeckt; der konkrete
+5.Hostfall war davor rot und ist nach der Auswahl vor Klassenfairness gruen.
+Keine Running-Zwischenzustaende oder verbrauchte FIFO-Gelegenheit beim Skip.
+
+Frischer finaler KVM4:127/127Kernelmaske,181/181Tasks,9/9echteWorktickets,
+isolated15/roles15/deadline65/IF4/unwind2, null lebende Ressourcen/Fehler.
+Alle urspruenglichen langen BASIC-/GB-/SNES-/Save-/Pause-/PCM-/Rejektions-/
+Report-/Join-/Reapfaelle, Desktopowner und regulaerer Shutdown0 bestanden.
+Tatsaechlicher BOOT und8Moduldateien im fertigen Gast stimmen bytegenau;
+Kernel-ELF413 SHA256
+98b5b819a90c33ff6a626fc858a95adbf6b40e1aef5aad65d9ca841adaffe820.
+SUBSYSOK13 ergaenzt nur explizite Diagnose: Ohne C:\TEMP\SUBSYS.TIMING keine
+zusaetzlichen Clockabfragen in den Hostcallbacks und kein Diagnosewrite bei
+Erfolg. Der selektive SDK-Build kompiliert nur dieses vorhandene Fixture.
+
+Eine verworfene Vorprobe mit Fixture12 endete A120/audio-close raw=-8:
+Service-RPC-Timeout,32640Byte erzeugt/21120quittiert/3Idlecloses, B0 und echte
+Cleanup.100msRPC/500msClose und alle Orakel blieben unveraendert. Eine spaetere
+Diagnoseprobe bestand; ihre Maxima4msPresent/2msPoll beziehen sich nur auf
+verstrichene Hostaufrufe dieses erfolgreichen Laufs. Die finale Defaultprobe
+ohne Zusatzmessung bestand ebenfalls vollstaendig. Dies isoliert weder die
+Ursache des frueheren Timeouts noch beweist es Rauschen oder eine Regression.
+Beobachtung unverfaelscht zu56/57(globaler IRQowner/BSP-/Serviceworker) und
+zur integrierten66 weitergegeben; nicht als in55 beseitigter Audiotimeout
+ausgeben. Kompakter Beleg:Temp/08755-service-timeout-observation.json.
+
+OssiPC tatsaechlich auf55/Kernel413/HDA44/Spectra80, ein Foundationpaket mit
+3Payloads; Batch7cleanup/installed/applied5/5, frischer Boot60.484s ohne
+restartwake. Alle16CPUs konfiguriert/schedulierbar, keine Kappung.7installierte
+Module vollstaendig zurueckgelesen; originaler503ByteCONFIG/SHA6deac07f...
+unveraendert. Tatsachliche HDA-Kontrolle396Turns/234Fortsetzungen/max16Verben;
+kompletter Originalexport SHA256
+1911c1192e552dbba4d8f922f6919b4486f42fe6cc9f7e6719b2c1f27c9a7382.
+GAP1440accepted/backend/DMA/consumed,0unknown/0suppressed/einStreamgeneration/
+einOpen/keinSilenceClose/echteClose- und Ressourcenquittung. OriginalAudio8280/
+Master/Mute/2Streams/4Close/Reopen/IRQ/Deadline/HDA und480Progress gruen.
+Desktop- und Display-API verfuegbar, WINSVC running, cachedWindows0 und kein
+pendingOwner. NVIDIA333/R4NV19 bleibt automatic/software-native/native-cpu;
+keine neue GR- oder Latenzquittung. Sichttests explizit vom User uebersprungen,
+keine neue Hoer-/Maus-/Ordnerlatenzbeobachtung daraus ableiten.
+
+Genau ein finaler KVM4-STANDARD55:
+ffa650d5-e25f-4fbb-b690-f6fb46737851,30Originalsamples/4vollstaendigeWorker/
+Primaermetrik2/6gueltigeScores. Original-SHA256
+e58f52e0f28d52e82ba5844cea5289416103e7da578a72b54341a35190c51626.
+Vollstaendig lokal und inR4OSServer validiert: kompletter normalisierter
+Original-/Referenz-GETgleich, alle6reportedMatches wahr. Gesamt234.148294,
+IPC723.304528; gegen54(204.892983/329.352060) unisoliert, kein Speedup-,
+Rauschen- oder Regressionsbeweis und keine Scorewiederholung. Originale,
+Referenzen, Arbeits-/CPU-/Artefakt-/Vergleichskontext und SHA-Sidecars unter
+ExFiles/Reports/Benchmarks/ffa650d5-e25f-4fbb-b690-f6fb46737851/.
+151produktiveModule: nurHDA44/Spectra80neu,149bytegleich. Testfixture13 liegt
+separat imSDK-Ausgang; Kernel413neu. Oeffentliches Full/Slim51/Recovery65
+bleibt vom quell-/nativqualifizierten55 getrennt. Sammelpush/Versionsabschluss
+erst nach den zugehoerigen Git-/API-Quittungen;56ist der naechste Schritt.
+
 0.87.51: Audio-Workfrist an der sicheren CPU-Auswahl (SPEED-043)
 ---------------------------------------------------------------------
 Release0.87.51 / Kernel0.1.410 / Spectra0.1.78. Driver Work und Scheduler

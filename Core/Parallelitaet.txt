@@ -1,6 +1,132 @@
 ﻿R4OS concurrency and responsiveness
 ===================================
 
+0.87.57: Explizite Compute-Worker, I/O und Audiofortschritt
+-------------------------------------------------------
+Stand: Implementierung und benoetigte Originalfaelle qualifiziert; finaler
+STANDARD lokal und R4OS Server vollstaendig validiert. Kernel415, Desktop173,
+Spectra81, AUDIOD14, SDK104/Contract53. Drei von151produktiven Modulen neu,
+148bytegleich; SUBSYSOK13 bleibt separate Testfixture. Shared/Rust/raw.rs
+kanonisch aus CFacadeGen regeneriert (R4SYS1336/R4AUDIO224), Assertions erhalten.
+Passende technische SDK104-Hosttools fuer Linux/Windows/Runtime neu exportiert;
+kein Umgehen der vorherigen SDK103-Matched-Checksumpruefung.
+
+Besitzmatrix und verbleibende CPU0-Pflichten:
+- Desktop: Main/UI/Input und der Anwendungslader bleiben BSP. Ein Compute-
+  Worker darf laut program_api::launch keine Programme starten. Nur besessene
+  Task:Send-Daten-/Outputvorbereitungs-/Layout-/Capturejobs bekommen das
+  Compute-Flag und runtime.workers=owned-v1. Lokale SDK-Kontexte, atomare
+  Steuerung, besessene Payloads und wirklicher Join vor Zugriff/Freigabe.
+  Keine pauschale runtime.parallel-Freigabe und keine neue Produktionsqueue.
+- Die vier vorhandenen Async-I/O-Worker (2Datei/2Service) sind SMP-zugelassen.
+  Request-ID/Ownergeneration/WorkerTaskgeneration/AtomicRequest/Lane-FIFO,
+  Buffer-/Volume-/Range-/Servicebesitz sowie originale Cancel-/Close-/Exit-
+  und Terminal-/Retirementkanten bleiben erhalten.
+- audio-progress laeuft auf zugelassenen APs. Outputpermit, StreamMutex und
+  Backendcallback-Admission bleiben bindend. Safe-Checkpoint erst nach dem
+  vollstaendigen Callback-/Guardreturn. r4d-audio bleibt BSP: seine exakte
+  Ticket-/Deadlinepriorisierung ist weiterhin an CPU0 gebunden. Normale
+  R4D-/gfx-work-/gfx-mode-Arbeit bleibt wegen nicht qualifizierter RM-/MMIO-/
+  Firmware-/Resetbesitzfolge BSP. Keine generelle Kernel-/R4D-Timerpreemption.
+
+Zwei konkrete bei der Integration gefundene Engpaesse:
+1. vm_pager::file_buffer machte jeden pager_io_count zur Exklusivsperre fuer
+   die ganze Heap-VMA. Unabhaengige Callerbuffer in derselben Region konnten
+   trotz zweier Leser nicht gleichzeitig I/O ausfuehren. Ein kompatibler
+   Filebuffer-Teilzaehler erlaubt gemeinsame Pins. Jeder Pin blockiert weiter
+   Reclaim/Writeback/Uncommit/Rangefreigabe; beide Zaehler unter demselben VM-
+   Besitz exakt aufgenommen/freigegeben. Der private Zaehler nutzt vorheriges
+   Tailpadding: Range216B und alte Offsets202/206 bleiben compilergeprueft.
+2. Jede logische Streamtermin-Zusage verlangte das Hardware-Outputpermit.
+   Paralleler Progress fuehrte dadurch in den langen Original-SNES-Faellen
+   zu343/297BUSY-Writes. Zusagen sind jetzt ausschliesslich Streammetadaten
+   unter StreamLock, mit exakter Owner-/Streamgeneration und Transaktion.
+   Eine zusammen mit desired_flow erfasste Revision wird vor jeder PCM-
+   Reservierung unter demselben Lock erneut geprueft. Bei Aenderung erst
+   Flowcallback ohne Streamborrow, dann erneut pruefen/reservieren. Neuer
+   PCM-Tail ist nicht Teil eines alten reservierten Chunks. Devicecallbacks
+   bleiben unter Outputpermit, kein Backendcall auf dem Producer, keine
+   neue Queue und keine gelockerte Frist/Busy-/PCM-Grenze.
+
+AUDIOD14: Eigene explizite BUSY-Close-Wiederholungen werden exakt gegen den
+Dienstzaehler fuer alle tatsaechlich eingegangenen Close-RPCs geprueft.
+Vorherige fixe +1-Annahme war bei zwei wirklich gesendeten Requests falsch.
+Nur bekannte BUSY-Antworten duerfen weiter innerhalb derselben3s/100ms-RPC-
+Fristen wiederholt werden; Transport-/Epochfehler bleiben fatal. Eine echte
+Lazy-Oeffnung, kein Idleclose, same-generation1440accepted/backend/DMA/consumed
+und alle alten Ressourcenbaselines bleiben erforderlich.
+
+WORKERS128 ist ein separater expliziter Beobachter an echten besitzenden
+Aufruf-/Returnkanten. Defaultall127 und dessen20_000Tick-Controller unveraendert.
+WORKERS30_000Ticks/45_000Controller/100Tick-Expirywaits umfassen auch den echten
+langsamen ATA-PIO-BMP-Return. Gemischte128-Masken werden vor Arbeit mit -1 und
+unveraendertem Output abgewiesen. Vier Klassen mit Task-/Ownergenerationen,
+Originalschluesseln und Anfangs-/End-CPU; Pending-Serviceversuche sind keine
+Completion. Maximal16repraesentative Terminalquittungen je Klasse und volle
+Gesamt-/CPU-Masken. Jede Klasse verlangt tatsaechliche erfolgreiche AP-Arbeit;
+keine Auftrags-/Callerbuffer-Lebensdauer im Beobachter. Standardbetrieb nur
+negative Atomicabfrage am Anfang, finish(None) sofort; keine Uhrzeit-/Runtime-
+Aufnahme, kein Sampler/Thread/Timer und keine Byte-/MMIO-Instrumentierung.
+Bootlogquittungen sind nach BootReady nicht automatisch serielle Ausgaben.
+
+Lokale KVM4-Abnahme mit finalem ELF34fe443695c4a11216c2fb26611781c95a5740044da88ebac029ca3e0e2ce67c:
+127/127,182/182Tasks,9/9Work,isolated15/roles15/deadline65/IF4/unwind2,
+keine Live-/Cleanupfehler; IRQ56-/FIFO-/Ticket-/Cancel-/FPU-Originale erhalten.
+MEMORY KERNELHEAP und PAGERSTRESS/STRICT; READERS C/NTFS und F/FAT echte
+Overlap2, Daten exakt, overwrite/truncate/rename busyUse=yes, mountGeneration
+und Notifications geschlossen. Lange Original-BASIC/GB/SNES60s bestehen;
+SNES jetzt beide busy=0 bei unveraenderten Arbeit-/PCM-/Zeit-/Draingrenzen.
+Gemischt8originalGAP/3echteExplorerFirstContent+Desktop-Reap/32exakte65573B-
+Dateilesen/3echteJoins, Privatdateien und besessener Desktop freigegeben.
+Alle4APklassen/UnionF/invalid0; realer grosser Screenshot gejoint/Headergeprueft/
+Datei entfernt;13installierte Dateien und BOOT vollstaendig bytegleich.
+Desktophost:10Besitzerfaelle+3Geometrie+1SDKclock gruen.
+
+Native OssiPC57/415, alle16CPUs ohne Kapazitaetslimit:
+OWNED-SMP57/4Payloads/SHA883b8afe57c90423c12e83adf2760fdd9f7687a12236396c9303a242a702c225
+voll transport-/dateigleich; Batch9cleanup/installed6von6, erster neuer Boot
+64.999s, unveraenderte503B-CONFIG und13Modul-/Konfigurationsreadbacks.
+NVIDIA333/R4NV19/automatic/native-cpu erhalten. Vor dem57Update war schon56/414
+TCP-erreichbar ohne SSH-Banner; einmal freigegebene Recovery12, VER56/414nach
+59.277s. Das ist kein57-Regressionsbeweis. Ein alter unreferenzierter Boot-
+Backup wurde durch SYSUPD voll verglichen archiviert; Journal unveraendert.
+
+Nativer WORKERS128: alle4Klassen erfolgreich auf APs, Union9E (5tatsaechliche
+CPUs innerhalb16Kapazitaet), Controller1/1 und keine ungueltigen Identitaeten.
+3ExplorerFirstContent/echteDesktop-Reaps und32exakteDateilesen/3Joins belegt.
+Originale getrennt: GAP1440/trueClose/Rest0, AUDIOD8280/2Streams/4Close/reopen/
+IRQ/HDA und PROGRESS480 mit absichtlicher Quellstarvation1/Stalegen1/Close2;
+HDAcontrol1634Turns/978Fortsetzungen/max16 und FPU64/64,2Tasks/6Work/Rest0.
+Normaler frischer REBOOT ohne Poweraktion; erster Clockbeleg nach ca54.364s
+(Host-Belegdateizeiten, keine erfundene genaue Bootdauer). DISPLAYD war zuerst
+preparing und konvergierte im selben Boot zu automatic/nvidia/native-cpu/
+pending0. Eigene14Dateien nach vollstaendigem Inhaltsvergleich entfernt;
+normaler Neustart entfernt auch den absichtlich zurueckgehaltenen Testprozess.
+Kein separater R4D-Unloadnachweis und keine neue physische Sicht-/Hoerquittung.
+
+Wichtige offene integrierte Beobachtung, nicht als Pass umdeklarieren:
+OBS-08757-NATIVE-MIXED1 meldet beim ersten GAP terminalClose FAILED, obwohl
+spater Source-Sessions/Materialisierung0,Lazy+1/Close+2/Backendfail0 vorliegen.
+Genauer Transport-/Fehlercode nicht erfasst; Ursache offen. Gemischter Producer-
+Gesamtlauf bleibt fehlgeschlagen, die getrennten Originalpasses ersetzen ihn
+nicht. Folder-Caller bis FirstContent556/483/5235Ticks und File32total1769/
+max1700Ticks bei1000Hz sind keine physische Sicht-/Cursorlatenz oder isolierter
+Speedvergleich. Gleichen strengen Mischvertrag in66 nach den verbleibenden
+Grafik-/Schedulerarbeiten wieder aufnehmen, mit echtem RPC-/Closequeuekontext;
+keine Frist/PCM-/Ressourcengrenze lockern. Fruehere55Finite-Service-Timeout-
+Beobachtung bleibt separat; keine Gleichheit/Noise-/Regressionsursache behauptet.
+PublicFull/Slim51/Recovery65 bleiben vom Quell-/Native57-Stand getrennt.
+
+Genau ein finaler KVM4-STANDARD57:
+ceb275e6-1cdb-4b6d-93cc-1e61437a555d,30Originalsamples/4Worker/Primaermetrik2,
+alle6Scores gueltig. OriginalSHA
+aff092d607b9d9894be15f0426deaf0a6f024e201615e9e28c9c0e9275d89457.
+Unveraendertes Original samt CPU-/Arbeits-/Artefakt-/Vergleichskontext, lokalen
+und nativen Originalen unter ExFiles/Reports/Benchmarks/<run_id>/. Vollstaendige
+normalisierte Original- und Referenz-GETs des R4OS Servers gleich, alle6reportedMatches.
+Gesamt229.356381/IPC735.160800 gegen56 235.991006/741.339935 unisoliert;
+kein Speedup-/Noise-/Regressionsbeweis und kein Score-/Upload-Rerun.
+
 0.87.56: IRQ-Callback ausserhalb des globalen Runtime-Owners
 ----------------------------------------------------------
 Kernel414; AHCI0.2.6, AC970.1.8, RTL8139/RTL8168je0.1.5.

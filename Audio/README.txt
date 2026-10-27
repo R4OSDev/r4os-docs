@@ -145,9 +145,10 @@ resync therefore interleave with input, VM and presentation cycles instead of
 forming a synchronous multi-write burst. Busy preserves the exact source PCM
 and uses an independent 10 ms retry deadline. Source-frame feedback separates
 AudioService acceptance, deliberate silence suppression and explicit discard.
-The current platform contract exposes no per-stream hardware playback cursor;
-callers must report that state as unavailable rather than deriving played
-frames from accepted frames or guest time.
+Since0.87.53 a generation-bound per-stream cursor can report known backend
+acceptance, DMA submission and consumed canonical frames separately. Missing
+or reset-spanning device evidence remains unavailable/unconfirmed; acceptance
+and guest time never become playback receipts. See PlaybackProgress.txt.
 
 HDA and AC97 submit refill/status/recovery passes through DriverApi v20. Each
 request declares a 10 ms absolute deadline, a bounded callback budget and a

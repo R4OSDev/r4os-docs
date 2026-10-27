@@ -1,0 +1,186 @@
+0.87.53 - Wiedergabefortschritt und kontinuierliche Quellfristen
+===========================================================
+
+Problem und Verhalten
+--------------------
+Eine erfolgreiche AudioService-Annahme belegt keine Wiedergabe. R4SNES29
+begrenzt deshalb seine gesamte Audiopipeline mit960/1920 kanonischen Frames
+(20/40ms bei48kHz/stereo/S16), einschliesslich angenommenem, noch nicht
+konsumiertem PCM. Annahme allein weckt den gefuellten Produzenten nicht.
+Konsumierter Fortschritt, explizit unbestaetigte Restdaten und beabsichtigte
+Unterdrueckung/Verwerfung behalten getrennte Bedeutungen. DSP-interne32kHz
+werden nicht als Geraete-Frames ausgegeben.
+
+Vertrag und Besitzer
+-------------------
+Contract0.64.51/R4AUDIO3 erweitert den unveraenderten200-Byte-Praefix auf224
+Bytes um Fortschritt, Quellerwartung und Abschluss mit finalem Snapshot.
+Die bisherigen23 Slots einschliesslich2 Tombstones und die Mindestwerte2/200
+bleiben erhalten. Neue v1-Daten: BackendWriteReceipt48, BackendPlayback112,
+BackendFlow40, StreamExpectation40, StreamProgress152; AUDSVC-Request32,
+State200, FlowRequest72 und TrackedWriteRequest48. Contract51 korrigiert nur
+Ausgabe-/Besitzmetadaten der neuen Operationen; Zig/C/Rust-Bindings sind
+bytegleich zum bereits qualifizierten Contract50.
+
+HDA43 zaehlt angenommene PCM-Frames, echte DMA-Nutzlast und konsumierte Frames
+getrennt. Auffuellstille, Traegerstille und Postroll werden nicht gutgeschrieben.
+Partielle LPIB-Positionen und vollstaendig abgearbeitete Perioden werden ueber
+Slotintervalle der PCM-Sequenz zugeordnet. Output-/Resetgenerationen wechseln
+bei realer Entwertung; ein letzter nichtleerer Epochensnapshot erhaelt dessen
+bekannten Praefix. Ein ungewisser Rest bleibt unbestaetigt, ohne Wiederholung.
+HDA-Codec-Control bleibt vom PCM-/DMA-Streamlock getrennt wie in0.87.52.
+
+Kernel412 ordnet skalare Intervalle hoechstens8 Quellbesitzern und64 gemischten
+Backendspannen zu. Streamslot und64-Bit-Generation verhindern Zurechnung auf
+wiederverwendete Quellen. Keine Anwendungszeiger, kein Zusatzthread und keine
+allgemeine neue IRQ-/Scheduleradmission. Bestehende Audioarbeit beobachtet
+Cursor/Fristen begrenzt; Callbacks laufen ausserhalb des Streamlocks unter
+dem vorhandenen Ausgabebesitz. Abschluss beobachtet den finalen Cursor unter
+demselben Ausgabebesitz wie Idle/Drain, bevor der Quellbesitzer freigegeben wird.
+
+AUDSVC15 bindet Dienstepoche, logische Streamgeneration und Kernelstream exakt.
+Nur die nichtmutierende Erstabfrage darf beide externen Schluessel0 verwenden.
+Mutationen/Abschluss verlangen exakte Schluessel. Erzeugte Stille kontinuierlicher
+Quellen durchlaeuft den echten Taktpfad; diskrete Stille darf weiterhin absichtlich
+unterdrueckt werden. Bereits angenommene Daten werden durch eine anschliessend
+beschaeftigte Fortschrittsabfrage nicht nochmals angeboten.
+
+SDK101 behaelt genau einen besessenen Async-Request und eine PCM-Kopie.
+Discovery, Flow und Write werden erst nach echter IO-Retirement fortgesetzt;
+alle Teile teilen das urspruengliche absolute Requestbudget. Input und ein
+anstehendes Bild werden vor jedem Fortsetzungspoll verarbeitet. Neue
+Fortschrittsabfragen entstehen im vorhandenen Audiopump, nicht als Pollthread.
+Gastreset/Pause/Save/Load und ein spaeter alter Cursor koennen keinen Fortschritt
+der alten Quelle auf den neuen Gastabschnitt umlegen.
+
+Pause/Fortsetzen behaelt dabei denselben Gastabschnitt: spaete konsumierte
+Frames des noch schliessenden Streams muessen dessen ausstehende Frames
+weiter freigeben. Nur echter Gastreset beziehungsweise neuer Captureabschnitt
+blendet dessen spaete Daten aus. Ein gezielter Runtimefall bestaetigte vor der
+Korrektur360 faelschlich ausgeblendete Frames; Fortsetzen und Gastreset sind
+jetzt getrennt. Ein zweiter Kandidatenfehler wurde durch echte Wartedaten
+belegt:989/991 DSP-Frames warteten bei leerem Dienst/DMA, waehrend Fortschritts-
+abfragen das Nachfuellen verdraengten. Abgeschlossene IO wird nun nach Input/
+Bild und vor dem Producer-Refill verarbeitet. Der entsprechende Runtimefall
+scheiterte vorher mit0 statt1 Write. Die lange Originalprobe erreicht nach
+diesen Korrekturen beide vollen60 Gastsekunden mit drift=0/pending=0,
+1288636320 Masterzyklen und3605 PPU-Frames. Ihr strenger Reportvergleich
+hat zusaetzlich einen Zaehlerfehler offengelegt: vor der spaeten Writequittung
+gezaehlte Pause-/Mute-Bytes schlossen den wirklich angenommenen Praefix ein.
+Der erste Verwerfungsgrund bleibt nun beim besessenen Request; nach echter
+Quittung wird nur der tatsaechlich verworfene Rest als Pause/Mute gezaehlt.
+Neue strenge Faelle fuer volle/partielle Annahme scheiterten vorher
+(faelschlich3840 statt1920 beziehungsweise2880) und bestehen jetzt mit allen56
+SDK-Ownerfaellen. Die bestehende Gleichheit verworfen=pause+mute bleibt Pflicht.
+Die erneute echte KVM4-Abnahme besteht auch diese strengen Originalfaelle.
+
+Fristen und Messgroessen
+-----------------------
+Eine kontinuierliche Quelle besitzt eine feste absolute Fortsetzungserwartung.
+Leere Queue nach deren Ablauf zaehlt genau ein Unterversorgungsereignis je
+Episode. Abfrage, leere Queue und BUSY-Repetition erneuern die Frist nicht.
+Explizites Ende bleibt gewolltes Idle. Das ist ein Quellereignis; der alte
+HDA-Hardware-Underrunzaehler wird dafuer nicht umgedeutet.
+
+Queuealter stammt vom aeltesten noch ausstehenden Quellzeitstempel. SNES-Exporte
+erhalten konsumierte, DMA-/Backend-/unbestaetigte Frames, Start-/Endqueue,
+Queuealter, Quellunterversorgung und Stream-/Backend-/Output-/Resetgeneration.
+audio_playback_frames ist nur bei gueltiger geraetegestuetzter Zuordnung gesetzt
+und umfasst das exportierte Aufnahmeintervall. Historische Exporte/NULL-Werte
+bleiben unveraendert. Weder MMIO-Cursor noch bekannte konsumierte Frames sind
+eine physische Lautsprecher-, Sicht-, Eingabe- oder Ordnerlatenzquittung.
+
+Qualifikation
+-------------
+Contract51:26 Mutationsfaelle und originale Zig/C/Rust-Layouts/Callbacks,
+HDA68, reines Kernelmodell3, SDK56, AUDSVC9 und SNES173 einschliesslich11
+Maturityfaellen bestanden. Aktuelle C/Rust-Subsystem-Interop7 mit beiden
+originalen Kernen und5 echten unsicheren/Ownership-Negativen bestanden;
+Driver67+3Negative und Platform4+Misuse beim unveraenderten Besitzer erhalten.
+LanguageParity660Ownerdateien/35Scopes/180Exporte gruen. Das erteilt keine
+zusaetzliche Windows-, Hardware- oder physische Wiedergabequittung.
+
+Frischer echter KVM4 mit Kernel412:127/127Masken,181/181Tasks,5/5Work,
+isolated15/roles15/deadline65/IF4/unwind2, null lebender Besitz/Cleanupfehler.
+Alle unveraenderten langen BASIC-/GB-/SNES- und Desktop-Owner-Vertraege
+bestehen. Beide SNES-Instanzen erreichen60Gastsekunden/1288636320Masterzyklen/
+drift0/pending0 und enden durch Witness beziehungsweise echtes Close.
+Tatsaechliche BOOT-/Moduldateien im Gast stimmen bytegenau; Kernel412
+SHA f2f6ce56bb5fd2ec459c74264eb826a7e9d62f0934076d8e7bda2ff231e93b98,
+SNES29 SHA9d1c6b6817f397207baf515ba52318a3ba45b2945448d079e8d29b2a0b91cd4c.
+Keine temporaeren Traces/Stopuhren im Produkt. Getrennte echte Transport-
+faelle bestaetigen80Quanten/38400Frames mit Teilannahmen, DMA-Ringumlauf,
+mehreren Quellen, konsumiertem PCM, unknown0 und leerem Abschluss.
+
+Native Endqualifikation53/412: vollstaendiges Sechs-Payload-PAGEFIX-Paket
+SHA e408c52894c10c71537db34e6812114fe2a26a3ca045d71e85bd7c00bba5449f,
+Batch5 cleanup/installed8von8, wirklicher Neustart in64.975s ohne restartwake.
+Kernel aktiv/installiert412; HDA43/AUDSVC15/SNES29/AudioDiag0.2.12/Spectra79
+zusaetzlich vollstaendig bytegenau zurueckgelesen. Alle16CPUs schedulierbar,
+keine Kapazitaetsbegrenzung. OriginalCONFIG503Bytes/SHA
+6deac07f9612be6eca104b1857d0c5c2016ea9b52e5aaf5b0efa0e9eba28b313 erhalten.
+DISPLAYD software-native/backendnvidia/native-cpu automatisch, NVIDIA333/
+R4NV19 unveraendert; keine GR-Beschleunigungsquittung.
+
+Originaler nativer AUDIOD:8280Frames/33120Bytes/21Writes; Kontinuitaet,
+Master/Mute/Multisource/Reopen/Lifecycle/Restart bestanden, sieben echte
+HDA-Kandidaten und vollstaendiger Originalexport. PROGRESS getrennt:
+480Frames angenommen/Backend/DMA/konsumiert, unknown0, absichtlicheQuell-
+unterversorgung1/explicit-end0, alteGenerationabgewiesen1, echte getrennte
+Zwischenstaende und zwei Abschluesse. Diese Werte sind kein Lautsprecherbeleg.
+
+Bei der ersten53/411-Qualifikation fror der Desktop nach passiven Abfragen
+ein. Der wirkliche SYSUPD-Rollback stellte52/410/HDA42/AUDSVC14/SNES28 und
+die vorherigeCONFIG wieder her; dieselben Haenger bestanden dort. Die neuen
+Audioartefakte waren dafuer nicht erforderlich. TASKS+SLEEP1500 sowie
+TASKS+DESKTOP froren ein; einzeln konnten die Abfragen vollstaendig enden.
+Ein noch kleinerer einzelner Fall ohne SNES/Grafik/Parallelprozess hing an
+einem frischen resident0/8192Byte-Task-Ausgabepuffer.
+
+Ursache: execution_inventory.rs schrieb Callerzeilen und Antworten unter
+ProgramStateGuard0. Metadatenkommittierter SDK-Heap darf erst beim Zugriff
+physisch belegt werden; der Fault-Handler verweigert Pagerarbeit unter
+gehaltenem Memoryowner. Kernel412 behaelt Staging und finale Epochenchecks,
+kopiert Cursorerwartungen vorher und gibt den Besitzer vor allen Caller-
+Ausgaben/Restartantworten frei. Kein ABI-/Epochen-/Thread-/Queueumbau.
+
+Echte positive KVM4- und Native16-Abnahme: Spectra79 CHECK VM /INVENTORY
+beziehungsweise Default-VM verwendet unberuehrte Task-/Threadpuffer.
+Native:64Taskzeilen/8192resident/2Faults,19Threadzeilen/4096resident/1Fault,
+vorher jeweils resident0, failed0, beide Regionen exakt freigegeben. Die
+vorher haengenden parallelen Paare liefern jetzt vollstaendige Original-
+antworten und nachfolgendesVER: TASKS+SLEEP13.053/1.919s, TASKS+DESKTOP
+13.254/1.083s. Der neue explizite begrenzte VM-Fall startet keinen Sampler;
+Restart liefert weiterhin null Zeilen und maximal16 Epochenversuche.
+Das belegt diese konkrete Haengerkorrektur, keinen allgemeinen Speedup.
+
+Finaler sichtbarer DESKRUN-Funktionslauf unter412:0.25sWarmup+0.25sNTSC-
+Detailgastzeit,5369318Masterzyklen/pending0/15Frames,48000Bytes angenommen,
+13009konsumierteFrames=12000neue+1009anfangsgepufferteFrames. Unknown0/
+Endqueue0, gleiche Stream-/Output-/Resetgenerationen, cleanup_verified=true,
+Desktopcache0Fenster, anschliessendeDesktop-/Lifecycle-/VER-Abfragen0.
+Sechs echte Quellunterversorgungen bleiben unveraendert im Original; daraus
+keine unterbrechungsfreie Musik oder physische Latenz ableiten. PCM-Digest
+ist laut OriginalprofilvertragNULL; kein vollstaendiger Wiedergabestromhash.
+Original+SHA+CPU/Arbeit/Artefakte/Display/Ressourcen/Regressionskontext unter
+ExFiles/Reports/Benchmarks/0.87.53-ossipc-perfcheck-kernel412/. Der fruehere
+411-Lauf mit zwei Unterversorgungen bleibt getrennt und unveraendert unter
+0.87.53-ossipc-perfcheck/. Beide sind instrumentierte Funktionsproben ohne
+formale SNES-run_id, Score, FPS- oder integrierte66-Vergleichsaussage.
+
+User27.10.2026 bestaetigte beim ersten53/411-Audiotest: Testton hoerbar,
+Desktop normal. Keine neue menschliche Hoerbeobachtung unter412. Weitere
+Sichttests laut ausdruecklicher Useranweisung uebersprungen; beliebige
+gezielte Neustarts fuer die restliche Roadmap freigegeben, User unerreichbar.
+Diese Ausnahme ersetzt keine der dokumentierten technischen Nativequittungen.
+
+Genau ein finaler STANDARD53:1e5f81b8-e147-4bda-812c-d7524cc35bdb,
+Suite3/30Rohsamples/4Worker/Primaermetrik2/5Aggregate/6gueltigeScores.
+Original-SHA4a58873d4fb41a645e5116ea19c4dd310b5d16c3b1770fee033e32f1184783d2.
+Vollstaendig lokal und in R4OS Server validiert; kompletter normalisierter
+Original-/Referenzreadback gleich, alle6reported_matches. Archiv unter
+ExFiles/Reports/Benchmarks/<run_id>/ mit Rohdaten/Kontext/Referenz/SHA.
+Gesamt202.492133/IPC357.425996 gegen52 206.017554/474.951502 unisoliert;
+kein isolierter Beschleunigungs-, Rausch- oder Regressionsbeweis daraus.
+Fuenf von151Modulartefakten neu/146gleich; Kernel412 neu, SDK101/Contract51,
+SUBSYSOK0.66.11. Kein Score-Rerun. Sammelpush und Abschlussstand in der API.

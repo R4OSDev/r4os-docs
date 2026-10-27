@@ -149,6 +149,12 @@ Since0.87.53 a generation-bound per-stream cursor can report known backend
 acceptance, DMA submission and consumed canonical frames separately. Missing
 or reset-spanning device evidence remains unavailable/unconfirmed; acceptance
 and guest time never become playback receipts. See PlaybackProgress.txt.
+Since0.87.54 SDK102/AUDSVC16 also retain active discrete null PCM on the
+same stream: only initial unmaterialized discrete silence stays lazy.
+Confirmed producer idle/stop or explicit Close owns the original asynchronous
+retirement and HDA drain. AudioDiag13 /GAP checks signal/null/signal, exact
+1440 consumed frames and true final resource release. No new timer/thread,
+kernel/HDA/ABI change or audible/physical speed claim.
 
 HDA and AC97 submit refill/status/recovery passes through DriverApi v20. Each
 request declares a 10 ms absolute deadline, a bounded callback budget and a

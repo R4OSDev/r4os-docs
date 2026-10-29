@@ -1881,3 +1881,79 @@ BOOTreadback desselbenKernel423; genau1finaler32Lauf, keinScorererun.
 Lokal validiert; R4OS Server ausstehend (Import/Readback).
 Inventar141Module/1069Tests/483Dokumente. Gezielte SDK-Abhaengigkeiten sind
 publiziert; regulaerer Sammelpush der22weiterenBesitzer folgt diesem Stand.
+
+0.88.33: Bedarfsabhaengige Besitzerpruefung in WINSVC
+---------------------------------------------------
+WINSVC26 plant seinen Owner-Sweep nur, solange Tray-, Display-, Graphics-
+oder Modusbesitzer zu beobachten sind. Neue Endpointbatches und faellige
+Sweeps aktualisieren das Interesse; ein leerer Dienst bekommt keine feste
+50-Tick-Fachdeadline. Eine bestehende Deadline wird durch weitere Requests
+nicht nach hinten geschoben. Tray-/Graphics-Waits, Launch- und Diagnose-
+fristen werden unabhaengig weiter als frueheste Deadline kombiniert.
+Der zentrale SDK-Stopcheck bleibt auf seinem bisherigen maximalen200ms-
+Budget. Allgemeine Endpoint-/Retentionbehandlung bleibt erhalten; die
+Aenderung verspricht keine vollstaendige Abschaffung aller Idlewakes.
+
+Innerhalb eines maintainTray-Durchlaufs wird dieselbe volle Identitaet aus
+Instanz-ID, Generation und reserved nur einmal abgefragt. Das temporäre
+Stackmemo ist aus den bestehenden Tabellen abgeleitet:84 Eintraege mit
+2016Bytes Nutzspeicher plus Count, keine Heapallokation und keine neue
+Live-Owner-Grenze. Nur der initialisierte Praefix wird gelesen; ein leerer
+Wake nullt keinen ganzen Cache. Auch Diagnose- und Sweepschritte derselben
+Runde teilen das Ergebnis. Die folgende Runde fragt frisch. Unerwarteter
+Status bleibt unbekannt und wird nicht zum bestaetigten Prozessende.
+Entfernte Surfaces mit fortbestehender Identitaet bleiben beobachtet, weil
+der Desktop noch Chains halten kann. Es kamen keine GPU-Fencepolls hinzu.
+
+Vorherpruefung am unveraenderten Adapter: ein leerer ServiceState liefert
+Fachdeadline0 (runService setzt ansonsten immer now+50); ein genauer Owner
+in echten Tray-/Display-/Graphics-/Modusbrokern wird6mal abgefragt. Nachher:
+null und1Abfrage.8 gezielte Hostfaelle pruefen den tatsaechlichen main-
+Adapter, Generationen, Unknown-/Ende-Uebergaenge, mehrere Surfaces, weiterhin
+zu beobachtende entfernte Surfaces, Fristen und die volle Memokapazitaet.
+Dazu bestehen16 bisherige Broker-/Wire-/Launchfaelle einschliesslich der
+vorhandenen Modus-/Graphics-Checks und2 SDK-Service-/Netzwerkfassadenfaelle.
+Der zentrale SDK-Stopcheck ist unveraenderte Quelle, nicht als zusaetzlicher
+Standalone-SDK-ServiceLoop-Test ausgegeben. Die gezaehlte Status-Probe ist
+nur Testtransport; normales Produkt-IR enthaelt weder Probe noch Fixture.
+
+Normal gebautes WINSVC26, SHA256:
+03728c76f1af9e818af5ee0dea25274496f5ef3830246b8f42c075c79ce63553.
+Kernel423/Desktop187/SDK111/Contract59/Libraryquelle38 bleiben unveraendert.
+Der echte private KVM4-/Softwaregast liest das identische WINSVC-Artefakt
+vollstaendig zurueck. Zwei aktuelle GUI-Laeufe vor bzw. nach Definition-
+Neuanlage liefern Exit0, vollstaendige externe Ausgaben und Observerfreigabe0.
+Der genaue Desktophost wird per oeffentlichem Inventar ermittelt und beendet;
+ein frischer Dienst ohne Desktop-/GUI-Produzenten beantwortet seinen Status
+und stoppt regulaer. Der beobachtete leere Stop einschliesslich SSH benoetigt
+rund0.201s; daraus folgt keine isolierte Latenz- oder CPU-Einsparungszusage.
+Normaler Gastshutdown ist belegt. Der bestehende /SELFTEST besteht ebenfalls
+auf denselben26Bytes in einem separaten Gast. Er registriert Testfenster und
+fuehrt echten Restart/Cleanup aus; deshalb vom laufenden GUI-Setup trennen.
+Ein direktes /PING ist in der Terminal-Serviceklassenzulassung nicht frei;
+der leere Endpoint wurde ueber den tatsaechlichen Status-RPC geprueft.
+
+Zusaetzlicher Befund0.88.78 bleibt am Roadmapende offen. Nach gewoehnlichem
+Stop/Start derselben WINSVC-Definition liefern sowohl exakte Original25-
+Bytes (d8760bdd8a06bde6676f2c2c328064977bbabb98b3921b1902758446822dff25)
+als auch26 nach1.2s ohne Eingabe DESKRUN no_desktop/keinSpawn. Vollstaendige
+Definition-Neuanlage stellt bei beiden die Bindung wieder her. Das ist kein
+33-Regressionsclaim und keine abgenommene automatische Desktop-Neuanbindung.
+Quellursache und moeglicher Bezug zuServicegeneration70 bleiben dort offen.
+
+Die Source-Aufrufreduktion6->1 ist ausgefuehrt, keine absolute native CPU-
+oder Hardwareersparnis gemessen. Keine physische GPU-/Windowsqualifikation
+und keine geaenderte native Fence-/Capture-/Ownershipzusage. Bestehende
+historische Hardwarebelege bleiben datiert. Der finale STANDARD33 und der
+regulaere Sammelpush werden nach dieser fachlichen Abnahme ergaenzt.
+
+Finaler STANDARD33:1b1ea77e-8e7c-4eef-8e8a-d7dda2aed78c,
+Suite3/Primaermetrik2/KVM4; alle30Samples, Arbeitsmengen und4Worker sowie
+6gueltigeScores gegen die festeReferenz verlustfrei geprueft. Beobachtetes
+Overall156.320568, keine isolierteWINSVC-CPU-/Speedupzusage. Original-SHA256:
+403ffdd54fc760a9c4a0bab66215d82925fc6f54c9b7ae5afa63b3aaae1e7d69.
+Voller unveraenderter Export und separatePruefung unter
+ExFiles/Reports/Benchmarks/1b1ea77e-8e7c-4eef-8e8a-d7dda2aed78c/.
+BOOTreadback desselbenKernel423; WINSVC26 unveraendert zum qualifizierten
+Artefakt. Genau1finaler33Lauf, keinScorererun. Lokal validiert; R4OS Server
+ausstehend (Import/Readback).141Module/1069Tests/483Dokumente.

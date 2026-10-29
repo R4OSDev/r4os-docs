@@ -530,3 +530,67 @@ printed a misleading failed-command line despite the successful summary/exit;
 this is not a failed owner case. These host cases do not establish current live
 AUDSVC restart/persistence/audio/DMA/physical sound. No new gate/full catalog or
 STANDARD; docs/status and release marker only.
+
+HDA/AC97 DMA, interrupt and lifecycle review (0.88.12)
+----------------------------------------------------
+Bounded review: actual HDA/AC97 PCM callbacks, copied queues/descriptors,
+stream/command/control Work, CORB/RIRB and codec route programming, IRQ/cursor/
+position recovery, coherency configuration and drain/stop/unregister ownership.
+No new physical profile, native register trace, live guest or hearing acceptance.
+
+0.88.49 owns unrequested HDA close diagnostics. Both physical Stop and successful
+IdleCloseWork format large control/controller/core/runtime/idle (and carrier)
+blocks without a detail guard. In the async path this occurs after stream unlock
+but before callback return and terminal Work publication. Static PCI/codec data
+is repeated too. Suppressed kernel Info output still pays driver formatting.
+Gate requested detail acquisition/formatting and keep coherent short snapshots,
+genuine errors and complete actual backend status/receipt semantics. No measured
+serial delay or previous starvation cause is inferred from log-call order.
+
+0.88.50 owns AC97's synchronous normal idle/close boundary. It has no distinct
+nonwaiting Idle callback: Stop acquires stream up to100ms, drains with repeated
+status reads/tick waits up to its original2000ms, then waits retained Work up to
+100ms per handle. The first AUDSVC close can block here before it can retain a
+Pending response. Preserve these real drain/retirement obligations in an
+independently progressing resident owner rather than shorten waits or free DMA
+early. HDA's existing asynchronous last-stream state is a lifecycle reference,
+not proof that HDA carrier/PCM/IRQ details apply to AC97. Two seconds is an
+existing bound, not an observed elapsed duration of a current run.
+
+0.88.51 owns AC97's unproven INTx extra registrations. If MSI is absent/fails,
+setup registers a representable PCI line then all GSI16..23. Every accepted
+extra route counts as admission and can cause own port reads for unrelated IRQs.
+Only actual proven routes should count. The existing HDA line/pin evidence
+helper demonstrates the intended distinction; real AC97 shared routing needs
+its own actual provider evidence. No measured lost IRQ or real hang claimed.
+
+Preservation findings: HDA command bursts are already bounded and return to
+tick pacing after the short response burst; unsolicited/mismatched replies
+remain distinct. Capability/codec/topology/route preparation is tied to actual
+initialization or control transitions, not decoded on every PCM sample. Native
+PCM takes a bounded direct copy; foreign formats retain the canonical streaming
+phase and complete reservation before DMA publication. Queue/CIV/period ownership
+keeps exact descriptors and does not infer completion outside its own window.
+Position-DMA/LPIB source validity, movement-based freeze and impossible-jump
+checks are functional. A repeated position read cannot itself advance consumed.
+
+IRQ handlers acknowledge own status and defer non-IRQ work; HDA coalesces a busy
+refill owner with its release wake and keeps the independent control lane.
+MMIO/DMA barriers, BDL/RUN/reset/position coherency and owned PCI-bit restore
+remain. Actual HDA idle Close retains its absolute deadline, output/reset epoch,
+postroll, real caller PCM and pending Work handles until completion/release.
+Route/reset changes and timeout cannot certify old work. Physical Stop/Unregister
+has distinct shutdown/IRQ/work/DMA obligations; HDMI silent carrier is an
+intentional option, not an unconditional stopped descriptor. AC97 reset's tight
+bounded port polling is not declared a universally removable wait without actual
+controller timing evidence; its asynchronous close follow-up must preserve the
+real reset/quiescence result. No blind sleep/barrier/cursor-check deletion.
+
+Current existing driver owner steps passed: HDA80/80 cases,41/41 build steps;
+AC977/7 cases,13/13 steps. Includes independent queue, Work, codec/command,
+coherency, route/cursor/recovery/lifecycle/idle-drain helpers as selected by each
+owner build. Actual caller/main/integration hardware is not covered merely by
+those helper cases. R4M0 module builds/inspection succeeded into Temp, completed
+temporary R4Ds removed; productive artifacts unchanged. No full system test,
+new suite/gate, STANDARD, actual IRQ/PCI hardware/hot-unload/audio latency claim.
+Only docs/status and release marker advance for this source analysis.

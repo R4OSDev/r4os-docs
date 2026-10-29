@@ -2156,3 +2156,89 @@ Kernel423 BOOTreadback und unveraenderte nativeD189-Artefaktbytes geprueft.
 Lokal validiert; R4OS Server ausstehend (Import/RemoteReadback).
 141Module/1070Tests/483Dokumente; neue4Hostfaelle in einem Testfile,
 keine neue permanente Produktmessung.
+
+0.88.36: Gemeinsame ueberschneidungsfreie Dirty-Normalisierung
+-----------------------------------------------------------
+Desktop190 verwendet fuer Regions.add und Dirty.invalidate denselben
+vollstaendigen Append-Pfad. Die produktive lokale Geometrie liegt in
+render/geometry.rs; die getrennten gemeinsamen R4GFX-Display-Helfer wurden
+nicht geaendert. Bisher absorbierte der neue Eintrag zwar alle direkten
+Ueberschneidungen, die Kapazitaetszusammenfassung des guenstigsten Paars
+konnte aber weitere Ueberschneidungen erzeugen. Nur Regions.add baute die
+acht Ueberlebenden erneut auf; Dirty lieferte sie ungeprueft weiter.
+
+Der urspruengliche while/swap/restart-Schritt liegt jetzt in einem privaten
+absorb_overlaps. Normalinsert und Rebuild der hoechstens acht Ueberlebenden
+benutzen genau diese Closure. Die Acht-Bereich-Grenze, neun Kandidaten,
+guenstigste Flaechenkosten, erste guenstigste Paarwahl und urspruengliche
+Swap-/Restartreihenfolge bleiben. Ein Neuaufbau erfordert keinen weiteren
+Kapazitaetsmerge, keine Rekursion und keine Heapallokation. Regions.add
+delegiert nur noch; sein redundanter Neuaufbau nach jedem normalen Insert
+entfaellt. Vollbild-/Boundingboxersatz und das Abschalten der bestehenden
+Kompositorpruefung werden nicht verwendet.
+
+Vorher: kanonische zehn Rechtecke erzeugen im unveraenderten189-Produkt
+unter anderem(23,44,53,3) und(37,36,7,15), die sich ueberschneiden.
+Alle9 alten Geometriefaelle bestehen, der neue Regressionfall scheitert.
+Ein getrennter echter Dirty.take_regions -> Frames::primary -> SDK-/CPU-
+Kompositoradapter erhaelt vor Present Some(Invalid). Daraus folgt der
+belegte Mainloop-Fehlerpfad; fuer den Vorherbeleg wurde kein alter Gast
+absichtlich abgebrochen. Der erste kombinierte Hostfilter stoppt bereits
+nach dem Geometriefehler und zaehlt nicht als weiterer CPU-Lauf.
+
+Nachher: derselbe Input und seine negative Origin-Verschiebung liefern
+Dirty==Regions, ohne verlorene Eingabepixel oder ueberlappende Ausgabepaare.
+Unabhaengige i64-Intervalle und ein vollstaendiges Pixelraster pruefen jede
+Kombination, Bounds und Flaeche. Summierte und eindeutige Ausgabeflaeche
+stimmen ueberein; eine blosse Gesamtzahl/Areasumme reicht nicht. Die
+urspruengliche ROI(10,2,66,73) bleibt. Zulaessige Mehrflaeche folgt weiterhin
+der Kapazitaetspaarpolitik; es wird kein exaktes Eingabeunion-Versprechen
+erfunden. Der echte CPU-Frame wird praesentiert, der naechste Frame laeuft
+weiter. Die vier bisherigen Timing-/32x32-Wirebounds-/Pixel-/Presentorakel
+bleiben; die Testshape96x96 erweitert sie mit genauen Wireunionbounds und
+allen uebergebenen Paaren.15gezielte und ganze263Desktop +3gemeinsame
+R4GFX-Geometrie +1SDK-Precise-Clockstartfall bestehen.
+
+Alle tatsaechlichen Dirty-Verbraucher sind einbezogen: primaerer CPU-Frame,
+render/runtime Outputdamage, capture/remote, capture/publisher Cursor-
+Damage und diagnostics/runtime. Die bisherigen Layer-/Kompositions-/
+Capture-/Ressourcenorakel bleiben bestehen. Daraus wird keine vorherige
+Kernel-/native-Regions-Ablehnung oder physische GPU-Wirkung abgeleitet.
+Testorakel befinden sich nur unter cfg(test); im normalen Produkt fehlen
+FRAMEFIX und Probezeichen. Es entstand weder ein neuer Runner noch ein
+neuer dauerhafter Messpunkt.
+
+Privater normaler Software-KVM4 mit exakt zurueckgelesenen190-Bytes:
+Desktop14/Generation14 bleibt vor und nach12angenommenen Remote-
+Captionereignissen gleich. Das echte GUI-Fenster verschiebt sich um50x20;
+der QMP-Softwareframebuffer zeigt(670,130) gegenueber dem Default(620,110).
+Zwei voneinander verschiedene GUI-Prozesse(19/19 und52/52) erhalten ihren
+jeweiligen Contentbeleg, Exit0, vollstaendige Ausgabe und release0. Ein
+weiterer Start und logischer Tastendruck im selben Desktopprozess sind
+belegt. Die exakte zehn-Rechteckfolge ist der Host-/Primaeradapterbeleg,
+kein heimlicher Produkt-Hook und keine behauptete Gastinjektion. Normales
+POWEROFF, eigener Gast beendet und Sourceimage kanonisch entfernt. Diese
+Softwarebedienung ist kein physischer Sicht-/Eingabe-/Latenzbeleg.
+
+Finales Desktop190-SHA256: a213b298858ed2a0ebe1cb3d9e6f1d4a8e8913dded5d2d68da99ed8730f8c210
+Kernel423 bleibt 738b5636a2b15159fd488b532b34df44f095a04d170cbcdea8eeb4d141eba808
+WINSVC27 bleibt bb64e60c3ad64602bf1fd45f3e95d7bfed81087f0f891532b63bf813fd20c3ba
+SDKQuelle111/Contract59/Libraryquelle38 unveraendert. Normales Desktop-
+Projektprofil mit bestehender technical=true-Arbeitsbaumqualifikation,
+unveraenderter SDK-Toolsetexport technical=false. Probeimage-Basis war
+Release35; Marker36 folgt fuer den finalen STANDARD. Belege:
+Temp/08836-runtime-proof.json, before-geometry.log, before-cpu-only.log,
+geometry-primary-tests.log und vorhandener RustNative-Runner. Gleicher
+Testdateibestand:141Module/1070Tests/483Dokumente, kein Hardwareupdate.
+
+Finaler STANDARD36:614e237a-cc00-4e45-b24a-9449a10655dc,
+Suite3/Primaermetrik2/KVM4:30Samples/4Worker/6gueltigeScores. GanzeArbeits-,
+Warmup-/Batch-/Bytekontexte, uint64-/Dezimalwerte und6Scores gegen die feste
+Referenz28b326e2-4323-4a4c-a0d2-4c1bab4958c0 verlustfrei geprueft.
+BeobachtetesOverall163.101784, kein isolierter Geschwindigkeitsbeleg.
+Genau1finaler36Lauf, keinScorererun. Voller unveraenderter Originalexport
+und separatePruefung:
+ExFiles/Reports/Benchmarks/614e237a-cc00-4e45-b24a-9449a10655dc/.
+Original-SHA8342b3356ace4dd744cd3a80ef2e25a7d9aea5e2070ae9d87dd3950533975211.
+Kernel423 BOOTreadback und unveraenderte native190-Artefaktbytes geprueft.
+Lokal validiert; R4OS Server ausstehend (Import/RemoteReadback).

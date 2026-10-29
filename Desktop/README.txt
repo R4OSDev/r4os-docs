@@ -2394,3 +2394,95 @@ Artefakt-/6Scorepruefung unter ExFiles/Reports/Benchmarks/0a5256a0-4304-4b03-8df
 Lokal validiert; R4OS Server ausstehend (Import/Readback). Die feste
 Referenz wurde beibehalten; kein weiterer Lauf fuer Score oder Upload.
 Der Abschluss umfasst den regulaeren Sammelpush von Desktop/Distribution/Docs.
+
+0.88.39: Periodische Uhr-/Audiodateipruefung ausserhalb des GUI-I/O-Pfads
+----------------------------------------------------------------------
+Desktop193 laesst TIME.R4S ueber den vorhandenen SDK-OwnedIo-Read und die
+AUDSVC-Dateipraesenz ueber io_control(FileInfo) pruefen. Der GUI-Refresh
+admittiert begrenzte Arbeit und fragt Status ab; die vorhandenen Kernel-
+I/O-Worker fuehren die Dateiarbeit aus. Je eine Clock- und Audioanforderung
+koennen ausstehen. Der stabile769Byte-Puffer bleibt bis zur exakten Close-
+Quittung verliehen; erst danach wird gelesen, geparst oder wiederverwendet.
+Normales Drain und der explizite Diagnosehandoff warten ebenfalls auf ACK.
+Es gibt keinen neuen Kernelservice, SDK-Vertrag oder produktiven Messpunkt.
+
+Zwei Verzeichnis-Cursor werden einmal beim Startup angemeldet. Deren Begin
+kann Dateisystemarbeit ausfuehren; periodische Polls benutzen ausschliesslich
+das vorhandene RAM-Journal. Aktuelle VFS-Schreib-/Append-/Copy-/Replace-/
+Rename-/Delete- und Streamfinish-Pfade melden die betroffene Elternstruktur.
+Das Journal mit256Eintraegen und Mountgeneration ist ein Aenderungshinweis,
+keine atomare Dateiversion. Ein erster sichtbarer asynchroner Snapshot
+schliesst die Luecke zwischen Startup-Laden und Cursoranmeldung. Lokale
+Invalidierungsepochen verwerfen bekannte veraltete Antworten nach Close.
+Fehlender/staler Cursor faellt auf begrenzte asynchrone Nachpruefung im
+bisherigen1s-/0.5s-Rhythmus zurueck, ohne erneuten GUI-Begin. Ein abgelaufener
+Fallbacktimer allein macht eine laufende langsame Antwort nicht veraltet.
+
+FileRead reicht die originalen Datei-Resultate durch: -3 bedeutet fehlend,
+-5 zu gross. FileInfo verwendet dagegen IO_NOT_FOUND=-5 und gibt bei Erfolg
+die Dateilaenge zurueck; auch0 bedeutet vorhanden. Diese Operationen werden
+getrennt behandelt. Fehlende/zu grosse/abgelehnte Inhalte ersetzen keine
+gueltige Uhrkonfiguration. Bekannte unveraenderte Fehler warten auf einen
+Hinweis, unbekannte Fehler behalten den letzten Wert und werden begrenzt
+nachgeprueft. Ein Installationshinweis ist kein Audio-Providerhandle und
+kein Dienstreply; bestehende Provider-/View-/Intent-/Timeoutregeln bleiben.
+
+Clock behaelt hoechstens768Konfigurationsbytes. Identische gueltige oder
+abgelehnte Snapshots betreten den nativen Parser nicht erneut; Decoderfehler
+bleiben wiederholbar. Ein Kandidat wird nur bei gueltiger Decodierung
+uebernommen. Versteckte Uhr erzeugt keine periodische Datei-, Hint- oder
+Kalenderarbeit und keinen eigenen Waittermin. Configflag, Terminal Mode
+und dieselbe Vollbild-Taskleistenabdeckung wie im Painter bestimmen die
+Sichtbarkeit. Bei Wiederanzeige wird ein frischer Snapshot angefordert;
+Kalender und neu eingetroffene Zeitzone/Format gelten ohne Abwarten des
+alten Kalendertermins. Der Kernel bleibt die einzige Kalender-/Zeitbasis.
+
+Vorher192: fuenf identische Snapshots rufen den originalen residenten R4STD-
+Parser fuenfmal auf; das neue Arbeitsmengenorakel scheitert5gegen1. Aktuell
+bestehen6Clock-,8FileOwner-,3urspruenglicheAudio- und2Taskbarfaelle innerhalb
+der ganzen278Desktop+3Geometry+1SDKclockfaelle. Vor dem letzten Zusatzfall
+bestanden18gezielt ausgewaehlte Faelle separat. Ein unveraenderter5s-Verlauf
+mit50GUI-Turns erzeugt genau einen initialen asyncRead und einen FileInfo,
+danach5Clock-/10Audio-RAM-Hintpolls und keine synchronen Dateicallbacks.
+100Turns waehrend einer kontrolliert langsamen Antwort laufen weiter;
+CloseBusy haelt Puffer/alte Anzeige, erst ACK erlaubt die echte DST-Anzeige.
+Getestet sind bekannte Stale-Replies, Mountverlust/fehlendeHints, Startup-
+Sichtbarkeit, Missing/Oversize/Refusal/UnknownError, Ownerabweichung und Drain.
+Die urspruenglichen Kalender-,Datum-,DST-,12h-,Audiointent-,Restart-,Pixel-
+und Ressourcenorakel bleiben. Ein neuer cfg(test)-Komponenteneintrag im
+bestehenden Runner:141Module/1071Tests/483Dokumente. Das sind Arbeitsmengen,
+keine gemessene physische Diskstall- oder isolierte Latenzverbesserung.
+
+Finaler normaler Desktop193 SHA256
+e53a4fc141a58850e483627c9ec1fa28901759551a3f122ee3c276edcd9d9f90.
+Zwei eigene Software-KVM4-Gaeste mit vollstaendig zurueckgelesenen193Bytes
+und SYSINFO4schedulableCPUs qualifizieren das Produkt. Im ersten bleibt
+Desktop14:14 ueber zwei GUI-Prozesse25:25/65:65 mit Content, Exit0, voller
+272Byte-Ausgabe und Observerrelease0 erhalten. Externes NTFS-COPY/DEL/
+Wiederanlegen von TIME.R4S zeigt Berlin23:46,12h11:46PM, dieselbe gueltige
+Anzeige bei abgelehnter/fehlender Datei und nach Wiederherstellung UTC22:46.
+AUDSVC wird gestoppt, seine Datei temporaer umbenannt und zurueckgestellt:
+fehlender Provider entfernt das Trayicon, Rueckkehr stellt es wieder her;
+Dienst8->56 und nachfolgend erneut geoeffnete bedienbare Audioelemente sind
+belegt. Fruehe Wiederanlaufbilder bleiben als unavailable qualifiziert.
+
+Der zweite frische Gast belegt am selben dortigen Host14:14 die echte
+Terminal-Mode-Verbergung: Berlin/12h wird waehrend verborgener Uhr geschrieben,
+der regulaere DESKTOP-Befehl bringt die aktuelle11:51PM-Anzeige zurueck.
+Der vorherige Zusatzversuch mit EXIT beendet nur seine Terminal-Sitzung
+und ist kein Rueckkehrorakel; daraus wird keine39-Regression abgeleitet.
+Verborgene Callbackzahlen stammen aus dem Hostorakel, nicht aus einem
+produktiven Zaehler im Gast. Screenshots wurden kontrolliert; daraus folgt
+keine atomare Screenshot-/Scanout- oder physische Audio-/GPU-Abnahme.
+Beide Gaeste wurden normal mit POWEROFF beendet und ihr gemeinsames,
+unveraendertes Sourceimage anschliessend mit Test-Retention entfernt.
+Kernel423/WINSVC27/SDK111/Contract59/Library38 bleiben unveraendert.
+Einziger finaler STANDARD39: 495ba087-320c-4b08-aa99-284df2e41778; Suite3/
+Primaermetrik2/KVM4,30Samples/4Worker/6gueltigeScores. Gesamtscore
+153.403760. Vollstaendiger Originalexport SHA256
+4f733cabd4a0d862c81207d3dacf2478759d5de61afdafc95e971bc99e44fb21
+liegt unveraendert samt separater verlustfreier30Sample-/Arbeits-/CPU-/
+Artefakt-/6Scorepruefung unter ExFiles/Reports/Benchmarks/495ba087-320c-4b08-aa99-284df2e41778/.
+Lokal validiert; R4OS Server ausstehend (Import/Readback). Die feste
+Referenz wurde beibehalten; kein weiterer Lauf fuer Score oder Upload.
+Der Abschluss umfasst den regulaeren Sammelpush von Desktop/Distribution/Docs.

@@ -1,4 +1,4 @@
-DESKRUN - Desktopstarts aus SSH (Stand0.87.41)
+﻿DESKRUN - Desktopstarts aus SSH (Stand0.88.26)
 ============================================
 
 DESKRUN ist eine normale Konsolen-App. Sie reicht einen kopierten Auftrag
@@ -80,8 +80,9 @@ App: Repositories/Apps/DesktopRun (DESKRUN.R4X, Slim und Full).
 Wire/Queue: Services/WindowService/Contract/desktop_launch_v1.zig und
 src/desktop_launch.zig. Desktop besitzt eine Rust-Projektion dieses
 Dienstvertrags und den Verbraucher in runtime/desktop_launch.rs.
-Es wird keine neue Kernel-ABI benoetigt; allgemeine SDK-Servicefassaden
-tragen Submit, Status, Wait, Austausch und Complete (4736..4740).
+Die448-Byte-Startnachricht und die Operationen4736..4740 bleiben erhalten.
+Seit0.88.26 verwendet die optionale Belegsicherung zusaetzlich die separate
+R4SYS32-Beobachtungs-API; allgemeine SDK-Servicefassaden tragen die Start-RPCs.
 
 Maximal 8 aktive Auftraege, 16 kopierte Ergebnisplaetze. Terminale Ergebnisse
 bleiben bis 60s oder bis zur Verdraengung durch neue Auftraege erhalten.
@@ -177,3 +178,138 @@ misst allgemeine Kernelarbeit, keine DESKRUN-Fenster- oder SNES-Latenz.
 Originalexport unter Artifacts/Distribution/Diagnostics/SpectraStandard/
 28f69195-9efc-438c-9f16-52b6cf8ac786/run.json sowie im DevCenter.
 Kein OssiPC-/Windows- oder physischer Bild-/Audio-/Latenznachweis.
+
+0.88.26 - Generationengebundene Abschluss- und Ausgabebelege
+=========================================================
+
+Herkunft und aktueller Gegenbeleg
+--------------------------------
+Der fremde Solitaire-Lauf hatte bestaetigtes Prozessende, exitCode=null,
+exitEvidenceUnavailable=true, outputIncomplete=true und null erfasste Bytes.
+SDK-/Releaseversion und Originalprogramm sind dort nicht fest gebunden.
+Erwartete Textmarker bleiben fuer diesen Originalversuch unbestaetigt;
+eine Konkurrenz beim Reap ist moeglich, aber nicht bewiesen.
+
+Eigene oeffentliche C-GUI-Fixture auf Kernel418/SDK107: stdout/stderr je BEGIN
+und END sowie return37. Ein externer Beobachter ohne eigenen Reap las frueh
+Exit37, aber output_length0/read-12. Nach Desktop-Reap waren wait/read-2.
+Aktuelle getrennte Ursachen: GUI-Ausgabe wurde durch die CUI-Routenpruefung
+nicht aufgenommen; der konsumierte Completion-Knoten wurde anschliessend
+entfernt. Daraus folgt keine bewiesene Ursache des alten Solitaire-Laufs.
+
+Besitz, Bindung und Startquittung
+-------------------------------
+Contract56 fuegt R4SYS32 retain/wait/read/release an: vier Slots ab1336,
+Tabelle1368; der alte1336-Byte-Praefix und165Slots bleiben unveraendert.
+ProgramObservationHandle ist24Byte: exakter Prozesshandle samt Generation
+und eigene boot-eindeutige Referenz-ID. Eine vorhandene Referenz bleibt nach
+Reap lesbar. Das alte Prozess-Wait/Reap bleibt konsumierend und nach dem
+Besitzer-Reap ungueltig; Beobachter reapen oder beenden das Ziel nicht.
+
+Standardreferenzen gehoeren zur erzeugenden Prozessgeneration und werden
+beim Creator-Ende geschlossen. PORTABLE ueberlebt diesen Creator bis zur
+expliziten Freigabe oder zum Bootende. Kopien desselben Tokens sind dieselbe
+Referenz; fuer unabhaengige Beobachter separat retain verwenden. Bindung
+muss erfolgen, solange der genaue Completion-Datensatz noch existiert;
+eine bereits vorhandene Referenz erlaubt auch spaetes erneutes Binden.
+Fehlende Belege liefern einen Fehler, keinen erfundenen Exitcode0.
+
+DESKRUN2 fordert Belegsicherung standardmaessig an. Desktop183 bindet vor
+Anbindung/Verwerfen eines geladenen Kindes und haelt bis zur Complete-ACK.
+WINSVC25 uebernimmt davor eine eigene creator-gebundene Referenz. Verlorene
+ACKs loesen keinen neuen Spawn und keine vorzeitige Desktopfreigabe aus.
+Die bestehende448-Byte-Startnachricht bleibt; flags4 fordert Retention,
+flags8 meldet deren Fehlschlag getrennt vom echten Startresultat.
+JSON fuegt evidence_retained/evidence_unavailable hinzu, Text evidence=...
+terminal/ERRORLEVEL quittieren weiterhin den Startauftrag, nicht App-Exit.
+
+WINSVC haelt seine Referenz nur in der bestehenden16-Ergebnis-Historie:
+maximal60s beziehungsweise bis zur Verdraengung. Freigabe braucht die echte
+Kernelquittung; bei verweigerter Freigabe bleibt der Eintrag erhalten.
+Dienstende raeumt seine creator-gebundenen Referenzen auf. Ein externer
+Beobachter bindet vor History-Ende seine eigene Referenz; deren Lebensdauer
+ist dann unabhaengig von Broker-History und Desktop-Reap. Kein unbegrenztes
+Kernelarchiv und keine Prozess-/Task-/VM-/Image-/Fensterbindung durch Retention:
+uebrig bleiben nur terminale Metadaten und inaktive Transcript-Payloads.
+
+Console-/STDIO-Vertrag
+---------------------
+R4SYS.write und R4DESK.console_write stdout/stderr einer GUI-App gehen in ein
+bei erster Ausgabe angelegtes Transcript. Es entsteht kein sichtbares CUI-
+Fenster und keine physische TTY-Umleitung. Stille GUIs brauchen keine Console.
+GUI-Text wird nach Abschluss ueber observation_read gelesen; die alte lebende
+console_output-CUI-Oberflaeche wird dadurch nicht zur GUI-Textoberflaeche.
+R4DRAW-Bilddaten und COM1-Diagnosen sind eigenstaendige Kanaele.
+
+Das Transcript ist die zusammengefuehrte normalisierte UTF-8-Console-
+Repraesentation, einschliesslich CRLF-Normalisierung; kein roher getrennter
+stdout/stderr-Bytestrom. Nutzdatenkapazitaet16384Byte plus begrenzte Block-/
+Segmentkosten. Available16 kennzeichnet auch erfasste leere Ausgabe;
+Truncated32 zeigt verworfenen Praefix, Incomplete64 bekannte Bearbeitung/
+Capture-Verluste, beispielsweise Clear/Backspace oder Allokationsfehler.
+Diese Verlustflags bleiben ueber Clear erhalten. Fehlt Available, ist die
+Erfassung unverfuegbar; output_length0 allein beweist keinen leeren Erfolg.
+Nichtnormaler App-Exit und erwartete Marker sind zusaetzlich zu pruefen.
+
+C: r4os/app_resources.h, r4_resources_observation_retain/wait/read/release,
+R4OS_PROGRAM_OBSERVATION_FLAG_PORTABLE und die kanonischen
+R4OS_PROGRAM_COMPLETION_FLAG_OUTPUT_* Konstanten. Zig: programObservation...
+im oeffentlichen Systemkontext. Rust: Resources::observe_process und
+Observation::{wait_ready,read,close}; export/adopt_observation uebertragen
+Freigabeverantwortung, aendern jedoch die Kernel-PORTABLE-Policy nicht.
+SDK/README.md beschreibt die Bindung und den Unterschied zur Besitzer-API.
+
+Aktuelle gezielte Abnahme
+------------------------
+Kernel419/Desktop183/WINSVC25/DESKRUN2, SDK108/Contract56/Libraryquelle35,
+Softwaredesktop/KVM4/Linux. Quelle der Library-Rust-Projektion regeneriert;
+R4L-Artefaktversionen und Spectra94 unveraendert. O26EDGE/O26LIFE sind explizite
+C-Fixtures in DesktopRun/Tests/Guest/GuiOutput und Observation, keine
+installierten Module. Gleiche getestete Quellbytes, normale Manifestbuilds.
+
+Nach echtem Desktop-Reap bestaetigt: Exit37, alle vier BEGIN/END-Marker,
+76Transcriptbytes aus72Quellbytes; zwei Referenzen lesen denselben Beleg.
+Creator-Ende entfernt Standardreferenz bei lebendem Ziel. PORTABLE bleibt
+nach Creator-Ende/Reap lesbar. Zwei echte verwaltete Threads empfangen den
+Abschluss; Schliessen einer pending Referenz weckt deren wartenden Thread.
+Alte Besitzer-API liefert danach-2, Generationstausch wird abgewiesen.
+Fensterslot2 wird mit neuen Prozesspaaren wiederverwendet; kein kuenstlicher
+32bit-Prozess-ID-Umlauf und keine physische Eingabe-/Sichtabnahme behauptet.
+
+Leer: Available16/length0/read0. Ueberlauf: length16384/Truncated32 und
+lesbares Ende. Clear: length36/Incomplete64, alte BEGIN-Marker entfernt.
+Kill liefert den tatsaechlichen Exit-9 und nur bereits erzeugte40Bytes;
+kein App-Erfolg oder bestaetigtes END daraus. FAST ohne eigenen Frame endet37;
+der erste externe retain gelingt nach bereits konsumiertem Desktop-Reap.
+Nach realen65s bleibt PORTABLE trotz abgelaufener Broker-History lesbar;
+letztes release entfernt den Datensatz, erneutes retain-2.
+
+Vorher/nachher gleiche Desktopinstanz14/Generation14,0gecachte Fenster,
+0Capture-Leases/Livebytes. Ziele sind nicht mehr aktive Prozesse; kein
+Task-/VM-/Fenster bleibt wegen Beobachtung am Leben. Normaler POWEROFF,
+QEMU-Ende0; SSH-Trennung255 ist keine erfundene App-Exitquittung.
+Ein erster Threadtest hatte nur64KB Reserve und erschöpfte seinen Guard;
+mit1MB sind beide Threadfaelle erfolgreich. Der erste terminale Fixture-Lauf
+belegt keine Thread-Fault-Recovery. Keine Hardware-/Windows- oder isolierte
+Geschwindigkeitszusage aus diesen Tests.
+
+Contract:16/16Steps,26Mutationen,7echte C/Zig/Rust-Interopfaelle, Host/Bare-
+Layout und Clippy. SDK: native Resource-/GUI-Faelle samt Unsafe/Send/Frame-
+Negativen. Desktop:241Owner-/3Geometriefaelle. WINSVC:9Queuefaelle mit
+Doppel-ACK/Retentionfehler/TTL/Freigabequittung und History-Verdraengung.
+DESKRUN:2CLI-Faelle. Core419 Releasebuild und Clippy erfolgreich.
+Kompakte Originalbelege: Temp/08826-core-proof.json und
+Temp/08826-integration-proof.json; Ressourcen-/Artefakthashes dort erhalten.
+
+Finaler STANDARD0.88.26: efc49c9b-fccb-4cdc-a99f-ca8a6a0278c8,
+Suite3/Metrik2/KVM4:30Rohsamples, je4bestaetigteWorker,5gueltigePrimaermetriken/
+6gueltigeScores. Alle Batch-/Byte-/Warmupmengen und ns/Operation-Werte
+verlustfrei sowie sechs Scores gegen die gefrorene Referenz
+28b326e2-4323-4a4c-a0d2-4c1bab4958c0 nachgerechnet. overall165.105228;
+kein isolierter GUI-/Observer-Geschwindigkeitsnachweis. Genau ein finaler
+Lauf, keine Wiederholung fuer bessere Scores. Vollstaendiges Original mit
+allen CPU-/Arbeits-/Artefakt-/Vergleichskontexten unveraendert unter
+ExFiles/Reports/Benchmarks/efc49c9b-fccb-4cdc-a99f-ca8a6a0278c8/.
+SHA256 5118140cba59fe27a934bafe2db9c5a115e362853e899b194de1a7bf06953b93.
+Status: lokal validiert; R4OS Server ausstehend (Import und Remote-Readback
+fehlen). Spaeter denselben archivierten Export verwenden, keinen neuen Lauf.

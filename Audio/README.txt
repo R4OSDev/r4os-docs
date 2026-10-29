@@ -418,7 +418,9 @@ and common native/C/Rust owner projections. No driver DMA/audio acceptance here.
 checks magic/version/action; writeBounded checks bytes and frame alignment but
 not the returned stream identity or result==accepted bytes. Control accepts any
 nonnegative result without checking own stream and can clear ownership on Close.
-Open also accepts any nonnegative result. Async decode already checks own stream,
+Open's positive result is its stream ID in the service contract; consistency
+with that ID must be checked, not replaced by a zero-success rule. Async decode
+already checks own stream,
 accepted-byte/result agreement and zero control success. Malformed/lateral
 replies must not turn into own completion or PCM progress. No real AUDSVC bad
 reply, audible duplication or provider fault was reproduced in this analysis.
@@ -460,3 +462,71 @@ PCM oracles do not prove actual endpoint scheduling, asynchronous cancellation,
 current live driver/audio or physical sound/latency. The new negative reply/
 wait-order injections remain obligations of42/43. No source/artifact/test gate
 changed; docs/status/release marker only, no STANDARD or new guest image.
+
+AUDSVC, IPC and session review (0.88.10)
+---------------------------------------
+Reviewed boundaries: request dispatcher and typed replies, lazy/materialized
+sessions, copied pending Close keys and tracked progress, current client-owner
+cleanup, master/mute/output policy, asynchronous debounced persistence and
+status/selftest activation. Kernel resource retirement and hardware remain
+deeper independent boundaries; service exit0 is not new physical-drain proof.
+
+0.88.44 owns private Session.writes/bytes_written without any product reader.
+These are distinct from the publicly exported state.bytes_written. It also owns
+obsolete clientIsRunning/runningRecordMatches helpers used only by their own
+ID-only test; current product Open/Reap uses collectRunning with exact generation
+and conservative paged inventory. Its current generation/partial/reused-ID/
+duplicate-owner oracles remain, as do matches and actual silence detection.
+The old before/after informational AUDSVCWORK print duplicates asserted native
+work counts and causes misleading Zig stderr text; it can go without removing
+those assertions. No normal OS polling cost is attributed to test-only helpers.
+
+0.88.45 owns unrequested full diagnostic acquisition for owner checks. The actual
+ClientInventory calls ProgramInventoryBegin into an unused large summary, then
+reads full ProgramInstanceSnapshot pages, but consumes only handle/generation
+and running state. Open and each200ms cleanup with open sessions pay this cost.
+The kernel begin path captures program/task/thread/heap statistics, up to eight
+stability attempts; full pages select diagnostic instance information. Existing
+programLifecycleBegin/Programs provide the real minimal data and epoch without
+that summary. Reuse this current mandatory API, preserving collectRunning and
+all Unknown/Busy/restart/absence rules; do not add a second owner cache.
+
+Protocol refinement for0.88.42: this service returns Open result=stream_id, a
+legitimate positive value. Require consistency with the returned ID according
+to that contract, never a zero-Open-success rule. Write result is accepted bytes;
+Control success is zero. The common SDK source description above is clarified;
+no SDK/product correction is silently included in this analysis.
+
+Preservation findings: owner cleanup already has one traversal for all sessions;
+incomplete/changed inventory cannot authorize absence. Empty sessions do not
+schedule a cleanup deadline, although ServiceLoop keeps its separate stop check.
+Output state caches discovery for500ms and avoids systemwide R4DEV diagnostics;
+incomplete data cannot certify a live backend, and NoEndpoint invalidates the
+route without losing desired selection. Lazy initial discrete zero PCM and
+materialized continuous silence retain different timeline meanings.
+Pending legacy Close is serviced by the normal loop with copied client/stream/
+generation/request/deadline; dispatcher never blocks waiting for DMA. Duplicate
+requests cannot replace or extend it. Real kernel close progress remains the
+quittung, and timeout/Busy/hard errors do not become successful absence. The
+tracked path keeps its separate finite response/progress contract. Normal
+service-stop delegation to kernel process resource collection is not qualified
+as already completed DMA by the service message or its reset local table.
+
+Master persistence is debounced, coalesces identical snapshots and runs in a
+joined worker; atomically published generation/values and a final exact join
+protect storage lifetime. Save verification/atomic replacement and recoverable
+failure reporting are functional, not disposable diagnostic reads. Public
+request/write elapsed counters and status/silence/global byte/persist fields
+have real IPC consumers. Selftest/status polling helpers are explicit CLI work,
+not automatic per-block diagnostics. No additional proven service logic bug
+or measured wait/gain is claimed in the bounded review.
+
+Existing owner Build.sh test passed13/13 cases and16/16 steps, exit0: four pending
+Close, four owner and five master/output-policy cases (including the actual
+output-control check invoked by the master roundtrip case). R4M0 container build/
+inspection also passed into Temp only; that completed temporary module was
+removed, productive artifacts unchanged. The Zig stderr informational marker
+printed a misleading failed-command line despite the successful summary/exit;
+this is not a failed owner case. These host cases do not establish current live
+AUDSVC restart/persistence/audio/DMA/physical sound. No new gate/full catalog or
+STANDARD; docs/status and release marker only.

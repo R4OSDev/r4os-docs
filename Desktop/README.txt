@@ -1452,3 +1452,52 @@ or physical acceptance is inferred. Product sources/artifacts are unchanged;
 only documentation, inventory status and the release marker advance. No
 STANDARD or image build is required for this analysis. Implementations retain
 their own exact pixel/resource/SMP4 and final STANDARD obligations.
+
+Presentation, output and cursor review (0.88.5)
+----------------------------------------------
+Reviewed boundaries: primary Display transport and Frames caller, managed CPU/
+native output admission/retirement, cursor clean-frame/sequence controller,
+GPU consumer receipts and kernel presentation/queue/IRQ completion operations.
+This is not a new full NVIDIA/AMD firmware, physical scanout or HDR acceptance.
+
+0.88.38 owns the confirmed source result/lifetime problem in primary software
+presentation. Fallback copied and presented are computed independently; the
+caller passes only presented to Cursor::presented, allowing clean_ready after
+an unsuccessful copy. Previously taken Dirty regions are not requeued after
+an unsuccessful presentation, while the CPU scene is marked current. The
+follow-up must inject these exact provider outcomes before correction and
+retain pending damage. No actual ghost cursor or failed live display run was
+claimed here. Valid current hardware/output alternatives must remain distinct
+from blindly repeating another API path after every nonzero result.
+
+The same fallback classification is also a simplification/wait-work target:
+unavailable, invalid and real backend-option paths should be handled according
+to the actual provider contract instead of treating every failure identically.
+No timing gain is measured by that source observation. The existing original
+present, pixel, cursor and deadline expectations remain requirements.
+
+Preservation findings: native admission revalidates the exact current device;
+pending state and CPU admission are separate. Managed and primary native
+outputs share the same transaction/retirement owner. Consumer receipts keep
+actual device/job/fence identities until the exact broker loan ends. Cursor
+preparation, clean captured frame, visibility completion and release remain
+separate barriers; unknown device state cannot grant CPU redraw or release.
+Native queue completion authenticates the driver/binding/fence and requires
+real quiescence before resource release. A terminal cancellation can still own
+physical work; the state completion path retains that distinction. The worker
+publishes notifications only for actual completed/released work and waits
+indefinitely with no pending work, with bounded polling only for real pending
+owners. These are not removable diagnostic waits.
+
+Private detailed CPU frame timing is already owned by0.88.35. Public actual
+completion timestamps/fences, counters with consumers, reset/ownership checks
+and explicitly requested reports cannot be classified as excess tracing solely
+from their names. No additional independent instrumentation defect was proved
+at the reviewed boundary, and no new periodic measurement was introduced.
+
+Existing RustNative outputs::cursor/outputs::cpu/outputs::native/receipt cases
+passed6/6; shared geometry3/3 and SDK precise-clock1/1 passed too. These are
+host owner/receipt cases, not live display failure injection or new GPU/physical
+visibility. No product source/artifact changed; documentation, inventory and
+release marker only. No STANDARD or new image is needed for this analysis.
+The follow-up owns its actual failure/recovery, SMP4 and final STANDARD proof.

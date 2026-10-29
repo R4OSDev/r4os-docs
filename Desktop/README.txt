@@ -1,4 +1,4 @@
-R4OS Desktop
+﻿R4OS Desktop
 ============
 
 The desktop is an R4X application in `Repositories/Apps/Desktop/`. It owns
@@ -1264,3 +1264,58 @@ no score rerun, noise dismissal or isolated icon/Explorer speedup claim.
 No physical NVIDIA/audio/input/folder timing, hotplug or forced I/O-kill
 qualification. No OssiPC, SDK publication or Full/Slim update; deployed14/
 Recovery65 and native OssiPC12 remain separate. NVMe fixture remains absent.
+
+Input, event loop and idle review (0.88.1, source analysis)
+---------------------------------------------------------
+The source review follows Desktop input/{runtime,router,physical,console,
+keys,native}, hosted/{input,gui}, runtime/desktop, SDK InputQueue and the
+kernel input/publication plus service/desktop_events and sched/sync_wait.
+Desktop source baseline: 53e6650b7ce231e69295149db9a8e0738e1d5f38.
+All three requested search areas were examined; this is not a physical
+latency measurement or an implementation acceptance.
+
+Confirmed defects have independent roadmap owners:
+- 0.88.30: Router::pointer updates the source button history, then returns
+  from wheel handling before button/drag transitions. A left-button release
+  combined with wheel input cannot be recovered by a later unchanged sample.
+- 0.88.32: hosted/gui Host::push abandons ordering-sensitive events after
+  four queue-full attempts. Source records have already been polled; GUI
+  delivery has no retained suffix. Logical-key failure may fall through into
+  shell commands. Queue-pressure reproduction and correction remain pending.
+- 0.88.31: private input counters and state have only writers/declarations,
+  with no productive reader. Most private Event::Record fields are populated
+  although the productive reader only uses its tick. Generated-code cost and
+  removal are a separate task; no measured speedup is claimed.
+
+Negative findings and preservation boundaries:
+Physical keyboard, PS/2/USB mouse, platform-input and accepted remote-input
+publishers commit their state before desktop activity notification. Desktop
+sequence publication and WaitQueue enrollment use the same runtime owner.
+No lost-wakeup defect was found at that boundary. Per-source button histories
+and physical motion totals avoid replaying an unchanged physical snapshot over
+new remote input. Remote and physical batches are bounded (16/32), then the
+active branch consumes the notification with a zero timeout and yields; the
+batch limits do not introduce an unconditional one-tick sleep.
+
+Idle waits use activity plus bounded clock/owner deadlines. One-tick polling
+is conditional on actual outstanding owners or console suffixes; these paths
+cannot simply be removed without an equivalent completion notification.
+The half-second deadline also serves visible cursor blink. Timing and resource
+lifetimes are functional behavior, not expendable diagnostic measurements.
+Repeated shared-service and rendering queries are reviewed in their respective
+later analyses, rather than called redundant solely because they are polled.
+
+Desktop diagnostic_work returns before detailed work when no explicit request
+is pending. /INPUTTEST and the standalone test handoff are explicitly selected;
+Rust cfg(test) cases are host test code. input_generation, idle_timeouts and
+cursor_moves have actual diagnostic, task-view or benchmark consumers. Their
+existence alone is not grounds for removal. No automatic input trace, new
+sampler, test gate or modified workload is introduced by this review.
+
+Validation: existing RustNative input::physical/input::keys/input::console
+selection passed all6cases; the shared runner also passed3geometry cases and
+its1SDK precise-clock case. Host/native scope only. Wheel+button and full-GUI-
+queue regressions remain for their separate implementation versions.
+Product sources and kernel/module artifacts are unchanged. The release marker
+will advance on analysis completion; no image deployment or runtime speedup is
+implied. No STANDARD is required for this source/documentation-only step.

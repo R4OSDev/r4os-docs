@@ -14,8 +14,29 @@ with the component that owns the corresponding contract or source code.
     Inventory/    Module, test, browser and documentation inventories
     Changelogs/   Historical release roadmaps
 
-The thematic directories document only the current state. Historical paths,
-decisions and acceptance logs remain in `Changelogs/`.
+The thematic directories describe current contracts and identify the scope
+of older evidence. Complete release roadmaps remain in `Changelogs/`.
+
+## Completed graphics and responsiveness work
+
+Release family 0.87.X is complete through 0.87.66: 66 subversions,
+280 tasks (279 completed, one intentionally discarded) and 212 acceptances. Its full roadmap is archived in
+[V0.87.X.txt](Changelogs/V0.87.X.txt). Planning continues in the separate,
+initially empty 0.88.X roadmap; the installed R4OS release remains 0.87.66.
+
+The final implementation and acceptance limits are documented in
+[Parallelitaet.txt](Core/Parallelitaet.txt),
+[SNESArchitecture.txt](Subsystems/SNESArchitecture.txt),
+[SnesBenchmark.txt](Diagnostics/SnesBenchmark.txt) and
+[AudioDiagnostics.txt](Audio/AudioDiagnostics.txt).
+SNES virtual debt is bounded; real-time deficits and audio starvation remain.
+Later passing checks do not explain earlier failures, and automated native
+receipts do not substitute for the explicitly skipped physical checks.
+
+[DeskRun.txt](Desktop/DeskRun.txt) describes visible application launches from
+SSH. The separately published Full/Slim 0.87.51 packages and their exact
+qualification are recorded in [Release08751.txt](Deployment/Release08751.txt);
+roadmap completion does not create a new Full/Slim package.
 
 ## Completed CPU and text work
 

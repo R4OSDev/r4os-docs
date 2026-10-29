@@ -1362,3 +1362,44 @@ physical or performance acceptance. Source artifacts remain unchanged. This
 analysis advances only the release marker and documentation; no STANDARD or
 new product image is needed. Follow-up implementations retain their own
 regression, artifact/version, final STANDARD and resource obligations.
+
+Scene, damage and composition review (0.88.3, source analysis)
+------------------------------------------------------------
+Reviewed: runtime render scheduling, geometry Dirty/Regions, compositor layer
+walk/coverage, CPU layer repaint and row comparison, immutable native recording
+reuse, output repair debt and the text-layout/cache boundary. The actual
+backend/transport lifetimes remain the subjects of0.88.4/5.
+
+0.88.36 is an actual host reproduction with unchanged productive geometry.rs:
+the cheapest-pair overflow in Dirty can create an overlapping third region.
+The ten-rectangle input and resulting intersections are recorded once in that
+follow-up's API evidence. Regions::add already applies overlap closure, while
+Dirty::invalidate does not. The primary CPU path passes take_regions directly
+to a compositor that rejects overlap; the error propagates to Desktop exit.
+The host probe verifies the productive Dirty result and the distinct normalized
+Regions result. No live guest or physical Desktop crash was triggered here.
+
+0.88.35 records two unconditional detail-clock reads per primary CPU frame
+whose current productive consumers are explicit trace statistics. Initial
+clock use for icon cache expiry remains functional and must not be removed.
+No elapsed-time or FPS improvement is asserted by counting these calls.
+
+Current preservation findings: CPU composition repaints the bounded damage,
+compares actual row content and preserves unchanged generations. Native
+recording reuse requires matching view, previous frame, live assets and exact
+per-layer applicability; an immutable recording is not a GPU-ready receipt.
+External image layers retain separate reader/retirement ownership. Primary
+CPU coverage is limited to a current valid classic app frame; retained/native
+or external data does not silently imply opacity. Existing output-image repair
+debt is cleared on accepted presentation, not submission. These checks are
+functional correctness and cannot be removed as diagnostic overhead.
+The bounded region policy and original color/alpha/scaling semantics remain
+requirements of the correction, not reasons to switch to full-screen redraw.
+
+Existing RustNative output_damage/layers/compositor selection passed5/5;
+shared geometry3/3 and SDK precise-clock1/1 also passed. Those unchanged cases
+do not cover the reproduced Dirty overflow. No source or pixel oracle was
+weakened, and no new permanent gate or product probe was introduced. This
+source/documentation step has no runtime artifact change and needs no
+STANDARD or image build. Follow-ups own their actual CPU-/native-/guest
+qualification and final STANDARD; hardware visibility remains unqualified.

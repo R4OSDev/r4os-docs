@@ -1815,3 +1815,69 @@ Lokal validiert; R4OS Server ausstehend (Import und Remote-Readback fehlen).
 This one whole-system STANDARD does not attribute a speedup or isolate a
 Desktop input/frame latency. Release0.88.31/Desktop186; Kernel422 and SDK110/
 Contract58/Librarysource37 unchanged. No permanent product instrumentation added.
+
+
+0.88.32: GUI-Eingaben bei voller Queue erhalten
+----------------------------------------------
+Desktop187 unterscheidet GUI-Zustaendigkeit von Accepted/Pending/Cancelled.
+Ein zur GUI gehoerendes Escape wird bei Busy weiterhin von der GUI besessen;
+es faellt nicht als Shellaktion durch. Pro genauem Client wird ein Suffix bis
+128 lazy reserviert; maximal16 quittierte Records verlassen einen Flush.
+Der Mainloop bleibt nicht blockierend. Ein zurueckgewiesener nativer Post
+aktiviert einen einmaligen Fortschrittswake; normale erfolgreiche Polls
+bekommen keine weiteren Wakes oder Messzaehler. Move-Coalescing erhaelt die
+relative Key-/Buttonreihenfolge, angenommenes Praefix wird nicht wiederholt.
+
+R4DESK20/624 ergaenzt den atomaren genauen Hostvertrag am alten616Byte-
+Praefix: QUERY/POST/RESET mit Prozessgeneration und nativer Fensterepoche.
+Kernel423 haelt nur die technisch notwendige, nicht durch die63erDatenqueue
+blockierbare Cancelbarriere; Pending-/Eingabepolitik bleibt beim Desktop.
+Fokus/Close/Desktopwechsel/Prozessende oder endgueltige Ueberlast brechen
+alte Eingaben explizit ab. Neue Owner erhalten keine alten Records. Native
+Capture-Terminalmeldungen behalten ihre Prioritaet. InputReset16 transportiert
+Grund/Fenster/Tick in C/Zig/Rust; aktuelle GUI-Consumer beenden Press-/Repeat-/
+Auswahl-/Zeichen-/Dragzustaende ohne Klick, Save oder Install zu synthetisieren.
+Der SDK-Subsystembesitzer gibt gehaltene physische Tasten einmal frei.
+
+Gezielte Source-/Bindingpruefung: ContractGenerator/Layout/negativeMutationen/
+Interop, KernelClippy/fmt/Build, Desktop252+3Geometry, SDK7GUI-/52Subsystem-
+Originalfaelle und aktuelle C/Rust-GUI-Gates bestehen. Alle16 betroffenen GUI-
+Programme und beide statischen Decoderconsumer SNES/GB bauen. Sprachreview:
+SDK111/Contract59/Libraryquelle38,669Dateien/35Scopes/180Rootexports; datierte
+historische Belege unveraendert. Normaler SDK-Toolsexport technical=false;
+regulaerer Desktop187-Build bytegleich zum qualifizierten Gastartefakt.
+
+Echter KVM4-/Softwarevergleich mit unveraendertem Original-C-Artefakt:
+nativeQueue63/Consumerdelay2s: vorherDown1/Up0/Exit7, jetztDown1/Up1/63gelesen/
+Exit0/voll78Bytes. Die aktuelle C-Matrix prueft dazu Escape/logischesA und
+physischesA-Down/Up,300erUeberlast/Reset1, Fokuswechsel/Reset2, CaptionClose/
+Reset3, Capture-Fokuscancel vor Close, Kill und Wiederverwendung desselben
+Fensterplatzes mit neuer Prozessegeneration/Fensterepoche. Alter pendingUp
+wird keinem neuen Owner zugestellt. Der oeffentliche Inventarvertrag ermittelt
+den nativen Desktophost14/14; dessen echtes Ende liefert dem weiterlebenden
+GUI-Owner Reset4 ohne haengende Eingaben.9normale GUI-Belege komplett/Exit0,
+ein echterGUI-Kill mit Exit-9/voll81Bytes/ohne erfundenenEndmarker; alleexternen
+Beobachtungen freigegeben. Der getoetete Desktophost selbst hat Exit-/Freigabe-
+beleg, aber keinen vollstaendigen Ausgabetext. Regulaerer Gastshutdown belegt.
+Detaillierte Vertrags-/Artefakt-/Fallqualifikation: Docs/API/GuiFacade.md.
+
+Kein physischer Maus-/Wheel-/GPU-, Windows-, IRQ-Resetoverflow-, Prozess-ID-
+Wrap- oder isolierter Speedupclaim. PhysischesReset wird im aktuellen Pending-
+und SDK-Besitzertest geprueft; der Gast beobachtet einen normalen PS/2-Key-Paar.
+Ein WINSVC-Brokerneustart allein ist kein Ende des unveraenderten Desktophosts.
+Zusaetzlicher externer kooperativer Prozess-Close mit weiterhin aktivem Capture
+bleibt als eigenerBefund0.88.77 am Roadmapende offen: terminal0/held1vorClose,
+kompletter309Byte-Negativbeleg/Exit11. Regulärer hosted WindowClose und echte
+Fokuscancel-Reihenfolge sind davon getrennt qualifiziert; kein32-Regressions-
+oder allgemeiner Hardwarefehlerclaim aus diesem Zusatzfall.
+
+Finaler STANDARD32:5780c0c4-3848-4ce8-8607-10cfd1842bd8,Suite3/metric2/KVM4,
+alle30Samples/4Worker-Arbeitsvertraege und6gueltigeScores verlustfrei geprueft.
+Overall161.257548 ohne isoliertenGUI-Speedupclaim. Original-SHA256:
+ddb4aea40f83e280ad2e741b490d35e69217f8e7c2564faa9b94c82cbeab2a06.
+Voller unveraenderter Export samtgetrennterPruefung unter
+ExFiles/Reports/Benchmarks/5780c0c4-3848-4ce8-8607-10cfd1842bd8/.
+BOOTreadback desselbenKernel423; genau1finaler32Lauf, keinScorererun.
+Lokal validiert; R4OS Server ausstehend (Import/Readback).
+Inventar141Module/1069Tests/483Dokumente. Gezielte SDK-Abhaengigkeiten sind
+publiziert; regulaerer Sammelpush der22weiterenBesitzer folgt diesem Stand.

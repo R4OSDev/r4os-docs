@@ -340,3 +340,118 @@ ExFiles/Reports/Benchmarks/57c5757d-e273-40b1-ab97-1141738695ec/.
 Status: lokal validiert; R4OS Server ausstehend (import and remote readback).
 No benchmark repeat for scores. No hardware installation or standalone SDK
 binary distribution is implied. Inventories:141modules/1063tests/483documents.
+
+## 0.88.32: bounded ordinary GUI input and explicit cancellation
+
+R4DESK20/624 appends `gui_host_input` at byte616; the19/616 prefix and
+raw event kinds0..15 remain intact. `GuiHostInputRequest` is80bytes: exact
+32-byte process/window identity, the unchanged40-byte event, operation and
+reason. QUERY0 resolves the current native window epoch for an exact process
+handle and Desktop window index. POST1 and RESET2 require that exact epoch.
+The registered Desktop is the native host caller; GUI applications consume
+input and cannot use this operation to become another window's input host.
+C exposes `r4desk_gui_host_input`; Zig `guiHostInput` and the generated
+C/Rust GUI Desktop context transport preserve the same native results.
+Errors are Invalid-1, Stale-2, Busy-3 and Context-4; failed calls leave output
+untouched. The current Desktop requires this provider at startup.
+
+Desktop187 retains a rejected suffix in the bound client's lazy bounded
+queue128 and posts at most16 acknowledgements per flush. Only acknowledged
+records leave the front. GUI ownership remains true for a Busy/cancelled GUI
+record, preventing Shell dispatch of that record. The main loop never waits
+inside a retry loop. A rejected native post arms one space/progress wake;
+ordinary successful GUI polls add no Desktop wake or measurement counter.
+MouseMove coalescing moves the newest position to the suffix end without
+crossing key/button order. Resource admission and work stay bounded.
+
+Finite overload, focus loss, window close, Desktop change and process end
+have reset reasons1..5. RESET cancels unread ordinary input and retains the
+metadata/capture-control ordering; its coalesced control slot cannot be
+blocked by the63-entry data ring. New ordinary admission waits for that
+control to be consumed. Exact process/window rebind cannot replay the old
+suffix into a new incarnation. Capture terminal notices keep their separate
+priority, including the existing terminal-before-hosted-Window-Close contract.
+
+Raw `input_reset` is16; public C `R4_MESSAGE_INPUT_RESET` is15 and the native
+C/Rust GUI session semantic kind is17. The message carries window, reason
+and the full64-bit tick. Clients clear held keys, repeat, pressed controls,
+selection/drawing drags and pending activations. They do not synthesize a
+click, save, install, or release activation. The shared subsystem input owner
+releases held physical keys once; lifecycle reset also changes focus through
+the existing focus path. Current GUI consumers handle cancellation; Fonts
+requires a fresh Down before activating on Up. Stateless DeviceManager is
+rebuilt against the appended exhaustive raw enum. Documents and user data
+remain application-owned.
+
+Binding qualification: Contract generated/layout/negative/interop gates,
+seven original Zig GUI cases,52 subsystem cases, current public C/Rust GUI
+pixel/lifecycle/negative-usage cases and Desktop252+3geometry pass. The same
+original C guest artifact on KVM4/software fills native queue63 and sleeps2s:
+Kernel422/Desktop186 loses Up (Down1/Up0,exit7); Kernel423/Desktop187 preserves
+it (Down1/Up1,63drained,exit0,complete78-byte output and observer release0).
+This comparison ran with the locally matched development tool export.
+The additional native lifecycle/overload matrix and normal SDK source/tool
+publication are qualified below. Final STANDARD32 is recorded separately.
+No physical mouse/wheel/GPU, Windows, latency or isolated speedup claim.
+
+### Native qualification of 0.88.32
+
+The normal SDK111/Contract59/Library-source38 export has technical=false.
+The regular Desktop project build is byte-identical to the tested187 artifact:
+e3f04972d9adfd289d1fe4843d80ca52b6b67eb8f014ecde3e732f7bbd0a5b84.
+Kernel423 is738b5636a2b15159fd488b532b34df44f095a04d170cbcdea8eeb4d141eba808.
+Current GUI artifacts are rebuilt, including transient-state consumers and
+stateless raw exhaustive-enum consumers; SNES/GB use the changed shared input
+decoder. Module versions remain authoritative in their owner manifests.
+
+The public C consumer fills the actual native ring with63 non-Move records,
+then sleeps2s while the Desktop continues. Real Remote Up/Escape and emulated
+PS/2 A Down/Up are retained: Down1/Up1,63 records drained, logical A1,
+Escape1, physical Down1/Up1, held0, exit0, complete307-byte output.
+Burst300 causes explicit overflow reset1, discards the cancelled unread input,
+and ends with held0/clicks0. A second real GUI moves focus: reset2 precedes
+focus-lost, with Up0/drained0/held0/clicks0. A real caption Close produces
+reset3 before Close, likewise without a click or remaining held input.
+
+With native outside-drag Capture active and the ring full, real focus loss
+provides one Capture terminal notice before generic reset2 and the following
+Close; the C owner exits0 with held0 and no click. An exact forced GUI kill
+ends-9 with complete81-byte partial-lifetime text and no invented finish
+marker. The next GUI reuses native window1 with a new process generation and
+epoch13->14, receives no old key/button suffix, and exits0.
+
+The public program inventory independently identifies the registered Desktop
+host14/generation14. Ending that exact host while a GUI's final Up is pending
+produces native Desktop-change reset4: Up0/drained0/held0/clicks0, exit0,
+complete309-byte output. All nine normal GUI completions and the forced GUI
+completion have exact external retained readbacks and observation release0.
+The killed Desktop host has separate exit-9/release0 evidence; its own text
+read is unavailable and is not claimed complete. The guest shuts down normally.
+Actual process-ID wrap/reuse, physical-key-reset IRQ overflow, real hardware,
+Windows and isolated latency/speedup are not qualified by these cases.
+
+A broker-only WINSVC restart leaves the ordinary Desktop identity unchanged;
+it is not the Desktop-end reset scenario. The actual Desktop-end case above
+uses the exact publicly resolved native host. Host/source Pending and SDK
+input-owner cases separately cover physical-reset retention and once-only
+held-key release; the guest PS/2 case observes an ordinary physical A pair.
+
+Additional finding0.88.77 remains open: external cooperative process-close
+with Capture still active, without earlier focus or hosted-window cancellation,
+can synthesize Close without the terminal notice. The negative C readback is
+complete309bytes/exit11, ACTIVE1/terminal0/held1. This additional process path
+was not the hosted Window-Close qualification of0.88.28 and is not silently
+included in the successful32 cases. Its exact evidence and reusable modeP
+consumer are retained for the planned separate correction.
+
+Final STANDARD32: run5780c0c4-3848-4ce8-8607-10cfd1842bd8,
+Suite3/primary metric2/KVM4, all30 samples/four worker work contracts and
+six valid scores checked losslessly; frozen reference28b326e2-4323-4a4c-a0d2-
+4c1bab4958c0. Overall161.257548 is the observed complete-suite score, not an
+isolated GUI latency/speedup claim. Exact original SHA256:
+ddb4aea40f83e280ad2e741b490d35e69217f8e7c2564faa9b94c82cbeab2a06.
+The complete unchanged export and separate validation are archived under
+ExFiles/Reports/Benchmarks/5780c0c4-3848-4ce8-8607-10cfd1842bd8/.
+BOOT readback confirms the same423 kernel. Exactly one final STANDARD32;
+lokal validiert; R4OS Server ausstehend (Import/Readback). No new measurement
+was created for publication. Inventory141modules/1069tests/483documents.

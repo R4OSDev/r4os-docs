@@ -2242,3 +2242,69 @@ ExFiles/Reports/Benchmarks/614e237a-cc00-4e45-b24a-9449a10655dc/.
 Original-SHA8342b3356ace4dd744cd3a80ef2e25a7d9aea5e2070ae9d87dd3950533975211.
 Kernel423 BOOTreadback und unveraenderte native190-Artefaktbytes geprueft.
 Lokal validiert; R4OS Server ausstehend (Import/RemoteReadback).
+
+0.88.37: Unveraenderliche Capturebilder direkt synchron publizieren
+-----------------------------------------------------------------
+Desktop191 verwendet Frames.capture_shadow nur noch fuer einen getrennten,
+sichtbaren Cursor. Ohne Cursor, bei bereits eingebettetem sichtbarem Cursor
+und bei unsichtbarem separatem Cursor geht image.pixels unmittelbar an den
+bestehenden synchronen Publishvertrag. Die zuvor unnoetige private
+Vollbildkopie samt Schattenpuffer-Resize entfaellt. Es wird weiterhin nur
+bei vorhandener Capturenachfrage publiziert.
+
+Ein gueltiger Publishversuch setzt Frames.current weiterhin auf false,
+auch bei einem API-Fehler. Das ist fuer verspaetete Readbacks und den
+Wechsel zur CPU-Szene erforderlich; deren private Bytes, Abmessungen und
+Generation werden ohne Overlay nicht angefasst. Identische required_bytes/
+Laengenpruefung erhaelt die unavailable-Behandlung fuer ungueltige oder
+leere Geometrie. Kein Bedarf, Unterdrueckung und Geometriemismatch bleiben
+fruehe Rueckwege; andere Fehler behalten Cursordamage fuer einen Retry.
+
+Kernel/program/r4desk_frame.rs kopiert synchron vor Revision, History und
+Rueckkehr in seinen Snapshotowner und speichert keinen Quellzeiger. Alle
+drei Desktopaufrufer quittieren Capture erst nach Publisher.image. Diese
+notwendige Kernelkopie und die genaue Readback-/Fenceleihe bleiben erhalten.
+Ein echtes Cursoroverlay schreibt weiter nur in den privaten CPU-Puffer
+und stellt dessen Ursprung nach der Publikation wieder her; read-only
+Maps werden niemals veraendert. Kernel und Vertrag benoetigen kein Delta.
+
+Das bestehende Original-R4GFX-/Remote-Readbackfixture publiziert seinen
+tatsaechlich fertigen8x8Pixelview vor acknowledge ueber Publisher und die
+aktuelle SDK-Tabelle. Unveraendertes190 scheitert am neuen Zeigerorakel.
+191 reicht in allen drei No-overlay-Faellen exakt diesen Quellzeiger
+weiter: alle64Pixel, Dirty-Rechteck und Cursorflags bleiben gleich. Ein
+vorheriger privater2x2Puffer und Generation77 bleiben unveraendert bei
+current=false. Damit entfaellt genau eine zusaetzliche256Byte-Schattenkopie
+je8x8Publikation; daraus wird kein isolierter Zeitgewinn abgeleitet.
+Fuer das sichtbare Overlay bei(2,3) prueft ein unabhaengiger Satz15
+konkreter Schwarz-/Weisspixel das ganze64Pixelbild, die unveraenderte
+Quelle und die vollstaendige Schattenrestauration. API-Fehler mit Retry,
+unavailable,63Pixel,0x0,Demand/Unterdrueckung/Mismatch bestehen ebenfalls.
+Alle263Desktopfaelle plus3gemeinsameGeometrie- und1SDK-Uhrfall bestehen.
+Die bisherigen Readbackteilbereiche, Epoch-/Cancel-/Deadline-/Source-
+Retirement- und Originalpixelorakel bleiben im selben Fixture erhalten;
+kein neuer Runner oder produktiver Messpunkt entstand. Die vorhandene
+Testgruppe wurde erweitert.
+
+Normaler191-Build mit bestehender Projekteinstellung technical=true:
+SHA256 b8220ac3b38953617d9177f5809ca468565d29fd2bd7720e3e1e3337cf529440.
+Privater Software-KVM4 mit exakt zurueckgelesenen Artefaktbytes besteht
+zwei regulaere SPECTRA CHECK REMOTEFRAME-Pruefungen (eine bei aktivem GUI)
+und /EXITOWNED. Format/Bereich/Dirty/Wait, gemeinsame unveraenderliche
+Snapshots, veraltete Tokens sowie echtes Kindende/Reap/Ressourcenfreigabe
+bestehen. Zwei verschiedene GUI-Prozesse erreichen Content, Exit0,
+vollstaendige Ausgabe und Observerrelease0; derselbe Desktophost bleibt.
+Das8x8GPU-No-copy-Orakel ist ein Host-Providerfall, kein GPU-Gast- oder
+physischer Nachweis. Normales POWEROFF und kanonische Sourceimage-
+Bereinigung sind bestaetigt. Keine physische Sicht-, GPU-, Windows- oder
+Latenzabnahme wird abgeleitet. Kernel423/WINSVC27/SDKQuelle111/Contract59/
+Libraryquelle38 unveraendert.141Module/1070Tests/483Dokumente bleiben.
+Einziger finaler STANDARD37: 58093b69-bd62-419f-a9b7-240ae3936cf3; Suite3/
+Primaermetrik2/KVM4,30Samples/4Worker/6gueltigeScores. Gesamtscore
+162.875779. Vollstaendiger Originalexport SHA256
+19102a697c59136661a143afef350378577f35fd75917c557be7c523d1d1f187
+liegt unveraendert samt separater verlustfreier30Sample-/Arbeits-/CPU-/
+Artefakt-/6Scorepruefung unter ExFiles/Reports/Benchmarks/58093b69-bd62-419f-a9b7-240ae3936cf3/.
+Lokal validiert; R4OS Server ausstehend (Import/Readback). Die feste
+Referenz wurde beibehalten; kein weiterer Lauf fuer Score oder Upload.
+Desktop/Distribution/Docs werden ueber den regulaeren Sammelpush geschlossen.

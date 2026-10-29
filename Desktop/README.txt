@@ -1594,3 +1594,69 @@ correctly rejected by the runner; this is not a passed lifecycle test or product
 failure. The corrected selection and actual coverage are reported above. No
 full app build, current guest/GPU/physical test, STANDARD or source fix occurred.
 Only docs/status and release marker advance for this analysis.
+
+Desktop diagnostic and test-cost review (0.88.8)
+-----------------------------------------------
+Bounded inventory: Desktop source diagnostic activation/callers/consumers, the
+current RustNative runner and Original oracle links, owner-build test steps,
+Spectra-requested desktop work, relevant WINSVC exchanges and Tests.json entries.
+The inventory currently contains137 Desktop entries:100 Inline,29 Fixture,
+5 Component,1 Runner,1 Native and1 Host. These are inventory rows, not137 runs
+or unique test cases. Related SDK/WINSVC records were sampled, not all executed.
+
+Definition / caller / consumer / activation and cost classification:
+- diagnostics/runtime Owner::poll/execute: desktop::diagnostic_work returns before
+  execution with neither pending session nor broker work. Explicit versioned
+  Spectra requests own capture/profile/restart/input scenarios, deadlines and
+  exact caller generation. Its report counters have genuine wire consumers.
+- diagnostics/software_profile::run: only explicit profile Op admission; owns a
+  separate synthetic RAM renderer, original phase/pixel/hash oracles and clocks.
+  No normal display write or unsolicited recurring profiling controller.
+- diagnostics/snes Trace: allocated for an explicit trace, accepted frame/owner/
+  revision and actual output receipts checked. Frame clocks below remain a
+  separate normal-path problem; existence of the guard does not hide that cost.
+- render/runtime Frames::primary: composition/present completion clocks currently
+  occur every primary CPU frame although only requested trace reads them.
+  0.88.35 owns demand gating; the initial icon-cache age clock is functional.
+- private input/Capture/font/layout/snapshot/cull/frame bookkeeping: written on
+  ordinary respective events/frames/misses/completions with no product reader,
+  or only cfg(test) readers. 0.88.31 owns the coherent source cleanup. Test-only
+  hit/miss/witness oracles can remain. Compiler-elided writes have no measured
+  normal-path cost; verify the actual optimized artifact before claiming gain.
+- runtime/test_start: only explicit /HEADLESS-SUBSYSTEM startup asks Spectra for
+  the existing test work. Spawned child handle/completion/reap is retained, no
+  normal autonomous test loop. Historical SUBSYS86 filename is not by itself
+  evidence of an obsolete test or old-OS runtime path.
+- R4SNES main shutdown: ordinary post-close SAV/RTC file info currently executes
+  before the trace activation check; 0.88.41 owns it, from the0.88.7 source review.
+- actual idle/input-generation, present-error/lost-generation and visible Tasks
+  counters: real report/control consumers. Frame rendered_windows is a real
+  requested-work witness. Native fence/scanout/BO/read-lease acknowledgements,
+  validation and release retry state retain lifetime meaning and are preserved.
+
+0.88.31 gains the exact additional no-reader sites: compositor visited/culled
+counts and gui totals; replay resource_bytes feeds only the unused total.
+Replay commands!=0 also drives rendered_windows: retain that boolean work truth.
+Frames mixed/pixels/copied_bytes are unread, unlike public diagnostic failures,
+redraws, presents and Tasks fields. Do not remove every stats-named field.
+
+Test-layer classification and remaining coverage: RustNative compiles the real
+Rust owners against current SDK/R4STD/R4GFX and retained original pixel/codec/
+geometry oracles. Inline and separately listed fixture rows describe the same
+entry/fixture relationship, not duplicate execution. Original Zig sources have
+active owner-build or cross-language oracle uses; their old names/date markers
+alone do not justify deletion. Explicit guest fixtures uniquely cover actual
+broker/process/resource closure; host state cases cannot substitute for them.
+No fully redundant runnable Desktop test/gate was proved in the sampled current
+set. Therefore no test is deleted and no new gate/full-catalog run is added.
+Use relevant existing filters for future fixes, preserve original independent
+pixel/UTF8/DST/queue/resource/guest-work oracles, and keep only compact required
+results. Runner finally removes its completed private work; failed or empty
+selections remove success receipts. The rejected empty filter in0.88.7 behaved
+as intended. No permanent test environment is required by this review.
+
+The already completed0.88.1–7 focused cases are reused as bounded evidence;
+unchanged pure analysis does not warrant rerunning them all or a STANDARD.
+This inventory establishes source consumers/activation, not an empirical CPU
+profile, all-tests pass claim or proof of physical display visibility. No
+product source/test catalog/artifact changed; docs/status and release marker only.

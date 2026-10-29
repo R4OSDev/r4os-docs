@@ -2486,3 +2486,60 @@ Artefakt-/6Scorepruefung unter ExFiles/Reports/Benchmarks/495ba087-320c-4b08-aa9
 Lokal validiert; R4OS Server ausstehend (Import/Readback). Die feste
 Referenz wurde beibehalten; kein weiterer Lauf fuer Score oder Upload.
 Der Abschluss umfasst den regulaeren Sammelpush von Desktop/Distribution/Docs.
+
+0.88.40: ICO-Pixel mit einem kanonischen SDK-Sammeltransfer
+-----------------------------------------------------------
+Desktop194 verwendet SDK112 Icon::best_bitmap/copy_scaled_pixels. Auswahl,
+BMP-/Palette-/Masken-/Alphadecodierung bleiben bei SDKico.pixelAt; die
+Sammelfunktion validiert Layouts, alle Laengen/Strides/Ueberlaeufe und
+Aliase vor Writes und uebernimmt RGB/Alpha synchron ohne Allokation oder
+gespeicherten Sourcepointer. Native opake Werte bleiben in ihrer SDK-Rolle.
+Der Cache behaelt min(Ziel,Source)-Groesse, Zentrierung kleiner Bilder,
+ganzzahligeNN-Skalierung,32Pixelstride, vorheriges Clearing und Publikation
+erst nach Erfolg. Positive32Slots, separater32Miss-Ledger,8192Inputbytes,
+5s-Frische, negative Fristen/Arrival/Replacement/Invalidierung/Rollback und
+alpha128-Paintregel sind unveraendert. Kein zweiter Decoder entstand.
+
+Vorher193: Das reale32x32Application-ICO ruft pixelAt sowie RGB-/Alpha-
+Getter genau3072mal auf; das neue Orakel scheitert3072gegen1. Aktuell
+besteht derselbe Fall mit einem Sammeltransfer. Die Zahl erfasst Pixel-
+transfer, nicht die konstanten Auswahl-/Dimensionscalls. Ein zusaetzlicher
+Directoryparse durch die sichere ICO-Fassade gehoert zu diesen festen
+Calls; der Vergleich behauptet keine3072fache Zeitwirkung. Der Counter-
+macro existiert ausschliesslich in cfg(test); das Produkt fuehrt nur den
+SDK-Aufruf aus. Alle vier urspruenglichen ICO-/Cachegruppen bleiben,
+aktuell5gezielte und279gesamteDesktop+3Geometry+1SDKclockfaelle bestehen.
+SDK49Owner-/5C-Rust-/5Ownership-Negativfaelle und die passende Generierung
+bestehen ebenfalls; SDK/LanguageParity.txt beschreibt den oeffentlichen
+C-/Rust-Vertrag.141Module/1071Testdateien/483Dokumente bleiben.
+
+Finaler normaler Desktop194 SHA256
+d0487f46523132bbc2293acc459190d3cbb1eaec0e2217737c72b35fa3692345.
+Nach der letzten rein redaktionellen SDK-Reviewverknuepfung wurden der
+gepinnten SDK-Wahrheit entsprechend Tools, normaler Build und voller
+Testbeleg aktualisiert. Alle Produktbytes blieben identisch. Das native
+SMP4-Testimage und der vollstaendig zurueckgelesene194-Container enthalten
+genau diesen finalen Stand, SDK112; Kernel423/WINSVC27/Contract59/Library38
+bleiben erhalten. Der normale Produktcountertext ist nachweislich abwesend.
+
+Software-KVM4/SYSINFO4schedulableCPUs: Die erste Aufnahme stimmt mit der
+aufbewahrten normalen193/e53-Aufnahme fuer die ganze300x650Iconregion
+ueberein:195000Pixel/0abweichendeFarbkanaele, inklusive Hintergrund,
+Iconbildern und Text; Uhr, Versionsschrift und Cursor liegen ausserhalb.
+RGB-Regionshash
+b4ab66c6a8eb84252e2e2364b4361aa80e28106c59b041282ec89aaff571c681.
+Die Aufnahme wurde auch visuell kontrolliert. Das ist weder eine atomare
+Screenshot-/Scanoutquittung noch eine physischeGPU-/Windows-/isolierte
+Latenzabnahme. Der echte Host14:14 bleibt ueber zwei GUI-Prozesse21:21 und
+30:30 erhalten; Content, Exit0, volle272Byte-Ausgabe und Observerrelease0
+bestehen. Gast normal perPOWEROFF beendet; Sourceimage nach Prozessende
+mit Test-Retention entfernt. Keine Testprovider-/Decoderinjektion im Gast.
+Einziger finaler STANDARD40: f6c25f16-1e4a-492b-8c67-67351710f76c; Suite3/
+Primaermetrik2/KVM4,30Samples/4Worker/6gueltigeScores. Gesamtscore
+164.024049. Vollstaendiger Originalexport SHA256
+d76b4e621be2567972a21f59c65383e0e8c153802701487dd3ec3dd741c8e073
+liegt unveraendert samt separater verlustfreier30Sample-/Arbeits-/CPU-/
+Artefakt-/6Scorepruefung unter ExFiles/Reports/Benchmarks/f6c25f16-1e4a-492b-8c67-67351710f76c/.
+Lokal validiert; R4OS Server ausstehend (Import/Readback). Die feste
+Referenz wurde beibehalten; kein weiterer Lauf fuer Score oder Upload.
+Der Abschluss umfasst den regulaeren Sammelpush von Desktop/Distribution/Docs.

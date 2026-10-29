@@ -1546,3 +1546,51 @@ shared geometry3/3 and SDK precise-clock1/1 passed. Original pixel/cache/time
 oracles retained, no new gate/catalog suite. These host cases do not inject
 slow live filesystem I/O or demonstrate a guest latency improvement. Analysis
 changed docs/status and release marker only; no product artifact or STANDARD.
+
+Application, SDK and subsystem-host boundary review (0.88.7)
+-----------------------------------------------------------
+Reviewed boundaries: SDK app_gui EventLoop and native/C/Rust session/event/paint
+projection, Desktop Host input and metadata calls, frame snapshots/replay/index,
+process-handle generation and sampled Notepad/R4SNES callers. This is a bounded
+cross-boundary review, not a complete source/build review of every installed app.
+
+0.88.25 already owns missing typed focus/font messages: app_gui.Message and its
+translator use unknown for existing raw events; the native semantic EventKind
+and Rust projection likewise expose only the current ten kinds. Raw guiEvent()
+round-trip remains available. Additions belong to the common SDK owner rather
+than a second app-specific event decoder. No absent raw focus API is claimed.
+0.88.32 already owns Host::push queue-pressure loss; the app EventLoop already
+parks on guiActivityWait. No extra app polling workaround is needed.
+
+0.88.41 owns a new source-confirmed diagnostic leak into normal SNES shutdown:
+main computes save_files before testing e2e_trace.active. Its only consumers are
+the trace report/witness, but persistenceFilesPresent performs up to two real
+SAV/RTC File.info calls after actual guest close whenever those save types exist.
+No calls for a game with neither save type, and no measured game/close gain is
+claimed. Move only diagnostic acquisition behind activation; actual shutdown,
+SAV/RTC flush/close receipts and ordinary user-visible save errors stay intact.
+
+0.88.31 additionally owns private frame_snapshot stats with only test readers.
+Preserve actual owner/generation, pending/out_of_memory, data bounds, immutable
+snapshot publication and read-lease release state. Functional state is not dead
+bookkeeping merely because its current name resembles diagnostics.
+
+Preservation findings: SessionStorage is pinned and opaque native storage is not
+reborrowed as Rust-owned bytes. Paint holds caller command/resource buffers for
+its lifetime; current frame transactions are required. Failed append/commit
+cancels the private frame and cannot publish a prefix. Notepad already uses a
+bounded64-command/8KB resource batch and event-driven hosted waiting. SNES
+Presenter retains damage on failed backend publication and clears it only on
+real successful commit. Shared raster leases and actual renderer consumers
+remain distinct; neither API completion nor source bytes prove physical output.
+R4SNES real40ms admission, master-cycle/DSP work, frame/trace witnesses and save
+state are retained, not replaced by easier synthetic work. Reap remains bound
+to an exact process handle. External post-reap output evidence remains0.88.26;
+no Solitaire reproduction or proven competitive reap cause was obtained here.
+
+Existing selected replay/index/inventory-generation cases passed11/11, geometry
+3/3 and SDK precise-clock1/1. An initial nonexistent hosted::lifecycle filter was
+correctly rejected by the runner; this is not a passed lifecycle test or product
+failure. The corrected selection and actual coverage are reported above. No
+full app build, current guest/GPU/physical test, STANDARD or source fix occurred.
+Only docs/status and release marker advance for this analysis.

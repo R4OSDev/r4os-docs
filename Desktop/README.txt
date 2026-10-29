@@ -2064,3 +2064,95 @@ ExFiles/Reports/Benchmarks/1c36d5d4-654d-48ed-bc87-d27dc295ea17/.
 BOOTreadback Kernel423 und unveraenderte nativeD188/WINSVC27-Artefaktbytes
 geprueft. Genau1finaler34Lauf, keinScorererun. Lokal validiert; R4OS Server
 ausstehend (Import/RemoteReadback).141Module/1069Tests/483Dokumente gleich.
+
+0.88.35: CPU-Framezeiten nur fuer angeforderte Traces
+--------------------------------------------------
+Desktop189 liest im normalen CPU-Frame nur noch die funktionale Startzeit.
+Sie bleibt unveraendert fuer icons.begin_frame und dessen Cache-/Fehler-
+fristen erforderlich. Die beiden Detailabfragen nach Komposition und Present
+werden nur bei vorhandener ausdruecklicher SNES-Traceanforderung fuer das
+exakte lebende, nicht in Retirement befindliche Ziel erhoben. Der bestehende
+trace_input-Verbrauch entscheidet; es gibt keinen neuen Poller oder
+permanenten Messzaehler. Capture-/GPU-/Output-/Recordedpfade konsumieren
+keine dieser CPU-Detailfelder und bleiben unveraendert. Die separate
+explizite Softwareprofil-Diagnose behaelt ihre eigenen Uhren und Phasen.
+
+Frame.timing ist eine optionale, diesem Frame zugeordnete Messung mit
+Start, Abschluss, Kompositions- und Presentspanne. Ein nicht vermessener
+Frame liefert None. Die alten gemeinsam gespeicherten Detailwerte in
+Stats und die immer vorhandenen Frame-Timestamps entfallen; weder Nullen
+noch Daten einer frueheren Sitzung werden als frische Messung ausgegeben.
+Das bestehende OutputSample-Schema des ausdruecklichen Traces bleibt
+unveraendert. Seine aktiven Zeitpositionen und Fehler bleiben erhalten.
+Funktionale Fristen, echte Present-/Generations-/Ressourcenquittungen,
+Pixel-/Layer-/Icon-Caches und der urspruengliche Presenttransport bleiben.
+
+Vorherpruefung am tatsaechlichen Frames::primary -> SDK -> nativen Uhr- und
+Presentadapter: alter Desktop188 liest3mal bei einem erfolgreichen
+kanonischen Present; der neue Normalfall liest1mal. Angeforderter Trace
+liest3mal mit identischen10/30/10/10-Testwerten. Der folgende Normalframe
+ist explizit ungemessen und behaelt dieselben Pixel/Presentzaehler. Ein
+nicht benoetigter zweiter Uhrfehler kann keinen normalen Frame mehr
+abbrechen. Der verpflichtende erste Uhrfehler und Fehler der ausdruecklich
+angeforderten Kompositions-/Abschlussmessung haben weiterhin ihre echten
+Fehlerpfade, auch nach bereits ausgefuehrtem Present. Vier gezielte Faelle
+verwenden die reale API-/Session-/Graphics-/Farb-/Framekette; sie ersetzen
+keinen Renderer. Die vorhandenen kompletten Original-Szenen-/Pixel-/
+SNES-Trace-/Ressourcenorakel bleiben. Ganze261Desktop +3Geometrie und der
+vorhandene1SDK-Precise-Clockstarttest bestehen ueber denselben Runner.
+Die neue Probe liegt nur unter cfg(test); FRAMEFIX und Probezeichen sind
+im normalen Produkt nicht enthalten. Erfasst wurden Aufrufzahlen; ein
+isolierter FPS-/CPUzeitgewinn wurde nicht gemessen.
+
+Privater normaler Software-KVM4 mit Terminalshell und exaktem Desktop189-
+Artefaktreadback: das vorhandene SPECTRA BENCH DESKTOP /OWN-DESKTOP liefert
+20Originalrecords, vier Varianten mit je fuenf Samples, neun Phasen und
+beide urspruenglichen gesamten1920x1080-Bildhashes. Der anschliessende
+SPECTRA BENCH SNES /WINDOW /CHECK /OUTPUT-ANALYSIS /OWN-DESKTOP liefert im
+unveraenderten NTSC/normal/small-Vertrag denselben zusaetzlichen20-Record-
+Softwarebeleg und den echten SNES-Desktoptrace.32 streng geordnete
+Generationen1..32, alle mit voller Clientkopie, exaktem Kind23/23 und
+positiven zusammenpassenden Frame-/Kompositions-/Presentspannen wurden
+verlustfrei geprueft.17Generationen bis zum Messbeginn und15Messgenerationen
+entsprechen dem originalen250ms-/CHECK-SNES-Koerper; keine zusaetzlichen
+SNES-Profilclockreads, echtes cleanup_verified. Beide Auftraege bestaetigen
+Cleanup und Exit0/Reap ihres eigenen isolierten Desktops. Normales
+POWEROFF, eigener Gast beendet, Sourceimage kanonisch entfernt. Physische
+Sicht-/Cursor-/Audio-/GPU-/Windowslatenz ist davon nicht abgeleitet.
+
+Die unveraenderten vollen Originalexporte, SHA256 und separate Pruefung
+liegen ohne erfundene run_id unter
+ExFiles/Reports/Benchmarks/0.88.35-desktop-profile/ und
+ExFiles/Reports/Benchmarks/0.88.35-snes-trace-short/.
+Der erste150Byte-SSH-Aufruf wurde vor Programmanlage am bestehenden128-
+Byte-Terminalargumentpuffer einschliesslich /NOAUTOEXEC /C abgewiesen.
+Derselbe Spectra94 wurde voll zurueckgeprueft als kurzer S35-Pfad benutzt;
+der echte102Byte-Aufruf belaesst NTSC/normal/small-Defaults und lief einmal.
+Das ist ein Hoststarter-Befund zur Befehlslaenge, kein Desktop189-Fehler
+und keine Messwiederholung fuer bessere Ergebnisse. Die Originalowner-
+Exports sind Qualifikationsbelege, keine nachtraeglich normalisierten
+STANDARD-/Serverlaeufe.
+
+Desktop189-SHA256: 1b2ee88939f64f2ff7eb4efe02eb0e9434b2964b3da4a3f64e5bae0d839040ac
+Kernel423 bleibt 738b5636a2b15159fd488b532b34df44f095a04d170cbcdea8eeb4d141eba808
+WINSVC27 bleibt bb64e60c3ad64602bf1fd45f3e95d7bfed81087f0f891532b63bf813fd20c3ba
+SDKQuelle111/Contract59/Libraryquelle38 bleiben gleich. Normales Desktop-
+Projektprofil mit bestehender technical=true-Arbeitsbaumqualifikation,
+unveraenderter SDK-Toolsetexport technical=false. Native Probeimage-Basis
+war Release34; Marker35 gilt fuer den finalen STANDARD. Quelle/Belege:
+Temp/08835-runtime-proof.json, native-validation.json und vorhandener
+RustNative-Runner. Kein Hardwareupdate wurde vorgenommen.
+
+Finaler STANDARD35:0b37ad76-d0a0-48d1-a609-8a34175bbccd,
+Suite3/Primaermetrik2/KVM4:30Samples/4Worker/6gueltigeScores. Arbeitsmengen,
+Warmup-/Batch-/Bytekontexte und uint64-/Dezimalwerte verlustfrei geprueft;
+6Scores gegen die festeReferenz28b326e2-4323-4a4c-a0d2-4c1bab4958c0
+nachgerechnet. BeobachtetesOverall149.114353; Aufrufnachweis und
+Systembenchmark sind getrennte Belege. Genau1finaler35Lauf,
+keinScorererun. Voller unveraenderter Originalexport und separatePruefung:
+ExFiles/Reports/Benchmarks/0b37ad76-d0a0-48d1-a609-8a34175bbccd/.
+Original-SHA277dec08aa8519734ac4b08eb30ddb828f6c44802b5852429fa54f2d58a1dfb1.
+Kernel423 BOOTreadback und unveraenderte nativeD189-Artefaktbytes geprueft.
+Lokal validiert; R4OS Server ausstehend (Import/RemoteReadback).
+141Module/1070Tests/483Dokumente; neue4Hostfaelle in einem Testfile,
+keine neue permanente Produktmessung.

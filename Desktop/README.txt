@@ -1660,3 +1660,67 @@ unchanged pure analysis does not warrant rerunning them all or a STANDARD.
 This inventory establishes source consumers/activation, not an empirical CPU
 profile, all-tests pass claim or proof of physical display visibility. No
 product source/test catalog/artifact changed; docs/status and release marker only.
+
+Complete ordinary wheel/button snapshots (0.88.30)
+------------------------------------------------
+Desktop185 fixes the ordinary Router's early Wheel return. Previously it first
+changed the relevant physical/remote button history, then returned for Wheel
+before handling Down/Up or an active window/icon/volume drag. A lost Up could not
+be recovered by the following zero-button packet. The productive Router is first
+called unchanged through a valid native SDK host session: its Volume Up+Wheel
+assertion fails with drag still active. Twelve subsequent failures in that run
+are consequences of the poisoned shared R4STD fixture mutex, not new defects.
+
+A snapshot now classifies the existing console/task-list/volume/tray wheel
+behavior and processes button/drag state completely. Compact optional Wheel
+and right-release effects plus one general primary Action are returned to the
+runtime after short GUI/window loans. The runtime emits them in order after
+its existing cursor/geometry/event completion. Right tray release also no longer
+short-circuits simultaneous left release. The fixed scalar extra effects avoid
+triplicating a general Action containing a large Launch; no per-snapshot heap,
+second global queue, extra source history or periodic measurement is added.
+Terminal-mode history/scroll behavior and the separate native Capture/FPS route
+keep their existing contracts. Current bounds/focus, normal frame activity and
+final release coordinates remain with their original owners.
+
+Five native compositions execute the productive Router for each physical/remote
+source flag: Volume Down/Motion/Up with final commit and no later replay; actual
+window drag motion/final Up without separate motion; icon layout commit; Wheel
+plus both tray releases followed by Wheel-only; and original native SDK GUI
+Down/Up delivery. The full existing suite passes249 Desktop cases plus3geometry.
+These are host/native snapshots with a real native session; they do not pretend
+to be physical wheel hardware.
+
+The actual separate KVM4/software run builds public C Gui/Input fixtures under
+Desktop Tests/Guest/PointerWheel. Gui never acquires native capture, so packets
+use the ordinary router. R4DESK remote_input_push accepts full wheel/button
+snapshots. Native client starts628,140,434x212. Down+Wheel and Up+Wheel arrive
+exactly once at(80,70)/buttons1 and(85,75)/buttons0. Caption Down/Motion/final Up
+all include Wheel; a later free movement leaves final client728,195 (+100,+55).
+A subsequent GUI gesture receives Down(40,40) and Up(43,43). Exact retained
+process result0, complete original output516bytes, observer reference release0;
+normal system poweroff observed. Screenshot and native coordinates are recorded
+separately from native model tests. No physical mouse/wheel/GPU, Windows or
+physical latency qualification follows. No current window-placement contract is
+inferred from these coordinates.
+
+Desktop185 SHA256:
+7eecc6f3903007a07d18afce4361a09dde0b2f443764c630777024b181814153.
+Kernel422 remains9bd639bc204221534d3c7f157fb22cca97254a0a582d651fb41cdbdda74a7388;
+SDK110/Contract58/Librarysource37 and other module artifacts do not change.
+The functional guest uses release0.88.29 before formal30 close. Release source
+advances to0.88.30 for its one final STANDARD; final context follows below.
+Inventories:141modules/1067tests/483documents. Explicit fixtures are not installed
+or periodically executed. Completed private images are removed.
+
+Final30 STANDARD: 26acb776-8395-4bca-a74c-4cc13249f06f. Suite3/primary metric2,
+KVM4, all30samples/all4worker work/byte/clock contracts and5metric medians/MAD
+plus6valid scores recalculated against frozen28b326e2-4323-4a4c-a0d2-4c1bab4958c0.
+Original whole export SHA256:
+6ff90fbdbd292bd82c7bb9678f5e63408c885bb7323a274bdda5ed7d2b38eb93.
+Overall156.080187. Original and lossless uint64/Decimal validation remain under
+ExFiles/Reports/Benchmarks/26acb776-8395-4bca-a74c-4cc13249f06f/.
+This is one final whole-system STANDARD, not an isolated pointer latency or
+causal speedup measurement. Lokal validiert; R4OS Server ausstehend (Import und
+Remote-Readback fehlen). Release0.88.30, completed guest images removed. The
+reusable C/native fixtures stay with Desktop; no permanent product probes.

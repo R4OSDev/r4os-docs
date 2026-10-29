@@ -1319,3 +1319,46 @@ queue regressions remain for their separate implementation versions.
 Product sources and kernel/module artifacts are unchanged. The release marker
 will advance on analysis completion; no image deployment or runtime speedup is
 implied. No STANDARD is required for this source/documentation-only step.
+
+Window service and desktop lifecycle review (0.88.2, source analysis)
+-------------------------------------------------------------------
+Reviewed owners: WindowService main request dispatch, tray/display/graphics/
+mode/diagnostic/launch mailboxes, Desktop runtime/service and desktop_launch,
+window service mirror/gate, and the shared ServiceLoop boundary. Deeper image
+and GPU retirement remain with the later transport/output analyses.
+
+0.88.33 records unnecessary unconditional 50-tick owner sweep deadlines and
+repeated status reads of the same exact desktop across bound surfaces/modes.
+An empty WINSVC still schedules the sweep; the SDK's separate bounded stopcheck
+remains necessary and must survive any improvement. Time/CPU savings are not
+measured by the source count.
+0.88.34 records independent launches waiting behind one claimed WAIT_FRAME
+request, even when other window slots are free. Broker capacity8 and a single
+Desktop receipt currently serialize that path. Existing retention prevents
+double-spawn after lost replies; its identity/real-worker guarantees must be
+preserved when permitting independent work.
+
+No additional confirmed lifecycle correctness error was found in the reviewed
+binding paths. Desktop takeover checks exact current process generations;
+a live or ambiguous old owner cannot be displaced. GPU handles include the
+actual service generation after restart. Read-only marker data is cached by
+an observed activity revision, so a notification during the RPC remains due.
+Copied launch data survives caller exit; a caller timeout does not acknowledge
+the underlying loader, and pending work is retained until real completion.
+The external Solitaire exit/output observation remains independent0.88.26;
+this source review has not reproduced its cause or upgraded its evidence.
+
+Normal diagnostic counters have actual status/text consumers. /SELFTEST and
+/PING are explicit entry modes. Diagnostic clock collection happens only on
+an explicit diagnostic operation; failure receipts are bounded values on the
+failure path. Ordinary status/owner sweeps do not poll GPU fences or generate
+a fake frame clock. Their presence alone is no basis for removing checks.
+The same application GUI-queue issue already owned by0.88.32 is referenced,
+not planned again.
+
+Validation: existing WindowService desktop-test and launch-test both passed
+through its Linux Build.sh. These are host broker/wire tests, not live GUI,
+physical or performance acceptance. Source artifacts remain unchanged. This
+analysis advances only the release marker and documentation; no STANDARD or
+new product image is needed. Follow-up implementations retain their own
+regression, artifact/version, final STANDARD and resource obligations.

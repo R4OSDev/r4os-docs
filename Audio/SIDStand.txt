@@ -59,3 +59,67 @@ PAL oscillator/VIC timing, dynamic CIA timers and full ROM/IRQ execution
 are outside this correction; NTSC cadence does not imply full NTSC emulation.
 
 Format reference: https://hvsc.c64.org/download/C64Music/DOCUMENTS/SID_file_format.txt
+
+Synth, protocol and other audio-driver review (0.88.13)
+------------------------------------------------------
+Bounded source review: MIDI/OPL3/SID/AudioFail drivers, AudioMidi/AudioOpl3/
+AudioSid protocol dispatch, current native SDK/advanced operations, Kernel
+synth integration, normal R4Synth callers and actual module image activation.
+This is not a complete chip-faithfulness review, current SYNTHD guest run,
+concurrent-process fault injection or new physical sound/latency acceptance.
+
+0.88.52 owns SID-Stop interference with the common PCM output. sid_stop always
+calls stop_active_pcm after the private synth Stop, without checking other
+open PCM sources. That is a physical Stop on the shared active backend; it
+can drain/restart unrelated playback. Other core final-close logic explicitly
+considers other streams/synths. Preserve private SID halt/Pending semantics
+while letting the common output owner decide when it really becomes idle.
+This source call sequence is not a measured audible dropout or a proven cause
+of historical SNES starvation.
+
+0.88.53 owns exclusive synth-session lifetime. Core has only global SID/MIDI
+acquired flags and active synth slot, with generic handle1. R4AUDIO synth
+entries are direct; unlike PCM stream bindings they do not record the R4X
+caller generation. Reaper action9 closes owned PCM streams, not these exclusive
+synth sessions. The driver SID acquire/release adapters likewise know no R4X
+owner. Normal R4Synth explicitly stops/releases/closes, but an aborted/faulted
+process cannot be assumed to finish that code. The follow-up must test actual
+two-client/fault/SMP behaviour and bind real resource lifetime, without adding
+a permission/sandbox model or blocking all PCM behind synthesis work.
+
+0.88.54 owns obsolete private no-op diagnostic scaffolding in SID/OPL3 engines.
+k.puts/putDec/putHex/putc are empty; dumpStatus has no active caller. SID's
+last_io_read/write address/value stores feed only that empty dump; private
+protocolStatus has no active driver/app consumer. Generic R4DEV protocolStatus
+in SYNTHD is a different real function. Only individually proved no-reader data
+is removable. OPL3 last_mixed_channels, SID clock/RAM/write maps/phase/filter/
+envelope state and genuine SynthEngineStatus counters have other meaning and
+must remain. Compiler elimination may already remove private stores/empty calls;
+no actual normal log stream or speedup follows from their source definitions.
+
+Preservation findings: mapped SID writes already dispatch ResolveIo once and
+call writeRegisterDecoded, avoiding a second protocol classification. Direct
+public register writes retain their one required classification. Required
+protocol binding is not an old-OS substitute; missing/failed roles remain real
+errors. MIDI.R4D is explicitly a router without PCM renderer; choosing a
+renderable MIDI synth does not treat that router as an audible renderer.
+Synth rendering remains bounded; pending PCM is retried rather than rerunning
+the same SID frame after backpressure. Original SID routine-return/step limits,
+full title-load replacement including invalid loads, exact cadence/remainder/
+PCM byte count and unsupported ROM/IRQ formats remain. No shortened synthesis,
+phase reset on silence or simplified substitute audio was proposed.
+
+The three protocol selftests are explicit dispatch operations, not automatic
+per-sample checks; no Kernel caller of their self-test opcodes was found.
+AudioFail is the deliberate negative AC97FAIL init fixture (return-38), marked
+negative and IMAGE_SCOPE=none; ordinary image configs contain no such module.
+Its existence does not create normal driver failure/probe overhead. Keep it for
+loader/failure coverage. Building it does not execute its intentional init error.
+
+All seven relevant unchanged owner builds/container inspections succeeded with
+exit0: MIDI,OPL3,SID,AudioFail R4Ds and AudioMidi/AudioOpl3/AudioSid R4Ps. Output
+went only to Temp and those completed modules were removed. No new test gate,
+full system catalog or runtime selftest run is claimed. Earlier focused SDK
+platform cases cover the common facade boundary only, not these real engines.
+Sources/product artifacts remain unchanged; docs/status/release marker only,
+no STANDARD/new image/hardware action from this analysis.

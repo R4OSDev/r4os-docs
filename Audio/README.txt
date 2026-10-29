@@ -406,3 +406,57 @@ ExFiles/Reports/Benchmarks/e747503f-801b-4cd3-896f-120953151828/.
 Kompakte Qualifikation Temp/08752-qualification.json. OeffentlichesFull/Slim
 bleibt51, nativerOssiPCjetzt52; alsnaechstes53Wiedergabefortschritt/
 Quellfristen. READERS37/IPC55/FS57 und integrierte66-Abnahme bleiben offen.
+
+Application PCM, SDK transport and pacing review (0.88.9)
+-------------------------------------------------------
+Reviewed boundaries: app_audio Audio/AudioStream/WriteCursor; async subsystem
+Audio Transport ordinary/tracked/discover/configure/progress/close paths;
+AudioPump acceptance/queue/pacing/retirement; canonical streaming PCM conversion
+and common native/C/Rust owner projections. No driver DMA/audio acceptance here.
+
+0.88.42 owns a source-confirmed asymmetric reply check. Synchronous validResponse
+checks magic/version/action; writeBounded checks bytes and frame alignment but
+not the returned stream identity or result==accepted bytes. Control accepts any
+nonnegative result without checking own stream and can clear ownership on Close.
+Open also accepts any nonnegative result. Async decode already checks own stream,
+accepted-byte/result agreement and zero control success. Malformed/lateral
+replies must not turn into own completion or PCM progress. No real AUDSVC bad
+reply, audible duplication or provider fault was reproduced in this analysis.
+
+0.88.43 owns an unnecessary terminal wait: drain polls, waits on actual I/O,
+then sleeps one tick whenever request_id remains, before polling/retiring even
+a completed wait. Only the next poll clears the ID. This is terminal finish/
+close/fence work; ordinary interactive pumping remains nonwaiting. Real ioClose
+BUSY/retirement and transient waits still need their exact acknowledgement and
+bounded retry behaviour. A finite remote budget never permits premature buffer
+reuse. No real close-time/latency benefit is measured from this source sequence.
+
+Preservation findings: one async request per transport owns copied PCM/header/
+response storage until genuine I/O close succeeds. BUSY status defers inspection;
+an uncertain Open is fenced on its original endpoint before reuse. Discovery,
+flow and tracked Write consume one absolute chain budget. Exact service epoch,
+stream generation and source deadline remain bound; accepted source frames are
+not consumed/DMA/audible frames. AudioPump drops only a confirmed frame-aligned
+accepted prefix, retains remaining queued bytes through pending operation and
+keeps invalid/unconfirmed work separate. Silence in a materialized continuous
+stream still owns timeline; producer pause/stop, not zero sample values, owns
+Close. Progress/real work/counters consumed by pacing and explicit original
+reports are not removable bookkeeping. No second backlog/worker is proposed.
+
+Native48kHz stereo S16LE already has a bounded direct-copy converter path.
+Fractional phase/remainder and the final previous-sample tail preserve streaming
+partition identity; finish handles end-of-stream instead of inventing boundary
+samples between chunks. Copied async payloads preserve source lifetime; they
+cannot be removed solely because another copy exists at the IPC boundary.
+PCM sample work instrumentation is comptime-gated by builtin.is_test or explicit
+root.audio_work_counters; normal unrequested sample counting was not found.
+Public Rust uses the native owner and requires explicit Close; Drop is no native
+close receipt. Bounds/format/owner checks remain functional.
+
+Existing SDK subsystem-runtime-test and platform-parity-test passed72/72:
+58 runtime/transport owner cases,9 Audio/Device cases,3 PCM cases and2 power
+cases;10/10 build steps succeeded. These original controlled native tables and
+PCM oracles do not prove actual endpoint scheduling, asynchronous cancellation,
+current live driver/audio or physical sound/latency. The new negative reply/
+wait-order injections remain obligations of42/43. No source/artifact/test gate
+changed; docs/status/release marker only, no STANDARD or new guest image.

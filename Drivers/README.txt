@@ -111,3 +111,115 @@ remain visible through the input diagnostics.
 
 Drivers are fully trusted. PCI/MMIO/port access is validated for obvious
 technical errors only. A faulty driver can still crash or corrupt the system.
+
+Resource-dependent driver admission (0.88.29)
+---------------------------------------------
+Kernel422 removes the separate CONFIG12, planned-name12, driver-registry32,
+R4D descriptor/runtime32 and Work-owner16 ceilings. Configured names and the
+short-lived load plan use fallible storage; the complete CONFIG file is read
+instead of only2048bytes. Invalid names, disabled/case-insensitive duplicate
+names, existing built-ins and optional driver load failures keep distinct
+accounting. Metadata/refused input never silently becomes a truncated success.
+A failed configuration-name allocation rejects the complete configured plan;
+fallible R4D admission preserves exact prior instances and rolls back its new
+binding. Existing DISABLE/OPTION directive limits remain separate policy bounds.
+
+Resident driver rows grow in32-row chunks.32 is early BSP bootstrap capacity,
+not an admission ceiling. Live owner state, callback references, resource epochs,
+module entries/catalogs and atomic generation/state claims never move. Chunk
+preparation holds no Runtime/Work/BO metadata lock; only publication uses the
+existing component admission. Atomic chunk publication and interior mutable row
+storage permit existing guarded row access. Resident control capacity remains at
+its high-water mark; per-instance backing/leases require real terminal receipts.
+Rows transport is private native implementation, not a new public API. Config,
+resource-model and graphics-model private layouts changed; Contract58/SDK110/
+Librarysource37 and all public ABI tables/records remain unchanged.
+
+The coupled shared R4M0 registry also grows beyond64 entries. Entry, catalog and
+claim reside together in a stable row; immutable published contents and exact
+claim/CAS transitions remain. Full inventory counts stream all records and retain
+only the requested row/name, replacing the128-record/32-driver-name snapshot.
+Public count/index/error contracts remain unchanged; invalid output stays intact.
+No separate higher product count replaces the removed boundaries. Finite memory,
+integer identities and independent actual resources still bound admission. In
+particular16 resident Work tickets and128 shared DMA pin/mapping slots retain
+their original meanings. This does not promise unlimited simultaneous DMA.
+
+Private KVM4 qualification uses129 separate ordinary public C R4D identities,
+plus intentional failed initialization before and after their expanded plan,
+a real disabled container, case variants/duplicates, PS2 already active, invalid
+name and missing module. Actual2387-byte CONFIG is larger than the old read.
+The plan reports149directives,145selected,4skipped(disabled1/duplicates2/
+invalid-name1),capacity0,already1,136loaded,4missing,4init-failed,0load-failed.
+This includes normal optional Test-profile failures; they are not reclassified
+as passes. The public C consumer finds129active fixture names up to owner142,
+positive runtime/module generations,179complete inventory records and one or
+more completed/released Work callbacks per owner with queue capacity16. The
+standalone earlier software run had178records before its optional SSH service.
+
+The explicit lifecycle fixture calls the actual otherwise private native R4D
+unload/reload path for all129instances in a private kernel image. Every real
+shutdown/cleanup returns ACK; old runtime info is missing and old heap binding
+stale. Reload produces newer runtime/resource generations. Example last owner:
+142->142,runtime141->270,resource epoch144->274. Public C consumption and normal
+Terminal continue afterward. The additional call site is removed from normal
+source before final build. lifecycle.rs remains a reusable image_scope=none
+fixture, never periodic product work or a physical hot-unload claim. The private
+lifecycle image KernelSHA is
+51c4ee601b26c825f9a307d494b2e58c4b857df803c264a69da3384376c9cff2;
+normal KernelSHA is
+9bd639bc204221534d3c7f157fb22cca97254a0a582d651fb41cdbdda74a7388.
+Final clean-image/source/benchmark evidence follows separately below.
+
+Each fixture holds real192byte heap data and one semaphore until shutdown,
+uses and ends a private DMA lease before the next driver, and waits/releases
+actual Work and a generation-bound dedicated thread. Its display classification
+only exposes software inventory rows; no display backend, GPU mode, network
+backend or physical DMA transfer is advertised. Native4 composition cases cover
+full global owner IDs65/97 across growth, retained live backing, failed allocation
+without partial publication, cross-owner and reused resource generations. Native
+heap/runtime stand-ins are separate from actual task/DMA/boot receipts. Kernel
+build/Clippy/format pass. Windows, actual hardware and physical latency remain
+unqualified. No other module artifact changes and no hardware installation.
+
+A prior unqualified held-DMA variant exhausted the independent128slot resource
+pool and then failed shell lookup. The original first refused call/error cause
+was not isolated; causality remains unproved, and source revision also changed.
+It is separated into roadmap0.88.73 at the end, with compact first-run evidence.
+Success of this driver-count/lifecycle fixture does not settle DMA-Full safety.
+Reusable sources/workflow: Kernel Tests/Guest/DriverCounts and
+Tools/Test-DriverCounts.ps1. No installed module or recurring instrumentation.
+
+Normal final source/guest qualification 0.88.29
+--------------------------------------------
+The normal Kernel422 source contains neither the temporary lifecycle call nor
+path-debug tags. Final normal private guest reports Release0.88.29/Kernel422
+active and installed,129active fixture drivers/max_owner142/179complete inventory
+records, all Work completed/released and unchanged out-of-range output. Public
+C command exit0 and AUTOEXEC ERRORLEVEL0 are captured; actual SSH/Terminal remain
+usable after both intentional initialization refusals. Normal poweroff is
+observed; the SSH255 disconnect is not misreported as application failure.
+IPCONFIG is absent from this minimal image; its attempted command supplies no
+network-status proof. Successful SSH is the separately observed network use.
+Native4 final actual-source checks pass; Kernel build/Clippy/format pass. Only
+Kernel422 and product release0.88.29 change; other module artifacts and
+SDK110/Contract58/Librarysource37 remain unchanged. Completed private images and
+generated fixture build environments are removed; the unresolved73 precursor
+retains small original logs/context and reconstructed canonical packages only.
+Inventories:141modules/1065tests/483documents.
+
+Final STANDARD and publication context 0.88.29
+---------------------------------------------
+Exactly one final STANDARD:e66c3763-b5b1-4fd8-9fc4-f856a650a1e3,
+Suite3/primary metric2/KVM4/30samples/4actual workers/5metric contracts/6valid
+scores,overall155.301464. Original SHA256:
+3193df50281db8f61329e3bed0979c1bf26d1c37de3bdfaa124800187dac1571.
+Original sample workers/batches/work/bytes/warmup/clock/median/MAD and all scores
+validate losslessly against frozen28b326e2-4323-4a4c-a0d2-4c1bab4958c0.
+Canonical benchmark BOOT reads back the same normal9bd639bc... Kernel422;
+release context0.88.29. Complete original and compact validation remain under
+ExFiles/Reports/Benchmarks/e66c3763-b5b1-4fd8-9fc4-f856a650a1e3/.
+No score rerun or isolated driver-admission speed claim. Status: lokal validiert;
+R4OS Server ausstehend (Import/Readback). No physical deployment or native
+hardware/Windows qualification follows. Three changed owners: Kernel,
+Distribution and Docs; SDK/Contract/Libraries and other module artifacts remain.

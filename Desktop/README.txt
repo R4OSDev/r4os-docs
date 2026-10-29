@@ -1501,3 +1501,48 @@ host owner/receipt cases, not live display failure injection or new GPU/physical
 visibility. No product source/artifact changed; documentation, inventory and
 release marker only. No STANDARD or new image is needed for this analysis.
 The follow-up owns its actual failure/recovery, SMP4 and final STANDARD proof.
+
+Shell, widget, text and asset review (0.88.6)
+-------------------------------------------
+Reviewed boundaries: copied controller/view separation, menus and modal widgets,
+Tasks/status/tray snapshots, volume requests, clock/settings/store I/O, folder
+publication/writeback, wallpaper and shared font/icon caches. The current SDK
+and R4STD retain parsing/recovery/codec ownership; no duplicate decoder added.
+
+0.88.39 owns periodic synchronous filesystem work in the GUI refresh: every
+second Clock.reload reads and parses even unchanged config; every half second
+AUDSVC installation info is queried on the GUI thread before async RPC. The
+clock path and its wait deadline also run when TASKBAR_CLOCK hides its label.
+Follow-up: preserve external changes, missing/unreadable data, calendar/DST and
+service ownership while avoiding repeated parse and GUI waits. Source call
+frequency is established; no measured disk stall or responsiveness gain yet.
+
+0.88.40 owns ICO bridging granularity: a decodable32x32 cachemiss performs up
+to3072 external pixel/RGB/alpha bridge calls, in addition to selection/parse.
+A bounded SDK-owned batch can preserve the current canonical8/32bpp palette,
+mask, scaling, alpha and bounds behaviour. This is cachemiss/5s revalidation
+work, not decoding every frame. Existing bulk helpers must be checked before
+extending the API, and no proportional timing gain is inferred from call count.
+
+0.88.31 also owns private bookkeeping found here. Font-cache stats have only
+test readers; Layoutwriteback stats and Save.started have no productive reader.
+Preserve test-only hit/miss oracles and real writeback generation, policy,
+worker joins and error/recovered logs. Compiler-elided writes are not measured
+normal-path cost; redundant source bookkeeping can still be removed.
+
+Preservation findings: version/inventory and wallpaper are loaded deliberately,
+not in every paint. Unreadable folder/config/wallpaper input retains the prior
+view. Layout writes already own an immutable encoded worker snapshot and use
+R4STD retry/recovery; failure/recovered messages describe actual state changes.
+Tray publication commits a complete revision, never partially mixed pages.
+Font coverage is bounded and keyed by font/revision/scalar with synchronous
+paint loans; icon misses already have bounded retry and replacement/invalidation
+coverage. Removing TTL/freshness checks blindly could hide actual new content.
+Normal task display has real counter consumers; do not delete these together
+with private unused stats. Test assertions/asset printlns are under cfg(test).
+
+Existing selected clock/menu/config/dialog/icon/font-cache owners passed14/14;
+shared geometry3/3 and SDK precise-clock1/1 passed. Original pixel/cache/time
+oracles retained, no new gate/catalog suite. These host cases do not inject
+slow live filesystem I/O or demonstrate a guest latency improvement. Analysis
+changed docs/status and release marker only; no product artifact or STANDARD.

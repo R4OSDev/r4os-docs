@@ -1724,3 +1724,94 @@ This is one final whole-system STANDARD, not an isolated pointer latency or
 causal speedup measurement. Lokal validiert; R4OS Server ausstehend (Import und
 Remote-Readback fehlen). Release0.88.30, completed guest images removed. The
 reusable C/native fixtures stay with Desktop; no permanent product probes.
+
+Private Desktop bookkeeping without productive consumers (0.88.31)
+----------------------------------------------------------------
+Desktop186 removes private input counters remote_events/keys/mouse and physical
+received/forwarded/invalid, unused remote_sequence and repeat_tick/repeat_armed.
+Complete current-owner searches found only declarations/writes; these are not
+public diagnostics or ABI records. PhysicalKeyEvent validation, monotone exact
+physical_sequence, MouseActivity, independent real button histories, cursor_moves,
+input_generation, input/idle clocks and actual diagnostic fields remain owned
+by their original implementations.
+
+Private Event/Record accumulated target/owner/layer/phase/key/pointer/consumed
+metadata and a private ID without any productive reader except trace input tick.
+It is replaced by last_event_tick at exactly the original keyboard/ordinary/
+captured-mouse begin points. Dead repeat reset, duplicate ordinary Down/Up
+classification and modifier synthesis for that unused record disappear too.
+The real physical native modifier/event payload and accepted public key values
+keep their existing path. Shared hit Target values remain unchanged. The six
+private metadata-only model tests disappear with their unconsumed model; native
+functional routing, physical validation, GUI, terminal and rendering tests stay.
+
+Capture Publisher published/skipped/errors, layout writeback Stats and Save.started,
+compositor layer/window/item/GUI aggregates and frame mixed/pixels/copied-byte
+counters have no productive reader and are removed. Coverage keeps its original
+geometry predicates without disposable counter arguments, including the actual
+software-profile diagnostic caller. Publisher result still clears cursor damage
+on success/unavailable and retains pending damage on other errors. Layout still
+owns immutable bytes/generation, exact native worker join, dirty/retry policy,
+first-failure/recovery messages and newer-generation resave. Real presentation
+and lost-generation/error/composition/present clocks are unchanged.
+
+Font-cache and GUI-frame snapshot counts plus original replay command/resource
+count oracles are compiled only for explicit tests with cfg(test), including
+storage and writes. Actual glyph/cache keys/revisions, frame owners, pending,
+allocation errors, resource/raster/read/release leases and fallback conditions
+remain functional. Replay's productive boolean records any selected record for
+this exact clip, at the exact original selected-command counting point before
+command validation. It drives rendered_windows exactly as old count!=0; it is
+not an assertion of physical visibility. Empty/nonselected and skipped commands
+keep the original work witness semantics.
+
+Generated current Desktop185 code is examined before deletion: font layout
+hit/miss retain incq0x30/0x38 at22ea3/22eca; exact snapshot append retains counter
+inc/add at19ccb/19cd2/19cde; LayoutWriteback::poll f780e..f7858 retains elapsed
+subtraction and completed/last/total/max bookkeeping after actual join. These
+are observed instructions, not inferred from source alone. Selected current
+input/composition/publisher code is separately inspected; no universal cost or
+per-counter timing/isolated speedup is assigned where optimization/inlining
+prevents a precise independent attribution.
+
+Full native gate:243 Desktop cases plus3R4GFX geometry pass after deleting the
+six unused Event-model oracles (previous249). Original cache hit/invalidation,
+frame delta/replacement, clipping/pixel, input/Capture/terminal and exact lease
+oracles remain. The first development compile identified the disposable
+software-profile coverage counter argument, which was migrated to the same
+boolean predicate; no failing native product case remains. Actual guest and
+one final STANDARD qualification follow below. Inventories stay141modules/
+1067test entries/483documents; no new permanent probes or test runner is added.
+
+Actual31 qualification: normal Desktop186 artifact SHA256
+fc0faac784a3cdcca66a1786f84e19bf8eb8bda751e3bf1d53a50e85a58bff0b,
+Kernel422 unchanged9bd639bc204221534d3c7f157fb22cca97254a0a582d651fb41cdbdda74a7388.
+Public C PointerWheel GUI/Input from30 reused unchanged (SDK110/Contract58/
+Librarysource37). VER in this actual KVM4/software image reads Release0.88.31/
+active+installedKernel0.1.422. QMP physical S/Q keys plus real remote combined
+wheel/button packets yield the original two exact GUI Down/Up pairs, caption
+final movement+100/+55 and unchanged geometry after a free packet. Exact process
+exit0/full original output516bytes/observer release0. Software screenshot reaches
+the desktop, native client coordinates agree, and normal POWEROFF stops QEMU.
+The completed private source image is removed. Source/native proofs cover
+remaining private state/lease/control invariants; this guest is an actual
+ordinary GUI input/frame/retained-output proof with physical-hardware scope
+separate. No new SDK/Contract/Library or Kernel artifact is required.
+
+Optimized same-named function sizes before185/after186: native font layout
+831/824bytes, exact snapshot append2423/2382bytes, poll_input39358/38230bytes.
+The former font hit/miss instructions disappear in the productive artifact.
+These are emitted code sizes and inspected counter work; they are not a
+per-operation latency measurement or an attributed whole-system speedup.
+
+Final31 STANDARD: b0cede49-3722-4298-b39f-808e91a1430a. Suite3/primary metric2,
+KVM4/all4workers/all30originalsamples,5metric work/byte/clock/median/MAD checks
+and6valid original scores recalculated against frozen28b326e2-4323-4a4c-a0d2-
+4c1bab4958c0. Full original SHA256:
+9c416f9850f5c387d9cbbafbafe0bdbe9b3e690707b742be437fccc4b3996505.
+Overall155.786649. Complete original and lossless uint64/Decimal verification:
+ExFiles/Reports/Benchmarks/b0cede49-3722-4298-b39f-808e91a1430a/.
+Lokal validiert; R4OS Server ausstehend (Import und Remote-Readback fehlen).
+This one whole-system STANDARD does not attribute a speedup or isolate a
+Desktop input/frame latency. Release0.88.31/Desktop186; Kernel422 and SDK110/
+Contract58/Librarysource37 unchanged. No permanent product instrumentation added.

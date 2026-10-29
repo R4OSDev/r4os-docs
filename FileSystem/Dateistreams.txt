@@ -117,3 +117,93 @@ The repair latch belongs to one live mount; the on-disk dirty bit survives
 remount. A general repair/admission policy for already-dirty volumes remains
 outside this change. Such a remount is not proof that file contents have
 been repaired, and ordinary write progress cannot serve as a repair result.
+
+0.88.27: Pfadprovider, Dateinamengrenzen und klare Vorabfehler
+------------------------------------------------------------
+Rolle: bestehender Dateisystem-/VFS-Vertrag mit SDK-Library-Fassaden. Die
+bestehenden FAT32-/NTFS-Besitzer bleiben im Kernel; die neue Abfrage vermittelt
+deren tatsaechlichen Pfad/Mount. Kein neues Modul oder periodischer Test.
+
+Contract57 ergaenzt R4SYS33/1376 um file_name_limits am Offset1368 sowie
+FileNameLimits56. Alte Slots, Payloads, Konstanten und Statuswerte bleiben
+byteinhaltlich gleich. SDK109 bindet den veroeffentlichten Contract57-Commit
+7c379e9b34a0ee86e0063cbf517c788931433d03 und dessen echten Archivhash.
+Libraryquelle36 projiziert nur die gemeinsame Rust-Tabelle/Typalias; keine
+R4L-Artefaktversion wurde dafuer angehoben. Kernel420 implementiert die
+konkrete Mountabfrage und prueft Stream-/Atomic-Namen vor Mutationen.
+
+Oeffentlich: Zig Files.nameLimits/Context.fileNameLimits, C
+r4_files_name_limits/r4sys_file_name_limits, Rust Files::name_limits.
+Grenzen gleichzeitig beachten:255UTF16-Codeunits und maximal765UTF8-Byte
+je Komponente,1023Byte roher/aufgeloester sichtbarer Pfad ohne NUL samt
+Laufwerkspraefix und CWD-Aufloesung. Ergaenzende Unicode-Skalare brauchen
+zwei UTF16-Units. Die bisherigen SDK-Syntaxbudgets (260Zeichen und die
+C-/Rust-Nicht-BMP-Einschraenkung) sind gesondert. Eine erfolgreiche reine
+Capabilityabfrage braucht weder Datei noch Elternverzeichnis und scannt
+keinen Freiraum. Mountslot/-generation sind ein Snapshot, keine Reservierung;
+Slot0 ist gueltig, unbekannte Angaben erfordern fehlende Knownflags bzw.
+UNSUPPORTED. Fehler schreiben keine Queryausgabe.
+
+FAT-Langnamen, aktuelle ASCII-/NTFS-UpCase-Kollation und die separate
+FAT-APPEND-Neuanlage-Shortregel stehen in name_rules. atomic_rules meldet
+kurze Stage-/Backupnamen auf beiden Providern sowie kurze FAT-Ziele bei
+ownergeschuetzter Create-only-Publikation. Erlaubtes Kurznamensalphabet:
+ASCII-Buchstaben/Ziffern und _-$~, Basis1..8, optionale Erweiterung0..3.
+Gueltige lange CREATE-Namen und lange normale Austauschziele bleiben erlaubt.
+Details und C-Beispiel: Docs/API/StorageFacade.md, SDK/README.md.
+
+Streambegin und file_replace_atomic unterscheiden NAME_NOT_SUPPORTED-64
+und NAME_TOO_LONG-65 von allgemeinem INVALID und I/O. Die neuen Werte
+kollidieren nicht mit AsyncTransport-1..-10. Vorabfehler reservieren keinen
+neuen Stream und bewahren vorhandene Dateien; normale Syntax-/andere
+Statusdomaenen bleiben erhalten. Rust enthaelt fuer diese eindeutigen
+Beginfehler keine Abortpflicht; ambige Fehler behalten ihre bisherige Schuld.
+Der Dokument-Saver war bereits passend: DS+6Hex mit.TMP/.BAK,64Kandidaten,
+kollatierte Aliaspruefung, keine Zielkuerzung und kein Direktwritefallback.
+
+Vorher Kernel419/SDK108 im privaten KVM4-Testimage: C:/D:NTFS, E:FAT32
+und C:/BOOT:versteckter FAT32-ESP-Pfad. Lange43- und255ASCII-Namen konnten
+angelegt und identisch zurueckgelesen werden. FAT-Dotprefix lieferte IO-5,
+langer Atomic-Stage NOT_ATOMIC-8. Die fremde Exchange-Meldung INVALID-1
+ist damit nicht reproduziert: Originalprovider/-Name/-Version fehlen.
+Keine allgemeine8.3-Pflicht und keine Ursache der alten Meldung behauptet.
+
+Nachher Kernel420/SDK109:40echte Create-/Payload-/Finish-/Readback-Vektoren
+auf denselben4Pfadfamilien;255/256ASCII-,Euro- und UTF16-Unit-Grenzen mit
+ergaenzenden Skalaren sowie exakter1023-/abgewiesener1024Byte-Pfad.
+12Atomic-Proben: kurze Stages ersetzen kurze/lange Ziele; lange Stages-64
+erhalten Target, Stage und Backup bytegenau.4echte C-SDK-Dokumentsaves
+ersetzen lange Ziele mit vollstaendigem Payload-Readback.215Checks,0Fehler,
+Gastprozess0; C:/BOOT meldet Mountslot26/Generation2 statt C:2/3.
+Gueltige Supplementary-Namen funktionieren nativ; der gesonderte
+C-Pfadparser lehnt sie weiterhin syntaktisch ab. Wiederverwendbare Quelle:
+Repositories/Kernel/Tests/Guest/FileNames, image_scope none, nicht installiert.
+
+Contract16/16,26Mutationen,7C/Zig/Rust-Interop, Host/Bare-Layouts/Clippy;
+SDK bestehende Storage-/Pfad-/Registry-/C-/Rust-Interops bestanden, inklusive
+fehlender Capability, Fehlerweitergabe und echter Bereinigungspflicht.
+Name-Hostbesitzer3/3; SharedLibrary-Rustcheck und Kernelbuild/Clippy0.
+Sprachparitaet:19konkrete Quelldeltas,660Dateien/35Scopes/180Rootexports.
+Privater Gast normal heruntergefahren: SSH-Abbruch255 durch POWEROFF,
+QEMU0; keine Erfolgsumdeutung des SSH-Abbruchs. Vollimages nach der
+Aufbewahrungsregel entfernt. Windows/physische Storagehardware nicht getestet.
+
+Nach der Gastabnahme wurde lediglich eine bestehende Transcript-Allokation
+in instance_storage.rs vom Formatter umgebrochen. Keine Operation oder
+Semantik wurde geaendert. Finaler Neubuild/FMT erfolgreich; die Gastabnahme
+und der folgende finale Artefakthash bleiben getrennt nachvollziehbar.
+
+Finaler STANDARD0.88.27: d9ca30a2-0e73-4627-9c88-8b572fe47824,
+Suite3/Metrik2/KVM4,30Rohsamples/4Worker/5Primaermetriken/6gueltigeScores.
+Alle Arbeits-, Batch-, Byte- und Warmupnachweise sowie ns/Operation und
+Median/Min/Max/MAD verlustfrei geprueft; sechs Scores mit der gefrorenen
+Referenz28b326e2-4323-4a4c-a0d2-4c1bab4958c0 nachgerechnet.
+Overall158.668159; kein isolierter Namens-/I/O-Geschwindigkeitsclaim.
+Genau ein finaler Lauf, keine Wiederholung fuer bessere Scores.
+Finaler Kernel420-SHA256:
+d4256d884305ee154dfa7a5d0d49cf87f3649d00db02bff045ba26800914fb2b.
+Vollstaendiger Originalexport mit allen CPU-/Arbeits-/Artefakt-/Vergleichs-
+kontexten unveraendert unter ExFiles/Reports/Benchmarks/d9ca30a2-0e73-4627-9c88-8b572fe47824/.
+Original-SHA256:41787f6335adcb1646c422b2e5ba98ad82cd46f17c8408a36496c667bece6fc2.
+Status: lokal validiert; R4OS Server ausstehend. Import und Remote-Readback
+fehlen; spaeter denselben Originalexport nutzen, keinen neuen Lauf.

@@ -1,6 +1,6 @@
 ﻿# Console, file, directory and registry facade
 
-The SDK wraps R4SYS with typed Zig and C views. These views validate paths,
+The SDK wraps R4SYS with typed Zig, C and Rust views. These views validate paths,
 buffers and lifecycle but do not add new kernel operations or invented file
 handles.
 
@@ -15,6 +15,66 @@ File operations are path-based where the R4SYS contract is path-based.
 Directory enumeration uses bounded caller buffers and explicit end/error
 states. Atomic replace/update helpers bind staging, target, backup and
 identity checks so applications do not reimplement system-file transactions.
+
+### Actual path name limits (0.88.27)
+
+`R4SYS.file_name_limits(path, out)` returns a 56-byte `FileNameLimits`
+snapshot for the actual resolved mount. SDK syntax acceptance does not
+establish provider acceptance. In particular, `C:\BOOT\...` resolves to the
+boot FAT32 provider even when the visible C: drive uses NTFS. Neither the
+final file nor its parent directory must exist for this query.
+
+Public wrappers are Zig `Files.nameLimits` / `Context.fileNameLimits`,
+C `r4_files_name_limits` / `r4sys_file_name_limits`, and Rust
+`Files::name_limits`. The query does not enumerate files, scan free space,
+reserve a name, or retain a mount. `mount_slot` and `mount_generation` identify
+the snapshot only when `MOUNT_IDENTITY` is set. Unsupported providers or an
+unavailable callback return `UNSUPPORTED (-2)` and preserve caller output;
+zero fields without `KNOWN` do not establish a zero-length limit.
+
+The current FAT32 and NTFS providers support 255 UTF-16 code units per
+component, with an effective ceiling of 765 UTF-8 bytes. A supplementary
+Unicode scalar consumes two UTF-16 units. The raw and resolved visible path
+must fit 1023 UTF-8 bytes, including its drive prefix when resolved and
+excluding NUL. Relative names must also fit after CWD resolution. These
+provider/kernel budgets are separate from the SDK path parser's current
+260-character syntax budget and its C/Rust non-BMP syntax restriction.
+
+`name_rules` describes actual provider behavior. FAT long names exclude
+leading/trailing dots, all-space names, controls below U+0020, U+007F,
+U+FFFF and `\/:*?"<>|`. These long-name restrictions apply after the
+existing short-name predicate: for example, `A.` remains an accepted short
+alias. FAT's APPEND-new-file path additionally requires a short name; ordinary
+write and stream CREATE support valid long names. NTFS uses its existing
+volume UpCase collation; FAT retains its existing ASCII case folding.
+Neither implies Unicode normalization.
+
+`atomic_rules` is independent of ordinary CREATE. Both current providers
+require short stage and backup basenames; owned create-only publication also
+requires a short FAT target. A short basename consists of 1..8 ASCII letters,
+digits or `_-$~`, with one optional dot and 0..3 extension bytes from the same
+repertoire. Ordinary atomic replacement can target a supported long name.
+Same-directory, same-volume, alias and ownership rules still apply.
+
+Stream begin and atomic replacement distinguish `NAME_NOT_SUPPORTED (-64)`
+from `NAME_TOO_LONG (-65)`, general `INVALID`, and I/O failures. These two
+preflight failures preserve existing files and allocate no new stream.
+Malformed Unicode remains invalid syntax. Other operations retain their own
+status domains. Rust failed stream opens need no abort for these two precise
+name failures; other ambiguous failures retain their cleanup obligation.
+
+The document-save helper already uses `DS` plus six hexadecimal digits and
+`.TMP`/`.BAK`, checks collated aliases and tries up to 64 candidates. It keeps
+the full target name and performs no truncation or direct-write fallback.
+Consumers choosing their own stage names can query the actual target mount
+and must still handle a rejected operation or collision.
+
+The original external Exchange report has no exact provider, name or release
+identity. Its `INVALID (-1)` was not reproduced on Kernel419/SDK108:
+43- and 255-byte ASCII CREATE/readback worked on actual private-image FAT32
+and NTFS volumes. The confirmed gaps were generic FAT name errors and the
+separate atomic staging restriction. This does not establish a general R4OS
+8.3 requirement.
 
 ## Streams
 

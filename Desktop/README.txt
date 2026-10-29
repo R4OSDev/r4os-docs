@@ -1957,3 +1957,110 @@ ExFiles/Reports/Benchmarks/1b1ea77e-8e7c-4eef-8e8a-d7dda2aed78c/.
 BOOTreadback desselbenKernel423; WINSVC26 unveraendert zum qualifizierten
 Artefakt. Genau1finaler33Lauf, keinScorererun. Lokal validiert; R4OS Server
 ausstehend (Import/Readback).141Module/1069Tests/483Dokumente.
+
+0.88.34: Unabhaengige externe Desktopstarts und genaue Einzelquittungen
+---------------------------------------------------------------------
+Desktop188 und WINSVC27 fuehren externe Starts unabhaengig weiter. Die
+realen vier Desktop-/Loaderplaetze bleiben gleich. WINSVC behaelt acht
+aktive Tickets und16Historieplaetze; der Desktop haelt je genauem
+(Brokerinstanz/Generation, Requestinstanz/Generation) eine eigene Quittung.
+Der feste Speicher reicht fuer vier reale Plaetze plus eine zu bestaetigende
+Aufnahme/Fehlerquittung. Er erzeugt keine weiteren Fenster und keine
+Heapallokation je Ticket. Die bisherige echte Fenster-/Loaderreservierung
+entscheidet weiterhin ueber Platzmangel.
+
+Die private additive WINSVC-Operation4741 bestaetigt nur die gespeicherte
+Desktop-Empfangsquittung. V1 und448Wirebytes bleiben gleich. Ein noch nicht
+bestaetigter Take wird genau wiederholt. Sobald der Desktop den Auftrag
+haelt, darf WINSVC andere unbeanspruchte Arbeit anbieten. Received setzt
+weder Prozess/Fenster/Content noch settled, Frist oder Ressourcenquittung.
+Ein nach Caller-Timeout noch laufender Loader bleibt gegen Historie-/TTL-
+Verdraengung geschuetzt, bis sein echtes Ergebnis oder das bestaetigte
+Desktopende eintrifft. Normale Prozess-/Fenster-/Inhaltsresultate bleiben
+getrennt und koennen unabhaengig in anderer Reihenfolge eintreffen.
+
+Der Desktop bindet jede temporaere Beobachtung an ihren Auftrag. WINSVC
+uebernimmt seinen eigenen genauen Beleg vor dem Ergebnis-ACK. Verlorene
+Antworten behalten die lokale Quittung; idempotente Received-/Ergebnis-
+Timeouts verlieren die Hostbindung nicht. Fremde Broker-/Desktopgenerationen
+werden vor dem RPC abgewiesen. Ein bestaetigter neuer Broker verwirft keine
+realen alten Worker: diese bleiben bei ihren bestehenden genauen Slot-
+Tickets; ihr alter Callback kann keine neue Quittung ueberschreiben.
+Window-/Prozessgenerationen werden vor einem Contentresultat verglichen.
+
+Eine kopierte Mailbox wird lokal nur einmal angeboten, wobei ihr Broker
+fuer unabhaengige spaetere Ergebnisse erhalten bleibt. Die Entscheidung,
+ob eine Kopie neu ist, wird vor dem ACK-Aufraeumen festgehalten: wenn gerade
+die letzte Antwort fuer dasselbe erneut gelieferte Ticket bestaetigt wird,
+entsteht dadurch kein neuer Start. Empfang, Workerabschluss, erstes echtes
+konsumiertes GUI-/Consolecontent und terminale Fristen sind getrennte
+Sachverhalte. WAITFRAME bekommt kein kuenstlich verlaengertes Budget.
+
+Unveraenderter Vorherstand: Desktop187/WINSVC26, alle9 alten Queuefaelle
+bestehen; neuer Unabhaengigkeitsfall scheitert (erwartetesB4, geliefertesA3).
+Die oeffentliche C-Fixture0.1.2 wartet inS dreiSekunden sowohl vor dem
+GUI-Bild als auch vor jeder Consoleausgabe; T praesentiert sofort.
+Privater normaler Software-KVM4 mit exakten SFTP-Artefaktreadbacks:
+Vorher AStart99494/Erstbild102494,
+BStart102550 erst danach. Nachher AStart61424/
+Erstbild64424, BStart61705/Erstbild61705 davor.
+Beide voneinander verschiedenen Tickets erhalten ihre eigenen
+Prozess-/Fenster-/Contentbelege; beide Prozesse beenden mit Exit0,
+vollstaendiger Ausgabe und Beobachtungsfreigabe0.
+
+Drei weitere echte externe GUI-Fenster fuellen die freien Plaetze neben
+dem normalen Terminal. Der naechste Start meldet weiterhin window_full,
+Prozess0/Fenster0, keine Zusatzanlage. Alle drei GUI-Prozesse enden mit
+Exit0, kompletter Ausgabe und release0. Ein weiterer S-Caller endet nach
+seinem originalen700ms-Budget mit timeout. Die Callerantwort ist dabei
+nur accepted/Prozess0/terminalfalse; frisches STATUS desselben Tickets
+liefert dagegen window/Prozess71:71/timeout/terminaltrue mitBeleg. Daraus
+erst wird der genaue Beobachter gebunden. Das echte GUI arbeitet bis zur
+ersten Bildveroeffentlichung weiter. Ein unabhaengiger T-Auftrag startet
+trotzdem vorher. Auch diese beiden realen Prozesse enden sauber mit
+voller Ausgabe/release0. Damit sieben finale GUI-Abschlussbelege und eine
+Kapazitaetsablehnung ohne Prozess; keine physische Eingabe-/GPU-/Windows-
+oder allgemeine Latenzabnahme. Normales POWEROFF, eigene Gaeste beendet,
+beide Imagequellen per kanonischer Test-Retention entfernt.
+
+Hostqualifikation:14 echte WINSVC-Queuefaelle, die bisherigen7Tray-/Wire-/
+Checkgruppen samt enthaltenen Modus-/Graphicspruefungen und die8Maintenance-
+faelle bestehen. Desktop257 und gemeinsame R4GFX-Geometrie3 bestehen ueber
+den vorhandenen Runner. Die gezielten Faelle enthalten verlorenen Take/
+Received-/Ergebnis-ACK, genaue Generationen, unabhängige spaete Resultate,
+Timeout/TTL/Historiedruck ohne Workerfreigabe, alte Callbacks und das
+ACK-/Redelivery-Zeitfenster. Bestehende Host-/Loading-/Dienstendepruefungen
+bleiben erhalten; ihre Faelle sind keine physischen Native-Loaderfehler.
+
+Der kombinierte Tray-/Diagnose-/Launch-Exchange bleibt bestehen. Ein
+kontrollierter echter Host/SDK-Peerfall zaehlt3Exchange-RPCs,1Received und
+3Ergebnis-ACKs inklusive verlorenerAntwort/Wiederholung. Keine Messung aller
+Gastpolls, keine behauptete RPC-Anzahlreduktion. Ein noch asynchroner neuer
+Auftrag benoetigt einen zusaetzlichen fruehen Received-RPC; unabhaengige
+Quittungen werden lokal bearbeitet. Keine permanenten Laufzeitzaehler,
+neuer Providerersatz oder zusaetzliche Testinstallation.
+
+Finales Desktop188-Artefakt: 33b2cb41ab0180d98627d4337a4735e1db7086cf08da7475d7594a0deba85192
+WINSVC27: bb64e60c3ad64602bf1fd45f3e95d7bfed81087f0f891532b63bf813fd20c3ba
+Kernel423 bleibt 738b5636a2b15159fd488b532b34df44f095a04d170cbcdea8eeb4d141eba808
+SDKQuelle111/Contract59/Libraryquelle38 und deren Toolset bleiben gleich.
+Desktop wurde ueber seinen normalen SDK-Projektstarter gebaut; dessen
+bestehende technische Arbeitsbaumqualifikation ist true, der unveraenderte
+SDK-Toolsetexport ist technical=false. Die private Testimage-Basis nutzte
+noch Release33; Marker34 folgt fuer den finalen STANDARD, kein behauptetes
+Hardwareupdate. Temp/08834-runtime-proof.json enthaelt Originalvorher/
+Nachher, genaue Artefaktbytes, Tickets, Originalausgaben und Freigaben.
+Befund78 zum gewoehnlichen WINSVC-Stop/Start-Reconnect bleibt eigenstaendig.
+
+Finaler STANDARD34:1c36d5d4-654d-48ed-bc87-d27dc295ea17,
+Suite3/Primaermetrik2/KVM4:30Samples/4Worker und6gueltigeScores.
+AlleArbeits-/Batch-/Byte-/Warmupmengen sowie uint64-/Dezimalwerte und
+6Scores gegen die festeReferenz28b326e2-4323-4a4c-a0d2-4c1bab4958c0
+verlustfrei geprueft. BeobachtetesOverall165.139947; keine isolierteCPU-
+oder allgemeineLatenzgewinnzusage. Original-SHA256:
+73b1ed611115d189be4a22b1f464c0773ae8761152b2f9a74934b3ed43b382ee.
+Voller unveraenderter Export mit allen Kontexten und separaterPruefung:
+ExFiles/Reports/Benchmarks/1c36d5d4-654d-48ed-bc87-d27dc295ea17/.
+BOOTreadback Kernel423 und unveraenderte nativeD188/WINSVC27-Artefaktbytes
+geprueft. Genau1finaler34Lauf, keinScorererun. Lokal validiert; R4OS Server
+ausstehend (Import/RemoteReadback).141Module/1069Tests/483Dokumente gleich.

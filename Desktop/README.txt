@@ -2308,3 +2308,89 @@ Artefakt-/6Scorepruefung unter ExFiles/Reports/Benchmarks/58093b69-bd62-419f-a9b
 Lokal validiert; R4OS Server ausstehend (Import/Readback). Die feste
 Referenz wurde beibehalten; kein weiterer Lauf fuer Score oder Upload.
 Desktop/Distribution/Docs werden ueber den regulaeren Sammelpush geschlossen.
+
+0.88.38: Abgewiesene Softwareframes korrekt behalten und quittieren
+-----------------------------------------------------------------
+Desktop192 verwendet einen CPU-Frame nur dann als angenommenen Frame,
+wenn copied und presented beide bestaetigt sind. Dieselbe accepted-
+Bedingung steuert Cursor-Cleanbarriere, erfolgreiche Presentzaehler,
+Trace und rendered-Rueckgabe des Koordinators. Ein beliebiger letzter
+Present nach gescheiterter Kopie ist keine erfolgreiche Ausgabe.
+
+Der alte Zusatzpfad wird entfernt: Kernel r4draw.blit und present_regions
+benutzen denselben presenter/manager. Dieser verwaltet bereits die echten
+beschleunigten, nativen und bootfb-CPU-Optionen samt exklusivem Writeguard
+und finish. Erneutes Desktop-Legacyblit nach einem kanonischen Fehler
+behebt keine fehlgeschlagene Admission, verliert aber exakte Regionen und
+Quellgeneration. Separater display_present setzt nur Surface-Modemetadata.
+Die aktuelle Pflicht-API wird vorausgesetzt; echte Kernelbackendoptionen
+und deren Besitz-/Boundspruefungen bleiben bestehen. Kein Kernel-/SDK-
+oder Contractdelta ist erforderlich.
+
+complete_cpu_frame reiht alle abgewiesenen Rechtecke wieder in die echte
+Dirty-Liste ein und liefert false. Der bestehende Aktivitaetswartepfad
+gilt damit auch bei Ablehnung; es gibt weder einen internen Retryloop noch
+neue Zeitmesspunkte oder Default-Timeouts. CPUcurrent bleibt bewusst die
+Gueltigkeit komponierter CPU-Pixel, keine Ausgabequittung. Das erhaelt
+Teilbildreparaturen ohne unnoetigen Vollbildersatz. Zurueckgewiesene rohe
+Provider-Metadaten bleiben zur Quellidentitaet erhalten; ihre Generation
+fortzuschreiben ist nur bei einem angenommenen Frame zulaessig.
+
+Eine Ausgaberevision ersetzt die bisherige globale Damage durch eine
+vollstaendige Neuzeichnung ihrer neuen Desktopgrenzen. Alte, disjunkte
+Bereiche ausserhalb des neuen Ziels werden nicht erneut eingereicht.
+Die vorhandenen Ressourcen-/Capture-Resetquittungen bleiben zustaendig;
+diese Aenderung betrifft Rechtecke, keine fremden Leihen oder GPU-Fences.
+
+Vorher191: actual Frames->SDK/nativeAdapter lehnt canonical ab, Copy=-3,
+getrennter Present=0. Das ganze Frontbild bleibt336699; presented war
+trotzdemtrue. Das neue Orakel scheitert gezielt. Aktuell8CPU-Faelle und
+ganze266Desktopfaelle plus3Geometry/1SDKclock bestehen. Die vorhandene
+Fixturedatei erhaelt drei Faelle: Ablehnung/Recovery mit echter
+Cursorcontroller-Cleanbarriere, vier Fehlerkombinationen und genaue
+sechsPixel-Teilbildreparatur aus kohaerenter CPU-/Frontbelegung sowie
+Ausgabewechsel64x32->16x16. Alter Fullappend behaelt Rect40,4,2,2 neben dem
+neuen Vollbild und erzeugt Beginunion42x16; keine Annahme am16x16Ziel.
+Der reale Reset liefert nur die neue Vollrect und eine frische Generation.
+Abgewiesene Testgeneration999 bleibt Rohmetadatum und erzeugt weder
+Erfolg noch verlorenen Frame. Urspruengliche Clock-, Wirebounds-, Pixel-,
+Layer-, Ressourcen-, Cursor- und Resetorakel bleiben erhalten; kein neuer
+Runner oder produktiver Messpunkt entstand.141Module/1070Tests/483Docs.
+
+Endgueltiger normaler192-Build mit bestehendem technical=true:
+SHA256 603a93b1d4fa066cc8e5447226ee1c7226a68aa380b20e0dd8f4b96867281459.
+Software-KVM4 mit exakt zurueckgelesenen Bytes/4schedulableCPUs besteht
+zwei GUI-Starts, Content, Exit0, vollstaendige Ausgabe, Observerrelease0
+und denselben Desktophost vor/nachher.
+
+Eine getrennte, nur voruebergehend gebaute Testvariante aus denselben
+Quellen injiziert acht canonical-unavailable-Antworten VOR dem echten
+Provideraufruf. Nur zwei Runtimequellen werden dort instrumentiert;
+drei weitere Dateien enthalten lokale Compilerpfadzuordnungen. Eigene
+Artefakte/Images verhindern eine Verwechslung mit dem normalen Produkt.
+Varianten-SHA256 2ee664713f6f6162abea4af0c7ff2963941a1043fbd3d6cea018fa47ff7fd763.
+Im echten Koordinator bleibt nach acht Ablehnungen Dirty0,0,1280,720,
+Quellgeneration8/Providergeneration0/Erfolge0 erhalten. Generation9 wird
+anschliessend vom echten Kernelprovider als Providergeneration1 angenommen,
+Damage ist leer. Der bestehende Waitpfad fordert Timeout1 bei
+active=0 an und liefert Ergebnis1; daraus wird keine
+Schlafdauer oder isolierte Latenz abgeleitet. Zwei weitere GUI-Prozesse
+beenden sich mit vollen Belegen/release0 bei gleichem Desktophost.
+
+Diese gezielte Adapterinjektion ist kein realer Treiber-/Hardwarefehler.
+Native Sicht ist nur im Software-QEMU-Framebuffer kontrolliert; physische
+Sicht/Hardwarecursor, GPU-Ausgabe und Windows bleiben unqualifiziert.
+Normales POWEROFF beider Gaeste, deren Sourceimagebereinigung sowie das
+Entfernen der temporaeren Sourceansicht ohne Folgen ihrer Abhaengigkeits-
+Symlinks sind bestaetigt. Im normalen Artefakt fehlen die F38-Witnesses.
+Fruehere68bbc/4f4ce-Artefakte sind Zwischenstaende; die obigen SHAs sind
+massgeblich. Kernel423/WINSVC27/SDKQuelle111/Contract59/Library38 bleiben.
+Einziger finaler STANDARD38: 0a5256a0-4304-4b03-8dff-d152fa2c683b; Suite3/
+Primaermetrik2/KVM4,30Samples/4Worker/6gueltigeScores. Gesamtscore
+161.751427. Vollstaendiger Originalexport SHA256
+49a30fac2b464e954ba4569f30f087f1102415c91a0377d2d610c7ed30a75b2a
+liegt unveraendert samt separater verlustfreier30Sample-/Arbeits-/CPU-/
+Artefakt-/6Scorepruefung unter ExFiles/Reports/Benchmarks/0a5256a0-4304-4b03-8dff-d152fa2c683b/.
+Lokal validiert; R4OS Server ausstehend (Import/Readback). Die feste
+Referenz wurde beibehalten; kein weiterer Lauf fuer Score oder Upload.
+Der Abschluss umfasst den regulaeren Sammelpush von Desktop/Distribution/Docs.

@@ -1403,3 +1403,52 @@ weakened, and no new permanent gate or product probe was introduced. This
 source/documentation step has no runtime artifact change and needs no
 STANDARD or image build. Follow-ups own their actual CPU-/native-/guest
 qualification and final STANDARD; hardware visibility remains unqualified.
+
+Frame transport, image ownership and capture review (0.88.4)
+----------------------------------------------------------
+Reviewed: frame_reader/frame_snapshot, window_image/window_graphics/window_set,
+native_images, capture publisher/source/remote/readback and screenshot/recording
+worker ownership. Three data paths remain distinct: copied committed command/
+resource metadata, exact imported image/read leases, and demand-only immutable
+CPU snapshots. A copy is not redundant merely because another path has one.
+
+0.88.37 records the unconditional private capture_shadow full-image copy in
+Publisher::image, even when no separate visible cursor overlay needs writing.
+The final kernel publisher consumes the already immutable image synchronously;
+that branch can be simplified while preserving validation, CPU-scene state and
+lease duration. This is an extra Desktop copy on an explicitly demanded path,
+not a claim of background readback without consumers or universal zero-copy.
+The necessary kernel immutable snapshot copy and real GPU readback are separate.
+
+0.88.31 additionally owns the private Publisher published/skipped/errors fields
+with no productive reader/getter/export. Generated-code cost is still to be
+checked there; functional result handling and cursor-damage retirement stay.
+0.88.36 also covers the reused Dirty type in capture/cursor damage. The actual
+primary-compositor failure already proved there is not automatically a second
+proved capture/kernel failure. Shared causes are linked rather than duplicated.
+
+Preservation findings: generation refresh has separate active/staging storage;
+stale reads and allocation failure retain the prior committed view. Repeated
+unchanged generations avoid command/resource copies. Delta suffixes validate
+counts/offsets before rebasing; appended shared-raster commands fall back to a
+full validated acquisition. Failed raster releases retain exact native lease
+identities. CPU producers are queried/mapped without waiting for a fence;
+pending work leaves the preceding front. Read ledgers bind actual image
+identities, not whichever slot is front later. Incoming GPU receipts are
+returned intact on refused replacement, and exact Return/reset acknowledgement
+precedes resource release. Unknown service state is not a death receipt.
+
+Capture demand is checked before output readback/publication. Read-only maps
+are never painted through; explicit screenshot/recording workers return owned
+payloads after native join and retain refused file/snapshot cleanup for retry.
+Those copies, bounds, format checks, counters with actual readback consumers
+and retirement barriers are functional. No new background probe or sampler was
+introduced. The no-consumer path already avoids capture pixels.
+
+Existing native frame_snapshot/window_image/window_graphics/capture::source
+selection passed23/23, shared geometry3/3 and SDK precise-clock1/1. These are
+host ownership/snapshot cases; no new real GPU, guest, screenshot-file, recording
+or physical acceptance is inferred. Product sources/artifacts are unchanged;
+only documentation, inventory status and the release marker advance. No
+STANDARD or image build is required for this analysis. Implementations retain
+their own exact pixel/resource/SMP4 and final STANDARD obligations.

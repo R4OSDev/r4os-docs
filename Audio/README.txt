@@ -918,3 +918,63 @@ ExFiles/Reports/Benchmarks/1ba7b15d-9e05-47ba-ba3f-53d5d9ae8a79/.
 Status: lokal validiert; R4OS Server ausstehend (Import und Readback).
 Dies ist die allgemeine Systemkontextmessung; keine Messung eines isolierten
 Lifecycle-, CPUzeit- oder Hoergewinns.141Module/1071Testdateien/483Dokumente.
+
+0.88.46: remove unreachable private audio force/deferral bookkeeping
+--------------------------------------------------------------------
+Kernel0.1.424 removes the always-true force argument from pump_goal_locked,
+pump_output_owned and pump_available_output_owned. Every current productive
+caller passed true: owner-close reserved masks, individual-stream drain masks
+and the audio worker. The only force consumer was the unreachable optional
+open_count>1 && !force && !deferred_once branch. Its private Stream field,
+initial value, resets and sole open_count/was_empty bookkeeping are removed.
+No public platform API, contract type, module or SDK changes.
+
+The actual mixing, exact reserved/target PumpGoal masks, output leases,
+read reservations, partial admission and ring consumption remain unchanged.
+Actual2ms BUSY, ledger, backend and flow progress schedules remain. This is
+not a removed current2ms wait: the deleted branch never ran. Source cleanup
+does not establish an isolated throughput or latency gain. The optimized
+ELF does change before version metadata, hence the artifact version424.
+Final SHA256 69d254933cec7a8162be4d84cc92257bf77ebb2eb1ce029252972c76b999a0b8.
+All140existing module artifacts/manifests stay byte-identical; RecoveryMenu
+remains unbuilt. SDK114/Desktop196/WINSVC27/AUDSVC19/SNES35/Contract59 and
+Library source38 remain unchanged.
+
+Pinned fmt/check/clippy and final kernel build pass. Three original current
+Rust playback host cases retain mixed partial retirement/reset/reused-stream,
+invalid-tail FIFO/DMA-hole and repeated-read/deadline oracles. Four exact
+historical Zig mixer facade tests from1f870ac3^:audio/mixer.zig execute against
+the current Rust mixer C ABI: owner generations, ringwrap, bitexact unity,
+volume scaling and multi-source saturation. Only temporary no_std host
+panic/personality glue is added; this is neither an old-kernel build nor a
+physical audio test. No persistent test file, gate or runtime probe is added.
+
+An own KVM4 guest verifies four configured/schedulable CPUs, actual active
+and installed Kernel424, exact BOOT artifact hash and full installed
+AUDSVC19/AUDIOD16/Desktop196/SNES35 readbacks. Original AUDIOD PCM/master/
+restart/replay/lifecycle/drain/close/deadline/HDA checks, PROGRESS480 with
+stale generation/two closes, and GAP1440 accepted/backend/DMA/consumed with
+one stream/restored resources pass. Actual close retry counts remain in
+the originals; the endpoint ends with zero open sessions. Original Spectra94
+SNES acceptance runs two full60s guests with PCM/input/video/SAV+RTC, reset,
+independent endings, invalid/firmware rejection and owned Desktop exit0/reap.
+Normal POWEROFF is observed and only the private Source image is removed.
+The initial image release marker was0.88.45; exact artifacts bind this proof.
+Original exports/reports and host provenance are retained under
+ExFiles/Reports/Audio/0.88.46-force-cleanup/. No physical hearing, isolated
+CPU time or speaker latency claim. The sole final STANDARD46 follows after
+original validation.141modules/1071test files/483documents. Source proof:
+Temp/08846-source-qualification.json; native closure:08846-runtime-proof.json.
+
+Finaler STANDARD und Abschluss zu0.88.46
+----------------------------------------
+Einziger finaler STANDARD46: 70f861f9-a4a1-4b07-bc46-51024c535900, Suite3/Metric2/KVM4,
+30Samples/4Worker/6gueltigeScores, overall=152.573831.
+OriginalSHA256 40dac0f7b58ad5804f06a294d6a0619de788379208f123d038ae14aa918bb30c.
+Alle Arbeitsmengen, Workerzahlen, Batch-/Bytewerte und sechs Scores wurden
+verlustfrei gegen Referenz28b326e2-4323-4a4c-a0d2-4c1bab4958c0 validiert.
+Das vollstaendige Original blieb unveraendert und liegt unter
+ExFiles/Reports/Benchmarks/70f861f9-a4a1-4b07-bc46-51024c535900/.
+Status: lokal validiert; R4OS Server ausstehend (Import und Readback).
+Dies ist die allgemeine Systemkontextmessung; keine Messung eines isolierten
+Deferral-, CPUzeit- oder Hoergewinns.141Module/1071Testdateien/483Dokumente.

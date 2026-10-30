@@ -1418,3 +1418,90 @@ ExFiles/Reports/Benchmarks/7e84a42c-607a-40ec-8913-76560515094a/.
 Status: lokal validiert; R4OS Server ausstehend (Import und Readback).
 Dies ist die allgemeine Systemkontextmessung; keine Messung eines isolierten
 AC97-, CPUzeit- oder Hoergewinns.141Module/1076Testdateien/483Dokumente.
+
+0.88.52 / Kernel427: SID-Stop und gemeinsamer PCM-Ausgang
+--------------------------------------------------------
+SID-Stop bestaetigt zuerst den privaten SID-Treiber. Dessen Busy/Fehler behaelt
+bereits gerenderte Pending-PCM-Daten und loest keinen gemeinsamen Idle aus.
+Erst Privatstop0 verwirft eigene Pendingdaten und markiert die Quelle ruhig.
+Weitere Versuche wiederholen diesen bestaetigten Privatstop nicht. Akzeptierte
+Register-/Load-/Init-/Playarbeit, Acquire/Release und SID-Providerregistrierung
+beginnen einen neuen Quellenlebenszyklus; ungueltige Register tun dies nicht.
+
+Der vorhandene Kernel-Outputbesitzer prueft echte offene PCMstreams und die
+MIDIquelle vor und nach Outputadmission. Andere Produzenten behalten ihren
+Ausgang. Bei der letzten Quelle wird der vorhandene v4-Idlevertrag (oder sein
+bestehender Legacy-Fallback) benutzt; Busy und Fehler kommen wahrheitsgemaess
+zurueck. Ein ruhiger, noch erworbener SIDhandle blockiert den letzten fremden
+PCM-Close nicht. Abgeschlossene Wiederholung erzeugt keinen weiteren Idle.
+Eine private funktionale Outputrevision bindet ausstehende Enden an Auswahl
+und tatsaechlich bestaetigte Enduebergaenge. Auch A->B->A oder ein anderer
+bereits bestaetigter Outputabschluss autorisieren keinen alten Idle am neuen
+Ausgang. Die Revision ist keine Messstelle und wird nicht je PCMwrite erhoeht.
+Keine neue oeffentliche API, kein weiterer Worker oder Hardwarebesitzer.
+SYNTHD0.1.5 und SYNTH0.1.8 wiederholen ausschliesslich Busy beim SIDstop fuer
+hoechstens drei Sekunden mit Tickpausen; Fehler bleiben Fehler. SDK114,
+Contract59 und Libraryquelle38 bleiben unveraendert.
+
+Wiederholbare Regressionen liegen beim Kernel unter Tests/Guest/SidStop.
+Drei IMAGE_SCOPE=none-Fixtures sind ausschliesslich explizite Gasttests.
+Der dauerhaft gepflegte Builder erzeugt bytegenau dieselben Artefakte wie
+der eingefrorene Vorherlauf. Acht echte native Corecallback-/Streamfaelle
+S/P/I/E/N/O/R/M schlagen auf Kernel426 fehl und bestehen auf427: fremde echte
+R4AUDIO- und materialisierte AUDSVCstreams, Pending nach Privatstopfehler,
+letzte Idle-Busy/-66, akzeptierte/ungueltige Registerarbeit, realer Output-
+und SID-Providerwechsel sowie MIDI mit null normalen Corestreams. Kein
+nachgebauter OpenCount entscheidet die Ergebnisse. Drei weitere427-Faelle
+bestaetigen Output A->B->A, privaten Stop-Busy mit exakt3840Pendingbytes und
+letzten fremden Close bei weiterhin erworbenem ruhigem SIDhandle.
+
+Realer KVM4-Nachweis mit unveraendertem HDA46/SID4/OPL3/MIDI/den drei Audio-
+R4Ps und AUDSVC19: volle SYNTHD-Diagnose bei zwei offenen fremden Streams
+erzeugt keinen neuen Normal-HDA-Auftrag (5->5 und7->7). Die Vorlage426 erzeugt
+2->3. Backend-/Outputidentitaeten und fortgesetzte PCMannahme sind belegt.
+Die vollen sechssekundigen SYNTHD-Ablaeufe enthalten eigene Renderarbeit und
+leere Pausen; HDA darf dabei regulär parken. Ihre Resetwerte4->6(vorher),
+5->7/10->12(nachher) sind keine exklusive SIDstop-Kausal- oder Verlustmessung.
+Die anfangs zu breite Resetannahme des Hosthelpers ist samt Originalbelegen
+und Korrektur erhalten. Sie wurde nicht als Produktregression ausgegeben.
+
+Zwei zusaetzliche reale Stop-/Reopenfaelle isolieren den Stopmoment bei noch
+3072QueuedPCMframes: Reset23->23 bzw24->24, Normal-HDA-Work18->18/19->19,
+Backend/Output unveraendert, weitere9600Bytes angenommen. Danach enden beide
+fremden Streams bei noch erworbenem SIDhandle mit Close0; genau ein echter
+HDA-Idleauftrag ist quittiert, ein SIDstop-Replay erzeugt keinen weiteren.
+Echte Session- und HDA-Workabfragen bestaetigen abschliessend null Belegung.
+Queuemomentaufnahmen sind keine abschliessende DMA-/Lautsprecherquittung.
+Die urspruenglichen AUDIOD8280-Frame-/Master-/Vierfach-Lifecyclepruefungen,
+PROGRESS480, GAP1440, BEEP und SYNTH-Selftest bestehen. Zwei echte SYNTH8-
+PSID-Kinder68:68/73:73 laufen ueber SID4 und HDA, erhalten ein Console-Q und
+enden mit Exit0, je358vollstaendigen Ausgabebytes, Reap0/Observerrelease0.
+Alle eigenen Testgaeste sind normal heruntergefahren; ihre vier qualifizierten
+Quelldatentraeger wurden mit Test-Retention entfernt. Erstes unqualifiziertes
+Fixture-Init und Hosthelperfehler bleiben getrennt erhalten. Keine physische
+Hoerabnahme, Windowsausfuehrung oder isolierte CPU-/Audiolatenzmessung.
+
+Zwei eigenstaendige Befunde bleiben am Roadmapende:85 behandelt den legitimen
+Lazy-R4P-Loadedzustand beim ersten SYNTHD-Aufruf (identischer warmer Aufruf
+besteht),86 den reziproken gemeinsamen Idle bei MIDIclose und aktiver SID.
+Beide sind gegenueber dem alten Kernel/SYNTHD-Quellstand eigenstaendig; sie
+werden nicht innerhalb dieses SIDstop-Abschlusses still mitbehoben.
+Vollstaendige Originale, Quell-/Artefakthashes und korrigierte Hostannahmen:
+ExFiles/Reports/Audio/0.88.52-sid-stop/.
+141kanonischeModule/1077Testeintraege/483Dokumente. Kernel427 und zwei
+Modulartefakte sind versioniert;138andere gebaute Module/Manifeste bleiben
+bytegleich, RecoveryMenu bleibt ungebaut. Release52 wird hier einmal gesetzt.
+Der einzige finale STANDARD folgt nach diesen Laufzeitbelegen.
+
+Finaler STANDARD und Abschluss zu0.88.52
+----------------------------------------
+Einziger finaler STANDARD52: 2c5e33dd-81f7-4518-b32c-0900fa5bfcce, Suite3/Metric2/KVM4,
+30Samples/4Worker/6gueltigeScores, overall=164.710743.
+OriginalSHA256 6cac94956e7bee6f1112160cdd3e9e154eeb77ddaed1ae1efc36edca9080b421.
+Alle Arbeitsmengen, Workerzahlen, Batch-/Bytewerte und sechs Scores wurden
+verlustfrei gegen Referenz28b326e2-4323-4a4c-a0d2-4c1bab4958c0 validiert.
+Das vollstaendige Original blieb unveraendert und liegt unter
+ExFiles/Reports/Benchmarks/2c5e33dd-81f7-4518-b32c-0900fa5bfcce/.
+Status: lokal validiert; R4OS Server ausstehend (Import und Readback).
+Dies ist die allgemeine Systemkontextmessung; keine isolierte Messung eines
+SID-, CPUzeit- oder Hoergewinns.141Module/1077Testeintraege/483Dokumente.

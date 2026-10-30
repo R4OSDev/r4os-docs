@@ -1128,3 +1128,97 @@ ExFiles/Reports/Benchmarks/3e3ed0a9-5f3d-4df6-ad26-0456176c574f/.
 Status: lokal validiert; R4OS Server ausstehend (Import und Readback).
 Dies ist die allgemeine Systemkontextmessung; keine Messung eines isolierten
 Adapter-, CPUzeit- oder Hoergewinns.141Module/1071Testdateien/483Dokumente.
+
+0.88.49: request HDA completion details explicitly
+--------------------------------------------------
+HDA46 caches OPTION HDA details=on at initialization; the default is off.
+Successful ordinary Stop/Idle/Close no longer formats the large Control,
+Coop, candidate/selection, core/runtime, Idle and Carrier blocks. Init
+admission, actual warnings/errors and the small final playback summary remain.
+The existing physical drain,400ms/100ms continuation/retirement budgets,
+hardware stop, terminal Work receipts and cleanup decisions remain intact.
+178 other original function bodies are byte-identical. Exact normalization
+of the changed Stop/Idle/shutdown bodies preserves their functional branches.
+
+Only requested details enter a noinline helper. An existing driver semaphore
+is allocated lazily in task context and supplies the authenticated loaded
+driver owner_epoch. Its permit serializes a checked monotone diagnostic
+sequence. No semaphore query/allocation, snapshot or detail text occurs with
+the option off. The helper revalidates the exact output/reset/PCI identity
+under the actual stream owner, copies at most2048bytes and releases that
+owner before formatting. Carrier SD_CTL is copied under the same owner;
+formatting never reads mutable live State or copies its large codec graphs.
+Successful driver shutdown destroys the permit after callback/hardware
+quiescence. Host owner destruction is checked; no separate native driver
+unload is claimed by the normal guest poweroff observation.
+
+Requested HDA.SNAP/HDA.DET log envelopes bind driver epoch, sequence,
+semaphore handle, output/reset, PCI and capture tick. Original logical lines
+up to511bytes use72-byte fragments inside existing160-byte LogService
+records. Declared original length, every part and terminal line/part counts
+must agree. AUDIOD17 rejects stale or missing time/parts, clipped final
+fragments, conflicting duplicates, invalid bounds/version and failed footer.
+Full-width counter/identity values survive reassembly. Required controller
+candidate/selection, core and close-runtime fields remain mandatory.
+Export writes the already validated immutable snapshot and never queries
+mutable log pages a second time. /DETAILS or /OUT fails if details are
+unavailable. Unrequested off mode retains all functional audio checks and
+reports detailSKIP. Test-profile and hardware-acceptance images explicitly
+enable the option; Slim and Full keep the default off. No Kernel API or
+public Query layout changes; the envelopes belong to HDA/AUDIOD.
+
+The existing owner steps pass87HDA and9AUDIOD cases: five diagnostic-owner/
+emitter cases, two actual State->Snapshot->original formatter cases, seven
+strict receiver cases and unchanged original audio/queue/Work/cursor cases.
+The actual snapshot tests overwrite live State/MMIO after capture and retain
+copied metadata, original full-width counters and output/reset/PCI rejection.
+Three test components are inventoried in the existing owner steps; no global
+gate or background sampler is added.141modules/1074test files/483documents.
+
+Actual KVM4 readbacks bind final HDA46/AUDIOD17 and unchanged Kernel426,
+SDK114/Desktop196/WINSVC27/AUDSVC19/SNES35/Contract59/Librarysource38.
+Only HDA and AUDIOD artifacts/manifests change;138other existing artifacts
+remain byte-identical, RecoveryMenu remains unbuilt. The same ordinary
+GAP1440 Close gives7new retained detailrecords/611textbytes on original
+HDA45 and0/0 with final details-off. Core's original unguarded formatter call
+is source-proved; no new retained Core record or repetition counter was
+observed. No cause for that absence is inferred. This is source/text-work
+reduction, not an isolated formatting CPU or serial/Close latency measurement.
+
+Off mode passes original PCM/master/restart/four-cycle lifecycle and rejects
+explicit /DETAILS as unavailable. On mode passes original PCM/master/restart/
+lifecycle, strict HDA marker/export, PROGRESS480/two closes and GAP1440 with
+real DMA consumption and restored sessions. The original export has8logical
+lines/14parts, exact epoch7/sequence6/handle21/output1/reset8/tick58816.
+Current unchanged Spectra94 CHECK SUBSYSTEM /HOST /SNES passes both full
+60-second original SNES35 guests, input/video/PCM, SAV/RTC, invalid/firmware
+rejections, independent endings, exact owned Exit0/reap and cleanup. Its
+original REMOTEFRAME check passes snapshot format/bounds/dirty/wait,
+immutable multireader/stale-token and cleanup with actual3,686,400-byte frame
+metadata and64-pixel head/tail reads. Physical visibility/hearing/latency and
+physical HDMI remain unqualified. Both own off/on guests and the baseline
+guest power off normally; their private Source images are removed.
+
+Original exports, four complete SNES reports, owner logs, before/off/on
+proofs and source guards are archived unchanged under
+ExFiles/Reports/Audio/0.88.49-hda-details/.
+An independent unchanged marker SelfTest rejects its own synthetic Basic
+ready/no-audio-end fixture against the strict closed+terminal parser; all
+other19Basic groups and the HDA marker pass. Existing Git blobs are unchanged
+(known CRLF working copy in the marker script). This is appended as0.88.84;
+the production oracle is preserved. Current native HDA qualification passes.
+The sole final STANDARD49 follows original validation; no speed or physical
+audio result is derived from the general system-context benchmark.
+
+Finaler STANDARD und Abschluss zu0.88.49
+----------------------------------------
+Einziger finaler STANDARD49: 463e1d0d-39da-4401-973d-de7f0e1a33c4, Suite3/Metric2/KVM4,
+30Samples/4Worker/6gueltigeScores, overall=162.584005.
+OriginalSHA256 4e96213a0445b6f6db1497d8b2071a2bee63dd4614e678afd8d1f82c010e3f85.
+Alle Arbeitsmengen, Workerzahlen, Batch-/Bytewerte und sechs Scores wurden
+verlustfrei gegen Referenz28b326e2-4323-4a4c-a0d2-4c1bab4958c0 validiert.
+Das vollstaendige Original blieb unveraendert und liegt unter
+ExFiles/Reports/Benchmarks/463e1d0d-39da-4401-973d-de7f0e1a33c4/.
+Status: lokal validiert; R4OS Server ausstehend (Import und Readback).
+Dies ist die allgemeine Systemkontextmessung; keine Messung eines isolierten
+HDA-Detailformatierungs-, CPUzeit- oder Hoergewinns.141Module/1074Testdateien/483Dokumente.

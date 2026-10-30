@@ -2131,3 +2131,119 @@ Desktop197-Toolprofilvarianten bestehen getrennte aktuelle originale
 vollstaendige KVM4-ALL-Laeufe. Keine Crossprofil-Byteidentitaetsbehauptung.
 141Module/1082Testeintraege/483Dokumente. Alle fuenf eigenen funktionalen
 Gaeste sind normal beendet und ihre Sourcebilder entfernt.
+
+0.88.59: Ungebrauchte Audio-Dauermessung kontrolliert stillgelegt
+----------------------------------------------------------------
+Kernel430, HDA48 und AC9712 erheben keine reinen Write-/Refill-Dauerticks
+mehr. WriteTiming/recordTickStat, deren Start-/Endlesungen, private Dauer-
+zaehler und deren Aggregation sind entfernt. Annahme-/Fortschrittstakte,
+Deadline-/Drain-/IRQ-/DMA-/Worker-/Fehlerzaehler und die urspruenglichen
+PCM-/Owner-/Generations-/Closepfade bleiben erhalten. tick_count und sein
+R4D-Callback sind passive Zeitprojektionen, keine Refill-/IRQ-Servicecalls.
+Die Quellenkosten entfallen; ein isolierter Geschwindigkeitsgewinn wurde
+nicht gemessen.
+
+Diese Version nutzt die ausdrueckliche Stilllegungsalternative der Roadmap.
+Kein Messfenster und kein dauerhaft aktiver Diagnoseowner werden eingefuehrt.
+Contract0.64.61 behaelt alle Namen, Typen, Offsets, Groessen, API-Slots und
+Wireversionen. Die neun ProgramPerformanceSummary15/6352-Dauerfelder und
+sechs AudioBackendStatus128-Dauerfelder melden den benannten Wert
+audio_duration_ticks_unavailable = UINT64_MAX. Das bisherige Bit
+performance_flag_audio_latency_ready ist clear. UINT64_MAX ist keine Dauer:
+nicht addieren, subtrahieren, als Latenz darstellen oder bewerten. Aktuelle
+Zig-/Rust-Defaultrecords verwenden ebenfalls diese explizite Unverfuegbarkeit.
+Die historischen Exporte und das unabhaengig gepinnte Recovery bleiben erhalten.
+
+Spectra95 und AUDIOD18 entfernen nur die nutzlosen Dauer-Monotoniepruefungen
+und erfordern stattdessen den wirklichen Nichtverfuegbarkeitsvertrag. Echte
+angenommene PCM-Arbeit, High-Water/Verlust, Fehler und Close bleiben streng.
+Die generische aktuelle SUMMARY-Ausgabe erzeugt fuer diese neun Sentinels
+JSON value:null mit unavailable:retired beziehungsweise Text unavailable
+(retired), unabhaengig vom Detailmodus. Historische0/27 und unverwandte
+UINT64_MAX-Zaehler bleiben numerisch; es werden keine Nullzeiten erfunden.
+
+Die vorhandenen Ownersteps bestehen: HDA89, AC9729, SDK18Audio/PCM/Power,
+AUDIOD9 und Spectra42Hostgruppen. Die drei neuen tatsaechlichen generischen
+Rendererfaelle lieferten vorher zwei gezielte Fehler bei einem unveraenderten
+Positivfall. Zwei Invalid- und zwei echte Refillorakel zeigen jeweils alte
+2 gegen neue0 Detailticklesungen. Die alten Refill-Praefixe sind exakt die
+unveraenderten Produktquellen; PCM-Bytes/aktiver DMA-Slot, Deskriptorlaengen/
+Adressen/IOC/Queue sowie480submitted/0consumed sind unabhaengige Arbeitsbelege.
+Neue Hosttestcomponent: Spectra/src/output.zig; keine Produkttesthooks.
+
+Vollstaendiger Contractcheck,26Generatormutationen, Host-/Baretarget-Rust,
+Clippy und7nativeC/Rust/Zig-Roundtrips bestehen. Kernel430 fmt/check/clippy/
+normalBuild bestehen. Contract61 ist als8f57555c3f0eda78c2c7f7cf74e0506124cae4e2
+veroeffentlicht, SDK117 als2bcfce7896a2fb7eceeffe16cd93b6724ad01c19.
+Die SDK-Laufzeitimplementierung, hoeheren C/Rust-Aliase, nativen Fingerprints
+und Library39 bleiben unveraendert. Der ausdrueckliche Matrixreview bewahrt
+670Pfade/35Scopes/180Exports; nur9aktuelle Vertrags-/Pininputs aendern sich.
+Die echten neuen Linux-/Windowswerkzeuge und drei Runtimeobjekte sind ueber
+den offiziellen Exporter gebunden;547SDK+10Contractinputs sind zu den
+veroeffentlichten Archiven rawbytegleich. Windows wurde dabei gebaut, nicht
+ausgefuehrt. Ein verfruehter Export ohne Storageobjekt wurde abgewiesen und
+liess den vorherigen Werkzeugsatz bytegleich; danach vollstaendiger Export.
+
+Alle vier normalen Module sind gegen die tatsaechlichen oeffentlichen
+SDK117/Contract61-Pins byteidentisch. Spectra bindet dazu Library39 und seine
+zwei expliziten unveraenderten oeffentlichen Desktop-/WINSVC-Wirehelperquellen;
+sein einzelnes Archiv ist nicht als unabhaengig davon baubar qualifiziert.
+Der Spectra-test-Step installiert kein Produkt: der erste private Harness
+suchte daher eine noch nicht gebaute Datei. Separate normale und publiziert
+gepinnte Produktbuilds beheben diese Nachweisluecke, keinen Produktfehler.
+
+Zwei eigene KVM4-Gaeste pruefen die jeweils vier tatsaechlich installierten
+Treiber-/AUDSVC-/AUDIOD-/Spectra-Dateien vollstaendig bytegleich. HDA und AC97
+bestehen jeweils die ganze unveraenderte AUDIOD-PCM-/Fehler-/Deadline-/
+Lifecycle-/terminaleClosepruefung. HDA bestaetigt zusaetzlich eigene480 und
+1440 angenommene/backend/DMA/consumedFrames mit echtem Close und restaurierten
+Ressourcen. AC97 erhaelt keine erfundene Cursoreigenschaft. Beide aktuellen
+Live-SUMMARY-Dateiexporte zeigen alle9retiredNullwerte und weiterhin wirkliche
+numerische Audioarbeit. Am Ende sind CoreOpen/available/queued/fail/errors0.
+Keine physische Lautsprecher-/Board-/Windows- oder isolierte Latenzabnahme.
+
+Wichtig: Die vollstaendige originale Spectra-PERFORMANCE-Konformitaet bleibt
+in beiden aktuellen Gaesten bei einem bestehenden Abschlussfall FAILED.
+4096PCM-Bytes werden angenommen, ein einziger unmittelbarer Roh-audioClose
+liefert aber dokumentiertesBusy(-7), wo der Aufrufer sofort0 verlangt.
+In beiden vollstaendigen aktuellen Dateiexporten bestehen die anderen76von77
+Orakeln einschliesslich PerformanceSummaryContract. Exaktes vorheriges
+Spectra94-Artefaktff5dc119ec6aad6c751088cc8c67e5f9250b8675a0284f75f8f152398e2cc1de
+liefert im selben430/HDA48-Gast ebenfalls4096/-7. Die vorher/nachher Callerpraefixe
+bis einschliesslichClose und KernelcloseInner sind bytegleich; dazwischen
+war CoreOpen/queued0. Es gibt keinen alten429-Runtimevergleich und keinen
+globalen Kausalitaetsausschluss. Dieser eigenstaendige Befund ist als0.88.91
+am Roadmapende geplant; keine Produkttestassertion wurde gelockert, kein
+individueller RawClose0ACK aus der spaeteren Prozessbereinigung erfunden.
+Die erste Konsolenfassung meldete zusaetzlich11470verloreneBytes/SSHexit3;
+die vollstaendigen31740/31247/31315Byte-Dateioriginale bleiben daneben erhalten.
+Die bestandene erforderliche59-Abnahme ist keine Behauptung, dass dieser
+vollstaendige Legacy-Konformitaetslauf bestanden habe.
+
+Der separat gefundene reine AUDSVC-Requestdaueraufwand bleibt unveraendert
+und ist als0.88.90 am Ende geplant. Auch die frueheren88/89 bleiben offen.
+Die beiden finalen eigenen Gaeste sind normal perPOWEROFF beendet und ihre
+Sourcebilder perTest-Retention entfernt. Zwei zuvor ohne VM erzeugte Bilder
+wurden nach der generischen Outputkorrektur verworfen; keine falschen alten
+Spectra95-c408-Bytes als finale Variante qualifiziert.
+
+Manuelle Inventare:141Module/1083Tests/483Dokumente.136andere gebaute Module
+und ihre Manifeste bleiben unveraendert. Die zuvor veraltete generierte
+Payloadreferenz ist bytegleich zur kanonischen Ausgabe synchronisiert:
+391 statt369Schemastrukturen. Root-Userdateien bleiben bytegleich erhalten.
+Vollstaendige Originale liegen unter
+ExFiles/Reports/Audio/0.88.59-duration-retirement/.
+
+Der einzige abschliessende normale STANDARD59 ist bestanden und lokal
+verlustfrei validiert: RunIdda482358-4be3-4e48-8336-c47cef1ffc48,
+overall159.969038, Suite3/Metric2/4CPUs. Alle30Samples/4Worker/6Scores
+reproduzieren die unveraenderte eingefrorene Referenz
+28b326e2-4323-4a4c-a0d2-4c1bab4958c0. Messmengen/Bytes/Batches, Clockbelege
+und ganze64Bit-Werte bleiben erhalten; Lifecyclewarmup hat9Batches, die
+anderen3. Die Originaldatei wird unveraendert unter
+ExFiles/Reports/Benchmarks/da482358-4be3-4e48-8336-c47cef1ffc48/run.json archiviert,
+SHA2562a36e7ac6180e4b05fe731ee24af7c0479504979fc6d5f523e628b0a5b34c701.
+BOOT enthielt die qualifizierten Kernel430-Bytes82893e4e7ac1432960b9e8bdae844696f365f92859a4a60ce195df85aacd81ad.
+R4OS-Serverimport und Readback stehen aus. Kein erneuter Scorer-/STANDARD-
+Lauf; dieser Systemscore ersetzt weder einen isolierten Wirkungsnachweis
+noch den ausdruecklich offenen urspruenglichen RawClosebefund91.

@@ -5,9 +5,9 @@ Diese Datei wird deterministisch aus `API/ApiContract.json` erzeugt. Manuelle Ä
 Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenzen und Conformance-Fixtures werden produktiv aus diesem Schema erzeugt; handgeschriebene Dateien bleiben nur Fassaden oder erklaerende Texte.
 
 - Schema: v11, Baseline `standalone-contract-0.64.11`
-- Reachability: 369 von 369 Typen aufgelöst oder explizit klassifiziert
+- Reachability: 391 von 391 Typen aufgelöst oder explizit klassifiziert
 - Zentrale SDK-only-Wurzeln: 0; Runtime-R4Ls besitzen libraryeigene Vertraege
-- Operationen: 0; Fehlerdomänen: 64; Konstanten: 2715; Limits: 111
+- Operationen: 0; Fehlerdomänen: 64; Konstanten: 2811; Limits: 111
 
 ## App-Profile
 
@@ -390,6 +390,28 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `FpuObservationRequest` | fixed_layout | extern_struct | 48/8 | 48/8 | 48/8 | 48/8 |
 | `FpuObservationInfo` | fixed_layout | extern_struct | 128/8 | 128/8 | 128/8 | 128/8 |
 | `ProgramLifecycleSnapshot` | extensible | extern_struct | 40/8 | 40/8 | 40/8 | 40/8 |
+| `DirectoryBatchCursor` | extensible | extern_struct | 2160/8 | 2160/8 | 2160/8 | 2160/8 |
+| `DirectoryBatchEntry` | fixed_layout | extern_struct | 1120/8 | 1120/8 | 1120/8 | 1120/8 |
+| `AudioBackendWriteReceipt` | fixed_layout | extern_struct | 48/8 | 48/8 | 48/8 | 48/8 |
+| `AudioBackendPlayback` | fixed_layout | extern_struct | 112/8 | 112/8 | 112/8 | 112/8 |
+| `AudioBackendFlow` | fixed_layout | extern_struct | 40/8 | 40/8 | 40/8 | 40/8 |
+| `AudioStreamExpectation` | fixed_layout | extern_struct | 40/8 | 40/8 | 40/8 | 40/8 |
+| `AudioStreamProgress` | fixed_layout | extern_struct | 152/8 | 152/8 | 152/8 | 152/8 |
+| `AudioServiceStreamProgressRequest` | fixed_layout | extern_struct | 32/8 | 32/8 | 32/8 | 32/8 |
+| `AudioServiceStreamProgressState` | fixed_layout | extern_struct | 200/8 | 200/8 | 200/8 | 200/8 |
+| `AudioServiceStreamFlowRequest` | fixed_layout | extern_struct | 72/8 | 72/8 | 72/8 | 72/8 |
+| `AudioServiceStreamTrackedWriteRequest` | fixed_layout | extern_struct | 48/8 | 48/8 | 48/8 | 48/8 |
+| `ProgramObservationHandle` | fixed_layout | extern_struct | 24/8 | 24/8 | 24/8 | 24/8 |
+| `FileNameLimits` | fixed_layout | extern_struct | 56/8 | 56/8 | 56/8 | 56/8 |
+| `GuiPointerWindowIdentity` | fixed_layout | extern_struct | 32/8 | 32/8 | 32/8 | 32/8 |
+| `GuiPointerCaptureHandle` | fixed_layout | extern_struct | 40/8 | 40/8 | 40/8 | 40/8 |
+| `GuiPointerCaptureInfo` | fixed_layout | extern_struct | 104/8 | 104/8 | 104/8 | 104/8 |
+| `GuiPointerHostRequest` | fixed_layout | extern_struct | 96/8 | 96/8 | 96/8 | 96/8 |
+| `GuiHostInputRequest` | fixed_layout | extern_struct | 80/8 | 80/8 | 80/8 | 80/8 |
+| `AudioOutputEpoch` | fixed_layout | extern_struct | 24/8 | 24/8 | 24/8 | 24/8 |
+| `AudioOutputEpochFn` | callback | c_callback | 8/8 | 8/8 | 8/8 | 8/8 |
+| `AudioOutputProviderEpoch` | fixed_layout | extern_struct | 24/8 | 24/8 | 24/8 | 24/8 |
+| `AudioOutputCatalog` | fixed_layout | extern_struct | 224/8 | 224/8 | 224/8 | 224/8 |
 
 ## Typdetails
 
@@ -9986,6 +10008,393 @@ Kernel-, Zig- und C-Program-ABI, R4L-Identitaeten, Contractlayouts, API-Referenz
 | `exit_code` | 32 | 4 | 4 | `i32` | - |
 | `window_id` | 36 | 4 | 4 | `i32` | - |
 
+### `DirectoryBatchCursor`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `extensible`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 2160 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `change` | 8 | 40 | 8 | `DirectoryChangeCursor` | - |
+| `parent_change` | 48 | 40 | 8 | `DirectoryChangeCursor` | - |
+| `owner_id` | 88 | 4 | 4 | `u32` | - |
+| `owner_kind` | 92 | 4 | 4 | `u32` | - |
+| `owner_generation` | 96 | 8 | 8 | `u64` | - |
+| `node_generation` | 104 | 4 | 4 | `u32` | - |
+| `path_len` | 108 | 4 | 4 | `u32` | - |
+| `path` | 112 | 1024 | 1 | `[1024]u8` | - |
+| `backend` | 1136 | 1024 | 8 | `[128]u64` | - |
+
+### `DirectoryBatchEntry`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 1120 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `info` | 0 | 96 | 8 | `FileInfo` | - |
+| `path` | 96 | 1024 | 1 | `[1024]u8` | - |
+
+### `AudioBackendWriteReceipt`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 48 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `flags` | 8 | 4 | 4 | `u32` | - |
+| `reserved` | 12 | 4 | 4 | `u32` | - |
+| `output_generation` | 16 | 8 | 8 | `u64` | - |
+| `reset_generation` | 24 | 8 | 8 | `u64` | - |
+| `first_frame` | 32 | 8 | 8 | `u64` | - |
+| `frames` | 40 | 8 | 8 | `u64` | - |
+
+### `AudioBackendPlayback`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 112 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `flags` | 8 | 4 | 4 | `u32` | - |
+| `reserved` | 12 | 4 | 4 | `u32` | - |
+| `output_generation` | 16 | 8 | 8 | `u64` | - |
+| `reset_generation` | 24 | 8 | 8 | `u64` | - |
+| `accepted_frames` | 32 | 8 | 8 | `u64` | - |
+| `dma_frames` | 40 | 8 | 8 | `u64` | - |
+| `consumed_frames` | 48 | 8 | 8 | `u64` | - |
+| `previous_output_generation` | 56 | 8 | 8 | `u64` | - |
+| `previous_reset_generation` | 64 | 8 | 8 | `u64` | - |
+| `previous_accepted_frames` | 72 | 8 | 8 | `u64` | - |
+| `previous_dma_frames` | 80 | 8 | 8 | `u64` | - |
+| `previous_consumed_frames` | 88 | 8 | 8 | `u64` | - |
+| `rate` | 96 | 4 | 4 | `u32` | - |
+| `channels` | 100 | 2 | 2 | `u16` | - |
+| `format` | 102 | 2 | 2 | `u16` | - |
+| `max_queue_frames` | 104 | 4 | 4 | `u32` | - |
+| `reserved1` | 108 | 4 | 4 | `u32` | - |
+
+### `AudioBackendFlow`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 40 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `flags` | 8 | 4 | 4 | `u32` | - |
+| `reserved` | 12 | 4 | 4 | `u32` | - |
+| `source_due_ns` | 16 | 8 | 8 | `u64` | - |
+| `low_water_frames` | 24 | 4 | 4 | `u32` | - |
+| `high_water_frames` | 28 | 4 | 4 | `u32` | - |
+| `output_generation` | 32 | 8 | 8 | `u64` | - |
+
+### `AudioStreamExpectation`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 40 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `flags` | 8 | 4 | 4 | `u32` | - |
+| `reserved` | 12 | 4 | 4 | `u32` | - |
+| `stream_generation` | 16 | 8 | 8 | `u64` | - |
+| `source_due_ns` | 24 | 8 | 8 | `u64` | - |
+| `low_water_frames` | 32 | 4 | 4 | `u32` | - |
+| `high_water_frames` | 36 | 4 | 4 | `u32` | - |
+
+### `AudioStreamProgress`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 152 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `flags` | 8 | 4 | 4 | `u32` | - |
+| `stream_id` | 12 | 4 | 4 | `u32` | - |
+| `stream_generation` | 16 | 8 | 8 | `u64` | - |
+| `backend_generation` | 24 | 8 | 8 | `u64` | - |
+| `output_generation` | 32 | 8 | 8 | `u64` | - |
+| `reset_generation` | 40 | 8 | 8 | `u64` | - |
+| `accepted_source_bytes` | 48 | 8 | 8 | `u64` | - |
+| `accepted_frames` | 56 | 8 | 8 | `u64` | - |
+| `backend_frames` | 64 | 8 | 8 | `u64` | - |
+| `submitted_frames` | 72 | 8 | 8 | `u64` | - |
+| `consumed_frames` | 80 | 8 | 8 | `u64` | - |
+| `unconfirmed_frames` | 88 | 8 | 8 | `u64` | - |
+| `queued_frames` | 96 | 8 | 8 | `u64` | - |
+| `queue_age_ns` | 104 | 8 | 8 | `u64` | - |
+| `observed_ns` | 112 | 8 | 8 | `u64` | - |
+| `source_due_ns` | 120 | 8 | 8 | `u64` | - |
+| `source_starvations` | 128 | 8 | 8 | `u64` | - |
+| `rate` | 136 | 4 | 4 | `u32` | - |
+| `channels` | 140 | 2 | 2 | `u16` | - |
+| `format` | 142 | 2 | 2 | `u16` | - |
+| `reserved0` | 144 | 4 | 4 | `u32` | - |
+| `reserved1` | 148 | 4 | 4 | `u32` | - |
+
+### `AudioServiceStreamProgressRequest`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 32 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `magic` | 0 | 4 | 4 | `u32` | - |
+| `version` | 4 | 2 | 2 | `u16` | - |
+| `size` | 6 | 2 | 2 | `u16` | - |
+| `stream_id` | 8 | 4 | 4 | `u32` | - |
+| `flags` | 12 | 4 | 4 | `u32` | - |
+| `service_epoch` | 16 | 8 | 8 | `u64` | - |
+| `stream_generation` | 24 | 8 | 8 | `u64` | - |
+
+### `AudioServiceStreamProgressState`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 200 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `magic` | 0 | 4 | 4 | `u32` | - |
+| `version` | 4 | 2 | 2 | `u16` | - |
+| `size` | 6 | 2 | 2 | `u16` | - |
+| `result` | 8 | 4 | 4 | `i32` | - |
+| `stream_id` | 12 | 4 | 4 | `u32` | - |
+| `service_epoch` | 16 | 8 | 8 | `u64` | - |
+| `stream_generation` | 24 | 8 | 8 | `u64` | - |
+| `suppressed_bytes` | 32 | 8 | 8 | `u64` | - |
+| `accepted_source_bytes` | 40 | 8 | 8 | `u64` | - |
+| `progress` | 48 | 152 | 8 | `AudioStreamProgress` | - |
+
+### `AudioServiceStreamFlowRequest`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 72 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `stream` | 0 | 32 | 8 | `AudioServiceStreamProgressRequest` | - |
+| `expectation` | 32 | 40 | 8 | `AudioStreamExpectation` | - |
+
+### `AudioServiceStreamTrackedWriteRequest`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 48 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `magic` | 0 | 4 | 4 | `u32` | - |
+| `version` | 4 | 2 | 2 | `u16` | - |
+| `size` | 6 | 2 | 2 | `u16` | - |
+| `stream_id` | 8 | 4 | 4 | `u32` | - |
+| `byte_count` | 12 | 4 | 4 | `u32` | - |
+| `service_epoch` | 16 | 8 | 8 | `u64` | - |
+| `stream_generation` | 24 | 8 | 8 | `u64` | - |
+| `source_due_ns` | 32 | 8 | 8 | `u64` | - |
+| `flags` | 40 | 4 | 4 | `u32` | - |
+| `reserved` | 44 | 4 | 4 | `u32` | - |
+
+### `ProgramObservationHandle`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 24 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `process` | 0 | 16 | 8 | `r4os.abi.ProgramProcessHandle` | - |
+| `id` | 16 | 8 | 8 | `u64` | - |
+
+### `FileNameLimits`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 56 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `size` | 0 | 4 | 4 | `u32` | - |
+| `flags` | 4 | 4 | 4 | `u32` | - |
+| `provider` | 8 | 4 | 4 | `u32` | - |
+| `drive_letter` | 12 | 4 | 4 | `u32` | - |
+| `mount_slot` | 16 | 4 | 4 | `u32` | - |
+| `reserved` | 20 | 4 | 4 | `u32` | - |
+| `mount_generation` | 24 | 8 | 8 | `u64` | - |
+| `max_path_bytes` | 32 | 4 | 4 | `u32` | - |
+| `max_component_bytes` | 36 | 4 | 4 | `u32` | - |
+| `max_component_utf16_units` | 40 | 4 | 4 | `u32` | - |
+| `short_base_bytes` | 44 | 2 | 2 | `u16` | - |
+| `short_extension_bytes` | 46 | 2 | 2 | `u16` | - |
+| `name_rules` | 48 | 4 | 4 | `u32` | - |
+| `atomic_rules` | 52 | 4 | 4 | `u32` | - |
+
+### `GuiPointerWindowIdentity`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 32 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `owner` | 0 | 16 | 8 | `ProgramProcessHandle` | - |
+| `epoch` | 16 | 8 | 8 | `u64` | - |
+| `window_id` | 24 | 4 | 4 | `i32` | - |
+| `reserved` | 28 | 4 | 4 | `u32` | - |
+
+### `GuiPointerCaptureHandle`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 40 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `window` | 0 | 32 | 8 | `GuiPointerWindowIdentity` | - |
+| `id` | 32 | 8 | 8 | `u64` | - |
+
+### `GuiPointerCaptureInfo`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 104 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `capture` | 0 | 40 | 8 | `GuiPointerCaptureHandle` | - |
+| `desktop` | 40 | 16 | 8 | `ProgramProcessHandle` | - |
+| `revision` | 56 | 8 | 8 | `u64` | - |
+| `state` | 64 | 4 | 4 | `u32` | - |
+| `mode` | 68 | 4 | 4 | `u32` | - |
+| `reason` | 72 | 4 | 4 | `u32` | - |
+| `capabilities` | 76 | 4 | 4 | `u32` | - |
+| `buttons` | 80 | 4 | 4 | `u32` | - |
+| `motion_x` | 84 | 4 | 4 | `u32` | - |
+| `motion_y` | 88 | 4 | 4 | `u32` | - |
+| `reserved` | 92 | 4 | 4 | `u32` | - |
+| `cursor_x` | 96 | 4 | 4 | `i32` | - |
+| `cursor_y` | 100 | 4 | 4 | `i32` | - |
+
+### `GuiPointerHostRequest`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 96 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `operation` | 0 | 4 | 4 | `u32` | - |
+| `reason` | 4 | 4 | 4 | `u32` | - |
+| `flags` | 8 | 4 | 4 | `u32` | - |
+| `reserved` | 12 | 4 | 4 | `u32` | - |
+| `capture` | 16 | 40 | 8 | `GuiPointerCaptureHandle` | - |
+| `event` | 56 | 40 | 8 | `GuiEvent` | - |
+
+### `GuiHostInputRequest`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 80 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `window` | 0 | 32 | 8 | `GuiPointerWindowIdentity` | - |
+| `event` | 32 | 40 | 8 | `GuiEvent` | - |
+| `operation` | 72 | 4 | 4 | `u32` | - |
+| `reason` | 76 | 4 | 4 | `u32` | - |
+
+### `AudioOutputEpoch`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 24 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `generation` | 8 | 8 | 8 | `u64` | - |
+| `count` | 16 | 4 | 4 | `u32` | - |
+| `active_index` | 20 | 4 | 4 | `i32` | - |
+
+### `AudioOutputEpochFn`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `callback`
+- Repräsentation: `c_callback`
+- Version/Größe/Alignment: 1 / 8 / 8
+
+### `AudioOutputProviderEpoch`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 24 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `registration` | 0 | 8 | 8 | `u64` | - |
+| `generation` | 8 | 8 | 8 | `u64` | - |
+| `count` | 16 | 4 | 4 | `u32` | - |
+| `active_index` | 20 | 4 | 4 | `i32` | - |
+
+### `AudioOutputCatalog`
+
+- Quelle: `API/ApiContract.json`
+- Klasse: `fixed_layout`
+- Repräsentation: `extern_struct`
+- Version/Größe/Alignment: 1 / 224 / 8
+
+| Feld | Offset | Größe | Align | Quelltyp | Pointer-/Buffervertrag |
+|---|---:|---:|---:|---|---|
+| `version` | 0 | 4 | 4 | `u32` | - |
+| `size` | 4 | 4 | 4 | `u32` | - |
+| `registry_generation` | 8 | 8 | 8 | `u64` | - |
+| `active_registration` | 16 | 8 | 8 | `u64` | - |
+| `count` | 24 | 4 | 4 | `u32` | - |
+| `provider_count` | 28 | 4 | 4 | `u32` | - |
+| `providers` | 32 | 192 | 8 | `[8]AudioOutputProviderEpoch` | - |
+
 ## Fehlerdomänen
 
 ### `arp`
@@ -10107,6 +10516,8 @@ Geltung: `driver_work`, Einheit: `status_code`, Stabilität: `fixed_contract`.
 | Name | Wert | Typ |
 |---|---:|---|
 | `driver_work_result_cancelled` | -7 | `i32` |
+| `driver_work_result_continue` | -8 | `i32` |
+| `driver_work_result_wait` | -9 | `i32` |
 
 ### `ethernet`
 
@@ -10134,6 +10545,8 @@ Geltung: `file_stream`, Einheit: `status_code`, Stabilität: `fixed_contract`.
 | `file_stream_error_too_large` | -8 | `i32` |
 | `file_stream_error_unsupported` | -2 | `i32` |
 | `file_stream_result_ok` | 0 | `i32` |
+| `file_stream_error_name_not_supported` | -64 | `i32` |
+| `file_stream_error_name_too_long` | -65 | `i32` |
 
 ### `gui_frame`
 
@@ -10901,10 +11314,12 @@ Geltung: `serial`, Einheit: `status_code`, Stabilität: `fixed_contract`.
 | `dns_flag_a_record` | `1` | `u32` | flag | bitmask | `dns` | fixed_contract |
 | `dns_op_build_a_query` | `1` | `u32` | identity | number | `dns_op` | fixed_contract |
 | `dns_op_handle_response` | `2` | `u32` | identity | number | `dns_op` | fixed_contract |
-| `driver_api_version` | `37` | `u32` | version | number | `driver_api` | fixed_contract |
+| `driver_api_version` | `39` | `u32` | version | number | `driver_api` | fixed_contract |
 | `driver_api_thread_work_version` | `35` | `u32` | version | number | `driver_api` | fixed_contract |
+| `driver_api_continuation_work_version` | `38` | `u32` | version | number | `driver_api` | fixed_contract |
 | `driver_magic` | `826888260` | `u32` | magic | number | `driver` | fixed_contract |
 | `driver_work_flag_from_irq` | `1` | `u32` | flag | bitmask | `driver_work` | fixed_contract |
+| `driver_work_flag_continuation` | `2` | `u32` | flag | bitmask | `driver_work` | fixed_contract |
 | `driver_work_flag_none` | `0` | `u32` | flag | bitmask | `driver_work` | fixed_contract |
 | `driver_work_state_cancelled` | `4` | `u32` | identity | number | `driver_work` | fixed_contract |
 | `driver_work_state_completed` | `3` | `u32` | identity | number | `driver_work` | fixed_contract |
@@ -12728,6 +13143,8 @@ Geltung: `serial`, Einheit: `status_code`, Stabilität: `fixed_contract`.
 | `kernel_scheduler_check_case_inheritance` | `16` | `u32` | flag | bitmask | `kernel_scheduler_check` | fixed_contract |
 | `kernel_scheduler_check_case_deadlines` | `32` | `u32` | flag | bitmask | `kernel_scheduler_check` | fixed_contract |
 | `kernel_scheduler_check_case_fpu` | `64` | `u32` | flag | bitmask | `kernel_scheduler_check` | fixed_contract |
+| `kernel_scheduler_check_case_workers` | `128` | `u32` | flag | bitmask | `kernel_scheduler_check` | fixed_contract |
+| `kernel_scheduler_check_case_idle` | `256` | `u32` | flag | bitmask | `kernel_scheduler_check` | fixed_contract |
 | `kernel_scheduler_check_case_all` | `127` | `u32` | flag | bitmask | `kernel_scheduler_check` | fixed_contract |
 | `kernel_scheduler_check_isolated_timer_reprogram` | `1` | `u32` | flag | bitmask | `kernel_scheduler_check` | fixed_contract |
 | `kernel_scheduler_check_isolated_timeout_batch_64` | `2` | `u32` | flag | bitmask | `kernel_scheduler_check` | fixed_contract |
@@ -13462,6 +13879,98 @@ Geltung: `serial`, Einheit: `status_code`, Stabilität: `fixed_contract`.
 | `fpu_observation_error_exhausted` | `-5` | `i32` | value | number | `fpu_observation` | fixed_contract |
 | `program_inventory_kind_lifecycle` | `4` | `u8` | value | enum_value | `program_inventory` | fixed_contract |
 | `program_inventory_cursor_flag_lifecycle` | `2` | `u32` | value | bit | `program_inventory` | fixed_contract |
+| `gui_activity_shared_clipboard` | `1` | `u32` | flag | bit | `gui_activity` | fixed_contract |
+| `gui_activity_shared_directory` | `2` | `u32` | flag | bit | `gui_activity` | fixed_contract |
+| `gui_activity_shared_all` | `3` | `u32` | value | bitmask | `gui_activity` | fixed_contract |
+| `drive_info_flag_free_valid` | `1` | `u32` | flag | bitmask | `drive_info` | fixed_contract |
+| `directory_batch_max_entries` | `8` | `u32` | value | count | `directory_batch` | fixed_contract |
+| `directory_batch_work_steps` | `256` | `u32` | value | count | `directory_batch` | fixed_contract |
+| `audio_backend_playback_version` | `5` | `u32` | version | number | `audio_outputs` | fixed_contract |
+| `audio_playback_valid` | `1` | `u32` | flag | bitmask | `audio_playback` | fixed_contract |
+| `audio_playback_previous_valid` | `2` | `u32` | flag | bitmask | `audio_playback` | fixed_contract |
+| `audio_playback_running` | `4` | `u32` | flag | bitmask | `audio_playback` | fixed_contract |
+| `audio_playback_quiet` | `8` | `u32` | flag | bitmask | `audio_playback` | fixed_contract |
+| `audio_flow_continuous` | `1` | `u32` | flag | bitmask | `audio_playback` | fixed_contract |
+| `audio_progress_source_valid` | `1` | `u32` | flag | bitmask | `audio_playback` | fixed_contract |
+| `audio_progress_device_valid` | `2` | `u32` | flag | bitmask | `audio_playback` | fixed_contract |
+| `audio_progress_age_valid` | `4` | `u32` | flag | bitmask | `audio_playback` | fixed_contract |
+| `audio_progress_continuous` | `8` | `u32` | flag | bitmask | `audio_playback` | fixed_contract |
+| `audio_progress_ended` | `16` | `u32` | flag | bitmask | `audio_playback` | fixed_contract |
+| `audio_progress_unconfirmed` | `32` | `u32` | flag | bitmask | `audio_playback` | fixed_contract |
+| `audio_progress_closed` | `64` | `u32` | flag | bitmask | `audio_playback` | fixed_contract |
+| `audio_progress_fresh` | `128` | `u32` | flag | bitmask | `audio_playback` | fixed_contract |
+| `audio_service_op_stream_progress` | `11` | `u16` | value | number | `audio_service` | fixed_contract |
+| `audio_service_op_stream_expectation` | `12` | `u16` | value | number | `audio_service` | fixed_contract |
+| `audio_service_op_write_stream_tracked` | `13` | `u16` | value | number | `audio_service` | fixed_contract |
+| `audio_service_op_close_stream_progress` | `14` | `u16` | value | number | `audio_service` | fixed_contract |
+| `program_completion_flag_output_available` | `16` | `u32` | flag | bitmask | `program_completion` | fixed_contract |
+| `program_completion_flag_output_truncated` | `32` | `u32` | flag | bitmask | `program_completion` | fixed_contract |
+| `program_completion_flag_output_incomplete` | `64` | `u32` | flag | bitmask | `program_completion` | fixed_contract |
+| `program_observation_flag_portable` | `1` | `u32` | flag | bitmask | `program_observation` | fixed_contract |
+| `file_name_limits_flag_known` | `1` | `u32` | value | number | `file_name_limits` | fixed_contract |
+| `file_name_limits_flag_mount_identity` | `2` | `u32` | value | number | `file_name_limits` | fixed_contract |
+| `file_name_provider_fat32` | `2` | `u32` | value | number | `file_name_provider` | fixed_contract |
+| `file_name_provider_ntfs` | `3` | `u32` | value | number | `file_name_provider` | fixed_contract |
+| `file_name_rule_fat_long` | `1` | `u32` | value | number | `file_name_rules` | fixed_contract |
+| `file_name_rule_append_create_short` | `2` | `u32` | value | number | `file_name_rules` | fixed_contract |
+| `file_name_rule_ascii_casefold` | `4` | `u32` | value | number | `file_name_rules` | fixed_contract |
+| `file_name_rule_ntfs_upcase` | `8` | `u32` | value | number | `file_name_rules` | fixed_contract |
+| `file_name_atomic_stage_short` | `1` | `u32` | value | number | `file_name_atomic` | fixed_contract |
+| `file_name_atomic_backup_short` | `2` | `u32` | value | number | `file_name_atomic` | fixed_contract |
+| `file_name_atomic_owned_target_short` | `4` | `u32` | value | number | `file_name_atomic` | fixed_contract |
+| `file_replace_atomic_error_name_not_supported` | `-64` | `i32` | value | number | `file_replace_atomic` | fixed_contract |
+| `file_replace_atomic_error_name_too_long` | `-65` | `i32` | value | number | `file_replace_atomic` | fixed_contract |
+| `gui_pointer_mode_drag` | `1` | `u32` | value | number | `gui_pointer_mode` | fixed_contract |
+| `gui_pointer_mode_relative` | `2` | `u32` | value | number | `gui_pointer_mode` | fixed_contract |
+| `gui_pointer_state_none` | `0` | `u32` | value | number | `gui_pointer_state` | fixed_contract |
+| `gui_pointer_state_pending` | `1` | `u32` | value | number | `gui_pointer_state` | fixed_contract |
+| `gui_pointer_state_active` | `2` | `u32` | value | number | `gui_pointer_state` | fixed_contract |
+| `gui_pointer_state_released` | `3` | `u32` | value | number | `gui_pointer_state` | fixed_contract |
+| `gui_pointer_state_cancelled` | `4` | `u32` | value | number | `gui_pointer_state` | fixed_contract |
+| `gui_pointer_reason_none` | `0` | `u32` | value | number | `gui_pointer_reason` | fixed_contract |
+| `gui_pointer_reason_explicit` | `1` | `u32` | value | number | `gui_pointer_reason` | fixed_contract |
+| `gui_pointer_reason_focus_lost` | `2` | `u32` | value | number | `gui_pointer_reason` | fixed_contract |
+| `gui_pointer_reason_window_closed` | `3` | `u32` | value | number | `gui_pointer_reason` | fixed_contract |
+| `gui_pointer_reason_minimized` | `4` | `u32` | value | number | `gui_pointer_reason` | fixed_contract |
+| `gui_pointer_reason_process_ended` | `5` | `u32` | value | number | `gui_pointer_reason` | fixed_contract |
+| `gui_pointer_reason_desktop_changed` | `6` | `u32` | value | number | `gui_pointer_reason` | fixed_contract |
+| `gui_pointer_reason_wm_conflict` | `7` | `u32` | value | number | `gui_pointer_reason` | fixed_contract |
+| `gui_pointer_reason_source_unsupported` | `8` | `u32` | value | number | `gui_pointer_reason` | fixed_contract |
+| `gui_pointer_reason_input_overflow` | `9` | `u32` | value | number | `gui_pointer_reason` | fixed_contract |
+| `gui_pointer_capability_drag` | `1` | `u32` | value | number | `gui_pointer_capability` | fixed_contract |
+| `gui_pointer_capability_relative_physical` | `2` | `u32` | value | number | `gui_pointer_capability` | fixed_contract |
+| `gui_pointer_capability_absolute_remote_drag` | `4` | `u32` | value | number | `gui_pointer_capability` | fixed_contract |
+| `gui_pointer_capability_wheel_events` | `8` | `u32` | value | number | `gui_pointer_capability` | fixed_contract |
+| `gui_pointer_source_physical_relative` | `1` | `u32` | value | number | `gui_pointer_source` | fixed_contract |
+| `gui_pointer_source_remote_absolute` | `2` | `u32` | value | number | `gui_pointer_source` | fixed_contract |
+| `gui_pointer_host_bind` | `0` | `u32` | value | number | `gui_pointer_host` | fixed_contract |
+| `gui_pointer_host_snapshot` | `1` | `u32` | value | number | `gui_pointer_host` | fixed_contract |
+| `gui_pointer_host_grant` | `2` | `u32` | value | number | `gui_pointer_host` | fixed_contract |
+| `gui_pointer_host_cancel` | `3` | `u32` | value | number | `gui_pointer_host` | fixed_contract |
+| `gui_pointer_host_deliver` | `4` | `u32` | value | number | `gui_pointer_host` | fixed_contract |
+| `gui_pointer_host_unbind` | `5` | `u32` | value | number | `gui_pointer_host` | fixed_contract |
+| `gui_pointer_error_invalid` | `-1` | `i32` | value | number | `gui_pointer_error` | fixed_contract |
+| `gui_pointer_error_stale` | `-2` | `i32` | value | number | `gui_pointer_error` | fixed_contract |
+| `gui_pointer_error_busy` | `-3` | `i32` | value | number | `gui_pointer_error` | fixed_contract |
+| `gui_pointer_error_context` | `-4` | `i32` | value | number | `gui_pointer_error` | fixed_contract |
+| `gui_pointer_error_unsupported` | `-5` | `i32` | value | number | `gui_pointer_error` | fixed_contract |
+| `gui_pointer_error_queue_full` | `-6` | `i32` | value | number | `gui_pointer_error` | fixed_contract |
+| `gui_pointer_error_exhausted` | `-7` | `i32` | value | number | `gui_pointer_error` | fixed_contract |
+| `gui_pointer_error_unavailable` | `-8` | `i32` | value | number | `gui_pointer_error` | fixed_contract |
+| `gui_pointer_host_flag_motion_snapshot` | `1` | `u32` | value | number | `gui_pointer_host_flags` | fixed_contract |
+| `gui_host_input_operation_query` | `0` | `u32` | value | number | `gui_host_input_operation` | fixed_contract |
+| `gui_host_input_operation_post` | `1` | `u32` | value | number | `gui_host_input_operation` | fixed_contract |
+| `gui_host_input_operation_reset` | `2` | `u32` | value | number | `gui_host_input_operation` | fixed_contract |
+| `gui_input_reset_reason_overflow` | `1` | `u32` | value | number | `gui_input_reset_reason` | fixed_contract |
+| `gui_input_reset_reason_focus_lost` | `2` | `u32` | value | number | `gui_input_reset_reason` | fixed_contract |
+| `gui_input_reset_reason_window_closed` | `3` | `u32` | value | number | `gui_input_reset_reason` | fixed_contract |
+| `gui_input_reset_reason_desktop_changed` | `4` | `u32` | value | number | `gui_input_reset_reason` | fixed_contract |
+| `gui_input_reset_reason_process_ended` | `5` | `u32` | value | number | `gui_input_reset_reason` | fixed_contract |
+| `gui_host_input_error_invalid` | `-1` | `i32` | value | number | `gui_host_input_error` | fixed_contract |
+| `gui_host_input_error_stale` | `-2` | `i32` | value | number | `gui_host_input_error` | fixed_contract |
+| `gui_host_input_error_busy` | `-3` | `i32` | value | number | `gui_host_input_error` | fixed_contract |
+| `gui_host_input_error_context` | `-4` | `i32` | value | number | `gui_host_input_error` | fixed_contract |
+| `audio_duration_ticks_unavailable` | `18446744073709551615` | `u64` | value | ticks | `audio` | fixed_contract |
 
 ## Limits
 

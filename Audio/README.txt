@@ -615,3 +615,93 @@ Activation and cost: AudioDiag is a requested application; PROGRESS/GAP and WAV 
 Findings: 0.88.59 makes pure WriteTiming/backend-write and HDA/AC97 write/refill total/max/last duration sampling demand-dependent. These ticks and stores currently occur on every relevant operation even without a diagnosis. The known explicit AudioDiag/Spectra consumers mostly test duration consistency; no scheduling/PCM admission decision uses those duration fields. They are nevertheless public today: current contract/SDK/generic export readers must be checked, and inactive measurement must not silently mean zero latency. No measured aggregate speedup is claimed.
 Related work remains 0.88.41 (post-close SNES report preparation), .44 (private AUDSVC counters/obsolete helpers/test print), .48 (unused private migration/test adapters), .49 (verbose synchronous close logs). Required accepted-prefix, source shortage, consumed/unconfirmed, real IRQ, DMA, exact generations, deadline and drain/close proofs remain. Existing hardware options and original fixtures are not obsolete OS fallbacks. Removing a metric must not remove its remaining useful oracle without evidence.
 Validation: unchanged AudioDiag/Tests/Analyze-QemuWav.ps1 -SelfTest exited0: continuous signal accepted; legacy480/544 and injected sample loss rejected; diagnostic signal selected despite unrelated louder mixed audio. This is host analyser validation, not a new guest WAV, speaker or hardware receipt. The existing SDK72, AUDSVC13, HDA80 and AC977 cases already passed in the preceding analyses and were not repeated. No new gate, benchmark, test count, artifact or hardware qualification; only release metadata0.88.16 and this inventory status change. Historical original exports retain their actual versions, samples and limits.
+
+0.88.42: bind audio replies to their stream and acknowledged PCM
+----------------------------------------------------------------
+SDK0.64.113 uses one stateless owner, r4os/audio_stream_reply.zig, for
+ordinary synchronous and asynchronous reply acceptance. The complete120-byte
+reply, magic/version/action and operation-specific values must agree before
+any caller advances its confirmed PCM prefix or retires its stream ownership.
+Open success retains the actual AUDSVC contract: positive result==stream_id;
+a negative Open result has stream_id=0 and bytes=0. Existing-stream replies
+must name the nonzero owned stream. Successful Write requires result==bytes,
+nonzero bytes no larger than the submitted chunk and complete PCM frames.
+Successful Volume/Close requires result=0 and bytes=0. Negative replies
+contribute no new bytes. A malformed reply returns Invalid without silently
+replaying possibly accepted audio or accepting an unrelated Close.
+
+The public safe Rust owner delegates to the Zig audio owner. The legacy C
+transport now calls the generated SDK data adapter for this same validation;
+it no longer owns independent acceptance rules. Its header-only compatibility
+predicate remains available. The existing typed Open/control buffer-length
+errors and raw Write Invalid behavior are retained. Data projection contains
+185types/169functions, private fingerprint17614999946340117096; the C facade
+projection was regenerated and the GUI projection remained unchanged.
+decodeProgress, drain, submit and poll method bodies are byte-identical to
+the predecessor. Request/fence generations, deadlines, uncertain Open,
+I/O-close BUSY and genuine resource retirement keep their existing semantics.
+
+Before the fix, the actual native SDK table fixture failed four intended
+checks: wrong-stream Write/control and inconsistent sync/async Open pairs.
+After the fix76/76 owner cases pass. The C and safe Rust fixture matrices
+cover stream/result/bytes/header/version/action/short/long errors, zero or
+inconsistent Open pairs, ordinary positive IDs1/91/i32max, negative replies,
+zero/oversized/unaligned writes, positive control replies, partial prefixes4
+and4076 at the second RPC, preserved owner state and a subsequent valid Close.
+There is no implicit third Write. Existing BUSY/timeout/negative prefix tests
+remain. These malformed replies are host-fixture injections; the actual
+AUDSVC was not observed returning such a reply.
+
+Four native C/Rust platform groups plus four real compiler safety negatives,
+49 data-owner cases, five original C/Rust data groups plus five ownership
+compiler negatives, and279Desktop+3Geometry+1SDKclock cases pass. Linux and
+Windows host tools, freestanding helpers and technical SDK113 export were
+rebuilt. LanguageParity checks670files/35scopes/180root exports; its finalized
+review digest is pinned by the export and actual Desktop receipt. The export
+has547 input records for533 unique SDK paths, all checked against source.
+
+Exactly eight changed module artifacts were versioned after comparison with
+the141-module baseline: Desktop195, R4SNES34, R4GB22, R4Basic45, AudioDiag16,
+R4Synth7, Beep8 and NetworkFacadeCDiag3. Their source changes are SDK inputs
+and their own manifest versions. The other132 existing artifacts remain
+byte-identical, including SysInfo12 and CStartSmoke4; RecoveryMenu is unbuilt.
+Kernel423/WINSVC27/Contract59/Library source38 remain unchanged. Desktop's
+SDK/library native helpers were rebuilt against the current SDK.
+
+The own KVM4 guest verified4 configured/4 schedulable CPUs and full installed
+AUDIOD16/SNES34/Desktop195 readbacks against the final artifact hashes.
+Normal AUDIOD /OUT passed PCM, volume/mute, service restart/replay, four
+lifecycle cycles, close, deadline and compact HDA evidence assertions. Its
+endpoint ended with zero open sessions/queued requests/workers and no
+BUSY/timeout/cancel errors. The unchanged continuity predicate requires no
+new idle close because that case closes its stream explicitly after drain;
+AudioDiagnostics.txt now describes this current requirement.
+
+The original Spectra94 CHECK SUBSYSTEM /HOST /SNES also passes: two full60s
+guest runs, each1288636320 master cycles/3605PPUframes, zero drift/pending
+cycles, original PCM/input/video/SAV+RTC witnesses, independent end paths,
+invalid/firmware rejection and owned Desktop exit0/reap. D2 reports2 begun
+and2 completed asynchronous saves with0errors. Full original exports, four
+reports and HDA records are retained unchanged under
+ExFiles/Reports/Audio/0.88.42-replies/. The guest was shut down normally and
+its private Source image removed. Its initial release marker was0.88.41;
+the exact installed artifacts, rather than that old marker, bind this proof.
+No physical hearing, input latency or isolated speed gain is claimed.
+
+Final hashes and all qualified inputs: Temp/08842-runtime-proof.json and
+Temp/08842-artifacts-final-before-image.json. The sole final STANDARD42 uses
+the new0.88.42 marker and is documented separately after its original export
+has been validated. Inventories remain141modules/1071test files/483documents.
+
+Finaler STANDARD und Abschluss zu0.88.42
+----------------------------------------
+Einziger finaler STANDARD42: 30104894-12ac-436d-a262-ff06e9cc9546, Suite3/Metric2/KVM4,
+30Samples/4Worker/6gueltigeScores, overall=164.128236.
+OriginalSHA256 e71496ac0a7726193df19afc0b67bb88c60c47aed77ca445610109bd86ff59a4.
+Alle Arbeitsmengen, Workerzahlen, Batch-/Bytewerte und sechs Scores wurden
+verlustfrei gegen Referenz28b326e2-4323-4a4c-a0d2-4c1bab4958c0 validiert.
+Das vollstaendige Original blieb unveraendert und liegt unter
+ExFiles/Reports/Benchmarks/30104894-12ac-436d-a262-ff06e9cc9546/.
+Status: lokal validiert; R4OS Server ausstehend (Import und Readback).
+Dies ist die allgemeine Systemkontextmessung; keine Messung eines isolierten
+Audio-Pruefungs-, Spiel- oder Hoergewinns.141Module/1071Testdateien/483Dokumente.

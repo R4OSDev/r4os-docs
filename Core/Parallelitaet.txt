@@ -3518,3 +3518,85 @@ Neue0.88.71: aktive Definition-/Aufrufersuche findet fuer3Taskindex- und5Clockma
 Neue0.88.72: RuntimeACQUISITIONS fuehrt auch ohne Detailmessung ein globales Atomic-RMW aus. Der normale blockierende Zaehler laeuft vorLOCK, erfolgreicheTry danach; fehlgeschlageneTry zaehlen nicht. Diesen Beobachtungszaehler ohne zusaetzliches global konkurrierendes RMW fuehren und alle Zaehltakte erhalten. In memory/owner sind viele Statistik-RMWs bereits vom eigenen Lock ausgeschlossen und koennen wie runtime.add_owned vereinfacht werden. Ungeschuetzte Rangfehlerschreiber/funktionale Atomics sind andere Faelle. Passive Diagnoseaggregation darf einen anderen Leseaufwand haben; noch kein gemessener Gesamteffekt.
 Zuordnung erhalten: Desktopprivate Buchhaltung31/Detailclocks35, SNES-Endbericht41, AUDSVC44, Audioadapter48/Closelogs49/immer erhobeneDauerticks59, wiederholteAudioentscheidung60, Donorinvalidierung61, Waitsnapshot63, Asyncauswahl66/Broadcast67/Reapretry68. Betriebs-/Fehler-/Accepted-/DMA-/Consumed-/Owner-/RSP-/FPU-/IRQ-/TLB-/Resourcebelege sind keine entbehrlichen Tests. Historische Originalexporte behalten Version/Bytes/Messbedeutung; aktive Detailbeobachtung wird von Normalbetrieb und echter Arbeit getrennt.
 Validierung:3/3 vorhandene Taskindexorakel direkt aus Originalquelle mit gepinntem Ruststarter bestanden: indexierte skalareKeys ohne lineareVisits, unabhaengigeIndices nachRemove/Rollback/fremderPointer und genaueGeneration beiAddressreuse. Tempbinary entfernt. Vorherige gezielte Originaltests nicht unveraendert wiederholt, keine neue Suite/Gate-/Inventaranzahl. Kein neuer Detail-/Gast-/SMP-/Hardware-/STANDARDlauf. Reine Analyse mit Docsstatus/RELEASE_VERSION0.88.24; Produktbasis bleibt der reale0.87.66-Artefaktstand.
+
+0.88.60: Audio-Policyabfragen innerhalb eines Scheduleruebergangs
+----------------------------------------------------------------
+
+Kernel431 buendelt zusammengehoerige urgent/audio_preemption/next_ready/
+refresh_pending-Abfragen mit einer privaten AudioPass-Kopie innerhalb einer
+ununterbrochenen Runtime-Zulassung. Ein positiver Worker-Identitaetslookup
+und die kopierte Policy werden innerhalb dieser Abfragegruppe wiederverwendet.
+Es gibt keinen globalen Cache, Heapbedarf, zusaetzlichen Clockread oder
+produktiven Messzaehler. Getrennte Abfragegruppen beginnen frisch.
+
+Eligibility, Protected und Giveback werden bei jeder Entscheidung mit deren
+tatsaechlichem now neu berechnet. Jede moegliche Priorisierung prueft aktuell
+ID/Generation, Rolle, Ready-Verkettung beziehungsweise Running-Zustand und BSP-
+Zuordnung. Die Mailbox-Sequenz begrenzt die konkrete Entscheidung; Changed
+fuehrt zu begrenztem Refresh, Busy zum Verzicht auf diese Priorisierung.
+Fehlende oder ungueltige Identitaeten werden nicht dauerhaft negativ gecacht.
+Adopt und selected synchronisieren veraenderte Policydaten zum bestehenden
+Owner. Reservierungsbudget, Cooldown, FIFO-Schuld und Rank0-Vorrang bleiben.
+APs kehren vor Policy-/Mailbox-/Registryarbeit zurueck. Die lokale Kopie endet
+lexikalisch VOR dem physischen RSP/FPU-Wechsel beziehungsweise Runtime-Release;
+kein Descriptorpointer wird ueber Switch, Wait oder neue Zulassung behalten.
+
+Gezielter Vorherbeleg aus dem unveraenderten Kernel430-Funktionskoerper:
+drei zusammengehoerige Candidate-Abfragen bedeuten drei Registrylookups und
+drei Policykopien; das 1/1-Orakel scheitert wie erwartet. Der exakt aktuelle
+Candidate plus Taskvalidator bestehen zwei Hostadapterfaelle: 1 Lookup,
+1 Policykopie und 3 frische Validierungen; neue Zulassung beginnt erneut.
+Die bestehenden audio_work-Ownerfaelle wurden von9 auf16 erweitert, alle16
+bestehen, ebenso die3 unveraenderten Selection-Faelle. Neue Faelle pruefen
+Zeitablauf/selected/FIFODebt, Cancel/Ersetzung, Publikation waehrend der
+Validierung, Busy, fehlende Identitaet, Generationswechsel und Scopegrenzen.
+Hostadapter zaehlen nur lokale Testzugriffe; sie simulieren keinen echten
+Assemblyswitch und belegen keinen isolierten Geschwindigkeitsgewinn.
+
+Kernel fmt/check/clippy/Normalbuild bestehen. Normaler431-ELF:
+ee847399b5ea8e9b69e15af783f24775d4e90d5a25fe892b97f9f30e22d098f6.
+SDK117/Contract61/Library39 bleiben unveraendert; alle141 Modulmanifeste und
+140 gebauten normalen Modulartefakte sind gegen den abgeschlossenen59-Stand
+bytegleich. Kein oeffentlicher API-/ABI-Vertrag wurde veraendert.
+
+Echter KVM4-Gast mit genau diesem ELF und vollstaendig zurueckgelesenen
+HDA48/AUDSVC21/AUDIOD18/Spectra95: originales KERNEL:SCHED60/60 mit158/158
+Tasks,3/3 Work und65 echten Deadline-Tasks; KERNEL:FPU64/64 mit2/2 Tasks,
+6/6 Work. Beide live_tasks/live_work/cleanup_errors0. Der originale Audio-
+Work-Fall bestaetigt Input1/Audio2/Completion3/Tail4, normale Arbeit waehrend
+Audio, Cancel, Slotreuse mit neuer Generation und tatsaechliche Freigabe.
+Originales AUDIOD inklusive vier Lifecyclezyklen und wirklichem Close besteht,
+ebenso Progress480 und GAP1440 mit echten DMA-/Consumed-/Ressourcenbelegen.
+Abschliessend Core-Streams/Bytes/Queue/Errors/Fail0. Keine physische Tonabnahme.
+
+Idle-Abnahme hat eine reale Ruhevoraussetzung: Im laufenden Dienstegast
+scheiterten zwei zusaetzliche IDLE-Aufrufe an fehlendem mindestens50ms langen
+kohaerenten Ruhefenster. Jeweils nur der Controller angelegt/aufgeraeumt,
+keine Live-Ressourcen. Der alte430-Kontrollgast scheitert dort ebenfalls;
+sein SCHED-Kontrolllauf brach zuvor bereits bei Fairnessbit8 ab (45/45Tasks,
+Work0, cleanup0). Daher kein vollstaendig gleicher Konditionierungsablauf,
+kein kausaler Regressionsausschluss und keine behauptete Fehlerbehebung daraus.
+Alle negativen Exporte und beide aktuellen Ruhefenster-Bootlogbelege bleiben
+erhalten; das erste aktuelle Dateiexport wurde beim zweiten Aufruf ersetzt,
+beide Transportantworten und getrennten Bootlogbelege liegen vollstaendig vor.
+
+Separater aktueller431-Gast fuehrt denselben originalen IDLE-Fall vor SERVMAN
+BOOT/SSHD aus:256/256,2/2Tasks,Work0,Live0/Cleanup0. Alle drei APs qualifizieren
+echte Ruhefenster, max_quiet_irq_delta0; danach Target2/Capacity4,12 aktive IRQs,
+16 echte Timerwakes, max_sleep_ticks2 und reaped1. Keine fremde Task geparkt,
+keine Frist/IRQ-/Retirementassertion veraendert. Gleicher voller Spectra95-
+Readback und aktueller431-BOOT-Hash. Die Ruhevoraussetzung wird durch den
+Aufrufzeitpunkt erfuellt; der laute Dienstegast wird nicht als Idle-PASS gezahlt.
+
+Vollstaendige Originale und Quellbelege:
+ExFiles/Reports/Core/0.88.60-audio-policy/.
+STANDARD60: genau ein finaler Lauf 39ce9e33-7758-4333-96f4-8cf6210d0679, Suite3/Metric2/KVM4,
+overall140.532486. Alle30 Samples mit je4 abgeschlossenen Workern,
+Batches/Operationen/Bytes/Clock und6 Scores verlustfrei gegen die eingefrorene
+Referenz28b326e2-4323-4a4c-a0d2-4c1bab4958c0 validiert (uint64/Decimal).
+Vollstaendiges unveraendertes OriginalSHA3d9cbaf7162d89460f86e63fdf5a82c55c686534c10db56cd21cc80b8b49357f
+unter ExFiles/Reports/Benchmarks/39ce9e33-7758-4333-96f4-8cf6210d0679/.
+Lokal validiert; Serverimport und Serverreadback sind ausstehend. Dieser
+Gesamtwert ist kein isolierter Geschwindigkeitsnachweis fuer die Aenderung.
+Funktionale Gastquellen nach normalem Shutdown entfernt; keine aelteren
+offenen Befunde88/89/90/91 als behoben ausgegeben.

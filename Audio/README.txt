@@ -705,3 +705,69 @@ ExFiles/Reports/Benchmarks/30104894-12ac-436d-a262-ff06e9cc9546/.
 Status: lokal validiert; R4OS Server ausstehend (Import und Readback).
 Dies ist die allgemeine Systemkontextmessung; keine Messung eines isolierten
 Audio-Pruefungs-, Spiel- oder Hoergewinns.141Module/1071Testdateien/483Dokumente.
+
+0.88.43: terminal audio wait checks real retirement before backoff
+-----------------------------------------------------------------
+SDK0.64.114 changes only the product Transport.drain method. After a successful
+ioWait reports completed or failed, drain immediately invokes its actual
+poll/status/ioClose path. Wait publication is not permission to reuse memory.
+If that poll has actually submitted the next request in an existing bounded
+chain, drain continues without inserting a tick. A still blocked or transient
+status/close keeps its storage and uses the existing one-tick backoff.
+No new worker, PCM backlog, automatic replay or completion publication exists.
+
+All other product bytes before the private test Probe are identical to SDK113:
+interactive submit/poll/open/write/volume, ordinary/progress decoding, source
+time, uncertain Open/fence, closeWithTimeout and finish. The finite absolute
+Close RPC budget and unlimited wait for actual storage retirement remain
+separate. Public C/Rust signatures, schemas and generated projections are
+unchanged. Native C/Rust consumers are rebuilt against the current SDK.
+
+The actual native-table fixture failed three new ordering groups on the old
+drain (59/62). The fixed owner passes79/79:62runtime and17platform/PCM/power.
+Completed and failed waits retire before any sleep. Running/transient waits,
+repeated ioClose BUSY and status BUSY still back off, retaining the same401
+request and copied1920-byte PCM; another Write remains BUSY, no additional
+service request appears and only one final completion is delivered. The
+continuous discover/configure/tracked chain keeps its original200/180/150tick
+budgets and confirmed partial prefix; expiration at201 prevents PCM submission.
+Original uncertain-Open/fence, frame/prefix, shutdown-failure and pacing cases
+remain. The fixture models native tables, not actual DMA/service retirement.
+
+LanguageParity checks670files/35scopes/180exports. The SDK114 review was frozen
+before technical tool export and actual Desktop receipts;547export records
+cover533 unique SDK paths and all match source. Current Desktop279+3Geometry+
+1SDKclock checks pass. Exact artifact comparison versions only the changed
+modules: Desktop0.1.196, R4Basic1.2.46, R4GB0.10.23, R4SNES0.22.35. The other136 existing artifacts
+remain byte-identical, including AUDIOD16/Synth7/Beep8; RecoveryMenu is unbuilt.
+Kernel423/WINSVC27/Contract59/Library source38 remain unchanged.
+
+An own KVM4 guest confirmed4 configured/4 schedulable CPUs and full installed
+AUDIOD/SNES/Desktop readbacks. Original AUDIOD PCM/master/restart/lifecycle/
+drain/close/deadline/HDA-record checks pass and leave no open audio sessions.
+Original Spectra94 CHECK SUBSYSTEM /HOST /SNES passes two full60s guest runs
+with the actual current SNES: each1288636320 master cycles/3605PPUframes,
+zero drift/pending, original PCM/input/video/SAV+RTC witnesses, independent
+end paths, invalid/firmware rejection and owned Desktop exit0/reap. Reset and
+close consume actual stream acknowledgements. Normal POWEROFF and private
+Source cleanup are confirmed. Full original reports/exports remain under
+ExFiles/Reports/Audio/0.88.43-drain/. The native image initially carried the
+old0.88.42 marker; exact installed artifact hashes bind this qualification.
+
+This removes an imposed source tick before the first retirement check after
+a terminal Wait. No isolated native teardown duration, physical hearing or
+latency gain is measured. The sole final STANDARD43 and its full original
+validation are documented separately below.141modules/1071test files/483docs.
+
+Finaler STANDARD und Abschluss zu0.88.43
+----------------------------------------
+Einziger finaler STANDARD43: 8637ca41-d56c-4a6f-87e7-998e1fb92178, Suite3/Metric2/KVM4,
+30Samples/4Worker/6gueltigeScores, overall=157.640471.
+OriginalSHA256 9be9b9029467ba78cbd88739bb5afa4cf5da36106a61127adb66ecd8e9b36a22.
+Alle Arbeitsmengen, Workerzahlen, Batch-/Bytewerte und sechs Scores wurden
+verlustfrei gegen Referenz28b326e2-4323-4a4c-a0d2-4c1bab4958c0 validiert.
+Das vollstaendige Original blieb unveraendert und liegt unter
+ExFiles/Reports/Benchmarks/8637ca41-d56c-4a6f-87e7-998e1fb92178/.
+Status: lokal validiert; R4OS Server ausstehend (Import und Readback).
+Dies ist die allgemeine Systemkontextmessung; keine Messung eines isolierten
+Audio-Drain-, Spiel- oder Hoergewinns.141Module/1071Testdateien/483Dokumente.

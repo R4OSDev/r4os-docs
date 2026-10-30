@@ -978,3 +978,80 @@ ExFiles/Reports/Benchmarks/70f861f9-a4a1-4b07-bc46-51024c535900/.
 Status: lokal validiert; R4OS Server ausstehend (Import und Readback).
 Dies ist die allgemeine Systemkontextmessung; keine Messung eines isolierten
 Deferral-, CPUzeit- oder Hoergewinns.141Module/1071Testdateien/483Dokumente.
+
+0.88.47: reject PCM geometry that cannot admit a complete source frame
+------------------------------------------------------------------------
+Kernel0.1.425 validates the existing bounded whole-sourceframe admission at
+RawOpen and continuous Expectation. The private stream_window_fits helper
+uses the actual PCM source-frame size and existing output_frame_count for
+one frame. Its canonical expansion must fit the actual ring at Open and
+the proposed high watermark at Expectation. Validation under the exact
+owner/generation lock occurs before changing watermarks, expectation or
+flow revision. End/flags0 and real BUSY/backpressure rules remain unchanged.
+
+For the current48k canonical target and4096-frame source ring, continuous
+windows require0<low<high<=4096 and high>=ceil(48000/source_rate). At8000Hz
+the minimum high is6; high2/high5 return INVALID(-1). At12Hz minimum high
+is4000; high3999 is invalid.11Hz needs4364 frames and cannot fit the current
+ring, so RawOpen rejects it before allocating a stream. Current RawOpen
+therefore supports12..192000Hz with the existing1/2-channel U8/S16 formats.
+This follows current provider geometry, not an arbitrary OS-wide minimum
+rate/latency. AudioOutputInfo.preferred_rate is a preferred hardware format,
+not an exhaustive source-rate capability promise. No public ABI change.
+
+AUDSVC keeps its existing lazy logical Open, which may precede any hardware
+stream. On the first materialization it propagates the actual Kernel Open
+error. The unchanged SDK/service now receive INVALID instead of permanent
+BUSY for1/11Hz signal writes, with zero accepted bytes; logical Close still
+succeeds. Initial discrete-silence suppression remains its existing distinct
+policy. Clients handle INVALID as incompatible parameters and may change
+format/window; BUSY still describes actual contention or occupied capacity.
+There is no guessed duplicate kernel-ring limit in the SDK or service.
+
+The actual Kernel424 baseline reproduces16BUSY writes of a complete frame
+with zero accepted/queued PCM at1/11Hz,8000Hz high2/high5 and12Hz high3999.
+The exact same fixture binary/source on425 rejects that geometry. Valid
+same-stream high6/high4000 recovers, including retained resampler phase and
+Close tails: three sourceframes finish at exactly18/12000 accepted/backend/
+DMA/consumed canonical frames, zero queued/unconfirmed.44100/48000/96000/
+192000Hz ordinary inputs finish at3/2/1/1 frames. Actual lazy service writes
+change fromBUSY(-7) toINVALID(-1), rather than an invented success.
+
+A separate current425 case verifies real partial source prefixes:8000Hz
+mono8bytes accepts2/2/2/2 and finishes24canonical frames;48000Hz stereo
+direct16bytes accepts8/8 and finishes4frames. One incomplete sourceframe is
+INVALID. Three exact historical Zig PCM facade oracles run against current
+Rust PCM before the change; that converter source stays byte-identical.
+Phase/remainder/tail/direct/format-reset/chunk-duration oracles remain.
+Pinned fmt/check/clippy/final build pass. The only changed product source
+is Kernel stream/flow admission; mixing, conversion, partial writing,
+retirement, DMA attribution and real progress deadlines remain unchanged.
+
+Current KVM4 verifies active/installed425, exact BOOT hash and full installed
+AUDSVC19/AUDIOD16/Desktop196/SNES35 module readbacks. Original normal AUDIOD
+PCM/master/restart/replay/lifecycle/close/HDA plus PROGRESS480/two closes and
+GAP1440/same stream/restored resources pass. Both own guests shut down
+normally; their private Source images are removed. No unrelated full
+catalogue or new SNES runtime run is claimed. All140existing module artifacts
+and manifests stay byte-identical; RecoveryMenu remains unbuilt. SDK114,
+Desktop196/WINSVC27/AUDSVC19/SNES35/Contract59/Library source38 remain.
+Kernel425 SHA256 e600d437f80e4e2f12ba06e2c3f5547d7d6538b995cc0d52744193ed511e1367.
+Full original before/after exports, exact executable/source and host oracle
+provenance:ExFiles/Reports/Audio/0.88.47-admission/. Initial image marker46;
+the exact artifacts bind the native proof. No claim about older SNES stalls,
+general speed, physical hearing or speaker latency. No persistent test file,
+gate or runtime counter added.141modules/1071test files/483documents. The
+sole final STANDARD47 follows separately after original validation.
+
+Finaler STANDARD und Abschluss zu0.88.47
+----------------------------------------
+Einziger finaler STANDARD47: 0f30a9bd-c56b-4184-96bf-aba28456b8e5, Suite3/Metric2/KVM4,
+30Samples/4Worker/6gueltigeScores, overall=163.419824.
+OriginalSHA256 67a2baceca2e66e9909fb971c71b43794ae21705a205f20fd6fa363da29e27d4.
+Alle Arbeitsmengen, Workerzahlen, Batch-/Bytewerte und sechs Scores wurden
+verlustfrei gegen Referenz28b326e2-4323-4a4c-a0d2-4c1bab4958c0 validiert.
+Das vollstaendige Original blieb unveraendert und liegt unter
+ExFiles/Reports/Benchmarks/0f30a9bd-c56b-4184-96bf-aba28456b8e5/.
+Status: lokal validiert; R4OS Server ausstehend (Import und Readback).
+Dies ist die allgemeine Systemkontextmessung; keine Messung eines isolierten
+Admission-, CPUzeit- oder Hoergewinns.141Module/1071Testdateien/483Dokumente.

@@ -1505,3 +1505,143 @@ ExFiles/Reports/Benchmarks/2c5e33dd-81f7-4518-b32c-0900fa5bfcce/.
 Status: lokal validiert; R4OS Server ausstehend (Import und Readback).
 Dies ist die allgemeine Systemkontextmessung; keine isolierte Messung eines
 SID-, CPUzeit- oder Hoergewinns.141Module/1077Testeintraege/483Dokumente.
+
+0.88.53: Exklusive Synthsitzungen und bestaetigter Prozessabbau
+============================================================
+Stand30.10.2026: Kernel0.1.428 bindet SID und MIDI ueber die bestehende
+Program-Domain an volle R4X-Instanz und Generation. Private Sitzungen speichern
+zusaetzlich Slot und monotone Synthregistrierung. Der oeffentliche Handle1 und
+die R4AUDIO-Tabellenform bleiben erhalten; fremde oder veraltete Prozess-
+generationen erhalten INVALID. Threads desselben Prozesses duerfen dessen
+Sitzung benutzen, erhalten bei parallelem Acquire aber genau eine Exklusivitaet.
+Dies ist Ressourcenbuchhaltung im vertrauten Single-User-System.
+
+SID und MIDI/OPL3 besitzen je einen nichtrekursiven, ausschliesslich versuchten
+vorhandenen UnwindGuard. DSP-Zustand, Sessionwechsel und jeweilige Callbacks
+bleiben darunter geordnet. Normale PCM-Streams behalten ihre bisherigen Stream-
+und Outputbesitzer. Registrieren/Closing/Unregister nehmen beide Synthbesitzer
+in fester Reihenfolge; eine aktive Lease verhindert auch identischen Provider-
+ersatz. Nach Release ist eine neue Registrierung mit eigener Generation erlaubt.
+Externe Synthregistrierung speichert den tatsaechlichen R4D-Owner. Die vorhandene
+Callbackadmission bindet nur den jeweiligen echten Treibercallback und wird vor
+einem anderen PCM-Provider abgegeben. Sie allein ist keine Modul-Lebenszeitgarantie;
+die Execution-/Closingbarrieren bewahren die wirkliche Providerreferenz.
+Der explizite interne KERNEL-Owner bleibt separat; globale OPL3-Registeraufrufe
+bleiben global und teilen lediglich den MIDI/OPL3-Ablaufbesitzer.
+
+Reaper-Aktion9 bestaetigt zuerst ausschliesslich eigene Synthsitzungen, danach
+eigene PCM-Streams. SID-Release braucht private Stop-, gegebenenfalls gemeinsame
+Idle- und private Releasequittung. MIDI-Close bewahrt seine private Stopquittung
+ueber gemeinsame Busy-/Fehlerantworten. Fehlgeschlagener privater Stop behaelt
+Pending-PCM; bestaetigte Phasen werden beim Retry nicht erneut emuliert oder als
+zusaetzlicher Stop ausgefuehrt. Erst der tatsaechlich erfolgreiche Abschluss
+loescht die Session. Andere PCM- und Synthproduzenten behalten die Ausgabe.
+Funktionale atomare Producer-/Registrierungsmetadaten ersetzen ungeschuetzte
+Querlesezugriffe; keine periodische Messstelle oder zusaetzlicher Worker.
+
+SYNTHD0.1.6 und SYNTH0.1.9 wiederholen SID-Release und MIDI-Close wie den bereits
+vorhandenen SID-Stop ausschliesslich bei Busy, hoechstens drei Sekunden mit
+einem Tick Wartezeit. Echte Fehler bleiben Fehler. SDK114/Contract59/Library38,
+HDA46/AC9710/AUDIOD17/AUDSVC19/SID4/OPL3/MIDI bleiben unveraendert.
+Normaler Kernel-SHA256:
+68d49195d23a3561533c980b650a3273144ce8642a7a7f36d19a4d81af09830d.
+SYNTHD-SHA256:
+c3d3f3a9c04c128340e9f8a6cba8d01473b6e004f628b17ae214e8d95f4c5d60.
+SYNTH-SHA256:
+0f5b38a124cdafa04ef2d01bd10948e2b9b3d9e5dd8aec743fd534ea5306686d.
+
+Qualifizierte native Nachweise auf KVM mit vier CPUs
+-------------------------------------------------
+Identisch gefrorene Zwei-R4X-Fixturen SF/MF/SE/ME/SK/MK/SX/MX scheitern auf
+Kernel427 in allen acht Faellen und bestehen auf normalem Kernel428 ohne die
+ausdruecklich nur vorherige Legacyreparatur. Fremde Writes/Stop/Release werden
+abgewiesen, die lebende eigene Quelle bleibt nutzbar. Nach natuerlichem Exit,
+gezieltem Kill und echter bestehender Stackreserve-Fault-Recovery kann ein
+neuer Prozess Acquire1/Close0 erreichen. Jede Prozesscompletion ist vollstaendig
+zurueckgelesen, Reap0 und Observerrelease0 sind bestaetigt. Die Stackfaelle
+qualifizieren vector14, Reservegrund1, Exit−4096 und exakte Prozess-, Task- und
+Threadgenerationen mit dem vorhandenen Spectra-Recovery-Funktionskoerper.
+
+Sechs weitere Faelle auf dem normalen428-Artefakt beobachten wirkliche Core-
+und R4D-Callbacks: exakte3840Pendingbytes nach privatem Stopfehler−55 werden
+ohne erneutes Rendern angenommen; echte aussteigende SID/MIDI-Prozesse bleiben
+bei privatem Fehler, gemeinsamem Idle-Busy/−77 und SID-Releasefehler−66 unreaped
+und exklusiv. Erst echte ACKs geben sie frei, private Stop/Idle/Release jeweils
+einmal. Providerersatz ist live Busy und nach Release erlaubt. Zwei tatsaechliche
+Programmthreads erhalten SID1/−2 beziehungsweise MIDI1/−3, beide Join0 und
+exakte Threadgenerationen; der Mainthread derselben Prozessgeneration schliesst.
+Der native Bootlog enthaelt sieben vollstaendige Driver-LOG1-Nachweise mit dem
+tatsaechlichen Owner8. Heap bleibt im vorhandenen Callbackvertrag unzulaessig.
+
+Ein zusaetzlicher SHA-gepinnter privater Kernel bindet allein einen expliziten
+C-Testbridge an bestehende Core-/R4D-Funktionen. Derselbe Instanzwert mit falscher
+Generation kann weder schreiben noch releasen; sein Reaperaufruf loescht keine
+fremde Quelle. Expliziter KERNEL-Acquire/Release und Abgrenzung zu Appsessionen
+bestehen fuer SID und MIDI. Aktive Leases vetoen Closing, Unregister und echtes
+R4D-Unload, danach bleibt die exakte Quelle benutzbar. Nach Release blockiert
+Closing neue Acquires; echtes Unload liefert1, alte Runtimeinfo0, Heapstale−3
+und kein Synthregister. Echtes Reload erzeugt Runtime7->13->14,
+Resourceepoch7->15->16 sowie erneuerte Synthregistrierungen1->3/4->6.
+Neue Acquires/Release bestehen. Dieser Bridge ist keine oeffentliche API und
+kein nachgebautes Ownermodell. Include/Call wurden entfernt, normaler Core und
+normaler428-ELF warnungsfrei und byteidentisch wiederhergestellt; fmt besteht.
+
+Alle acht gepflegten SidStop-Faelle bestehen weiter. FallR ist mit App0.1.1
+bewusst strenger: Liveersatz bleibt auch bei privatem Stop-ACK/Idle-Busy
+verboten; erst Release erlaubt Ersatz, der neue eigene Stop-/Idlequittungen
+braucht. Originale52-v0.1.0-Binaries und Belege wurden nicht ueberschrieben.
+Tests/Guest/SynthSessions ist eine einzelne neue explizite Component-Fixture;
+ihr gemeinsamer Hostbuilder reproduziert alle fuenf geprueften Artefakte
+byteidentisch. Keine dieser IMAGE_SCOPE=none-Fixturen wird normal installiert.
+
+Die echten normalen HDA46/SID4/OPL3/MIDI/dreiR4P/AUDSVC19-Pfade bestehen:
+zweimal3072bereits wartende Frames bleiben bei SIDstop erhalten, weitere9600Bytes
+werden angenommen; letzter fremder Close bei noch erworbenem ruhigem SIDhandle
+quittiert ein echtes Idle, Stop-Replay erzeugt keinen Auftrag. Zwei echte
+SYNTH9-PSID-Kinder enden mit Exit0, vollen358Textbytes, Reap0/Observerrelease0.
+Originale BEEP/SYNTH-Selftests, AUDIOD8280/Master/Lifecycle4 sowie PROGRESS480/
+GAP1440 bestehen. Abschliessend sind Streams, Materialisierungen und HDA-Work0.
+
+Der erforderliche gemeinsame Synthabschluss behebt auch den Kernbefund86:
+MIDI-Close bei produzierender SID und null gewoehnlichen PCM-Streams ruft
+Idle0/Stop0 auf, quittiert seinen privaten Stop einmal; SID rendert weiter und
+erst sein spaeteres Release quittiert das letzte Idle einmal. Dies wurde auf
+normalem428 gemessen. Die spaetere Roadmap86 muss diesen bestehenden Fix
+verifizieren und darf weder einen unbehobenen Fehler noch eine weitere
+Laufzeitmutation oder doppelte Vergleichsmessung erfinden. Befund85 zum ersten
+legitimen Lazy-R4P-Diagnoseaufruf bleibt bestehen; Warmaktivierung ist getrennt.
+
+Grenzen, Originale und Abschluss
+-------------------------------
+Eine fruehe Haltefixture ohne R4DESK-Import konnte Q nicht lesen; korrigierte
+gefrorene Binaries tragen erst die qualifizierten acht Paarvergleiche. Ein
+urspruenglicher UD2-Test beendet den unveraenderten427-Gast mit fatalem vector6;
+kein bestaetigter Prozessreap. Dieser eigene Gast wurde nach Originalcapture
+gezielt per QMP beendet und ist getrennt vom normalen Shutdown qualifizierter
+Gaeste. Befund87 steht am Roadmapende; keine UD2-Recoverybehauptung in53.
+Eine weitere fruehe Callbackprobe erwartete unzulaessig Heapallokation und
+lieferte fixtureeigenes−73. Der vorhandene Vertrag verbietet dies ausdruecklich;
+die Probe prueft nun korrekte Unverfuegbarkeit plus reale Driverlogzuordnung.
+Alle urspruenglichen Quellen, Binaries und Fehlerbelege bleiben erhalten.
+
+Alle vier qualifizierten eigenen53-Gaeste wurden regulaer heruntergefahren,
+ihre Sourceimages mit der kanonischen Test-Retention entfernt. Volle Originale,
+Quell-/Artefaktstaende und getrennte Grenzen liegen unter
+ExFiles/Reports/Audio/0.88.53-synth-sessions/.
+Kontrollierte Softwarecallbacks belegen keine physische DMA- oder Hoerquittung;
+keine isolierte Latenz-, CPUzeit- oder Windowsabnahme.141Module/1078Tests/483Docs.
+Der genau eine finale STANDARD wird nach dieser Laufzeitqualifikation mit dem
+normalen Produktartefakt ausgefuehrt und anschliessend mit Volloriginal ergaenzt.
+
+Finaler STANDARD und Abschluss zu0.88.53
+----------------------------------------
+Einziger finaler STANDARD53: 2098fd73-0263-409f-bd70-ba1f14a73f3b, Suite3/Metric2/KVM4,
+30Samples/4Worker/6gueltigeScores, overall=141.716483.
+OriginalSHA256 d106f946dbec7e749ff7fe6f3167226dbca50cc66ba127db845da76bc448b524.
+Alle Arbeitsmengen, Workerzahlen, Batch-/Bytewerte und sechs Scores wurden
+verlustfrei gegen Referenz28b326e2-4323-4a4c-a0d2-4c1bab4958c0 validiert.
+Das vollstaendige Original blieb unveraendert und liegt unter
+ExFiles/Reports/Benchmarks/2098fd73-0263-409f-bd70-ba1f14a73f3b/.
+Status: lokal validiert; R4OS Server ausstehend (Import und Readback).
+Dies ist die allgemeine Systemkontextmessung; keine isolierte Messung eines
+Synth-, CPUzeit- oder Hoergewinns.141Module/1078Testeintraege/483Dokumente.

@@ -1981,3 +1981,153 @@ Dies ist die allgemeine Systemkontextmessung. Die kontrolliert belegte
 PCM-Quellplanung ist davon getrennt; keine isolierte Systemzeit-, Hardware-
 oder Hoerabnahme.
 141Module/1082Testeintraege/483Dokumente.
+
+0.88.58 - Subsystemfristen nach tatsaechlicher Arbeit auswerten
+---------------------------------------------------------------
+Besitzer SDK0.64.116. Runtime.run bewertet absolute Gast-/PCM-/Close-/
+Progressfristen unmittelbar vor dem wirklichen Wait mit frischer Hostzeit,
+nach Guest.step, Praesentation und I/O-Arbeit. Bereits verbrauchte Zeit wird
+nicht erneut geschlafen. Der private cycleWork-Teil fuehrt dieselbe Arbeit
+und Fehler-/Endebehandlung aus; public cycle behaelt seinen ausdruecklichen
+Ticksnapshot. Die fuer nextWait projizierte GuestClock ist eine Kopie:
+Originalclock, Restbruchteile, Gastarbeit und virtuelle Schuld bleiben erhalten.
+Neue relative Open-/Busy-/Close-/Progress-/Quellgap-/Prefillintervalle beginnen
+an der wirklichen Callbackrueckgabe. Aktive PCM-Cadence +=quantum und der
+bisherige initiale Silent-Source-Daueranker bleiben. Forever wird nicht
+arithmetisch verkuerzt; bestehendes aktives Yield/Backoff und Fehler gelten.
+Der optionale Clockkontext wird nur synchron geliehen, niemals gespeichert.
+Es gibt keine neuen Runtimefelder, oeffentlichen Typen oder Produktmessstellen.
+
+Vorher/Nachher verwendet den echten Runtime.run-Einstieg mit echten R4SYS-
+Adaptern und kontrollierter externer Zeit in Guest.step/Present/I/O. Der
+vollstaendige67963Zeichen-Productionprefix der SDK115 war vor dem gueltigen
+Negativlauf unveraendert. Sieben Gruppen: vorher1KontrollePASS/6beabsichtigt
+FAIL, danach7/7 und alle36aktuellen Runtimegruppen(29alte+7neue)PASS.
+Partielle Gastfrist10->3 nach3Guest+4Presentticks, abgelaufene Frist1Wait->0;
+ueberfaellige PCM/Close/Progressarbeit wird ohne erneuten Vollwait faellig.
+Frische Idle4/OpenRetry50/Pending1/Busy10/gap+Prefill10 bleiben nach15Ticks
+Arbeit vollstaendig;3840PCMbytes/Quanten/Close unveraendert. Pause/Resume,
+Forever, echte Eventwakes und sleep-Fallback bestehen. Ein frueher Helper
+liess frame_ready aus: dessen18Tick-Closefall ist kein15Tick-Negativbeleg.
+Nur der korrigierte unveraenderte-Produktlauf before-tests4 begruendet die
+genannten Negativbefunde; alle Rohversuche/Quellen/Binaerdateien bleiben.
+
+Compilerpruefung bestaetigt identische Subsystem-C-Header, publicDeclheaders,
+Runtime-/AudioPump-Feldtexte und Native-Fingerprint12413102210881657404.
+Die bisherigen C/Rust-Fassaden delegieren weiter an denselben SDK-Owner;
+urspruengliche6funktionale Interopfaelle plus5wirkliche Compilerablehnungen
+fuer Besitz/unsafe bestehen. Auch3originale Desktop-Audiofaelle plus
+3Geometrie-/1SDK-Clockfall bestehen; der erste falsche Pipefilter fuehrte
+keine Desktopfaelle aus und wird nicht als Test gewertet. Bewusste Review
+der genau2geaenderten Watchinputs build.zig.zon/Runtime behaelt alle670Pfade,
+35Scopes und180Exports. Der ReviewguardPASS ist getrennt von Laufzeitbelegen.
+
+Normale Besitzerartefakte: BASIC1.2.47/GB0.10.24/SNES0.22.36 konsumieren
+den geaenderten gemeinsamen Runtimekern, ihre Kern-/PCM-Quellen sind gleich.
+Desktop0.1.197 erfasst den nachweislich geaenderten Dependencyneubau mit
+echtem matchedSDK116/Contract60/Library39 statt dem vorgefundenen114-Toolset;
+Desktop-Implementierung bleibt gleich. Die normalen CNETD3/CSTARTD4 werden
+mit aktuellem SDK neu gebaut und bleiben bytegleich, ohne Versionsbump.
+Der private originale SDK-Runtimegast SUBSYSOK wird0.66.14; er ist ein
+bestehender Testgast, kein weiterer Eintrag im141-Modulinventar.
+Kernel429/HDA47/AC9711/AUDSVC21/WINSVC27/Spectra94/Contract60 und die
+Libraryimplementierung39 bleiben unveraendert.
+
+SDK116 wurde nach fachlicher Qualifikation als
+8471e7fab087afd2f80fb5a41eebf34bff9450b6 veroeffentlicht. Vier bisher
+veraltete Clientpins zeigen auf das wirkliche Archiv, Desktop auch auf
+Library39(3788bc2da0999c57d0916c0876ffcdb614d5a09c). Die isolierten
+Build.sh-/PS7-Bauten waehlen die wirklichen veroeffentlichten SDK116/
+Contract60/Library39-Quellarchive und passende offiziell exportierte
+Runtimeobjekte/Tools. Alle Produktquellen/Cargo/MFs bleiben bytegleich, nur
+temporaere Callerpfade werden konfiguriert. Desktop verwendet die normale
+Verzeichnisstruktur mit einer bytegleichen Kopie des echten Library39-
+Quellarchivs. Dessen gefiltertes Zigpaket enthaelt die Mesa-Originaldateien
+nicht:5benoetigte BLAKE3-Dateien werden aus dem vorhandenen Upstreamcache
+erst nach Bytegroessen-/SHA256-Pruefung gegen das unveraenderte oeffentliche
+Library39-Gitmanifest materialisiert. Es gibt keine ungebundenen Workspace-
+Implementierungen. Die erste flache Tempstruktur wurde vom C-Include-
+Rootguard korrekt abgewiesen; ein zweiter Aufbau zeigte die noch fehlenden
+Vendorinputs. Das vollstaendige oeffentliche Library39-Archiv umfasst2449
+Dateien; das gefilterte Zigpaket allein stellt nicht alle Rusthelperinputs
+bereit. Die verworfenen Konfigurationen und Fehler bleiben unveraendert.
+Die drei Zig-Standaloneartefakte entsprechen exakt den nativ geprueften Bytes:
+BASIC47 5baaa650d6faaa1cb815bf7a0033ce94b50a5b44e5cc7fdbb1258fd275713a8b
+GB24 1cefd9429eaea5bb4155c2d8c806d2f72dccd84101e5b1219021e3c52431672d
+SNES36 074e6cb798b2b8fccd746af3dbc76a3117fa8e04b590d04636cd781ce231d2f9
+Desktop197 a99d353e65d35285378292526d0698cec0f4c96acb2d152a4f7b32e1cb125489
+Desktop aus kanonischen veroeffentlichten SDK-Runtimeobjekten hat dagegen
+SHA256046886871179cb84f8048a41f523d2f4afcfb724f335debce7cbb24ed93788be.
+Gleiche Quellen/Versionen bedeuten hier keine behauptete Byteidentitaet:
+3474ELF-Funktionskoerper haben nach ausschliesslichem Ausblenden der
+tatsaechlichen Relocation-Patchbytes gleiche Multimengen; Daten-/Referenz-
+semantik folgt daraus nicht. Beide echten Desktopartefakte bestehen daher
+getrennte urspruengliche komplette KVM4-ALL-Laeufe mit vollstaendigem
+Readback, Gast-/PCM-/Storagearbeit und jeweiligem ownedExit0/Reap/Cleanup.
+Die Guards werden nicht umgangen; das alte114-Toolset ist mit allen173
+Dateien verlustfrei erhalten. Neues WorkspaceTechnical116- und separat
+kanonisches publiziertes Toolprofil sind echte Exporte. Windowswerkzeuge
+sind crossgebaut; eine Windowsausfuehrung wird nicht behauptet.
+
+Der abschliessende normale KVM4-Lauf liest9installierte Moduldateien voll
+bytegleich zurueck und besteht die unveraenderte Spectra94-Vollabnahme
+CHECK SUBSYSTEM /HOST: originale SDK-Testgaeste, echter BASICbaseline,
+GB+SNES jeweils2volle60s-Gastlaeufe, physische Tasteneventvertraege,
+Gastarbeit/Drift, PCM/DSP/APU ohne Drops, SAV/RTC/asyncStorage, ungueltige
+Eingaben und getrennte normale Enden. SNESD1/D2 je60000000000Gastns,
+1288636320Masterzyklen/Drift0,6056/5999Writes,0Audiofehler, echterClose0/
+resourcesclosed. Eigener Desktop endet mitExit0, exakter Completion/Reap
+und CleanupACK. Fuenf eigene funktionale Gaeste wurden normal per POWEROFF
+beendet, Prozessende bestaetigt und nur ihre Sourcebilder per Test-Retention
+entfernt.136andere gebaute Module bleiben bytegleich, RecoveryMenu ungebaut.
+Inventar141Module/1082Testeintraege/483Dokumente, nur bestehende Noten gepflegt.
+
+Zwei echte fruehere Fehlbelege bleiben AUSDRUECKLICH UNGEKLAERT:
+1) Erster normaler aktueller Vollablauf: BASIC/GB erfolgreich, SNESD1volle
+60Gastsek/Drift0 aber1Writefehler bei53Writes/nachResetDSP-rendered960,
+Exit97/Close0/resourcesclosed. Der Controller beendet darauf D2 vorzeitig
+bei53.4Gastsek. Der damalige Fehlercode ist nicht im Originalbericht.
+Ein Timeout, fehlerhafter Reply, Reap oder Verursachung durch58 ist unbewiesen.
+Exakte Vorherpayloads46/23/35/SDKHost13 bestehen denselben Vollablauf auf
+identischem restlichen aktuellen Stack. Ein privater SNES-Endberichtprobe
+mit nur vorhandenem last_error-Feld besteht spaeter die urspruengliche
+SNES-Einzelabnahme mit0Fehlern; dieser Probe qualifiziert keine normalen Bytes.
+Der oben genannte normale Vollerfolg verwendet exakt die unveraenderten
+ersten aktuellen Produktbytes. Wiederholung erklaert oder behebt den Fehler
+nicht. Neuer Befund0.88.88 klaert Ursache und Reparatur am Roadmapende.
+2) Der private Vollversuch vor dieser SNES-Einzelabnahme stoppt bereits
+vorSNES bei Focus-RPC-Timeout3000ms aufSDKHost14-Gast26:26. Beide exakten
+Testgaeste enden danachExit0; ihr Zustand exakt zum Timeout ist unbekannt.
+windowAction prueft ended vorRPC und nachNotFound; eine Abschlusskonkurrenz
+oder die bekannte WINSVC-Rebindluecke ist eine Hypothese. Keine Frist oder
+Fehlerschwelle wurde angepasst. Neuer Befund0.88.89 klaert das getrennt.
+Alle bisherigen87Eintraege bleiben geordnet,88/89 sind nur am Ende angehaengt.
+Der erfolgreiche Lauf schliesst58-Mitverursachung nicht aus. Keine physische
+Lautsprecher-, isolierte Geschwindigkeits-/CPU-/Latenz-/Speicherbehauptung.
+
+Vollstaendige unveraenderte Originale, Vorherquellen/-binaerdateien, verworfene
+Controlleraufrufe, alle nativen Fehl-/Kontroll-/Probe-/Normalexporte,
+Artefaktreadbacks/Reports/Shutdownbelege und echte Pin-/Toolnachweise liegen
+unter ExFiles/Reports/Audio/0.88.58-runtime-waits/. Der einzige finale
+normale STANDARD58 ist vollstaendig; Original, Scorevalidierung und
+serverseitiger Stand sind im folgenden Abschlussvermerk getrennt dokumentiert.
+
+Finaler STANDARD und Abschluss zu0.88.58
+----------------------------------------
+Einziger finaler STANDARD58: bb419114-b64c-4f72-9baa-b0da36104dd2, Suite3/Metric2/KVM4,
+30Samples/4Worker/6gueltigeScores, overall=162.274802.
+OriginalSHA256 ef67407d51c7a6960f737681365a742b5a7d5f296675bb3da6f5bad6a1126034.
+Alle Arbeitsmengen, Workerzahlen, Batch-/Bytewerte und sechs Scores sind
+verlustfrei gegen Referenz28b326e2-4323-4a4c-a0d2-4c1bab4958c0 validiert.
+Das vollstaendige Original blieb unveraendert und liegt unter
+ExFiles/Reports/Benchmarks/bb419114-b64c-4f72-9baa-b0da36104dd2/.
+Status: lokal validiert; R4OS Server ausstehend (Import und Readback).
+Die funktionalen Fristbelege und die allgemeine Systemkontextmessung bleiben
+getrennt. Kein isolierter Geschwindigkeits-, physischer oder Hoernachweis.
+Die frueheren echten Fehlbelege88/89 bleiben OFFEN und am Roadmapende;
+dieser STANDARD und spaetere Funktionserfolge erklaeren oder beheben sie nicht.
+Drei Zig-Standaloneartefakte sind bytegleich; zwei byteverschiedene
+Desktop197-Toolprofilvarianten bestehen getrennte aktuelle originale
+vollstaendige KVM4-ALL-Laeufe. Keine Crossprofil-Byteidentitaetsbehauptung.
+141Module/1082Testeintraege/483Dokumente. Alle fuenf eigenen funktionalen
+Gaeste sind normal beendet und ihre Sourcebilder entfernt.

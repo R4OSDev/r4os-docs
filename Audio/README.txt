@@ -1867,3 +1867,117 @@ Dies ist die allgemeine Systemkontextmessung. Die funktional belegte
 Entkopplung der Audioauswahl ist davon getrennt; keine isolierte Zeit-,
 Hardware- oder Hoerabnahme.
 141Module/1079Testeintraege/483Dokumente.
+
+0.88.57 - BEEP und R4Synth mit absoluten PCM-Quellfristen
+-------------------------------------------------------
+Besitzer: Apps/Beep und Apps/R4Synth. BEEP0.1.9 und SYNTH0.1.10 behalten
+private App-Pacingregeln und die vorhandenen kanonischen SDK115-Vertraege.
+Kernel429/HDA47/AUDSVC21/AC9711/Contract60/SDK115/Libraryquelle39 sind
+unveraendert; keine neue Plattformfunktion oder Produktionsmessstelle.
+
+Der bisherige lokale Framezaehler schlief die PCM-Dauer zusaetzlich zu
+Quell-, RPC-, Busy- und Bedienzeit. Neue absolute Fristen laufen ab Beginn
+des echten Schreibversuchs: max(vorherigeFrist,Schreibbeginn) plus nur der
+angenommene framegenaue Praefix. Ticks*Samplerate erhalten Bruchteile ohne
+schrittweise Rundungsdrift. Nur positive Fristreste werden auf einen Tick
+aufgerundet; Quellarbeit und synchrones Warten verbrauchen die Frist.
+Eine lange Pause laesst alte Fristen auslaufen und erzeugt kein spaeteres
+Burstguthaben. Der160msQuellvorlauf und der abschliessende Restwait bleiben;
+Q ueberspringt nur diesen Hostwait, beide Pfade verlangen echtes Close.
+Weder Hostfristen noch160msVorlauf sind Abspielquittungen. HDA47 hat seine
+eigene2x480Frame-Startschwelle(20ms) und Tail-/Drainlogik. Kurzes512B-SYNTH-
+PCM bleibt unveraendert; echtes Close ist fuer kurze Tails erforderlich.
+Fehlende ticks/sleep_ticks oder unbekannte Ereignisfrequenz brechen PCM
+vorOpen sichtbar ab. SID-/MIDI-Hardwarepfade und deren Zeitregeln bleiben
+eigenstaendig; die gesamten vorhandenen Konvertierungs-/Parser-/SID-/MIDI-
+Quellen ab WavChunk sowie alle rohen SID-/MIDI-Appmethoden sind bytegleich.
+
+Kontrollierte Besitzerfaelle verwenden den echten App-Einstieg und das
+echte SDK mit extern modellierten R4SYS-Uhren/Dateien/Input/Serviceantworten.
+Kein Hardwarefortschritt wird daraus erfunden. OriginalBEEP8:2PASS/3FAIL,
+langsamesSchreiben2250 statt1250Ticks, Teilpraefix/Busy950 statt750.
+OriginalSYNTH9:2PASS/6FAIL, langsamesSchreiben450 statt250, Quellarbeit500
+statt309, Teilpraefix/Busy950 statt750, langePause1603 statt1540. Die
+qualifizierten Vorherquellen/Artefakte/Testhelper/Fehlerausgaben liegen
+getrennt unter Temp/08857-before-qualified. Der erste Testhelper hatte ein
+ungueltiges Open-Paar0/7, das das SDK korrekt abwies; erst das korrigierte
+7/7-Paar begruendet die genannten Vorherbefunde.
+
+Final bestehen5BEEP+8SYNTH-Gruppen: exakte unveraenderte Ton-/WAV-Praefixe,
+direktes48kStereo16Bit und konvertiertes44k1Mono8Bit, schnelle/langsame
+Quellen, positiveTeilpraefixe und0PraefixBusy, Pause/Resume/Quit, echter
+Closefehler und fehlende Uhrfunktionen/Frequenz. Schnelle Quellen bleiben
+auf160ms plus hoechstens ein gerade angenommenes Paket begrenzt, auch nach
+Resume: BEEPmax8640Frames, WAVmaxZiel+1019Frames. SlowWrite/Partial haben
+keinen zusaetzlichen Pacerwait; bei langsamer WAV-Quellarbeit bleibt nur der
+neue9Tick-Tail. Der kurze128Frame-Selbsttest rundet2.667ms auf3Ticks statt
+vorzeitig auf2 ab. Je2 urspruengliche SDK-Cursor-/Payloadfaelle und4 echte
+Zeitvertragsfaelle bestehen ebenfalls.
+
+Beide veralteten Standalone-Pins35 sind auf das veroeffentlichte SDK115
+b31dcb6381c835031a4a2dc0176e183f08fea1bc / Contract60 korrigiert. Dessen
+Implementierung ist zur Workspace115 identisch;56 aenderte dort nur Review.
+Alle13Besitzergruppen bestehen auch ohne Workspacefork; beide produktiven
+Artefakte sind gegen echte veroeffentlichte Pins byteidentisch:
+BEEP9 SHA256 ad4c498779f2978329bd3d3d8713d4c9aee28e1d1d8fc0251601f32c53a5752a
+SYNTH10 SHA256 64c4ed87c35d069f471fc0c29a029c3d8e646889ca5f39566c6c8e545edc3923
+
+Aktueller eigener KVM4-Gast mit normalem Kernel429/HDA47/AUDSVC21 prueft
+alle9 installierten Modul-/Observer-/WAV-Dateien per vollstaendigem Readback.
+Sieben echte Appkinder bestehen: BEEP200ms38400B(21:21), BEEP1s192000B
+(24:24), WAV48k38400B(27:27), konvertiertes44k1WAV35280B(30:30), SYNTH-
+Selftest512B(33:33), Pause/Resume115200B(40:40), Quit48912B(43:43).
+Jedes Kind hat Exit0, vollen originalen Ausgabetext, Reap0/Observerrelease0,
+genau einen realen HDA-Idleauftrag, echte Backendannahmen und danach keine
+Core-/AUDSVC-Sessions/materialisierten Streams/benutzten/queued/running
+Treiberarbeiten. Pause haelt angenommene Quellbytes220ms bei48912 konstant,
+Resume liefert danach den vollstaendigen Rest. Q behaelt den angenommenen
+Praefix und beendet trotzdem ueber echtes Close. Das externe Beobachten
+besitzt keinen Streamcursor des AUDSVC-Kindes: playback_frames=unavailable
+ist ausdruecklich erhalten, angenommene Bytes sind keine gehoerten Frames.
+Die separaten unveraenderten AUDIOD-Originale bestaetigen fuer ihre eigenen
+Streams Progress480 undGAP1440 accepted/backend/DMA/consumed, gleiche
+Generation/echtes Close/resources=restored; diese Quittungen gehoeren nicht
+nachtraeglich den Appstreams. Keine physische Lautsprecher-/Windowsabnahme
+oder isolierte Laufzeit-/CPU-/Speicherbehauptung.
+
+Die ersten5 nativen Belege bleiben unveraendert auf Privatobserver0.1.0.
+Sein erster Pauseversuch benutzte irrtuemlich das erst nach Prozessende
+verfuegbare ObservationRead zur Livebereitschaft; Keypush wurde danach
+abgewiesen. Privatobserver0.1.1 korrigiert nurP/Q-Livebereitschaft ueber
+vorhandenes consoleOutput bei weiterhin stark gebundenem lebendem Kind;
+die terminalen Ausgabebelege benutzen weiter ObservationRead. Beide neuen
+P/Q-Belege bestehen; die5 bestandenen Faelle wurden nicht wiederholt.
+Ein Upload ueber die schon vorhandene P57PCM-Datei las unveraendert die
+alten Bytes zurueck; dieser verworfene Transport ist gesondert erhalten,
+kein Appfehler daraus abgeleitet. Der neue8.3Alias P57FIN wurde vollstaendig
+bytegleich uebertragen und erst danach ausgefuehrt. Die drei PCM-Fixtures
+des dauerhaften MakeInputs.ps1 sind zu unabhaengigen Python-WAV-Originalen
+byteidentisch. Der Observer ist IMAGE_SCOPE=none und kein normales Modul.
+
+Der eigene Gast wurde normal per POWEROFF beendet; Prozess terminal und
+seine Sourcebilder per Test-Retention entfernt.138andere gebaute Module
+und alle ihre Manifeste sind unveraendert; RecoveryMenu bleibt ungebaut.
+Manuelles Inventar:141Module/1082Testeintraege(3neueBesitzerkomponenten)/
+483Dokumente. OwnerREADME/deDoc und veraltete Linuxpfade/HDA160ms-Aussage
+sind berichtigt. Die Originale und alle Grenzen werden vollstaendig unter
+ExFiles/Reports/Audio/0.88.57-pcm-pacing/ archiviert.
+
+Die funktionale Qualifikation und der einzige abschliessende normale
+STANDARD57 sind vollstaendig; Original und Grenzen stehen im folgenden
+Abschlussvermerk.
+
+Finaler STANDARD und Abschluss zu0.88.57
+----------------------------------------
+Einziger finaler STANDARD57: 256db97a-96ef-4ed0-bbb9-a3251d920008, Suite3/Metric2/KVM4,
+30Samples/4Worker/6gueltigeScores, overall=150.159598.
+OriginalSHA256 b1d5cfb90b8c188ed3fa775bef331db09e2340e1d4b3c0d5f9a31df55ae4223f.
+Alle Arbeitsmengen, Workerzahlen, Batch-/Bytewerte und sechs Scores wurden
+verlustfrei gegen Referenz28b326e2-4323-4a4c-a0d2-4c1bab4958c0 validiert.
+Das vollstaendige Original blieb unveraendert und liegt unter
+ExFiles/Reports/Benchmarks/256db97a-96ef-4ed0-bbb9-a3251d920008/.
+Status: lokal validiert; R4OS Server ausstehend (Import und Readback).
+Dies ist die allgemeine Systemkontextmessung. Die kontrolliert belegte
+PCM-Quellplanung ist davon getrennt; keine isolierte Systemzeit-, Hardware-
+oder Hoerabnahme.
+141Module/1082Testeintraege/483Dokumente.

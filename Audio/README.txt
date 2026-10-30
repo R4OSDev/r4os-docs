@@ -1222,3 +1222,103 @@ ExFiles/Reports/Benchmarks/463e1d0d-39da-4401-973d-de7f0e1a33c4/.
 Status: lokal validiert; R4OS Server ausstehend (Import und Readback).
 Dies ist die allgemeine Systemkontextmessung; keine Messung eines isolierten
 HDA-Detailformatierungs-, CPUzeit- oder Hoergewinns.141Module/1074Testdateien/483Dokumente.
+
+0.88.50: bounded resident AC97 Idle completion
+------------------------------------------------
+AC979 uses the existing version4/104-byte idle descriptor, including real
+query/select/active callbacks for the same AC97 output id/name. Normal Idle
+and last-stream Close submit/query one resident normal Work continuation.
+Busy is retained until caller PCM is drained, hardware DCH is observed,
+quiet reset is confirmed, the actual status jobs retire and the continuation
+itself is terminal and released. Its2000ms absolute drain budget starts
+before submission, including queue delay; quiet reset starts the original
+100ms status retirement budget. A turn performs one bounded pump and returns
+the existing driver_work_result_wait with the stream owner released. No
+additional task, audio deadline job or caller pointer spans the wait.
+
+Output/reset/PCI identity binds the intention. Only its confirmed drained
+reset adopts a changed reset identity. New accepted PCM cancels old intent;
+invalid/Busy writes leave it intact. An old ticket cannot acknowledge new
+PCM. Genuine deadline/reset/release failure is recorded by the autonomous
+worker even if its client no longer waits. A short reaper gate serializes
+actual status/release; physical completionWait holds neither that gate nor
+the stream owner. Status admission closes and in-flight submitters reach
+zero before quiet retirement can acknowledge all jobs. Cancelled queued
+status work does not execute finishPass: only actual retirement clears its
+Pending bookkeeping. The targeted actual-callback case failed before this
+correction and passes after it. Failed resource release never becomes ACK.
+
+Physical Stop/shutdown keep their separate hardware quiescence and original
+2000ms drain/100ms-per-Work joins. No HDA carrier/postroll policy is copied.
+The existing AUDSVC500ms legacy deferred-Close and1000ms caller contracts
+remain unchanged. RPC expiry is neither DMA nor Work completion. No Kernel,
+SDK or public Query layout change is needed; the existing continuation API
+is required. Backend status and real error counters remain available.
+
+The original32-entry BDL/eight4096-byte DMA slots, CIV/CELV last-valid
+processing and independent pending0+DCH condition, IRQ/W1C accounting,
+resampler phase, conversion/preparation/rollback and partial tail remain.
+36 original function bodies are byte-identical. Actual writePcm normalizes
+exactly to its original after the explicit admission/epoch hooks are removed;
+publication only adds accepted-PCM cancellation, successful reset consumes
+the recovery it has actually handled. Intel ICH7 datasheet307013-003,
+section16.2.4 pp636-637, confirms CELV includes the last buffer being processed,
+not bare index equality:
+https://www.intel.com/content/dam/doc/datasheet/i-o-controller-hub-7-datasheet.pdf
+No speculative queue change is made from the register name alone.
+
+The existing owner step passes19cases: seven original queue/Work cases,
+six drain-state cases and six actual descriptor/Idle/Work/write callback
+cases through host port/completion adapters. They retain absolute budgets,
+pending0/DCH, changed identities, real accepted-PCM cancellation, failed
+reset/release, autonomous error visibility and no lock spanning physical
+joins. Two test components are inventoried in that owner step, without a new
+global gate or normal sampler. Product artifacts contain no host probe text.
+
+Original AC978 is byte-identical when rebuilt with current SDK114; installed
+baseline SHA256cad1e650b4dcc1c548008dc6c4a54c4b8e9850f9700eee5d3a84a3fcb18a9db0.
+Final AC979 SHA2569cca561e08af7913de1b430bf751f823776460db25765f0c0055fe15043b06fb.
+Only AC97 artifact/manifest changes;139 other built modules are identical,
+RecoveryMenu remains unbuilt. Kernel426/SDK114/HDA46/AUDIOD17/Desktop196/
+WINSVC27/AUDSVC19/SNES35/Contract59/Librarysource38 remain unchanged.
+
+Actual KVM4 exact installed readbacks compare the same frozen AC50E source
+and executable,8032 accepted sourcebytes, source-ring availablePCM0 and one
+remaining real backend descriptor. Endpoint requests+1/responses unchanged/
+used1/delivered1 plus pending IO prove Close admitted but unanswered.
+Baseline master535560->535567 returns after actual Close535566; final master
+94629->94629 returns while Close is still pending, before its actual end94631.
+Both actual Close0, IO and connection retirement pass. This establishes
+service availability ordering, not an isolated CPU/serial/latency speedup.
+Early temporary observers misread availablePCM as free space and queue_used
+as queued-only; their failures/partial results remain explicitly unqualified.
+The final predicates are verified against the real Kernel source and the
+unchanged fixture is used in both guests.
+
+Original BEEP200ms and AUDIOD8280-frame PCM/master/restart/four-cycle lifecycle
+pass on both AC97 artifacts with zero actual path errors. HDA detailSKIP is
+expected because this private guest disables HDA; no HDA diagnostic result
+is inferred from AC97. A separate real client exits with8032acceptedbytes,
+one open/materialized session and no Close. AUDSVC's generation-bound reaper
+reaches open0/materialized0/backend_fail0 with the same service instance.
+Native virtual AC97 and host callback fault cases are separate qualifications;
+physical hearing/visibility, native fault injection and acoustic latency are
+not claimed. Both own guests shut down normally and their Source images are
+removed. The intermediate ef44 image was never booted and was removed after
+the host Pending regression was found. Native images initially carry release49;
+exact module/BOOT hashes bind the proof. Original evidence and frozen fixture:
+ExFiles/Reports/Audio/0.88.50-ac97-idle/.
+141modules/1076test files/483documents; the sole final STANDARD50 follows.
+
+Finaler STANDARD und Abschluss zu0.88.50
+----------------------------------------
+Einziger finaler STANDARD50: 22248770-2054-4a8c-88ea-198127cfd0ab, Suite3/Metric2/KVM4,
+30Samples/4Worker/6gueltigeScores, overall=159.888931.
+OriginalSHA256 d76659673097a5940e7dcbdce1e161c621daab6f586a6e2fcf660647cf605bb5.
+Alle Arbeitsmengen, Workerzahlen, Batch-/Bytewerte und sechs Scores wurden
+verlustfrei gegen Referenz28b326e2-4323-4a4c-a0d2-4c1bab4958c0 validiert.
+Das vollstaendige Original blieb unveraendert und liegt unter
+ExFiles/Reports/Benchmarks/22248770-2054-4a8c-88ea-198127cfd0ab/.
+Status: lokal validiert; R4OS Server ausstehend (Import und Readback).
+Dies ist die allgemeine Systemkontextmessung; keine Messung eines isolierten
+AC97-, CPUzeit- oder Hoergewinns.141Module/1076Testdateien/483Dokumente.

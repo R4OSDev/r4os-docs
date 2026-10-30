@@ -1055,3 +1055,76 @@ ExFiles/Reports/Benchmarks/0f30a9bd-c56b-4184-96bf-aba28456b8e5/.
 Status: lokal validiert; R4OS Server ausstehend (Import und Readback).
 Dies ist die allgemeine Systemkontextmessung; keine Messung eines isolierten
 Admission-, CPUzeit- oder Hoergewinns.141Module/1071Testdateien/483Dokumente.
+
+0.88.48: keep private audio comparison adapters in explicit test builds
+----------------------------------------------------------------------
+PCM/mixer/backend-contract C Op dispatches and their sole Args/Span records,
+global Work exports and adapter layout checks now require cfg(test). The
+retained original PCM/mixer/backend facades need these minimal host test
+adapters. The one-shot convert_to_stereo_s16 helper has only the Op6 caller
+and also requires test context; its original algorithm is retained. Clippy
+checks this without a broad dead-code allowance. Normal ResamplerState,
+Owner and Source layout assertions remain active. Productive optional
+per-sample work pointers remain null; functional stream/progress counters
+remain unchanged.
+
+The definition-only r4os_rust_display_audio_routes C Op adapter is removed.
+Its native Store publish/query/invalidate/erase code is byte-identical. The
+actual driver GFX audio publish/query entrypoints remain present before and
+after. Fresh active Agents/DevKit/Tools/Repositories searches, including
+generated projections, find six definitions and zero callers before the
+change. Public R4AUDIO/R4D Query-table layouts, admission and contracts stay
+unchanged. No second implementation, persistent test file or gate is added.
+
+Three exact PCM, four mixer and three backend original comparison oracles
+execute current Rust through the explicit test adapters. They retain sample
+bounds/direct borrowed spans, phase/remainder/tail/chunk duration, format
+resets, owner generations/ringwrap, bitexact unity/gain/saturation and the
+separate Idle versus physical Stop callback branches. Their historical Zig
+facade sources are retained from1f870ac3^; host builds link the current Rust
+source with explicit test cfg. Test callbacks establish branch behavior,
+while actual virtual hardware qualification follows separately.
+
+The six private names are absent from the actual unstripped Kernel425 before
+and426 after; the stripped image alone cannot establish symbol elimination.
+Nevertheless, actual removal from the normal source graph changes the built
+425 artifact26440976->26436944bytes before version metadata,4032bytes less.
+Internal materialized symbol sets also vary; the public Query layouts and
+source contracts remain. This is artifact evidence, not measured saved
+per-sample work or an isolated throughput/latency gain. Kernel becomes426,
+SHA256 c2b4fb4d41ab33f0dd9746e4ee15714ca20efffff815382c5667e3ac1f6970a4.
+Pinned fmt/check/clippy/final build and all ten host oracles pass. Exact
+source guards preserve every productive algorithm body and native layout.
+All140existing module artifacts/manifests remain byte-identical; RecoveryMenu
+is unbuilt. SDK114/Desktop196/WINSVC27/AUDSVC19/SNES35/Contract59 and Library
+source38 remain unchanged.
+
+An own current KVM4 guest verifies active/installed426 and exact BOOT hash,
+with full installed AUDSVC19/AUDIOD16/Desktop196/SNES35 module readbacks.
+The unchanged47 boundary fixture retains INVALID at unrepresentable source/
+window geometry, valid6/4000 phase/tail Close18/12000canonical frames and
+ordinary44100/48000/96000/192000 exact3/2/1/1. The unchanged partial fixture
+retains mono8000Hz2/2/2/2byte prefixes->24canonical and native48k stereo8/8
+->4canonical, incomplete-frame INVALID and exact DMA/consumed/Closed state.
+Original normal AUDIOD PCM/master/restart/replay/lifecycle/close/HDA plus
+PROGRESS480/two closes and GAP1440/same stream/restored resources pass.
+The guest shuts down normally and its private Source image is removed.
+Full original exports, exact fixture source/executables, ten host oracle
+logs, active searches and artifact/symbol comparisons are retained under
+ExFiles/Reports/Audio/0.88.48-private-adapters/. Initial image release47;
+exact artifacts bind current native proof.141modules/1071test files/483docs.
+The sole final STANDARD48 follows after original validation. No physical
+hearing or general speed claim is derived from this cleanup.
+
+Finaler STANDARD und Abschluss zu0.88.48
+----------------------------------------
+Einziger finaler STANDARD48: 3e3ed0a9-5f3d-4df6-ad26-0456176c574f, Suite3/Metric2/KVM4,
+30Samples/4Worker/6gueltigeScores, overall=149.986875.
+OriginalSHA256 37aa034c75e5cc8b680ab18d10b68c4baa010611eef5ea44dedea0c589a0243a.
+Alle Arbeitsmengen, Workerzahlen, Batch-/Bytewerte und sechs Scores wurden
+verlustfrei gegen Referenz28b326e2-4323-4a4c-a0d2-4c1bab4958c0 validiert.
+Das vollstaendige Original blieb unveraendert und liegt unter
+ExFiles/Reports/Benchmarks/3e3ed0a9-5f3d-4df6-ad26-0456176c574f/.
+Status: lokal validiert; R4OS Server ausstehend (Import und Readback).
+Dies ist die allgemeine Systemkontextmessung; keine Messung eines isolierten
+Adapter-, CPUzeit- oder Hoergewinns.141Module/1071Testdateien/483Dokumente.

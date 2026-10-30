@@ -771,3 +771,74 @@ ExFiles/Reports/Benchmarks/8637ca41-d56c-4a6f-87e7-998e1fb92178/.
 Status: lokal validiert; R4OS Server ausstehend (Import und Readback).
 Dies ist die allgemeine Systemkontextmessung; keine Messung eines isolierten
 Audio-Drain-, Spiel- oder Hoergewinns.141Module/1071Testdateien/483Dokumente.
+
+0.88.44: unused service writes counter and obsolete owner test cleanup
+----------------------------------------------------------------------
+AUDSVC0.1.18 removes the private Session.writes field and its two unused
+increments. Session.bytes_written remains: replyTrackedState publishes its
+sum with suppressed_bytes as accepted_source_bytes. Its increment, all public
+global byte/status/latency/silence/master counters, real flow/generation and
+pending-close state are unchanged. The complete main.zig delta is exactly
+the one field and two increment lines; all remaining source bytes match.
+The current source-consumer check therefore refines the old analysis: the
+per-session byte counter is productive and is preserved by the canonical44
+scope and task2, rather than removed together with the unused writes field.
+
+The actual SDK114 rebuild of the original service17 is byte-identical to its
+baseline. Its linked production ELF contains an incq at Session offset224 in
+the lazy-silence path and a paired writes/bytes-written vector update in the
+signal path. The optimized production IR confirms both stores. Service18
+removes the unused counter work while keeping a scalar byte addition; its
+private Session type shrinks272->264bytes, or128bytes across the16-slot array.
+This is a struct/code result, not a measured resident-memory or time saving.
+
+The obsolete clientIsRunning/runningRecordMatches functions, their sole
+ID-only self-test and the informational AUDSVCWORK print are removed. Those
+helpers and print already had no normal ELF symbols/work, so their cleanup
+is not an OS polling improvement. Actual collectRunning generation/paged/
+incomplete-inventory behavior, duplicate/reused IDs, new-stream generation
+binding, matches/isSilence and the exact one-begin/one-read assertions remain.
+Master/output and real delayed-close tests are unchanged. Before13/13 owner
+cases pass; after12/12 retained cases and16/16 build steps pass without the
+old misleading print-related failed-command line. No test file or gate was
+added or removed; Tests.json continues to describe1071files.
+
+Exactly one canonical artifact changes: AUDSVC0.1.18, SHA256
+a3ab0c062408cdd0c0153fbc5408a81ec7174fbc803269980d8510ded450a5a0.
+The other139 existing artifacts remain byte-identical; RecoveryMenu is
+unbuilt. SDK114/Desktop196/SNES35/Kernel423/WINSVC27/Contract59/Library source38
+remain unchanged, including their previously qualified current source inputs.
+
+The own KVM4 guest verifies4 configured/4 schedulable CPUs and full installed
+AUDSVC18/AUDIOD16/Desktop196/SNES35 readbacks. Original normal AUDIOD PCM,
+master/restart/replay/lifecycle/drain/close/deadline/HDA checks pass. Original
+PROGRESS confirms480accepted/consumed, stale-generation rejection and two
+closes. Original GAP confirms1440accepted/backend/DMA/consumed,480silent,
+zero suppression/unconfirmed, one stream/open, no silent close, actual Close
+quittung and restored resources; retry count is its actual observed count.
+The endpoint then has zero open audio sessions. Original Spectra94 SNES
+acceptance also passes two full60s guests/each1288636320cycles/3605PPUframes,
+zero drift/pending, PCM/input/video/SAV+RTC witnesses, reset, independent ends,
+invalid/firmware rejection and owned Desktop exit0/reap.
+
+Normal POWEROFF and private Source cleanup are confirmed. Unchanged original
+reports, HDA data, actual installed service bytes and before/after optimized
+IR/assembly remain under ExFiles/Reports/Audio/0.88.44-counter-cleanup/.
+The native image initially carried the old0.88.43 marker; exact installed
+service bytes bind this proof. No physical hearing/latency or isolated CPU/
+time/RSS gain is claimed. The sole final STANDARD44 is documented separately
+after its full original validation. Inventories remain141modules/1071test
+files/483documents. Source proof: Temp/08844-source-qualification.json.
+
+Finaler STANDARD und Abschluss zu0.88.44
+----------------------------------------
+Einziger finaler STANDARD44: 0abb6347-b653-4be3-acf6-08df3762eb17, Suite3/Metric2/KVM4,
+30Samples/4Worker/6gueltigeScores, overall=151.334240.
+OriginalSHA256 5a2054c22cdecd86c2fc21887cd0cbc6ced36cbe25248a3889709a25ab6125c7.
+Alle Arbeitsmengen, Workerzahlen, Batch-/Bytewerte und sechs Scores wurden
+verlustfrei gegen Referenz28b326e2-4323-4a4c-a0d2-4c1bab4958c0 validiert.
+Das vollstaendige Original blieb unveraendert und liegt unter
+ExFiles/Reports/Benchmarks/0abb6347-b653-4be3-acf6-08df3762eb17/.
+Status: lokal validiert; R4OS Server ausstehend (Import und Readback).
+Dies ist die allgemeine Systemkontextmessung; keine Messung eines isolierten
+Zaehler-, CPUzeit- oder Hoergewinns.141Module/1071Testdateien/483Dokumente.

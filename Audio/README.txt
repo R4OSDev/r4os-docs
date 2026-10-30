@@ -1757,3 +1757,113 @@ Status: lokal validiert; R4OS Server ausstehend (Import und Readback).
 Dies ist die allgemeine Systemkontextmessung. Die belegte Callbackreduktion
 ist davon getrennt; keine isolierte Zeit-, Hardware- oder Hoerabnahme.
 141Module/1079Testeintraege/483Dokumente.
+
+0.88.56 - Audioauswahl mit gebundenem Worker und echter Abschlussquittung
+======================================================================
+
+Besitzer sind AUDSVC0.1.21 und seine reine Auswahlplanung; Kernel0.1.429,
+HDA0.3.47, AC970.1.11, Contract0.64.60 und SDK0.64.115 bleiben im
+Laufzeitcode unveraendert. Libraryquelle0.64.39 korrigiert eine erreichbare
+generierte Rust-Typabbildung. SDK-Parityaenderungen sind Reviewmetadaten.
+
+Vorher: Der Dispatcher von AUDSVC20 wartete selbst im echten Treiberselect.
+Ein kontrolliert offener R4D-Callback blockierte sieben parallele Requests;
+alle unveraenderten100ms-Budgets endeten mit Timeout. Nach Freigabe kam genau
+eine echte Auswahlquittung. Dies ist ein Fortschrittsbeleg, keine isolierte
+Geschwindigkeits- oder physische Hoermessung.
+
+Jetzt kopiert der Dispatcher einen begrenzten Plan der bisherigen Policy
+(maximal vier Kandidaten). Genau ein dienstgebundener Worker ruft die
+bestehenden Kernel-/Treiberowner auf. Request, Ziel, Clientgeneration und
+Dienstepoch bleiben gebunden. Er leiht keine Katalog-, Payload- oder
+Replypuffer. Erst ein erfolgreicher exakter Join erlaubt Publikation und
+Speicherwiederverwendung; beliebige Joinfehler behalten Argumente und Handle.
+Es entsteht kein zweiter Hardwarekatalog und kein Produkt-Testhook.
+
+Waehrend Pending gibt es keine indirekten Outputqueries, Fallbackwahl oder
+neue Materialisierung im allgemeinen Dispatcher. Letzte Anzeige bleibt mit
+catalog-busy und ohne Backendbestaetigung erhalten. Status/Master/Volume
+antworten, vorhandene PCM kann fortschreiten; neue Materialisierung und ein
+zweiter Intent liefern Busy. Der10ms-Joinpoll existiert nur bei einem echten
+Auftrag; die bisherigen Transportfristen bleiben unveraendert.
+
+Finaler normaler Kernel429/AUDSVC21 auf SMP4: automatische Auswahl ohne
+zusaetzliche Query-/Epochcallbacks waehrend Pending, Providerfehler-1/Busy-7,
+Caller-Timeout vor Workerende ohne Replay, getoeteter Client22:22 mit
+Kill/Wait/Reap0 vor Providerende und normaler Stop nach50ms-Timeout. Erst
+nach Providerfreigabe folgen Join, Persistenz, Exit0 und neue Dienstinstanz
+8->23 mit gespeicherter Praeferenz. Ein paralleler PCM-Thread akzeptierte
+205568Bytes (106Write-/28Busy-Antworten), Join0/Close0. Akzeptierte Praefixe
+sind keine Abspiel-/Hoerquittung. Der unveraenderte AUDSVC-Selbsttest besteht.
+
+Ein zusaetzlicher echter Katalogrueckzug waehrend eines aelteren Route-ACKs
+fand im ersten Kandidaten b1c einen falschen bevorzugt-Status bei leerer
+Anzeige. Final cc2f wertet den anschliessend vollstaendig erfassten Katalog
+rein lesend aus: keine aktive Route, none-available4, keine Backendbestaetigung
+und kein weiterer Select. Vorher-/Zwischen-/Finalbelege bleiben getrennt.
+
+Die Desktop-Gegenprobe deckte ausserdem eine Luecke aus0.88.55 auf:
+Library-Rust-Aliasse prueften noch224/664 statt232/672. Der Librarygenerator
+erzeugt drei neue kanonische Records und zwei aktuelle Tabellenpruefungen;
+C-Header und nativer Fingerprint sind bytegleich. Keine Libraryimplementierung
+oder installiertes R4L-Artefakt aendert sich. Bestehende C/Rust2Faelle plus
+fuenf echte negative Compilerorakel und drei originale Desktop-Audiofaelle
+(+3Geometrie/+1SDK-Uhr) bestehen. Ein leerer Zwischenfilter wurde abgewiesen
+und ist kein ausgefuehrter Desktoptest. Nur die spaetere Parity-Reviewdatei
+weicht vom Desktop-Beleg ab; alle kompilierten Quellen sind identisch.
+Genau ein geaenderter beobachteter Raw-Input wurde bewusst nachgeprueft;
+670Dateien/35Bereiche/180Exporte und die vorige Matrix bleiben erhalten.
+
+HDA: neun vollstaendige aktuelle Artefaktreadbacks, echter Katalog/skalarer
+160Byte-Vergleich sowie Dienstworker-Select mit echter Quittung, passender
+Praeferenz/aktiver Route/Backendstatus. Unveraenderte originale52Queued-Flow-
+und PSID-Laeufe jezweimal, AUDIOD/Master/Lifecycle4/PROGRESS480/GAP1440/BEEP/
+SYNTH-Selbsttest und leere HDA-Workplaetze bestehen. Fresh-lazy85 bleibt
+separat dokumentiert. HDA-Gast regulaer POWEROFF/terminal/Source entfernt.
+
+AC97: aktueller Katalog, kompletter skalarer Vergleich und echter
+Dienstworker-Select mit passender Praeferenz/aktiver Route/Backendstatus.
+Die originale kurze und LONG-AUDIOD einschliesslich ihres100ms-Progressorakels
+besteht bei je drei parallelen vollstaendigen SFTP-Kopien. Alle sechs Kopien
+sind bytegleich. Echte IRQ-Work zaehlt fort und endet ohne benutzte, wartende,
+laufende, fehlgeschlagene oder verworfene Auftraege. Q35-Slot3/PinA nutzt
+explizit GSI23 gemeinsam mit RTL8139-Slot7; rawPCI-Line11 ist davon getrennt.
+BEEP besteht. Der eigene Gast ist regulaer POWEROFF/terminal/Source entfernt.
+Alle acht dauerhaft gepflegten privaten Artefakte unter
+Kernel/Tests/Guest/AudioCatalog sind byteidentisch zu den geprueften Dateien;
+die normalen Images installieren sie nicht. Originale drei P55-Bausteine
+bleiben unveraendert, der reale P55H-Beobachter0.1.1 prueft zusaetzlich den
+Dienstworker. Die bestehenden15Hostfaelle behalten ihre Orakel und erhalten die
+neuen Plan-/Join-/Abschlussfaelle im selben Testschritt. Workspace und echte
+veroeffentlichte115/60-Pins bauen identische finale21Bytes.
+
+Finales AUDSVC21 SHA256
+cc2f13d54027be041e369a4df47ca6d161ce9bb0cc404947fcf14721b3c24bdd.
+Kernel429 SHA256
+c609a521f4be54701260b94311317c2cd35b83a6811bc7b4ac185d150880560c
+bleibt unveraendert.139weitere gebaute Module samt Manifesten sind gleich;
+RecoveryMenu bleibt ungebaut.141Module/1079Testeintraege/483Dokumente.
+Die veralteten v14-Stille-/Idle-Close-Texte der Dienstanleitung wurden auf
+das geltende16+-Verhalten korrigiert. Zwei Root-Userdateien sind bytegleich.
+Vollstaendige Quellen, Vorher-/Zwischen-/Finalartefakte, Originalausgaben und
+Belegmanifeste liegen unter ExFiles/Reports/Audio/0.88.56-output-selection/.
+Keine physische ELD-/Receiver-/Speaker-/Windows- oder isolierte Zeitabnahme.
+
+Die funktionale Qualifikation und der einzige abschliessende normale
+STANDARD56 sind vollstaendig; Original und Grenzen stehen im folgenden
+Abschlussvermerk.
+
+Finaler STANDARD und Abschluss zu0.88.56
+----------------------------------------
+Einziger finaler STANDARD56: d50ca0dc-041d-4d34-ac9e-48a5d0df11ed, Suite3/Metric2/KVM4,
+30Samples/4Worker/6gueltigeScores, overall=167.042541.
+OriginalSHA256 fdd950b4290422057cbea0c78f8fce274fe6ca8c3436d8c3caa5d0b9dd3ac53d.
+Alle Arbeitsmengen, Workerzahlen, Batch-/Bytewerte und sechs Scores wurden
+verlustfrei gegen Referenz28b326e2-4323-4a4c-a0d2-4c1bab4958c0 validiert.
+Das vollstaendige Original blieb unveraendert und liegt unter
+ExFiles/Reports/Benchmarks/d50ca0dc-041d-4d34-ac9e-48a5d0df11ed/.
+Status: lokal validiert; R4OS Server ausstehend (Import und Readback).
+Dies ist die allgemeine Systemkontextmessung. Die funktional belegte
+Entkopplung der Audioauswahl ist davon getrennt; keine isolierte Zeit-,
+Hardware- oder Hoerabnahme.
+141Module/1079Testeintraege/483Dokumente.

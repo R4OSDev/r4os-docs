@@ -1645,3 +1645,115 @@ ExFiles/Reports/Benchmarks/2098fd73-0263-409f-bd70-ba1f14a73f3b/.
 Status: lokal validiert; R4OS Server ausstehend (Import und Readback).
 Dies ist die allgemeine Systemkontextmessung; keine isolierte Messung eines
 Synth-, CPUzeit- oder Hoergewinns.141Module/1078Testeintraege/483Dokumente.
+
+0.88.55 - Vollstaendige Audioausgangserfassung mit Providerbelegen
+================================================================
+
+Der aktuelle R4AUDIO-Vertrag ergaenzt audio_output_catalog (Tabelle4/232B,
+Slot26/Offset224). Der224B-Praefix und die skalare Einzelabfrage bleiben
+unveraendert. Der Caller stellt256 AudioOutputInfo-Zeilen und einen disjunkten
+AudioOutputCatalog v1/224B bereit. Die Zeilen sind Scratch bis Rueckgabe1;
+Fehler veraendern den Metadatenbeleg nicht. Ueberschneidung mit dem gesamten
+deklarierten Zeilenpuffer wird vor Callbacks abgewiesen, groessere Header
+behalten ihr Ende unveraendert. Es gibt keinen Kernel-Snapshothandle/Heapkatalog.
+
+Ein Outputpermit bindet die tatsaechliche Registry waehrend der Kopie. Jeder
+Provider liefert unter seinem realen Datenbesitzer einen nicht wiederverwendeten
+Katalogzaehler, Anzahl und lokalen aktiven Index. Der Kernel validiert alle
+Providerepochen erneut nach der Erfassung aller Provider; auch Aenderungen
+an einem frueher kopierten Provider werden damit erkannt. Registrierung und
+Registry besitzen gesonderte echte Identitaeten. HDA publiziert seine Epoche
+bei kontrolliertem HDMI-/Receiverkatalog und Routenuebergaengen; waehrend
+Initialisierung, Routenwechsel und Erschoepfung ist die Erfassung Busy. Die
+Initialisierungsfreigabe wird atomar publiziert. AC97 besitzt waehrend einer
+Registrierung einen unveraenderlichen Anschluss; Shutdown ist keine neue
+positive Verfuegbarkeitsquittung. R4D bindet den Callback ueber den optionalen
+DriverApi39/672-Tail. Fehlender Providervertrag ergibt err_no_fn; es wird
+keine Ersatzgeneration aus Zeilenhashes oder altem OS-Verhalten erfunden.
+
+AUDSVC20 kopiert nur vollstaendige Kataloge und transportiert seine Seiten
+weiter unter Serviceepoch/Revision. Echte Provider-/Registrywechsel erhoehen
+die Publikationsrevision auch bei gleichen IDs. Busy/Invalid haelt die letzte
+Anzeige, bestaetigt aber keine aktuelle Backendverfuegbarkeit. Der500ms-Cache,
+Desired-/Fallbackpolicy und die NoEndpointinvalidierung bleiben erhalten.
+Katalogbeobachtung, erfolgreiche Auswahl und echte Route-/Stop-/ELD-/DMA-
+Quittungen sind verschiedene Belege.
+
+UnveraenderterKernel428: ein realer kontrollierter Provider mit1/2/32Ausgaengen
+benoetigt im skalaren Gesamtdurchlauf3/6/560Queries und2/5/560Active-Abfragen.
+FinalerKernel429: derselbe Bestand benoetigt2/3/32Queries,0Active und2Epoch-
+Abfragen. Ein zweiter leerer Provider verursacht separat1Endquery/2Epochs.
+Dies ist Callbackarbeit; daraus folgt kein isolierter Zeitgewinn. Die alten
+skalaren Verbraucherorakel bleiben bei3/6/560 bestehen. Finale SMP4-Faelle
+pruefen Providerwechsel, spaeten Cross-Providerwechsel, reale reentrante
+Registryabmeldung(Busy), owned-Work-Neuregistrierung(Registry7->11,UID1->3),
+Fehler/Teilkopie,64Bit-Generationen und unveraenderte Headerenden. AUDSVC liefert
+33Ausgaenge in5gleichen Serviceepoch-/Revisionseiten, behaelt Desired bei
+Withdrawal/Fallback/Return und bestaetigt beiBusy keinBackend. Ein echter
+PCM-Programmthread akzeptiert1023360B/533Writes waehrend50vollstaendiger
+Captures+10Busy, Join/Exit0. P55D bestaetigt dabei Softwarewrites; dies ist
+keine physische Hoer-, ELD-, DMA-, Windows- oder isolierte Latenzabnahme.
+
+Finale Versionen: Kernel0.1.429 (SHA c609a521f4be54701260b94311317c2cd35b83a6811bc7b4ac185d150880560c),
+Contract0.64.60/R4AUDIO4, SDK0.64.115/DriverApi39, AUDSVC0.1.20,
+HDA0.3.47 und AC970.1.11. Contract und SDK wurden geprueft publiziert;
+HDA/AC97/AUDSVC binden die neuen Sourcepins. Drei erneute Besitzerbauten
+bleiben vollstaendig byteidentisch zu den aktuellen nativen Artefakten;
+HDA baut/testet87/87 auch mit den publizierten Pins ohne Workspaceoverride.
+Alle bisherigen Contractslots/-Payloadtypen/-Konstanten ausser der
+DriverApi-Version bleiben unveraendert; voller Generator-/ABI-/C/Zig/Rust-
+Test mit26Mutationen und7nativen ABI-Interopgruppen besteht.
+
+Aktuelles QEMU-HDA47: reale koharente Katalog-/Skalar-/Auswahl-/Servicedaten
+(registry4/registration1/provider1), zwei Originalfaelle mit3072unberuehrten
+queuedBytes/9600weiterenBytes/letztemIdleACK1, zwei reale SYNTH9PSID-Kinder
+mit vollem358BText/Exit0/reap0/release0, vollstaendiger originaler AUDIOD-
+PCM/Master/Lifecycle4Check, PROGRESS480/GAP1440/strictCleanup/BEEP/SYNTH-
+Selftest bestehen. Der bekannte ersteLazy-SYNTHD-Befund85 bleibt getrennt.
+Aktuelles QEMU-AC9711: derselbe reale Katalog-/Skalar-/Auswahl-/Dienstbeleg;
+originaler Short+LONG-AUDIOD mit unveraendertem100msProgressorakel besteht
+unter3parallelen SFTP-Vollkopien jeLauf (alle6bytegleich). q35Slot3/PinA
+verwendet explizitGSI23 gemeinsam mit RTL8139Slot7; RawLine11ist davon
+getrennt. EchteIRQWork steigt, Used/Queued/Running/Failed/Dropped bleiben0.
+Alle eigenen qualifizierten Gaeste wurden normal heruntergefahren, Prozesse
+terminal bestaetigt und nur deren Sourceimages per Test-Retention entfernt.
+
+Zig/C und die automatisch typisierten Driver-/GUI-Audio-/Subsystem-C/Rust-
+Bindings wurden gemeinsam aktualisiert. Aktuelle18Platform-Ownergruppen,
+die vollstaendigenC-Audio-/Devicefaelle,4RustPlatform+4negativeConsumer,
+1RustDriver+3negative und6RustSubsystem+5negativeConsumer bestehen. Ein
+letzter erwarteter negativer Compilerexit wurde nur durch den temporaeren
+Sammelstarter falsch alsGesamtfehler klassifiziert; die Besitzer erreichten
+PASS und ausschliesslich erfolgsgebundeneWorkrootbereinigung. Originale
+Exit1/Logs bleiben erhalten, der Starter ist korrigiert, grueneOrakel wurden
+nicht wiederholt. Die bisherige Paritymatrix15fb02a6... ist bytegenau erhalten;
+nach23einzeln geprueften geaenderten Contract-/SDK-Quellinputs und passenden
+C/Rust-/Gastbelegen ist ihr Review670Dateien/35Bereiche/180Exporte gruen.
+Dies ist kein blindesHashrefresh und keine neue physische Abnahme.
+
+Ein dauerhafter Kernel/Tests/Guest/AudioCatalog-Baustein reproduziert alle4
+privaten Artefakte byteidentisch; die normalen Images installieren diese
+Fixtures nicht.141Module/1079Testeintraege/483Dokumente; die urspruenglichen
+zwei geaenderten Root-Userdateien bleiben bytegenau erhalten. Vollstaendige
+Originalquellen, Artefakte, nativeOutputs und Belegmanifeste gehoeren nach
+ExFiles/Reports/Audio/0.88.55-output-catalog/; die erste Zwischenqualifikation
+vor finalen Lint-/Buffer-/Atomicinitkorrekturen bleibt mit ihren eigenen
+SHAwerten getrennt erhalten.
+
+Die funktionale Qualifikation und der einzige abschliessende normale
+STANDARD55 sind vollstaendig; Original und Grenzen stehen im folgenden
+Abschlussvermerk.
+
+Finaler STANDARD und Abschluss zu0.88.55
+----------------------------------------
+Einziger finaler STANDARD55: e5931260-0448-405a-9426-7e024e57c4f1, Suite3/Metric2/KVM4,
+30Samples/4Worker/6gueltigeScores, overall=160.171281.
+OriginalSHA256 394d28199ceb81a96271ef079debaf2420365ff3090e68824867238a0d1f01fb.
+Alle Arbeitsmengen, Workerzahlen, Batch-/Bytewerte und sechs Scores wurden
+verlustfrei gegen Referenz28b326e2-4323-4a4c-a0d2-4c1bab4958c0 validiert.
+Das vollstaendige Original blieb unveraendert und liegt unter
+ExFiles/Reports/Benchmarks/e5931260-0448-405a-9426-7e024e57c4f1/.
+Status: lokal validiert; R4OS Server ausstehend (Import und Readback).
+Dies ist die allgemeine Systemkontextmessung. Die belegte Callbackreduktion
+ist davon getrennt; keine isolierte Zeit-, Hardware- oder Hoerabnahme.
+141Module/1079Testeintraege/483Dokumente.

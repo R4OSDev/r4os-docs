@@ -1322,3 +1322,99 @@ ExFiles/Reports/Benchmarks/22248770-2054-4a8c-88ea-198127cfd0ab/.
 Status: lokal validiert; R4OS Server ausstehend (Import und Readback).
 Dies ist die allgemeine Systemkontextmessung; keine Messung eines isolierten
 AC97-, CPUzeit- oder Hoergewinns.141Module/1076Testdateien/483Dokumente.
+
+0.88.51: AC97 INTx admission follows the actual PCI route
+-------------------------------------------------------
+AC9710 removes the blanket registration of GSI16..23. Kernel426 DriverApi
+provides raw PCI configuration Line/Pin (offset0x3c), not ACPI _PRT/GSI
+resolution. INTx requires an explicit board route through the existing
+getOption contract: OPTION AC97 intx-gsi=N (one or two decimal digits0..31),
+plus PCI Pin1..4. Raw legacy Line alone cannot admit. Unknown/malformed
+configuration or failed registration refuses admission with an actionable
+error. No neighboring GSIs are tried. MSI remains first and needs no option;
+failed/out-of-range MSI registration requires confirmed PCI MSI disable
+before INTx fallback. One owned route shrinks fixed storage9->1. Failed
+unregister retains that route/context; failed MSI disable retains mode2
+for retry without unregistering an already retired route twice. The existing
+once-only device log adds raw Line/Pin. No Kernel/SDK/public Query change.
+
+For this private Q35 arrangement, AC97 is fixed at00:03.0/pinA and its
+explicit board option is23. This is not a global AC97 default. The official
+QEMU11.1.2 ICH9 routing source maps slot3/pinA toPIRQ7/GSI23; NICslot7/pinA
+shares that GSI, while raw PCI Line11 describes the separate legacy route:
+https://gitlab.com/qemu-project/qemu/-/raw/v11.1.2/hw/isa/lpc_ich9.c
+The installed binary reports11.1.2/Debian; current runtime delivery below
+qualifies the actual emulator independently of source assumptions.
+
+A raw-Line-only intermediate (SHA3e3085...) was rejected before release:
+normal PCM passed, but an initial shared short run failed and a fresh
+comparison yielded shortPASS/shortFAIL/LONGPASS. Exact oldAC979 bytes on
+the same topology passed2short+LONG. The original100ms asynchronous-progress
+predicate remains unchanged. No physical data loss or deadline miss was
+reported, and no physical cause is inferred; the unsupported Line-to-GSI
+assumption is removed rather than accepting the negative qualification.
+
+55 original function bodies remain byte-identical, including IRQ/W1C,
+status Work, PCM conversion/queue, normal Idle, Stop and physical retirement.
+Only setupInterrupts and logDevice bodies plus the route-capacity constant
+change; the new bounded configuredIntxRoute helper reads init-only evidence.
+There is no new normal sampler, port observer or runtime test hook.
+The existing owner step passes27cases:19 previous queue/Work/drain/actual
+Idle cases plus8 actual registration/teardown/W1C callback cases. Controlled
+DriverApi/port/Work adapters cover explicit routes, missing/malformed board evidence, failed
+registration, MSI success/fallback/disable failure, refused unregister and
+retry, and separate foreign vs owned shared-line W1C status with real Work
+submission. Original AC979 passes22/27 and fails five targeted route cases;
+final AC9710 passes27/27. Product bytes contain no host-probe text.
+
+Primary qualification covers a baseline and two final KVM4 boots, with
+exact installed module and Kernel426 BOOT readbacks. Baseline AC979 reports00:03.0 Intel8086:2415,
+Line11/Pin1, registers11 plus16..23 and reaches24 owned actual-IRQ Work
+submissions after BEEP/AUDIOD. Final AC9710 registers only the configured GSI23; its owned
+actual-IRQ Work rises10->23,
+with used/queued/running/failed/dropped0. Raw11 and GSI16..22 lose the
+AC97 registration; GSI23 retains its actual shared handler. Positive per-owner
+IRQ-derived work proves delivery independently of playback/fewer handlers.
+
+A second final boot puts RTL8139 at slot7: QMP reports both AC97 and NIC on
+rawLine11/Pin1, and the real router reports two shared handlers onGSI23
+(raw11 retains onlyNIC). Two short and one LONG original AUDIOD runs with
+three concurrent full AUDIOD-module SFTP readbacks per run pass;
+each readback equals its original bytes. AC97-owned actual-IRQ Work rises
+10->1163 with no retained
+jobs/errors. Original8280-frame and LONG PCM continuity, master volume/mute, service
+restart and four Close cycles pass with zero upstream drops/underruns/driver
+errors/backend failures on both final topologies. QMP IRQ/controller and
+NIC/system receipts are retained. All own guests shut down normally and
+Source images are removed. Native images initially carry release0.88.50;
+exact module and BOOT hashes identify their qualified code.
+
+Detailed per-IRQ timing is disabled (coverage44), so zero timing samples are
+unavailable. The positive per-owner IRQ counts use the existing Work API.
+Controlled host MSI/failure cases and virtual INTx boots are separate;
+no physical PCI/ACPI resolution, physical MSI, acoustic completion or isolated
+CPU/latency gain is inferred. A temporary probe before any Work correctly
+returned owner_present0. IPCONFIG is absent in the private Test image;
+SYSINFO and actual transfers provide the qualified network receipt.
+
+AC9710 SHA2566ca343dd93d0da4eea726197ea507be433b404495bda5b9144fe96578dd320bd.
+Only AC97 artifact/manifest changes;139 other built artifacts/manifests are
+identical and RecoveryMenu remains unbuilt. Kernel426/SDK114/HDA46/AUDIOD17/
+Desktop196/WINSVC27/AUDSVC19/SNES35/Contract59/Librarysource38 unchanged.
+141modules/1076test files/483documents. Full original sources, host logs,
+native/QMP/readback and cleanup proofs:
+ExFiles/Reports/Audio/0.88.51-ac97-route/.
+Exactly one final STANDARD51 follows as general system context.
+
+Finaler STANDARD und Abschluss zu0.88.51
+----------------------------------------
+Einziger finaler STANDARD51: 7e84a42c-607a-40ec-8913-76560515094a, Suite3/Metric2/KVM4,
+30Samples/4Worker/6gueltigeScores, overall=153.156733.
+OriginalSHA256 d05c15b10e2782a650c7d1d57de3de7217ccf8874cf532a22709aef379a5ae16.
+Alle Arbeitsmengen, Workerzahlen, Batch-/Bytewerte und sechs Scores wurden
+verlustfrei gegen Referenz28b326e2-4323-4a4c-a0d2-4c1bab4958c0 validiert.
+Das vollstaendige Original blieb unveraendert und liegt unter
+ExFiles/Reports/Benchmarks/7e84a42c-607a-40ec-8913-76560515094a/.
+Status: lokal validiert; R4OS Server ausstehend (Import und Readback).
+Dies ist die allgemeine Systemkontextmessung; keine Messung eines isolierten
+AC97-, CPUzeit- oder Hoergewinns.141Module/1076Testdateien/483Dokumente.

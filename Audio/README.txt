@@ -842,3 +842,79 @@ ExFiles/Reports/Benchmarks/0abb6347-b653-4be3-acf6-08df3762eb17/.
 Status: lokal validiert; R4OS Server ausstehend (Import und Readback).
 Dies ist die allgemeine Systemkontextmessung; keine Messung eines isolierten
 Zaehler-, CPUzeit- oder Hoergewinns.141Module/1071Testdateien/483Dokumente.
+
+0.88.45: service owner acquisition uses the minimal lifecycle registry
+----------------------------------------------------------------------
+AUDSVC0.1.19 changes its actual ClientInventory reader to the existing current
+R4SYS programLifecycleBegin/programLifecyclePrograms API. Its16 native rows
+are ProgramLifecycleSnapshot rather than ProgramInstanceSnapshot. The reader
+consumes the same handle.instance_id/generation and state0running/1closing/
+2done. The unused ProgramInventorySummary local is gone. Existing cursor/
+snapshot-generation, returned-count and complete/more checks remain. There
+is no second owner list, cache, ID-only authority or diagnostic fallback.
+
+The actual reader is in the existing session_ownership module and is aliased
+by both unchanged main Open and shared200ms cleanup callsites. Existing
+collectRunning and all three original owner groups are byte-identical. Busy,
+Restart, invalid/incomplete pages or changed epochs return no absence
+authority; callers retain their existing conservative behavior. A complete
+empty snapshot can establish absence, while a positive shared-owner result
+may still finish early on a more page. Real pending-close acknowledgement,
+master/output/persistence behavior and per-session byte progress are intact.
+
+Kernel423 source binds lifecycleBegin to the same program registry epoch with
+a nonblocking lock. Lifecycle pages use scan(false)/lifecycle_info and keep
+the same ID/generation/state without vm_stats or the full diagnostic begin's
+task/thread/heap summary acquisition. Restart emits no rows and advances no
+cursor. The existing Desktop LifecycleReader/SDK Resources::Lifecycle uses
+this current contract. No Kernel, SDK or public ABI change is needed.
+
+Three added groups in the existing owner test step execute this actual reader
+through controlled native tables. The old diagnostic reader fails those
+three intended call-boundary checks (12/15); the new reader passes15/15 cases
+and16/16 build steps, including6ownership/4master/5pending-close cases. They
+count exactly1LifecycleBegin and the expected0/1/2LifecyclePages with0full
+diagnostic Begin/Programs calls. Running/closing/done, reused IDs, initial
+generation binding,16duplicate owners, complete-empty vs incomplete-empty,
+Begin/PageBusy, Restart, epoch mismatch, invalid status, bounds and a later
+page failure retain their original generation/absence semantics. No test
+file, gate or normal runtime measurement counter was added. The host callback
+counts do not claim native kernel timing; the real producer is source-checked.
+
+Actual optimized ClientInventory shrinks2776->1112bytes: the row buffer is
+2304->640bytes,1664bytes smaller, and the separate old160byte begin summary
+is no longer requested. This is structural/call-path evidence, not measured
+native latency, RSS or isolated CPU savings. Only AUDSVC changes, version19,
+SHA256 d32c7bc85ee5aa4c16169a53c638e67342f2058e3036d59807f83f6104c4fef8.
+The other139existing artifacts are byte-identical, with RecoveryMenu unbuilt.
+SDK114/Desktop196/SNES35/Kernel423/WINSVC27/Contract59/Library source38 remain.
+
+An own KVM4 guest verifies4configured/4schedulable CPUs and full installed
+AUDSVC19/AUDIOD16/Desktop196/SNES35 readbacks. Original AUDIOD PCM/master/
+restart/replay/lifecycle/drain/close/deadline/HDA checks pass; original
+PROGRESS480/stale-generation/two-close and GAP1440accepted/backend/DMA/
+consumed/one-stream/restored-resources oracles pass, with actual Close retry
+counts retained. The endpoint ends with0open sessions. Original Spectra94
+SNES acceptance passes twofull60s guests/each1288636320cycles/3605PPUframes,
+zero drift/pending, PCM/input/video/SAV+RTC, reset/independent ends, invalid/
+firmware rejection and owned Desktop exit0/reap. The guest shuts down
+normally and its private Source image is removed. Original reports/exports,
+actual installed service and optimized IR remain under
+ExFiles/Reports/Audio/0.88.45-owner-lifecycle/. Its initial image marker was
+0.88.44; exact installed artifacts bind this proof. No physical hearing or
+latency claim. The sole final STANDARD45 follows separately after original
+validation.141modules/1071test files/483documents; source/contract proofs in
+Temp/08845-source-qualification.json and Temp/08845-contract-proof.json.
+
+Finaler STANDARD und Abschluss zu0.88.45
+----------------------------------------
+Einziger finaler STANDARD45: 1ba7b15d-9e05-47ba-ba3f-53d5d9ae8a79, Suite3/Metric2/KVM4,
+30Samples/4Worker/6gueltigeScores, overall=154.036242.
+OriginalSHA256 d21ad5960f467d4b268fdcd7749689f7593998e24dc976fb291833da1a51f07a.
+Alle Arbeitsmengen, Workerzahlen, Batch-/Bytewerte und sechs Scores wurden
+verlustfrei gegen Referenz28b326e2-4323-4a4c-a0d2-4c1bab4958c0 validiert.
+Das vollstaendige Original blieb unveraendert und liegt unter
+ExFiles/Reports/Benchmarks/1ba7b15d-9e05-47ba-ba3f-53d5d9ae8a79/.
+Status: lokal validiert; R4OS Server ausstehend (Import und Readback).
+Dies ist die allgemeine Systemkontextmessung; keine Messung eines isolierten
+Lifecycle-, CPUzeit- oder Hoergewinns.141Module/1071Testdateien/483Dokumente.

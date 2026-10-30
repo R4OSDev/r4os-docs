@@ -3685,3 +3685,108 @@ Lokal validiert; Serverimport und Serverreadback sind ausstehend. Dieser
 Gesamtwert ist kein isolierter Geschwindigkeitsnachweis fuer die Aenderung.
 Funktionale Gastquellen nach normalem Shutdown entfernt; keine aelteren
 offenen Befunde88/89/90/91 als behoben ausgegeben.
+
+0.88.62: Priorisierte Wait-Handoffs ohne vollstaendigen Queuescan
+----------------------------------------------------------------
+
+Kernel433 pflegt fuer jede private WaitQueue einen intrusiven AVL-Index nach
+aktuellem Wake-Rang und urspruenglicher Einschreibreihenfolge. Die gerichtete
+Auswahl liest das kleinste Element und validiert seine genaue Taskgeneration
+und seinen Blocked-Zustand. Der normale Handoff prueft einen Kandidaten;
+Indexpflege bei Einschreibung, Rangwechsel und Entnahme kostet O(log n).
+Es gibt weder eine feste Wartendenobergrenze noch einen beliebigen Suchpraefix.
+Ungerichtete Auswahl verwendet weiterhin den urspruenglichen FIFOhead.
+
+Die Taskowner publizieren jeden echten Wake-Rangwechsel sofort, auch wenn
+der Dispatchrang gleich bleibt. mutex_pi.changed aktualisiert den Index vor
+dem Rueckweg fuer einfache Waits ohne Lockkante oder bereits vorgemerkte
+PI-Arbeit. Rollen-/Placementaenderung, direkte und abgeleitete Donation,
+Budgetverbrauch und die privaten Legacy-Feldsetter sind beruecksichtigt.
+Der bestehende begrenzte PI-Pump mit acht Kanten bleibt getrennt erhalten;
+sein spaeter aktualisierter Edge-Rang ist keine Auswahlwahrheit. Rangwechsel
+bewahren das urspruengliche FIFOalter gleichrangiger Wartender.
+
+Nur der exakte eigene Node mit passender Taskgeneration zieht seine PI-Kante
+zurueck. Ein alter separater Node darf keine neue Generation oder deren Wait
+entfernen. Close, Timeout, Kill und Guard-Handoff behalten ihre Besitzer- und
+Abschlussvertraege. Ein vollstaendiges Wake-all trennt den Prioritaetsindex
+einmal unter dem exklusiven Runtimeowner und entfernt danach die FIFO-Nodes
+linear; keine Task kann waehrend dieser geschuetzten Phase neu einschreiben.
+Ein seltener u64-Einschreibzaehlerumlauf verdichtet nur die FIFO-Ordnungswerte
+unter demselben Owner. Die relative Baumordnung bleibt dabei erhalten.
+
+Der vorhandene AVL-Owner bietet zusaetzlich stille Insert-/Remove-Operationen;
+dieser neue Waitindex sammelt keine ungenutzten visits-Statistiken. Bestehende
+AVLNutzer behalten ihre bisherigen beobachteten Operationen. Keine neue
+Clockabfrage, Allokation, Callback- oder Runtimezulassung im normalen Handoff.
+Die fachliche Rolle bleibt das Scheduler-Subsystem im erforderlichen Kernel.
+
+Die Layoutpruefung hat keine oeffentliche Inline-Speicherleihe fuer diese
+nativen Syncobjekte gefunden. Die R4D-SemaphoreAPI bleibt handlebasiert mit
+Version1/64Bytes. R4DEV-Slots, WaitRequest72, WaitSummary96, LockSummary120,
+ProgramPerformanceSummary6352 und alle oeffentlichen Contractlayouts bleiben.
+Private Groessen: Node40->88, QueueCore/WaitQueue40->80, Event/Completion/
+Semaphore48->88, Mutex128->168 und UnwindGuard136->176Bytes. Die queue-
+Offsets in Mutex/Guard bleiben40. Der interne Treibersemaphorrecord wird
+120->160Bytes bei gleichem Payloadoffset72; seine Allokation verwendet sizeof.
+126 abgeleitete private Size-/Offsetassertions in Console/Gui/Thread/Service
+wurden mit dem gepinnten Compiler ermittelt und angepasst. Die temporaeren
+Diagnoseassertions sind vollstaendig entfernt. Die generierte oeffentliche
+PayloadTypes-Referenz bleibt bytegleich; private Strukturen gehoeren dort
+nicht hinein. SDK117/Contract61/Library39 bleiben unveraendert.
+
+Vorherbeleg mit dem exakten432-pop_waiter-Funktionskoerper und wirklicher
+generischer Nodeverkettung:128 gueltige Wartende, korrekte letzte Auswahl,
+aber128 Kandidatenpruefungen statt erwarteter1 (gezielter FAIL101). Aktuell
+prueft derselbe Funktionsadapter einen Kandidaten. Drei Adapterfaelle pruefen
+zusaetzlich sofortige Rangpublikation vor beiden PI-Rueckwegen sowie alte
+Nodegeneration gegen frische Einschreibung. Die Adapter ersetzen Taskwerte
+und PI-Detachquittung; sie belegen keinen echten Kontextwechsel.
+
+Zwoelf Hostfaelle bestehen durch den neuen gemeinsamen PS7-Runner mit
+gepinntem Rust und Quellhashquittungen: acht echte Waitownerfaelle fuer128
+gemischte Wartende, FIFO nach umgekehrten Rangwechseln, sofortige wiederholte
+Rangwechsel,4096 Operationen gegen unabhaengiges Vec-Orakel, Close/Reopen,
+257er Wake-all, Zaehlerumlauf und ungueltige Enrollmentversuche; dazu vier
+echte AVLfaelle einschliesslich257 stiller Entnahmen ohne visits-Schreibzugriff.
+Der Runner entfernt sein eigenes Compiler-Temp. Windows nutzt denselben
+hostagnostischen Runner; Windowsausfuehrung wurde hier nicht behauptet.
+Kernel fmt/check/clippy und normaler433-Build bestehen. Normaler ELF:
+776509c33d45a8571897eab6fa3e6c239162748e0146d94163bac79dfde24dcc.
+
+Echter KVM4-Gast mit diesem ELF: vollstaendiges originales Kernelprofil
+127/127,199/199 eigene Tasks,9/9Work,65Deadlines,Rolemask15,Event200/IF4/
+Unwind2,live_tasks/live_work/cleanup_errors0. Der bestehende gerichtete Test
+behaelt seine originale Vierrollenrunde und ergaenzt eine zweite Runde mit
+vier echten wartenden Tasks. Promotion und Demotion ueber den Rollenowner
+wirken sofort; nach umgekehrten Aenderungen entscheidet das alte FIFOalter.
+Alle acht realen Wakes pruefen unter dem Runtimeowner exakt einen Kandidaten,
+alle acht Tasks werden wirklich freigegeben. Die bisherigen PI-Ketten-/
+Budget-/Timeout-/Kill-/Close-Reopen-/Guard-/Generationstests bleiben aktiv.
+Die Diagnosehistorie208 und die allgemeine dynamische Taskkapazitaet bleiben.
+Das originale IDLEprofil besteht256/256 mit2/2 Tasks und echtem Timer-/IRQ-
+und Retirementbeleg; beide Profile liefen vor SERVMAN BOOT/SSH:
+[AP-IDLE58] result=PASS quiet_cpus=3 target=1 capacity=4 active_irq_delta=20 timed_wakes=16 max_sleep_ticks=2 reaped=1
+
+Vier vollstaendige installierte Modulreadbacks bestaetigen HDA48/AUDSVC21/
+AUDIOD18/Spectra95. Volles originales AUDIOD mit angefordertem kohaerentem
+HDA-Snapshot besteht einschliesslich echter handlebasierter Diagnosepermit-
+Erzeugung/Status/Acquire/Release. Progress480 und GAP1440 bestaetigen echte
+DMA-/Consumedfortschritte, Close und Ressourcenruecklauf; abschliessend
+Core-Streams/Bytes/Queue/Errors/Fail0. Normaler POWEROFF und kanonische
+Source-Retention des eigenen Gasts sind bestaetigt. Kein physischer Ton-
+oder isolierter Geschwindigkeitsbeleg und keine Behebung aelterer Befunde.
+Alle141 Modulmanifeste und140 normalen Modulartefakte bleiben bytegleich.
+
+Vollstaendige Originale, Quellstaende und Besitzerbelege:
+ExFiles/Reports/Core/0.88.62-wait-priority/.
+STANDARD62: genau ein finaler Lauf d989cc20-f1b7-4afc-bcdf-e95dbc659a64, Suite3/Metric2/KVM4,
+overall162.850231. Alle30 Samples mit je4 abgeschlossenen Workern,
+Batches/Operationen/Bytes/Clock und6 Scores verlustfrei gegen die eingefrorene
+Referenz28b326e2-4323-4a4c-a0d2-4c1bab4958c0 validiert (uint64/Decimal).
+Vollstaendiges unveraendertes OriginalSHA126b100553a9744707df0a9075286ecb84845bc5e4954dd6f8ed4123fa869fc0
+unter ExFiles/Reports/Benchmarks/d989cc20-f1b7-4afc-bcdf-e95dbc659a64/.
+Lokal validiert; Serverimport und Serverreadback sind ausstehend. Dieser
+Gesamtwert ist kein isolierter Geschwindigkeitsnachweis fuer die Aenderung.
+Funktionale Gastquellen nach normalem Shutdown entfernt; keine aelteren
+offenen Befunde88/89/90/91 als behoben ausgegeben.

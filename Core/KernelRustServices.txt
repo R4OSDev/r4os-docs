@@ -158,3 +158,123 @@ Lokal validiert; Serverimport und Serverreadback sind ausstehend. Der
 Gesamtwert ist kein isolierter Geschwindigkeitsnachweis fuer diese Aenderung.
 Offene Befunde70..91/94/95/96 bleiben getrennt. Finale Publikation92/93 erst
 nach allen funktionalen Punkten; tatsaechliche finale Identitaeten mindestens96.
+
+0.88.70: Dienstlebenszeit an die wirkliche Prozessgeneration binden
+----------------------------------------------------------------
+
+Ein verwalteter Dienst behaelt den vollstaendigen Launchhandle und eine
+private ownerlose Observation seines Completionbelegs. Die Bindung wird
+nach Programmpublikation, aber vor Runnable-Publikation des Diensttasks
+committet. Allokation erfolgt vor den Besitzern; unter ProgramRegistry110
+wird ausschliesslich ServiceRegistry120 per begrenztem Try betreten.
+Nach Commit ist die Publikation des Retentionsschluessels unfehlbar.
+Die private Bindung ueberlebt das Starterende und haelt ausschliesslich
+detached Completionmetadaten, keine Instanz, Task, VM oder Image.
+Startreservierungsnonce, Registryepoch und Prozessgeneration bleiben
+verschiedene Identitaeten. Ein fremder Registrywechsel darf eine alte
+Startreservierung nicht als STARTING zuruecklassen.
+
+Name-/Index-/Refresh-/Stop-/Restart-/Mode-/Remove-/Endpointpfade pruefen
+denselben Registrytarget aus Epoch, Slot, Name, Startnonce, aktivem IDwert,
+vollem Prozesshandle und privatem Belegschluessel. Nach freigegebenem Owner
+wird keine fremde Belegung mutiert. Endpointregistrierung prueft ebenfalls
+die volle laufende Prozessgeneration. Aktueller Stopintent entscheidet erst
+unter seinem Besitzer ueber Stopped/Failed. Fehlende Completion bleibt
+unbekannt; History und STOPPING ersetzen keinen physischen Abschluss.
+
+Erst ein wirklicher Retained2/3-Beleg erlaubt die Terminalprojektion.
+Der Dienst konsumiert seine Completion exakt per vollem Handle, damit die
+Legacy-ID wieder frei wird. Der private Lease behaelt die letzte Terminal-
+identitaet bis vor naechstem Start/Remove/Disable. Bereits konsumierte
+NOT_FOUND/STALE-Reapantwort ist nur zusammen mit dem zuvor gelesenen
+wirklichen ACK zulaessig; Busy bleibt unbekannt. Leasefreigabe erfolgt
+ausserhalb des Serviceowners und anschliessendes Clear nur am selben Target.
+Die absolute Frist aus69, Poll0 und Forever sowie echte Abschlusspruefung
+bleiben erhalten. Keine neue Scheduler-/Ownerhierarchie oder Messstelle.
+
+Contract62 erweitert R4SYS33/1376 auf34/1392 um genau zwei optionale Slots:
+service_bound_detail170/1376 und service_stop_bound171/1384. Alle170 alten
+Slots inklusive Signaturen, Semantik, Reserved/Tombstone und alle festen
+oeffentlichen Typen sowie anderen Gruppen bleiben erhalten. Der Getter
+liefert einen generationengeprueften Detail-/Prozesssnapshot einschliesslich
+letzter Terminalidentitaet und gewaehrt keinen App-Lease. StopBound prueft
+den erwarteten vollen Prozesshandle VOR jedem Close und behaelt denselben
+privaten Registrytarget. SDK118 bindet beide Aufrufe in Zig/C/Rust.
+Die ausdrueckliche Zig-Killpolicy verwendet StopBound und HandleKill,
+vergleicht erneut dieselbe Generation und erneuert kein Wartebudget.
+Killannahme allein ist kein ACK: bei ausstehendem Abschluss bleibt Timeout.
+SERVMAN0.1.5 benutzt den gebundenen Handle statt Vollinventarsuche nach ID.
+
+Vorher440:14 kontrollierte Faelle8PASS/6erwarteteFAIL101. Der noch
+unveroeffentlichte erste70-Entwurf vergass den kanonischen Completionconsume;
+erweiterte28Faelle24PASS/4FAIL101 sichern auch diese notwendige Kante.
+Nachher44Faelle aus18 exakt identischen Funktionsbodies PASS, aufgeteilt
+16Retention-/Startfactory und28Target-/Stopfaelle. Owner-/Record-/Clock-/
+ACK-/Close-/Reap-/Heapleaves sind ausdrueckliche Hostadapter, keine native
+ABI-/SMP-/physische Ressourcenabnahme. Fmt/check/clippy und Normalbuild441
+PASS. Contractcheck,26Mutationstests und C/Zig/Rust-ABIinterop PASS.
+SDK139Buildschritte/171Tests, elf echte SDK-Policyfaelle und gemeinsamer
+C/Rust-Fassaden-/Deadline-/Retentionsinterop sowie unsafe/Send-Negativcompiler
+PASS. Zwei private Hosttest-Compilefehler und ein falsch geerbter erwarteter
+Negative101 im Tempwrapper bleiben erhalten; aktueller Ownerlauf bestanden.
+
+Native KVM4 im selben normalen441-Gast1058304: C-Dienst fragt seine
+Bindung vor Endpointregistrierung ab und vergleicht unabhaengig den durch
+seinen laufenden Task gepinnten Selfhandle. Echter Starter Wait/Reap
+beendet die Dienstbindung nicht. Danach wird30:30 nach wirklichem Exit23
+ohne Client-Reap des Diensts exakt als30:31 wiederverwendet. Alte gebundene
+Stops werden Busy, der neue Dienst erhaelt kein Close, alte Endpointaufrufe
+werden abgewiesen und sein alter Observationbeleg liefert weiterhin Exit23.
+Echter Restart31:32 und Remove/Reinstall desselben Namens als30:33 pruefen
+frische Generationen und alte Belege erneut. Zwei native Stopprozesse
+erhalten denselben wirklichen Abschluss0. SDK-Killpolicy fuer33:36 liefert
+Timeout-8 und danach echten physischen ACK-9. Alle fuenf C-Startabfragen
+bestaetigen die Bindung; alle oeffentlichen Observations freigegeben und
+Registry-Lifecyclezaehler zum Ausgangswert zurueckgefuehrt.
+
+Die erste private0.1.0-Gastfassung erreichte erste C-Abfrage und Starter-Reap,
+scheiterte dann aber im kombinierten Stop-/ACK-/Terminalorakel mit Code6;
+die einzelne Unterbedingung wurde dort nicht aufgezeichnet. Keine einzelne
+beobachtete Exitursache wird nachtraeglich erfunden. Die Quellpruefung
+zeigte, dass der C-Test regulaere fruehe Endpointinvalidierung beim Stop
+faelschlich als Fehler behandelte. Nur die private Fixture wurde auf0.1.1
+korrigiert und genauer protokolliert. Derselbe Kernel/SDK/SERVMAN bestand
+den zweiten Lauf; alle ersten Quellen, Artefakte, Readbacks, Transport- und
+Serialoriginale bleiben erhalten. all_native_runs_pass=False,
+required_scope_pass=True. Die unveraenderten Produktoberakel bleiben strikt.
+
+Unveraenderter SDK117-Controller besteht zusaetzlich Poll0/endlich5Ticks/
+Restart40Ticks mit Timeout und echtem spaeteren ACK, Forever1001Ticks,
+gestoppten Poll, wirklichen Restart sowie SVCAPPD-APITEST Exit0/Reap.
+Unveraendertes Spectra95 besteht METADATA, die sechs originalen SERVICE-
+Marker und ASYNCQUICK mit Caller-/Thread-/Buffer-/Endpointquittungen.
+Sieben volle Originalreadbacks und zwei volle aktualisierte Fixture-
+Readbacks stimmen; SERVMAN STATUS ist nativ bestanden. Native C-Abnahme
+betrifft den Getter, erwarteter Stop und Killpolicy sind native Zig-Aufrufe;
+C-StopBound und hoehere Rustfassade sind durch echten Hostinterop belegt.
+Kein nativer Rust-, Windows-, Hardware- oder isolierter Leistungsanspruch.
+Gast normal POWEROFF/terminal, eigene Source per kanonischer Retention
+entfernt. Der volle PROGRAMLIFECYCLE-Negativbeleg aus68 bleibt bei96 offen.
+
+Normaler441-ELF-SHA256: 2fb0d275a9de0572ac81624e621d0cf74a68cc4ceb0e34746a406134c286444d
+Contract62: 021de967330c4dd9c052ad96a8b9c8f4507ba0d6
+SDK118: 781d98324f5766bdb41e4afd6924e2b72eda4951
+SDK118-Archivhash: r4os_sdk-0.64.118-NnPzAoEt2wEah9Uc1-CqpUuzM85-k8I_78-v03DWvlzc
+Producerquellen qualifiziert einzeln publiziert, damit der unabhaengige
+SERVMAN-Pin vonSDK35 auf118 umgestellt werden kann. Sein direkter9-Schritt-
+Build ohne WorkspaceSettings/Dependencyforks reproduziert bytegenau die
+nativ getestete0.1.5 und den regulaeren Ownerbuild.
+Library39 bleibt;139 andere normale Modulartefakte und140 andere Manifeste
+bleiben unveraendert. Inventar141Module/1089Tests/483Dokumente, drei bestehende
+Testnotizen fortgeschrieben; neue Hostfaelle nutzen bestehende Testbesitzer.
+Originale/Quellen: ExFiles/Reports/Core/0.88.70-service-binding/.
+STANDARD70: genau ein finaler Lauf a9e40e3c-31d2-4b89-ba3c-3443f5393252, Suite3/Metric2/KVM4,
+overall137.748014. Alle30 Samples mit je4 abgeschlossenen Workern,
+Batches/Operationen/Bytes/Clock und6 Scores verlustfrei gegen die eingefrorene
+Referenz28b326e2-4323-4a4c-a0d2-4c1bab4958c0 validiert (uint64/Decimal).
+Vollstaendiges unveraendertes OriginalSHAe4bc158e7a29c727fa1581d940ba3b2867587405ff44ae819dfb00f4e2290711
+unter ExFiles/Reports/Benchmarks/a9e40e3c-31d2-4b89-ba3c-3443f5393252/.
+Lokal validiert; Serverimport und Serverreadback sind ausstehend. Der
+Gesamtwert ist kein isolierter Geschwindigkeitsnachweis fuer diese Aenderung.
+Finale SDK-/Slim-/Full-Publikation92/93 erst nach allen funktionalen Punkten
+einschliesslich94/95/96; wirklicher finaler Marker und Paketidentitaeten>=0.88.96.

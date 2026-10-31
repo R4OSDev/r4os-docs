@@ -16,3 +16,162 @@ or prebuilt output as a success fallback.
 Host builds remain the practical primary workflow while self-hosting matures,
 but the two paths are explicit and separately testable. `module.R4MF` v2 is
 their shared project truth.
+
+0.88.83 – Bewertung echter nativer Rust-Prüfung und -Builds
+----------------------------------------------------------
+Entscheidung: als eigenes Toolchain-Portierungsvorhaben technisch sinnvoll,
+aber heute nicht verfügbar und nicht Teil einer Compilerimplementierung in
+0.88.83. supported/nativeRust bleibt false. Ein im Gast gestarteter Host- oder
+Remotebuild, deklaratives Manifestlesen und vorgebaute Programmausgabe sind
+keine native Rust-Kompilierung. Nexus-Pins SDK92/Contract45 bleiben erhalten.
+
+Istbestand (Quellenstand31.10.2026)
+- Host: gepinntes rustc/Cargo1.99.0, rustup1.29.1 unter Linux/Windows;
+  RustToolchain.json mit Manifesthash, Profile/Codegen und SDK124/Contract65.
+  Der installierte Linux-rustc ist ELF mit /lib64/ld-linux-x86-64.so.2;
+  Kopieren nach R4OS ersetzt keinen Compilerhost-Port.
+- SDK/Tools/Build-RustModule.ps1: Host-Cargo offline/locked, Edition2024,
+  staticlib, native Begleitobjekte, rust-lld/ELF-Linkerskript und r4xbuilder
+  für R4M0. Compilerinputs/Lockfile/Tools/Runtime/Container sind gebunden.
+  Externe custom-build/proc-macro-Targets werden ausdrücklich abgelehnt.
+- Gast: R4CC0.1.3 kompiliert genau den eigenen C-Subset für eine Quelle,
+  R4X App console/gui und feste Klassenimporte. Kein allgemeines C++, kein
+  Rustfrontend. R4BUILD0.1.5 trennt R4MF-Validierung/Plan/Build: Rust liest
+  deklarierte Dateien/Cargo.toml/Cargo.lock; Cargo-Graphprüfung ist Hostarbeit.
+  module_capabilities meldet rust-native-compiler-unavailable für alle Rollen.
+- R4PACK0.1.5 ist ein vorhandener nativer Containerpacker, mit expliziten
+  Code-/rodata-/data-/Relokationseingaben und begrenzten Puffern. Das ist noch
+  kein allgemeiner nativer Rust-staticlib/ELF-Linker samt ELF-Importpipeline.
+- no_std-Programmcode mit core/alloc, Allocator, SDK-Fassaden und öffentlichem
+  Startup existiert. Das beweist weder ein std für Compilerprozesse noch
+  deren native Cargo-/Compiler-/Linkerwerkzeuge. Der tatsächlich installierte
+  Rust-std-PAL wählt kein R4OS; unbekannte Plattformen gehen in unsupported.
+
+Minimaler Nexus-Vertrag für ein Folgevorhaben
+A: echte native Prüfung einer Offline-no_std-Quelle bzw. eines kleinen,
+explizit gesperrten Mehrmodulprojekts. rustc läuft als eigene R4X-Anwendung;
+Edition2024, fest gepinnte core/alloc/SDK/Contract, deklarierte lokale Dateien,
+aufgelöste Namen, echte Typ-/Borrowprüfung und Compilerdiagnosen mit Datei,
+Zeile/Spalte und Exitcode. Nur Manifestlesen oder Parsererfolg reicht nicht.
+Zunächst direkte rustc-Aufrufe mit explizitem --extern/Dependencyplan statt
+Cargo/Registry. Das ist ein nativer Prüfer, noch kein nativer Programmbuild.
+
+B: dieselben Quellen im Gast zu Objekt/staticlib kompilieren, im Gast mit
+passender SDK-/Heap-/Startup-Runtime linken, ELF korrekt nach R4M0 packen,
+prüfen und ein neues R4X mit realer Ausgabe/Exit starten. Vorher gelieferte
+Bibliotheken/Sysroot dürfen benutzt werden; Compiler, Linker und Packer für
+die neue Quelle müssen tatsächlich im Gast laufen. StufeB ist erst nach
+vollständigem Artefaktpfad nativeBuild, nicht bereits nach StufeA.
+
+Vorerst ausgeschlossen: std im Anwenderprojekt, C/C++-Begleitquellen,
+Registry-/Git-/Netzwerkdownloads, proc-macros, build.rs, automatische Features,
+Plugins/dynamische Compilerbackends und ungesperrte Cargo-Workspaces. target
+und Features stammen aus einem versionierten Profil. Console-R4X zuerst;
+GUI/Service/R4L/R4D/R4P/Subsystem sind getrennte spätere Rollenabnahmen.
+Ein std im Compilerhost ist trotz no_std-Anwender-MVP notwendig.
+
+Geprüfter Bootstrapansatz und Grenzen
+Bevorzugt: offiziellen rustc mit dem vorhandenen x86-Backend als Compilerhost
+nach R4OS portieren. Linux/Windows baut zunächst eine gepinnte Stage für den
+neuen Compilerhost; dessen Ausgabeziel bleibt zunächst das bestehende
+x86_64-unknown-none/R4M0-Profil. Ein Name wie x86_64-unknown-r4os wäre ein
+neu zu implementierender Hosttarget, kein bereits unterstütztes Triple.
+Target-JSON allein liefert weder std/PAL noch einen auf R4OS startbaren rustc.
+Die offizielle Targetdokumentation bestätigt Crosscompile/no-std/ELF und
+SysV ohne Redzone; das ist kein Compilerhostvertrag:
+https://doc.rust-lang.org/rustc/platform-support/x86_64-unknown-none.html
+
+Bootstrapkonfiguration, Targetaufnahme und Compilerabhängigkeiten sind
+explizite Portarbeit; x86-Maschinencode benötigt keinen neuen CPU-Backend.
+https://rustc-dev-guide.rust-lang.org/building/new-target.html
+https://rustc-dev-guide.rust-lang.org/building/how-to-build-and-run.html
+Statisches Compilerdriver-/Backend-Linken oder ein qualifizierter Loaderpfad
+muss vorab geklärt werden; normale Host-dylibs können nicht vorausgesetzt
+werden. Keine zusätzliche Kernel-ELF/POSIX-Laufzeit als bequeme Vorannahme.
+Auch ein anderer Backend beseitigt Frontend-/std-/Datei-/Prozessport nicht.
+
+Alternative mrustc geprüft und für den Nexus-Prüfer verworfen: upstream
+C++-Bootstrapcompiler, erzeugt C für einen externen Compiler, nimmt gültige
+Quellen an und ist kein gleichwertiger Typ-/Fehlerdiagnosedienst. R4CCs
+C-Subset kann diese C++-/generische C-Kette nicht einfach übernehmen; seine
+Kompatibilität mit dem aktuellen1.99-/Edition2024-Profil ist nicht belegt.
+https://github.com/thepowersgang/mrustc
+
+Besitzer und nötige Arbeiten (noch keine neuen Projekte angelegt)
+- App/Compiler: eigener öffentlicher Toolchainbesitzer für rustc-Port,
+  statischen Driver/LLVM, Compilerhosttarget, gepinnte Sysroot und Diagnosen.
+- Library: std/PAL- und C/C++-Runtime-Adapter auf die öffentlichen R4SYS-/
+  SDK-Owner. Allocator/Alignment, abort/Panic, memcpy/Atomics, Uhr/Zufall,
+  Dateimetadaten/Seek/Directoryenumeration, Pfade/CWD/Argumente/Umgebung und
+  stdout/stderr müssen echte Semantik besitzen. Nicht benötigte APIs melden
+  Unsupported, sie simulieren keine erfolgreiche IO.
+- SDK/R4BUILD/R4PACK: gesperrter Projektplan, Diagnose-/Prozessgenerationen,
+  echte Wait-/Exit-/Ausgabebelege und explizites Cancel/Close; nativer Linker
+  mit Relokationen/Archive-Lesen und ELF→R4M0-Ingestion. Vorhandene bestätigte
+  Abschluss-/Outputverträge wiederverwenden, kein zweiter Lifecycleowner.
+- Threads/TLS/VM/Stack: Compiler zunächst ein Prozess, begrenzte Parallelität,
+  panic=abort; dennoch müssen von rustc/LLVM benötigte Threads, TLS, Locks,
+  Atomics und Stackprobes konkret geprüft/adaptiert werden. VMreserve/commit,
+  Stackguard und Heapbudgets beim bisherigen Owner benutzen. Kein Argument,
+  std generell in den Kernel zu verlagern. Contract-/Kerneländerungen erst
+  bei belegter fehlender öffentlicher Primitive, mit eigener Qualifikation.
+- Filesystem: Provider-Dateinamengrenzen beachten, kanonische Pfade und kurze
+  Build-/Cacheidentitäten, keine Symlink-/Case-/mmap-/POSIX-Annahme; Objekt-
+  und Sysrootdateien können wesentlich größer als bisherige C-Puffer sein.
+  Dateicache/temporäre Dateien und Atomicaustausch bleiben beim Dateiowner.
+
+Ressourcen und Aufwand sind Planung, keine gemessenen Mindestwerte
+Upstream nennt für den vollständigen Compiler-BUILD 8GB+RAM,30GB+freie Platte
+und mindestens2Kerne; das ist keine Aussage zum installierten R4OS-Compiler.
+https://rustc-dev-guide.rust-lang.org/building/prerequisites.html
+Für die erste R4OS-Abnahme vorläufig4GB Gast-RAM,4GB freie Tool-/Sysrootplatte,
+1Compilerjob und ein explizites maximal2GB-Prozessbudget einplanen. Das sind
+Versuchsbudgets, keine zugesicherten Mindestressourcen. Im Bootstrapspike
+Compiler/Sysrootgröße, echte Heap-/Stackspitze und maximalen Einzeldateiumfang
+messen; bestehende Speicherprofile/Providergrenzen vor Aufnahme abgleichen.
+Wenn die reale Toolchain nicht hineinpasst, Budget oder Portansatz sichtbar
+ändern und keinen unterstützten Zustand behaupten. Finaler Mindestbedarf
+folgt erst aus diesem Versuch. Kein neuer permanenter Poller/Messdienst.
+
+Geordneter separater Folgeplan
+1. Gepinnte upstream Quellen/LLVM/Bootstrapcompiler und lokale Patchliste
+   festlegen; Toolchainprojekt gemäß Agents/Github.txt erst im Folgeauftrag
+   öffentlich anlegen. Licence-/Quell-/Sysroothashes erfassen. Owner-/API-
+   Lücken und statische Linkbarkeit mit kleinem Compilerhostspike entscheiden.
+2. Library/PAL und Hosttarget außerhalb des Kernels; echte Datei-/Diagnose-
+   IO, Allocator, Prozess-/Thread-/TLS-/Stackgrundlagen mit kleinen Fällen.
+   Nur benötigte belegte Contract-/Kernelrevisionen, ansonsten keine.
+3. Auf Linux/Windows reproduzierbar Compiler-R4X/Sysroot crossbootstrappen;
+   Compiler im Gast starten. StufeA liefert echte gute/fehlerhafte Diagnosen.
+4. Native Linker-/ELF-Packerpipeline und R4BUILD-/SDKrevision für StufeB,
+   dann echtes neues Console-R4X ausführen. SDK-/Heap-/Contractrevisionen
+   passen als eine gelieferte Kombination; keine nachträgliche Tokenanalyse.
+5. Erst danach weitere Modulrollen, offline-Cargo und optional proc-macros/
+   build.rs als eigenständige Hostausführung/Dynamic-Loading-Fähigkeit.
+   Selbsthosting (Compiler baut sich selbst) bleibt ein weiteres Ziel.
+Grobe Einschätzung: mehrwöchiges bis mehrmonatiges Toolchain-/Runtimeprojekt,
+kein kleiner R4CC-Patch; größte Risiken std/C++-/statischer LLVM-Port,
+Speicherbedarf, Hostdylibs, Dateisemantik und reproduzierbare Bootstrapstages.
+Kein verbindlicher Termin ohne den Spike und keine Portierung innerhalb dieser Bewertungsstufe.
+
+Spätere minimale Erfolg-/Fehlerabnahmen
+- Im Gast neue gültige Rustquelle prüfen; danach bewusst Syntaxfehler,
+  unbekannten Namen und Typfehler einbauen: echte passende Rustdiagnose und
+  nonzero Exit, kein frisches Erfolgsartefakt. Ein Borrowfehler separat.
+- Gesperrtes kleines Zweimodulprojekt mit erlaubtem Feature offline bauen;
+  fehlende Dependency/anderer Sysroothash/verbotenes Buildscript sichtbar
+  ablehnen. Gesperrter Graph ist nicht automatisch beliebiges Cargo.
+- StufeB: frisch veränderte Quelle im Gast→Objekt→ELF→R4M0→echterR4XStart,
+  vollständige neue Ausgabe/Exit; Hash-/Versionsbeleg und keine Hosthilfe.
+- Compilerfehler/OOM/Cancel sauber beenden, originale Diagnosen erhalten,
+  Ressourcen nur nach tatsächlicher Quittung freigeben; Nexus bleibt nutzbar.
+Erst erfolgreiche reale Teilabnahmen aktivieren die zugehörige Capability.
+
+0.88.83 liefert diese Bewertung/Planung. Keine Produktquellen, neuen Apps,
+Capabilitywerte, SDK-/Contract-/Modul-/Kernelrevisionen oder Tools verändert.
+Nur bestehende SelfHosting-Dokumentation/Inventar und Release0.88.83 werden
+angepasst. Keine Tests, Compilerbuilds, Gäste oder neuen STANDARD nötig;
+unveränderte normale OS-Artefakte sind weiter dem OriginalSTANDARD79
+zugeordnet. Die Quellenbelege liegen unter Temp/08883-* und im Archiv
+ExFiles/Reports/Core/0.88.83-native-rust-capability/. Die gesamte Portierung
+wird durch Abschluss der Bewertung weder implementiert noch still gestartet.

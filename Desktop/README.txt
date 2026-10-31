@@ -2543,3 +2543,65 @@ Artefakt-/6Scorepruefung unter ExFiles/Reports/Benchmarks/f6c25f16-1e4a-492b-8c6
 Lokal validiert; R4OS Server ausstehend (Import/Readback). Die feste
 Referenz wurde beibehalten; kein weiterer Lauf fuer Score oder Upload.
 Der Abschluss umfasst den regulaeren Sammelpush von Desktop/Distribution/Docs.
+
+0.88.78: WINSVC-Wiederanbindung auf aktuellem Stand
+--------------------------------------------------
+
+Die bestehende Desktop-Verbindung erneuert sich nach normalem Stop/Start
+derselben WINSVC-Definition bereits ohne Benutzereingabe. Es war keine
+Laufzeitaenderung erforderlich. Ein Fehler nach1,2Sekunden belegt allein
+keinen dauerhaften Verlust: Der bestehende Fehlerrueckzug der Fensterspiegelung
+betraegt zwei Sekunden. Verbindungsschluss und Quittungen bleiben erforderlich;
+die nachstehende Fuenfsekundenprobe ist keine garantierte Latenzobergrenze.
+
+Der unveraenderte Desktop197 erkennt einen ungueltigen Host, trennt seine
+Grafikspiegelung und versucht ueber das vorhandene Gate erneut zu verbinden.
+Host::claim schliesst alte Verbindung und Modusleihen vor dem neuen Open;
+desktop_sync validiert den vollstaendigen Desktop-Handle samt Epoche.
+Nach der Farbmailbox-Qualifikation folgt restart_cleanup. Die Spiegelung
+akzeptiert den Reset nur fuer aktuellen Owner und Endpoint, registriert
+bestehende Fenster erneut und bestaetigt den Grafikwechsel. Trayrevisionen,
+Modusanfragen und die Launchmailbox verwenden ihre bestehenden Verträge.
+Altantworten waehrend Retirement werden nicht angewandt; Ressourcen bleiben
+bis zu ihrer wirklichen Close-Quittung gebunden. Es gibt keine neue Dauerprobe,
+keinen neuen Zaehler und keinen zusaetzlichen Ereignisverteiler.
+
+Frischer KVM4-/Software-Nachweis, normale Artefakte:
+Kernel446 dd9913991fdf3066e85edc5cafb8313f5b5a710c12b0c0b7b756b4d922b01224,
+Desktop197, WINSVC27, DESKRUN2; installierter Release77 vor Dokumentations78.
+Im Idle-Fall wechselt der Broker von11/11 auf40/40; Desktop14/14 bleibt.
+Nach1,2s liefert DESKRUN no_desktop/request und process_id0, also keinen Spawn.
+Die Probe nach5s startet ein echtes GUI mit Frame-ACK; externe Beobachtung
+liefert normalen Exit0 und alle272Ausgabebytes samt Freigabequittung.
+Ein weiterer Stop/Start erfolgt mit offenem Fenster62/62 und vorhandener
+Surface. Ohne Eingabe oder Probe im folgenden Fuenfsekundenintervall wechselt
+der Broker40/40 auf71/71. Derselbe Desktop registriert das eine Fenster neu.
+Es bleibt unveraendert nutzbar, endet danach normal0 und liefert272Bytes;
+held0, stale0, reset0 und pass1. Drei tatsaechliche GUI-Starts insgesamt.
+Die alten SDK111/Contract59-C-Fixturebinaerdateien sind vollstaendig
+rueckgelesen und unveraendert; keine neue SDK121-Kompilierung behauptet.
+
+Snapshot.service_generation bezeichnet die volle Brokerprozessgeneration.
+Die interne ServiceRegistrygeneration ist ein anderer Wert und wurde hier
+nicht nativ abgefragt. Dieselbe Definition ergibt sich aus STOP/START ohne
+REMOVE/INSTALL. Die21 betreffenden Kernel-Servicequellen sind seit70
+bytegleich; dessen exakte Generation-/Stop-/Altendpoint-/ACK-Nachweise
+werden weiterverwendet. Die historischen25/26-Proben nach1,2s aus33 bleiben
+unveraendert; ihr spaeterer Verlauf wurde damals nicht gemessen. Kein
+Kausalnachweis, dass70 die Wiederanbindung eingefuehrt haette.
+
+Geprueft wurden die zwei betroffenen Neustartszenarien. Vorhandene Definition-,
+DeadDesktop-, gehalteneRPC-, Capture- und Retirementbelege werden fuer
+unveraenderten Code weiterverwendet. Keine erneute breite Matrix, kein
+SELFTEST und keine neue physische/FPS-Abnahme. Der ausstehende portable
+Launch-Abschluss97 und Fenstersteuerung98 bleiben eigenstaendig offen.
+
+Originale und Quellen: ExFiles/Reports/Core/0.88.78-broker-reconnect/.
+Temp/08878-before-native-proof.json, 08878-occupied-native-proof.json und
+08878-source-review.json enthalten die Grenzen der Aussagen. Der eine
+fruehe echte no_desktop-Befund bleibt als Negativprobe erhalten.
+Alle1773 qualifizierten Inputs waren vor Dokumentation bytegleich mit77;
+Kernel,140 normale Modulartefakte und141 Modulmanifeste bleiben unveraendert.
+Daher keine Build-, Hosttest- oder STANDARD-Wiederholung. Der vorhandene
+STANDARD77 b2e8a31f-f07c-40b9-b78d-bffe5d2ba4a4 gilt fuer diese identischen
+Laufzeitartefakte weiter; kein neuer Leistungserfolg wird abgeleitet.

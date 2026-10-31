@@ -250,3 +250,115 @@ bleiben null/unavailable, Serverimport/-readback des Originals ausstehend.
 Bestand141Module/1089Tests/483Docs; drei bestehende Testnotizen ergänzt,
 kein neuer Gate und keine Produktmesslogik. Originale und qualifizierte
 Quellen: ExFiles/Reports/Core/0.88.80-tcp-peer-end/ sowie Temp/08880-*.json.
+
+0.88.81 – Begrenztes inkrementelles HTTP-POST-Streaming
+-----------------------------------------------------
+Der öffentliche SDK-Library-Owner app_web.PostStream sendet Header und
+Requestbody getrennt und liefert Nutzdaten vor dem Ende der Gesamtantwort.
+Das 12KB-Headerbudget beschränkt keinen vollständigen POSTbody mehr.
+Bekannte Slice-/Readerlänge benutzt Content-Length, unbekannte Readerlänge
+chunked. Ein Reader produziert maximal8KB in den Aufruferpuffer, mit
+0=EOF/-1=Pause/-2=Cancel/-3=Fehler. Fester Body und Reader sind exklusiv;
+Framing-/Expect-/Connection-Header bleiben Transportbesitz, kein Requesttrailer.
+
+Defaultgrenzen: Request-/Responsebody je64MB, URL1024B, Requestheader12KB,
+Responseheader16KB/64Felder, Chunk-/Trailerzeile1024B, Trailer16KB/64Felder,
+maximal8Zwischenantworten. 1MB=1024KB. Kontext und vier getrennte stabile
+Puffer bleiben beim Aufrufer: Header16KB, TLSscratch54KB und kleine nichtleere
+IO-/Uploadpuffer. Keine vollständig gepufferte Antwort, keine neue Messstelle,
+kein Hintergrundpoller oder neuer Netzwerk-/TLSstack. Die bisherigen Fetch-/
+Download-Typen und der CL-only StreamDecoder bleiben unverändert; deren
+HTTP-Quellpräfix bis vor den neuen Funktionen ist exakt bytegleich.
+
+PayloadStreamDecoder verwendet den bestehenden parseHead. CL/chunked und
+ausdrücklich erlaubtes Close-Delimited-EOF werden inkrementell verarbeitet;
+Nutzdaten bleiben geliehene Ausschnitte des aktuellen Empfangspuffers.
+Chunkgrößen/Extensions/Nullchunk/Trailer dürfen über Eingaben verteilt sein.
+Extensions berücksichtigen BWS/Token/quoted-string nach
+[RFC9112Abs7.1.1](https://www.rfc-editor.org/rfc/rfc9112.html#section-7.1.1).
+TE/CL-Konflikt, Zusatzbytes im bereits empfangenen Input, zu frühes EOF,
+unzulässiges1xx-/204-Framing, fehlerhafte Zeilen und Limits bleiben Fehler.
+Ein unbekanntes Antworttotal ist null, nicht0. TCP-EOF, TLS-close_notify,
+HTTPvollständigkeit und ein LLM-/SSE-Endmarker sind unabhängige Befunde.
+Insbesondere vervollständigt nacktes TCP-EOF keinen TLS-EOF-Body.
+
+Sink accept übernimmt den ganzen Chunk vor Rückkehr; pause übernimmt0Bytes
+und behält denselben Chunk bis run nach tatsächlicher Verbraucherbereitschaft.
+Die gemeinsame absolute Frist läuft während Anwendungspausen weiter.
+Callbacks müssen begrenzt zurückkehren; die bestehenden StopFlags bleiben
+atomar. Accepted-then-Stop behält bereits übernommene Bytes im Ergebnis.
+Bestätigter Requestbodypräfix, Applikationswirebytes, decodierte Antwortbytes
+und vom Sink übernommene Bytes werden getrennt gezählt. TLS-Wirebytes
+enthalten Recordoverhead, keinen Handshake; nur vollständig bestätigt
+gesendete Records erhöhen den bestätigten Plaintextpräfix. Ungewisse Writes
+bleiben markiert; weder POST noch angefangene TLSrecords werden automatisch
+wiederholt. TCP-Annahme ist kein Nachweis der Ausführung beim Server.
+
+Der echte Socket verbleibt bei unbekanntem Close im ortsfesten Kontext.
+Explizites Close mit eigenem begrenztem Cleanupbudget und canRelease/
+close_ack auswerten; Rust-Drop versucht nur best-effort Poll-Close.
+Bestehende Zertifikats-/Hostname-/Trustprüfung, Target-/Cookie-/CORSregeln
+werden verwendet. CORS-Preflight hat einen eigenen bestätigten Close vor dem
+POST; keine implizite Sessionwiederverwendung. Redirect ist manuell oder ein
+Fehler, kein automatisches Replay/Credentialweiterreichen.
+
+C benutzt transport_helpers.h mit postStreamInit/Run/Report/Response/Cancel/
+Close/CanRelease und bestehender Callbacktabelle (neue Kinds38/39; alte Werte
+unverändert). Zig benutzt app_web.PostStream; Rust web::transport ergänzt
+PostRequest/PostBuffers/PostStream/StreamReport. Normale Compilerprojektion
+der lokalen web-/transport-Bridge und CFacadeGen write/check bestanden.
+Die SDK-lokalen Fingerprints werden gemeinsam geliefert; kein Mischbetrieb
+alter Header und neuer Runtime. GUI-Header/Fingerprint bleiben bytegleich.
+SDK- und tatsächlicher Clientcode für x86_64-unknown-none typgeprüft.
+Examples/README.md dokumentiert den Nexus-tauglichen POST-/Callbackpfad und
+SSE-Zeilen, UTF8-Zustand, id/mehrzeilige data sowie LLM-Endmarker als
+Anwendungsschicht. Nexus-Pins SDK92/Contract45 wurden nicht verändert.
+
+Usersteuerung SPARSAM: vier direkt betroffene reale HTTP-/PostStream-
+Hostfälle; darunter byteweise UTF8/Chunkheader/Trailer, alle3Framings,
+Fehler-/Grenzfälle, Pause/Fortsetzen, Sinkfehler, Cancel und Accepted-then-Stop.
+Ein vorheriger Grenzenfall bestätigte die alten12KB-/CL-only-Limits.
+Ein privater neuer UTF8-Fixture hatte zunächst23/0x17 statt22/0x16Bytes;
+2PASS/1FAIL samt Originalquelle bleiben erhalten. Keine Produktabschwächung.
+Ein direkter privater Cargoaufruf ohne normalen Startup-Generator meldete
+fehlende Entry-Umgebung; Bodytypcheck und regulärer Build-Project bestanden.
+Erster normaler Runtimebuild erfolgreich; eine Zwischenkompilierung wurde
+bei der Frist-/Stopquellenprüfung gezielt130 beendet; endgültiger Build und
+alle nötigen Projektionen erfolgreich. Keine breite RustWeb-/Transport-/
+PROGRAMLIFECYCLE-Matrix, kein neuer Gate; HTTP81 im vorhandenen Filter.
+
+Genau ein KVM4-Softwaregast1174728 mit installiertem Release0.88.80,
+Kernel446/TCPSVC9 qualifizierte den tatsächlichen öffentlichen SDK124-
+Rust→C→Zig-Ownerpfad im ersten Lauf. R81 und TCPSVC vollständig zurückgelesen.
+Vier Fälle, echter Exit0 und vollständige Ausgabe:
+* CL-Request20480B; erster Sinkchunk9B pausiert mit0übernommenen Bytes.
+  Nach Resume derselbe Pointer/Chunk, Signal über eine zweite Verbindung
+  vor dem vom Peer gesperrten letzten Daten-/Nullchunk. Danach35B exakt.
+* Reader-Request20480B chunked; CL-Antwort35B exakt, bekanntes Total35.
+* Absolutes Timeout mit bestätigt gesendetem Body20480B und erhaltenem
+  Antwortpräfix15B; kein vorgetäuschter HTTPabschluss und kein POST-Replay.
+* Readercancel nach bestätigt8192B; Peer hält genau diesen Requestpräfix,
+  Antwort0B/kein HTTPabschluss. Vier eindeutige Requeststarts, kein Duplikat.
+Alle vier besitzen echte Close-ACKs. Frontendhandles1→1; nach einmal3.5s
+keine eigenen Zielport-TCPslots, fremde SSH-Verbindung bleibt. Globale volle
+Status-/Serialoriginale enthalten den gezielten Timeout-/Spätantwortpfad;
+keine pauschale Nullfehlerzählerbehauptung oder Einzelattribution daraus.
+Normales POWEROFF/terminal, lokaler Peer regulär beendet, eigene Imagequelle
+kanonisch entfernt. HTTP-EOF-Framing ist Host-decoderqualifiziert; keine
+zusätzliche native EOF-/TLS-Erfolgs-/Zertifikats-/Windows-/Hardware-/NIC-/
+Heapfreigabeabnahme oder SDK-Geschwindigkeitsbehauptung.
+
+SDK0.64.124 öffentlich: c5e6a366d707667a98a39c47ae230c9c14494ea6
+r4os_sdk-0.64.124-NnPzAheB3gGtLZYVaC3r2eOU9CtRNFNyInZYHFK96Zjw
+Contract65 unverändert; aktuelle normale C-/Zig-Bareobjekte und sieben
+unveränderte Tool-/Heapkomponenten mit passendem technischem Profil exportiert.
+Die finale öffentliche SDK-Archivabnahme bleibt Stufe99, R4OSfinal Stufe100.
+
+Release0.88.81 wird nach dieser Qualifikation einmal gesetzt. Alle140 normalen
+R4OS-Modulartefakte,141 Manifeste und Kernel446 sind exakt bytegleich79/80.
+Deshalb kein identischer OS-Standard erneut: Original79 e0631a6b-31fd-445e-8815-69dbf79d4db7,
+overall 129.931272, SHA256 143a50b7a71fe643584e66d308bb4b5c5698f97d9286633c9cd182ef17beec8a.
+Alle30Samples/4Worker/6Scores waren verlustfrei validiert; Observernulls bleiben
+unavailable, Serverimport/-readback ausstehend. Kein neues81etikett und kein
+SDK-Leistungsclaim. Originale/Beforearchive/Objekte/Readbacks und qualifizierte
+Quellen: ExFiles/Reports/Core/0.88.81-post-stream/ und Temp/08881-*.json.

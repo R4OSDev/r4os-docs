@@ -107,3 +107,67 @@ periodic PIT granularity without changing the deadline epoch.
 Zig implementations are under `Repositories/SDK/r4os/`; C layouts are under
 `Repositories/SDK/Shared/C/`; R4STD bindings are under
 `Repositories/Libraries/R4STD/Bindings/`.
+
+0.88.82 – U+2013: unveränderte Textbytes und begrenzte Fontabdeckung
+-----------------------------------------------------------------
+Im aktuellen öffentlichen SDK124-Pfad ist kein Datenverlust reproduziert:
+U+2013 bleibt E2 80 93 vom eigenen GUI-U32-Ereignis über TextArea-Eingabe,
+Editieren, Kopieren/Einfügen, separate Verlaufs-TextArea, JSON-Nutzdaten und
+Drawcommand. Der alte Key-Bytewert ist kein Ersatz für codepoint:u32.
+handleCodepointEx unterstützt den Scalar bereits im historischen SDK92
+(51ed03d813d9baeab630746f1d1bbc46c2d2a1e6). Die aktuellen C-/Rust-Fassaden
+übertragen ebenfalls den vollständigen U32-Scalar; vorhandene gemeinsame
+C-/Rust-Orakel für volle Scalars/UTF8 bleiben erhalten. Kein behaupteter
+neuer separater C-/Rust-Nativlauf und keine neue Fassade oder ABI nötig.
+
+Der erste aktuelle Fragezeichenersatz ist eine Darstellungsentscheidung:
+Alle14 normalen R4F-Systemschriften enthalten257 Glyphmaps, jedoch kein
+U+2013. DESKTOP.R4S wählt TERMINAL8.R4F. Kernel font/state sucht den Scalar
+im tatsächlichen GMAP; beim Fehlen liefert builtin::glyph/row_mask das
+Fragezeichenbitmap. Weder TextArea noch JSON werden dabei umgeschrieben.
+Eine Anwendung muss gespeicherten UTF8-Text behalten und einen Font mit
+passender Abdeckung auswählen, wenn sie den Gedankenstrich anzeigen will.
+Keine stille Transliteration, Codepageumdeutung oder Voll-Unicodezusage.
+Der öffentliche GlyphBitmap-Record besitzt kein fallback-Bool: Abdeckung
+hier aus den exakten Fontbytes und Bitmaps ermittelt, kein erfundenes Feld.
+
+Genau ein KVM4-Softwaregast1180244 mit unverändertem Kernel446 und dem
+öffentlichen SDK124-GUIverbraucher G82 qualifiziert den aktuellen Pfad.
+Die echte GUI-Instanz empfängt '-', U+2013 und U+00E4 als U32; resultierende
+Textbytes sind 2D E2 80 93 C3 A4. Auswahl/Clipboard einschließlich Restore,
+Editieren, Verlauf und JSON sowie beide Frame-Textpayloads bleiben exakt.
+Stockfont-ID14 und eigene Testfont-ID15, Katalogrevision2, wurden erfasst.
+Die ausdrücklich private 6588B-Schrift R4OS82Fixture/EnDash82 ergänzt nur
+für die Diagnose einen eigenen U+2013-Glyphen. SHA256:
+087daa88c7929d3c50dff9ae9cd188355264f5758061ec3cb706508cce49d839.
+Stock-U+2013 entspricht '?'; U+10FFFD ist absichtlich nicht vorhanden.
+Die fähige Schrift zeigt den definierten achtzeiligen Glyphen, zusätzlich
+64 exakte Pixel im originalen QMP-Softwareframe geprüft. Kein physischer
+Sichttest. Echter Exit0,175B vollständige Ausgabe, Generationsticket und
+Release0; regulärer Desktopclose, POWEROFF/terminal und Source-Retention.
+
+Nur ein gezielter neuer Fall im vorhandenen tatsächlichen Font-Owner-Test:
+Stock-/Testfont, exakte Glyphzuordnung, '?' bei fehlendem Scalar und
+Bitmap-/Pixel-Sampler. Vier ältere Fälle wurden gefiltert, keine breite
+Font-/GUI-/PROGRAMLIFECYCLE-Wiederholung. Kleine Testfixture liegt unter
+Kernel/Tests/Fixture/Unicode82 und wird nicht ins normale Image installiert.
+Ein anfänglicher privater G82-NUL-Sentinel-Compilefehler und ein korrigierter
+Test-Modulimport bleiben mit Quellen/Originaldiagnosen erhalten. Keine
+Abschwächung des Produktverhaltens und keine neue Laufzeitmessstelle.
+
+Der ursprüngliche Nexus-Composer-/Verlaufsfall unter0.87.14 ist damit nicht
+als reproduziert oder behoben behauptet: dessen Originalquellen/-binary,
+Fontbytes und aktive Font-ID/Revision/Renderpins liegen nicht vor. Die
+separate Test-Verlaufsarea ist keine Nexus-Abnahme. Nexus-Pins92/45 bleiben
+unverändert. Grapheme, Shaping/Bidi, Hardware und Windows sind nicht geprüft.
+
+Keine neue SDK-/Contract-/Kernel-/Desktop-/Font-Lieferrevision: Produktion
+und normale Artefakte sind unverändert; nur Kernel-Testquelle/-fixture,
+dieser Vertrag und Inventar werden ergänzt. Release0.88.82 einmal gesetzt.
+Alle140 normalen OS-Artefakte,141 Modulmanifeste und Kernel446 sind exakt
+bytegleich79..81. Deshalb kein identischer STANDARD82; voller Original79
+(e0631a6b-31fd-445e-8815-69dbf79d4db7, overall129.931272, SHA256
+143a50b7a71fe643584e66d308bb4b5c5698f97d9286633c9cd182ef17beec8a)
+bleibt diesem Binärsatz zugeordnet. Kein neues82Etikett/SDK-Leistungsclaim;
+Serverimport/-readback weiter offen. Quellen, Fontbytes, alle Originale,
+Readbacks und Softwareframe: ExFiles/Reports/Core/0.88.82-unicode-font/.

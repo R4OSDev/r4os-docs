@@ -686,3 +686,112 @@ is reported as a physical-frame receipt; original PMM/page-cache/VM acknowledgem
 remain authoritative. Per-read scratch and its fallback are unchanged.
 Contract and evidence: FileSystem/DateisystemUndStorage.txt and
 Core/KernelNtfsUnitCache08432.json.
+
+0.88.74: gleichzeitiger Prozessgesamtpeak und Lebensdauer
+---------------------------------------------------------
+
+memory_resident_bytes umfasst die tatsaechlich residenten Bytes aller aktiven
+VM-Ranges mit R4X-Instanzbesitzer3 und der exakten Instanz-ID, unabhaengig von
+Fenster und Rangeart: Image, SDK-Heap/explizites VM, Haupt- und Nebenstacks.
+Separat taskzugeordnete Kernelstacks, geteilte R4L-Images und Kernel-/DMA-
+Payloads anderer Besitzer gehoeren nicht dazu. Dies ist logische VM-Range-
+Residenz, keine Summe eindeutiger physischer RAM-Seiten oder des gesamten RAM.
+
+Reserved zaehlt Reservierungen einschliesslich Guards, Committed logische
+Zusage einschliesslich momentan nichtresidenter Seiten. Resident zaehlt erst
+tatsaechlich publizierte Residenz. Pending Page-ins beeinflussen weiterhin
+die bestehende Admission, aber keinen tatsaechlichen Residentwert/Peak.
+Die Profilquoten bleiben auf ihrem bisherigen expliziten R4X-VM-Fenster6/
+VirtualRange4 beschraenkt. Image/Stack haben weiterhin ihre eigenen Bounds.
+Die breitere diagnostische Prozesssumme erweitert keine dieser Quoten.
+
+Der bisherige max(liveRange.peak_resident_bytes) war kein Prozessgesamtpeak
+und verlor Beobachtungen beim Freigeben der groessten Range. Der vorhandene
+VM-Buchungsowner fuehrt jetzt neben den unveraenderten VR-Admissiontotals
+die tatsaechliche all-owner3-Residentsumme und ihren historischen Hoechststand.
+Alle bestehenden Residenzuebergaenge laufen durch vm_ranges.update_ptr:
+eager/resident Commit, Demand-Fault/Page-in, physisch quittierter Reclaim,
+Decommit, Rollback, Besitzerzuordnung und Rangefreigabe. Keine Abfrageschleife
+und kein Statusread erzeugt den Peak. Zeitlich versetzte Rangehoechstwerte
+werden nicht addiert. u128-Summen bleiben intern exakt; u64-Ausgaben werden
+mit ihrer vorhandenen Overflowinformation gesaettigt.
+
+Der Prozesspeak bleibt bei Decommit und Rangefreigabe historisch monoton.
+Der Rangepeak bleibt der eigene Hoechststand bis zur tatsaechlichen Freigabe/
+Wiederverwendung dieser Range; auch Decommit loescht ihn nicht. Der globale
+VM-Peak ist nun die hoechste gleichzeitig residente Summe aller aktiven
+VM-Ranges waehrend dieser VM-Bootlebensdauer, auf derselben Basis wie der
+globale aktuelle Residentwert. Er ist kein physischer RAM-Gesamtpeak.
+
+Die vorhandene abgeleitete Tabelle behaelt hoechstens einen Prozessschluessel
+je lebender Range; ihr VR-Budgetanteil bleibt getrennt. Sie benoetigt32KB
+zusaetzliche feste Prozesssummen-/Peakfelder und einen globalen u128-Peak.
+Vor image/stack/owner-Freigabe uebergibt der wirkliche Reaper den Hoechststand
+an seinen bestehenden CompletionNode, nach exakter Slot-/Generation-/Node-/
+Phase4-/Pinpruefung. Dieser private Node waechst208->216Bytes. Die Uebergabe
+erteilt keinerlei Freigabe- oder Completionrecht; alle physischen ACKs bleiben.
+Quieszierende Threads und die unveraenderten Releasepfade koennen danach
+Prozessresidenz nur noch abbauen. Der VM-Peakrecord darf mit der letzten Range
+verschwinden; der genaue Completionbeleg behaelt den Wert weiter.
+
+Voller Handle-Status verbindet bei noch angehaengtem Node den Live-VM-Peak mit
+dem quittierten Archivwert. Die Registry haelt die ID bis zum Ende ihrer
+exakten Slot-/Completionlebensdauer besetzt; sie bezeichnet dabei keine neue
+PID-Generation. Abgeloeste Nodes verwenden nur ihren eigenen gespeicherten
+Wert. Eine neue Instanz erbt keine alte Spitze. Aktuelle Memory-/Profil-/
+Stackfelder eines blossen Completionrecords bleiben unavailable/Nullplatzhalter,
+keine Messnull; der historische Peak ist weiterhin vorhanden. Der schnelle
+Lifecycle-only-Inventarpfad behaelt seine reine Lifecyclefunktion ohne
+zusaetzliche VM-Abfrage. Nur ausdrueckliche Diagnostik sammelt Memorydaten.
+
+Hauptstackreserve und -commit stammen jetzt zusammen mit den Prozesssummen
+aus EINEM VM-Ownersnapshot und erfassen quittiertes Wachstum. Diese Felder
+sind die Hauptstackuntermenge; Nebenstacks stecken bereits in den Prozess-
+summen. Stackbytes duerfen deshalb nicht noch einmal zur Gesamtsumme hinzu.
+
+Ein gezielter Hostfall am echten Ledger prueft zwei gleichzeitige Bereiche,
+versetzte Rangehoechststaende, groesste Freigabe, Stack-/Fremdbesitzanteile,
+Pending vs. tatsaechliche Residenz, publizierten Teilcommit/Rollback zwischen
+Abfragen, Schluessel-/Clusterbereinigung, Sattigung und Bootreset. Kontrollierte
+Rangecontributions sind kein nativer Pager-/Stack-/Generationsbeweis.
+
+EIN KVM4-Lauf mit unveraendertem normalen Kernel445 und oeffentlichem C-
+Verbraucher qualifiziert den wirklichen program_handle_status-Pfad:
+Baseline148KB; zwei Demandbereiche256/768KB plus64KB residenter Commit ergeben
+1236KB, ohne Prozessstatus dazwischen. Nach der groessten Freigabe sinkt
+Resident auf468KB, Peak bleibt1236KB. Nichtgleichzeitige Folgewachstumswerte
+senken die Historie nicht. Hauptstackcommit waechst128->512KB im selben
+Snapshot; ein wirklicher Nebenstack samt echtem Join hebt den Prozesspeak
+auf1620KB. Nach eigener VM-Freigabe bleiben532KB aktuell und1620KB Peak.
+Nach tatsaechlichem Instanzabbau behaelt Handle16/Generation16 die1620KB.
+Der zweite Prozess Handle17/Generation17 hat148KB; die alte Historie bleibt
+waehrenddessen gleich. Beide Completion-Consume-ACKs bestehen. Kind-Erfolg
+benoetigt ein besonderes Magic plus den berichteten Peak, keine beliebige
+positive Exitnummer. Das ist kein kuenstlicher oeffentlicher PID-Umlauf.
+Nativer Reclaim/Writeback, globaler VM-Peak auf echter Hardware und Windows
+sind damit nicht behauptet. Gast1122207 wurde normal ausgeschaltet; sein
+Source-Image ist ueber die kanonische Retention entfernt.
+
+Contract63 praezisiert elf Beschreibungen, einschliesslich Nullplatzhaltern.
+Der Generator vergleicht auch Typbeschreibungen; der erste Plain-write-
+TypeDrift bleibt als lokaler Entwurf erhalten. Kontrolliertes --baseline
+folgte erst nach vollstaendigem Vergleich: alle Tabellen, Versionen,
+Signaturen, Defaults und Layouts ausser Beschreibungen identisch. Normaler
+Contractcheck PASS; alle generierten Bindings/Conformance bytegleich,
+kein Validator abgeschwaecht. SDK119 aendert nur Quellpaketversion und
+unveraenderlichen Contractpin. Neun unberuehrte Tools/Runtimeobjekte wurden
+mit exakten Hashes im offiziellen technischen Profil119/63 wiederverwendet,
+nicht als Neubau ausgegeben. Library39 und140 normale Modulartefakte /
+141 Manifeste bleiben; das endgueltige oeffentliche binaere SDK bleibt92.
+Fmt, Clippy samt nativer Typpruefung und normaler Kernelbuild PASS.
+Kernel445 SHA:
+f72b10c3c3308dd2c294b65840b93daca2fa7dec8719fe5f5d5f5de3f043146f.
+STANDARD74 abgeschlossen: 82505279-1707-49dd-a5be-41bb0f75d910; Suite3/Metric2/KVM4, overall 127.726721.
+Alle30 Samples mit je4 abgeschlossenen Workern und alle6 Scores verlustfrei
+ueber uint64/Decimal gegen Referenz28b326e2-4323-4a4c-a0d2-4c1bab4958c0
+validiert. Optionaler observer_overhead_ns bleibt null/unavailable; keine
+gemessene0 daraus. Vollstaendiges unveraendertes Original SHA256:
+921be971d0e53309102aa3029b38241f2f93546da5c283a646ac20e4481425e4
+Archiv: ExFiles/Reports/Benchmarks/82505279-1707-49dd-a5be-41bb0f75d910/.
+Serverimport/-readback ausstehend; kein isolierter Geschwindigkeitsnachweis.
+Vollbelege: ExFiles/Reports/Core/0.88.74-process-peak/.

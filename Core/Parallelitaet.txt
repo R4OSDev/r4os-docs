@@ -4111,3 +4111,115 @@ Lokal validiert; Serverimport und Serverreadback sind ausstehend. Dieser
 Gesamtwert ist kein isolierter Geschwindigkeitsnachweis fuer die Aenderung.
 Funktionale Gastquellen nach normalem Shutdown entfernt; keine aelteren
 offenen Befunde88/89/90/91/94 als behoben ausgegeben.
+
+0.88.72: Runtime- und Speicherownerzaehler ohne redundante Statistik-RMW
+----------------------------------------------------------------------
+
+Die Zaehler gehoeren zu den technisch notwendigen Kernelbesitzern arch/runtime
+und memory/owner. Ihre passiven R4DEV-/Spectraleser behalten die festen Records.
+Runtime acquires zaehlen weiterhin vor LOCK auch wartende Anfragen; nested
+und nur erfolgreiche Try-Aufnahmen behalten ihre urspruenglichen Zaehlpunkte.
+Bei deaktiviertem Runtimeowner bleibt die Zahl null. Die Erfassung liegt mit
+IF0 vor jedem spaeter eventuell geoeffneten Contentionfenster.
+
+Der fruehere globale ACQUISITIONS-RMW ist durch64 private, je64Byte getrennte
+AtomicU64-Slots ersetzt. Am genauen Zaehlpunkt schreibt allein die aktuelle
+CPU mit atomarem Relaxed-Load, wrapping_add und Store. Der vorhandene dichte
+CPUindex wird weiterverwendet; CpuLocal und funktionaler Runtimebesitz bleiben.
+Residenter kurzer Countcode hat keinen Callback, keine Allokation und keinen
+Reschedule. Maskierbare IRQs sind dort gesperrt; TLB-IPIs besitzen ihren
+unabhaengigen Pfad. Die NMI-/Machinecheck-Terminalpfade kehren nicht als neuer
+normaler Countwriter zur unterbrochenen Stelle zurueck.
+
+Die einzige bestehende Initialisierung vor AP-Start setzt alle64 Slots zurueck.
+CPU-Offlining/-Onlining oder Aufgabenmigration loeschen keine Beobachtung.
+Der passive Statsread summiert alle64 Slots einschliesslich offline gegangener
+CPUs modulo u64. Das kostet64 atomare Loads statt des bisherigen einen Loads.
+Es ist weiterhin ein passiver Feldsnapshot, keine gleichzeitige Transaktion
+ueber CPUs oder andere Felder. Keine neue Samplerschleife oder Statistikworker.
+legacy_global_acquisitions bleibt0. Die privaten Slots beanspruchen4KB.
+
+In memory/owner entfallen elf statistische RMW-Schreibstellen, die bereits
+unter dem wirklichen state-LOCK, waehrend Nestedbesitz oder vor dessen Release
+liegen. Summen verwenden atomaren Load/wrapping-Store, Maxima Load/bedingten
+Store. Die beiden order_violations-RMWs vor/ohne gueltige Zulassung bleiben:
+Rangfehler vor dem Lock und fremde/ungueltige Freigaben haben konkurrierende
+Writer. Fehlgeschlagenes Try behaelt seine bisherigen unbeeinflussten Counter.
+Funktionale CAS-/Acquire-/Release-, Depth-, Owner-, Rank-, IF-, TLB- und
+Switchablaeufe bleiben mechanisch nachgewiesen erhalten. RuntimeStats72,
+OwnerLock712, Token16, OwnerStats64 und Public-Lockrecord120Bytes bleiben;
+kein PublicContract-, SDK-, PerCpu- oder unabhaengiges Recoverydelta.
+
+14 verschiedene aktuelle Ganzmodul-Hostfaelle bestehen vor/nachher jeweils
+im normalen und kontrollierten Detailmodus:56 Ausfuehrungen, keine56 neuen
+Tests. Reale Hostthreads und Atomics pruefen wartenden Vorlockcount, Nested,
+erfolgloses Try, genaue IF-Rueckgabe, vier exklusive CPUwriter, Migration
+zwischen Aufnahmen, hohe/offline Slots, Wrap/Bootreset, Switchrelease und
+passive Layouts. Memoryowner prueft die spaetere tatsaechliche CAS-Zaehlung,
+Konkurrenz, Maxima und12.000 konkurrierende ungeschuetzte Fehlerereignisse.
+CPU-/CPL0-/TSC-/Stackvorbereitungsleaves sind ausdruecklich kontrolliert;
+dies ist kein nativer IRQ-/SMP-/TLB-/Kontextbeweis. Produktions-Detailmessung
+bleibt deaktiviert. Keine neue permanente Testdatei oder Inventaranzahl.
+
+Fmt/check/clippy und der regulaere Kernel443-Build PASS. Die wirkliche native
+Releasebibliothek zeigt statische Locked-Befehlsstellen: save_runtime4->3,
+RuntimeTry3->1, OwnerAcquire8->4, OwnerRelease1->1. Das sind statische Stellen,
+keine dynamischen Kosten pro Aufnahme oder isolierte Laufzeitmessung.
+Alle2661 unmangled C-/Assemblynamen bleiben. Der ELF ist gestrippt; allein
+leeres nm waere kein Exportbeweis. Die erste lokale Codegenauswertung fand
+wegen Selektor-/Escaping-/V0-Cratehashbehandlung nicht alle Rustbodies und
+bleibt unqualifiziert erhalten. Aktuell erzwingen sechs echte Bodyheader,
+passende Rohsymbole und native Relocations die Auswertung. Alle eigentlichen
+Counterhostlaeufe bestanden; all_host_attempts_pass=False benennt auch diese
+gehaltenen lokalen Auswertungsentwuerfe, kein Produktfehler wird daraus gemacht.
+
+Normaler KVM4-Gast1098002 mit Kernel443 besteht unveraendert SYNC/Unwind
+(Maske3,24 erzeugte/gereapte Tasks, Event200/IF4/Unwind2), FPU (Maske64,
+zwei Tasks/sechs Workquittungen) und volles SMP/TLB (vier CPUs, fuenf Tasks,
+256 Mutexoperationen, Checksummen, TLB-Ziel14/ACK14 und saubere Ressourcen).
+Passive LOCKS liefern je13 feste Records mit laufenden Countern; Detailwerte
+bleiben ausdruecklich null/unavailable=detail-disabled, keine Messnull.
+
+Der erste volle CPU-Lifecyclelauf scheiterte insgesamt mit Exit1/fehlendem
+success-only-Foregroundbeleg. Sein nativer Teil Maske63 mit fuenf Tasks/IF3
+bestand; nach echtem Offlining und Modul-YMM-/Wait-Joins lieferte der verlangte
+NVMe-I/O-Fall DEVICE unavailable1, run_id0 und keine Geraete-/Requestidentitaet.
+Der erste private QEMU-Gast hatte ausschliesslich AHCI und keinen NVMe-Treiber.
+Das ist kein I/O-Abschlussbeleg. Saemtliche ersten Originale bleiben erhalten.
+
+Nur die private Testhardware wurde um eine256MB-NVMe-Namespace und den
+unveraenderten vorhandenen NVME.R4D ergaenzt. Derselbe Kernel-/Spectra-/SDKstand
+im zweiten KVM4-Gast1100484 besteht das unveraenderte volle CPU-Lifecycleorakel:
+Maske63/fuenf Tasks/IF3, echte Modul-YMM-/Waitmigration, Offline3/Online4 mit
+neuer Epoche und reale512Byte-NVMequittung ueber MSI-X. Native/Observationflags
+je15, Backend-/Observedhandle identisch, ein Callback/Task, Worker-/Async-
+Requests und Completions je um1 erhoeht, keine gehaltenen Pins/Buffer/Tasks.
+MCA und Microcode behalten passive Offlinebelege und frische Onlineepochen.
+Der urspruengliche Foreground-Erfolgsbeleg ist nun bestaetigt. Die getrennten
+bereits bestandenen SYNC/FPU/SMP-Faelle wurden nicht wiederholt.
+
+Sieben vollstaendige Binaerreadbacks und elf Originalexports samt beiden
+Serialfolgen bleiben. Passive LOCKS before/after werden ausschliesslich im
+jeweiligen selben Boot verglichen; alle64 Beobachtungsslots bleiben erhalten.
+Beide Gaeste normal POWEROFF/terminal und Sources per kanonischer Retention
+entfernt. required_scope_pass=True, all_native_runs_pass=False, erster
+Gesamtfehler bleibt sichtbar. Keine Produktbyteaenderung nach erstem Gast,
+keine Originalerwartung gesenkt. Kein Windows- oder physischer Hardwarelauf,
+keine isolierte Geschwindigkeit oder neue produktive Messstelle.
+
+Normaler443-ELF-SHA256: 5de1825085209d70c7c87fa4aabb7bff0f6e15c13f21e32e041c22bfc43bcdb6
+SDK118/Contract62/Library39, alle140 normalen Modulartefakte und141 Manifeste
+bleiben. Inventar141Module/1089Tests/483Docs; drei bestehende Testnotizen.
+Originale: ExFiles/Reports/Core/0.88.72-owner-counters/.
+STANDARD72: genau ein finaler Lauf 18496664-948e-47de-8475-a19fb7845d76, Suite3/Metric2/KVM4,
+overall127.530178. Alle30 Samples mit je4 abgeschlossenen Workern,
+Batches/Operationen/Bytes/Clock und6 Scores verlustfrei gegen die eingefrorene
+Referenz28b326e2-4323-4a4c-a0d2-4c1bab4958c0 validiert (uint64/Decimal).
+Vollstaendiges unveraendertes OriginalSHA4d9d80827790ccde65f760a3ec73b2e3586bb98bc28774d809fe83d3fe6a9970
+unter ExFiles/Reports/Benchmarks/18496664-948e-47de-8475-a19fb7845d76/.
+Lokal validiert; Serverimport und Serverreadback sind ausstehend. Der
+Gesamtwert ist kein isolierter Geschwindigkeitsnachweis fuer diese Aenderung.
+Die offenen Slice-/FullKernelbefunde94 und volle PROGRAMLIFECYCLE96 behalten
+ihre negativen Originale; keine neue vollstaendige Abnahme oder Regression-
+exklusion behauptet. Final92/93 nach ALLEN funktionalen Punkten bis mindestens
+0.88.98; hoehere Marker nie auf92/93 zuruecksetzen.

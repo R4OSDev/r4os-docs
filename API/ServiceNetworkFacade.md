@@ -136,8 +136,12 @@ Einmal normales POWEROFF/terminal, eigene Imagequelle per Retention entfernt.
 Release0.88.79. Bestand141Module/1089Tests/483Docs, bestehende Notizen ergänzt,
 keine neue Messstelle, Queue, Ownerverwaltung oder gelockerte Oracle.
 140 normale Module: nur TCPSVC geändert,139 bytegleich. Kernel446 bleibt.
-Finale SDK-Binärpakete92 und Slim/Full93 erst nach allen funktionalen
-Befunden94–98; tatsächlicher finaler Marker mindestens0.88.98.
+Aktuelle kanonische Releaseplanung: finales SDK0.88.99 nach allen
+funktionalen Befunden94–98, danach R4OS-Slim/Full0.88.100 mit finalem
+Release-Marker0.88.100. Die bisherigen Stufen92/93 wurden bei gleichen
+internen API-IDs92/93 in99/100 umbenannt; ältere Planverweise sind überholt.
+Qualifizierte Quellen, öffentliche Pakete und spätere Studio-Gastabnahme
+bleiben getrennt. Reine Verpackung/Publikation braucht keinen neuen STANDARD.
 Originale: ExFiles/Reports/Core/0.88.79-tcp-deadlines/;
 Temp/08879-native-proof.json, SDK-/Contract-Publikationsbelege.
 

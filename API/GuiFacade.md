@@ -455,3 +455,77 @@ ExFiles/Reports/Benchmarks/5780c0c4-3848-4ce8-8607-10cfd1842bd8/.
 BOOT readback confirms the same423 kernel. Exactly one final STANDARD32;
 lokal validiert; R4OS Server ausstehend (Import/Readback). No new measurement
 was created for publication. Inventory141modules/1069tests/483documents.
+
+## 0.88.77 Kooperatives Prozess-Close und natives Capture
+
+ProgramHandleRequestClose publiziert den nativen Capture-Terminalbeleg jetzt
+vor dem kooperativen Close-Flag. mark_close nutzt unter der Registry den
+bestehenden Metadatenbesitzer0: Nur der exakt passende lebende Captureowner
+wird über die vorhandene Visibility-Cancelpolicy beendet, danach wird das
+Flag mit Release publiziert. Derselbe Publisher bedient direkte und geerbte
+Console-Kind-Closes. Der GUI-Payload wird unter Metadata0 gelesen, kein GUI
+angelegt. Native Capture-Aufnahme prüft das Flag unter demselben Besitzer;
+zwischen Cancel und Flag kann keine neue Aufnahme dazwischentreten.
+Kein Rückrollen oder stilles Reaktivieren eines terminalen Tokens.
+
+Die vorhandenen zwei Pointer-Notices und ihre Barriere bleiben erhalten:
+Alle63 vorher akzeptierten Queueereignisse werden vor dem Terminalevent
+gelesen. C/Zig-Polling liefert native Nachrichten vor synthetischem Close.
+Rust Session::next benutzt denselben Zig Window::waitMessage-Pfad mit
+typisierter Captureübersetzung. Der genaue Owner-/Generationsbeleg ist
+publiziert, bevor ein Verbraucher das Flag sieht. Nach Ende eines Prozesses
+wird kein weiterer Nachrichtenverbrauch behauptet.
+
+Keine neue Queue, ABI, Messstelle, Pollschleife oder Ownerverwaltung.
+should_close bleibt bytegleich ein AtomicLoad. Der erste erfolgreiche Close
+nimmt einmal Metadata0, auch für möglicherweise GUI-assoziierte Konsolen.
+Dies serialisiert Payloadpublikation/Aufnahme; keine Nullkostenbehauptung.
+Wiederholtes Close nimmt diesen Guard nicht erneut. Desktopwake folgt den
+Änderungen aller Consolekinder, GUI-/Inputwakes der Registryfreigabe.
+Physische Task-/VM-/TLB-/Treiberfreigaben und ACKs unverändert.
+
+Original0.88.32-Negativbeleg unverändert: Kernel423/Desktop187/SDK111,
+echte63erQueue,ACTIVE,2sDelay, externer voller Handle-Close,
+held1/Terminal0/Exit11. Der Prozessclosepfad war seit0.87.35 bis445
+unverändert. Keine32-Kausalitätsbehauptung oder breite Vorhermatrix.
+
+EIN gezielter KVM4-Softwaregast1138824 besteht im ersten Versuch:
+Kernel446 SHA256 dd9913991fdf3066e85edc5cafb8313f5b5a710c12b0c0b7b756b4d922b01224;
+unveränderte normale Desktop197/WINSVC27/DESKRUN2, volle installierte
+Rücklesungen. Exakt dieselbe öffentliche QG32-C-Fixture SDK111/Contract59,
+SHA256 a7b245ee3de39ed32740eb35f31b4e223113f89ce2c38c6f5b844632439ea2ce,
+unveränderte M28OBS-/WI30-Helfer; kein Neubau/SDK121-Relabel dieser Originale.
+
+Owner23/Generation23, Window1/Epoch2, Down1/Up0,63gefüllt/63gelesen,
+ACTIVE1/Terminal1/Close1,held0/clicks0/pass1. Unabhängiger portabler
+Beobachter: echter Exit0, alle307Bytes, Read0/Release0,flags27.
+Native Cancelzustellung vor Close. Gleicher Desktop/Broker und0Fenster/
+0Captureleases/0Livebytes vor/nach. Einmal normales POWEROFF/terminal,
+Source per Retention entfernt.
+
+Unveränderte C-/Zig-/Rust-Event-/Closequellen gezielt geprüft/gehasht.
+Bestehende Sprach-/hosted Close-/Focus-/Kill-/Reusebelege28/32 erhalten;
+kein neuer nativer Zig-/Rust-Replay oder voller Inputmatrixlauf behauptet.
+Neuer Gastumfang ist dieser C-Dragfall. Kein neuer physischer Relative-Mouse-,
+Windows- oder isolierter Speedclaim. Keine zusätzliche Hostmatrix.
+
+Fmt, Clippy einschließlich Typprüfung und Normalbuild PASS. Erster Formatguard
+erkannte alten Cargo-Contract63-Pin; Original erhalten. Neuer446-Build pinnt
+bereits veröffentlichten Contract64 Commit973dfbd67198cd63faa788ff56c2abb81efc5af4.
+Öffentliche ABI/Sprachbindungen bytegleich, kein Validator gelockert.
+Kein redundantes cargo check.
+
+Release0.88.77/Kernel446; SDK121/Contract64/Library39 und140 normale
+Modul-Artefakte/141 Manifeste unverändert. Bestand141/1089/483; eine bestehende
+Testnotiz präzisiert, kein neuer Gate. Originale:
+ExFiles/Reports/Core/0.88.77-cooperative-capture-close/;
+Temp/08877-native-proof.json und früherer08877-external-close-precursor.json.
+
+STANDARD77 abgeschlossen: b2e8a31f-f07c-40b9-b78d-bffe5d2ba4a4; Suite3/Metric2/KVM4, overall 129.369992.
+Alle30 Samples mit je4 abgeschlossenen Workern und alle6 Scores verlustfrei
+ueber uint64/Decimal gegen Referenz28b326e2-4323-4a4c-a0d2-4c1bab4958c0
+validiert. Optionaler observer_overhead_ns bleibt null/unavailable; keine
+gemessene0 daraus. Vollstaendiges unveraendertes Original SHA256:
+2d641d0cb5870684e5eb00505a9cf497e7d83b856528c5ee3e718f8161964474
+Archiv: ExFiles/Reports/Benchmarks/b2e8a31f-f07c-40b9-b78d-bffe5d2ba4a4/.
+Serverimport/-readback ausstehend; kein isolierter Geschwindigkeitsnachweis.

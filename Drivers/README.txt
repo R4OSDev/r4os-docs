@@ -223,3 +223,73 @@ No score rerun or isolated driver-admission speed claim. Status: lokal validiert
 R4OS Server ausstehend (Import/Readback). No physical deployment or native
 hardware/Windows qualification follows. Three changed owners: Kernel,
 Distribution and Docs; SDK/Contract/Libraries and other module artifacts remain.
+
+0.88.73: preserve storage admission when the shared DMA pools fill
+-----------------------------------------------------------------
+
+Active R4D count and live DMA leases are separate quantities. The Kernel DMA
+owner still has independent global tables of 128 legacy allocations, 128 pins
+and 128 mappings. Bounce backing additionally consumes physical frames; the
+16 MB per-buffer limit remains. No DMA capacity or driver-count limit is raised.
+
+Pin and mapping admission now reserve their final slot (index 127) for the
+actual executing registered storage callback. General calls use slots 0..126;
+storage normally uses those slots too and may also use the final slot. The
+classifier is the existing authenticated callback owner, not a driver name or
+declared module kind. Its extra query runs only when the first free slot is the
+final one. Both tables retain their canonical owner/generation records and
+existing error -5; refused output handles are cleared before return. The
+legacy-allocation table is unchanged. This is a route for bounded storage
+progress under general pin/map pressure, not an unlimited concurrency or
+physical-memory guarantee. Real completion, quiescence, unmap/unpin ACKs and
+foreign-owner protection retain their original rules.
+
+A single private public-C R4D derived from DriverCounts was replayed before
+and after this ten-line owner change. The same SDK 0.64.118-built consumer,
+resource payload and normal module artifacts were used in two KVM4 guests:
+
+  Kernel 443: 128 mappings on one pin, then independent 128 pins. Each next
+  allocation returns original -5 and handle 0. A second successfully pinned
+  buffer before map refusal is actually unpinned. With either table full, a
+  cold named-resource file read returns -6; after releasing exactly one own
+  slot, the same offset returns 16 bytes with the expected data.
+
+  Kernel 444: general mapping and pin admission stop at 127 with the same -5
+  and cleared handle. File reads return all 16 correct bytes while each
+  general pool is full, and after releasing a general slot. The partial-pin
+  rollback also acknowledges success. Total canonical table capacity is 128.
+
+The fixture never programs its own leases into a device. Its resource reads
+use the real filesystem/AHCI path; observed bounce count is zero. Each run
+deliberately returns Init -73 with one quiescent pin, heap and semaphore still
+owned. Real failed-init shutdown releases that pin and the other resources:
+heap allocations/pending creates/pending releases are zero. Ordinary terminal,
+file read, SYSINFO, unchanged IPCONFIG and running SSHD then work. The first
+private image lacked the IPCONFIG alias; its unchanged normal binary was used
+in the same guest. Both guests were normally powered off and their source
+images removed through canonical retention.
+
+The old held-lease run from 0.88.29 used Kernel SHA
+06430e3a55df6e29b145880de2f5601ab326fee29554755f0fa676ef8fddfcfd.
+Its DC29128 Init -29 and subsequent shell/service lookup failures remain
+original evidence with an unobserved first subcall. These controlled one-owner
+runs establish current shared-pool starvation and its fix; they do not
+reconstruct the exact old 129-owner failure or its later fatal shell cause.
+The original negative Kernel443 reads remain explicit, not an all-runs pass.
+
+Kernel444 fmt, Clippy including native type checking and normal build pass.
+No additional host matrix or unrelated native suite was run. Public Contract,
+SDK, library sources, fixed ABI records and all 140 normal module artifacts /
+141 module manifests are unchanged. Only the Kernel artifact changes; no
+independent Recovery, Windows or physical-hardware qualification is claimed.
+Kernel444 SHA: b333a3fbf2c8feaa80ea281b5fa946f09175382e4159db2ea4ecf8305b535c7e.
+Exactly one final STANDARD completed: 76235d4d-a493-4d2a-8020-6bc570de71ec
+Suite3 / Metric2 / KVM4, overall 126.363961. All 30 samples, four
+completed workers each, operation/byte/batch/clock quantities and six scores
+are verified losslessly with uint64/Decimal against frozen reference
+28b326e2-4323-4a4c-a0d2-4c1bab4958c0. Unchanged original SHA256:
+dc4d319c84f510b6fc5723caa3fff8057fd9ed24cecc8e75e23abd553e5e58d7
+Full original: ExFiles/Reports/Benchmarks/76235d4d-a493-4d2a-8020-6bc570de71ec/.
+Locally validated; Server import/readback remain pending. The overall score
+does not isolate the performance effect of this change.
+Full evidence: ExFiles/Reports/Core/0.88.73-dma-exhaustion/.

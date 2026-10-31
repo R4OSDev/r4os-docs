@@ -153,3 +153,100 @@ gemessene0 daraus. Vollstaendiges unveraendertes Original SHA256:
 143a50b7a71fe643584e66d308bb4b5c5698f97d9286633c9cd182ef17beec8a
 Archiv: ExFiles/Reports/Benchmarks/e0631a6b-31fd-445e-8815-69dbf79d4db7/.
 Serverimport/-readback ausstehend; kein isolierter Geschwindigkeitsnachweis.
+
+## 0.88.80 TCP-Readiness und lokaler Socketbesitz
+
+SDK0.64.123 Commit 88ce1139dbaaa4aeb1d1215d447abec212538f0e, Paketidentität
+r4os_sdk-0.64.123-NnPzAum62wHsgXArzMzl9c_gb9ZvbBJ2knl2K6YcpvEa.
+Contract0.64.65/TCPSVC0.1.9/Kernel0.1.446 bleiben unverändert. Erforderliche
+R4OS-Basis ist der in0.88.79 qualifizierte Laufzeitsatz. Ein öffentliches
+Quellarchiv ist kein neues vollständiges binäres SDK-Release; die finale
+SDK-Verpackung folgt in0.88.99, R4OS-Slim/Full danach in0.88.100.
+
+C r4_tcp_socket_readiness liefert einen neuen R4TcpPollResult44B
+(result12B/bestehender R4SdkTcpReadiness28B/available4B). Rust
+TcpSocket::readiness liefert TcpPoll mit Operationsausgang und Option des
+bestehenden TcpReadiness-Alias. Zig benutzt die freie Funktion
+app_network.tcpReadiness(&socket, timeout); keine neue reflektierte Methode.
+Readability/pending_rx, Peer-Ende, Reset, terminaler Zustand, Fenster und
+Status sind unabhängig. Ein Snapshot kann peer_closed UND readable sein.
+available/Option bezeichnet die gültige strukturierte Antwort; bei fehlender
+oder ungültiger Antwort gibt es keine erfundene Snapshotnull. Die bisherige
+poll-Funktion bleibt Zustandssicht mit0 übertragenen Bytes. Nutzer, die
+poll.bytes als Verfügbarkeit lasen, müssen readiness.pending_rx verwenden.
+Ein Poll konsumiert keine Daten; pending_rx ist kein Transferfortschritt.
+
+TCP Read/Write/Poll verwerfen raw weder bei PeerClosed noch Reset/Closed/
+BackendBadHandle. valid() bezeichnet den lokalen Token, keine Providerprobe.
+Der Kernel kann seinen Backendhandle nach dem letzten RX-Drain retiret
+haben; TCPSVC hält seine Frontreferenz trotzdem bis Close. Strukturierte
+Readpräfixe bleiben validiert und kopiert. Erst gültige explizite Close-/
+Invaliditätsquittung im Closepfad löscht den lokalen Token. Unknown/Timeout
+beim Close bleibt unbestätigt. Borrowed owned0 besitzt keine Closepflicht;
+Rust-Drop versucht bei owned/raw!=0 weiter best-effort Poll-Close. Drop
+allein ist kein ACK; wer ihn braucht, wertet vorher explizit close aus.
+
+Bestehender TCP-Kernel: FIN setzt Closed mit noch drainbarem RX-Puffer.
+Dies erweitert keine Halfclose-Sendefähigkeit. Nach Drain kann ein weiterer
+Read/Poll Provider-Closed/BadHandle liefern; der Frontend-Close bleibt nötig.
+TCP-Ende ist weder TLS-close_notify noch vollständiger HTTP-/SSE-Abschluss.
+Kein Nexus-Datenverlust-/TLS-Ursachenclaim oder automatische Pinänderung.
+Nexus bleibt bei SDK92/Contract45; HTTP-POST-Streaming folgt getrennt in81.
+
+Normale aktuelle Compilerprojektion write/check und Rust-Nativziel-Typprüfung
+bestanden. Alle2307 bisherigen Typ-/Layoutblöcke,14864 Funktionssignaturen
+und5093 Konstanten/Aliase bleiben exakt. Neu sind nur Typ und Zugriff.
+Die erzeugte Deklarationsreihenfolge verschiebt sich, weil app_network den
+bestehenden net_bridge-Typ vor dessen Gebrauch einbezieht; keine Handänderung
+erzeugter Dateien oder neue Plattform-/Wire-/Slot-/Contractrevision.
+GUI-Header/Fingerprint bytegleich und aktueller normaler Zig-Runtime-FPguard
+bestanden. C-/Zig-Runtimeobjekte frisch gebaut, sieben übrige Werkzeug-/Heap-
+Komponenten unverändert normal exportiert. Erster Zig-Normalbuild meldete
+nach Entfernung der raw-Mutation einen ungenutzten privaten self-Parameter;
+Original erhalten, Parametername korrigiert, fehlgeschlagener Anteil gebaut.
+Keine Wiederholung des bereits bestandenen unveränderten C-Hostfalls.
+
+Usersteuerung SPARSAM: ein gebündelter C-Hostprotokollfall. Alter SDK122-
+Stand scheitert181, neue Quelle besteht FIN/24Restbytes/5B-Drain/EOF/
+Reset/IOBadHandle/UnknownClose/Borrow/KnownClose/malformedNoCopy.
+Kontrollierte Clock/Serviceblätter sind kein physischer Nativebeweis.
+Vorhandene C-/Zig-/Rust-Fixtureerwartungen gezielt angepasst; keine breite
+RustServices-/Transport-/PROGRAMLIFECYCLE-Suite ausgeführt.
+
+Ein KVM4-Softwaregast1166822 (installierter Marker noch0.88.79) qualifiziert
+im ersten Versuch die drei tatsächlichen öffentlichen SDK123-Verbraucher
+C80/R80/Z80 am identischen Peer43280. Volle installierte Rücklesungen aller
+drei und des unveränderten TCPSVC9. Peer sendet je48B und echtes SHUT_WR-FIN.
+Alle3 sehen FIN mit pending48/readable gleichzeitig, Polltransfer0,
+drainen alle48B genau einmal in7 Reads bis EOF und behalten raw bis zum
+Close-ACK. Borrowed Close verweigert; Rust-Borrow-Drop lässt den Owner
+nutzbar. Alle3 echten Exit0 samt vollständigen PASS-Ausgaben.
+Frontend-Handles1→1 und nach einmal3.5s Nachlauf keine eigenen Zielport-
+TCPslots; eine fremde SSH-Verbindung bleibt. Einmal normales POWEROFF/
+terminal, eigene Imagequelle kanonisch entfernt. Keine neue Messstelle.
+Kein nativer Reset-/Windows-/Hardware-/SDK-Speedclaim.
+
+Der schon Closed gewordene Kernel sendet beim lokalen Close nur ACK.
+Daher keinen Client-FIN/Host-EOF-Beweis erfinden: alle drei Host-Wire-
+EOF-/Reset-Beobachtungen waren false. Der Peer räumt seinen eigenen Socket
+erst nach dem gespeicherten originalen Gast-Exit0 auf. Gastseitige Close-
+Quittung/Frontendbaseline und TCPslots werden unabhängig belegt.
+Kein allgemeiner NIC-/DMA-/Heap-Freigabeclaim. Globaler TCPSVC-bad_op-Zähler
+0→1 bleibt unzugeordnet in vollständigen Status-/Serialoriginalen erhalten;
+keine pauschale unveränderte Fehlerzähler- oder Ursachenzusage daraus.
+
+Release0.88.80 nach dieser Qualifikation einmal gesetzt. Alle140 normalen
+R4OS-Module,141 Manifeste und Kernel446 sind vor/nach Imageplan bytegleich79.
+Nur SDK-Quellen und zwei externe SDK-Bare-Runtimes/Verbraucher ändern sich.
+Deshalb kein identischer OS-Benchmark erneut: gültiger voller STANDARD79
+e0631a6b-31fd-445e-8815-69dbf79d4db7, overall129.931272,30Samples/4Worker/
+6Scores, Original SHA256
+143a50b7a71fe643584e66d308bb4b5c5698f97d9286633c9cd182ef17beec8a.
+Sein gemessener Release79 bleibt erhalten; kein neues als80 etikettiertes
+Ergebnis und kein SDK-Leistungsclaim daraus. SDK123-Verhalten ist durch
+die obigen neuen gezielten Fälle qualifiziert. Optionale Observerwerte
+bleiben null/unavailable, Serverimport/-readback des Originals ausstehend.
+
+Bestand141Module/1089Tests/483Docs; drei bestehende Testnotizen ergänzt,
+kein neuer Gate und keine Produktmesslogik. Originale und qualifizierte
+Quellen: ExFiles/Reports/Core/0.88.80-tcp-peer-end/ sowie Temp/08880-*.json.

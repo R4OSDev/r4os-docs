@@ -1256,3 +1256,101 @@ Scope und Native1236/1620/148KB-Belege: Core/Speicherverwaltung.txt,
 ExFiles/Reports/Core/0.88.74-process-peak/. Ein gezielter Hostfall und ein
 oeffentlicher C-KVM4-Lauf; keine Wiederholung voller Lifecycle96-/Kernel94-
 Suiten und kein oeffentlicher PID-Wrap als Gastbehauptung.
+
+0.88.87 – Sicher zugeordnete Programm-UD2 am bestehenden Abbruchrand
+----------------------------------------------------------------
+Kernel447 behandelt ausschließlich den belegten #UD/Invalid-Opcode-Fall
+innerhalb eines vorhandenen gepinnten R4X-Ausführungsrahmens. Die vorherigen
+aktuellen446-Gäste reproduzieren beide echten globalen Fatalfälle: main
+23:23/thread31:31/task68:68 und ein eigener Worker. Der bestehende native
+Stackreserve-Abbruch bestand bereits im Vorher-Gast. Originale bleiben
+vollständig erhalten; vorherige globale CPU-Fehler sind keine Recoverypässe.
+
+Der neue Fall benutzt denselben vorhandenen callback_abort-Rand wie die
+belegte Stackreserve-Erschöpfung. IF muss gesetzt, DF gelöscht sein; es dürfen
+keine gehaltenen Ownerlocks/Runtime-, Preempt-, Unwind-, Handoff-, Guardoffer-
+oder Spawnpflichten bestehen. Der Task läuft auf dieser CPU, current() bindet
+exakte Task-/Threadgenerationen; der Ausführungspin hält seine genaue
+Instanzgeneration bis zum späteren Unpin. Programmbild oder exakt gebundener
+R4L-Code, eigener committed Stack mit gültigem SP und ein gesunder residenter
+Kernel-Callbackframe samt Ausrichtung, 32KB Rückkehrreserve und Kernel-Return-
+PC werden geprüft. Kein Lesen/Zurückkehren auf den defekten Modulstack.
+
+Vector6 benutzt nun ausdrücklich das bereits vorhandene Fault-IST2. Damit
+besitzt die bestehende IRET-Umschreibung einen echten hardwaregesicherten
+RSP/SS-Rand. Der unveränderte Assembler stellt den gespeicherten Kernel-SP,
+Callee-GPR, MXCSR/x87-Steuerzustand und x87-Modus wieder her; verworfene
+Caller-Daten/Status sind kein zugesagter vollständiger XSTATE-Schnappschuss.
+Danach läuft der vorhandene generationengebundene Programmabschluss mit
+exit=-4097 / reason=Failed(3). Die bisherige Stackreserve benutzt weiterhin
+-4096. Kein Modul-Epilog, pauschales Exception-Resume, neuer Reaper, Rechte-
+oder Sandboxmechanismus. Andere CPU-Ausnahmen und ungeklärte Kernel-/Treiber-
+ursprünge behalten ihre Fataldiagnose. Bestehende First-Exit-Commit-Semantik
+wird nicht verändert; eine bereits festgeschriebene Completion wird nicht
+nachträglich ersetzt.
+
+Die normalen aktuellen447-Artefakte/öffentlicherSDK124 wurden gezielt in
+KVM4 geprüft, ohne breiten Kernel127-/Lifecycle-Lauf:
+- M: echter Main22:22/thread35:35/task72:72 mit SID1 und ungeschlossenem,
+  vorher erfolgreich abgefragtem File-I/O-Request3834. Zweimal wait-6 und
+  Fremdacquire-2 unter Stopfehler/konfiguriertem Busy; erst reale private
+  Stopack1 erlaubt vollständige152B, Exit-4097/Failed, Reap0 und Observer-
+  Release0. Ein fremder PCMstream akzeptiert weiter1920B und schließt0;
+  SID neu erwerben1/schließen0. Exakte bestehende Faultinfo meldet vector6.
+- T: echter Worker40:40 neben Main39:39, Besitzer25:25/task77:77, MIDI1 und Request
+  3960. Derselbe tatsächliche Reaper-/Outputvertrag: wait-6/Fremdacquire-3,
+  privateAck1, vollständige203B, Exit-4097/Failed, Reap0/Release0 sowie
+  MIDI-Reopen1/Close0 und fortgesetzter fremder PCMstream1920B/Close0.
+- Danach bestehender P53APP SX mit echten neuen Kindgenerationen28/29:
+  Stackreserve/Vector14, vollständige Belege/Reap/Release, Folgestart und
+  eigenes Schließen bestehen; anschließend VER weiterhin erfolgreich.
+Die Beobachtung des konfigurierten Busy-Intervalls isoliert keinen bestimmten
+Busy-Callback. Die echte abschließende Stopquittung ist separat gezählt;
+bestehende Stop-/Busy-Prüfungen bleiben zusätzlich erhalten. Der I/O-Request
+war wirklich offen; physisch ausstehende DMA wurde nicht gemessen.
+
+Zwei notwendige Gegenfälle bleiben tatsächlich global fatal:
+- Derselbe normale447-Gast1205200: kontrolliertes echtes R4D P53D führt im
+  audio-progress-Kerneltask19:19 auf CPU3 UD2 aus. RIP0xFFFFFF100410D73B liegt
+  im wirklich geladenen R4D-Bild0xFFFFFF100410D000/16384B. Keine Programm-
+  Recovery bei einem Kernel-Worker-/Treiberursprung.
+- Separater447-Gast1205462: F87A führt CLI dann UD2 im echten Main19:19/
+  thread24:24/task61:61 aus. IF ist durch diese gebaute Quellsequenz gelöscht;
+  der unterbrochene Flagwert wurde nicht unabhängig exportiert. Fatalvector6
+  bleibt erhalten; keine ungeprüfte Kernelrückkehr.
+Alle vier eigenen Vorher-/Nachhergäste sind nach erfasster absichtlicher
+Fataldiagnose und genau einem bewachten QMPquit terminal. Eine dabei vor
+JSON-Antwort geschlossene QMP-Verbindung ist mit Original und unabhängigem
+PID-Endbeleg erhalten. Keine normale POWEROFF-Behauptung für Fatalgäste.
+Beide privaten Imagequellen sind kanonisch per Test-Retention entfernt.
+
+Normale447 fmt/check/clippy/Build bestanden; keine zusätzliche Hostmatrix,
+keine neuen Produktprobes. Die privaten Gastquellen sind bytegleich in den
+bestehenden Kernel/SynthSessions-Testbesitz übernommen. Selektive Build-
+Part-/Cachewahl vermeidet unbeteiligte Fixturebuilds. Testinventar ergänzt,
+keine zusätzliche Inventarposition oder normal installiertes Modul.
+Privates TreiberfixtureP53D0.1.1, F87A0.1.1/F87CTRL0.1.0. Der private
+Thread-Boolname execution_aborted behält Layout400B/Offset368. Kernel447
+pinnt den bereits veröffentlichten Contract65 für den passenden Schemaguard;
+keine neue öffentliche ABI-/SDK-/Modulrevision. SDK124 und140 normale
+Modulartefakte/141Manifeste bleiben bytegleich86. Release0.88.87 nach dieser
+funktionalen Abnahme; genau ein abschließender STANDARD für Kernel447 folgt.
+Compiler-/Qualifier-Erstfehler, vollständige Readbacks, Serials, QMPregister,
+beide446-Fatals und alle447-Belege: Temp/08887-* und
+ExFiles/Reports/Core/0.88.87-program-ud2/. Keine physische DMA-,Hör-,allgemeine
+Isolation-/Latenzfreigabe und keine allgemeine Wiederherstellung aller CPU-
+Fehler. Serverimport/-readback des STANDARD bleibt bis zum Nachweis offen.
+
+0.88.87 – Abschließender STANDARD
+---------------------------------
+Genau ein regulär abgeschlossener STANDARD3/SMP4 des eingefrorenen447-Satzes:
+aebe9904-a251-481a-b0b3-539e232dadff, overall127.849219.
+Original-SHA256 769e9106c8530089e96050c18187adc5953455ba4db88dd186fbbbc95d3bac75.
+Alle30Rohsamples, vier tatsächliche Worker, Arbeitsmengen und sechs gültige
+Scores gegen Referenz28b326e2-4323-4a4c-a0d2-4c1bab4958c0 verlustfrei mit
+uint64/Decimal validiert. Fehlende optionale Observerwerte bleiben null.
+Gebootetes Kernel447-SHA und Exportteilnehmer exakt zugeordnet; vor/nachher
+1821Sourceinputs/889Kernelownerfiles/140Normalmodule/141Manifeste unverändert.
+Kein Wiederholungslauf oder isolierter Leistungsgewinn behauptet. Vollständige
+Originalbytes unter ExFiles/Reports/Benchmarks/aebe9904-a251-481a-b0b3-539e232dadff/run.json.
+R4OS Server Import und vollständiger Readback bleiben ausstehend.

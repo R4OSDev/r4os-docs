@@ -1,4 +1,4 @@
-﻿R4OS SDK
+R4OS SDK
 ========
 
 The SDK in `Repositories/SDK/` is the normal development surface for Zig and
@@ -183,3 +183,25 @@ negative error if the cursor/mount is invalid. A copied cursor owns no kernel
 resource and needs no close. Consume it before reloading to retain changes
 that arrive during enumeration. A missing optional R4SYS change-tracking callback reports the normal
 missing-function result without a substitute watcher or directory scan.
+
+Abgestimmtes SDK0.88-Endrelease (01.11.2026)
+------------------------------------------
+Veroeffentlicht: https://github.com/R4OSDev/r4os-sdk/releases/tag/v0.64.127
+SDK0.64.127 / Contract0.64.68 / Libraries0.64.40 mit getrennten sauberen
+Quellarchiven und normalem technical=false Hostwerkzeugarchiv. Alle9
+oeffentlichen Assets sind vollstaendig heruntergeladen und in Laenge/SHA256
+gegen die qualifizierten Originale geprueft. SDK-Release.json bindet alle
+Commits, CPU-/Compilerprofile, Werkzeuge, Bare-Runtimeobjekte und Grenzen;
+SDK-Qualification.json und SHA256SUMS.txt sind eigene oeffentliche Assets.
+Frische getrennte Extraktion: compilerfreier Katalog/Schema3,681/35/182
+Paritaetsreview und reale C-/Zig-/Rust-Host-Verbraucherbauten bestanden.
+Die eigentlichen nativen Vertragsbelege stammen aus97/98/105/107; diese
+Paketbauten behaupten keine neue Gast-, Windows-, native-Rustcompiler- oder
+physische Hardwareabnahme. Der Linuxexporter erhaelt nun die Ausfuehrbarkeit
+aller Linuxwerkzeuge. Erster fehlerhafter Paketversuch und private
+Qualifizierungsfehler bleiben als Originale erhalten; keine all-attempts-PASS-
+Behauptung. Konservativer Matchingruntimestand R4OS0.88.107/Kernel452,
+WINSVC31/Desktop198. AlteRawclients behalten eigene Mindestvertraege.
+88/101 wurden vomUser ausdruecklich verworfen; Ursachen weiter ungeklart.
+Aktuelle genaue Asset-/Commitbelege stehen im SDKrelease und im finalen
+Deployment/Release088107.txt. Eigenstaendiger Slim-/Fullabschluss folgt100.

@@ -1,10 +1,20 @@
-R4OS SDK
+﻿R4OS SDK
 ========
 
 The SDK in `Repositories/SDK/` is the normal development surface for Zig and
 C modules and the qualified Rust R4X profile. It provides startup code, typed platform facades, module build
 support, templates, C headers and generic Runtime-R4L helpers. The separate
 Contract repository remains the canonical API and ABI source.
+
+Current matching release: SDK0.64.134 / Contract0.64.71 / Libraries0.64.42,
+https://github.com/R4OSDev/r4os-sdk/releases/tag/v0.64.134.
+R4OS0.89.18 provides Kernel0.1.454, Desktop0.1.200 and WINSVC0.1.33.
+Typed bounded pointer, own FocusSnapshot, TCP CloseReceipt, password editor,
+simultaneous heap-owner active peak and native own-link activation are
+qualified. DESKRUN0.1.5 exposes saved /LINK, /LINKSTATUS and /LINKRELEASE.
+All nine public SDK assets and all four R4OS assets were fully read back.
+Scope and limits: Deployment/Release08918.txt, Desktop/DeskRun.txt and
+Core/GuardOffer08918.txt; language/package evidence: SDK/LanguageParity.txt.
 
 A module project contains `module.R4MF`, `build.zig`, `build.zig.zon`,
 `Settings.R4S`, `Build.bat` and its own sources. The repository starter maps

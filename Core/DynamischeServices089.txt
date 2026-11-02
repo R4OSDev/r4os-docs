@@ -1,0 +1,155 @@
+﻿R4OS 0.89.19: Vertrag der dynamischen Serviceverwaltung
+=====================================================
+
+Stand: 02.11.2026. Dieser Abschnitt legt den Umbau fest; er behauptet noch
+keine Implementierung oder Laufzeitabnahme. Umsetzung: 0.89.20 bis 0.89.24.
+
+Ziel und Besitzer
+-----------------
+
+Es gibt keine einkompilierte maximale Gesamtzahl registrierter oder laufender
+Dienste. Speicher, gepruefte Zahlenbereiche und wirkliche Ressourcenfehler
+begrenzen die Aufnahme. Eine Testmenge oder groessere Ersatztabelle ist kein
+Produktlimit. Gestoppte/deaktivierte Eintraege zaehlen weiterhin zum Bestand.
+
+Kernel/Rust/service besitzt ausschliesslich technische Registry, native
+Prozessbindung, Endpunkte und IPC. SERVMAN besitzt SERVICES.R4S, Autostart,
+Startmodi und Persistenz. Services ist die grafische Oberflaeche derselben
+oeffentlichen API. Contract besitzt die ABI; SDK die Zig-/Rust-/C-Fassaden.
+Es entsteht kein neues kanonisches Projekt und kein Rechte-/Sandboxmodell.
+
+Bekannte Mengenannahmen des Ausgangsstands
+------------------------------------------
+
+- registry_types.rs: MAX_SERVICES=16, MAX_ENDPOINTS=MAX_SERVICES.
+- registry.rs: feste Entry-/Endpointtabellen, u8-api_slots, Sentinel255.
+- registry_api.rs: Slotgrenzen, Startreservierung, Endpointsuche und -aufnahme.
+- registry_metrics.rs und R4DEV: max_services/service_max_count und Scans.
+- SDK/app_services: caller-eigene Gesamtpuffer und EOF ohne Revisionstoken.
+- SERVMAN: vier 16er-Gesamtpuffer und config_max=4096 beim Laden/Speichern.
+- Services: feste 16er-Zeilen und Stagingpuffer, indexbasierte Auswahl.
+- Distribution: SERVICES.R4S und Profil-/Testinjection-Verbraucher.
+
+Namen-, Pfad-, Argument-, Beschreibungs- und IPC-Payloadgrenzen bleiben
+getrennte Einzelrecordvertraege. Acht Requestplaetze je Endpoint begrenzen
+Rueckstau, nicht die Dienstanzahl. Der bestehende Async-I/O-Pool wird nicht
+nebenher vergroessert oder als maximale Dienstanzahl interpretiert.
+
+Registry und Identitaet
+----------------------
+
+Diensteintraege werden einzeln resident und adressstabil angelegt. Ein
+Registrierungs-ID-/Namensindex darf wachsen; er ist keine zweite Wahrheit.
+Eine entfernte Registrierung wird durch ihren Namen nicht wiederbelebt.
+Registrierungsidentitaeten werden innerhalb einer Bootlebensdauer niemals
+wiederverwendet; Erschoepfung wird vor Mutation abgewiesen. Groesse, Index,
+Serien und Generationen werden geprueft und nicht umgebrochen.
+
+Der bestehende RegistrymutexRang120 und EndpointmutexRang130 bleiben. Die
+ProgramRegistry110-zu-ServiceRegistry120-Publikation vor Runnable bleibt ein
+begrenztes Try ohne Heaparbeit. Vorbereitung und Heapfreigabe liegen ausserhalb
+von Registry-/Runtimebesitz. Nur vollstaendig vorbereitete Records werden
+veroeffentlicht; Konkurrenz oder OOM hinterlassen keinen halben Eintrag.
+
+Startnonce, Registryrevision, Registrierungs-ID und volle Prozessgeneration
+bleiben verschiedene Identitaeten. Die bestehende detached Completionlease
+wird erst nach wirklichem Abschluss konsumiert/freigegeben. STOPPING oder ein
+Timeout ist weder Prozessabschluss noch Speicherfreigabe. Self-Restart und
+die eine absolute Stopfrist bleiben erhalten.
+
+Endpointleben und native Waits
+-----------------------------
+
+Ein Endpoint samt acht Request-/Antwortslots wird erst bei Bedarf resident
+angelegt. Mutex, Semaphore und WaitQueues werden nach Publikation niemals
+verschoben. Ein einzelner Record wird direkt am endgueltigen Heapziel
+initialisiert, nicht als rund67KB grosses Stacktemporaer erzeugt.
+
+Vor einem Mutexwait nimmt der Aufrufer unter Registrybesitz eine genaue
+Lebenszeitleihe und einen Task-Unwindschutz auf. Eine kopierte Identity ist
+keine Leihe: erneute Admission sucht den aktuellen Handle unter Registrybesitz
+und vergleicht alle Identitaetsfelder, bevor sie einen Pointer dereferenziert.
+
+Ein nativer Queuewait darf keinen durch Hard-Kill vergessenen Stackpin
+behalten. Sein vorhandener Releasecallback uebergibt unter EINER Runtime-
+Admission die kurze Endpoint-/Unwindleihe an die wirkliche WaitQueue-Aufnahme.
+Pruefung und Enrollment bleiben im selben Runtimeabschnitt. Nach Wake wird
+nur die wertartige Originalidentitaet neu aufgeloest; ein alter Queue-/Slot-
+Pointer wird nicht mehr gelesen. Kill/Timeout detacht den echten Taskknoten.
+
+Retire schliesst zuerst die Aufnahme, entfernt den Endpoint aus den aktiven
+Indizes und weckt/detacht originale Wartende. Der geschlossene Record bleibt
+bis zur letzten kurzen Leihe und leeren nativen Queues gehalten. Collector-
+Auswahl prueft das unter Registry-/Runtimebesitz; die tatsaechliche Heap-
+freigabe erfolgt danach ohne diese Besitzer. Fehlgeschlagene Freigabe bleibt
+als geschlossener Record fuer Retry vertreten. Kein neuer Pollworker.
+
+Noch laufende Kopien halten ihren genauen Endpointmutex/-pin. Timeout/Cancel
+einer Fremdarbeit ersetzt deren wirklichen Ownerreturn nicht. Requestdaten
+werden nicht ueber ihre bestehende native Copy-/ACK-Grenze hinaus verliehen.
+Numerische Endpointhandles werden vor Wiederverwendung geschuetzt.
+
+Vollstaendiger Bestand und Aktionen
+----------------------------------
+
+Eine neue optionale append-only-Abfrage bietet einen Registryrevision- und
+Cursorvertrag. Eine begrenzte Seitengroesse ist nur Transfergranularitaet.
+Es gibt keine feste maximale Gesamtzahl von Seiten oder Zeilen. EOF ist
+explizit; ein voller Puffer beweist kein Ende. Bei Struktur-/Konfigurations-
+aenderung wird Restart gemeldet, kein gemischter oder gekuerzter Erfolg.
+
+Mitgliedschaft und Konfiguration einer erfolgreichen Seitenfolge gehoeren
+zu einer Revision. Prozess-/Endpointzustand ist der jeweilige frische
+Besitzersnapshot; keine globale atomare IPC-Zaehleransicht wird behauptet.
+Caller-Ausgaben werden ausserhalb der kurzen Metadatenbesitzer publiziert.
+
+Eine Zeile enthaelt die Registrierungsidentitaet und die genaue aktuelle
+beziehungsweise letzte gebundene Prozessidentitaet. Gebundene Aktionen
+validieren diese Werte vor Wirkung. Ein alter GUI-Zeilenindex oder ein
+wiedervergebener Name darf nie einen anderen Dienst steuern. Die alte
+Index-/Namens-ABI bleibt kompatibel; neue Faehigkeiten werden explizit geprueft.
+
+SDK-Fassaden halten caller-eigene dynamische Puffer. Bei Restart verwerfen
+sie Teilseiten, bei OOM/Fehler bestaetigen sie keinen leeren/vollstaendigen
+Bestand. Retries sind begrenzt; die Bestandsmenge ist es nicht. SERVICE-FULL
+fuer Queueaufnahme bleibt vom dynamischen Speichermangel unterscheidbar.
+
+Das alte service_max_count beschreibt keine neue kuenstliche Obergrenze:
+ein dokumentierter Wert0 bezeichnet dynamische Kapazitaet, keine Kapazitaet0.
+Neue optionale Bestandsmetadaten kennzeichnen das ausdruecklich. Aktuelle
+Belegung und reservierte/geschlossene Endpointressourcen bleiben getrennt.
+Alte fixed-layout-Records, Tabellenpraefixe und Fehlerzahlen werden erhalten.
+
+SERVMAN, Persistenz und GUI
+--------------------------
+
+SERVMAN erfasst den vollstaendigen Bestand vor Autostart und Speichern.
+SERVICES.R4S wird gestreamt oder bedarfsgerecht gepuffert;4096Bytes sind keine
+Gesamtdateigrenze mehr. Einzelrecords und I/O-Bloecke bleiben geprueft.
+UTF8/BOM, Syntax, Manual/Disabled und bestehende kleine Dateien bleiben gueltig.
+
+Speichern schreibt/prueft eine temporaere vollstaendige Datei und verwendet
+den bestehenden atomaren Austausch mit seinem Commit-/Uncertain-Vertrag.
+Ein unvollstaendiger Bestand wird nie gespeichert. Laufzeitaenderung und
+Persistenzergebnis werden getrennt quittiert. OOM und Short-Write sind Fehler.
+
+Services ersetzt seinen Bestand erst nach erfolgreicher Vollaufnahme. Es
+zeichnet nur sichtbare Zeilen, scrollt ohne feste Gesamtzeilenzahl und erhaelt
+Auswahl ueber die Identitaet. Fehlgeschlagener Refresh markiert alte Daten
+als veraltet und sperrt unsichere Aktionen; er macht daraus keine leere Liste.
+Persistenz verwendet den zustaendigen SERVMAN-Pfad, keinen zweiten Codec.
+
+Abnahme und Grenzen
+-------------------
+
+Vorhandene Besitzer-/ABI-/Fassaden-/SERVMAN-/Servicespruefungen werden gezielt
+erweitert. Native KVM4 prueft mehr als16 wirkliche gleichzeitige Dienste mit
+nutzbaren Endpoints. Groessere Registries jenseits255 pruefen Indexbreite;
+Konfigurationen ueber4096Bytes pruefen Vollstaendigkeit/Neustart. Zahlen sind
+Untergrenzen des Belegs, keine neuen Produktkapazitaeten. Konkurrenz, OOM,
+veraltete Identitaeten, echte Stop-/Join-/Reap-/Freequittungen und eigene
+Ressourcenrueckkehr gehoeren dazu. Realhardwaretests sind nicht vorgesehen.
+
+0.89.19 ist reine Vertrags-/Dokumentationsarbeit ohne Laufzeitdelta und
+benoetigt gemaess Agents/Benchmark.txt keinen neuen STANDARD. Ab0.89.20 gelten
+die vorhandenen Benchmarkregeln fuer tatsaechliche Runtimeaenderungen.

@@ -16,6 +16,21 @@ All nine public SDK assets and all four R4OS assets were fully read back.
 Scope and limits: Deployment/Release08918.txt, Desktop/DeskRun.txt and
 Core/GuardOffer08918.txt; language/package evidence: SDK/LanguageParity.txt.
 
+Local DevKit and independent repositories (03.11.2026)
+----------------------------------------------------
+DevKit remains on the local host, including its existing Git history, setup,
+installed tools and independent nested repositories. The parent GitHub
+repository R4OSDev/r4os-devkit is retired; workspace synchronization excludes
+it, and explicit DevKit push/pull/recreation is blocked. Other canonical
+repositories keep their own synchronization targets. Nested Git histories and
+remotes are retained; installed copies are not recursively published as part
+of the parent. Details and the remote-only retirement command: Agents/Github.txt.
+
+Current builds can continue using the retained local installations. Moving
+Contract/tool/system-library selection entirely into the SDK, with Server
+providing packages and Studio consuming the profile, is a separate migration.
+The remote retirement alone does not change compiler pins or build profiles.
+
 A module project contains `module.R4MF`, `build.zig`, `build.zig.zon`,
 `Settings.R4S`, `Build.bat` and its own sources. The repository starter maps
 the current local SDK, Contract, Libraries and DevKit checkouts before Zig

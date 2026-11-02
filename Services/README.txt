@@ -84,13 +84,34 @@ existing lifecycle path and abandons its owned completion for reaping. A late
 load error only changes its own reservation. A mode change must not detach a
 program that has started between STOP and DISABLE.
 
-SERVMAN configuration, boot enumeration and both service-list frontends use
-private staging arrays. Only explicit EOF (zero) publishes a complete list;
-negative errors preserve the existing file or GUI view. BUSY permits at most
-three complete attempts. A full staging array requires a further EOF query;
-capacity overflow is an error. The current index API has no cross-call
-revision token, so this validates complete enumeration and does not promise a
-point-in-time snapshot across concurrent successful structural edits.
+Since 0.89.20-0.89.23 the native registry and endpoints grow through stable
+individual resident allocations and intrusive indexes. There is no fixed
+service-count limit. Registration IDs and endpoint handles are not reused
+within a boot; real allocation and representation exhaustion remain errors.
+Closed endpoint storage is retained until short leases and actual native
+wait queues are quiescent, then freed outside registry/runtime ownership.
+
+SERVMAN and Services use the revision-bound dynamic SDK inventory. END proves
+completion; pages bound only one transfer. Membership/configuration changes
+invalidate the cursor with RESTART. Up to three complete attempts discard
+partial data. Runtime counters remain separate per-owner observations.
+Actions bind registration ID, start generation and exact process identity;
+a same-name reinstall or restarted process is never adopted implicitly.
+
+SERVMAN reads and renders SERVICES.R4S dynamically in bounded I/O blocks;
+4096 bytes is no longer a file limit. SAVE stages the complete BOM/UTF-8 file,
+verifies bytes and revision, and uses the native checked atomic exchange.
+An uncertain exchange preserves stage/backup evidence. Runtime changes and
+persistence results are reported separately. Services delegates persistence
+to SERVMAN and retains/reaps its exact child. Its dynamic list preserves
+selection by registration ID, renders visible rows and supports wheel,
+scrollbar, Home/End, arrow and page keys. Failed refresh retains stale data
+and disables mutations until a successful complete refresh.
+
+Legacy fixed-layout detail/index and named control APIs remain available.
+Their old 128-byte detail path cannot carry a longer valid path: BUFFER_TOO_SMALL
+is explicit. New rows carry the full 1024-byte native path field. Telemetry
+service_max_count=0 denotes dynamic capacity, not a capacity of zero.
 
 SERVICES keeps START, STOP, mode and installation results after refreshing the
 list. Refresh failure adds its own error without replacing the action result;

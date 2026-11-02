@@ -362,3 +362,39 @@ Alle30Samples/4Worker/6Scores waren verlustfrei validiert; Observernulls bleiben
 unavailable, Serverimport/-readback ausstehend. Kein neues81etikett und kein
 SDK-Leistungsclaim. Originale/Beforearchive/Objekte/Readbacks und qualifizierte
 Quellen: ExFiles/Reports/Core/0.88.81-post-stream/ und Temp/08881-*.json.
+
+## 0.89.21 Revision-bound dynamic service inventory
+
+Contract 0.64.72 appends R4SYS v35 slots 172/173 (offsets 1392/1400):
+`service_inventory_page` and `service_control_bound`. Earlier table prefixes,
+fixed layouts and IPC functions remain valid. Probe both optional functions
+before offering inventory-based controls.
+
+Start with a zero `ServiceInventoryCursor` and caller-owned row storage.
+`service_inventory_page_rows=8` bounds a transfer, never the total inventory.
+Continue until `service_inventory_end`; the last nonempty page may have END.
+The cursor carries revision, total and last registration ID (not row index).
+RESTART means discard the entire partial capture. Error calls leave cursor,
+rows and unused output tail untouched. Only membership and configuration
+share the revision; process/endpoint counters are per-owner observations.
+
+Zig `app_services.readInventory(sys, allocator)` returns owning `Inventory`
+rows; call `deinit()`. Rust `Services::inventory()` with `alloc` returns
+`ServiceInventory` with `Vec`/Drop ownership. Both allocate dynamically,
+validate provider progress/IDs/count/END and make at most three complete
+attempts for Busy/Restart. Memory failure is explicit, never an empty success.
+Without allocation, Rust `inventory_page` and C `r4_services_inventory_page`
+use caller-owned page/cursor storage. C consumers grow/validate their full
+capture and free that storage themselves; page size is no aggregate cap.
+
+`controlEntry` / `control_entry` / `r4_service_control_request` construct the
+bound request from the selected row. Supply operation Start, Stop, Restart,
+Mode or Remove; only Stop takes timeout ticks, only Mode takes start mode.
+The native control checks registration ID, start generation and the full
+process handle before effects. Stale/reinstalled names require a new view
+and user decision; no mutation is retried on a replacement identity.
+
+New errors: Memory=-20, Exhausted=-21, Restart=-22. Old FULL remains queue
+backpressure. `ProgramPerformanceSummary.service_max_count=0` denotes dynamic
+capacity; new inventory metadata explicitly sets DYNAMIC. No fixed service
+count, global Controller grant or new background worker is introduced.

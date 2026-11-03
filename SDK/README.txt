@@ -26,7 +26,11 @@ capabilities use schema 3. SDK-Qualification.json describes actual coverage.
 Linux is executed; Windows host tools are cross-built with static PowerShell
 checks. No Windows, physical-hardware or GPU execution is claimed.
 Durable originals/readback/consumer evidence: ExFiles/Reports/SDK/0.64.145.
-The matching R4OS Slim/Full publication is the next step, 0.89.36.
+Matching R4OS 0.89.36 Slim/Full is publicly available:
+https://github.com/R4OSDev/r4os-distribution/releases/tag/v0.89.36.
+Kernel 0.1.456 / Recovery 0.1.67. Both original ZIP images and all installed
+modules were verified and booted with KVM4; all four public assets passed
+complete original-data readback. Scope: Deployment/Release08936.txt.
 
 Local DevKit and independent repositories (03.11.2026)
 ----------------------------------------------------

@@ -31,6 +31,8 @@ https://github.com/R4OSDev/r4os-distribution/releases/tag/v0.89.36.
 Kernel 0.1.456 / Recovery 0.1.67. Both original ZIP images and all installed
 modules were verified and booted with KVM4; all four public assets passed
 complete original-data readback. Scope: Deployment/Release08936.txt.
+The final German handoff for both agents is
+SDK/SDK-Profilumstellung-Studio-Server.txt (0.89.37).
 
 Local DevKit and independent repositories (03.11.2026)
 ----------------------------------------------------

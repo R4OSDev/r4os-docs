@@ -1,0 +1,253 @@
+﻿R4OS SDK-Profilumstellung: Implementierungsuebergabe fuer Studio und Server
+==========================================================================
+Stand: 03.11.2026
+Adressaten: R4OS Studio Agent und R4OS Server Agent. Der Nutzer uebergibt diese Datei.
+Umsetzung im R4OS-Workspace: 0.89.25 bis 0.89.37.
+
+1. Verbindliches Ergebnis und Besitz
+------------------------------------
+Nur das ausgewaehlte SDK bestimmt Buildprofile, Compiler-/Werkzeugprofile, Contract und Systemlibraries. Gepflegt werden genau drei Originaldateien im SDK: Profiles/Build.json, Profiles/Tools.json und Profiles/Components.json. Zusammengehoerigkeit bedeutet gleiche SDK-Quelle und die im Releasebeleg genannten Originalhashes. Studio und Server duerfen keine eigenen Ersatzpins oder Defaultprofile einfuehren.
+Bisher lagen Vorgaben auch bei DevKit, Contract, Modulstartern, Kernel, nativen Librarybuildern und Recovery. Diese normalen Buildpfade beziehen ihre Auswahl nun aus dem SDK oder pruefen daraus erzeugte Projektionen. DevKit bleibt als lokale Installationsablage verwendbar; sein altes Online-Repository und seine Quellen werden nicht benoetigt oder gepusht.
+Quellcode und normative Vertraege behalten ihre Besitzer: Contract besitzt Plattform-ABI/CPUID/XSTATE, Libraries ihre Implementierungen und eigenen Library-Contracts, Kernel seinen zwingenden Kernelcode, Distribution Imageinhalte und Releases. Das SDK waehlt deren exakten passenden Stand. module.R4MF bleibt fuer Modulidentitaet, Rolle, Version, Quellen, Ressourcen, Importe/Exporte und Ziel zustaendig. Slim/Full/Test sind Distributions-Imageprofile.
+
+2. Tatsaechlich veroeffentlichter Satz
+--------------------------------------
+SDK 0.64.145: https://github.com/R4OSDev/r4os-sdk/releases/tag/v0.64.145
+SDK-Commit: 56eb19bbebc8444b8766db9b80cc5f7ffd44218a
+R4OS 0.89.36: https://github.com/R4OSDev/r4os-distribution/releases/tag/v0.89.36
+Distribution-Releasecommit: 3286a34168b3e0d0877afafcf9abb93e4f223305
+Kernel-Commit: ac2c2be81bfb65b8a385a0cee284b38c9818885c
+contract: 0.64.73, Commit c5a7989882385dd78ed2dcf5383c48bb4bed7b68, Zig-Pakethash r4os_contract-0.64.73-ELhbYZSUMQG2PmAhXu39yuENRXYCTwZTSQ0BdQ3KnvRG
+libraries: 0.64.47, Commit aeb023212ffa48b35849707589e4e37d356749ed, Zig-Pakethash r4os_libraries-0.64.47-dH4fNWAKeAOEn62lWiuzb2_qLAaMTisj7OqZQSeAO3SR
+Kernel: 0.1.456. Recovery: 0.1.67; eingefrorene Quellen werden ausdruecklich aus dem SDK ausgewaehlt. Die Umstellung ist kein Upgrade dieser historischen Recoveryquellen.
+recovery-sdk: aktiver Stand 0.64.22, Besitzer https://github.com/R4OSDev/r4os-recovery.git, Commit c54a19a5e2a50a94ec2e78226c92ad428c3e26e2, Teilpfad Platform/SDK.
+  Historische Originalprovenienz: {"repository":"https://github.com/R4OSDev/r4os-sdk.git","commit":"cfc6f470b2c7dd1ba173d52d2edf5ce68a9ed18c","archive_sha256":"d36bfbf6f046f5262a4965c331a07b17893ce2f7c6b76b1be4791e1ff920132e","version":"0.64.14"}
+recovery-contract: aktiver Stand 0.64.11, Besitzer https://github.com/R4OSDev/r4os-recovery.git, Commit c54a19a5e2a50a94ec2e78226c92ad428c3e26e2, Teilpfad Platform/Contract.
+  Historische Originalprovenienz: {"repository":"https://github.com/R4OSDev/r4os-contract.git","commit":"e9f97a6e66a3a1a4daf4e01e21518fdcb62d14cb","archive_sha256":"ca133da951fccd004564f8fc91325b3cd0c40d53db9a5cf2af3e8e2faab37f00","version":"0.64.11"}
+recovery-libraries: aktiver Stand 0.2.0, Besitzer https://github.com/R4OSDev/r4os-libraries.git, Commit 1365e096dfb3f58aca3ef915db6566cef5b50b1f, Teilpfad Legal/Sources/Libraries.zip im Recovery-Quellpaket.
+Originaldateien (exakter SHA256 der ausgelieferten Bytes):
+  Profiles/Build.json  6f0679f257b7f234bd9c2db1af0884fee043cec10801482d8ed4cb920c46a5f9
+  Profiles/Tools.json  93e15d437faa75c3d82ef693d65dc0d4851db08464a6acc0a03b214f60bcbe8b
+  Profiles/Components.json  ff75c5c5d586853b61ca5477b90040129578f36696fbc5a74fe473df0cb811fd
+SDK und R4OS besitzen unabhaengige Versionen. Die Abschlussmarkierung 0.89.37 dokumentiert diese Uebergabe; das binaere R4OS-Release traegt 0.89.36.
+
+3. Schema der drei Dateien und benoetigte Querverweise
+------------------------------------------------------
+Alle drei Originale verwenden die ganzzahlige schema-Version 1. Die gemeinsame SDK-Version steht in build.zig.zon. Fehlende/unbekannte Schemata oder Referenzen muessen vor dem Build scheitern. IDs sind kleingeschriebene ASCII-Kennungen (Buchstabe, dann bis zu 95 Buchstaben/Ziffern/Bindestriche/Unterstriche); doppelte oder nur durch Gross-/Kleinschreibung verschiedene Objektschluessel werden abgewiesen.
+Build.json: profiles benennt language, role, codegen, toolset, components und ggf. cpu/kind. codegen/cpu verweisen innerhalb Build.json, toolset auf Tools.json/toolsets, components auf Components.json/sets. codegen und cpu_baselines enthalten die vom SDK kontrollierten Compiler-, Optimierungs-, Laufzeit-, Native- und Kernel/Recovery-Abbildungen. native_c_profiles und weitere INI/Cargo/Zig-Formate sind gepruefte technische Projektionen, keine weitere Politikquelle.
+Gueltiger JSON-Ausschnitt aus Build.json (kein Ersatz fuer die vollstaendige Datei):
+{
+  "schema": 1,
+  "profiles": {
+    "r4os-zig-module-v1": {
+      "language": "Zig",
+      "role": "module",
+      "codegen": "module",
+      "toolset": "core",
+      "components": "system",
+      "cpu": "r4os-avx2-v1"
+    }
+  }
+}
+Die elf Profilkennungen mit ihren Verweisen:
+  r4os-zig-module-v1 | Zig/module | codegen=module | tools=core | components=system
+  r4os-c-module-v1 | C/module | codegen=module | tools=core | components=system
+  r4os-rust-r4x-v2 | Rust/module | codegen=rust-module | tools=core | components=system
+  r4os-kernel-rust-v1 | Rust/kernel | codegen=kernel | tools=core | components=system
+  r4os-recovery-zig-v1 | Zig/recovery | codegen=recovery | tools=recovery | components=recovery
+  r4os-native-graphics-v1 | C++/native | codegen=native-graphics | tools=graphics | components=system
+  r4os-host-tools-v1 | Zig/host | codegen=host | tools=core | components=system
+  r4os-rust-r4x-lowlevel-v1 | Rust/module | codegen=rust-module | tools=core | components=system
+  r4os-rust-r4l-v1 | Rust/module | codegen=rust-module | tools=core | components=system
+  r4os-rust-r4d-v1 | Rust/module | codegen=rust-module | tools=core | components=system
+  r4os-rust-r4p-v1 | Rust/module | codegen=rust-module | tools=core | components=system
+Tools.json: tools enthaelt exakte Werkzeugversionen, offizielle Quellen/Pruefbelege, Host- und Targetvarianten sowie deklarierte Hostvoraussetzungen. toolsets referenziert Werkzeug-IDs. Ein installierter Ort ist keine freie Versionswahl. Insbesondere sind allgemeiner Rust-Modul-/Kernelstand und die getrennte native Grafikkette verschieden.
+Gueltiger JSON-Ausschnitt aus Tools.json:
+{
+  "schema": 1,
+  "toolsets": {
+    "core": {
+      "tools": [
+        "zig",
+        "rust",
+        "limine",
+        "qemu"
+      ]
+    },
+    "recovery": {
+      "tools": [
+        "zig",
+        "limine",
+        "qemu"
+      ]
+    },
+    "graphics": {
+      "tools": [
+        "zig",
+        "graphics",
+        "shader"
+      ]
+    }
+  }
+}
+Aktuelle zentrale Werkzeuge: Zig 0.16.0, Rust/Cargo 1.99.0; Limine 12.0.1. QEMU Linux 11.1.2, Windows 11.0.0. Native Grafik: Clang 19.1.7, Rust 1.85.1. Weitere exakte Generator-/Download-/Hashwerte aus dem Original uebernehmen, nicht aus dieser Zusammenfassung ableiten.
+Components.json: policy verbietet fremde Systemauswahl. repositories bindet Repo/Commit/Version/Quellbaum und technische Pakethashes. libraries bindet Kennung, Besitzerrepository, Teilpfad, Modulversion, Installationsziel und Manifest-SHA256. sets bindet Contract und Systemlibrary-IDs. Das Recovery-Set besitzt explizite source_sdk/source_libraries-Bindungen; aktive eingefrorene Quellbaume und historische Originalarchiv-Provenienz sind getrennt.
+Gueltiger JSON-Ausschnitt aus Components.json:
+{
+  "schema": 1,
+  "sets": {
+    "system": {
+      "contract": "contract",
+      "system_libraries": [
+        "r4aco",
+        "r4amd",
+        "r4enc",
+        "r4font",
+        "r4gfx",
+        "r4gl",
+        "r4img",
+        "r4nak",
+        "r4nv",
+        "r4std",
+        "r4video",
+        "r4vk"
+      ]
+    },
+    "recovery": {
+      "contract": "recovery-contract",
+      "system_libraries": [],
+      "source_sdk": "recovery-sdk",
+      "source_libraries": "recovery-libraries"
+    }
+  }
+}
+Aktueller Systemlibrarysatz:
+  r4aco 0.1.6 -> /R4OS/LIBS/R4ACO.R4L
+  r4amd 0.1.8 -> /R4OS/LIBS/R4AMD.R4L
+  r4enc 0.1.10 -> /R4OS/LIBS/R4ENC.R4L
+  r4font 0.2.3 -> /R4OS/LIBS/R4FONT.R4L
+  r4gfx 0.1.38 -> /R4OS/LIBS/R4GFX.R4L
+  r4gl 0.1.32 -> /R4OS/LIBS/R4GL.R4L
+  r4img 0.3.4 -> /R4OS/LIBS/R4IMG.R4L
+  r4nak 0.1.4 -> /R4OS/LIBS/R4NAK.R4L
+  r4nv 0.1.19 -> /R4OS/LIBS/R4NV.R4L
+  r4std 0.2.6 -> /R4OS/LIBS/R4STD.R4L
+  r4video 0.1.14 -> /R4OS/LIBS/R4VIDEO.R4L
+  r4vk 0.1.43 -> /R4OS/LIBS/R4VK.R4L
+Source-tree-Vertrag: r4os-files-sha256-lf-v1. Ordinal sortierte relative UTF-8-Pfade; je Eintrag Pfad + NUL + 64 kleine Hexzeichen SHA256(Dateibytes) + LF, anschliessend SHA256 ueber diese Zeilen. Bei den vom SDK benannten Textformaten nur CRLF zu LF normalisieren. BOM, sonstige Textbytes und Binaerbytes bleiben signifikant. Gitquellen verlangen zusaetzlich exakten Commit und sauberen Stand; gepruefte entpackte Archive brauchen keine Git-Historie.
+Textnormalisierung gilt fuer die Erweiterungen .zig, .zon, .json, .ps1, .psm1, .psd1, .sh, .bat, .toml, .lock, .c, .h, .cc, .cpp, .hpp, .inc, .s, .asm, .ld, .r4mf, .r4s, .py, .rs, .md, .txt, .yml, .yaml, .xml und .cmake (Erweiterung kleingeschrieben), ausserdem fuer die exakten Dateinamen LICENSE, NOTICE, .gitignore, .gitattributes und Makefile. Pfade verwenden / und keine absoluten Orte, Segmente aus einem oder zwei Punkten; doppelte Pfade auch ohne Beachtung der Gross-/Kleinschreibung sind ungueltig. Zur Verifikation die SDK-Werkzeuge verwenden, statt einen zweiten Aufloeser zu pflegen.
+
+4. Unveraenderliche Pakete, Capabilities und Pruefreihenfolge
+-------------------------------------------------------------
+SDK-Release.json: schema=1, interface=r4os-sdk-package. Der Beleg bindet SDK-Quellidentitaet, profile_sources mit Pfad/schema/SHA256, die elf profiles, toolsets/tools, component_sets, sources/system_libraries/policy, resolved_sources und assets mit Rolle/Pfad/URL/Bytes/SHA256/prefix. Er ist eine erzeugte Ableitung und darf nicht separat gepflegte Politik werden. Er hasht sich nicht selbst; SHA256SUMS.txt deckt auch ihn ab. resolved_sources kann lokale Pfade des Herausgebers als Belegorte enthalten. Clients erzeugen ihre eigene Roots-Datei aus den entpackten Archivpraefixen; diese Pfade sind keine Installationsvorgabe.
+r4os-sdk-capabilities-v3.json: schema=3. profile_sources ist hier eine Hashabbildung; build_profiles, component_sets und package_interface beschreiben den SDK-Anschluss. Nicht mit den profile_sources-Objekten des Releasebelegs verwechseln. Ein DevKit-Pflichtfeld gibt es nicht mehr. Template-/Rollenfaehigkeiten weiterhin aus dem Katalog lesen; das Profil allein erteilt keine neue Laufzeitfaehigkeit.
+Die fuenf Archive werden neben dem Payload in getrennte Verzeichnisse entpackt: SDK/, CONTRACT/, LIBRARIES/, RECOVERY/ und Tools/. RECOVERY/ enthaelt die vom SDK selektierten eingefrorenen Quellen, unter anderem Platform/SDK und Platform/Contract. Der Tools-Export enthaelt Linux- und Windows-Hostprogramme, Runtimeobjekte, die drei Originale und die SDK-eigenen Setup-/Rust-Starter. Offizielle Zig-/Rust-Compiler werden passend provisioniert; nicht jeder Vendorcompiler ist im Tools-Archiv eingebettet.
+Alle zehn oeffentlichen SDK-Assets (vollstaendig und ohne Anmeldedaten zurueckgeladen):
+  R4OS-Contract-0.64.73-source.tar.gz | 1851622 Bytes | SHA256 f52d02fb99aa5c741b59299c45086e01df27c9ea35450367f04a3bf315aca8d5
+    https://github.com/R4OSDev/r4os-sdk/releases/download/v0.64.145/R4OS-Contract-0.64.73-source.tar.gz
+  R4OS-Libraries-0.64.47-source.tar.gz | 9984185 Bytes | SHA256 10714c98e96dbad99e8591cc4b3784b4f7ddb5d09a73a6fe68b5deb7aba8245f
+    https://github.com/R4OSDev/r4os-sdk/releases/download/v0.64.145/R4OS-Libraries-0.64.47-source.tar.gz
+  R4OS-Recovery-0.1.67-source.tar.gz | 39552115 Bytes | SHA256 c6a5d7f50cc2bfa3dce90d3e3b54d22230fcaa89269268a3dcf1ba2fccca21da
+    https://github.com/R4OSDev/r4os-sdk/releases/download/v0.64.145/R4OS-Recovery-0.1.67-source.tar.gz
+  R4OS-Rust-Tools-0.64.145.tar.gz | 19200181 Bytes | SHA256 c95055910e2e5ee6e6d1742cc282305370857c2200c4469f50a071ba70a6b252
+    https://github.com/R4OSDev/r4os-sdk/releases/download/v0.64.145/R4OS-Rust-Tools-0.64.145.tar.gz
+  R4OS-SDK-0.64.145-source.tar.gz | 10222064 Bytes | SHA256 e08fa9aeb548446540df616ab139375767cde2c9931cd4c8d59047aaaa0aaef1
+    https://github.com/R4OSDev/r4os-sdk/releases/download/v0.64.145/R4OS-SDK-0.64.145-source.tar.gz
+  r4os-sdk-capabilities-v3.json | 344878 Bytes | SHA256 26ad6c7c749786be3b55eb395f73d4683821c29bf4b811af11282d9092c46dc3
+    https://github.com/R4OSDev/r4os-sdk/releases/download/v0.64.145/r4os-sdk-capabilities-v3.json
+  README.txt | 396 Bytes | SHA256 469a214f0700dbd126a8fad263050da321333df6812fee07af155a8c2747c9ff
+    https://github.com/R4OSDev/r4os-sdk/releases/download/v0.64.145/README.txt
+  SDK-Qualification.json | 39066 Bytes | SHA256 880e43630c3debaac94bb8dc4779157b1709ce8c811672c7dd73246857ed8e65
+    https://github.com/R4OSDev/r4os-sdk/releases/download/v0.64.145/SDK-Qualification.json
+  SDK-Release.json | 239292 Bytes | SHA256 1e34a86b810caa16dbda575f3e0116d246f84a4e5d157a7fe611b5d6baea2916
+    https://github.com/R4OSDev/r4os-sdk/releases/download/v0.64.145/SDK-Release.json
+  SHA256SUMS.txt | 847 Bytes | SHA256 987144311950204a76ca1e7ba537f401c2119ce189a52f7d045110f9d46c4b7f
+    https://github.com/R4OSDev/r4os-sdk/releases/download/v0.64.145/SHA256SUMS.txt
+Alle vier oeffentlichen R4OS-Assets:
+  R4OS-0.89.36-full-x86_64.zip | 164899998 Bytes | SHA256 424fe5cb0880f4f0458f10203a1594a7fbc34ba7e141220a5ac9971de8078f7f
+    https://github.com/R4OSDev/r4os-distribution/releases/download/v0.89.36/R4OS-0.89.36-full-x86_64.zip
+  R4OS-0.89.36-slim-x86_64.zip | 161562607 Bytes | SHA256 fbd6dcf5da464014cc3159b94bd4536f895159a69bb2f9e2447e0cb63a319ab6
+    https://github.com/R4OSDev/r4os-distribution/releases/download/v0.89.36/R4OS-0.89.36-slim-x86_64.zip
+  R4OS-SOURCES-0.89.36.json | 45418 Bytes | SHA256 5904593ce45da5e652a785f100c9e9c3381d716f74641a5e8950df1403b15c42
+    https://github.com/R4OSDev/r4os-distribution/releases/download/v0.89.36/R4OS-SOURCES-0.89.36.json
+  SHA256SUMS.txt | 282 Bytes | SHA256 ae0dda438745c62bfceb2c31a98023d125dc4fc0c40d352f69e4011d97ec0334
+    https://github.com/R4OSDev/r4os-distribution/releases/download/v0.89.36/SHA256SUMS.txt
+Reihenfolge: SDK-Release/Pruefsummen beziehen, gesamten ausgewaehlten Satz unveraendert laden und Hash/Laenge pruefen, Archive entpacken, drei Originalhashes und Schemata pruefen, Quellen/Werkzeugexport ueber Package.ps1 verifizieren, erst danach installieren/aufloesen/bauen. Teilweise oder vermischte Saetze nicht als bereit anbieten. R4OS-SOURCES enthaelt den abgeleiteten sdk_profile-Verweis auf SDK-Version, die drei Originalhashes, Profilkatalog und Systemlibrarysatz.
+
+5. Echte SDK-Aufrufe und Hostvoraussetzungen
+--------------------------------------------
+Voraussetzungen: PowerShell 7 und ein unterstuetzter x64-Linux-/Windows-Host, passende Archiv-/Downloadwerkzeuge und die in Tools.json deklarierten Hostpakete. Die gemeinsame Logik liegt in .ps1; .sh und .bat sind Hoststarter. Pfade aus dem gewaehlten Paket ableiten. Setup -Check prueft einen vorhandenen Bestand; -ReuseRoot erlaubt ausdrueckliche Wiederverwendung eines passenden Bestands. Linux-QEMU ist ein exakt geprueftes Hostpaket; Liminebau benoetigt make und einen C-Hostcompiler.
+Die folgende PowerShell gilt fuer ein selbst gewaehltes, bereits entpacktes Paketverzeichnis $base; $payload nennt die unveraenderten Downloads und $install einen expliziten Werkzeugort. Die Dateinamen und Parameter sind reale SDK-Schnittstellen. Lokale Pfade zuerst passend setzen:
+$base = (Resolve-Path ./Paket).Path
+$payload = (Resolve-Path ./Downloads).Path
+$install = [IO.Path]::GetFullPath('./Werkzeuge')
+$sdk = Join-Path $base 'SDK'
+$contract = Join-Path $base 'CONTRACT'
+$libraries = Join-Path $base 'LIBRARIES'
+$tools = Join-Path $base 'Tools'
+$roots = Join-Path $base 'roots.json'
+@{
+  contract=$contract; libraries=$libraries
+  'recovery-sdk'=(Join-Path $base 'RECOVERY/Platform/SDK')
+  'recovery-contract'=(Join-Path $base 'RECOVERY/Platform/Contract')
+  'recovery-libraries'=(Join-Path $base 'RECOVERY/Legal/Sources/Libraries.zip')
+} | ConvertTo-Json | Set-Content -LiteralPath $roots -Encoding utf8
+pwsh -NoProfile -File (Join-Path $sdk 'Tools/Package.ps1') -Action Verify -PayloadRoot $payload -Manifest (Join-Path $payload 'SDK-Release.json') -RootsFile $roots -ToolsRoot $tools
+pwsh -NoProfile -File (Join-Path $sdk 'Tools/Profile.ps1') -Action Validate
+pwsh -NoProfile -File (Join-Path $sdk 'Tools/Profile.ps1') -Action Describe -Profile r4os-zig-module-v1
+pwsh -NoProfile -File (Join-Path $sdk 'Tools/Profile.ps1') -Action Resolve -Profile r4os-zig-module-v1 -RootsFile $roots -Output (Join-Path $base 'resolved.json')
+& (Join-Path $sdk 'Tools/Setup.ps1') -InstallRoot $install -Tools @('zig','rust')
+
+Tools/Rust.ps1 --root INSTALLATIONSROOT --profile sdk check prueft den isolierten Rustbestand. Fuer Kernel ist --profile kernel erforderlich. Private Cargo-/Rustup-Verzeichnisse vermeiden globale Toolchainwechsel. Nach vollstaendiger Bereitstellung und vorhandenen benoetigten Abhaengigkeiten ist Offline-Wiederverwendung geprueft.
+Erstellung/Bau eines externen C-Verbrauchers (C-Templatekennung ist im Katalog enthalten; Zielverzeichnis darf vorher nicht existieren):
+$project = [IO.Path]::GetFullPath('./MeineApp')
+pwsh -NoProfile -File (Join-Path $sdk 'Tools/New-Project.ps1') -TemplateId R4OS.Host_C_Console -Directory $project -ProjectName MEINEAPP -SdkRoot $sdk -ContractRoot $contract -ToolsRoot $tools
+pwsh -NoProfile -File (Join-Path $sdk 'Tools/Build-Project.ps1') -ProjectRoot $project -SdkRoot $sdk -ContractRoot $contract -LibrariesRoot $libraries -ToolsRoot $tools -ZigRoot (Join-Path $install 'Toolchains/Zig') -InstallRoot $install -OutputRoot (Join-Path $project 'Output')
+
+New-Project und Build-Project besitzen keinen freien -Profile-Parameter. Fuer normale Projekte waehlen Template, Sprache und Modulrolle das passende SDK-Profil. Profile.ps1 -Profile ID dient der ausdruecklichen Abfrage/Aufloesung. Weitere Templatekennungen ausschliesslich aus module-catalog capabilities --json beziehungsweise dem ausgewaehlten Capabilities-Asset verwenden. Rust-Projekte erhalten die angebotenen Host-Rust-Templates und benoetigen die SDK-installierte Rusttoolchain; C-Companions benoetigen zusaetzlich Zig.
+Das Output/build.json dokumentiert Erfolg, Modul/Artefakthash, SDK/Contract und sdk_profile mit Kennung, Originalhashes und technical. Fehlgeschlagene Builds duerfen kein altes erfolgreiches Artefakt als neuen Erfolg ausgeben. Setup-/Installationsbelege und Buildreceipts sind erzeugte Daten.
+
+6. App-eigene Zusatzlibraries und Entwicklung
+---------------------------------------------
+Eine App darf eigene zusaetzliche Libraries exakt pinnen. -AdditionalLibrariesFile akzeptiert ein JSON-Array mit id, root und exaktem commit einer sauberen eigenen Gitwurzel, optional path fuer eine Library im gemeinsamen Repository. Fuer vendorte Quellen ist stattdessen ein vollstaendiger tree mit algorithm/files/sha256 moeglich. -DependencyRoot/-DependencyRootsJson bindet bei Rust die benoetigten Quellen im tatsaechlichen Cargo-Graphen; der Pinbeleg ersetzt die fachliche Abhaengigkeitsdeklaration nicht.
+Syntaktisch gueltiges Formbeispiel; Pfad und synthetischen Commit vor Verwendung durch die echte eigene Library ersetzen:
+[
+  {
+    "id": "meine-zusatzlibrary",
+    "root": "/lokaler/pfad/MeineLibrary",
+    "commit": "0123456789abcdef0123456789abcdef01234567"
+  }
+]
+SDK-/Contract-/Systemkennungen duerfen weder direkt noch unter Alias ueberschattet werden. Tatsaechliche R4MF-/Cargo-Identitaet und aufgeloester Graph werden geprueft. Widerspruechliche transitive Systembindungen vor dem Compilerstart melden. Rootargumente/Settings waehlen Speicherorte, niemals andere Systemversionen.
+Quellenentwicklung ist ausdruecklich: Profile.ps1 -Action Develop -ContractRoot CONTRACT -LibrariesRoot LIBRARIES -Output NEUER_BELEG.json erzeugt einen technischen Snapshot aus dem Git-SDK und den tatsaechlichen Quellen. Verwendung ueber -DevelopmentProfile BELEG.json. Jede Quellen-/Profil-/Commitveraenderung macht ihn veraltet; neue Datei erzeugen, nicht automatisch selbst freigeben. R4OS_SDK_DEVELOPMENT_PROFILE ist ein ausdruecklicher Pfad, keine implizite Freigabe. Ein Technical-Toolsexport ersetzt diesen Quellbeleg nicht. technical=true niemals als regulaer qualifiziertes Release ausgeben.
+Technische Zig-Pins bei vorhandenen Besitzerprojekten mit Tools/Sync-ComponentPins.ps1 -ProjectRoot PFAD -Write aus dem SDK erzeugen. Keine manuelle alternative Versionsquelle pflegen. Versteckte --fork-/Optimierungs-/PATH-/RUSTFLAGS-/ZIG_LIB_DIR-Ueberschreibungen werden abgewiesen; keine stille Rueckfallstrategie.
+
+7. Konkreter Auftrag an R4OS Studio
+-----------------------------------
+1. SDK-Version aus dem verifizierten Paketsatz auswaehlen; alle drei Originale zusammen laden. Profil-/Werkzeug-/Contract-/Systemlibrary-Auswahl aus bisherigen Studioeinstellungen entfernen oder als lesende Anzeige aus dem SDK darstellen. Template/Modulrolle muss zur vom SDK angebotenen Faehigkeit passen.
+2. SDK-Release schema1 und Capabilities schema3 getrennt einlesen; drei Dateischemata und Referenzen pruefen. Quellen/Toolpakete nach exakten Belegen aufloesen. Lokale Installationspfade erlauben, dabei Identitaet/Herkunft nicht umdeuten. Alte Projekte bewusst auf den SDK-Satz migrieren und technische Pins regenerieren.
+3. SDK-Setup/Profile/New-Project/Build-Project als Besitzerwerkzeuge verwenden. Zusatzlibraries als eigene Pins und echte Projektabhaengigkeiten behandeln; Systemprovider-Konflikte mit konkreter Kennung/Grund anzeigen. DevelopmentProfile ausdruecklich erzeugen/anwenden, veraltete Belege stoppen den Build.
+4. Buildreceipts und Artefakthashes als Ergebnis auswerten. Abbruch/Fehler und technische Builds klar anzeigen. Keinen Erfolg aus vorherigen Ausgaben ableiten. Die Hostfaehigkeiten respektieren; keine nativen Zig-/Rust-Compiler in R4OS durch diese Profile voraussetzen.
+5. Anschluss mit mindestens einem echten Projekt fuer die angebotenen Sprachen/Rollen, einer eigenen Zusatzlibrary, Wiederverwendung/offline und gezielten Konfliktfaellen pruefen. Linux/Windows tatsaechliche Ausfuehrung jeweils separat melden.
+
+8. Konkreter Auftrag an R4OS Server
+-----------------------------------
+1. SDK-Release als atomaren, unveraenderlichen Satz katalogisieren: SDK-Version/Commit, die drei Originalhashes, Profile, Hosttoolvarianten, Contract-/Systemlibrarybindungen sowie Assetrollen/Laengen/Hashes. Keine servereigenen Compiler-/Systempins oder Defaultprofile zurueckschreiben.
+2. Die passenden SDK-, Contract-, Library-, Recoveryquell- und Toolarchive sowie Capabilities/Qualifikation/Releasebeleg/Pruefsummen unveraendert bereitstellen. Herkunft und Downloadadresse getrennt vom Inhaltshash fuehren. Vor Freigabe den gesamten Satz gegen SDK-Release und SHA256SUMS pruefen; Teiluploads nicht als installierbar ausgeben.
+3. Unbekannte Schemata/IDs, fehlende Assets, falsche Hashes und widerspruechliche Bindungen mit konkretem Fehler abweisen. Schemaweiterentwicklung ausdruecklich behandeln; keine stillen Fallbacks auf den alten DevKit-Vertrag. Release- und Komponentenidentitaeten nicht aus Dateinamen allein ableiten.
+4. Auswahl in WebApp/API auf SDK + gueltiges Profil + passende Hostvariante beschraenken. Zusatzlibrary-Pins gehoeren der App und ersetzen keine SDK-Systemkomponenten. Technische Entwicklungsbelege getrennt von regulaeren Releases behandeln.
+5. R4OS-Releasezuordnung ueber dessen Quellenmanifest/sdk_profile mit dem SDK-Beleg abgleichen. Bestehende Update-/App-/Benchmarkdienste bleiben fachlich eigenstaendig. Fuer den neuen SDK-Katalog werden hier keine noch nicht implementierten Serverendpunkte behauptet; konkrete API/URLs nach der Implementierung zurueckmelden.
+
+9. Qualifizierter Umfang und Grenzen
+------------------------------------
+Linux: regulaere Besitzerbuilds, voneinander getrennte SDK-/Contract-/Library-/Toolpakete, 33 vorhandene Hosttemplatefaelle in Zig/C/Rust und 18 gezielte Quellen-/Zusatzlibrary-/Offline-/Konflikt-/Entwicklungsfaelle bestanden. Bestehende SDK-, Contract- und native Librarypruefungen sowie gezielte KVM/SMP4-Integration sind in SDK-Qualification.json dokumentiert. Die oeffentlichen Originaldateien wurden fuer beide Releases vollstaendig gegen Laenge und SHA256 zurueckgelesen; ein frischer Verbraucher verwendet den veroeffentlichten SDK-Satz.
+Die beiden oben abgedruckten PowerShell-Bloecke wurden zusaetzlich unter Linux mit dem unveraenderten oeffentlichen SDK-/Contract-/Library-/Toolsatz ausgefuehrt; nur die vier lokalen Pfadzuweisungen wurden angepasst. Der genaue vorhandene SDK-Zig-/Rustbestand wurde verwendet. Paketpruefung, Profile Validate/Describe/Resolve, Setup zig/rust, C-Projekterstellung und Build bestanden. Ergebnis MEINEAPP.R4X, 8519 Bytes, SHA256 18e085155e92a28bce21b1ef8a5021be0453933b720bd7c1984a97387786658b. Das Buildreceipt weist r4os-c-module-v1 und technical=false aus.
+Recovery: bestehende BIOS-/UEFI-SMP4-/RAM- und vollstaendige Download-/Retry-/Fortsetzungs-/Hash-/Abbruch-/Powercut-/FAT-Faelle bestanden. Eingefrorene Originale blieben erhalten, Recoveryartefakte bytegleich. Der Kernel ist ebenfalls bytegleich. Bei den SDK-Runtimeobjekten sind Heap und Storage bytegleich; Facade unterscheidet sich nur in Debug-Line-Sektionen, alle uebrigen Sektionen sind gleich.
+Windows: PE-Werkzeuge cross gebaut und gemeinsame PowerShell-Pfade statisch geprueft; keine Windows-Ausfuehrung und keine hostuebergreifende Bytegleichheit behauptet. Keine Realhardware-/GPUabnahme. Native Shader-/Compilerfixtures sind CPU-Compilerpruefungen. Die bestehenden Sprach-/ISA-Grenzen gelten weiter, insbesondere die begrenzte direkte Rust-FP/SIMD-Freigabe; drei Profile allein erweitern keine ABI-/Runtimegarantie.
+Benchmarkoriginale und Referenzen bleiben unveraendert archiviert. Die lokale Abschlussausnahme fuer Serverimport/Readback gilt gemaess Projektregel: lokal validiert; R4OS Server ausstehend, sofern nicht im konkreten Qualifikationsbeleg anders nachgewiesen. Kein neuer Messlauf allein wegen Import/Upload.
+
+10. Benoetigte Rueckmeldung nach der Implementierung
+----------------------------------------------------
+Von Studio: Version und Commit; tatsaechlich konsumierte SDK-Version/Releaseadresse und drei Originalhashes; verwendete Profile/Templates; reproduzierbare Setup-/Buildaufrufe und vollstaendige Buildreceipts/Artefakthashes fuer Erfolgsfaelle; Zusatzlibrary-Pin und Konflikt-/Stale-/Hashfehler; tatsaechliche Linux-/Windows-Ausfuehrung und verbleibende Grenzen. Keine Secretwerte uebermitteln.
+Vom Server: Version und Commit; konkrete implementierte Katalog-/Download-/Pruefendpunkte; ein vollstaendiger Beispielkatalog fuer genau diesen SDK-Satz; unveraenderliche Assetadressen mit Rolle/Bytes/SHA256; Beleg fuer vollstaendigen unabhaengigen Readback; Behandlung unvollstaendiger Saetze, unbekannter Schemata und Konflikte; Zuordnung des R4OS-Releases zum SDK. Eventuelle Abweichungen vom hier beschriebenen Vertrag ausdruecklich nennen.
+Damit kann der R4OS-Agent die Anschluesse gegen die tatsaechlich veroeffentlichten Originale pruefen. Zugangsdaten sind fuer diesen Bericht und die Rueckmeldungen nicht erforderlich.

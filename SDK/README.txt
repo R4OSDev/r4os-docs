@@ -1,4 +1,12 @@
-﻿R4OS SDK
+SDK profile authority (0.89.25)
+-------------------------------
+The SDK owns exactly Profiles/Build.json, Profiles/Tools.json and
+Profiles/Components.json. Compiler-free validation: Tools/Profile.ps1.
+The ownership/schema/development contract is in Profiles.txt. Builder migration
+is tracked separately in roadmap0.89.26-.34; the contract alone does not claim
+that all existing consumers have already switched.
+
+R4OS SDK
 ========
 
 The SDK in `Repositories/SDK/` is the normal development surface for Zig and

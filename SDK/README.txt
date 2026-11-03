@@ -1,10 +1,11 @@
-SDK profile authority (0.89.25)
--------------------------------
-The SDK owns exactly Profiles/Build.json, Profiles/Tools.json and
-Profiles/Components.json. Compiler-free validation: Tools/Profile.ps1.
-The ownership/schema/development contract is in Profiles.txt. Builder migration
-is tracked separately in roadmap0.89.26-.34; the contract alone does not claim
-that all existing consumers have already switched.
+﻿SDK profile authority (0.89.25-0.89.35)
+--------------------------------------
+The SDK alone selects build policy, tools, Contract and system libraries in
+Profiles/Build.json, Profiles/Tools.json and Profiles/Components.json (schema 1).
+Normal builders consume those originals or verify generated projections.
+Tools/Profile.ps1 validates/describes/resolves the selection; Package.ps1
+verifies the immutable source/tool/asset set. Profiles.txt documents ownership,
+eleven profile IDs, additional-library pins and explicit development receipts.
 
 R4OS SDK
 ========
@@ -14,15 +15,18 @@ C modules and the qualified Rust R4X profile. It provides startup code, typed pl
 support, templates, C headers and generic Runtime-R4L helpers. The separate
 Contract repository remains the canonical API and ABI source.
 
-Current matching release: SDK0.64.134 / Contract0.64.71 / Libraries0.64.42,
-https://github.com/R4OSDev/r4os-sdk/releases/tag/v0.64.134.
-R4OS0.89.18 provides Kernel0.1.454, Desktop0.1.200 and WINSVC0.1.33.
-Typed bounded pointer, own FocusSnapshot, TCP CloseReceipt, password editor,
-simultaneous heap-owner active peak and native own-link activation are
-qualified. DESKRUN0.1.5 exposes saved /LINK, /LINKSTATUS and /LINKRELEASE.
-All nine public SDK assets and all four R4OS assets were fully read back.
-Scope and limits: Deployment/Release08918.txt, Desktop/DeskRun.txt and
-Core/GuardOffer08918.txt; language/package evidence: SDK/LanguageParity.txt.
+Current matching release: SDK 0.64.145 / Contract 0.64.73 / Libraries 0.64.47,
+https://github.com/R4OSDev/r4os-sdk/releases/tag/v0.64.145.
+All ten public assets were fully downloaded without authentication and compared
+with the qualified originals by length/SHA256. A fresh public Rust consumer
+passed normal build and offline reuse using the public source and host-tool
+archives. Vendor Rust was explicitly reused into a fresh installation root.
+SDK-Release.json (schema 1) binds the three originals, components and assets;
+capabilities use schema 3. SDK-Qualification.json describes actual coverage.
+Linux is executed; Windows host tools are cross-built with static PowerShell
+checks. No Windows, physical-hardware or GPU execution is claimed.
+Durable originals/readback/consumer evidence: ExFiles/Reports/SDK/0.64.145.
+The matching R4OS Slim/Full publication is the next step, 0.89.36.
 
 Local DevKit and independent repositories (03.11.2026)
 ----------------------------------------------------
@@ -34,15 +38,16 @@ repositories keep their own synchronization targets. Nested Git histories and
 remotes are retained; installed copies are not recursively published as part
 of the parent. Details and the remote-only retirement command: Agents/Github.txt.
 
-Current builds can continue using the retained local installations. Moving
-Contract/tool/system-library selection entirely into the SDK, with Server
-providing packages and Studio consuming the profile, is a separate migration.
-The remote retirement alone does not change compiler pins or build profiles.
+Current builds may reuse retained local installations after SDK verification.
+Contract/tool/system-library selection has moved into the SDK. Server and
+Studio consume the published SDK package contract; they must not introduce
+their own system pins. The final common handoff follows the R4OS publication.
 
 A module project contains `module.R4MF`, `build.zig`, `build.zig.zon`,
 `Settings.R4S`, `Build.bat` and its own sources. The repository starter maps
-the current local SDK, Contract, Libraries and DevKit checkouts before Zig
-resolves packages. Relative or absolute mappings are supported.
+the selected SDK and component/install locations. The SDK verifies exact
+source and tool identities before the compiler runs. Relative or absolute
+location mappings do not select alternative system versions.
 
 Rust R4X projects use Cargo.toml/Cargo.lock and the SDK's shared host builder
 instead of a Zig build script. SDK77/Contract44 provide profile2 with locked

@@ -23,7 +23,9 @@ Components
 
 - UPDSVC searches the configured package server, downloads packages and owns
   the single durable update job.
-- UPDATE.R4X is the graphical frontend.
+- The standalone UPDATE.R4X frontend is retired since R4OS 0.89.38.
+  New images contain no executable or menu item. UPDSVC and its IPC remain;
+  ordinary online search/download has no user interface until App Center.
 - SYSUPD.R4X is the administrative verification, apply, resume and status
   frontend.
 - The shared update engine owns package parsing, staging, journal, rollback,
@@ -31,7 +33,7 @@ Components
 
 Search and download never install by themselves. The service validates the
 catalog schema, immutable filename, size and SHA-256 before handing a package
-to the common engine. All frontends observe the same job and cancellation
+to the common engine. Administrative consumers observe the same job and cancellation
 state; they do not implement parallel installers.
 
 SYSUPD 0.1.20 / UPDSVC 0.2.24 retry a failed STATUS observation at most
@@ -100,7 +102,7 @@ Retained-prefix reads and bounded metadata reads are additional work; retries
 may add passes. SYSUPD reports actual payload stream attempts and bytes read.
 
 R4M0 strings and ELF section names use the shared 512-byte bounded artifact
-reader in all engine phases. UpdateCenter uses additive UPDSVC operations 10
+reader in all engine phases. The retired UpdateCenter used additive UPDSVC operations 10
 and 11: the complete offer plus its first component, then up to eight further
 components per response. Both fit the existing 4096-byte IPC limit. Old
 single-row operations remain available. Job and result-generation checks
@@ -225,7 +227,7 @@ Ergebnis, aktive Arbeit und Folgeannahme werden gemeinsam gesperrt geaendert.
 Ein vollstaendig vorbereiteter Neustartbatch reserviert seinen Suchstand.
 Weitere Auftraege, insbesondere neue Suchen, werden vor Aenderung von Job,
 Status oder Ergebnisliste zurueckgewiesen. Der passende Neustart bleibt
-moeglich. UpdateCenter deaktiviert die Suche und sendet ausschliesslich
+moeglich. Die damalige UpdateCenter-Oberflaeche deaktivierte die Suche und sendete ausschliesslich
 die bestaetigte, zur angezeigten Liste passende Neustartidentitaet. Nach
 einem zurueckgekehrten Commitfehler kann derselbe Batch erneut versucht
 werden; ein neu geoeffnetes Fenster laedt den zugehoerigen Suchstand nach.
@@ -265,3 +267,51 @@ configuration because no configuration files are payloads. Full Recovery
 UpdateR4OS reformats SYSTEM: export/restore settings and user files first.
 Preservation of the configured Limine menu or DATA is not a SYSTEM backup.
 A validated package/image is not a physical graphics qualification.
+
+Standalone GUI retirement (0.89.38)
+-----------------------------------
+The UpdateCenter repository retains its original sources in Archive/ and Git
+history; it has no active module manifest and cannot build a new UPDATE.R4X.
+The Desktop configured and fallback menus reject the retired application.
+Existing installed files are not removed just by changing an image plan.
+
+Install SYSUPD >=0.1.26 and Desktop >=0.1.201 through the administrative
+update route and restart into that Desktop version. Close any old UPDATE
+window and temporarily stop UPDSVC; SSH remains available:
+
+    SERVMAN STOP UPDSVC
+    SERVMAN STATUS UPDSVC
+    SYSUPD RETIRE-UPDATE-CENTER /CHECK
+    SYSUPD RETIRE-UPDATE-CENTER
+    SERVMAN START UPDSVC
+    SERVMAN STATUS UPDSVC
+
+Verify the actual stopped/running status even if a SERVMAN request times out.
+The maintenance command requires UPDATE and UPDSVC to be stopped
+and takes the shared SYSLOCK lease. An unfinished batch/transaction or an
+unavailable status stops it. It accepts only the exact released UPDATE
+0.2.8 bytes (SHA256 4191707700767d626701ed570ac8555c924c9c464df7b9a5ea9784050918533d).
+Unknown versions or modified files are preserved and reported for review.
+/CHECK validates the transition without archiving GUI or replacing inventory.
+
+UPDATE.R4X is renamed in its Desktop directory to UPDATE.OLD. Only its
+exact UPDATE/r4x/target inventory entry is removed. The catalog replacement
+is atomic within CONFIG; UPDRET.BAK preserves the old catalog. UPDRET.NEW
+is its private stage in that same directory. A retry after
+GUI archival finishes the same transition; a completed retry reports already
+retired. Conflicting backups/stages are retained and stop the command.
+A matching private UPDRET.NEW is reused after an interrupted attempt.
+
+No Registry address/port, registration credential, CA, service autostart,
+UPDSVC state, inbox, transaction journal or batch journal is rewritten.
+UPDSVC/R4SRV/SYSUPD, package staging, restart, recovery and rollback remain
+with their existing owners. A rollback that restores an old catalog requires
+this explicit retirement check again; the GUI original stays archived.
+
+SSH/SFTP administrative update route remains:
+transfer an unchanged R4U to C:\R4OS\UPDATE\INBOX, read it back and compare
+SHA256, then SYSUPD VERIFY <path>, SYSUPD APPLY <path> for a live-compatible
+package, or SYSUPD STAGE <path> and SYSUPD COMMIT for a restart batch.
+Follow SYSUPD STATUS / RESUME-BATCH after boot until the durable transaction
+is complete. Upload alone does not install a package. No server token is
+required for this local inbox route.

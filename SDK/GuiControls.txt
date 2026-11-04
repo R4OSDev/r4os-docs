@@ -1,0 +1,118 @@
+﻿Native SDK GUI controls
+=======================
+
+SDK0.64.147 / R4OS0.89.46
+-----------------------
+gui.Canvas defaults to style=null. Existing callers retain the classic
+Palette, relief controls, focus/navigation, editing and dialog behavior.
+withStyle(Style.light/dark) or checked setStyle opts one caller-owned Canvas
+into flat rounded surfaces, accent borders and explicit state colors.
+This neither changes another Canvas nor installs a Desktop/system theme.
+Style contains text/surface/accent/selection/disabled colors, bounded radius,
+spacing/padding and a FontSet. Invalid style values are refused by the modern
+drawing owner before it emits its surface. Colors use lower24 RGB bits.
+
+Shared implementation
+---------------------
+Button, TextField, List, TabBar and ModalDialog use the same original control
+and input owners. Only their presentation branches on Canvas.style. Normal,
+hover, pressed, focused, selected and disabled use explicit colors and native
+rounded resources. Focus outlines have transparent interiors. Password fields
+mask before calling the renderer; copy/cut, Unicode limits and wipe semantics
+remain those of the existing editor. Modern single-line selection/caret and
+textIndexAt use the actual per-command font measurement; classic paths retain
+their old geometry. textIndexAt handles at most4096 display bytes and returns
+grapheme boundaries. It neither edits text nor changes selection.
+
+Card provides reusable title/subtitle, state/focus/selection, disabled hit test,
+Enter/space action and an icon rectangle. Caller-owned raster/Alpha8 resources
+use the existing Canvas image paths in that rectangle. TileGrid supplies the
+same responsive cell rectangles for painting and constant-time hit testing;
+gaps, offscreen rows and indices outside its visible range are not targets.
+The caller owns scroll and selection; a grid draws no invisible items.
+Paragraph uses the existing Unicode line-layout owner and current font metrics,
+at most128 visible rows. Progress accepts full u64 counts, computes width in
+u128 and clamps to total. A zero total displays a bounded moving segment; the
+caller advances its phase on actual work, never a fictitious percentage.
+Canvas.actionButton/progressBar are scalar facades over these same owners.
+
+Input and lifecycle
+-------------------
+FocusState, MouseCapture, TextField and DialogState retain input policy.
+MouseCapture is local widget bookkeeping. Real outside-client delivery is
+Window.pointerIdentity/pointerCapture(drag)/pointerRelease through R4DESK.
+Process capture cancellation, focus loss, input reset, resize and close;
+release native capture and clear pressed widget state. Keep the main GUI owner
+and frame buffers alive through actual publication/cleanup. No global input
+controller, private framebuffer route or separate widget engine is required.
+Modern.zig demonstrates this complete event loop and the original dialog owner.
+
+Fonts and client geometry
+-------------------------
+Style.withSystemFonts selects current renderable R4 Sans catalog entries:
+body/caption12 regular, heading24 bold and display32 bold, choosing the closest
+available height/weight. IDs are queried, never hardcoded. Missing entries use
+the builtin font. Font reload requires selecting again on font_changed.
+Canvas.withTextRole chooses an existing font; R4DRAW fontMeasure and the
+existing Desktop glyph path render it. R4FONT owns scalable face decoding;
+the style introduces no font parser or new library. Canvas.layoutTabs returns
+the font-aware TabBar used for both paint and indexAt; use that same value
+for pointer and keyboard operations. Existing LayoutCursor/client bounds,
+font line_height and style.controlHeight supply sizes and spacing.
+
+Language boundary and optional support
+--------------------------------------
+Zig owns all algorithms. The compiler-typed gui_bridge.h and generated Rust
+gui::raw expose the same Style, fonts, controls and layout operations through
+opaque native records. Keep the matching generated header/runtime pair.
+The existing Canvas/TabBar from_fields C signatures keep their historical
+prefix; new presentation fields receive native defaults. Typed setters and
+withStyle/layoutTabs expose the additional fields. create remains compatible.
+Rust's safe Style and Paint methods delegate to this boundary as documented
+in the SDK source. No foreign code guesses Zig slices, optionals or enums.
+modernSupported tests the optional transactional frame transport; matching
+Desktop rounded-resource rendering is a deployment requirement. The separate
+gradientsSupported tests R4DRAW39 grammar; neither query proves actual pixels
+or GPU execution. Classic callers require no opt-in or new dependency check.
+
+Verification
+-------------
+Existing GUI parity/dialog/editor tests retain their classic pixel and input
+oracles. Focused additions cover native rounded resources and state colors,
+disabled/keyboard/grid targets, bounded progress and masked output. C/Rust
+consumers compare their actual frame commands/resources with the Zig owner.
+Native integration, captures, cleanup costs and limits are recorded separately;
+STANDARD3 is a system regression check and provides no isolated GUI speedup.
+
+Proportional catalog fonts
+--------------------------
+The first native example exposed Desktop203's fixed max_advance traversal:
+R4DRAW measured the real advances, but the Desktop spaced every glyph by the
+font maximum. Text then exceeded otherwise correctly measured control bounds.
+Desktop204 retains actual bitmap width/advance in the existing glyph-cache
+padding and follows those advances for imported fonts. Builtin/fixed-width
+paths retain their original cells. Dirty clips and skipped vertical lines
+retain bounded traversal; a zero advance still consumes the decoded scalar.
+The glyph record remains336 bytes and the cache capacity is unchanged.
+The existing text owner tests plus a directed proportional/dirty-clip case
+pass (seven text cases, three common geometry cases and the clock case).
+Both actual C/Rust peers, including the original GUI case and three misuse
+negatives, pass. Their modern frame/resource hashes equal the Zig owner.
+The displayed R4 Sans catalog strikes are bitmap fonts; this work does not
+claim antialiased TTF typography. R4FONT's scalable/Alpha8 owner is separate.
+
+Native qualification0.89.46
+--------------------------
+The actual Desktop204 QEMU/KVM4 guest runs the public Modern.zig consumer.
+Small680x480 and maximized1264x650 clients render the same controls with
+632x54 and1216x224 gradients. Native capture routes release outside the
+client without a click; the following real click produces exactly one action.
+Hover/pressed colors, light/dark, Unicode clipboard replacement, keyboard
+dialog dismissal and minimize/restore retain the same process/window.
+The final native button state is zero and exact process80:80 closes/reaps.
+Pixel checks leave the complete inter-card gap at the page background,
+including after restore. Frame readbacks report zero OOM; resources and
+frame costs remain observations of this example, not universal maxima.
+Original captures, frame receipts, host parity tests, source hashes and the
+earlier timing/transfer failures are in ExFiles/Reports/GUI/0.89.46.
+This SDK example is not evidence of Portex network/install functionality.

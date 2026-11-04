@@ -1,10 +1,55 @@
 ﻿GUI shape and frame contract
 ============================
 
-Complex rounded rectangles, borders, shadows, gradients and similar UI
-effects are described as bounded frame commands plus caller-owned payload
-bytes. R4DRAW validates command kinds, dimensions, offsets, clipping and
-payload ranges before accepting a frame.
+Implemented drawing owners
+--------------------------
+Flat surfaces use clear/rect. SDK gui_shapes builds native paths, rounded
+rectangles with independent elliptical corners and borders, and separate
+outer/inset shadows. Desktop performs four-sample coverage and bounded
+separable shadow blur. Alpha8 and straight ARGB32 use existing source-over
+image paths. These primitives existed before the Portex work.
+
+Contract0.64.74 / SDK0.64.146 / Desktop0.1.203 / Kernel0.1.457 add native
+linear and elliptical radial gradients for rounded rectangles. Earlier
+versions of this document listed gradients as if they already existed;
+they did not. Existing shape headers, frame commands and table slots keep
+their exact layouts. R4DRAW remains a built-in API, never a separate R4L.
+
+Text uses the existing font catalog and per-command font metrics. R4FONT
+owns scalable face parsing/rasterization and caller-owned Alpha8 glyphs;
+R4DRAW does not parse fonts. Icons/images use the current image/ARGB/indexed
+resources and Desktop asset cache. SDK style, layout and input helpers are
+separate from these drawing primitives; the modern controls follow in 0.89.46.
+
+Gradient paint
+--------------
+gradientRoundedRect builds an unchanged GuiShapeResource v1 rounded header,
+one separate GuiGradientPaint and two through eight GuiGradientStop records.
+No path segments, padding or extra tail bytes are permitted. The new logical
+frame command is gradient_rounded_rect. Zig/C/Rust share the same SDK builder.
+The SDK's gradientsSupported query identifies the R4DRAW grammar revision;
+deploy the matching Desktop renderer. This is no GPU acceleration claim.
+
+All coordinates are finite, bounded and local to the original command.
+Linear start/end define a vector at least 1/256 pixel long. Radial start is
+the center; end gives positive x/y radii at least 1/256 pixel. Stops are
+strictly increasing in [0,1], with exact endpoints zero and one. Colors
+clamp outside the range, interpolate premultiplied alpha/RGB, then use
+ordinary shape coverage and source-over. Solid borders remain independent.
+Draw shadows as their own existing logical layer before the gradient.
+
+The Desktop rasterizes only the damaged intersection. Temporary gradient
+storage is one coverage byte plus four ARGB bytes per intersected pixel;
+the ordinary asset cache retains its own budget. A small dirty region
+does not allocate a new full-window gradient texture. Radial distance and
+stop interpolation have real software cost per affected pixel. Repainting
+the entire client on every input event is not required by this API.
+
+Admission and publication
+-------------------------
+R4DRAW validates command kinds, dimensions, offsets, clipping and complete
+payload ranges before accepting a batch. The kernel validates transport;
+the Desktop owns rasterization, and the SDK owns application presentation.
 
 A frame uses an explicit transaction:
 
@@ -20,3 +65,26 @@ snapshot and does not reinterpret application memory.
 
 Numeric layouts, command kinds and limits are generated from the platform
 Contract and are not duplicated here.
+
+Native qualification 0.89.45
+----------------------------
+The unchanged SDK Canvas example ran as a normal hosted R4X in QEMU/KVM
+with four CPUs, Kernel0.1.457 and Desktop0.1.203. Both gradients retained
+their rounded borders and shadows after a real Desktop maximize: the
+per-card command bounds changed from 191x152 to 606x582 pixels. The frame
+contained six commands and 784 resource bytes in both sizes; reported
+current/peak frame storage was 2096/4192 bytes, with zero allocation errors.
+These numbers exclude Desktop raster scratch and the ordinary asset cache.
+The largest individual gradient intersection needs at most 1763460 bytes
+of temporary coverage/ARGB storage (606*582*5); no GPU claim is made.
+
+The example closed and its exact process generation was reaped. All 37
+native program-instance storage cases passed with identical before/after
+storage (153576 bytes). The first added test incorrectly expected a commit
+after a rejected append to succeed; it was corrected to the existing
+failed-transaction contract. Product rejection/publication behavior was
+unchanged. Twelve focused native Desktop cases, the existing Zig GUI tests
+and C/Rust bridge checks cover interpolation, dirty clipping, malformed
+resources and retained classic pixel goldens. Original receipts, captures
+and the initial test failure are retained in ExFiles/Reports/GUI/0.89.45.
+The STANDARD3 run is a system regression check, not a GUI speed measurement.

@@ -1,0 +1,162 @@
+﻿{
+  "schema": 1,
+  "date": "2026-11-05",
+  "roadmap": {
+    "version": "0.89.58",
+    "subversionId": 64
+  },
+  "scope": "Independent frozen Zig Recovery RX/ARP path; normal Rust kernel and all imported runtime modules unchanged.",
+  "incident": {
+    "target": "OssiPC",
+    "recovery": "0.1.67",
+    "kernel": "0.1.64",
+    "symptoms": "GitHub Full download varies between about1MB/s and below10KB/s, then Connection timed out after three resumptions. Existing ZIP survives; unfinished PART is removed."
+  },
+  "cause": {
+    "arpTtlMilliseconds": 30000,
+    "blockingPath": "RX TCP ACK/FIN/retransmit -> sendIpv4Payload -> resolveIpv4DestMacForAdapter -> waitForArpResolution -> recursive FIFO protocol processing",
+    "failure": "TCP frames ahead of a queued ARP reply start the same wait. At the four-level nesting limit the sole protocol consumer waits for work only it can consume. Driver backpressure and TCP stalls follow despite immediate router replies.",
+    "whyLocalTestsMissed": "Same-subnet test traffic refreshes the ARP peer from received IPv4 frames. The reproduction routes both HTTP and SSH through the gateway."
+  },
+  "correction": {
+    "owner": "Repositories/Recovery/Kernel/net/core.zig",
+    "sourceSha256": "b839cc03aa89647b6cf7286622174d16de3a188e48b92c1b7965374a62a0abe9",
+    "behavior": "The RX worker issues a paced ARP request and returns Busy immediately. TCP keeps pending ACK, FIN and retransmit ownership; the ordinary outer drain consumes replies and later activations retry. Other callers retain the existing bounded resolver.",
+    "requestIntervalMilliseconds": 500,
+    "stateReset": [
+      "init",
+      "arpFlush"
+    ],
+    "sourceCommit": "4ea28f4254d0a1ae3455c285a40a1b6cfb8a4bbc"
+  },
+  "reproduction": {
+    "environment": {
+      "host": "Debian Linux/KVM",
+      "firmware": "BIOS",
+      "cpus": 4,
+      "ramMB": 8192,
+      "adapter": "virtio-net-pci",
+      "streamBytes": 67108864,
+      "serverLimitBytesPerSecond": 1048576,
+      "expectedSha256": "281e519df3077b557c6b03f5da83c4e8d397219259615dd7c3308f89cae8f2a6",
+      "probeSha256": "5363baeee2e4043ac55d7a68004a5c0152ec38071c32909938894aff609352cb"
+    },
+    "before": {
+      "recovery": "0.1.67",
+      "kernel": "0.1.64",
+      "kernelSha256": "1d696d6283f284bc33d773687a2408d5514fd8371219ffec9dd9371fe06fc964",
+      "runtimeSha256": "c99cf408a0f58648601285adf849e73fd59166454928e870be65cb0e8e88c301",
+      "routerRequests": 208,
+      "routerReplies": 208,
+      "lastBytes": 27906080,
+      "lastArpTimeouts": 178,
+      "lastSampleBytesPerSecond": 942,
+      "hostWatchdogSeconds": 180,
+      "pcapSha256": "e76c7ead0ba2b8cffe2374d7e927e872393d3dfe5f044d590b92438918d8ee8b",
+      "serialSha256": "5652d8e8cfd35e2d238c43c03f069b77fe3b6827d1403e27a4e19d12cd1fec4c",
+      "lastSampleMilliseconds": 1528,
+      "lastSampleByteDelta": 1440
+    },
+    "after": {
+      "recovery": "0.1.68",
+      "kernel": "0.1.65",
+      "kernelSha256": "f0e4a622b6ed5c5fcb17cc8e9f3bbca54e2ee7f67169243a237c87a73975f4b5",
+      "runtimeSha256": "cca3b6f51518488a61f8c48f70bf79b62351c88ce05ced42f96cf27d27765276",
+      "bytes": 67108864,
+      "transferTicks": 63946,
+      "tickHz": 1000,
+      "hostSeconds": 64.20809993198782,
+      "sha256": "281e519df3077b557c6b03f5da83c4e8d397219259615dd7c3308f89cae8f2a6",
+      "minSampleBytesPerSecond": 1017248,
+      "maxSampleBytesPerSecond": 1083820,
+      "arpTimeouts": 0,
+      "pendingDrops": 0,
+      "routerExpiryTransfers": 2,
+      "pcapSha256": "cf2a3b688d90f4abac3ddf54ea7c3abdf9d39d419ede2e858a0dbf1af465ac21",
+      "serialSha256": "8df4ddc79689eef8141b5e24861c9a860b4678b5ad5de8e783f7fd40d3ef6fcc"
+    }
+  },
+  "qualification": {
+    "network": [
+      {
+        "firmware": "Uefi",
+        "adapter": "rtl8139",
+        "result": "ok",
+        "seconds": 25.389,
+        "coverage": "SSH shell/exec; SFTP/SCP; active/passive FTP; offline FAT32/NTFS read/create/copy/replace/rename/delete; hashes; executable admission; unchanged menu"
+      },
+      {
+        "firmware": "Bios",
+        "adapter": "offline",
+        "result": "ok",
+        "seconds": 10.993,
+        "coverage": "no network; damaged SYSTEM; local Terminal; return and restart"
+      }
+    ],
+    "releasePairSelfTest": "PASS",
+    "zigFormat": "PASS",
+    "gitWhitespace": "PASS",
+    "https": {
+      "result": "PASS",
+      "api": "HTTPS200",
+      "asset": "HTTPS200 with redirect and SHA256",
+      "bytes": 282,
+      "seconds": 0.997,
+      "runner": "Repositories/Recovery/Tools/Test-Downloads.ps1 -LiveOnly -NoCuts",
+      "installationTargetUnchanged": true
+    },
+    "distributionPin": "Resolve-R4RecoveryPackage accepts the published pin and exact cached package hash."
+  },
+  "moduleIdentity": {
+    "menuVersion": "0.1.26",
+    "menuSha256": "6d7a56ecd44417daaa4d5c59567bf7e441e3c0fc560b49013564cdbe322bebd4",
+    "menuUnchanged": true,
+    "importedModulesUnchanged": 39
+  },
+  "limits": [
+    "No OssiPC retest of Recovery68 yet; deployment requires booting the new independent pair.",
+    "No normal Rust-kernel change or qualification.",
+    "No physical RTL8168/cable/router fault exclusion is inferred from the guest.",
+    "No Windows host or new installation/SYSTEM/CURRENT-PREVIOUS mutation matrix. Existing unchanged owner evidence remains applicable."
+  ],
+  "rawEvidenceArchive": "Temp/OssiRecoveryNet/",
+  "release": {
+    "id": 435492172,
+    "tag": "v0.1.68",
+    "url": "https://github.com/R4OSDev/r4os-recovery/releases/tag/v0.1.68",
+    "commit": "4ea28f4254d0a1ae3455c285a40a1b6cfb8a4bbc",
+    "assets": [
+      {
+        "name": "R4OS-Recovery-0.1.68-x86_64.zip",
+        "bytes": 25191376,
+        "sha256": "24832b1f5ba112cab0790901cdc9e5e69c39ced4f3da6f514604b9384d28dac5",
+        "url": "https://github.com/R4OSDev/r4os-recovery/releases/download/v0.1.68/R4OS-Recovery-0.1.68-x86_64.zip"
+      },
+      {
+        "name": "R4OS-RECOVERY-SOURCES-0.1.68.json",
+        "bytes": 62848,
+        "sha256": "659f6c53ce248e8eb1f912c17cb6619e0e42f31969a3751263c2e82609d7964e",
+        "url": "https://github.com/R4OSDev/r4os-recovery/releases/download/v0.1.68/R4OS-RECOVERY-SOURCES-0.1.68.json"
+      },
+      {
+        "name": "SHA256SUMS.txt",
+        "bytes": 198,
+        "sha256": "f0f563b6725bd9211e8cc591e2a8df9660710e59265d0de8af8b09452306be16",
+        "url": "https://github.com/R4OSDev/r4os-recovery/releases/download/v0.1.68/SHA256SUMS.txt"
+      }
+    ]
+  },
+  "deployment": {
+    "target": "192.168.178.105",
+    "stagedPath": "R:\\INSTALL\\RECOV68.ZIP",
+    "bytes": 25191376,
+    "sha256": "24832b1f5ba112cab0790901cdc9e5e69c39ced4f3da6f514604b9384d28dac5",
+    "seconds": 147.21343903899833,
+    "readback": "exact",
+    "activePath": "R:\\INSTALL\\RECOVERY.ZIP",
+    "previousCache": "R:\\INSTALL\\RECOV67.ZIP",
+    "cacheActivated": true,
+    "installed": false,
+    "stateAtPreparation": "Verified cache available; installation and boot into Recovery68 remain a user menu action."
+  }
+}

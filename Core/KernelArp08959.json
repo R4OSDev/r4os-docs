@@ -1,0 +1,312 @@
+﻿{
+  "schema": 1,
+  "release": "0.89.59",
+  "status": "completed",
+  "kernel_version": "0.1.460",
+  "scope": "Repair the existing regular Rust kernel ARP/RX owner. Recovery0.1.68 has an independent correction. No module/API/ABI change.",
+  "root_cause": "After30s the next-hop ARP cache expires. Synchronous resolution while the serialized RX protocol consumer sends a TCP ACK prevents it from consuming the already queued ARP reply. Regular SMP kernels also dispatch frames on net-rx-ap, not just the BSP net-rx maintenance/poll task.",
+  "implementation": {
+    "files": [
+      "Repositories/Kernel/Rust/net/protocol_stats.rs",
+      "Repositories/Kernel/Rust/net/rx_runtime.rs"
+    ],
+    "workers": "Private predicate reuses exact current task ID/generation matching for BSP and AP workers. Existing BSP-only public query/poll semantics remain unchanged.",
+    "miss": "On an RX-worker cache miss, request at most once per adapter per500ms and immediately return existing Busy. Original TCP owner retains unsent ACK/FIN/retransmit work for another activation.",
+    "ownership": "Protect only resident pacing/counters with the short network owner. Driver/protocol request callback runs after release. No recursive poll, idle or ARP wait in either RX worker.",
+    "reset": "Init clears Metadata; owned ARP flush clears all adapter pacing deadlines.",
+    "ordinary_callers": "Original bounded3-attempt resolver, route/cache hits and driver errors retained; reject an invalid adapter before indexing.",
+    "source_proof": {
+      "source": "Repositories/Kernel/Rust/net/protocol_stats.rs",
+      "sha256": "586917f8944a5b2056bd3d4fc902614a5cdf553d214c35833d65def18173eea6",
+      "blocks": [
+        "fn metadata<T>",
+        "pub extern \"C\" fn r4os_rust_net_protocol_stats_reset",
+        "pub struct ArpPeers {",
+        "fn arp_error(",
+        "fn lookup(",
+        "fn wait_arp(",
+        "pub unsafe extern \"C\" fn r4os_rust_net_arp_resolve(",
+        "pub extern \"C\" fn r4os_rust_net_arp_cache_flush_owned("
+      ],
+      "rx_source_sha256": "8c44e703544671111c0e4c88b1110a909a98f170cfa2f6c263d47ced668899b7",
+      "rx_blocks": [
+        "fn is_ap_current()",
+        "fn is_current()",
+        "pub(super) fn is_worker_current()"
+      ],
+      "boundaries": "Actual bodies; mock clock, adapter admission, ARP cache, native current task identity/scheduler and short metadata guard; actual BSP/AP worker predicate bodies included. Peer callbacks record any execution under the owner."
+    }
+  },
+  "artifacts": {
+    "before_version": "0.1.459",
+    "before_sha256": "e4b57bfbe4f20e73cf32b67c5e1908a864f8c1dabb3276252f2288c34840d027",
+    "before_commit": "545a36aa4995a5dbc7f3f8fb2fca789775265b6b",
+    "final_sha256": "5785923d07c7aeaf79aa94fc97349923aa162b8d4daf5629b12b1ea177e69a8a",
+    "configuration_sha256": "9ceb615ea3788e09ef16b9b275acbd6f08bcddb21b30cc0ba533aac54230f5be",
+    "compilers": {
+      "rust": "rustc 1.99.0 (b940084d7 2026-09-28)"
+    },
+    "technical": false,
+    "probe_unchanged_sha256": "83628ee1d81b69deb15450b780ed1ef097496301bad9614f7053e027e3e7e36d",
+    "image_boot_readback_matches": true,
+    "versions": "Kernel0.1.460 and release0.89.59; module versions unchanged because module artifacts are unchanged."
+  },
+  "validation": {
+    "static_checks": {
+      "fmt": "pass",
+      "check": "pass",
+      "clippy": "pass",
+      "build": "pass",
+      "diff_check": "pass"
+    },
+    "temporary_host_cases": {
+      "result": "6/6 pass",
+      "source": "Actual resolver/cache-flush/reset and actual BSP/AP predicate bodies; no product implementation rewritten in the fixture.",
+      "boundaries": "Mock clock, adapter/cache, native task identity/scheduler and network admission. Assert all peer callbacks execute outside admission. This is a source-level boundary proof, not a host NIC test.",
+      "cases": [
+        "Busy without poll/idle/output copy",
+        "Per-adapter500ms pacing and exact boundary; init/flush reset",
+        "Cached reply resolves without another request",
+        "Driver failure and invalid adapter preserve ownership/counters",
+        "Ordinary caller synchronous reply and3-timeout behavior",
+        "Both BSP/AP exact identities; stale generations, foreign and absent current tasks"
+      ]
+    },
+    "routed_transfer": {
+      "environment": {
+        "execution": "KVM",
+        "vcpus": 4,
+        "ram_bytes": 8589934592,
+        "backend": "modern virtio-net / QEMU user network",
+        "guest": "10.0.2.15/24",
+        "router": "10.0.2.2",
+        "http_and_ssh_peer": "100.96.0.2 (off subnet)"
+      },
+      "method": "Identical temporary SDK R4X streams64MB into a hash sink, no target file. Server cap1MB/s, max_retries0. Off-subnet SSH prevents LAN traffic from refreshing router ARP. Private images use exact before/final normal product ELFs with verified BOOT readback.",
+      "size_bytes": 67108864,
+      "server_cap_bytes_per_second": 1048576,
+      "expected_sha256": "281e519df3077b557c6b03f5da83c4e8d397219259615dd7c3308f89cae8f2a6",
+      "before": {
+        "pcap_sha256": "1d36c2d7a2c0215aeccf45c735cd02d1f6de2e01485f7aa555bf54214a73330c",
+        "serial_sha256": "04495d08333178364fc6cb1966580e16da806038b6f5c2aebe97d22951e1669e",
+        "packets": 31101,
+        "capture_seconds": 117.163207,
+        "http_data_first_seconds": 7.037014007568359,
+        "http_data_last_seconds": 107.18216109275818,
+        "router_arp_requests_during_http": 246,
+        "progress_samples": 48,
+        "first_progress": {
+          "tick": 33483,
+          "bytes": 1052492,
+          "delta": 1052492,
+          "arp_attempt": 3,
+          "arp_timeout": 3,
+          "pending_drop": 1,
+          "nic_error": 0,
+          "diag": 1
+        },
+        "last_progress": {
+          "tick": 93953,
+          "bytes": 26315936,
+          "delta": 1440,
+          "arp_attempt": 221,
+          "arp_timeout": 219,
+          "pending_drop": 73,
+          "nic_error": 0,
+          "diag": 1
+        },
+        "arp_timeout_delta": 216,
+        "pending_drop_delta": 72,
+        "min_progress_bytes_per_second": 919.5402298850574,
+        "last_progress_bytes_per_second": 956.1752988047808,
+        "completion": null
+      },
+      "after": {
+        "pcap_sha256": "31b32a92606944a488f5d40dd7f0fa63808e87670c9f480aea8fa2390278e5e3",
+        "serial_sha256": "d33ef26f8d9ae86202ab408553bd7a66b9e15624e00631eedd6a99682ad95ea7",
+        "packets": 77785,
+        "capture_seconds": 72.787026,
+        "http_data_first_seconds": 7.2647621631622314,
+        "http_data_last_seconds": 71.25158715248108,
+        "router_arp_requests_during_http": 4,
+        "progress_samples": 63,
+        "first_progress": {
+          "tick": 33737,
+          "bytes": 1052492,
+          "delta": 1052492,
+          "arp_attempt": 1,
+          "arp_timeout": 0,
+          "pending_drop": 0,
+          "nic_error": 0,
+          "diag": 1
+        },
+        "last_progress": {
+          "tick": 95989,
+          "bytes": 66330264,
+          "delta": 1052492,
+          "arp_attempt": 5,
+          "arp_timeout": 0,
+          "pending_drop": 0,
+          "nic_error": 0,
+          "diag": 1
+        },
+        "arp_timeout_delta": 0,
+        "pending_drop_delta": 0,
+        "min_progress_bytes_per_second": 990685.0393700787,
+        "last_progress_bytes_per_second": 1050391.2175648704,
+        "completion": {
+          "result": "OK",
+          "bytes": "67108864",
+          "ticks": "64047",
+          "sha256": "281e519df3077b557c6b03f5da83c4e8d397219259615dd7c3308f89cae8f2a6"
+        }
+      },
+      "before_stop": "Bounded110s host watchdog; no successful completion. Last observed progress26,315,936 bytes, about956B/s;216 additional ARP resolve timeouts and72 additional pending drops.",
+      "after_result": "Complete64MB in64047 kernel ticks at1000Hz; correct SHA256. Both30s cache expirations cross without throughput collapse; zero ARP resolve timeouts/pending drops and zero NIC backend errors.",
+      "arp_wire_proof": {
+        "before_requests": 255,
+        "before_replies": 255,
+        "before_max_reply_delay_ms": 2.650976,
+        "after_requests_seconds": [
+          0.7762291431427002,
+          30.82888412475586,
+          30.831297159194946,
+          60.83515501022339,
+          60.836130142211914
+        ],
+        "after_replies": 5,
+        "after_max_reply_delay_ms": 0.028849
+      },
+      "generic_counters": "Busy/backpressure and TCP drop counters are not zero (post-transfer TX Busy197, TCP rx_drops35); no general zero-loss claim. ARP/NIC error counts are reported separately.",
+      "normal_poweroff": true
+    },
+    "existing_network_limit": {
+      "result": "pass",
+      "exit": 0,
+      "tests": 1,
+      "cases": 10,
+      "tcp_wait_tasks_created_retired": [
+        11,
+        11
+      ],
+      "original_assertions_unchanged": true
+    },
+    "failed_candidate": {
+      "archive": "ExFiles/Reports/Network/KernelArp08959/Failed-01-BspOnly/",
+      "sha256": "408f7a8876c873bb1f59162400ca73b7f770ceec7e5e5e14bae05c5afbcf6fa1",
+      "reason": "Initial BSP-only worker predicate missed the real AP protocol consumer. Targeted witness failed and was preserved; predicate corrected to include AP before final build/tests. No STANDARD on that candidate."
+    },
+    "standard": {
+      "result": "pass",
+      "run_id": "c9a4029a-fbf8-440a-8d35-a82d61cf2b12",
+      "release": "0.89.59",
+      "kernel": "0.1.460",
+      "kernel_sha256": "5785923d07c7aeaf79aa94fc97349923aa162b8d4daf5629b12b1ea177e69a8a",
+      "owner_reconstruction": "entire original export, 30 raw samples / 5 metrics / 6 scores, fixed original reference",
+      "samples": 30,
+      "metrics": 5,
+      "scores": [
+        {
+          "area_id": "scheduler_sync",
+          "baseline_run_id": "28b326e2-4323-4a4c-a0d2-4c1bab4958c0",
+          "scoring_version": "spectra-geomean-1",
+          "score": "33.612957",
+          "status": "valid",
+          "reason": null
+        },
+        {
+          "area_id": "memory",
+          "baseline_run_id": "28b326e2-4323-4a4c-a0d2-4c1bab4958c0",
+          "scoring_version": "spectra-geomean-1",
+          "score": "183.710965",
+          "status": "valid",
+          "reason": null
+        },
+        {
+          "area_id": "ipc",
+          "baseline_run_id": "28b326e2-4323-4a4c-a0d2-4c1bab4958c0",
+          "scoring_version": "spectra-geomean-1",
+          "score": "113.758851",
+          "status": "valid",
+          "reason": null
+        },
+        {
+          "area_id": "lifecycle",
+          "baseline_run_id": "28b326e2-4323-4a4c-a0d2-4c1bab4958c0",
+          "scoring_version": "spectra-geomean-1",
+          "score": "230.802041",
+          "status": "valid",
+          "reason": null
+        },
+        {
+          "area_id": "filesystem_io",
+          "baseline_run_id": "28b326e2-4323-4a4c-a0d2-4c1bab4958c0",
+          "scoring_version": "spectra-geomean-1",
+          "score": "122.185695",
+          "status": "valid",
+          "reason": null
+        },
+        {
+          "area_id": "overall",
+          "baseline_run_id": "28b326e2-4323-4a4c-a0d2-4c1bab4958c0",
+          "scoring_version": "spectra-geomean-1",
+          "score": "114.650882",
+          "status": "valid",
+          "reason": null
+        }
+      ],
+      "workers": "4/4 for all30",
+      "exactly_one_final_run": true,
+      "archive": "ExFiles/Reports/Benchmarks/c9a4029a-fbf8-440a-8d35-a82d61cf2b12/",
+      "sha256": {
+        "context.json": "8e47e64326f60d15809625db1ceebc52109a3c1f19102e03f8741aeed0f2ec23",
+        "qemu.err": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "r4os.build.json": "2b2b3411da490691bc13118bd46e706af597fe877e85216ca16de4ee80288179",
+        "r4os.elf": "5785923d07c7aeaf79aa94fc97349923aa162b8d4daf5629b12b1ea177e69a8a",
+        "reference-descriptor.json": "bce8222c28c786d02f07800b831a34d84b072eb951e45110b084faf612ee3ec1",
+        "reference.json": "dbc69c15f01c54f3abca36f0b11db2070a4a26fd0b0bfca5490716137a744d2d",
+        "run.json": "10813efdca3a0e91d5087c29610051c75aa3140e862c8bd05b4cc04fe3e5ba11",
+        "serial.log": "a8af0e202e3472a77ffbc0a1fe264988305b7104dbe8a42f910dd42563bc39dc"
+      },
+      "server_status": "lokal validiert; R4OS Server ausstehend",
+      "server_remaining": "Claim/import of these unchanged original bytes plus complete GET and independent server scoring validation."
+    },
+    "archive": "ExFiles/Reports/Network/KernelArp08959/; original logs, pcaps, before/final/failed ELFs and metadata, source snapshots and SHA256.json. Temporary helpers stay under Temp/KernelArp08959/.",
+    "limits": "One targeted KVM4/VIRTNET route witness, not a hardware/CDN throughput campaign. The first cold-cache forwarded SSH banner timed out in all three fixtures; subsequent off-subnet sessions worked. This evidence does not establish initial-handshake reliability. NETWORK LIMIT is scoped; STANDARD has no TCP workload. OssiPC installation and new Full/Slim GitHub binary releases are outside this subversion.",
+    "standard_previous": {
+      "previous_release": "0.89.55",
+      "previous_run_id": "0e8376d3-b4c0-421c-9646-4d6cdcf2c960",
+      "same_suite_method": true,
+      "same_environment_except_clock": {
+        "execution": true,
+        "vcpus": true,
+        "ram_bytes": true,
+        "cpu_policy": true,
+        "measurement": true,
+        "filesystem": true,
+        "settle_ms": true,
+        "qemu": true,
+        "storage": true,
+        "workloads": true,
+        "cache_state": true,
+        "warmup_runs": true,
+        "warmup_min_ns": true,
+        "warmup_min_batches": true,
+        "repetitions": true,
+        "host": true,
+        "cpu": true,
+        "boot": true
+      },
+      "score_change_percent": {
+        "scheduler_sync": "-9.217095",
+        "memory": "-16.598604",
+        "ipc": "5.479335",
+        "lifecycle": "-18.577091",
+        "filesystem_io": "-10.445101",
+        "overall": "-10.249651"
+      },
+      "interpretation": "Descriptive single-run comparison only, including lower values. No performance parity or causal attribution; STANDARD uses no network. No repeat for better scores."
+    }
+  },
+  "test_policy": "Reuse existing NETWORK LIMIT; six bounded temporary source-derived cases only, no new permanent gate or broad catalog. Exactly one final STANDARD Suite3/SMP4; preserve original export/reference/context/artifacts and validate full reconstruction. Server import uses the explicit local completion exception."
+}

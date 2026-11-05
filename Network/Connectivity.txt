@@ -15,10 +15,13 @@ state and expose bounded endpoints to applications.
 
 Receive work has one bounded context boundary. An external NIC interrupt
 acknowledges and classifies its device cause, then publishes the exact adapter
-through DriverApi v23. The event-driven `net-rx` task moves the device cursor,
-copies frames into Netcore's fixed 64-slot queue and dispatches at most 32
-protocol frames per activation. TX-, link- and configuration-only causes do
-not execute the RX stack. A full common queue leaves the current device entry
+through DriverApi v23. The event-driven BSP `net-rx` task moves the device
+cursor and copies frames into Netcore's fixed 64-slot queue. Serialized
+protocol processing dispatches at most 32 frames per activation, using the
+optional `net-rx-ap` worker when registered callbacks permit AP execution and
+the BSP worker otherwise. Polling and maintenance remain on the BSP task.
+TX-, link- and configuration-only causes do not execute the RX stack.
+A full common queue leaves the current device entry
 owned by the driver for an event-driven retry. The 10-ms all-adapter poll is a
 watchdog for missing IRQ routing, not the normal intake clock.
 
@@ -54,6 +57,28 @@ the unacknowledged suffix for retransmission. Retransmit state is bound to the
 connection ID, physical slot and slot generation, and all RTO and TIME_WAIT
 deadlines use the monotonic kernel tick domain. Waiting for incoming data does
 not arm or retransmit outgoing payload.
+
+ARP resolution in RX workers (0.89.59)
+--------------------------------------
+Kernel 0.1.460 treats an expired next-hop ARP entry as deferred work in both
+RX task incarnations: the BSP net-rx poll/maintenance task and the optional
+net-rx-ap protocol worker. Task ID and generation identify the current worker;
+a foreign task or a reused ID keeps the ordinary bounded resolver behavior.
+The existing serialized protocol consumer must return to its outer frame
+queue before it can consume an ARP reply. Waiting synchronously while sending
+a TCP ACK can otherwise stall that same queue after the 30-second cache TTL.
+
+On a cache miss, an RX worker requests ARP at most once per adapter per 500 ms
+and returns Busy immediately. Existing TCP ownership retains an unsent ACK,
+FIN or retransmission for a later activation. Init and ARP flush clear the
+pacing deadlines. The short network owner protects only resident metadata;
+the request callback runs after release. Public R4NET records, the cache TTL,
+and bounded three-attempt resolution for ordinary callers stay unchanged.
+
+Core/KernelArp08959.json records the regular-kernel routed transfer comparison,
+source-derived host cases and existing NETWORK LIMIT acceptance. The recovery
+kernel has its independent correction in Recovery 0.1.68. STANDARD covers the
+five general workloads and provides no network-throughput measurement.
 
 TCP readiness ownership (0.84.28)
 ---------------------------------

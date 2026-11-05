@@ -1,7 +1,8 @@
 ﻿Portex: Erstzugang, Katalogzustand und OssiPC-Soforthilfe
 =======================================================
 
-Stand: 05.11.2026. Planung 0.90.3 offen; Soforthilfe auf 0.89.60 erfolgt.
+Stand: 06.11.2026. Automatischer PUBLIC-Erstzugang in0.90.3 umgesetzt.
+Die datierten Abschnitte halten Ausgangsbefund und manuelle Soforthilfe fest.
 
 Befund
 ------
@@ -71,8 +72,8 @@ damit nicht geprueft. Fuer diese Soforthilfe wurde kein Releaseartefakt
 geaendert und keine Unterversion abgeschlossen.
 
 
-Planung 0.90.3
--------------
+Planungsauftrag vom05.11.2026 fuer0.90.3
+-----------------------------------------
 Roadmap-Unterversion mit API-ID 3:
 Portex: automatischer Erstzugang und korrekte Katalogzustaende.
 
@@ -92,7 +93,8 @@ einen passenden gueltigen Cache. Einrichtung/Neu laden muessen ohne
 Appneustart wirken. Vorhandene Besitzerfaelle gezielt erweitern und einen
 frischen normalen Gast ohne Secretdatei bis zum echten Katalog und einem
 Originaldownload pruefen. Die manuelle OssiPC-Soforthilfe ersetzt diese
-Abnahme nicht. Die sechs Aufgaben und zwei Abnahmen bleiben offen.
+Abnahme nicht. Dieser Absatz dokumentiert den urspruenglichen Auftrag;
+Umsetzung und Abnahmen stehen im Anschluss.
 
 
 Originalbelege
@@ -104,3 +106,243 @@ ExFiles/Reports/Portex/0.90.X/OssiPC-Registration-2026-11-05/
 
 Die Secretdatei und ihre Rueckkopien gehoeren nicht zum Belegarchiv.
 Die getrennte Performanceanalyse steht in PortexPerformance090.txt.
+
+
+Umsetzung 0.90.3: normaler Erstzugang ohne kopiertes Secret
+---------------------------------------------------------
+Portex0.1.13, R4SRV0.1.1, SDK0.64.154 und der unabhaengig versionierte
+R4OS Server0.5.72 implementieren den normalen PUBLIC-Erstzugang. Desktop207
+und Kernel460 bleiben auf dem abgeschlossenen Stand0.90.2 unveraendert.
+Es ist kein dauerhaftes Registrierungs-/Dienstsecret im Image enthalten.
+
+R4SRV liest zuerst die vorhandene lokale R4OSSERVER.R4S. Gueltige Operator-
+Daten haben Vorrang; beschaedigte vorhandene Daten werden nicht ersetzt.
+Nur fuer offizielle PUBLIC-IP-/Portziele laedt der Dienst bei fehlenden
+Registrierungsdaten seinen getrennten PUBLIC.R4S-Nachweis oder fordert
+ihn einmal ueber HTTPS4022 POST /api/v1/registration/bootstrap an. LAN und
+angepasste Ziele werden nicht umgestellt. Die Registrydefaults setzen nur
+fehlende Zielwerte; es gibt keinen neuen Portex-Secretparser.
+
+Der Server liefert einen256Bit-Zufallsnachweis R4C1_ plus64kleine Hexzeichen
+mit genauem Schema R4OS_PUBLIC_REGISTRATION, VERSION1 und SCOPE
+REGISTRATION_READ. Er speichert nur SHA256, Ausgabe-IP und Zeitpunkt.
+Ausgabe allein registriert noch keine Adresse. Der normale TLS4021-Austausch
+mit vollstaendig gelesener OK-Antwort gibt die Quell-IP fuer Lesezugriffe
+frei. IP-Wechsel duerfen denselben Installationsnachweis wiederverwenden.
+Die bestehenden Verwaltungs-, Publisher- und Benchmark-Schreibrollen
+bleiben getrennt. Die neue Ausgabe liefert niemals deren Zugangsdaten.
+
+Bootstrap ist ausschliesslich auf dem oeffentlichen TLS-Listener verfuegbar.
+Gemeinsame Sperren, Registrierungsratelimit und oeffentliche Verbindungsslots
+bleiben wirksam; die persistente Quote erlaubt64Ausgaben/Stunde/Quell-IP.
+Antworten sind no-store. Die API nennt konkrete403/411/413/429-Fehler.
+CA, Server-IP/SAN und UTC-Zeit werden im Client geprueft; Redirects bleiben
+ausgeschlossen. Das oeffentliche CA-Zertifikat im gemeinsamen Imagekatalog
+stimmt im DER vollstaendig mit der tatsaechlichen Server-CA ueberein.
+
+Das SDK prueft Schema/Version/Scope/Token/Laenge und lehnt weitere Rollen-
+oder Bearerfelder ab. Eine vollstaendige, eigene Stage wird unter
+C:\R4OS\SECRETS create-only atomar zu PUBLIC.R4S publiziert und bytegenau
+zurueckgelesen. Ein vorhandenes Ziel oder konkurrierender Ersteller wird
+nicht ueberschrieben. Write-/Commit-/Racefehler lassen bestehende Daten
+unveraendert. Ein bereits begonnener begrenzter Dienstversuch darf seine
+atomare Einrichtung abschliessen, wenn der anfordernde Konsument abbricht;
+der naechste Konsument verwendet dieses Ergebnis.
+
+R4SRV serialisiert Konsumenten, teilt Erfolgsgenerationen und fuer5s auch
+einen fehlgeschlagenen Netzversuch. Der fehlgeschlagene gemeinsame IP-
+Versuch erhaelt trotzdem das jeweils passende Konsumentenportfeld.
+Bootstrap und Registrierung haben jeweils5sBudget. Geaendertes Profil,
+lokale IP, Gateway, MAC oder Adapter verwerfen die Verbindungscaches;
+ein spaeteres definitives401 nutzt weiter die generationstreue einmalige
+Neuregistrierung.403/429 erzwingen keine Registrierungswiederholung.
+
+Portex unterscheidet missing/stale/current anhand des tatsaechlichen
+validierten Katalogsnapshots. Eine leere Inventarprojektion bedeutet keinen
+vorhandenen Cache. Der aus einer leeren Projektion abgeleitete pauschale Praefix wurde entfernt;
+fehlende Daten zeigen Kein Katalog verfuegbar plus konkrete Abrufursache.
+Nur ein tatsaechlich gespeicherter gueltiger Cache wird als veraltet
+bezeichnet. Dieser Hinweis steht am Anfang der Meldung, damit er bei
+normaler Fensterbreite sichtbar bleibt. Die native0.1.11-Probe hatte
+den bisherigen Suffix rechts abgeschnitten;0.1.12 korrigiert dies.
+Eine abgebrochene Projektion mit gueltigem Katalog meldet in0.1.13
+Ansicht nicht verfuegbar statt faelschlich fehlenden Katalogs.
+HTTP200 leer/gefuellt und zulaessiges304 sind aktuell;304 ohne
+passenden validierten Cache bleibt ein Fehler. Einrichtung und Neu laden
+benoetigen keinen Portex-Neustart.
+
+Gezielte Besitzerpruefungen
+---------------------------
+Die vorhandenen Portex-Tests pruefen fehlende Daten, Credentialfehler,
+denselben Konsumenten nach behobener Einrichtung,200leer/gefuellt,304,
+beschaedigte/fremde Caches und unveraendert vorhandene Cancel-/Joinfaelle.
+Im vorhandenen SDK-Transporttest laufen die Credential-/Profilfaelle mit:
+strikter Scope/Version/Hex-Vertrag, PUBLIC/LAN/Custom und atomare Write-/
+Commit-/Race-Erhaltung. Die enge Sprachdriftpruefung715Dateien/35Scopes/
+187Exporte besteht. C/Rust verwenden weiter ihre unveraenderten generischen
+Datei-/Service-APIs; die gemeinsame Highlevelserver-Fassade behaelt ihren
+bisherigen Zig-Komfortumfang. Keine neue rohe ABI und kein C/Rust-Gastlauf.
+
+R4SRV besitzt einen gezielten Testschritt fuer Generation, Profiltrennung,
+Cooldown, konsumentenspezifisches Port und Netzpfadreset. Ein zweiter Fall
+prueft den echten SDK-HTTP-Serializer fuer den ausdruecklich leeren POST.
+Die ersten normalen Gastbytes hatten HTTP411 geliefert, weil die bestehende
+Fetch-Fassade bei leerem Body keine Laenge automatisch ausgibt. R4SRV setzt
+nun den vom Vertrag geforderten einzelnen Content-Length:0-Header.
+Der Zwischenstand bleibt separat als Preliminary411-Beleg erhalten und
+wird nicht als fertige Neuinstallationsabnahme gewertet.
+
+Serverseitig bestehen17gezielte State-/Servicefaelle: echte TLS-Ausgabe,
+fragmentierte Token-/OK-Registrierung, alte Operatornachweise auch mit
+ueberlappendem Praefix, fehlende Schreibrechte, geteilte Sperren/Limits,
+parallel persistente64erQuote und Datenbankwiedereroeffnen. Die normalen
+Artefaktbuilds, passende SDK154-Hostwerkzeuge und vorhandenen Bildpruefungen
+bestehen. Es entstand keine allgemeine neue Testsuite.
+
+Normaler frischer Gast und Originaldownload
+-------------------------------------------
+Das finale normale Full0.90.3-Image wurde neu aufgebaut und NTFS-geprueft.
+Sein versiegelter Imageplan enthaelt weder Secrets noch Portex-Cachedaten
+oder private Overlays. Eine unabhaengige lokale gorilla.bas-Beispieldatei
+wurde fuer diese Abnahme samt ihrem optionalen Hostoverlay beiseitegelegt;
+sie gehoert nicht zum geprueften Bild. Slim/Full/Test-Imageplaene enthalten
+das explizite PUBLIC-Profil, dieselbe oeffentliche CA und die exakten finalen
+Portex-/R4SRV-Artefakte, ohne Credentialdateien. Nur Full wurde nativ als
+frische Neuinstallation ausgefuehrt; fuer Slim/Test sind es Planbelege.
+
+Ein frischer KVM4-Gast verwendet eine neue Datenplatte/Overlay auf diesem
+normalen Bild. Portex startet ueber seinen kanonischen DESKRUN-Pfad und
+zeigt automatisch Katalog aktuell:2Pakete. Es wurden keine Secretdatei,
+Registryziele oder Zertifikate per SSH bereitgestellt. Fuer den temporaeren
+Beobachter wurde erst nach dem normalen Portexstart C:\TEMP angelegt und
+eine normale Diagnose-R4X dorthin uebertragen. Das ist keine Produkt-
+Einrichtung. Ihr Upload wurde mit frischer, geloeschter Readbackdatei
+bytegenau geprueft; alte Hilfsreadbacks zaehlen nicht als Uploadnachweis.
+
+Der Dienst hat PUBLIC.R4S selbst erzeugt; die Operator-Datei fehlt. Alle
+3Konsumenten erhalten denselben Erfolgsgeneration1 mit ihren Ports4022/
+4023/4024. Der echte Minesweeper-Originaldownload ueber die normale GUI
+liefert HTTP200,786574Bytes und exakt den Katalog-SHA256
+0232c968b0cbd8ddf50b94f3d472371d8665ba57d07769022e387901eff1f89c.
+Die GUI meldet Geprueft; bereit zur Installation. Das lokale Originalasset
+und seine unveraenderte Bindung wurden vollstaendig zurueckgelesen.
+Neu laden bestaetigt denselben echten Katalog mit304/unveraendert. Die
+persistente Ausgabemenge des Servers steigt beim Erstboot genau um1;
+Download und erneutes Laden erzeugen keinen zweiten Installationsnachweis.
+
+OssiPC
+-------
+R4SRV0.1.1 und zunaechst Portex0.1.11 wurden als Batch2/Transaktion6 mittels SYSUPD
+STAGE+COMMIT installiert. Nach Neustart bestaetigt VER Release0.90.3 und
+aktiven/installierten Kernel460; das Journal ist installed/cleanup mit
+4/4angewendeten Schritten. Die SSH-COMMIT-Antwort endet im Timeout; der
+echte neue Boot-/Journalbeleg klaert den Erfolg, COMMIT wurde nicht
+wiederholt. Fuer diesen Neustart war kein restartwake erforderlich.
+
+Beide Dateien wurden vollstaendig bytegleich zurueckgelesen. Die
+Anzeigeanpassungen auf Portex0.1.12 und final0.1.13 wurden danach jeweils
+als eigene versionierte Software-R4Us per SYSUPD APPLY live installiert
+(Transaktionen7/8), ohne weiteren Neustart. Die finalen13-Bytes sind
+bytegleich zurueckgelesen. Die zuvor
+auf Nutzerauftrag eingerichtete Operator-Secretdatei ist bytegenau erhalten;
+private Vergleichskopien wurden entfernt, weder Inhalt noch Hash protokolliert.
+R4SRV nutzt sie mit Vorrang: Operator vorhanden, PUBLIC.R4S nicht angelegt.
+Alle3Dienstziele teilen Generation1 und melden Code0. Das offen gelassene
+Portex zeigt den echten aktuellen2-Paket-Katalog, hier als304/unveraendert.
+Die manuelle Soforthilfe ist damit erhalten, ersetzt aber ausdruecklich
+nicht den separat belegten automatischen frischen Gast.
+
+Finale normale Artefakte
+------------------------
+Portex0.1.13:3159836Bytes SHA256
+  95cbdf0e3a31ddd4212a7ccb5431fdb088380462e803e2dc7999e4d7e2c59307
+R4SRV0.1.1:78331Bytes SHA256
+  634fd168cebb426ad33a1c7bd5cbcbf0283d6d09bbefdd58eeaee8c631bdf782
+SDK0.64.154 Commit34d30069e40d5a1f2476d07f97ec7c3c76969c5a.
+Desktop207 bleibt a809bf5cd76cb75bb9db597d38f4179088b87fc38e41abf58a49674a0f720d2d;
+Kernel460 und Contract76/Libraries49 sind unveraendert.
+Erstes R4U:3239412Bytes SHA256ac7d3372b76a23da038099ed12401f133e59b3f6d5cf9d1b4848afcfe2f1342e.
+Finales Portex13-R4U:3160750Bytes SHA256
+3d6abade312feb072794d63e74e2cc1c613a4fd4db9397f6837dbbb4aaff7653.
+Originale: ExFiles/Reports/Portex/0.90.3/. Serverquellen0.5.72 separat
+gepusht; dessen Vertragsdokumentation liegt im separaten Serverprojekt.
+Die weiteren nativen Zustands-/Abschlussbelege folgen unten.
+
+
+Finale native Zustandsabnahme0.1.13
+-----------------------------------
+Der vollstaendige normale Full-Aufbau wurde mit Portex0.1.13 erneut frisch
+und ohne Credentials/Portexdaten/private Overlays gebootet. Automatische
+Einrichtung, echter2-Paket-Katalog, unveraenderter786574Byte-Originaldownload
+und echtes304 bestehen mit den finalen R4X-Bytes. Es entsteht genau1neuer
+Installationsnachweis; Download, Reload, Fehlversuche und Appneustart geben
+keinen weiteren aus. Beide installierten R4X wurden vollstaendig mit den
+finalen Hostartefakten verglichen. Die gueltigen Slim/Full/Test-Plaene
+enthalten dieselben finalen Artefakte und die oeffentlichen Defaults.
+
+Ein endlicher, enger Fehlerpfad verwirft nur die ausgehenden TCP-Verbindungen
+dieses root-QEMU-Clients zur oeffentlichen HTTPS4022-Adresse. Andere
+Clientquellen und der Serverlistener bleiben erhalten. Es werden keine
+Registryziele/CA/Secrets umgestellt; der virtuelle Link und SSH bleiben
+verfuegbar. Alle mit eindeutiger Taskkennung gesetzten Regeln werden auch
+im Fehlerfall entfernt und ihr Fehlen geprueft.
+
+Mit gueltigem Cache bleibt die2-Paket-Ansicht mit Cachemarkierung erhalten.
+Die sichtbare Statuszeile beginnt mit Veralteter Katalog | Verbindung
+fehlgeschlagen. Nach Freigabe bestaetigt Neu laden im selben Prozess den
+Katalog per304. Fuer den zweiten Fall wurde ausschliesslich die eigene
+Katalogcachedatei im Testgast geloescht. Der gleiche Abruffehler zeigt dann
+Kein Katalog verfuegbar und keinen Veraltet-Hinweis; Neu laden nach Freigabe
+laedt denselben echten Katalog per200, weiterhin im selben Prozess.
+
+Eine kurzzeitig verworfene statt aktiv abgewiesene Verbindung haelt den
+Ladevorgang fuer die echte Abbrechen-Aktion offen. Der native Tastendruck
+bricht den gejointen Auftrag ab. Bei vorhandenem Katalog und nicht fertig
+aufgebauter Projektion steht nun Ansicht nicht verfuegbar; bitte neu laden,
+waehrend der Footer den gueltigen veralteten Cache und Abgebrochen nennt.
+Erneutes Laden, exaktes Close/Reap und ein neuer kanonischer Portexprozess
+bestehen. Dieser benutzt dieselben gespeicherten Zugangsdaten und laedt
+wieder den aktuellen Katalog. Alle aufgenommenen GUI-Frames melden oom=0.
+Der abschliessende Gast wurde normal geschlossen und heruntergefahren.
+
+Eine getrennte fruehere0.1.11-Grenzprobe trennte den gesamten virtuellen
+NIC-Link. DHCP erhielt nach Linkwiederkehr dieselbe Adresse, und die
+unveraendert laufende Portexansicht konnte ueber die normale Tastaturaktion
+wieder aktuell geladen werden. Der SSH-Diagnosekanal lieferte dagegen
+innerhalb30s keinen neuen Banner. Dieser eigenstaendige Listener-/Link-
+Ruecklauf ist nicht als repariert qualifiziert. Die finale0.1.13-Abnahme
+isoliert daher den benoetigten HTTPS-Ausfall, ohne den Diagnosekanal
+mit abzuschalten. Rohbeleg: link-recovery-11.json und zugehoerige Bilder.
+Die damalige Disposable-VM wurde nach dem ACPI-Powerdown-Warteversuch
+beendet; daraus wird kein normaler App-/Treiberteardown abgeleitet.
+
+Die Erststart-/Download-/Zustandsbelege sind Software-/KVM4-Belege. Sie
+behaupten keine physische Cursorlatenz, GPU-Ausgabe, Windowsausfuehrung,
+frische native Slim-/Test-Ausfuehrung oder neue Liveinstallation eines
+Katalogpakets. Der Originaldownload ist vollstaendig verifiziert; die
+bestehenden eigentlichen Installationsadapter wurden nicht geaendert.
+
+
+Finaler STANDARD und Abschluss0.90.3
+------------------------------------
+Genau1finaler STANDARD auf dem unveraenderten13/1.1-Artefaktstand:
+191f1f2a-ac1d-4112-aee5-2d95e7736e9f, spectra-standard-3/Primaermetrik2/KVM4.
+30Rohsamples,5Metriken,6valideScores,4/4abgeschlosseneWorker in jedemSample.
+Der vorhandene Besitzer rekonstruiert den vollstaendigen Originalexport
+gegen die feste Originalreferenz; alle Inhalte stimmen kanonisch ueberein.
+Overall127.974243 ist ein allgemeiner Systemindex, kein isolierter Portex-
+Geschwindigkeitsbeleg. Originale und getrennte Validierung:
+ExFiles/Reports/Benchmarks/191f1f2a-ac1d-4112-aee5-2d95e7736e9f/.
+
+Lokal validiert; R4OS Server ausstehend. Rest: dieselben unveraenderten
+Originalbytes claimen/importieren, vollstaendigen GET und unabhaengige
+Serverwertung pruefen. Kein neuer Lauf allein fuer einen Upload.
+Die ausdrueckliche lokale Abschlussausnahme bleibt dabei angewandt.
+
+Das urspruengliche optionale Hostoverlay wurde unveraendert zurueckgelegt.
+Tokenhaltige temporaere VM-Overlays und private Vergleichsdateien sind
+entfernt; Secrets, vollstaendige Gastdisks und Dienstkonfigurationen sind
+nicht Teil des Belegarchivs. Die eigenen OssiPC-Beobachter wurden entfernt,
+Portex bleibt mit aktuellem Katalog offen. Finales SYSUPD-Journal:
+Transaktion8/cleanup,2/2angewendet, Release0.90.3, Kernel460 unveraendert.
+Die finale Publikation und Roadmapquittung liegen im Belegarchiv.

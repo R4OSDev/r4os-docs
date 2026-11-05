@@ -33,7 +33,9 @@ and the common update/removal owner are included. SDK-Qualification.json
 states the actual scope. Linux executed; Windows host tools cross-built.
 No Windows, real-hardware or GPU execution is claimed.
 Durable originals/readback/consumer evidence: ExFiles/Reports/SDK/0.64.152.
-The matching R4OS Slim/Full publication follows in0.89.57.
+Matching R4OS0.89.57 Slim/Full is published and independently verified:
+https://github.com/R4OSDev/r4os-distribution/releases/tag/v0.89.57.
+Actual package-image qualification: Deployment/Release08957.txt.
 
 Local DevKit and independent repositories (03.11.2026)
 ----------------------------------------------------

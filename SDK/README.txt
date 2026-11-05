@@ -15,24 +15,25 @@ C modules and the qualified Rust R4X profile. It provides startup code, typed pl
 support, templates, C headers and generic Runtime-R4L helpers. The separate
 Contract repository remains the canonical API and ABI source.
 
-Current matching release: SDK 0.64.145 / Contract 0.64.73 / Libraries 0.64.47,
-https://github.com/R4OSDev/r4os-sdk/releases/tag/v0.64.145.
-All ten public assets were fully downloaded without authentication and compared
-with the qualified originals by length/SHA256. A fresh public Rust consumer
-passed normal build and offline reuse using the public source and host-tool
-archives. Vendor Rust was explicitly reused into a fresh installation root.
-SDK-Release.json (schema 1) binds the three originals, components and assets;
-capabilities use schema 3. SDK-Qualification.json describes actual coverage.
-Linux is executed; Windows host tools are cross-built with static PowerShell
-checks. No Windows, physical-hardware or GPU execution is claimed.
-Durable originals/readback/consumer evidence: ExFiles/Reports/SDK/0.64.145.
-Matching R4OS 0.89.36 Slim/Full is publicly available:
-https://github.com/R4OSDev/r4os-distribution/releases/tag/v0.89.36.
-Kernel 0.1.456 / Recovery 0.1.67. Both original ZIP images and all installed
-modules were verified and booted with KVM4; all four public assets passed
-complete original-data readback. Scope: Deployment/Release08936.txt.
-The final German handoff for both agents is
-SDK/SDK-Profilumstellung-Studio-Server.txt (0.89.37).
+Current matching release: SDK0.64.152 / Contract0.64.76 / Libraries0.64.49,
+https://github.com/R4OSDev/r4os-sdk/releases/tag/v0.64.152.
+All public assets were fully downloaded without authentication and compared
+with qualified originals by length/SHA256. Fresh Rust, Zig and C consumers
+passed normal builds and offline repeats from both local and public archives.
+Vendor Rust/Zig were explicitly reused into fresh installation roots after
+SDK verification; no DevKit sources were consumed. SDK-Release.json binds
+the three original profiles, matching component sources, tools and assets.
+The optional SystemLibraries archive supplies the eight normal runtime R4Ls
+from the qualified Full image; all system-library sources are in LIBRARIES.
+Use the matched set with the LICENSE, NOTICE and third-party legal material
+in the source archives. Zig/C Build-Project calls explicitly pass ZigRoot
+at the SDK-verified InstallRoot/Toolchains/Zig location.
+Shared GUI controls, optional title colours, native focus/link capabilities
+and the common update/removal owner are included. SDK-Qualification.json
+states the actual scope. Linux executed; Windows host tools cross-built.
+No Windows, real-hardware or GPU execution is claimed.
+Durable originals/readback/consumer evidence: ExFiles/Reports/SDK/0.64.152.
+The matching R4OS Slim/Full publication follows in0.89.57.
 
 Local DevKit and independent repositories (03.11.2026)
 ----------------------------------------------------

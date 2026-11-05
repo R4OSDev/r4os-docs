@@ -2605,3 +2605,21 @@ Kernel,140 normale Modulartefakte und141 Modulmanifeste bleiben unveraendert.
 Daher keine Build-, Hosttest- oder STANDARD-Wiederholung. Der vorhandene
 STANDARD77 b2e8a31f-f07c-40b9-b78d-bffe5d2ba4a4 gilt fuer diese identischen
 Laufzeitartefakte weiter; kein neuer Leistungserfolg wird abgeleitet.
+
+
+0.90.2: Rundungsgeometrie und begrenzter Scratchbesitz
+----------------------------------------------------
+Desktop207 bereitet normalisierte Rundungen einmal pro Kommando vor und
+ueberspringt transparente Solid-/Randmasken. Die urspruenglichen f32-
+Operationen, Coverage, Alpha, Schatten, Dirtykoordinaten und Budgets
+bleiben. Zwei private Rendererpuffer werden wiederverwendet; pro Puffer
+bleibt hoechstens1MB Kapazitaet erhalten, groessere legale Draws werden
+weiterhin ausgefuehrt. Nach Erfolgen und Fehlern werden die Laengen geleert.
+Gradientenfarben bleiben unveraendert; eine zusaetzliche Vorbereitung ohne
+belegten Zusatznutzen wurde verworfen. Bestehende8Shapeorakel und ein
+gezielter Reuse-/Clip-/Fehler-/Retentionsfall sowie3Geometrie-/1Clockfall
+bestehen. Native Portexbedienung und regionale Pixelgleichheit sind mit
+dem normalen finalen Artefakt belegt. OssiPC mit exakt40gleichen Vollframes:
+13902->3875Desktop-Ticks bei unveraendertem Portex0.1.10. Messumfang,
+Quell-/Artefaktidentitaet und Originale: Deployment/PortexPerformance090.txt,
+ExFiles/Reports/Portex/0.90.2/. Keine Kernel-/ABI-Aenderung.

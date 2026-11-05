@@ -33,9 +33,16 @@ and the common update/removal owner are included. SDK-Qualification.json
 states the actual scope. Linux executed; Windows host tools cross-built.
 No Windows, real-hardware or GPU execution is claimed.
 Durable originals/readback/consumer evidence: ExFiles/Reports/SDK/0.64.152.
-Matching R4OS0.89.57 Slim/Full is published and independently verified:
-https://github.com/R4OSDev/r4os-distribution/releases/tag/v0.89.57.
-Actual package-image qualification: Deployment/Release08957.txt.
+Current R4OS Slim/Full release: 0.89.60, with normal Kernel0.1.460 and
+independently versioned Recovery0.1.68:
+https://github.com/R4OSDev/r4os-distribution/releases/tag/v0.89.60.
+SDK/Contract/Libraries remain the same matching set above. This release
+reuses the runtime evidence from0.89.58/59; the user explicitly requested
+no further guest, benchmark or package-download tests. Publication used the
+existing release structure/hash bindings and GitHub asset metadata.
+Exact scope: Deployment/Release08960.txt. Actual ZIP-image boot and complete
+public-download qualification for the earlier0.89.57 is retained separately
+in Deployment/Release08957.txt; it is not a new0.89.60 package test.
 
 Local DevKit and independent repositories (03.11.2026)
 ----------------------------------------------------
@@ -50,7 +57,9 @@ of the parent. Details and the remote-only retirement command: Agents/Github.txt
 Current builds may reuse retained local installations after SDK verification.
 Contract/tool/system-library selection has moved into the SDK. Server and
 Studio consume the published SDK package contract; they must not introduce
-their own system pins. The final common handoff follows the R4OS publication.
+their own system pins. The common handoff is documented in
+SDK-Profilumstellung-Studio-Server.txt; its original release examples are
+historical and the current matching release is listed above.
 
 A module project contains `module.R4MF`, `build.zig`, `build.zig.zon`,
 `Settings.R4S`, `Build.bat` and its own sources. The repository starter maps

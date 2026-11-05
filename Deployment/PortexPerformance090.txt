@@ -1,0 +1,372 @@
+﻿Portex: Performanceanalyse auf OssiPC und Korrekturen 0.90.X
+=======================================================
+
+Stand: 05.11.2026. Ausgangsbefund und Fortschreibung der Umsetzung 0.90.X.
+
+Ergebnis
+--------
+Die Verlangsamung ueber Portex ist auf dem installierten Release
+reproduziert. Bewegungen ueber einer unveraenderten leeren Clientflaeche
+loesen fortlaufend vollstaendige Portex-Frames aus. Deren Verarbeitung
+beschaeftigt den gemeinsamen Desktoppfad erheblich. Im Stillstand und
+bei derselben Bewegungsfolge ausserhalb des Fensters entstehen keine
+zusaetzlichen Portex-Frames.
+
+Der primaere belegte Fehler liegt in Apps/Portex: Ui.mouse setzt dirty
+auch dann, wenn sich der sichtbare Hoverzustand nicht aendert. Die
+Ereignisschleife zeichnet nach jedem einzeln verarbeiteten Ereignis erneut
+das gesamte Fenster. Der gemeinsame Software-Renderer besitzt weitere
+konkrete Optimierungskandidaten fuer die Kosten eines notwendigen Frames.
+Deren jeweiliger Anteil ist noch nicht durch getrennte Zeitmessungen belegt.
+
+Vorgesehen sind 0.90.1 fuer bedarfsgerechte/regional begrenzte Portex-Frames
+und 0.90.2 fuer die gemeinsamen Rundungs-/Gradientenpfade. Die folgenden Ausgangsbefunde beschreiben den Stand vor diesen Korrekturen;
+der jeweilige Implementierungs- und Abnahmestand steht in der Fortschreibung.
+
+
+Ziel, Versionen und Nachweisumfang
+--------------------------------
+- OssiPC, SSH 192.168.178.105:22, Release 0.89.60, aktiver/installierter
+  Kernel 0.1.460; 16 konfigurierte und schedulable logische AMD-CPUs.
+- Anzeige: Software-/Bootframebuffer, 1920x1080, Pitch 7680 Bytes.
+  Portex-Client 680x560; aeusseres Fenster 696x598 bei 680,160.
+- Portex 0.1.8 und Desktop 0.1.206 stimmen jeweils bytegenau mit den
+  vorhandenen lokalen Artefakten ueberein. SDK-Stand: 0.64.152.
+- Portex-Quellcommit: a53a94c930c6ba24face14b874985d78ea7bfa68.
+  Desktop-Quellcommit: e8efdcefd855be1a6a45cde727164cbdce3968fe.
+  SDK-Quellcommit: d698b2c724691cbfb8163c4e9730e4988e655c08.
+  Die drei Quellrepositories waren unveraendert.
+- Portex-Artefakt: 3155739 Bytes, SHA256
+  1c0ed8043051c2926135018246d3e00de28605e8f0bad2c4f4da836edb923bf2.
+- Desktop-Artefakt: 5590656 Bytes, SHA256
+  9e340987bc13f29824fa3d1df36e1abd30d7f48ad1975cec36808b5dbbb956da.
+
+Die Diagnose las bestehende SPECTRA-Sichten fuer Desktop, Tasks, Eingabe,
+Summary, SMP und Speicher sowie Dienststatus. Eine kleine temporaere
+Console-R4X nutzte normale oeffentliche Programm-/Fenstersnapshots,
+GuiFrameInfo/Read, Taskzaehler und RemoteInputPush. Sie wurde mit dem
+normalen SDK-Besitzerstarter gebaut. Es entstanden keine neuen Dauergates.
+
+Ein vorhandenes Explorerfenster blieb erhalten. Fuer die kontrollierte
+Messung wurde Portex mit DESKRUN /WAITFRAME gestartet: Prozess 38:38,
+Task 104, Desktop 17:17/Task 69, WINSVC 14:14. Portex blieb nach der
+Untersuchung geoeffnet. Die temporaeren R4X-Dateien auf C:\TEMP wurden
+danach per SFTP entfernt. Der Zeiger wurde nach jedem Bewegungsfall an
+die zuvor erfasste physische Mausposition zurueckgefuehrt.
+
+
+Kontrollierte Gegenproben
+------------------------
+Die Bewegungsfolge bestand aus 100 absoluten Remote-Moves mit 50 ms
+Wartezeit, ohne Tasten, Klicks oder Wheel; anschliessend 1000 ms Settle.
+Innerhalb des Fensters wechselte x zwischen 1028 und 1038 bei y=459.
+Dort lag eine leere Clientflaeche ohne wechselnden Control-Hit.
+Ausserhalb wechselte x zwischen 10 und 20 bei y=10. Fokus blieb Portex.
+Die beiden folgenden Bewegungsfaelle verwendeten dasselbe Probe-Artefakt.
+
+Fall                    Neue Portex-Commits   Desktop-run_ticks    Zeit
+----------------------  -------------------  -------------------  --------
+Stillstand, 7 s          0                    0                    7.001 s
+100 Moves innerhalb     44                   4991                 6.006 s
+100 Moves ausserhalb    0                    0                    6.003 s
+
+Innenmessung: Ticks 945132..951138, commit_count 17->61,
+snapshot_read_count 17->60, Desktop-run_ticks 18241->23232.
+Aussenmessung: Ticks 1052859..1058862, commit_count 63->63,
+snapshot_read_count 62->62, Desktop-run_ticks 23571->23571.
+Stillstand: Ticks 773027..780028, commit_count 4->4,
+snapshot_read_count 4->4, Desktop-run_ticks 16436->16436.
+
+Alle 100 Remote-Ereignisse jedes Bewegungsfalls wurden angenommen und
+abgeholt. Die Remotequeue war vorher/nachher leer; ihr Dropzaehler blieb
+null. Eine erste Aussenprobe mit der vorherigen Probeversion ergab ebenfalls
+0 neue Portex-Frames und blieb als Originalbeleg erhalten.
+
+Die 4991 Laufzeitticks entsprechen bei 1000 Hz 4.991 s bzw. rechnerisch
+83.1 Prozent des 6.006-s-Beobachtungsfensters fuer den Desktopkontext.
+Dies ist keine systemweite CPU-Prozentmessung. Der Zaehler umfasst Arbeit
+im Taskkontext einschliesslich aufgerufener SDK-/Kernel-/Fontpfade und
+erlaubt keine Aufteilung auf Shape-Rasterung, Text, Kopien und Ausgabe.
+Commit-/Readzaehler sind keine physisch praesentierten FPS. Die
+Remoteprobe misst keine physische HID- oder Cursorlatenz.
+
+
+Ursachenkette im aktuellen Code
+------------------------------
+1. Portex/src/ui.zig:656..691 berechnet den Hit, setzt bei move hover auf
+   den ermittelten Wert und setzt anschliessend immer dirty=true. Wiederholt
+   null->null oder derselbe Control-Hit verursachen dadurch neue Frames.
+   Auch bedeutungslose Keys und Wheel an einer Grenze haben vergleichbare
+   pauschale dirty-Stellen; diese sind Quellbefunde, keine getrennt
+   gemessenen Leistungsfaelle.
+
+2. Portex/src/main.zig:246..266 zeichnet vor dem naechsten waitMessage.
+   Ein angekommenes Mouse-Ereignis verursacht damit im folgenden Turn
+   unmittelbar paint, bevor weitere wartende Ereignisse verarbeitet werden.
+   Es gibt keine begrenzte Ereignisbuendelung vor der Darstellung.
+
+3. Portex/src/ui.zig:214..268 beginnt jedes Paint mit beginPaint/clear und
+   zeichnet die vollstaendige Clientansicht. SDK/r4os/app_gui.zig:375
+   verwendet dafuer guiFrameBegin. Der bestehende regionale Ersatzvertrag
+   guiFrameBeginReplace wird von diesem Pfad noch nicht genutzt.
+
+4. Die gemessene leere Ansicht enthielt schon 26 Kommandos und 1923
+   Ressourcenbytes, darunter elf abgerundete Flaechen. Die gesamte Flaeche
+   dieser elf Kommandos betraegt 48332 Pixel. Kleiner Transport und geringe
+   Frame-Speicherbelegung begrenzen deren Rasterkosten nicht automatisch.
+   Der Client hat insgesamt 380800 Pixel. Aktuelle/hoechste Framebelegung
+   waren 8723/17461 Bytes, oom_count=0.
+
+5. Desktop/src/rust/render/shapes/mod.rs:93..111 erstellt fuer abgerundete
+   Flaechen eine Fuellmaske und danach eine weitere Randmaske.
+   mask.rs:51..87 prueft je Pixel vier Teilpixel. geometry.rs:320 ruft
+   rounded fuer jede Probe auf und normalisiert darin nochmals die
+   bereits vorbereitete Geometrie; normalize bei Zeile260 berechnet
+   Radienfaktoren mit mehreren Divisionen und multipliziert alle Radien.
+   Die Randmaske wird auch vor einem anschliessend transparent abgewiesenen
+   Rand erzeugt. Das sind konkrete vermeidbare Arbeiten; ein isolierter
+   Zeitanteil oder ein kuenftiger Speedup ist noch nicht gemessen.
+
+6. Shapes werden im Hauptpfad des Desktops komponiert, der auch die
+   Zeigerereignisse verarbeitet: Desktop/runtime/desktop.rs und
+   render/runtime.rs. Wiederholte vollstaendige App-Frames konkurrieren
+   damit mit Eingabeverarbeitung und Cursoraktualisierung in diesem Pfad.
+   Die 16 logischen CPUs verteilen diesen serialisierten Pfad nicht
+   automatisch auf mehrere CPUs. Das erklaert die beobachtete Kopplung.
+
+Der Desktoprouter ruft zwar gui_mouse fuer die aktive GUI auf, doch
+hosted/input.rs:202..246 verwirft Bewegungen ausserhalb ihrer Clientflaeche.
+Das ist durch die Aussenprobe bestaetigt. Die waehrend der Untersuchung
+zunaechst vermutete unbedingte Weiterleitung ausserhalb ist damit widerlegt.
+
+Der normale Portex-Loop wartet mit 100 ms Budget; die automatische
+Katalogsuche ist nach einem gejointen Ladeauftrag fuer 300 s zurueckgesetzt.
+Eine staendige Neuzeichnung allein durch diesen Timeout trat nicht auf.
+Bei laufenden Download-/Installations-/Update-/Entfernungsjobs markiert
+main.zig:238 jedoch alle 250 ms die ganze Ansicht dirty, unabhaengig von
+einer sichtbaren Fortschrittsaenderung. Dies bleibt ein weiterer
+Optimierungskandidat fuer den ersten Schritt, ohne eigene Lastmessung.
+
+
+Eingrenzung und offene Grenzen
+-----------------------------
+- Der Fehler ist bereits mit leerem Katalog reproduziert. Die gemessene
+  Ansicht meldete 'Veralteter Katalog | Registrierungsschluessel fehlt'.
+  Daher liefen die Messungen ohne Downloads, Installation, Hero-Farbverlauf
+  oder Paketkarten. Die fehlende Registrierung ist ein separater
+  Konfigurationsbefund und wurde nicht geaendert.
+- Der Hero-Verlauf nutzt gradient_rounded_rect. Dessen gegenwaertiger
+  Renderer berechnet Farbe und Stop-Interpolation pro Pixel und verwendet
+  zusaetzlich vier ARGB-Bytes je betroffenem Pixel. Er kann gefuellte
+  Ansichten weiter verteuern, war aber nicht Ursache der leeren Messansicht.
+- Freier physischer Speicher lag beim passiven Snapshot bei
+  25317269504 Bytes; keine Fehlerbloecke. Die erste Eingabesicht meldete
+  gui_queue_pending=0, high_water=2, gui_rejected=0. Diese historischen
+  Snapshots und die spaetere Remotequeue sind getrennte Quellen.
+- Alte Maximalwerte fuer Tasklaufzeit und Ready-Latenz stammen seit Boot
+  aus verschiedenen Phasen. Sie belegen keine aktuelle Portex-Verursachung.
+  GUI-Task-run_ticks mit null werden nicht als CPU-Kostenfreiheit gewertet.
+- SPECTRA CHECK DESKTOP /OWNER wurde einmal mit BusyOrUserActivity
+  abgewiesen und meldete cleanup_acknowledged=true. Es wurden keine
+  Besitzerrechte erzwungen. Passive Desktopmetriken liefern ausdruecklich
+  keine privaten Rendertimings oder physische Cursorlatenz.
+- Netzwerkzugang war anfangs verzoegert, funktionierte danach ohne Reboot.
+  Eine Portex-Ursache fuer diesen fruehen SSH-Zustand ist nicht belegt.
+- Native Grafikausgabe, andere Aufloesungen, gefuellter Katalog,
+  Installationslast und ein korrigiertes Artefakt wurden nicht qualifiziert.
+
+
+Geplante Korrekturen
+-------------------
+0.90.1: Portex nur bei sichtbarer Aenderung und regional neu zeichnen.
+Besitzer: Apps/Portex und bei Bedarf die gemeinsame Window-/Paint-Fassade
+im SDK auf dem vorhandenen Framevertrag. Unveraenderte Hover-Hits und
+wirkungsloser Input bleiben ohne Paint. Bereits wartende Ereignisse werden
+begrenzt vor einem gemeinsamen Paint verarbeitet. Sichtbare lokale
+Aenderungen melden passende Regionen; Initialbild, Layout-/Font-/Katalog-
+und Groessenwechsel bleiben vollstaendige Invalidierungen. Fortschritt
+wird nur bei geaenderter Anzeige invalidiert. Lifecycle, Capture, Focus,
+InputReset, Cancel und gejointes Workerleben muessen erhalten bleiben.
+
+0.90.2: Gemeinsame Software-Rundungen und Farbverlaeufe effizienter zeichnen.
+Besitzer: Apps/Desktop. Normalisierung und andere kommandokonstante Werte
+aus der Teilpixelschleife ziehen; unwirksame Fuell-/Randarbeit auslassen;
+Scratchspeicher unter dem bestehenden Besitzer sinnvoll wiederverwenden.
+Gradientschleifen erst mit eigenem Arbeits-/Zeitbeleg optimieren. Bestehende
+Pixelorakel, Alpha, Dirty-Clipping, elliptische/asymmetrische Radien,
+Schatten und Fehlervertraege bleiben Abnahmegrundlage. Ein eigener
+Vorher-/Nachher-Vergleich muss den Zusatznutzen nach 0.90.1 ausweisen.
+
+Fuer beide Schritte vorhandene Besitzerfaelle gezielt erweitern und dieselbe
+endliche OssiPC-Probe nachfuehren. Fuer einen unveraenderten Hoverbereich
+soll nach Settling commit_delta=0 gelten. Fuer wirkliche Hoverwechsel und
+notwendige volle Frames sind Laufzeit und Pixel-/Eingabekorrektheit getrennt
+zu belegen. Gefuellte Karten-/Gradientenansichten zusaetzlich mit vorhandenen
+Fixtures untersuchen. Keine neue Benchmark-Suite und keine ungezielte
+Wiederholung des gesamten Gatebestands fuer diese Planung.
+
+
+Originalbelege
+--------------
+ExFiles/Reports/Portex/0.90.X/OssiPC-Performance-2026-11-05/
+  context.json, artifact-identities.json, measurements.json
+  ssh-session.log, ssh-session-2.log
+  probe.zig, probe.R4MF, PXOBS4.R4X, SHA256SUMS
+
+Die Zusammenfassung ist bewusst getrennt von Rohdaten, Zwischenversuchen,
+Hostkeyhistorie und Hashbelegen. Roadmap-IDs und der finale Planungsstand
+stehen in der Roadmap-API und im dort zugeordneten Exportbeleg des Archivs.
+
+
+Fortschreibung 0.90.1: Portex und gemeinsame Paint-Fassade
+---------------------------------------------------------
+Portex0.1.9 invalidiert bei MouseMove nur geaenderte alte/neue Treffer.
+Wirkungslose Keys, Wheel=0 und unveraenderte Scrollgrenzen bleiben ohne Paint.
+Die Ereignisschleife bearbeitet maximal32 bereits wartende Ereignisse in
+Reihenfolge; bei voller Layoutinvalidierung zeichnet sie vor weiteren
+Treffertests. Close, Workerabbruch und tatsaechliche Joins behalten ihren
+Besitzer. Die300-Sekunden-Katalogsuche bleibt erhalten.
+
+Hover und Press zeichnen die betroffenen Controlrechtecke. Laufende Jobs
+vergleichen den sichtbaren Status und die formatierten Zaehler mit dem
+letzten Bild und invalidieren nur bei einer Aenderung den unteren Bereich.
+Typ-Buttonbreiten werden bis zum Fontwechsel wiederverwendet; ein Pointer-
+Treffertest laedt seinen Layoutcanvas hoechstens einmal.
+
+SDK0.64.153 ergaenzt Window.beginPaintReplace und die Variante fuer eine
+explizite Clientgroesse auf dem bestehenden R4DRAW-Vertrag. Jede Generation
+enthaelt weiterhin die komplette Szene. Begin/Append/Commit/Cancel bleiben
+transaktional; fehlende Faehigkeiten und ungueltige Regionen sind Fehler.
+Groessenwechsel und koordinierte Viewwechsel erzwingen ein Vollbild. Der
+Kernel und Desktop0.1.206 bleiben fuer diesen Schritt unveraendert.
+
+Die native Eingabeprobe fand zusaetzlich einen bereits vorhandenen Fehler
+im gemeinsamen TextField: Strg+A im leeren Feld hinterliess einen leeren
+Auswahlanker. Das erste eingefuegte Zeichen wurde dadurch selektiert und
+beim zweiten Zeichen ersetzt. Ein erfolgreicher Insert loescht nun auch
+einen leeren Auswahlanker. Der bestehende Unicode-/Kapazitaetsfall und
+die vorhandenen C-/Rust-Peers pruefen die Folge Strg+A, a, b -> ab sowie
+eine leere Auswahl mitten im Text. Die Korrektur gilt fuer feste und
+geliehene Puffer, nicht nur fuer Portex.
+
+Gezielte Pruefung
+-----------------
+Portex-Besitzerfaelle bestehen einschliesslich No-op-Hits, exakter alter/
+neuer Hoverregionen, Cancel ohne Klick, geclippter/zusammengefuehrter Damage
+und wiederholtem/geaendertem Workerfortschritt. Die SDK-Paintprobe behaelt
+Befehle ausserhalb der Damage und prueft volle Promotion bei Geometrie und
+koordiniertem Viewwechsel. Aktuelle C-/Rust-Projektionen verwenden denselben
+Zig-Besitzer; die bestehenden nativen Peers rufen beide C-Einstiege und den
+Rust-Einstieg auf, einschliesslich fehlendem optionalem Callback.
+
+QEMU/KVM4 mit Kernel0.1.460/Desktop0.1.206: Der bestehende validierte
+synthetische Cache zeigt Hero, Karten, Apps/Libraries/Kernel und lokale
+Bestandsprojektion. Die exakte Portex-Prozessinstanz92:92 bestand Suche
+(Strg+A im leeren Feld, aurora vollstaendig), Details, ungueltigen Pfad,
+Escape, Maximieren/Wiederherstellen, Fokusverlust/-rueckkehr mit einem
+echten Notepad-Peer und normales Close/Reap. Alle gelesenen Frames: OOM0.
+Die synthetischen Assets wurden nicht installiert oder als Livekatalog
+ausgegeben. Rohbelege: ExFiles/Reports/Portex/0.90.1/.
+
+Die regionale Pixelprobe veraenderte4835 Pixel ausschliesslich im
+166x34-Button Neu laden und in den beiden Cursorflaechen. Ausserhalb war
+das Desktopbild identisch; nach Hoverende war die Ansicht wieder
+pixelgleich. Nur die Taskbaruhr war von diesem Bildvergleich ausgenommen.
+Dies prueft den Softwareframebuffer des Gasts, keine physische Monitorlatenz.
+
+OssiPC-Gegenprobe auf demselben Kernel/Desktop und1920x1080
+---------------------------------------------------------
+Nach dem regulaeren Start des unveraenderten Portex0.1.8 mit nun gueltigem
+PUBLIC-Katalog lief dieselbe100-Move-Folge ueber1028,459/1038,459. Sie
+erzeugte13 Vollbilder in6035 ms und5653 Desktop-Laufzeitticks. Die fruehere
+leere Ansicht mit44 Vollbildern bleibt ein eigener Ausgangsfall; beide
+Datenreihen werden nicht zu einer vermeintlich gleichen Framearbeit gemacht.
+
+Portex0.1.9 wurde als verifiziertes R4U ueber die normale Inbox und SYSUPD
+APPLY live installiert. Der vollstaendige Rueckdownload des installierten
+R4X stimmt mit dem lokalen Artefakt ueberein:3159835 Bytes, SHA256
+3d7b8ba60fdea66f9180f62292bd0cabdf9309899dbad38489ff06390a6445d5.
+Das Paket enthaelt nur Portex; Kernel und Desktop bleiben unveraendert.
+Die kanonische gestartete Instanz38:38 zeigt den echten Katalog mit zwei
+Paketen und HTTP304/gueltigem Cache.
+
+Jeweils100 Moves,50 ms Abstand, danach1 s Settling; Eintritt vorher1,5 s:
+- gleiche freie Clientflaeche:0 zusaetzliche Commits,81 Desktop-Ticks/6002 ms;
+- ausserhalb10,10/20,10:0 Commits,0 Desktop-Ticks/6006 ms;
+- derselbe Neu-laden-Hit:0 Commits,91 Desktop-Ticks/6002 ms;
+-99 echte Ein-/Austritte am Neu-laden-Button:99 notwendige Ersatzframes,
+  jeweils Damage490,18,166,34,1260 Desktop-Ticks/6003 ms.
+Alle Folgen wurden vollstaendig angenommen und gepollt; pending/dropped
+blieben0. Vollstaendige Generationen enthalten36 Befehle/2652 Ressourcen-
+bytes, Basis0, Tiefe1 und OOM0. Die Bewegungsfolge wurde seriell ausgefuehrt.
+Die Taskzaehler umfassen weiterhin den ganzen Desktopkontext. Der starke
+Rueckgang bei gleicher freier Flaeche ist ein Hardwarebeleg fuer weniger
+Desktoparbeit, keine Messung physischer Cursorlatenz oder Monitor-FPS.
+
+Die vorangegangene QEMU-Pixelprobe wurde vor der isolierten Textfeld-
+Eingabekorrektur aufgenommen; der Zeichenpfad ist unveraendert. Die finalen
+QEMU-Bedienbelege verwenden das oben genannte abgeschlossene R4X-Artefakt.
+Auf OssiPC wurden ausserdem Maximieren auf1904x1010 Client, Rueckkehr
+auf680x560, Fokusverlust/-rueckkehr mit einem echten Notepad-Peer und
+Close/Reap/Wiederstart der kanonischen Portexdatei geprueft. Geometrie-
+wechsel lieferten Vollbilder, OOM blieb0. FocusLost laeuft im Desktop
+ueber den bestehenden InputReset-/Cancelpfad. Zwei parallele erste
+Fernsteuerungen ueberlagerten sich; sie zaehlen nicht als isolierter
+Bedienbeleg. Die serielle Wiederholung und generationsexakte Nachlese
+bestaetigen den Zustand. DESKRUN /WAITFRAME fuer den Notepad-Peer blieb
+als SSH-Aufruf ohne Abschlussantwort, obwohl sein normaler Frame und
+seine Fokusidentitaet vorlagen; dessen Beenden wurde explizit bestaetigt.
+Es wurde keine weitere Aenderung an SSHD oder Notepad daraus abgeleitet.
+
+Der finale STANDARD und der abschliessende Artefaktstand stehen unten.
+
+
+Abschlussreview: ungerenderte Hoverzustaende
+-----------------------------------------
+Tabs, Suchfeld und Pfadfeld zeigen nur Auswahl beziehungsweise Fokus,
+keinen Hover-/Presszustand. Portex0.1.10 ueberspringt deshalb auch deren
+Enter-/Leave-Invalidierung; ein echter Wechsel von einem sichtbaren
+Buttonhover zeichnet dessen alte Region weiterhin. Der vorhandene
+Pointerfall prueft den Ein-/Austritt ins Suchfeld ohne Paint. Der
+Paintpfad und die geordneten Aktionen sind unveraendert.
+
+Die zuvor genannten Hardware- und Bedienbelege stammen von Portex0.1.9
+mit identischem Paint-/Job-/Ereignispfad und der bereits enthaltenen
+Textfeldkorrektur. Fuer0.1.10 werden die No-op-/Hoverfolgen auf OssiPC
+mit dem neuen installierten Artefakt erneut bestaetigt.
+
+STANDARD fe8c86a8-0f54-4b9d-a71c-8a425ab5e69d war vollstaendig lokal
+validiert mit30 Samples/5 Metriken/6 Scores auf Portex0.1.9. Er bleibt
+unveraendert als Zwischenstand erhalten. Wegen der nachfolgenden echten
+Codeaenderung wird genau ein neuer finaler Lauf auf Portex0.1.10
+ausgefuehrt; keine Wiederholung zur Auswahl eines besseren Scores.
+
+
+Abgeschlossener Stand0.90.1
+-------------------------
+Portex0.1.10/SDK0.64.153; Kernel0.1.460 und Desktop0.1.206 unveraendert.
+Das ueber SYSUPD live installierte finale R4X ist3159836 Bytes gross und
+stimmt bytegenau mit dem normalen Releasebuild ueberein, SHA256
+4a8e454376caefdd93dc62890f90049296aa6c0d14044aee526424def073f63d.
+Serielle OssiPC-Instanz91:91: Suchfeld- und Tab-Ein-/Austritte behalten
+dieselbe Generation und Commitzahl. Je100 Moves: freie Flaeche0 Frames/
+87 Desktop-Ticks, ausserhalb0/0, gleicher Buttonhit0/86. Echte99
+Hoverwechsel:99 regionale Ersatzframes/1280 Desktop-Ticks; Damage
+490,18,166,34, Basis0, Tiefe1. Alle Eingaben angenommen/gepollt; keine
+neuen Drops, pending0 und OOM0. Rohbelege mit finalen Originalen:
+ExFiles/Reports/Portex/0.90.1/Final10/.
+
+Finaler STANDARD3/KVM4: 099f6387-d422-45a2-b92f-a5f852fe6db2,30 originale
+Samples mit je4/4 Workern,5 Metriken und6 gueltige neu berechnete Scores.
+Gesamtindex 126.055921. Vollstaendiger Originalexport gegen Besitzer-
+Rekonstruktion und feste Referenz lokal geprueft. Dies ist Systemregression
+und kein isolierter GUI-Speedup. Original/Referenz/Kontext/Artefakte:
+ExFiles/Reports/Benchmarks/099f6387-d422-45a2-b92f-a5f852fe6db2/.
+Serverstatus: lokal validiert; R4OS Server ausstehend. Rest: unveraenderte
+Originalbytes importieren, vollstaendig zuruecklesen und Serverscoring
+unabhaengig pruefen. Die ausdrueckliche lokale Abschlussausnahme gilt.
+
+Die weitere Rendereroptimierung bleibt0.90.2. Der automatische Erstzugang
+und die Korrektur der irrefuehrenden Katalogmeldung bleiben0.90.3; die
+bestehenden lokalen OssiPC-Zugangsdaten sind noch keine Neuinstallations-
+abnahme.

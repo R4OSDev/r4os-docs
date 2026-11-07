@@ -1,0 +1,156 @@
+﻿R4OS Plattformgeneration 2
+==========================
+
+Geltung
+-------
+Dies ist der beschlossene Zielvertrag des API-Umbaus. Die Beschreibung eines
+Ziels ist keine Zusage, dass der aktuelle Kernel bereits dessen Anbieter
+besitzt. Generator, Loader, Tabellen und optionale Fachanbieter werden getrennt
+qualifiziert. Bestehende Programme behalten ihre bisherige SDK-Auswahl und
+ihre bisherigen Imports. Eine Verbrauchermigration ist nicht Bestandteil
+dieser Anbieterphase.
+
+Die kanonische gemeinsame Funktions-/Payloadquelle bleibt
+Repositories/Contract/API/ApiContract.json. Der neue Besitzervertrag unter
+Repositories/Contract/API/Generation2.json beschreibt die kontrollierte Ableitung der neuen
+Generation. Generierte Tabellen, Bindings und Slotzuordnungen sind keine
+zweiten handgepflegten Funktionskataloge. Lokale Entwurfskopien dienen der
+Entwicklung; nach Uebernahme ist allein der jeweilige Contractbesitzer normativ.
+
+Identitaet und Auswahl
+---------------------
+Der bestehende Modulresolver behandelt Exportversionen als Mindestversionen
+und sucht nach Symbolnamen. Ein inkompatibler Query:2 darf deshalb nicht
+unter demselben Symbol den Query:1 ersetzen. Generation 2 verwendet eigene
+Symbole:
+
+    Platformimport: <GRUPPE>:Query2:2
+    R4X-Entry:      R4XStart2:2
+    R4L-Metadaten:  Query2:2, Gruppe 0
+    R4D-Init:       DriverInit2:2
+    R4P-Init:       ProtocolInit2:2
+
+Die bestehenden Query-/R4XStart-/DriverInit-/ProtocolInit-Symbole bleiben
+waehrend des Uebergangs unveraendert. Ein Artefakt waehlt genau eine
+Start-/Initgeneration. Gleichzeitig vorhandene widerspruechliche Entries
+werden abgelehnt; kein Erraten anhand eines Pointercasts. R4L-Anbieter
+duerfen beide technischen Querymetadaten anbieten, waehrend ihre fachlichen
+Funktionstabellen weiterhin eigenstaendig versioniert bleiben.
+
+Die Wahl gehoert den zentralen SDK-Profilen Build.json, Tools.json und
+Components.json. Der Standard vorhandener Module aendert sich nicht.
+Explizite neue API-/Anbieterproben waehlen die Zielgeneration. Kein privater
+Kernelbridgepointer, keine per-App-Sonderpins, kein stilles Generationfallback.
+
+Tabellen
+--------
+Die sechs bisherigen Gruppen und ihre IDs bleiben erhalten. Die neue Query
+identifiziert ausschliesslich die Generation; sie enthaelt keine fachliche
+Funktionstabelle. Tabellenheader bleiben vier u32 mit 16 Byte:
+magic, abi_version, size, flags. Generation-2-Magics tragen anstelle des
+abschliessenden ASCII-'1' ein '2'; die Tabellenrevision beginnt in der neuen
+Identitaet bei 1 und waechst innerhalb der Generation append-only.
+
+Nur vier bereits stillgelegte Slots entfallen bei der initialen Ableitung:
+R4SYS.reserved_shell_run sowie die drei R4DEV-v1-Diagnosetombstones.
+Alle 505 aktiven Funktionen werden mit ihrer bestehenden Semantik und
+Signatur uebernommen; sonstige Reserven bleiben null. Nachfolgende neue
+Faehigkeiten erhalten eigene Slots und Payloadversionen. Insbesondere wird
+FileInfo nicht in-place auf eine breitere Dateiidentitaet umgedeutet.
+Die genauen Groessen und Zuordnungen entstehen aus dem Generator.
+
+Nach der initialen Qualifikation einer Generation werden ihre bestehenden
+Slots und fixed-layout-Typen nicht mehr verschoben. Weitere inkompatible
+Bereinigungen brauchen eine neue Identitaet. Funktionen und optionale
+Anbieter werden erst nach tatsaechlicher Implementierung bekanntgegeben;
+ein generierter Typ oder ein neuer Slot allein ist keine Faehigkeit.
+
+Technische Records
+------------------
+R4LQuery2 ist ein eigener 24-Byte-Record: magic:u32, abi_version:u32,
+size:u32, group:u32, reserved:u64. magic ist R4L2 (0x324c3452),
+abi_version ist 2. reserved bleibt null. kernel_bridge existiert nicht.
+
+R4XStartContext2 verwendet R4X2 (0x32583452), abi_major=2, abi_minor=0.
+Der 120-Byte-Basisrecord entspricht den bisherigen Feldern mit Ausnahme
+von reserved_runtime. Das verbleibende reserved2 liegt bei Offset 112 und
+bleibt null. Vorhandene reserved_memory-Felder bleiben null; sie werden
+nicht als versteckter Transport verwendet. R4XStartImport behaelt sein
+40-Byte-Layout, aber Symbol-/Versions-/Tabellenidentitaet muss zur gewaehlten
+Generation passen. Programmpfad/Argumente/Imports und Callbackleihen bleiben
+an den wirklichen gestarteten Besitzer und dessen Lebensdauer gebunden.
+
+Start-I/O erhaelt spaeter eine ausdrueckliche append-only-Erweiterung des
+Generation-2-Records mit eigenem Groessen-/Versionsvertrag und einer
+begrenzten Extensionliste. Keine Wiederverwendung des entfernten Runtime-
+Feldes oder irgendeines reservierten Feldes. Ohne Extension bleibt das
+bisherige Consoleverhalten der ausgewaehlten Startgeneration massgeblich.
+
+DriverApi2 ist eine eigene neue 16-Byte-Header-/Callbacktabelle. Nur die
+zwei immer fehlschlagenden untypisierten Audio-/Synthregistrierungen
+entfallen; alle anderen Callbacks werden in Reihenfolge uebernommen.
+Neue Magic unterscheidet die Generation, die Tabellenrevision beginnt bei 1.
+DriverInit2/ProtocolInit2 erhalten ausschliesslich diese Tabelle. Alte
+Treiber erhalten ausschliesslich die bisherige DriverApi.
+
+AudioBackendStatus2 entfernt genau die sechs stillgelegten Dauerfelder.
+Ein separater strukturierter AudioBackend2-Descriptor bindet den zugehoerigen
+Statuscallback. Alte Descriptorgroessen/Callbacks bleiben unveraendert.
+Neue Status- oder Capturezeitwerte duerfen nicht in alte Callbacklayouts
+geschrieben werden. Unbekannte Dauer ist keine gemessene Null.
+
+Semantik und Besitzer
+--------------------
+Die Plattform bleibt x86_64 little-endian, Pointer 64 Bit, C-Calling-Convention.
+Zig-, C- und Rust-Projektionen muessen Groessen, Ausrichtung, Callbacktypen,
+Fehler, Nullbarkeit und gueltige Ausgaben gemeinsam belegen. Shared Payloads
+haben einen Contractbesitzer und werden nicht pro Sprache neu erfunden.
+
+Vorhandene Fehlerdomaenen bleiben erhalten. Fehlende Gruppe/Funktion,
+fehlender Provider, ungueltige Generation, fehlende Hardware und fachlicher
+Fehler sind unterscheidbar. U64-Offsets/Zaehler erlauben nicht automatisch
+unbegrenzte Einzeltransfers: bestehende positive-i32-Ergebnisse behalten
+ihre dokumentierte maximale Bytezahl. Neue Transfers berichten den gueltigen
+Prefix; Retry darf angenommene Bytes nicht erneut zustellen.
+
+Zeitwerte nennen Einheit und Clockidentitaet. Poll, endliches Gesamtbudget
+und Forever sind verschiedene Zustaende. Keine Ersatzfrequenz bei unbekannter
+Clock, keine erneute Gesamtfrist pro Teiloperation. Timeout/Cancel beendet
+die Aufnahme neuer Arbeit, bestaetigt aber weder physischen I/Oabschluss
+noch Peerzustellung, Hardwaredrain oder die Freigabe geliehener Puffer.
+
+Genaues Handle plus Generation statt Inventargegenwart als Besitzbeweis.
+Unvollstaendige, neu zu beginnende oder durch OOM begrenzte Sichten sind
+nicht leer/erfolgreich. Caller-, Modul-, Frame- und DMAleihen enden erst
+nach dem wirklichen zustandigen Return/Join/Retirement. Kein Registry-/
+No-Sleep-Owner ueber I/O, Wait oder Callback; keine Callerpointer ueber
+Sleep in neuen WaitSet-Registrierungen. Bestehende Runtime-/Lock-/TLB-
+Invarianten bleiben verbindlich.
+
+Die neuen Queries zeigen auf dieselben fachlichen Besitzer wie bisher.
+Neue SDKhelfer fuer Parsing, Transfer, Inventare, GUI, Polling und Frames
+leben im SDK; der Cachecodec bei Libraries/Shared. Clipboard-/Audio-/Netz-
+Policy verbleibt bei bestehenden Services und Protokollen. IPv6/ICMPv6/ND
+ist externe Protokollarbeit; kein zweiter Kernel-IPstack. Nur notwendige
+Scheduler-Enrollment-/Loader-/Lebenszeitmechanik gehoert in den Kernel.
+R4OS bleibt Single-User und vertrauenswuerdig, ohne neues Rechte-/Sandboxmodell.
+
+Uebergang und Abnahme
+--------------------
+Waehrend der Anbieterphase bleiben die vorhandenen Verbraucherquellen,
+Manifeste und Profilbindungen unveraendert. Die neue Generation wird mit
+gezielten API-/Anbieterproben qualifiziert. Ein Neubuild allein beweist
+keine Binarkompatibilitaet; vorhandene Artefakte oder genaue originale
+Layout-/Querybelege werden getrennt erhalten und geprueft.
+
+Vorhandene Diagnoseorakel bleiben unabhaengig. Neue Faelle ergaenzen nur
+tatsaechlich neue Semantik; keine zweite allgemeine Gatesuite. Notwendige
+SMP4-/STANDARD-Abnahmen gelten nach dem tatsaechlichen Runtimeumfang;
+reine Architekturarbeit ohne Runtimeaenderung braucht keinen Benchmark.
+Hardware-/Netz-/Inputmethodfaehigkeit folgt einem nachgewiesenen Anbieter.
+AudioCapture ohne qualifizierten ADC meldet UnsupportedCapture; ein
+kontrollierter Testprovider ist keine Behauptung realer Mikrofonaufnahme.
+
+Die Abschaltung bisheriger Provider erfolgt erst nach einem spaeteren,
+gesondert beauftragten Verbrauchercutover. Dauerhafte doppelte oeffentliche
+Legacyfassaden und eine zweite Zustandsverwaltung sind kein Ziel.

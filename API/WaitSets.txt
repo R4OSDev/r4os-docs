@@ -1,0 +1,182 @@
+﻿WaitSets: begrenztes wait-any ueber bestehende native Besitzer
+===========================================================
+
+Vertrag: Contract0.64.83, R4SYS38/1480Bytes und SYS2Revision3/1472Bytes.
+Die sechs neuen Slots sind angehaengt. Die bisherigen177Slots,420Typen und
+2922Konstanten behalten ihren Inhalt. Query1 und Query2 teilen dieselben
+Kernelbesitzer; die Anwendungen werden durch diesen Anbieterumbau nicht
+umgestellt. Implementierung: Kernel/Rust/program/waitsets.rs und die
+bisherigen Notification-/Scheduler-/Threadbesitzer. SDK: wait_set.zig,
+wait_set_platform2.h und Rust/src/wait_set.rs.
+
+Besitz und Aufnahme
+------------------
+Ein Set gehoert zur aktuellen Programminstanz und zur exakten nativen
+Task-ID mit Generation seines Erzeugers. Nur dieser Task konfiguriert und
+wartet; andere Tasks derselben Instanz duerfen Close zur Beendigung nutzen.
+Ein globaler nie wiederverwendeter u64Handle identifiziert das Set. Jeder
+erfolgreich aufgenommene Eintrag besitzt eine eigene nicht wiederverwendete
+Registrierungs-ID innerhalb dieses Sets. Erschoepfung fuehrt zu Exhausted;
+keine Identitaet laeuft um. Remove/Close bleiben bei Revisionserschoepfung
+moeglich. Keine zweite Task-, Prozess- oder Notificationregistry.
+
+Create nimmt eine Kapazitaet von1bis32 auf. Jede Notification nimmt hoechstens
+32residente Quellverknuepfungen auf; Ueberlauf liefert Capacity und laesst
+Ausgaben sowie vorhandene Registrierungen unveraendert. Diese Grenze haelt
+die neue Arbeit beim Signalisieren/Schliessen unter Runtime begrenzt. Es
+gibt keine zusaetzliche feste globale Prozess- oder Taskobergrenze.
+
+Erster Quellumfang
+------------------
+Notification: bestehender Instanzhandle und beobachtete Revision; die
+Revision darf nicht in der Zukunft liegen. Notify, Check und das Einhaengen
+in die urspruengliche Task-Wartequeue teilen denselben Runtimebesitzer.
+Publikation zwischen Check und Enrollment kann deshalb nicht verlorengehen.
+Notificationclose loest alle wirklichen Quelllinks, publiziert SourceClosed
+und weckt das Set, bevor der urspruengliche Quellspeicher freigegeben wird.
+
+Timer: absolute Nanosekunden mit unveraenderter Clockidentitaet aus Source,
+Generation, Eventbackend und event_requested_hz. Ein faelliger Timer bleibt
+LevelReady bis Rearm oder Remove. Clockwechsel oder Ruecklauf werden beim
+naechsten Check als ClockChanged gelatcht; nur explizites Rearm hebt diesen
+Zustand auf. Es gibt keine zugesagte sofortige Clockwechsel-Unterbrechung.
+Die urspruengliche Scheduler-Timeoutqueue weckt faellige Timer; kein neuer
+Poller, Worker oder Systemdienst wird angelegt. Weitere Quellarten werden
+erst durch ihre gesonderten Besitzeradapter bereitgestellt.
+
+Beobachtung und Zeitbudget
+-------------------------
+Wait liefert einen begrenzten Batch und verbraucht keine Quellarbeit.
+Short batches rotieren ueber die bereiten Eintraege. More und Rescan zeigen
+weitere bereite Quellen; Revisionsspruenge setzen Coalesced und Rescan.
+Dies ist keine verlustfreie Ereignis-FIFO. Caller lesen/reapen/rescannen
+ihren eigentlichen Besitzer und bestaetigen anschliessend mit Rearm die
+neue beobachtete Revision. Quellenwechsel erfordert Remove plus Enroll.
+
+Bereite als Stop markierte Notifications erhalten auch bei Batchkapazitaet1
+Vorrang und liefern Cancelled. Weitere bereite Quellen bleiben vorhanden;
+More/Rescan zeigt sie an. Ein SourceClosed ist ein Quellenereignis; ein
+geschlossenes Set liefert dagegen den Batchausgang Closed.
+
+Poll, Finite und Forever sind getrennt. Finite bindet einen einzigen
+urspruenglichen absoluten Zeitpunkt und prueft Clockidentitaet/Ruecklauf
+bei jedem nativen Wiederaufwachen. Kein Wake erneuert das Budget. Die letzte
+Beobachtung darf nach Ablauf groesser als die Deadline sein. Die logische
+Tickumrechnung rundet mit gepruefter Ganzzahlarithmetik auf und darf auch
+einen endlichen u64MAX-Wert niemals in das alte Forever-Sentinel verwandeln.
+SDK-Adapter uebernehmen die gemeinsame DeadlineBudget-Zeitbasis.
+
+Lebensdauer und Abbau
+--------------------
+Alle API-Aufrufe einschliesslich Poll benoetigen schlaffaeigen Taskkontext
+mit freigegebenen Interrupts und ohne gehaltene Scheduler-/Ressourcenlocks.
+Create/Enrol/Remove/Close halten fuer ihre kurze Speicheroperation den
+bisherigen Task-Unwindschutz. Wait haelt keinen solchen Pin ueber Schlaf.
+Die urspruengliche einzelne Task-Wartenode gehoert nur zur Set-Wartequeue;
+residente Quelllinks sind gesonderte kernelinterne Registrierungen.
+
+Callerdescriptoren werden kopiert. Die residenten Besitzer/Wartenodes
+behalten keine Caller-/Stack-/Callbackzeiger. Ausgabepraefixe entstehen aus
+begrenzten lokalen Kopien nach Freigabe von Runtime. Aufrufer halten ihre
+disjunkten, ausgerichteten, gemappten Ausgaben durch den wirklichen Aufruf.
+Nach Park wird der Setrecord ausschliesslich ueber den Handle erneut
+aufgeloest; der alte Record und seine Queue duerfen bereits freigegeben sein.
+
+Close sperrt das Set, loest alle wirklichen Quelllinks, leert die originale
+Wartequeue und gibt Speicher ausserhalb von Runtime frei. Fehlgeschlagene
+Speicherfreigabe behaelt denselben geschlossenen Record fuer einen Retry.
+Taskretirement ruft nach dem wirklichen Taskdetach und vor dem Loeschen
+von ID/Generation den Abbau aller Sets dieser exakten Inkarnation auf.
+Fehler halten die bestehende Retirementkante offen. Prozessabbau leert die
+Setnamespace vor Notifications und Runtimepayload. Der private Runtime-
+Payload waechst von2248auf2272Bytes; alte Feldoffsets bleiben erhalten,
+wait_sets beginnt bei2248. Der ProgramInstance-Vertrag wird nicht erweitert.
+
+Rust WaitSet bindet die Contextlebensdauer, ist weder Send noch Sync und
+versucht Close bei Drop. Explizites Close macht Fehler beobachtbar; ein
+fehlgeschlagener Drop-Retry bleibt im Kernel fuer Taskretirement erhalten.
+Zig/C verlangen explizites Close und die dokumentierte einzelne Besitzfolge.
+
+Grenzen und Belege
+-----------------
+Ready, Closed, Timeout und Cancelled bestaetigen weder Arbeitsabschluss noch
+DMAstillstand oder Bufferfreigabe. Keine Mutex-wait-all-/FIFOsemantik. Der
+erste Umfang stellt Notification und Timer bereit; I/O-/Prozess-/Service-/
+GUIadapter und Verbrauchercutover gehoeren in spaetere Unterversionen.
+
+Gezielte Hostpruefung: Kernel/Tools/Test-WaitSets.ps1 nutzt die wirklichen
+WaitSet-/Notification-/Treapmodule mit simulierten Scheduler-/Heapgrenzen.
+Sie ist keine SMP- oder Hardwarepruefung. Native, Kompatibilitaets- und
+STANDARD-Ergebnisse stehen mit den tatsaechlichen Abnahmegrenzen in den
+lokalen Belegen Research/API-ABI/Umsetzung/0.90.28/. Keine Windows- oder
+Echthardwarequalifikation aus einem Linux-Hostlauf ableiten.
+
+
+Finale Qualifikation0.90.28
+--------------------------
+SDK171 / Contract83 / Kernel467 stellen den ersten Notification-/Timerumfang
+bereit. Alle bisherigen177SYSslots,420Typen und2922Konstanten sowie die
+anderen fuenf Plattformgruppen bleiben unveraendert. Der neue RawSYS38-
+Anhang und der kompakte SYS2rev3-Anhang teilen die tatsaechlichen Besitzer.
+Die Anwendungsquellen, IMPORT-/Buildprofile und alten Provider bleiben.
+
+Die bestehenden Contractpruefungen bestehen in18Buildschritten einschliesslich
+aller8C-/Rust-/Zig-Rundlaeufe.21vorhandene SDK-Kontext-/Technikfaelle,
+12originale Waitprioritaetsfaelle und12gezielte neue Besitzer-/Budgetfaelle
+bestehen. SDK-/Kernel-Clippy und Kernel-Fmt sind erfolgreich. Drei echte
+Compilernegative weisen Send, Sync und einen ueberlebenden Contextborrow
+fuer Rust WaitSet ab. Die Sprachparitaetspruefung umfasst829Dateien,
+35Bereiche und206Exports; sie ist eine Quellenreview, keine Laufzeitabnahme.
+
+Drei wirkliche Zig-/C-/Rust-Programme benutzen jeweils ausschliesslich einen
+R4SYS:Query2:2-Import und R4XStart2:2 im KVM4-Gast. Notificationrevision3 mit
+Coalesced, Rearm/Remove, echte Timer, Poll, eine abgelaufene absolute Deadline,
+fehlende Funktion/Unsupported und Rusts tatsaechlicher Drop/Close werden
+geprueft. Die grosse Zigprobe bestaetigt vier natuerliche Threadenden mit
+je32wirklichen Quelllinks, anschliessend32erneut aufnehmbare Links und Stale
+fuer den alten Set-Handle.128parallele Revisionen und ein20ms-Timer erreichen
+den urspruenglichen Zeitpunkt. Paralleles Set-/Quelleclose und ein neuer
+Notificationhandle bleiben getrennt. Drei Prozesse mit je32aufgenommenen
+Quelllinks werden nach Publikation hart beendet und vollstaendig gereapt.
+
+Exaktes Freigeben vor Wiederaufnahme, Freigabefehler und Clockwechsel/
+Ruecklauf werden mit den wirklichen Besitzermodulen an explizit simulierten
+Hostgrenzen erzwungen. Die native Close-/Joinprobe belegt den wirklichen
+Closeabschluss; ihr Marker allein legt nicht fest, welcher CPU-Lauf zuerst
+Speicher freigab. Keine physische Timerwechsel-/Windows-/Hardwareabnahme.
+Alle Programme und das finale BOOT-ELF sind vollstaendig rueckgelesen.
+
+Das identische alte Query1-Spectraartefakt bestaetigt40urspruengliche Kernel-
+Faelle mit ausgeglichener Heap-/Rollback-/Payloadbilanz, Zero-Initialisierung,
+allen522kompakten Slots, sechs vorhandenen WaitSetfunktionen und beiden
+Startkontexten. Die anschliessende breite Console-Lifecycleprobe kann ihre
+exakte APPHEAPD-Datei nicht finden: DIR liefert Path not found. Diese private
+Basis mit frueheren15Fixtures/Release14-Konfiguration und altem installierten
+463-Katalog ist keine aktuelle Gesamtneuinstallation. Aktives finales ELF
+ist467; ein vollstaendiger PROGRAMSTORAGE-/Modulbestandlauf wird nicht als
+bestanden gewertet.
+
+Alle9SDK-Werkzeuge/Runtimeobjekte sind passend gebaut und als normaler
+SDK171/Contract83-Satz offiziell rueckgeprueft. Das originale SDK170-Rohprofil
+bleibt byte-identisch erhalten. Der erste native Diagnoseversuch fand noch
+alte ausdrueckliche SYS2rev2/1432/1424-Erwartungen; diese wurden ausschliesslich
+auf SYS3/1480/1472 und sechs vorhandene neue Tailfunktionen fortgeschrieben.
+Andere Gruppen und die Query2-Symbolrevision2 bleiben exakt. Fehlversuche,
+Generator-/Testvorbereitungen und private Startstubkorrekturen bleiben in
+Host.json/Native.json erhalten. Keine Behauptung, dass alle Versuche bestanden.
+
+Genau ein finaler STANDARD/Suite3/KVM4, Run84b2ac54-3312-4484-b722-7373420adca8, besteht lokal.
+Alle30Originalsamples,5Metriken,6Scores und4Worker sind gegen die feste
+Originalreferenz vollstaendig rekonstruiert und unveraendert archiviert.
+Gemessen wurde Release27 mit dem finalen Kernel467; Release28 erst danach
+markiert. Die fuenf Kernworkloads pruefen bestehende Hotpaths; sie liefern
+keinen isolierten WaitSet-Beschleunigungsnachweis.
+Lokal validiert; R4OS Server ausstehend. Rest: Claim/Import derselben
+Originalbytes, vollstaendiger GETvergleich und unabhaengige Serverwertung
+unter der ausdruecklichen lokalen Abschlussausnahme in Agents/Benchmark.txt.
+Kein zusaetzlicher Lauf fuer Upload oder bessere Scores.
+
+Weitere I/O-/Prozess-/Service-/GUIquellen bleiben Unterversion0.90.29.
+ADD-0014 ist damit insgesamt weiter Beschlossen; der Kernmechanismus ist
+umgesetzt. Kein Verbrauchercutover und keine Abschaltung alter Provider.
+Vollbelege: Research/API-ABI/Umsetzung/0.90.28/Abnahme.json.

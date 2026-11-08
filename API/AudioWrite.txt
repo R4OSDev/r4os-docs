@@ -1,0 +1,116 @@
+﻿Audio-Gesamtfrist und PCM-Source-Pacing
+====================================
+
+Anbieterphase0.90.25, SDK0.64.168. Normativer SDKvertrag:
+Repositories/SDK/Docs/AudioWrite.txt. Kernel0.1.466, Contract0.64.82,
+Libraries0.64.50 und AudioService0.1.22 werden dafuer nicht geaendert.
+Analysebezug: OPTIMIZE-0003 und ADD-0005. Anwendungen folgen spaeter.
+
+Ein neuer statischer SDK-Writer leiht die ganze Quelle und den wirklichen
+AudioStream. Er verwendet den vorhandenen stream_transfer-Besitzer und
+time_budget; es entsteht weder eine zweite Deadlineimplementierung noch
+eine Verbindung/Registry oder ein weiterer Audiostack. Das alte write
+behaelt seine relative Frist pro RPC und sein altes Layout. Neue totale
+Fristen sind ein ausdruecklicher neuer Zugang in Zig, C und Rust.
+
+Init bildet die absolute Frist einmal. Ein Schritt startet hoechstens einen
+AUDSVC-RPC, ein begrenzter Aufruf1..64 nur solange bestaetigter Fortschritt
+vorliegt. Poll erlaubt insgesamt genau einen RPC, Forever bleibt explizit.
+Busy kehrt sofort zurueck. Verbleibende Nanosekunden werden mit der wirklichen
+angeforderten logischen Tickrate aufgerundet, nicht mit der effektiven
+Hardwareereignisrate. Fehlende Frequenz, Clockwechsel und Regression erlauben
+keine geratenen Werte oder stilles Rebase. Nach Ablauf kein neuer RPC.
+Ein aufgenommener synchroner RPC kann spaeter zurueckkehren; sein wirklicher
+Frameprefix bleibt bei Timeout/Cancel erhalten. Keine harte physische Frist.
+
+Der bestehende20-Byte-Request und120-Byte-Replyvalidator bleiben massgeblich.
+Payload4076 wird auf2-/4-Byte-S16-Frames abgerundet. Antwortlaenge ist keine
+PCMbytequittung. Vollstaendige gueltige Antworten bestaetigen genau ihren
+Prefix. Bei Transporttimeout, ungueltigem Reply oder unbekannter Wirkung
+endet Writer Uncertain und wiederholt nichts automatisch. Der letzte
+gueltige Serviceflagstand zeigt Backend/Mixer/Sessions/Ready/DurationUnavailable
+als historische Beobachtung. Er ist keine aktuelle Hardwareabspielquittung.
+
+Der normale Zugang leiht den echten alten AudioStream, C den compiler-
+typisierten R4SdkAudioAudioStream und Rust &mut platform::Stream. Der alte
+manuelle C R4AudioStream ist ein anderer Typ. Ein neuer crate-private Rust-
+Pointerzugang erweitert keine reflektierten Zigmethoden oder Layouts.
+Der fortgeschrittene Query2-Zugang verwendet genau service_call/monotonic_clock
+mit Caller-Handles, ohne Open/Close zu erfinden. Er ist in Rust unsafe und
+verlangt echte Handle-/Codelebenszeit und Exklusivitaet. Ganze Quelle und
+Stream bleiben bis zum wirklichen Return geliehen, auch nach Cancel. Rust
+verhindert spaeter benutzte Writer zusammen mit Quellenfreigabe/Streamclose
+und verbietet Send. Der urspruengliche Streamowner schliesst danach selbst.
+
+Der reine PcmSourcePacer fuehrt keine Sleeps oder Hardwareoperationen aus.
+Exakte Sourcezeit ist ns*rate als u128, ABI hi/lo-u64. Pro angenommenem ganzen
+Frame kommen1e9Einheiten hinzu; Start ist max(alterEnd,Writestart*rate).
+Bruchteile bleiben erhalten, lange Luecken geben kein kuenftiges Guthaben.
+Lead ist ausdruecklich eine Framezahl. Deadline liefert ceil-Wartezeit bis
+End-Lead oder ganzem Sourceende.0Bytes erzeugen keinen End-/Leadanspruch.
+Pause verwirft Schedule und behaelt Diagnoseframes, Resume startet neu,
+Reset waehlt Rate/Frame/Clock/Lead neu und setzt die Anzahl0. Clockidentitaet,
+Regression, ganze Frames und Ueberlauf werden vor Commit geprueft. Fehler
+lassen Pacer unveraendert. Sourceende ist niemals DMA-/Playback-/Drainquittung.
+
+Writer152, Provider40, Progress56, Pacer72 und SourceDeadline64 werden an
+der statischen Zig/C/Rust-Grenze geprueft. Inline-Query2-Bindungen liegen
+ausserhalb facades.h; die Projektion erzeugt keine unimplementierten Externs.
+State/Quelle/Stream/Output sind disjunkt und gueltig bis zum echten Return.
+Writer speichert keinen Selbstzeiger. Bestehende Programme, Import-/Build-
+profile, reflektierte Audio-/Serviceobjekte und AUDSVC-RPCs bleiben erhalten.
+
+Vor jeder Aenderung wurde der wirkliche alte AudioStream mit kontrolliertem
+3-ms-RPC und10-ms-Vorgabe ausgefuehrt:64PCMbytes/4Byteframes,16RPCs, davon
+12nach der urspruenglichen Frist,48msGesamtablauf. Die alte writeOnce-Probe
+bestaetigt4Bytes in einem RPC. Der neue wirkliche Writer bestaetigt16Bytes
+in4RPCs mit Restbudgets10/7/4/1Ticks und beendet nach12ms ohne weitere
+Aufnahme. Dies ist eine kontrollierte Besitzermessung, keine Hardwarelatenz.
+
+160direkte Vergleiche mit den unveraenderten originalen Beep-/R4Synth-
+Pacerkoerpern pruefen exakten rationalen Endwert und wirkliche berechnete
+Warteticks ueber5Raten, verschiedene Frameportionen und lange Luecke.
+Tick/Sleep und der kleine Synth-Appkontext sind ausdrueckliche Hostmodelle.
+Die Anwendungen selbst werden nicht migriert oder umgebaut. Sechs neue
+gezielte SDKfaelle pruefen Frist/Poll/Forever/Busy/Ungewissheit/Frameform,
+Reentrant-Cancel bis echtem Return und Pacer-Clock/Pause/Reset/Ueberlauf.
+
+Final bestehen133gebuendelte Besitzerfaelle:99SDKdaten,13originalAudio/Dev,
+3PCM,2Power und16Service. Zwei zusaetzliche private Proben bestaetigen den
+bekannten PCMprefix und letzten gueltigen Flagstand nach spaeterem defektem
+Reply sowie nach wirklicher BadHandle-Invalidierung durch den alten
+ServiceConnection-Besitzer. Keine automatische Wiederholung.
+
+16gemeinsame C/Rust-Datengruppen mit26Compilernegativen sowie10originale
+Platform-/Clock-/Visual-/neue BorrowedWriter-Gruppen mit8Compilernegativen
+bestehen. Der neue Platform-Prueffall ergaenzt ausdruecklich die im alten
+Serviceorakel fehlende Transportheaderlaenge und stellt eine kontrollierte
+Clock bereit; der originale Orakelkoerper bleibt byteidentisch. Echte AUDSVC-
+Antworten werden getrennt im Gast geprueft. Die neuen Compilerfaelle sperren Streamclose, Quellenfreigabe und
+Send bei spaeter benutztem Writer. Striktes Bare-Rust-Clippy und die
+compiler-typisierte C/Rust-Projektion bestehen; der frisch gebaute GUIgenerator
+bestaetigt byteidentische alte Typ-/Methodenprojektionen. Originale Methoden
+und Layouts bleiben erhalten, keine manuelle generierte Rustbearbeitung.
+
+Drei echte SYS Query2:2-/R4XStart2-Proben in Zig/C/Rust schreiben jeweils
+12288PCMbytes/3072Frames mit4RPCs in den unveraenderten wirklichen AUDSVC.
+Sie pruefen gueltigen Flagstand, rationalen Source-Pacer, wirklichen Stream-
+und Channelclose; Zig zusaetzlich Pause und Cancel. Volume0 erzeugt absichtlich
+stumme Sourcequittungen; kein Nachweis fuer Hardwareabspielzeit oder Drain.
+Der gleiche alte Query1-AudioStream-Binaerstand71ba2c78 besteht vor/nach
+Aenderungen mit write12288,writeOnce64 und Close. Ganze Module/AUDSVC sind
+rueckgelesen, das BOOT-ELF der unveraenderten Basis ebenfalls, Kernel466 ist
+aktiv. Der eigene KVM4-Gast ist normal ausgeschaltet. Die Basis hat fruehere15-
+Fixtures/Release14-Konfiguration; keine frische aktuelle Komplettinstallation,
+Windowsausfuehrung, reale Hardware oder Anwendungsmigration wird behauptet.
+
+Genau ein finaler STANDARD/Suite3/KVM4, Run6799ce2b-0d44-49b1-9b0d-b2fa064e2849, besteht lokal.
+Der gesamte Originalexport wurde mit30Rohsamples,5Metriken,6Scores und allen
+4Workern gegen die originale feste Referenz rekonstruiert und bytegenau
+archiviert. Gemessen:Release24, unveraenderter echter Kernel466; Release25
+wird danach markiert. Das ist keine isolierte Hardware-Audiolatenzmessung.
+Lokal validiert; R4OS Server ausstehend. Offen bleiben Claim/Import derselben
+Originalbytes, vollstaendiger GETvergleich und unabhaengige Serverwertung
+unter der ausdruecklichen lokalen Abschlussausnahme in Agents/Benchmark.txt.
+Es wird kein neuer Lauf fuer Upload oder bessere Scores erzeugt.
+Lokale Originale und Abnahmebelege: Research/API-ABI/Umsetzung/0.90.25/.

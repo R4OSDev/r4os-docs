@@ -1,0 +1,108 @@
+﻿StreamTransfer: Teilpraefix und Gesamtfrist
+=========================================
+
+Stand: 0.90.19, SDK0.64.162 / Contract0.64.79 / Kernel0.1.463.
+
+Der normative SDK-Besitzervertrag steht in
+Repositories/SDK/Docs/StreamTransfer.txt. Zig r4os.stream_transfer, C
+stream_transfer.h/stream_platform2.h und Rust r4os_sdk::transfer verwenden
+dieselbe statische Zustandsmechanik. Eine Gesamtoperation hat genau eine
+aeussere Clock-gebundene Deadline und einen bestaetigten U64-Bytepraefix.
+Ein Schritt fuehrt hoechstens einen wirklichen synchronen Callback aus;
+der Caller bestimmt das weitere Warten und Wiederaufnehmen.
+
+EOF, WouldBlock, Timeout, Cancelled, Closed, Failure, ClockFailed und
+ungewisse Wirkung bleiben verschieden. Bereits bestimmte Bytes bleiben
+auch neben einem terminalen Fehler erhalten. Ablauf verhindert neue Arbeit,
+gibt einen aktiven Borrower aber erst nach wirklicher Rueckkehr frei. Ein
+blockierender zugelassener Owner kann spaeter zurueckkehren als die Frist.
+Transferabschluss ist weder Peer-/DMAquittung noch Dateipublish/Persistenz.
+Ungueltige oder unsichere Quittungen erlauben keine automatische Wiederholung.
+Poll laesst genau einen unmittelbaren Schritt zu; ein kurzer Pollerfolg ist
+terminales WouldBlock. Finite und Forever werden nicht still ineinander
+umgedeutet. Rust bindet Ein-/Ausgang und nicht entweichende Callbackleihen.
+
+Die Adapter nutzen echte Query2-Callbacks und geliehene Pfad-/Endpoint-/
+Socketbesitzer. FileReadAt behaelt den tatsaechlichen synchronen32-Bit-
+Offsetbereich; groessere Base+Offset-Werte werden vor Zugriff abgewiesen.
+Breite asynchrone Datei-I/O bleibt mit ihrem eigenen Request-/Leihvertrag
+verfuegbar. U64-Gesamtfortschritt verspricht keinen unbeschraenkten Adapter.
+FileStream behaelt seinen wirklichen U64-Offset und dessen externe
+Begin-/Finish-/Abort-/Publish-Verantwortung. Es werden keine Dateihandles
+erfunden und keine bestehenden Verbraucher umgestellt.
+
+TCPSVC verwendet seinen bisherigen Footer, NetServiceTcpResult und den
+bestehenden Readinessowner. Eine Fristueberschreitung vor Admission bestaetigt
+Handle0/Bytes0; ein fehlender Reply nach Einreichung bleibt unsichere Wirkung.
+Positive Empfangspraefixe bleiben bei geschlossener Gegenstelle erhalten.
+Eine generische Serviceantwort ist keine Request-Bytequittung: ServiceSink
+verlangt den Decoder der ausgewaehlten Operation. ServiceReply fuehrt genau
+einen begrenzten RPC aus und liefert danach dessen private Antwort bis EOF.
+Idlefristen, Resume, Crypto, Protokoll-ACK und Publish gehoeren zum Aufrufer.
+Endpoint und Socket bleiben bei ihren wirklichen Besitzern.
+
+Gepruefter Umfang und ausdrueckliche TCP-Grenze
+---------------------------------------------
+Die vorhandene SDK-Pruefroute besteht mit71Faellen, darunter die sechs
+gezielten Stream-/Adapterfaelle. Eine einzelne Original-TCPSVC-Pruefung
+verwendet sieben bytegleiche Originalhelper und bestaetigt dessen Admission-,
+Poll- und Foreververtrag. Neun native C-/Rust-Testgruppen verwenden die echte
+gemeinsame Implementierung;15tatsaechliche Compilernegativfaelle pruefen
+Unsicherheit und Lebensdauer. Striktes Bare-Rust-Clippy und die kombinierten
+C-Header-/Layoutpruefungen bestehen. Zehn Records und14statische Funktionen
+sind aus den C-Besitzern erzeugt, keine handgepflegte ABI-Projektion.
+
+Drei private R4XStart2-Module (Zig/C/Rust) laufen im KVM4-Gast. Jedes hat
+genau einen R4SYS-Query2:2-Import und keine R4L. Installierte Module und
+Dateiergebnisse werden vollstaendig bytegleich rueckgelesen. Echte Datei-
+Shortreads/-writes samt EOF, der operationsspezifische EXSVC-Praefixdecoder
+und eine einzelne EXSVC-Antwort bis EOF bestehen in allen drei Sprachen.
+Die installierten alten EXSVC-/TCPSVC-Artefakte wurden separat rueckgelesen,
+als R4XStart1/Query1 identifiziert und tatsaechlich benutzt. Das unveraenderte
+Kernel-ELF wurde aus der FAT-BOOT-Basis gelesen und separat gehasht.
+
+Der externe TCP-Peer bestaetigt je Sprache genau acht gesendete/empfangene
+Bytes und geordnetes Half-Close. Der bisherige TCPSVC-/Backendpfad kann nach
+dem letzten Read jedoch die Schliessursache verlieren: Der naechste Reply
+liefert Bytes0/Result-1/LifecycleBadHandle statt eines eindeutigen EOF-Belegs.
+Der neue Adapter meldet dann korrekt Failed mit erhaltenem8-Byte-Praefix.
+BadHandle wird niemals EOF geraten. Alle drei Sprachen weisen diese Grenze
+aus; der anschliessende echte Socket-/Endpoint-Close ist jeweils quittiert.
+Ein durchgaengig generationstreuer TCP-Endebeleg ist fuer den neuen
+Netzwerk-Anbietervertrag0.90.31 festgehalten, keine aktuelle Faehigkeitszusage.
+
+Die erste private Gastprobe erwartete zu stark immer TCP-EOF und scheiterte
+an dieser korrekten Fehlerklassifikation. Originalartefakt, Logs und rohe
+Diagnosereplies sind erhalten. Die korrigierte Probe wurde anschliessend in
+einem frischen Gast in allen drei Sprachen ausgefuehrt. Produktiver Kernel,
+SDK-Mechanik und TCP-Service mussten fuer diese Orakelkorrektur nicht
+veraendert werden. Das private Debug1-Quellfile wurde vor der Orakelkorrektur
+nicht separat gesichert; sein echtes Artefakt und seine rohen Replies sowie
+der finale private Quellstand bleiben erhalten. Kein Byteoriginal-Quellbeleg
+wird dafuer behauptet. Beide eigenen Gaeste sind normal ausgeschaltet.
+
+Der Sprachreview prueft769Besitzerdateien,35Scopes und197oeffentliche Exporte.
+Er ersetzt keinen Laufzeittest. Alle sechs Linux-/Windows-Werkzeuge und drei
+Runtimeobjekte sind am finalen SDK-Stand gebaut. Host-/Gastkoerper sind auf
+019c eingefroren;019d ergaenzt nur Dokumentation und Sprachreview-Metadaten.
+Es gibt keine Anwendungsmigration, keinen zweiten Netz-/IPCstack und keinen
+kompletten Anwendungsneubuild. Windowslaufzeit, echte Hardware, dauerhafte
+Speicherung, physischer Stop und die vollstaendigen historischen P55Q-/
+PROGRAMSTORAGE-Faelle werden nicht aus dieser Abnahme abgeleitet.
+
+Genau ein finaler STANDARD/Suite3/KVM4-Lauf:
+fe3b0c79-9366-456f-a72d-4c46e44730d8.
+Der gesamte Originalexport wurde mit dem zustaendigen Besitzer aus den
+Original-Seriellrecords und dem Kontext rekonstruiert und gegen dieselbe
+feste Referenz geprueft:30Rohsamples,5Metriken,6gueltigeScores und je4/4
+abgeschlosseneWorker. Die gemessene Releasekennung ist0.90.18; der Marker
+0.90.19 folgt erst nach Abnahme, bei identischen Kernelbytes. Originale:
+ExFiles/Reports/Benchmarks/fe3b0c79-9366-456f-a72d-4c46e44730d8/.
+R4OS-Serverimport, vollstaendiger Readback und Serverwertung bleiben unter
+der geltenden lokalen Abschlussausnahme ausstehend. Kein isolierter
+StreamTransfer-Geschwindigkeitsgewinn wird behauptet.
+
+Lokale Belege: Research/API-ABI/Umsetzung/0.90.19/. Die unveraenderte
+Referenz liegt unter Research/API-ABI/Bestand/. ADD-0003 nennt den Vorschlag.
+Weitere Anwendungsmigration und Abschaltung bisheriger Provider folgen erst
+nach gesonderter Planung.

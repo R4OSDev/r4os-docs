@@ -180,3 +180,161 @@ Weitere I/O-/Prozess-/Service-/GUIquellen bleiben Unterversion0.90.29.
 ADD-0014 ist damit insgesamt weiter Beschlossen; der Kernmechanismus ist
 umgesetzt. Kein Verbrauchercutover und keine Abschaltung alter Provider.
 Vollbelege: Research/API-ABI/Umsetzung/0.90.28/Abnahme.json.
+
+Ressourcenadapter (0.90.29)
+--------------------------
+Contract84 / SDK172 / Kernel468 erweitern den vorhandenen Vertrag um genau
+waitset_source_prepare. Der alte WaitSource80 und alle sechs Grundfunktionen
+bleiben binaer erhalten. R4SYS39/1488 und Query2-SYS4/1480; Query2:2 bleibt.
+Die sechs Grundfunktionen koennen auch mit einem aelteren Kernel aufgeloest
+werden. Nur die neue Vorbereitung verlangt den optionalen neuen Slot.
+
+WaitSourceRequest64 bindet fuer Process die vollstaendige ID/Generation,
+fuer Thread zusaetzlich die vollstaendige Instanz-ID/Generation. IO und
+ServiceEndpoint besitzen bisher nur numerische oeffentliche Handles: die
+Vorbereitung beobachtet ausschliesslich die JETZT vorhandene Inkarnation.
+Sie rekonstruiert keine historische Identitaet eines bereits recycelten
+Legacyhandles. Mehrdeutige gleichzeitig lebende IO-IDs werden abgewiesen.
+Die bestehende Streaming-IO-Aufruferbindung bleibt massgeblich.
+
+Das Ergebnis traegt in generation einen opaken, global nie wiederverwendeten
+Beobachtungsschluessel aus dem echten Ressourcenrecord. Nicht selbst bauen
+oder mit einer Prozess-/Threadgeneration verwechseln. Prepare behaltet
+weder Record noch Arbeit. Geht die Quelle danach verloren, liefert Enroll
+Stale/Closed; ein Ersatz mit derselben numerischen ID wird nie verfolgt.
+Alle anderen Zeit-/Reservefelder bleiben0. Eingaben/Ergebnisse sind nur
+bis zum wirklichen synchronen Ruecksprung geliehen; Fehler lassen Ausgaben
+unveraendert.
+
+Kind3 IO meldet den tatsaechlich veroeffentlichten terminalen Requestzustand;
+Kind4 Process die echte Completion; Kind5 Thread den terminalen Zustand des
+exakten eigenen joinbaren Threads; Kind6 ServiceEndpoint die nichtleere
+urspruengliche Eingangs-FIFO des aktuell gebundenen Serviceprozesses.
+Diese Bereitschaft ist Levelzustand: Rearm verbraucht sie nicht. Read/Recv,
+Join/Reap und IO-Wait/Close bleiben ausdrueckliche Operationen des Besitzers.
+Ein terminaler Threadzustand kann vor der physischen Taskretirement liegen.
+Close/Timeout/Cancel sind insbesondere keine IO-Puffer-/DMA-Freigabequittung.
+
+Kind7 GUIActivity gehoert zum bestehenden Kanal des aktuellen Main-GUI.
+Arbeiterthreads erhalten keine GUI-Befugnis. Die Sequenz ist eine eigene
+nicht umbrechende Beobachtungsrevision des Kanals, kein Ersatz fuer die
+bestehende Legacy-GUI-Sequenz. Input-/Fensteraktivitaet sowie die
+vorhandenen Clipboard-/Directory-Publikationen signalisieren denselben
+Kanal. Neue Abonnenten verbinden sich mit der bestehenden Liste; der
+urspruengliche Legacy-Maskenwunsch wird getrennt bewahrt und nach dem
+letzten neuen Abonnement wiederhergestellt. Der erste Rescan wird auch dann
+publiziert, wenn eine alte ALL-Maske schon der kombinierten Maske entspricht.
+Bereits vorher eingegangene Eingaben duerfen dadurch nicht hinter einer
+unveraenderten Maske verborgen bleiben. Fremde Desktop-/GPU-Aktivitaet wird
+nicht pauschal als GUI-Aktivitaet zugestellt. Eigene Text-/Frame-/Titel-
+Ausgaben wecken das gleiche GUI-Main nicht erneut; die vorhandene Trennung
+zwischen eingehender Aktivitaet und eigener Renderrevision bleibt erhalten.
+
+Implementierung: IO100, ProgramRegistry110, Endpoint nach Registry120 mit
+Endpoint130 sowie der urspruengliche Threadzustandsbesitzer werden VOR
+Runtime genommen. Erst darunter werden Setidentitaet und die Quelle erneut
+geprueft und der residente Link eingetragen. Wait nimmt keinen dieser
+Besitzer und fragt keine Ressourcentabelle periodisch ab. Es sammelt die
+unter Runtime publizierten Bereitschafts-/Revisionswerte und schlaeft auf
+der vorhandenen einen Task-WaitQueue. Remove/Set-Close nehmen nur Runtime.
+Quell-Close loest hoechstens32 Links, markiert Closed und loescht jeden
+Quellpointer vor Reset/Unlink/Backing-Free. Ein fehlgeschlagener Set-Free
+behaelt weiterhin den geschlossenen retryfaehigen Setrecord.
+
+Es entstehen keine Ressourcenregistratur, Retain-/Joinlease, Pollworker,
+zusatzlichen Servicearbeiter oder GUI-Threadmodelle. Der neue private
+Beobachtungskanal kostet32Byte je IO-Request, Completion, Thread und Endpoint;
+die GUI erhaelt40Byte am Ende ihres alten Payloads. Alle alten Feldpositionen
+bleiben erhalten. Der Quellen-/Abonnentendeckel32 ist lokale Admission des
+WaitSets und keine neue globale Prozess-, Thread- oder Servicegrenze.
+
+Zig wait_set.prepare/io/process/thread/endpoint/guiActivity, der C-Header
+wait_set_platform2.h und Rust wait_set::prepare samt Requestbuildern bilden
+dieselben Bytes und fehlenden optionalen Funktionen ab. Die Eigentuemerschleife
+wartet, prueft kind/registration/tag/status und pumpt danach ausdruecklich
+den jeweils vorhandenen Besitzer: Endpoint-Recv/Reply oder GUI-Poll/Render,
+IO-Resultat oder Prozess-/Threadabschluss. Ein einzelner WaitSet-Batch ersetzt
+keine dieser Operationen. ServiceLoop, Klickifax, R4BUILD und Anwendungen
+werden mit dieser Unterversion nicht umgestellt.
+
+
+Finale Qualifikation0.90.29
+--------------------------
+Contract84 / SDK172 / Kernel468 bieten alle fuenf Ressourcenadapter neben
+Notification/Timer. Die bisherigen183SYSslots,424Layouts,2941Konstanten,
+Fehlerdomaenen und anderen fuenf Gruppen sind erhalten. WaitSource80 bleibt;
+neu sind Request64 und der optionale Vorbereitungsslot am R4SYS39/SYS4tail.
+Alle9SDK-Tools/Runtimeobjekte sind passend gebaut und normal rueckgeprueft;
+das originale SDK171-Rohprofil und das neue SDK172-Rohprofil bleiben erhalten.
+
+18bestehende Contractschritte einschliesslich8C/Rust/Zig-Rundlaeufen und
+21SDK-Kontext-/Technikfaelle bestehen.16gezielte echte Set-/Notification-/
+Kanal-/Budget-Hostfaelle und12urspruengliche Wait-/Prioritaetsfaelle bestehen.
+SDK-/Kernel-Clippy und Kernel-Fmt bestehen. Die Hostressourcenaufnahme ist
+eine ausgewiesene Admissionseam; sie ersetzt keine echte I/O-/Serviceprobe.
+Rusts WaitSet-Besitzertyp samt Implementierung bleibt bytegleich zum Stand28;
+die dortigen drei wirklichen Compilernegative werden weitergefuehrt, nicht
+als neue Ausfuehrungen ausgegeben.829Dateien/35Bereiche/206Exports sind im
+Sprachreview erfasst; dessen Ergebnis allein ist kein Laufzeitnachweis.
+
+Echte Zig-/C-/Rust-Programme rufen die neuen Funktionen im KVM4-Gast auf.
+Threadgeneration, zwei gleichzeitig bereite Thread-/Notificationquellen,
+kleine More-Batches, nicht konsumierendes Rearm, Join und SourceClosed/Stale
+bestehen. Datei-I/O gibt nach dem wirklichen Ergebnis die erwarteten Bytes
+zurueck; Close entkoppelt den vorbereiteten Epoch. Prozessbeobachtung besteht
+mit falscher Generation, natuerlichem Ende, Hard-Kill, explizitem Wait/Reap
+sowie dem unveraenderten alten Zig-Binaerpfad mit32Notificationabonnements.
+
+Eine echte registrierte Serviceinstanz wartet im selben Set auf Endpoint
+und asynchronen Selfcall. Recv veraendert die Antwortcanaries nicht und
+vollendet den I/Orequest nicht; erst Reply liefert das Ergebnis. Ein zweiter
+zugestellter Request bleibt waehrend Endpointclose im Pufferbesitz bis zum
+wirklichen negativen I/Oabschluss. Neuer Endpoint und ein vollstaendiger
+Serviceprozess-Neustart haben neue Identitaeten; alte Quellen werden Closed.
+
+Die nachtraegliche Gegenpruefung fand eine weitere Anfangsgrenze: Eine alte
+ALL-Maske konnte den ersten neuen Rescan verschlucken. Admission publiziert
+diesen Rescan nun auch bei unveraenderter Maske. Eine unabhaengige reale
+GUIprobe setzt zuvor die alte ALL-Maske und stellt EingabeB vor Prepare zu;
+Ready und das wirkliche Owner-Poll vonB bestehen am korrigierten Artefakt.
+Der vorherige Lauf1b7b2113-68f3-4da7-8215-777e34425123 am frueheren038c-ELF
+ist vollstaendig rekonstruiert/unveraendert archiviert und als Vorversuch
+vor dieser Codekorrektur ausgewiesen; er ist keine finale29Abnahme.
+
+Die wirkliche GUI-Mainprobe wird ueber die vorhandene Fensterzuordnung0
+explizit ohne dargestelltes Fenster gestartet. Sie bestaetigt echte Eingabe
+mit Owner-Poll, Fenstermetadaten, Directorysignale, die Wiederherstellung der
+alten Clipboardmaske nach dem letzten neuen Link und die Abweisung eines
+Arbeiters. Eigene Titelausgabe erzeugt keinen Selfwake. Dies ist keine
+Desktop-/Renderer-/GPU- oder physische Eingabegeraeteabnahme.
+
+Das identische alte Query1-Spectra besteht40Kernel-/Rollback-/Heap-/Payload-
+Faelle einschliesslich523kompakter Slots und des neuen optionalen Tails.
+Unveraenderte alte C-/Rust-WaitSetbinaere bestehen. Der alte Zig-Main verlangt
+exakt1472Tabellenbytes und lehnt1480vor seinen Aufrufen ab; sein unveraenderter
+KILLpfad wird dagegen mit32wirklichen Links ausgefuehrt, hart beendet und
+abgeschlossen. Keine pauschale Behauptung, alle alten Testbinaere bestuenden.
+Die breite PROGRAMSTORAGE-Fortsetzung fehlt weiterhin die exakte APPHEAPD-
+Datei. Private Basis: fruehere15Fixtures/Release14 und installierter463Katalog;
+aktives finales BOOT-ELF468 ist vollstaendig rueckgelesen. Keine aktuelle
+Gesamtneuinstallation, Windows- oder Realhardwareabnahme.
+
+Die privaten Erstversuche mit fehlendem GUI-Profilimport/Startschritt,
+positiver Textbytezahl und falschem Selfwakeerwartungswert sowie fehlendem
+Rust-Cargomanifest sind erhalten. Die oeffentlichen GUIbesitzer behalten
+weiterhin ihre vorhandene Trennung von eingehender Aktivitaet und Ausgabe.
+Erzwungenes Free-vor-Resume, Freigabefehler und Clockwechsel sind Hostgrenzen,
+keine behauptete physische CPUreihenfolge. Der Funktionsgast und der
+Messgast sind vor Abschluss regulaer beendet.
+
+Genau ein finaler STANDARD/Suite3/KVM4, Runb34f1ddf-b1d6-45bf-a62d-caed560cc02a, besteht lokal.
+30Originalsamples/5Metriken/6Scores und4Worker sind gegen die feste Referenz
+vollstaendig rekonstruiert und unveraendert archiviert. Gemessen wurde
+Release28 mit finalem Kernel468; der Release29-Marker folgt erst danach.
+Die fuenf Kernworkloads pruefen Alt-Hotpaths und keine isolierte neue
+WaitSet-Adapterbeschleunigung. Lokal validiert; R4OS Server ausstehend.
+Rest: Claim/Import derselben Originalbytes, vollstaendiger GETvergleich und
+unabhaengige Serverwertung gemaess der ausdruecklichen lokalen Ausnahme.
+Kein weiterer Lauf fuer Upload/bessere Scores. Kein Verbrauchercutover,
+keine ServiceLoop-/Appmigration und keine Abschaltung alter Anbieter.
+Vollbelege: Research/API-ABI/Umsetzung/0.90.29/Abnahme.json.

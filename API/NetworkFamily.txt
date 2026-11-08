@@ -1,0 +1,184 @@
+﻿Familienfaehige Netzwerk-API
+===========================
+
+Stand: 0.90.31; Contract 0.64.86, SDK 0.64.174, Kernel 0.1.469.
+API-/Anbieterarbeit ohne Umstellung bestehender Anwendungen.
+
+Der normative Vertrag gehoert Repositories/Contract/API/NetworkFamily.txt.
+Layouts und Zahlen werden ausschliesslich aus ApiContract.json erzeugt.
+Diese Anleitung beschreibt den Anschluss und die erreichte Anbietergrenze.
+
+Die neuen Zig-, C- und Rust-Clients verwenden Query2-Serviceaufrufe an den
+vorhandenen Endpunkten TCPSVC, UDPSVC und DNSSVC. Im SDK sind dies
+r4os.network_family, r4os/network_family_platform2.h und das Rustmodul
+network_family. Ihre alten Gegenstuecke und die Imports bestehender Programme
+werden nicht umgestellt. Zentraler Vertrag86 und SDK174 fuehren neun neue
+feste Records ein; die bisherigen527Slots/433Typen/2986Konstanten bleiben.
+
+INFO liefert die wirkliche Anbieter-Prozessgeneration und ausgehandelte
+Faehigkeiten. Die SDKs pruefen feste Groessen, Identitaeten, Bytepraefixe,
+Datagrammtrunkierung und vollstaendige Seiten, bevor Ausgaben geaendert werden.
+Ein alter Anbieter oder unpassendes Backend liefert keine erfundene neue
+Faehigkeit. Fehlende neue Transportadapter muessen in INFO sichtbar bleiben.
+
+NetworkAddress enthaelt vier beziehungsweise sechzehn Netzwerkbytes sowie
+lokale Scope-/Interfaceindices. Der u16-Port im Endpoint ist Hostordnung.
+Familienfallback, v4-mapped und Dualstack werden ausdruecklich angefordert;
+es gibt keine stillen Adresscasts. Der erste Anbieterstand ist IPv4 mit
+Defaultinterface0; andere v4-Indices werden nicht geraten. IPv6 bleibt bis
+zur wirklichen externen Anbieterqualifikation nicht verfuegbar.
+
+Neue TCPsockets behalten die genaue FIN-/Resetursache beim bestehenden
+Verbindungsbesitzer bis Close. Nach dem letzten Nutzbyte wird aus einem
+ungueltigen Handle kein EOF abgeleitet. Der neue UDPempfang konsumiert ein
+Datagramm und meldet Originallaenge, kopierte Bytes und verworfenen Rest
+getrennt. Ein leeres Datagramm ist etwas anderes als eine leere Queue. Der
+alte recv-small-Pfad behaelt seine bisherige nicht konsumierende Semantik.
+
+Ressourcen binden neben Anbieter/Socketgeneration die genaue aufrufende
+Prozessgeneration. Mehrere Kanaele desselben Prozesses koennen dieselben
+Sockets verwenden; ein Clientkanal-Close ersetzt kein Socket-Close. Nur
+waehrend neue Sockets existieren, benutzt der bisherige ServiceLoop einen
+begrenzten Besitzercheck. Busy oder eine fehlende Backendantwort ist keine
+Freigabequittung. Deadlinebudgets bleiben absolut und an ihren Quellclock
+gebunden; Retry verlaengert sie nicht. Poll beginnt weder Connect noch DNS.
+
+DNS kopiert bis zu32 passende Adressen in denselben originalen Cachebesitzer
+und liefert Seiten mit1..16 Adressen. Eine feste30Sekunden-Lesefrist behaelt
+diese Kopie; sie verlaengert keine DNS-TTL. Gepinnte Seiten werden weder durch
+weitere Seiten noch Legacycacheersetzung veraendert. Volle Pins ergeben
+Capacity, statt Adresssuffixe als erfolgreichen Teilbestand zu verschlucken.
+Die alte eigenstaendige First-A-Cachepolitik bleibt ausdruecklich bestehen.
+
+Der neue komplette A-/AAAA-Wirecodec gehoert NetDns. DnsService pinnt genau
+diese Quelle, statt einen weiteren Parser im SDK oder Kernel einzufuehren.
+Der bisherige R4P-Dispatch bleibt bestehen. ID, Frage, Klasse, Quelle/Port,
+CNAME, Kompression, Mengen und TTL werden im neuen Pfad geprueft. Null- und
+Highbit-TTL werden nicht zu frischen Typed-Cacheeintraegen fuer spaetere
+Transaktionen. Das AAAA-Codecbit allein bedeutet keine v6-Aufloesung. IDNA,
+DNSSEC, DNS-over-TCP und eine neue Negative-Cache/SOA-Politik werden nicht
+vorgetaeuscht. Der erste Resolver bedient A ueber IPv4.
+
+Externe Besitzergrenzen fuer0.90.32
+----------------------------------
+Die neuen kanonischen Rollen werden bei ihrer wirklichen Umsetzung als R4P
+angelegt, jeweils im eigenen oeffentlichen R4OSDev-Repository:
+
+- Repositories/Protocols/NetIpv6, NETIPV6.R4P, Rolle net.ipv6,
+  r4os-protocol-netipv6: IPv6-Pakete und der einzige IPv6-Interface-, Adress-,
+  Routen- und MTU-/PMTUzustand. Kein zweiter IPv6-Katalog im Kernel.
+- Repositories/Protocols/NetIcmpv6, NETICMP6.R4P, Rolle net.icmpv6,
+  r4os-protocol-neticmpv6: ICMPv6-Pruefsumme, Echo und Kontroll-/Fehlermeldungen.
+- Repositories/Protocols/NetNdp, NETNDP.R4P, Rolle net.ndp,
+  r4os-protocol-netndp: Nachbarschafts-/Router-/Praefixnachrichten und deren
+  Lebensdauer; Aenderungen werden dem IPv6-Besitzer ueber seinen Vertrag
+  uebergeben, ohne eine zweite Adress-/Routingwahrheit zu halten.
+
+Ethernet, bestehende NIC-/RX-/TX-Besitzer und Modulregistry werden geteilt.
+Der Kernel erhaelt nur notwendige Frame-/Callback-/Lebenszeitmechanismen,
+keine neue IPv6-Policyimplementierung. Erste Konfiguration, Routerverhalten,
+Extensions, Fragmentierung und PMTUgrenzen werden in0.90.32 vor Freigabe
+konkret festgelegt und als Faehigkeiten belegt. Die Protokollgrundlage allein
+schaltet die Endpunktfaehigkeit noch nicht frei:0.90.33 verlangt echte
+TCP-/UDP-/DNS-v6-Proben. Kein Appcutover wird dadurch vorgezogen.
+
+Arbeitsstand und Belege
+-----------------------
+Die lokale API-Arbeitskopie bleibt unter Research/API-ABI/Entwurf/.
+Bestand/ und Herkunft/ bleiben unveraenderte Referenzen. Der produktive
+Vertrag gehoert weiterhin Contract, unabhaengige Runtime-Libraries ihren
+eigenen Einheiten. Research ist kein zweiter aktiver Plattformvertrag.
+
+Umsetzungsbelege dieser Unterversion liegen unter
+Research/API-ABI/Umsetzung/0.90.31/. Hostpruefungen, native
+Funktionsproben und Performance sind getrennte Grenzen. Eine komplette
+aktuelle Installation, Windows oder reale Netzwerkhardware sind dadurch
+nicht automatisch qualifiziert. Die folgende Qualifikation trennt diese Grenzen.
+
+
+Finale Qualifikation
+--------------------
+Die neun neuen Records und 55 Konstanten sind generiert; alle sechs bisherigen
+Gruppen mit 527 Rawslots, 433 festen Typen und 2986 Konstanten bleiben exakt.
+18 bestehende Contractschritte samt acht Interopgruppen, 21 SDK-Kontextfaelle,
+sieben unabhaengige NetDns-Wirefaelle, kontrollierte Antwort-/Besitzergrenzen
+in Zig/C/Rust und drei echte Rust-Compilernegative bestehen. Die Hostfaelle
+fuer Clockwechsel, Busy, Countergrenzen und fehlende Backendantwort sind keine
+physischen Fehlernachweise. Clippy, Kernel-Fmt und die kanonischen Bauten
+bestehen. Das Sprachreview umfasst 836 Dateien, 35 Bereiche und 208 Exports;
+seine exakte Bereichszuordnung wurde neben dem allgemeinen Gate geprueft.
+
+Alle neun SDK-Hosttools/Runtimeobjekte sind passend gebaut und offiziell sowie
+unabhaengig vollstaendig rueckgelesen. Das originale SDK173-Rohprofil und das
+endgueltige SDK174-Rohprofil bleiben unveraendert erhalten. Der gemeinsame
+NetDns-Quellcodec und DnsService verwenden denselben sauberen SDK174-Pin;
+der bisherige NetDns.R4P-Dispatch und sein 0.1.1-Artefakt bleiben unveraendert.
+Ein vorgelagerter Werkzeugsatz ohne Backendprobe ist als ueberholt archiviert
+und wurde nicht als final exportiert. Keine Windows-Ausfuehrung behauptet.
+
+Drei echte Query2-Programme aus Zig/C/Rust pruefen TCP-Praefix/EOF, UDP mit
+1472 Ursprungsbytes bei acht kopierten Bytes und DNS mit 32 Antworten auf zwei
+unveraenderlichen Seiten. Die Zigprobe bestaetigt zusaetzlich FIN nach 4+4
+Bytes, wiederholtes EOF nach fremdem Reset, echten Reset erst nach bestaetigtem
+Datenpraefix, WouldBlock, Close/Stale, Family/Scope/Mapping-Verweigerung und
+unveraenderte Ausgaben. Poll und abgelaufene Connects erzeugen keine Verbindung.
+Ein leeres UDP-Datagramm ist Ready/0 mit Peer; eine leere Queue ist WouldBlock.
+Empfangskapazitaet0 konsumiert ein vorhandenes Datagramm und meldet dessen
+Originallaenge; der gekuerzte Rest taucht beim naechsten Recv nicht wieder auf.
+
+Der echte DNS-Pfad prueft TTL0/Highbit-TTL0, 32er-Mengen und vollstaendige
+Ueberlaufverweigerung, falsche ID/Frage/Quellport, TC, kaputte Kompression,
+NXDOMAIN und ein endliches 50-ms-Budget. Acht gepinnte Mengen ueberstehen einen
+alten First-A-Aufruf; die neunte neue Menge sendet vor Capacity keine Frage.
+Ein wirklicher Producerprozess endet und wird exakt gereapt; nach quittierter
+Besitzerbereinigung ist dessen UDP-Port wieder bindbar und der Host sieht den
+TCP-Abbruch. Ein echter 31-Sekunden-Wait qualifiziert die feste 30-Sekunden-
+Lesefrist. Ein voller DNSSVC-Neustart aendert die Prozessgeneration und weist
+alte Queryidentitaeten zurueck. Diese Proben nutzen einen kontrollierten
+Linux-Peer ueber QEMU-Usernetz, keine Internet- oder Realhardwareannahme.
+
+Unveraenderte alte DNSSVC-/UDPSVC-Selbsttestbinaere bestehen gegen die neuen
+Dienste. Der alte TCPSVC-Ping besteht als echter Kindprozess mit Wait/Reap und
+Exit0; sein eigener Konsolentext wird nicht in den Elternstream uebernommen.
+Das alte Terminal weist den direkten Service-/PING-Aufruf absichtlich ab;
+der vollstaendige TCP-Selbsttest mit Transportneustart ist nicht behauptet.
+Ein getrennter Gast mit exakt altem Kernel468 und denselben finalen Diensten
+meldet neue TCP-/UDP-Faehigkeiten0 und verweigert neue Erstellung als Backend.
+Die alte SSH-Verbindung und alte Operationen bleiben dabei benutzbar.
+
+Der finale Kernel469 besteht die zehn vorhandenen NETWORK-LIMIT-Gruppenfaelle,
+einschliesslich der erweiterten residenten FIN-/Reset-Lastread-Regressionsprobe.
+Dieser Fall verlangt laut bestehendem Vertrag eine ruhige Raw-ICMP-Queue:
+der erste Aufruf nach DNS-Fehlerverkehr endete vor TCP; die erfolgreiche Probe
+lief im frischen Gast vor diesem Verkehr. Kein Paketbestand wurde geloescht,
+keine Produktassertion abgeschwaecht. Die 40 internen Lifecycle-/Heapfaelle
+bestehen; die breite Programstoragefolge scheitert weiterhin an der fehlenden
+alten APPHEAPD-Fixture. Daraus folgt keine allgemeine Vollsuiteabnahme.
+
+Das bestehende TCP-Modell meldet Peer-FIN als terminalen Empfang; es gibt
+keine neue HalfClose-/Shutdown-Operation und keine Ende-zu-Ende-Zusage fuer
+einen vollstaendigen Wire-Close. Der kontrollierte FIN-Peer beendet seinen
+verbleibenden Wait nach dem bisherigen 15-Sekunden-Limit. Der positive Beleg
+betrifft die erhaltene genaue Ursache, kopierte Praefixe und lokale Identitaet;
+der wirkliche Besitzerexit-Abbruch wurde getrennt beobachtet. Ungewisser
+Transport-/Backendausgang gibt keine vorzeitige Ressourcenfreigabe frei.
+
+Privater Funktionsgast mit frueheren 0.90.15-Fixtures, Release14-Konfiguration
+und installiertem463-Katalog: aktives BOOT-ELF469 und alle drei finalen Dienste
+wurden vollstaendig rueckgelesen. Alle drei Gaeste und die Gegenstellen sind
+beendet. Geschuetzte Systempfade lehnten direkte SFTP-Schreibversuche ab;
+endgueltige Installationen nutzen Temp-Staging, COPY und ganzen Readback.
+Keine aktuelle Gesamtneuinstallation, physische NIC-/DMA-/IRQ-, Windows- oder
+isolierte neue Netzwerkgeschwindigkeit wird daraus abgeleitet.
+
+Genau ein finaler STANDARD/Suite3/KVM4: Run f03b1c4a-8c31-4449-843d-483c0c11b20e.
+30 Originalsamples, fuenf Metriken, sechs Scores und vier quittierte Worker
+sind aus Originalrohlog/Kontext gegen die feste Originalreferenz vollstaendig
+rekonstruiert. Die Originalbytes sind unveraendert archiviert. Der frische
+kanonische Test-Imageplan enthaelt genau die drei finalen Anbieterartefakte.
+Gemessen wurde Release30 / Kernel469; der Release31-Marker folgt danach.
+Die Kernworkloads qualifizieren bestehende Pfade, keine isolierte neue API-
+Beschleunigung. Lokal validiert; R4OS Server ausstehend. Rest sind Claim/Import
+derselben Originalbytes, ganzer GET-Readback und unabhaengige Serverwertung
+unter der ausdruecklichen lokalen Abschlussausnahme; kein weiterer Messlauf
+fuer Upload oder bessere Scores. Belege: Research/API-ABI/Umsetzung/0.90.31/.

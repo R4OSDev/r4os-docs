@@ -1,0 +1,120 @@
+﻿Kanonischer Compiler-Cachecodec
+===============================
+
+Besitzer: Libraries/Shared/Native/cache_codec.zig. Der reine Quellhelper wird
+in R4NAK und R4ACO eingebunden, ohne eigenes R4L, Kernelgruppe oder Registry.
+Zig/C/Rust erreichen ihn ueber die bestehenden COMPILER_V1:1-Cacheoperationen
+der jeweiligen Library. Bindings, Tabellen, Signaturen und Fehlercodes dieser
+Interfaces bleiben unveraendert. Anwendungen werden nicht umgestellt.
+
+ScalarSchemaCodec
+-----------------
+Ein Schema beschreibt Native-/Wiregroesse und sortierte feste Feldversatze.
+Maximal65536Recordbytes und256Felder, ausschliesslich4/8-Byte-Integerfelder;
+Wire ist immer Little Endian. Field besitzt12Bytes, Offsetfelder u32,
+Breite/Flags u8 und reserved u16=0. Flag1 schreibt/fordert Null fuer ein
+transientes Feld. Native Paddingbytes werden nie gelesen oder persistiert,
+Wirepadding wird genullt und beim Lesen auf Null geprueft.
+
+Record(T,zero_fields) leitet diese schon expliziten extern-Layouts ab;
+nur rekursive extern-Records mit vorzeichenbehafteten oder vorzeichenlosen
+32-/64-Bit-Integern sind zulaessig. Pointer, Arrays, Float, Bool und implizite
+Layouts werden beim Kompilieren abgelehnt. Transientnamen duerfen gepunktete
+Integerpfade sein; unbekannte/doppelte Namen sind Fehler.
+
+Manuelle Schemata werden vor jeder Ausgabe vollstaendig validiert: Grenzen,
+Breiten, Flags, Reserved, sortierte Wirefelder und disjunkte Nativefelder.
+Kapazitaet, arithmetische Grenzen und Ueberlappung einschliesslich geliehener
+Feldbeschreibungen werden vor dem ersten Schreiben geprueft. Ungueltige
+Eingaben lassen Ausgaben unveraendert. Die beschriebenen Speicherbereiche
+muessen tatsaechlich gemappt sein und bis zur Rueckkehr geliehen bleiben;
+arithmetisch gueltige Adressen sind kein Nachweis zugreifbaren Speichers.
+
+CanonicalCacheEnvelope
+----------------------
+Die generische Regel besitzt Magic, Format-/Compilerrevision, maximale
+Payload, echte Compileridentitaet und getrennte Key-/Metadatenvalidatoren.
+requiredBytes liefert die begrenzte Gesamtgroesse ohne Schreiben.
+encode/decode allozieren nicht, behalten nichts und greifen weder auf Dateien
+noch Compilerjobs oder Geraete zu. Inputs, Schema und Identitaet bleiben
+waehrend eines Aufrufs unveraendert; lesende Inputs duerfen sich ueberlappen,
+benutzte mutable Ausgabe- und Publikationsbereiche bleiben davon getrennt.
+
+C01 bleibt Format1/Compilerrevision1: Header64 mit Magic8, LE32-Revisionen,
+LE64-Gesamtgroesse, LE32-Key-/Metadatengroessen und Compileridentitaet32.
+Danach Key, Metadaten, SHA256(Header+Key+Metadaten+Payload), dann Payload.
+peak_bytes/elapsed_ns/log_length werden nicht persistiert. NAK verwendet
+Key136/Metadaten232/Payloadversatz464, ACO136/424/656. Gesamte Huelle,
+Identitaet, Key, Fachmetadaten, Padding, Digest und Kapazitaet werden vor
+Ausgabe von Code/Metadaten geprueft. written wird zuletzt veroeffentlicht.
+Kapazitaetsfehler bleiben Capacity, ungueltige Aufrufbereiche Invalid und
+ungueltige gespeicherte Daten CacheMiss in der jeweiligen Fehlerdomaene.
+
+R4NAKC01 und R4ACOC01 bleiben getrennt. ISA-/Geraete-/Stage-/SGPR-/VGPR-/LDS-
+und Symbolpruefungen bleiben beim jeweiligen Anbieter; ein gueltiger Cache
+erteilt keine GPUfreigabe. SHA256 erkennt Beschaedigung und ist keine Signatur.
+Jobs, Worker, TLS, Finalizer und abort_worker bleiben beim Compilerbesitzer.
+
+Identitaet und Qualifikation
+---------------------------
+Bytekompatibilitaet gilt bei identischer erwarteter Compileridentitaet.
+NAK behaelt seinen wirklichen gepinnten Compilerhash. ACO hasht die gesamte
+Source-/Port-/SharedNative-/SDK-/Manifest-/Toolchainclosure. Dieser Umbau
+aendert folglich die echte ACOidentitaet. Alte Identitaeten werden weiterhin
+abgewiesen; das ist weder eine neue Formatrevision noch Cachekorruption.
+Kontrollierte gemeinsame Identitaeten pruefen nur die Formatgleichheit.
+
+Unabhaengige Python-struct/hashlib-C01-Datensaetze und der vorab gesicherte
+Originalcode sind die Byteorakel. Bestehende ABI-/echte ACO-CPUcompilerfaelle
+und gezielte neue Schema-/Fehlergrenzen pruefen getrennte Eigenschaften.
+Der neue Test Shared/Tests/cache_codec.zig laeuft direkt mit dem benannten
+Modul cache_codec auf Shared/Native/cache_codec.zig. Keine neue Gesamtsuite.
+Native Cacheproben mit synthetischen Codebytes belegen Librarytransport und
+Codec, keine tatsaechliche Shader-/GPUausfuehrung. Versionsbelege und genaue
+Pruefgrenzen liegen lokal unter Research/API-ABI/Umsetzung/0.90.27/.
+
+
+Finale Qualifikation
+-------------------
+Library51/R4NAK0.1.6/R4ACO0.1.8 mit SDK170, Contract82/Kernel466 bleiben.
+Die urspruenglichen ABI- und3echten ACO-CPUcompilergruppen bestehen; alle12
+beobachteten Code-SHA256 stimmen vor/nach dem Umbau exakt ueberein. Die
+unabhaengigen C01-Datensaetze passen zum gesicherten Originalcode und neuen
+Codec.4neue Schemagruppen und7echte Compilernegative bestehen. Diese Proben
+trennen Formatmechanik, Compileridentitaet und Compiler-/Geraetevalidierung.
+
+Drei wirkliche Zig/C/Rust-Programme rufen die unveraenderten COMPILER_V1:1-
+Tabellen der neuen R4Ls im KVM4-Gast auf. C/Rust pruefen zusaetzlich Capacity,
+Identitaet und die ausgewaehlten Publikations-/Payloadguards bei Fehlern.
+Das identische alte Query1-Artefakt besteht vor/nachher. Libraries/Programme
+und das unveraenderte
+BOOT-ELF sind vollstaendig rueckgelesen, der Gast ist regulaer ausgeschaltet.
+Libraries werden durch normalen Kaltstart in der Modulregistry aktiviert;
+ein blosses Kopieren ersetzt keinen bereits geladenen Anbieter.
+NAKs echte Kennung bleibt gleich; ACOs aktuelle native Kennung lautet
+9da350b4e8f780c43335f76d7b26819f43c746d3ab71958995dc7724d3699d98.
+Synthetische Cachepayloads belegen keine reale Shader-/GPUausfuehrung; die
+realen CPUcompilerfaelle bleiben gesonderte Belege. Die private Basis mit
+frueheren15Fixtures/Release14-Konfiguration ist keine Neuinstallation des
+aktuellen Gesamtstandes. Keine Anwendungsmigration oder Windowsabnahme.
+
+Genau ein finaler STANDARD/Suite3/KVM4, Run541739bf-30bd-4d63-b9aa-828167775509, besteht lokal.
+Alle30Originalsamples,5Metriken,6Scores und4Worker sind gegen die feste
+Originalreferenz rekonstruiert und unveraendert archiviert. Gemessen wurde
+Release26 mit Kernel466 am finalen Buildstand; Release27 erst danach markiert.
+Die fuenf Kernworkloads sind keine Cache-/Compilerbeschleunigungsmessung.
+Die optionalen R4NAK-/R4ACO-R4Ls fehlen gemaess IMAGE_SCOPE=none im
+STANDARD-Image; deren Ausfuehrung wird durch die separate native Probe belegt.
+Lokal validiert; R4OS Server ausstehend. Rest: Claim/Import derselben
+Originalbytes, vollstaendiger GETvergleich und unabhaengige Serverwertung
+unter der expliziten lokalen Abschlussausnahme in Agents/Benchmark.txt.
+Kein neuer Lauf nur fuer Upload oder bessere Scores.
+
+Vorbereitungsfehler und korrigierte Pruefgrenzen bleiben in Host.json und
+Native.json erhalten: zu kleine Comptimequote, falsch uebertragener
+Testdigest, Werkzeugpfad, erwartete Metadatendrift, private Cargoquellen,
+SSH-COPY-Timeout mit spaeter vollstaendig verifizierter Zieldatei sowie
+ein vor Gaststart abgewiesener STANDARD-Vorlauf. Der kanonische Kernelbau
+aktualisiert dessen SDKprofilbericht; ELF und Kernelquellen bleiben bytegleich.
+Keine Behauptung, dass alle Versuche bestanden haetten. Vollstaendige Belege:
+Research/API-ABI/Umsetzung/0.90.27/Abnahme.json.

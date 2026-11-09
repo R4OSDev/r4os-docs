@@ -1,0 +1,77 @@
+﻿Begrenzte Byte-Pipes
+===================
+
+0.90.34 fuehrt echte Reader-/Writer-Referenzen mit begrenztem, kopiertem
+Bytepuffer ein. Der normative Vertrag liegt beim Contract-Besitzer unter
+Repositories/Contract/API/BytePipes.txt. Die sieben optionalen R4SYS-Endslots
+erhalten alle bisherigen Signaturen und sind auch explizit ueber Query2
+verfuegbar. Anwendungen behalten ihre bisherigen Imports und Startvertraege.
+
+Zig: r4os.byte_pipe; C: r4os/byte_pipe_platform2.h;
+Rust: r4os_sdk::byte_pipe. Die Fassaden halten keine globale Runtime und
+duplizieren keine Kanalverwaltung. Close ist ausdruecklich; eine einfache
+Handlekopie besitzt keine zusaetzliche Reader-/Writer-Referenz. Failed Close
+behaelt seine genaue Retry-Identitaet. Atomare LaunchIo-Bindings folgen separat.
+
+Die SDK-Schicht besitzt Bedienung, Chunking und logische Transfers. Kernel
+program/byte_pipes besitzt nur den technisch erforderlichen residenten
+Kanalmechanismus: Prozessgenerationen, Referenzen, begrenztes Backing und
+native WaitQueue-/Retirementgrenzen. Bestehende Nachrichten-IPC-Kanaele haben
+keinen Last-Writer-/EOF-Vertrag; Prozessnotifications sind prozesslokal.
+Gemeinsamer Speicher darf nach dem Ende des Erzeugers nicht dessen Heap oder
+Stack entliehen bleiben. Deshalb gibt es hier keinen reinen Pointeradapter.
+
+Create akzeptiert1..65536Bytes, maximal64Pipes/4MBPayload global und32Referenzen
+pro Pipe. Hoechstens32 native Read-/Write-Waiter parken gleichzeitig pro
+Pipe; die echten Queuecounts begrenzen Admission und Wakearbeit. Referenz-
+und Pipeidentitaeten laufen waehrend eines Boots nicht um.
+Read/Write kopieren je Aufruf hoechstens4096Bytes. Kleine Writes bis
+min(Kapazitaet,4096) sind ganz oder gar nicht atomar; groessere duerfen einen
+exakten Prefix annehmen. Konkurrierende Reader/Writer teilen denselben
+Kanalbesitzer. Daten haben keine Nachrichten- oder Zeilengrenzen.
+
+Ein angenommener Prefix belegt keine Zustellung an den Reader. EOF erscheint
+erst nach dem Schliessen ALLER Writerreferenzen und dem Lesen ALLER
+angenommenen Bytes. Der letzte Readerclose verwirft ungelesene Bytes; weitere
+Writes melden BrokenPipe. Fehlgeschlagene letzte Backingfreigabe behaelt
+Ressourcenbudget und geschlossene Retry-Identitaet. Der echte Prozessreaper
+schliesst verbleibende eigene Enden erst nach dem physischen Threadretirement.
+
+Poll/Finite/Forever verwenden denselben absoluten48Byte-Zeitwert wie WaitSet,
+brauchen aber kein WaitSet. Ein Wake erneuert die Frist nicht. Cancel betrifft
+bereits aufgenommene Aufrufe einer Referenz; Duplikate bleiben unabhaengig.
+Native Queues parken den echten Task ohne Unwind-Pin oder gespeicherten
+Callerzeiger. Callerbuffer bleiben bis zur wirklichen Rueckkehr geliehen.
+Nach dem Wake wird ausschliesslich die genaue Referenz neu aufgeloest.
+
+Ein WaitSource-Adapter wird noch nicht angeboten. Shellsyntax, Terminal-UI,
+Umstellung der Programme und automatische Ein-/Ausgabevererbung gehoeren
+nicht zu dieser Unterversion. Die lokale Abnahme liegt nach Abschluss unter
+Research/API-ABI/Umsetzung/0.90.34/; Host- und Gastgrenzen sowie der abschliessende
+STANDARD werden dort getrennt belegt. Physische Hardware folgt daraus nicht.
+
+Abnahme0.90.34
+--------------
+Contract89/SDK177/Kernel472 sind mit echten Query2-Aufrufern in Zig, C und
+Rust im KVM4-Gast geprueft. Der C-Fall belegt32wirklich geparkte Reader,
+33rd-Capacity, Cancel/Close und4Writer/4Reader mit jeweils512geprueften
+Datensaetzen.64Pipes/4MB,32Referenzen,lazy-VM-Callerbuffer, Ownerverweigerung
+und Rueckgewinnung aller64Pipes nach natuerlichem Kindende sowie geparktem
+Hard-Kill/Wait/Reap bestanden. Die unveraenderte Spectra0.1.110 besteht
+IPC-Selbsttest und SYNC3 mit24angelegten/wiederfreigegebenen Tasks.
+Host: Contract18Schritte/8Interop, SDK131, Owner15 und originale Ring-/
+Deadlinefaelle bestanden; Heap-/Clock-/Freigabefehler sind kontrollierte
+Hostbelege. Der normale Neubau liefert dieselben getesteten Kernel-/C-/
+Zigbytes; Rust nutzt die neu gebauten passenden SDK177/Contract89-Werkzeuge.
+
+Der einzige finale STANDARD/Suite3/KVM4 c42512e7-7b47-4f72-9d69-14f54f7ee8bf
+enthaelt30Samples/5Metriken/6Scores/4Worker und ist gegen die Originalreferenz
+vollstaendig rekonstruiert. Gesamt129.790408 gegen129.114329 in33;
+Scheduler35.130685 gegen37.563989. Ursache unisoliert, Befund fuer Integration38;
+keine Messung des neuen Pipe-Durchsatzes. Lokal validiert; R4OS Server
+ausstehend: dieselben Originalbytes claim/import/fullGET/Serverwertung.
+Originale und genaue Grenzen: Research/API-ABI/Umsetzung/0.90.34/Abnahme.json
+und ExFiles/Reports/Benchmarks/c42512e7-7b47-4f72-9d69-14f54f7ee8bf/.
+Der private Funktionsgast behaelt seinen alten SYSTEM-Bestand; der tatsaechlich
+gestartete472BOOT wurde voll rueckgelesen. Daraus folgt keine komplette
+Neuinstallation, Windows-, physische Hardware- oder Schedulerfairnessabnahme.

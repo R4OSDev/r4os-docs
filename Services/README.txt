@@ -122,3 +122,25 @@ The SELFTEST switch already selects the Terminal's console launch policy.
 
 Current services and image scopes are listed in
 `Docs/Inventory/AllModules.json`.
+
+Fortschreibung 0.90.64 - Normal Start2 administration
+---------------------------------------------------
+SERVMAN0.1.7 and SERVICES0.1.11 use App2 and Query2 on SDK200.
+Service actions bind the full registration and process identities.
+Status uses a bound endpoint channel and one five-second budget.
+Configuration readers check the exact metadata identity, content
+revision and length around a complete bounded stream read.
+
+SAVE compares the whole existing file when size and checksum match
+the desired configuration. A stable complete read and the current
+inventory revision confirm an already saved state. Changed data uses
+the existing checked atomic transaction. Services retains its exact
+SERVMAN child, waits for process completion or GUI activity, and
+reports success after reaping the child. CLI mutations wait for SAVE.
+
+The private KVM4 software Desktop exercised End selection and an
+actual Auto click, whole saved bytes, a successful window close and
+the configured auto start. Original command tests, retained old
+service completion, stale restart rejection, SSH ancestry refusal,
+malformed configuration and normal shutdown have separate records
+under Research/API-ABI/Migration/0.90.64.

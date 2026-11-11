@@ -2623,3 +2623,17 @@ dem normalen finalen Artefakt belegt. OssiPC mit exakt40gleichen Vollframes:
 13902->3875Desktop-Ticks bei unveraendertem Portex0.1.10. Messumfang,
 Quell-/Artefaktidentitaet und Originale: Deployment/PortexPerformance090.txt,
 ExFiles/Reports/Portex/0.90.2/. Keine Kernel-/ABI-Aenderung.
+
+Fortschreibung 0.90.65 - Desktop208
+---------------------------------
+Der Desktop nutzt echte App2-/Query2-Kontexte, den gemeinsamen vollstaendigen
+Inventarleser, typisierte Clipboardangebote und die globale Desktop2-
+Aktivitaetsquelle. Native Grafik- und Library-Leihen reichen bis zu ihren
+wirklichen Abschluessen. Kernel476 und SDK201 nehmen seine22 Imports auf.
+286native Desktopfaelle, drei Geometrie- und eine Uhrprobe bestehen.
+Software-KVM4 belegt originale Fenster-/Audio-/Restart-/Capturepruefungen,
+regulaere QEMU-PS2-Eingabe, Calculatorstart und Fensterziehen, bytegenauen
+UTF8-Clipboardtransport sowie genaues Close/Reap. Die Replayoption verlangt
+einen nativen GR-Owner. Der volle Loader-Kaltladebefund steht bei0.90.83.
+Versionen, Rohbelege, Scope und finaler STANDARD stehen in
+API/ConsumerMigration.txt und Research/API-ABI/Migration/0.90.65/Abnahme.json.

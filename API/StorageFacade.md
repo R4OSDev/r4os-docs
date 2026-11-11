@@ -295,3 +295,22 @@ Current atomic publication requires short 8.3 stage and backup names in the
 same directory; a long final target is supported on NTFS. Only a real
 publication or abort receipt releases ownership. A failed abort keeps the
 exact owner; a missing stream is not a file-deletion receipt.
+
+Fortschreibung 0.90.66 - App2-Dateiverbraucher
+--------------------------------------------
+Explorer34 liest FileMetadata2 und ganze DirectoryMetadata2-Seiten ueber
+die normale Generation2-Fassade. Ein DirectoryMetadataCursor2 gehoert
+dem erzeugenden Task. Nach dem Workerjoin prueft Main kopierte Namespace-,
+Mount- und Aenderungsfakten und erzeugt seinen eigenen begrenzten Cursor.
+Ein neuer Detailworker prueft portable Metadaten und DirectoryChangeCursor.
+Die vollstaendige Kandidatensicht bleibt bis zur geprueften Adoption privat.
+Shortcutbilder pruefen ihre ganze Dateiidentitaet und ihren echten Parentmount.
+
+Kopieren nutzt Files.copy und dessen bestehende Providertransaktion mit
+einem synchron gehaltenen16KB-Arbeitspuffer. Ein geschriebener Fehlerpraefix
+wird sichtbar gemeldet. Die bestehende FAT-Mutationsgrenze gilt weiter.
+R4Part9 bindet die512Byte-Formattergeometrie und ganze Geraete-/Layout-
+generationen mit BlockTransferShape. Der KVM4-Nachweis prueft ausschliesslich
+die eigene256MB-Testplatte mit unabhaengigen GPT-/NTFS-/FAT32-Orakeln.
+Quellen, normales Artefaktreadback, Remount und Fehlergrenzen stehen in
+API/ConsumerMigration.txt und Research/API-ABI/Migration/0.90.66.

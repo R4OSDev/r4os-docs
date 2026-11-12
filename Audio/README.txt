@@ -2247,3 +2247,19 @@ BOOT enthielt die qualifizierten Kernel430-Bytes82893e4e7ac1432960b9e8bdae844696
 R4OS-Serverimport und Readback stehen aus. Kein erneuter Scorer-/STANDARD-
 Lauf; dieser Systemscore ersetzt weder einen isolierten Wirkungsnachweis
 noch den ausdruecklich offenen urspruenglichen RawClosebefund91.
+
+
+Begrenzte Dienstfortsetzungen ab0.90.80
+-------------------------------------
+AUDSVC26 fordert fuer seinen genauen Dispatcher vor der Endpointpublikation
+die vorhandene Preferred-Klasse mit Standard-CPU-Menge an. Nach einem echten
+Yield prueft Get die angewendete Revision/Klasse und fehlendes Pending;
+ein Fehler beendet den Start vor der Endpointpublikation. Das bestehende
+Budget bleibt auf vier Ticks/vier Dispatches je Aktivierung begrenzt.
+PCM-Worker behalten ihre eigene Policy. Es gibt keine neue Kernelprioritaet,
+CPU-Reservierung oder RPC-Frist; der200ms-Clientvertrag bleibt erhalten.
+Im normalen KVM4 mit SSHD, FTPSVC und RDPSVC bestehen die urspruenglichen
+57BASIC/GORILLA-Writes mit216000Bytes/54000Frames ohne Verwerfen und mit
+echtem Close. Ein gleichzeitiger SSH-Aufruf beobachtet den CPU-Fortschritt
+desselben genauen Kindprozesses. Auch der urspruengliche native Volume-/
+Mute-/Zweistrom-/Fanout-/Persistenz-/Neustart-Selbsttest besteht.

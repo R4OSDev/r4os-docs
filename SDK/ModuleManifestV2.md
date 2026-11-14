@@ -12,12 +12,13 @@ KIND=R4X
 NAME=HELLO
 VERSION=0.1.0
 LANGUAGE=Zig
+SDK_PROFILE=r4os-zig-generation2
 SOURCE=src/main.zig
 ENTRY_MODE=app
 APP_CLASS=console
 TARGET=/R4OS/SOFTWARE/TERMINAL/HELLO.R4X
 IMAGE_SCOPE=full
-IMPORT=R4SYS:Query:1
+IMPORT=R4SYS:Query2:2
 ```
 
 The manifest defines kind, identity, version, language, sources, imports,

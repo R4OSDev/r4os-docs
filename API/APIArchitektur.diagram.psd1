@@ -7,11 +7,11 @@
         @{ Id = 'kernel_boundary'; X = 4; Y = 900; Width = 92; Height = 260; Label = 'Kernel' }
     )
     Nodes = @(
-        @{ Id = 'app_source'; X = 8; Y = 90; Width = 84; Height = 72; Kind = 'app'; Lines = @('Zig- oder C-Anwendung', 'schreibt r4_app_main(App*)') }
-        @{ Id = 'sdk_startup'; X = 8; Y = 200; Width = 84; Height = 72; Kind = 'sdk'; Lines = @('SDK-eigener R4XStart:1-Startup', 'validiert Kontext und App-Profil') }
-        @{ Id = 'app_facade'; X = 8; Y = 310; Width = 84; Height = 82; Kind = 'facade'; Lines = @('App-/R4App-Fassade und SDK-Wrapper', 'besitzen das Bundle', 'pruefen Gruppe, Feld und Vertrag') }
-        @{ Id = 'r4x_context'; X = 8; Y = 465; Width = 84; Height = 90; Kind = 'abi'; Lines = @('R4XStartContext mit Import-Bundle', 'Kontext ist fuer den Startaufruf borrowed', 'Tabellenzeiger bleiben Kernel-owned') }
-        @{ Id = 'r4l_query'; X = 8; Y = 610; Width = 40; Height = 120; Kind = 'loader'; Lines = @('R4LQuery', 'beim Laden', 'loest Gruppen-', 'importe auf', 'kein Laufzeit-', 'Dispatcher') }
+        @{ Id = 'app_source'; X = 8; Y = 90; Width = 84; Height = 72; Kind = 'app'; Lines = @('Zig- oder C-Anwendung', 'schreibt r4_app_main(App2*)') }
+        @{ Id = 'sdk_startup'; X = 8; Y = 200; Width = 84; Height = 72; Kind = 'sdk'; Lines = @('SDK-eigener R4XStart2:2-Startup', 'validiert Kontext und App-Profil') }
+        @{ Id = 'app_facade'; X = 8; Y = 310; Width = 84; Height = 82; Kind = 'facade'; Lines = @('App2-/R4App2-Fassade und SDK-Wrapper', 'besitzen das Bundle', 'pruefen Gruppe, Feld und Vertrag') }
+        @{ Id = 'r4x_context'; X = 8; Y = 465; Width = 84; Height = 90; Kind = 'abi'; Lines = @('R4XStartContext2 mit Import-Bundle', 'Kontext ist fuer den Startaufruf borrowed', 'Tabellenzeiger bleiben Kernel-owned') }
+        @{ Id = 'r4l_query'; X = 8; Y = 610; Width = 40; Height = 120; Kind = 'loader'; Lines = @('Query2 (24 Byte)', 'beim Laden', 'loest Gruppen-', 'importe auf', 'kein Laufzeit-', 'Dispatcher') }
         @{ Id = 'runtime_libraries'; X = 8; Y = 770; Width = 40; Height = 120; Kind = 'library'; Lines = @('Runtime-R4Ls', 'R4STD, R4IMG, R4FONT', 'lokaler Contract', 'eigene API-Tabellen', 'keine Kernel-Gruppe') }
         @{ Id = 'kernel_tables'; X = 52; Y = 610; Width = 40; Height = 280; Kind = 'table'; Lines = @('6 Kernel-Tabellen', 'R4SYS', 'R4DESK', 'R4DRAW', 'R4NET', 'R4AUDIO', 'R4DEV') }
         @{ Id = 'kernel_providers'; X = 8; Y = 950; Width = 84; Height = 82; Kind = 'kernel'; Lines = @('Sechs typisierte Kernel-Provider', 'direkte Funktionszeiger', 'kein Syscall- oder Dispatch-Zwischenweg') }
@@ -26,8 +26,8 @@
         @{ Id = 'compiler_linker'; X = 8; Y = 2180; Width = 84; Height = 82; Kind = 'build'; Lines = @('SDK-Buildprofil, Compiler und Linker', 'binden Startup und ABI', 'sowie deklarierte R4L-Imports') }
         @{ Id = 'r4x_builder'; X = 8; Y = 2290; Width = 84; Height = 72; Kind = 'build'; Lines = @('R4XBuilder', 'verpackt Code, Daten, Imports und Metadaten') }
         @{ Id = 'r4m0_artifact'; X = 8; Y = 2400; Width = 84; Height = 72; Kind = 'artifact'; Lines = @('R4M0-Container als .R4X', 'current-only Modul- und Startvertrag') }
-        @{ Id = 'kernel_loader'; X = 8; Y = 2510; Width = 84; Height = 82; Kind = 'loader'; Lines = @('Kernel-Loader', 'validiert, laedt und reloziert', 'baut den R4XStartContext') }
-        @{ Id = 'app_entry'; X = 8; Y = 2620; Width = 84; Height = 72; Kind = 'app'; Lines = @('SDK R4XStart -> r4_app_main', 'Anwendung laeuft mit ihrem App-Objekt') }
+        @{ Id = 'kernel_loader'; X = 8; Y = 2510; Width = 84; Height = 82; Kind = 'loader'; Lines = @('Kernel-Loader', 'validiert, laedt und reloziert', 'baut den R4XStartContext2') }
+        @{ Id = 'app_entry'; X = 8; Y = 2620; Width = 84; Height = 72; Kind = 'app'; Lines = @('SDK R4XStart2:2 -> r4_app_main', 'Anwendung laeuft mit ihrem App-Objekt') }
     )
     Edges = @(
         @{ Id = 'runtime_1'; X1 = 50; Y1 = 162; X2 = 50; Y2 = 200; Kind = 'runtime'; Label = 'Start' }

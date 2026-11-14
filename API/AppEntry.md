@@ -2,34 +2,39 @@
 
 ## Normaler Einstieg
 
-R4X-Programme exportieren binaer weiterhin `R4XStart:1`. Diesen technischen
+R4X-Programme exportieren binaer `R4XStart2:2`. Diesen technischen
 Einstieg erzeugt das SDK. Anwendungsquellen implementieren in beiden
 Sprachen nur den fachlichen Einstieg `r4_app_main`:
 
 ```zig
 const r4os = @import("r4os");
 
-pub fn r4_app_main(app: *r4os.App) i32 {
+pub fn r4_app_main(app: *r4os.App2) i32 {
     app.system().println("Hallo R4OS");
     return 0;
 }
 ```
 
 ```c
+#include <r4os/app2.h>
 #include <r4os/r4os.h>
 
-int32_t r4_app_main(R4App *app) {
-    r4sys_write_cstr(&app->system, "Hallo R4OS\r\n");
-    return 0;
+int32_t r4_app_main(R4App2 *app2) {
+    R4App app;
+    int32_t rc = r4_app2_facade(app2, &app);
+    if (rc < 0) return rc;
+    return r4sys_write_line(&app.system, "Hallo R4OS");
 }
 ```
 
 Der Entwickler schreibt keinen Entry-Assembler, verarbeitet keinen rohen
-`R4XStartContext` und initialisiert kein globales Tabellen-Bundle.
+`R4XStartContext2` und initialisiert kein globales Tabellen-Bundle.
 
 ## Profile
 
-Die zentrale Profilquelle ist `ApiContract.json`:
+Die Build-/SDK-Auswahl gehoert den drei SDK-Profildateien unter
+`Repositories/SDK/Profiles/`. `ApiContract.json` beschreibt die gemeinsamen
+App-Klassen- und Gruppenanforderungen:
 
 | Profil | App-Klasse | Pflichtgruppen | Optionale Gruppen |
 | --- | --- | --- | --- |

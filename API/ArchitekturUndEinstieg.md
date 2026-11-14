@@ -3,7 +3,7 @@
 The public program interface has two layers:
 
 1. Six platform groups implemented as built-in Kernel providers: R4SYS,
-   R4DESK, R4DRAW, R4NET, R4AUDIO and R4DEV. They keep versioned `Query:1`
+   R4DESK, R4DRAW, R4NET, R4AUDIO and R4DEV. They use versioned `Query2:2`
    imports but have no R4L file or independent installation/update path.
 2. Independent Runtime-R4L libraries such as R4STD, R4IMG and R4FONT, each
    with its own versioned function table.
@@ -19,7 +19,7 @@ SDK adds typed facades but does not define a second ABI.
 
 A module declares imports in `module.R4MF`. The loader resolves every required
 table against built-in Platform APIs or loaded Runtime-R4Ls and enters
-`R4XStart:1`. SDK startup validates the context and creates an `App` view. A
+`R4XStart2:2`. SDK startup validates the context and creates an `App` view. A
 normal file read, for example, follows:
 
 ```text
@@ -36,8 +36,9 @@ alternative filesystem implementation.
 2. Set identity, source, imports, target and image scope in `module.R4MF`.
 3. Initialize the SDK application context in the entry point.
 4. Request only the facades needed by the module.
-5. Build with the repository's `Build.bat` or
-   `Tools\Build.bat -module <Role\Project>`.
+5. Build with the owning repository's `Build.sh` on Linux or `Build.bat`
+   on Windows; workspace orchestration uses `./Tools/Build.sh` or
+   `Tools\Build.bat`.
 
 Every optional group and function remains explicit. Zig uses `hasFn` on the
 typed context; C uses the matching generated availability helpers. Missing

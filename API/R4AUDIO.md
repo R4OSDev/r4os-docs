@@ -3,7 +3,7 @@
 R4AUDIO ist die Audiogruppe. Sie besitzt PCM-Ausgabe, Audiostatus,
 Audio-Service-Streams, MIDI, SID, OPL3 und Synth-/Audiogeraetdiagnose.
 
-Import: R4AUDIO:Query:1
+Import: R4AUDIO:Query2:2
 
 Seit0.83.24 liegen Kernel-PCM-/Mixer-/Stream-/Outputbesitz und R4AUDIO nativ
 in Rust/audio und Rust/program/r4audio.rs. API/ABI, SDK und externe
@@ -43,11 +43,15 @@ Block an das aktive R4D-Backend. Backpressure bleibt sichtbar und bewahrt den
 unveraenderten Block fuer einen Wiederholungsversuch. Explizite Synthnamen
 werden exakt aufgeloest und muessen produktiv PCM rendern koennen.
 
+Die folgende generierte Tabelle beschreibt den aktiven Generation2-Vertrag.
+Datierte Einfuehrungsnotizen behalten ihre damaligen Tabellenrevisionen;
+aktuelle Verfuegbarkeit wird am konkreten Feld geprueft.
+
 <!-- R4OS-APIREF:BEGIN R4AUDIO (generiert von ApiContractGen aus ApiContract.json - NICHT von Hand editieren) -->
 ## Tabellen-Referenz R4AUDIO (generiert)
 
-Kernel-Gruppentabelle `R4XStartR4Audio` v2, 200 Bytes, 21 Funktionsfelder und 23 Slots insgesamt.
-Signatur-Wahrheit: `abi.R4AudioFns` (Feldname == Tabellenfeld).
+Kernel-Gruppentabelle `R4XStartR4Audio2` v2, 240 Bytes, 26 Funktionsfelder und 28 Slots insgesamt.
+Signatur-Wahrheit: `abi.R4AudioFns2` (Feldname == Tabellenfeld).
 Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 
 | Slot | Offset | Zustand | Tabellenfeld | Signatur |
@@ -75,4 +79,9 @@ Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 | 20 | 176 | reserved | `reserved1` | - |
 | 21 | 184 | function | `audio_output_info` | `*const fn (u32, *AudioOutputInfo) callconv(.c) i32` |
 | 22 | 192 | function | `audio_select_output` | `*const fn (*const [64]u8) callconv(.c) i32` |
+| 23 | 200 | function | `audio_stream_progress` | `*const fn (u32, u64, *AudioStreamProgress) callconv(.c) i32` |
+| 24 | 208 | function | `audio_set_stream_expectation` | `*const fn (u32, *const AudioStreamExpectation) callconv(.c) i32` |
+| 25 | 216 | function | `audio_close_stream_progress` | `*const fn (u32, u64, *AudioStreamProgress) callconv(.c) i32` |
+| 26 | 224 | function | `audio_output_catalog` | `*const fn ([*]AudioOutputInfo, u32, *AudioOutputCatalog) callconv(.c) i32` |
+| 27 | 232 | function | `audio_capture_io` | `*const fn (*const AudioCaptureRequest, *AudioCaptureReply, [*]u8, u32) callconv(.c) i32` |
 <!-- R4OS-APIREF:END R4AUDIO -->

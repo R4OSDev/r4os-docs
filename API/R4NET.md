@@ -9,7 +9,7 @@ weder auf Puffer noch auf UARTs zu. Ein vorhandener Tabellenzeiger bestaetigt
 hier keine Transportverfuegbarkeit. Die aktuellen SDK-Contexts bieten diese
 Methoden nicht mehr an. COM1-Kerneldebugging bleibt davon unabhaengig.
 
-Import: R4NET:Query:1
+Import: R4NET:Query2:2
 
 Bereitstellung: eingebauter Kernel-Provider; keine R4L-Datei und kein
 eigenstaendiger Installations- oder Updatepfad.
@@ -19,11 +19,15 @@ Zig-Context: r4os.r4net.Context
 Netzwerkprogramme deklarieren R4NET im Manifest und pruefen optionale Felder
 mit hasFn. Fachliche Status- und Fehlercodes stehen in abi.zig.
 
+Die folgende generierte Tabelle beschreibt den aktiven Generation2-Vertrag.
+Datierte Einfuehrungsnotizen behalten ihre damaligen Tabellenrevisionen;
+aktuelle Verfuegbarkeit wird am konkreten Feld geprueft.
+
 <!-- R4OS-APIREF:BEGIN R4NET (generiert von ApiContractGen aus ApiContract.json - NICHT von Hand editieren) -->
 ## Tabellen-Referenz R4NET (generiert)
 
-Kernel-Gruppentabelle `R4XStartR4Net` v2, 296 Bytes, 35 Funktionsfelder und 35 Slots insgesamt.
-Signatur-Wahrheit: `abi.R4NetFns` (Feldname == Tabellenfeld).
+Kernel-Gruppentabelle `R4XStartR4Net2` v1, 296 Bytes, 35 Funktionsfelder und 35 Slots insgesamt.
+Signatur-Wahrheit: `abi.R4NetFns2` (Feldname == Tabellenfeld).
 Ein Feld ist nutzbar, wenn `hasFn("feld")` es als vorhanden meldet.
 
 | Slot | Offset | Zustand | Tabellenfeld | Signatur |

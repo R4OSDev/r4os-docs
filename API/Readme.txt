@@ -7,8 +7,8 @@ same high-level relationship as a diagram.
 Platform groups
 ---------------
 
-All six groups are built-in Kernel providers. Their `Query:1` import names
-remain public ABI, but no group is built, installed or updated as an R4L file.
+All six groups are built-in Kernel providers. Their `Query2:2` import names
+are the sole active technical platform ABI, but no group is built, installed or updated as an R4L file.
 
 - R4SYS: console, files, programs, services, memory and registry.
 - R4DESK: windows, input, desktop and remote frames.

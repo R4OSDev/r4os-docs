@@ -1,9 +1,13 @@
 ﻿# R4OS application contract
 
-`r4os.App` is the normal Zig entry surface; `R4App` is the matching C
-surface. Both are immutable views over the same validated R4XStart context.
-The canonical layouts and operations come from
-`Repositories/Contract/API/ApiContract.json`.
+`r4os.App2` (also exposed through the current `r4os.App` alias) and
+`R4App2` are the normal Zig and C entry surfaces. The SDK validates the
+`R4XStartContext2` before calling `r4_app_main`. A C application may create
+the explicit borrowed `R4App` facade with `r4_app2_facade`; it is a view over
+that current context. App objects and their borrowed facades keep their
+documented entry, move and callback lifetimes. The canonical layouts and
+operations come from `Repositories/Contract/API/ApiContract.json` and
+`API/Generation2.json`.
 
 ## Profiles and groups
 
@@ -16,9 +20,11 @@ they are not Runtime-R4L files or independently installed components.
 Typical Zig access:
 
 ```zig
-var app = try r4os.App.init(start_context);
-const console = app.console() orelse return r4os.abi.err_no_fn;
-var files = app.files() orelse return r4os.abi.err_no_fn;
+const r4os = @import("r4os");
+pub fn r4_app_main(app: *r4os.App2) i32 {
+    app.system().println("Hello R4OS");
+    return 0;
+}
 ```
 
 ## Errors and optionality
@@ -38,6 +44,6 @@ gain ownership or reap rights.
 Independent Runtime-R4Ls are initialized from `app.startContext()`. They are
 not platform groups and do not appear as additional fields on `App`.
 
-Implementations are in `Repositories/SDK/r4os/app_contract.zig` and the
+Implementations are in `Repositories/SDK/r4os/app2.zig` and `app_contract.zig` and the
 matching C headers below `Repositories/SDK/Shared/C/`; generated Contract
 conformance checks keep both languages aligned.

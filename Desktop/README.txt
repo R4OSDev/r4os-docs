@@ -6,6 +6,55 @@ window composition, focus, z-order, taskbar, desktop items and user-facing
 input dispatch. The kernel provides the privileged display and event
 mechanisms but does not own desktop policy.
 
+Bulk layer RAM clearing (0.91.5)
+---------------------------------------------------------------
+Fable R4OS-0005 is confirmed in Desktop216. Desktop217 replaces volatile
+8-byte layer clears with ordinary slice clearing. A complete-width clipped
+band is one contiguous operation; partial-width clips retain exact row bounds.
+The unchanged SDK helper uses integer rep stosb, with no allocation or SIMD
+state. The qualified Rust target-default feature policy stays unchanged.
+
+An explicit CPU filled-capture method initializes the entire scratch repaint
+with its actual opaque base color, omitting the redundant transparent clear.
+The classic Desktop background uses it. A compositing-background hint cannot
+promise full coverage: text and cursor layers use those hints too. They and
+ordinary/empty paints keep their original transparent clear. The native default
+records the same clear/fill operations as before. Partial damage, source loans,
+fallible allocation, generation and cache-opacity rules remain with the owners.
+
+All27 selected software/scene/layer/compositor/native-capture cases,3 geometry
+cases and one clock case pass on exact final sources. The existing wide-clear
+alignment/tail and whole-scene/pixel/color oracles are unchanged. New cases
+cover signed-origin full-width bands and explicit filled capture, untouched
+pixels and later transparent clearing after scratch reuse. The first new cache
+fixture used Desktop mode for a signed origin; CpuOutput is the correct
+existing admission. Its corrected final run and original failure are separate.
+Regular Desktop217 binds all188 project compiler inputs. Full guest readback:
+358e068d2af8959d93e435fd7cc8a308a9bbcf428536c8dd1024fb843089bf0c
+
+The original20record/nine-phase SPECTRA BENCH DESKTOP /OWN-DESKTOP passes once
+for216 and217 in the same software KVM4/Kernel479/WINSVC38 guest. Both image
+hashes, record identities, direct_pixels, changed bytes and warm budgets match.
+For background=false, four measured-record medians for window-begin/clear are
+61304->10426.5ns at414x224 and1225881.5->246472.5ns at1904x1010. Full nine-phase
+medians are340172.5->262368ns /7546972->6414043ns. The other retained flag gives
+56683->9910ns /1218893->252617ns and totals332106->282835ns /7365805->6223961.5ns.
+Phase wall time includes descheduling. This profile measures bulk clear in
+SDR RAM; the explicit primary-background fill has separate retained scene
+qualification. Physical presentation and user-input latency were unmeasured.
+The paired guest keeps release label0.91.4; final STANDARD uses a fresh0.91.5
+plan. Normal poweroff, full originals, source/build receipts and disassemblies:
+ExFiles/Reports/Fable091/0.91.5/.
+
+Final STANDARD 5ff7fef3-975d-4b3a-87e5-70cc54aeb16f validates fresh release0.91.5,
+Kernel479/KVM4,30raw samples with4completed workers,5metric-v2 aggregates and
+6positive frozen-reference scores. Overall124.307663. Original SHA256:
+ee114edb23696dd738ed8f6d7d5294c1a8b9531759667cbce76368437f4ba1cf
+Full original/reference and guest records remain under
+ExFiles/Reports/Benchmarks/<run-id>/. Scope: system-wide Terminal workload.
+lokal validiert; R4OS Server ausstehend (Claim, Import, full GET and independent
+server scoring).
+
 Opaque CPU rows (0.91.4)
 ---------------------------------------------------------------
 Fable R4OS-0004 is confirmed in the regular Desktop215 O3/FatLTO ELF: owned

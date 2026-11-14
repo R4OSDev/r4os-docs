@@ -6,6 +6,54 @@ window composition, focus, z-order, taskbar, desktop items and user-facing
 input dispatch. The kernel provides the privileged display and event
 mechanisms but does not own desktop policy.
 
+Native raster capacity (0.91.1)
+---------------------------------------------------------------
+Fable R4OS-0001 remains reproducible after the API migration. The original
+Desktop 0.1.212 raster() exhausts the 8192-command recorder while painting one
+noisy 128x128 image. Desktop 0.1.213 records each opaque GUI raster as one XRGB
+picture at all 16 admitted integer scales. The original CPU RGB-run path
+retains its clipping, unaligned byte access and ignored high-byte behavior.
+
+A capacity-limited native scene gets one additional capture with ordinary
+layers painted into fallible CPU scratch images and immediately copied into
+content-keyed textures. Exact unsubmitted external image reads return before
+retry; external native images keep their own leases. Scratch remains inside
+the existing layer budget and is not retained in the CPU recording. Straight
+ARGB input exactly round-trips all valid premultiplied channel/alpha pairs.
+The next scene uses ordinary native primitives again. A remaining capacity
+limit uses bounded retirement/retry and does not blacklist the connector's
+device/connection generation. Actual device failures retain their policy.
+
+Eight focused cases pass through the existing RustNative runner: four GUI
+replay cases, three retained native capture cases and one new capacity case.
+The latter checks actual recorder overflow, one successful fallback, all 64
+pixels against an independent original GPU/CMM reference, later normal native
+capture, failure retry bounds and 32896 valid channel/alpha pairs. The original
+raster function fails the new noisy-image case with Capacity. The first new
+CPU-case failure exposed ignored-byte normalization and was corrected in the
+product; a new expected-picture error was corrected to respect the existing
+linear R4GFX output composition. Existing reference oracles are unchanged.
+
+The regular Generation2 Desktop 0.1.213 build is bound to all 187 actual project
+compiler inputs; artifact SHA256:
+ffd130fe9ec5bc33a15b44808ab88d91d3b70a8b1b72f3cee9a2fe21820e3979
+Functional originals, exact build receipt and initial comparison failures:
+ExFiles/Reports/Fable091/0.91.1/ in the local workspace. No physical GPU,
+Windows execution, visible latency or isolated speedup follows from these
+host/native-model checks.
+
+Final STANDARD 606883c6-cbec-4025-83c3-eaf48278b2e4 runs the exact release
+0.91.1 / Kernel 0.1.479 in KVM4. All 30 original samples have four completed
+workers; five primary metric-v2 aggregates and six local scores recompute
+against the frozen Suite-3 reference. Overall: 122.786429. This system-wide
+Terminal workload does not measure the Desktop change in isolation. Original
+export SHA256:
+fcbb1116f42284c8fced7e68445fc15a4095f409af753e2699144e05eead2a3a
+The unchanged original is retained under ExFiles/Reports/Benchmarks/<run-id>/;
+standard-validation.json in the functional archive records the local checks.
+Status: lokal validiert; R4OS Server ausstehend (Claim, Import, full GET and
+independent server scoring).
+
 Deferred Explorer free space (0.87.42)
 ---------------------------------------------------------------
 Explorer29 uses scalar drive_info_geometry for the Computer list and every

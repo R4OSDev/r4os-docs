@@ -1,4 +1,92 @@
-﻿0.87.57: Logische Flusszusagen vom Hardwarepermit getrennt.
+﻿0.91.7: Periodenarbeit weckt den bestehenden Audio-Worker
+=======================================================
+
+Kernel 0.1.480, HDA 0.3.51 und AC97 0.1.14 verwenden den optionalen
+DriverApi2-Hinweis audio_output_progress aus Contract 0.64.96 und SDK
+0.64.219. HDA-/AC97-Periodenarbeit sendet ihn erst nach Freigabe ihrer
+Besitzer. Der vorhandene Worker fasst MIX-/BACKEND-Fälligkeiten zusammen;
+der Hinweis enthält keinen Cursor und bestätigt kein abgespieltes PCM.
+Das frühere 664-Byte-Präfix und Revision 1 bleiben erhalten. Die aktuelle
+Tabelle hat 672 Bytes; das SDK prüft Größe und Nichtnull-Slot vor Benutzung.
+Der normative Vertrag steht in Contract/API/AudioProgressNotifications.txt.
+
+Der HDA-Rückfall folgt dem konsumierten Stand und dem Ende des ersten noch
+zugeordneten PCM-Blocks, aufgerundet und auf 1..10 ms begrenzt. Noch nicht
+laufende kurze Restblöcke behalten die bisherige 2-ms-Startprüfung.
+Cursorlose Backends behalten einen Rückfall nach einem kanonischen
+Mischquantum (480 Frames / 48 kHz = 10 ms), ohne erfundenen Konsumfortschritt.
+Kurze Sperr-/Callbackkonflikte bleiben gesondert begrenzt wiederholbar.
+Eine Quellfrist ist erst bei vollständig abgearbeitetem angenommenem PCM
+fällig; gepuffertes PCM macht eine abgelaufene Zusage nicht zum 1-ms-Poller.
+
+Publiziert ein gültiger Cursor die maximale Queuegröße, prüft der Mixer den
+freien Platz vor der Mischung. Angenommene Backendblöcke reduzieren diesen
+Platz nur bei passender Ausgabegeneration. Bei vollem Ring bleibt PCM in den
+bestehenden Quellringen. Bei unbekannter Kapazität entscheidet weiterhin der
+Treiber; echtes BUSY verbraucht keine Quellframes. Kein gemischter Borrow
+bleibt über Workeraufrufe, Close oder einen Generationswechsel hinweg offen.
+
+AUDIOD 0.2.23 verwendet für den abschließenden Nullblock denselben begrenzten
+vollständigen Schreibpfad wie für Signalquanten. Eine legale Teilannahme bei
+vollem Ring darf den Diagnoseblock nicht abschneiden. Die ursprünglichen
+PCM-, Dienst-, Close-, Fehler- und Deadline-Orakel bleiben unverändert.
+Die erste unveränderte Langzeitprobe ist einschließlich Fehlern archiviert.
+
+Der bestehende WORKER57-Zähler AUDIO erfasst Backend-Statusaufrufe im Worker;
+MIX-only-Durchläufe und synchrone Anwendungsaufrufe sind nicht darin enthalten.
+Der Vergleich verwendet 30.000 Ticks bei 1000 Hz innerhalb derselben
+60-Sekunden-PCM-Arbeit und identische AUDIOD-Artefakte. Das ist kein Nachweis
+aller Scheduler-Wakeups und keine physische Audio- oder Latenzmessung.
+
+Qualifikation 0.91.7: Alle fünf Audio-Ownerfälle, der vollständige
+Contract-Lauf einschließlich acht nativer C/Zig/Rust-Interopfälle sowie die
+bestehenden SDK-, HDA-, AC97- und AUDIOD-Besitzerprüfungen bestehen. Die
+regulären Kernel-/Modulartefakte binden die sauberen SDK-/Contractstände.
+Die installierten Kernel, HDA, AUDIOD und Metadaten wurden vollständig
+zurückgelesen; Desktop, Spectra, AUDSVC und WINSVC sind im Vergleich bytegleich.
+
+Bei gleicher PCM-Arbeit (60 s, 2.880.000 Signalframes plus 480 Nullframes)
+sinken AUDIO-Statusaufrufe im 30.000-Tick-Fenster von 14.924 auf 4.663 und
+Backend-Schreibaufrufe des Langzeittests von 55.506 auf 6.001. Beide Seiten
+behalten 6.004 Refills und null Drops, Underruns, Treiber-/Backendfehler oder
+Stille-Recovery. Die zusätzliche Desktopszene ist nicht vollständig gleich:
+die ursprüngliche Probe besteht vorher, erreicht nachher unter gleichzeitiger
+Audiolast jedoch WindowGeometry. Ihr separater Lauf besteht. Daraus folgt
+kein vollständiger Mischlast-, CPU-Zeit- oder Wakeup-Nachweis.
+
+Die strenge gemischte Langzeitdiagnose bleibt wegen drei Deadline-Verfehlungen
+auf beiden Ständen FAILED. Eine separate lange Audioprobe des neuen Stands
+meldet eine Deadline-Verfehlung; auch dieser ursprüngliche Fehler bleibt
+offen. Diese Grenzen wurden nicht durch erfolgreiche Teilfälle ersetzt.
+Kurze Originaldiagnose, PROGRESS480 und GAP1440 einschließlich terminalem
+Close und Ressourcenrückkehr bestehen. Der offizielle unveränderte WAV-Gate
+besteht mit 7.607 erwarteten zusammenhängenden Signalframes bei 44.100 Hz
+Hostausgabe und ohne das alte 480/544-Stillemuster. Das bestätigt digitale
+QEMU-Ausgabe, keine physische Hör- oder Controllerabnahme; AC97 ist hier nur
+mit seinen Besitzerfällen geprüft.
+
+Vollständige Originale einschließlich früher fehlgeschlagener temporärer
+Fixtures, Quellen, Build-/Readbackbelege und WAV:
+ExFiles/Reports/Fable091/0.91.7/. Die Endkontrolle korrigierte die aus dem veralteten HDA-README übernommene
+Versionsannahme: Das ursprüngliche Manifest enthält bereits 0.3.50. Die
+Messungen oben verwenden die lokale neue Implementierung noch unter dieser
+Zwischenidentität; das unveröffentlichte Ergebnis wurde auf 0.3.51 erhöht.
+Der Zwischen-STANDARD b65d8d5c-b37f-40ce-8aac-dc8dac24d555 bleibt vollständig
+unverändert erhalten und ist nach dieser Identitätskorrektur nicht der finale
+Lauf. Der normale Neuaufbau samt Besitzerprüfungen besteht. Genau ein Byte der
+Container-Metadaten ändert die Versionsziffer; alle ladbaren Sektionen,
+Imports, Exports, Einträge und Relokationen sind bytegleich zum gemessenen
+Zwischenartefakt. Die Messung bleibt so dem finalen Laufzeitcode zugeordnet.
+Finaler STANDARD des korrekten Stands: aeea8a0f-b3bc-471f-bb98-4aab005328f5,
+Kernel 0.1.480/KVM4, 30 Rohsamples, fünf metric-v2-Werte und sechs gegen die
+unveränderte Originalreferenz nachgerechnete Scores. Status: lokal validiert;
+R4OS Server ausstehend. Rest: Claim, Import, vollständiger GET-Readback und
+unabhängige Serverauswertung. Der Terminallauf misst keine isolierte Audio-
+beschleunigung. Originale: ExFiles/Reports/Benchmarks/
+aeea8a0f-b3bc-471f-bb98-4aab005328f5/. Die Roadmap führt die Veröffentlichung.
+
+
+0.87.57: Logische Flusszusagen vom Hardwarepermit getrennt.
 set_stream_expectation_for_owner aendert ausschliesslich exakte Streamdaten
 unter StreamLock und publiziert eine Flowrevision. Der Outputbesitzer behaelt
 sein Permit fuer Devicecallbacks und prueft snapshot+Revision vor jeder PCM-

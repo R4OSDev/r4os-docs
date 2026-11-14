@@ -6,6 +6,58 @@ window composition, focus, z-order, taskbar, desktop items and user-facing
 input dispatch. The kernel provides the privileged display and event
 mechanisms but does not own desktop policy.
 
+Opaque CPU rows (0.91.4)
+---------------------------------------------------------------
+Fable R4OS-0004 is confirmed in the regular Desktop215 O3/FatLTO ELF: owned
+ARGB tiles repeat alpha checks and copy32-bit words with a source-bound branch
+for every word. Desktop216 admits a whole checked source row before writing,
+then masks/sets two native pixels per64-bit integer transfer with an odd-word
+tail. Unaligned sources and four-byte-aligned targets remain valid; no unaligned
+Rust word slice is created. Overflow and short rows fail before any row write.
+
+The layer cache conservatively certifies whole-layer opacity from actual
+changed rows. Unchanged known-opaque rows retain proof; unknown untouched rows
+and partial opaque paints cannot certify a transparent layer. Native recordings
+carry no CPU opacity claim. Fully certified layers skip both repeated CPU alpha
+scans; mixed/external layers retain the existing checks and color/lease guards.
+Actual production copy_xrgb changes from checked DWORD operations at12e490 to
+row admission and unrolled QWORD operations at1387f0/138900. Rust target-default
+features remain unchanged: the pinned softfloat toolchain's SIMD-copy issue is
+not bypassed. No new SDK/library/API operation or permanent gate is introduced.
+
+All21 selected software/scene/layer/compositor cases pass on the exact final
+source, plus3 geometry and one clock case. Existing full-frame, linear-color,
+clipping, generation and warm-budget oracles stay fixed. New cases cover source
+alignments0..7, empty/odd rows, high bytes, padding, pre-write rejection and
+conservative opacity transitions. The final module binds all188 project inputs;
+full installed readback matches SHA256:
+174b5c855060b867971f7668e644db107fab99f78669bc7c0ec7baae4d97ec63
+
+Original SPECTRA BENCH DESKTOP /OWN-DESKTOP passes once per artifact in the
+same software KVM4/Kernel479/WINSVC38 guest. All20record identities, direct_pixels,
+changed bytes, warm budgets and the two immutable whole-image hashes match.
+Both clocks use source1/generation2. For the retained background=false mode,
+median composition of four original warm measurements is192241.5->43223ns for
+414x224 and3948645.5->1334991ns for1904x1010. The second background flag retains
+its productive culling and gives177971->55166ns /4007666->1344651.5ns. The full
+nine-phase median in the first mode is463124->322462.5ns /9787501->7298366.5ns.
+Phase time includes descheduling. Scope: SDR RAM; display presentation and
+general UI latency were unmeasured. The paired
+guest keeps release label0.91.3 while216 is installed; final STANDARD uses a
+fresh0.91.4 plan. The guest powers off normally. Original records, source/build
+receipts, disassemblies and exact comparison:
+ExFiles/Reports/Fable091/0.91.4/.
+
+Final STANDARD c0d50172-a2a4-4fe0-96f3-f2741c223934 passes release0.91.4,
+Kernel479/KVM4. All30raw samples prove4completed workers;5metric-v2 aggregates
+and6positive scores recompute against the frozen Suite3 reference. Overall
+126.256228. Original SHA256:
+0be8edbd7a785a015792424b03a7edcfb64f7fdd1416f2d80212c2bcbf32cff5
+Full original/reference bytes and guest records remain locally under
+ExFiles/Reports/Benchmarks/<run-id>/. Scope: system-wide Terminal workload.
+Status: lokal validiert; R4OS Server ausstehend (Claim, Import, full GET and
+independent server scoring).
+
 Deferred icon sources (0.91.3)
 ---------------------------------------------------------------
 Fable R4OS-0003 remains current after the API migration. Desktop0.1.215 gives

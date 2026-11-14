@@ -6,6 +6,60 @@ window composition, focus, z-order, taskbar, desktop items and user-facing
 input dispatch. The kernel provides the privileged display and event
 mechanisms but does not own desktop policy.
 
+Deferred icon sources (0.91.3)
+---------------------------------------------------------------
+Fable R4OS-0003 remains current after the API migration. Desktop0.1.215 gives
+paint only the bounded cache and copied requests, without a file/resource or
+decoder capability. Cold sources use the ordinary fallback until ready;
+expired positive entries retain their pixels while one copied I/O worker
+loads or validates them. The exact native thread join precedes publication.
+Folder invalidation and backwards time discard old-epoch replies. Shutdown
+cancels unstarted work and drains the actual worker before leaving the entry.
+
+The existing parent-directory cursor is admitted before reading. Its bounded
+RAM history skips a content reload only after no relevant change; overflow,
+retired mounts, errors and changes require a new read. A change during reading
+prevents retaining the watch. The cursor owns no kernel resource. Missing
+watches preserve the original five-second full revalidation outside painting;
+negative admissions retain their one-second bound. Current FileMetadata2
+providers have no valid content revision; DOS time/size never impersonate one.
+Positive slots, negative ledger and copied request queue are each bounded32;
+there is one worker,8192 input bytes and the original canonical ICO decoder.
+Same-path updates, resource/file keys, size, alpha128 and clipping stay intact.
+
+Existing RustNative selection passes8 icon cases and one actual worker case,
+plus3 geometry and one clock case. Original5 icon/pixel oracles remain; the
+output fixture only adapts its Paint constructor. In a simulated minute per
+unchanged source key, original/current reads are1/1 while quiet and12/1 with
+one-second or16-ms redraws. The admitted-watch case performs13 watch calls
+including initial admission, with no source work from paint. These are owner
+model counts, not measured guest disk throughput or physical input latency.
+The existing unknown-watch case still re-reads and displays replacement data.
+Copied-request deduplication, stale joined replies, read races, failed-worker
+backoff and independent capacity are covered. The regular build binds all188
+actual Desktop project compiler inputs; exact receipts and original probes:
+ExFiles/Reports/Fable091/0.91.3/.
+
+The final cold software KVM4 guest runs release0.91.3 / Kernel479. Original
+SPECTRA CHECK DESKTOP /HOST passes window/drag/resize/focus, static/timer,
+tray activation/removal and exact owned cleanup. All4 CPUs are online and
+schedulable. The installed Desktop215 fully reads back with artifact SHA256
+bac70bb7cf51686d35299802eecaddbcb6e7d209b1b54b7e8ed88a61f5568788.
+The unchanged original check export has SHA256
+54f58336d2e400b73d48a49aa52c8427232dbaa0dd922091397e2f4542834772.
+The guest powers off normally; physical GPU/visibility and isolated speedup
+are outside this software qualification.
+
+Final STANDARD ee927381-183d-4c80-9390-69027d4161d8 validates release0.91.3,
+Kernel479 and KVM4: all30samples prove4completed workers;5metric-v2 aggregates
+and6positive scores recompute against the frozen Suite3 reference. Overall:
+123.058769. Original SHA256:
+3b70f78bd06bc4499cc9199761b4ff72068d951bbd7fc9daf4e884addba06248
+Original run/reference bytes and full guest records remain locally under
+ExFiles/Reports/Benchmarks/<run-id>/. This Terminal workload does not isolate
+the icon change. Status: lokal validiert; R4OS Server ausstehend (Claim,
+Import, full GET readback and independent server scoring).
+
 Tray change notification (0.91.2)
 ---------------------------------------------------------------
 Fable R4OS-0002 remains current after the API migration. Desktop0.1.214 uses

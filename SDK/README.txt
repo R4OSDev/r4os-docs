@@ -1,4 +1,41 @@
-﻿SDK profile authority (0.89.25-0.89.35)
+﻿Current published SDK set (14 November 2026)
+============================================
+SDK 0.64.218 / Contract 0.64.95 / Libraries 0.64.64 is publicly available:
+https://github.com/R4OSDev/r4os-sdk/releases/tag/v0.64.218
+Release ID: 445521259; published: 2026-11-14T19:01:16Z.
+This is the SDK source/profile set used by R4OS 0.90.92 / Kernel 0.1.479.
+The SDK commit is 624c0359329011f7e574aa0943e5bb10249f3a73; its three original
+profile files remain unchanged. SDK-Release.json and SHA256SUMS.txt bind all
+eleven assets: four source archives, matched host tools, twelve exact normal
+Runtime-R4Ls, capabilities, qualification, README and the package manifest.
+
+All assets were completely downloaded anonymously and checked by size and
+SHA256. The canonical SDK Package.ps1 verifier accepted the public payload.
+Fresh extracted sources passed both component-set guards, all 167 exported
+tool/runtime file hashes, compiler-free capabilities, the existing language
+parity review and one real normal Zig/C/Rust console build each. These are
+host builds; previous whole SDK/native results retain their actual scope.
+Windows binaries are included; new Windows/hardware/guest/benchmark execution
+is not claimed. Technical platform generation2 is the only normal path;
+independent Library-V1 interfaces remain valid.
+
+Components.json deliberately selects Recovery source snapshot 0.1.73 at
+5f5e180d94aa3e727a89c2aef59e4797880c4c5d, with its frozen SDK218/Contract95/
+Library64 source trees. This is distinct from public Recovery binary 0.1.74.
+Do not replace these SDK component roots with a different latest checkout.
+The current 16 profile definitions come from Describe and SDK-Release.json;
+older eleven-profile examples below retain their dated source identity.
+Package.ps1 requires a fully qualified ToolsRoot; resolve the extracted
+Tools directory with (Resolve-Path Tools).Path before passing it.
+Current exact package instructions and qualification: release README.txt,
+SDK-Release.json and SDK-Qualification.json. Publication evidence remains
+under Research/ReleasePublication/20261114/SDK/ in the project workspace.
+
+Historical ownership and release notes
+--------------------------------------
+The following versioned notes keep their original qualification limits.
+
+SDK profile authority (0.89.25-0.89.35)
 --------------------------------------
 The SDK alone selects build policy, tools, Contract and system libraries in
 Profiles/Build.json, Profiles/Tools.json and Profiles/Components.json (schema 1).
@@ -15,7 +52,7 @@ C modules and the qualified Rust R4X profile. It provides startup code, typed pl
 support, templates, C headers and generic Runtime-R4L helpers. The separate
 Contract repository remains the canonical API and ABI source.
 
-Current matching release: SDK0.64.152 / Contract0.64.76 / Libraries0.64.49,
+Historical matching release (0.89.X): SDK0.64.152 / Contract0.64.76 / Libraries0.64.49,
 https://github.com/R4OSDev/r4os-sdk/releases/tag/v0.64.152.
 All public assets were fully downloaded without authentication and compared
 with qualified originals by length/SHA256. Fresh Rust, Zig and C consumers
@@ -33,7 +70,7 @@ and the common update/removal owner are included. SDK-Qualification.json
 states the actual scope. Linux executed; Windows host tools cross-built.
 No Windows, real-hardware or GPU execution is claimed.
 Durable originals/readback/consumer evidence: ExFiles/Reports/SDK/0.64.152.
-Current R4OS Slim/Full release: 0.89.60, with normal Kernel0.1.460 and
+Historical R4OS Slim/Full release: 0.89.60, with normal Kernel0.1.460 and
 independently versioned Recovery0.1.68:
 https://github.com/R4OSDev/r4os-distribution/releases/tag/v0.89.60.
 SDK/Contract/Libraries remain the same matching set above. This release

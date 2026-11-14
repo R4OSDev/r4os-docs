@@ -6,6 +6,45 @@ window composition, focus, z-order, taskbar, desktop items and user-facing
 input dispatch. The kernel provides the privileged display and event
 mechanisms but does not own desktop policy.
 
+Tray change notification (0.91.2)
+---------------------------------------------------------------
+Fable R4OS-0002 remains current after the API migration. Desktop0.1.214 uses
+published Desktop activity for prompt tray refresh and a500-ms idle fallback.
+Repeated input/GPU activity coalesces at50ms; unchanged sequences do not
+shorten waits. Service failure retains its full retry delay. Visibility
+acknowledgements keep their independent50-ms retry deadline. WINSVC0.1.38
+publishes real tray revisions before one coalesced Desktop notification per
+drained batch. Unchanged upserts, desktop_sync and maintenance remain silent.
+No new platform operation or kernel change is required.
+
+Existing RustNative selection passes5 tray owner cases,3 geometry cases and
+one clock case. Existing WINSVC owner-test passes9 cases. At1000Hz the owner
+model reduces quiet registry calls20->2 per second and bounds continuous
+activity at20. Existing mixed-page, exact owner and visibility oracles remain.
+Both normal module builds pass; all187 actual Desktop project compiler inputs
+match the receipt. Full guest readback matches both final artifact hashes.
+
+The original SPECTRA CHECK DESKTOP /HOST succeeds before and after in the same
+software KVM4 guest with Kernel0.1.479, including actual tray publication,
+activation/removal, window operations, static/timer revisions and owned
+cleanup. During its fixed2100-ms two-producer period idle_timeouts are134->50.
+Across each complete check WINSVC request deltas are300->210 over4794/4368
+1000Hz ticks. These busy-scenario totals are not pure-idle desktop_sync rates.
+Prompt activity and bounded delay are covered by actual Generation2 notification
+and owner cases; physical visibility and input latency remain unmeasured.
+The first private network fixture used the wrong emulated adapter; its context
+is retained separately and the corrected RTL8139 guest powers off normally.
+Original paired exports, source/build receipts and exact hashes are local:
+ExFiles/Reports/Fable091/0.91.2/.
+
+Final STANDARD c2d2eabb-870c-4edf-aab3-cddbf0015d9d validates release0.91.2,
+Kernel479, all30original samples with4complete workers,5metric-v2 aggregates
+and6local scores against the frozen Suite3 reference. Overall127.985454.
+Original SHA256 42ec0458d039a76cbf809e07ba2b7459dfb104cedbd7089d4f4f1e7bb73bdb47
+is retained unchanged under ExFiles/Reports/Benchmarks/<run-id>/.
+This Terminal workload does not isolate tray performance. Status:
+lokal validiert; R4OS Server ausstehend (Claim, Import, full GET, server scoring).
+
 Native raster capacity (0.91.1)
 ---------------------------------------------------------------
 Fable R4OS-0001 remains reproducible after the API migration. The original
@@ -868,8 +907,9 @@ call drops the handle and both mirrors; an idle retry opens the new service
 generation and registers all live windows before restoring tray state.
 
 Idle waiting follows the actual tray, clock, blink and retry deadlines.
-The normal tray interval remains 50 ms; a valid revision no longer forces
-10-ms sleeps. Clock reads are capped at once per second, with immediate
+Since0.91.2, tray changes wake Desktop through published activity. The idle
+fallback is500ms and active bursts coalesce at50ms; visibility retry deadlines
+remain independent. A valid revision does not force10-ms sleeps. Clock reads are capped at once per second, with immediate
 refresh after a timezone/format change. AppDefaults, Appearance,
 DeviceManager, Explorer, LogCenter, NetConfig, Services, TimeSettings,
 MemView, R4Code, Notepad and Paint use the SDK EventLoop. Only MemView and

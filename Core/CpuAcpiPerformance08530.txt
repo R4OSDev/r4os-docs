@@ -97,9 +97,68 @@ Koexistenz bleiben ungeprueft. PCC, FFH, neue _OSC-Freigaben, neues CPPC-Enable,
 komplexere ununterstuetzte Domaenen und Live-Katalogerneuerung bleiben unavailable.
 Kein OssiPC-/Remote-/nativer Host-CPU-Test und kein Windows-Lauf. Synthetische
 Aktuation und geladenes AML belegen keine reale Hardwarewirkung.
-Naechste offene Unterversion:0.85.31, tiefere CPU-Idle-Zustaende/sicheres Wecken.
+Die anschliessende0.85.31 behandelte tiefere CPU-Idle-Zustaende/sicheres Wecken.
 
 Gemeinsamer maschinenlesbarer Beleg: Core/CpuAcpiPerformance08530.json.
 Norm: UEFI ACPI6.4, Abschnitt8.4, deklarierte Prozessor-/Leistungsvertraege:
 https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/08_Processor_Configuration_and_Control/declaring-processors.html
 Pinned MIT-uACPI-Herkunft: ThirdParty/uACPI/Provenance.json beim ACPIPLAT-Besitzer.
+
+Fortschreibung0.91.23: SCI-Worker ueber echte IRQ-Zustellung
+----------------------------------------------------------
+ACPIPLAT0.1.8 / Kernel0.1.486 / Contract0.64.97 / SDK0.64.223.
+Der bestehende externe Treiber liest die SCI-Leitung aus dem authentifizierten
+FADT-Katalog. Die optionale DriverApi2-Funktion irq_rearm bei Offset672
+erweitert Version1 auf680Bytes; alle vorherigen672Bytes bleiben unveraendert.
+Die Registrierung verlangt einen exklusiven IOAPIC-Level-Low-Pfad. Shared/MSI,
+Kernelinterrupts und PIC-Kaskade sind ausgeschlossen; eine nicht verfuegbare
+Levelroute faellt beim Binden aus und behaelt die10-ms-Kompatibilitaetsabfrage.
+
+Der residente IRQ-Callback setzt nur den Hinweis und signalisiert ein binaeres
+Workerevent. Der Kernel maskiert vor Callbackabschluss und EOI. uACPI liest
+und quittiert den echten Firmwarestatus im vorhandenen CPU0-Task und gibt
+danach seine exakte IRQ-Bindung frei. Der Rueckfall auf dieser Route betraegt
+eine Sekunde; ohne installierten uACPI-Handler bleibt der Worker geparkt.
+AML-, Notify-, EC-, Lid- und Leistungsbesitzer behalten ihre eigenen Vertraege.
+
+Unregister entzieht neue Aufrufe und maskiert zuerst. Ein aktiver Callback
+oder offener Serviceauftrag behaelt die Bindung samt Modul; Rearm nach dem
+Entzug quittiert nur den Auftrag und kann die Leitung nicht erneut aktivieren.
+ACPIPLAT beendet erst den Plattformtask mit uACPI-Rueckbau, entzieht dann die
+IRQ-Quelle und gibt nach exaktem Join/Release seine Workerevents frei.
+
+Bestehende Hostintegration: alle bisherigen68Leistungs-/17Idle-Firmwarefaelle
+und AML/EC/GPE/Notify-/Fehler-/Stopfaelle bestehen. Die vorhandene Queuegruppe
+deckt zusaetzlich SCI-Parken, binaeres Wake, Sekundenrueckfall, Uninstall und
+Rearmfehler ab. Sechs Kernel-Hostfaelle verwenden die echten Routerbodies
+mit kontrollierten Runtime/IOAPIC/FPU-Leaves; sie pruefen unter anderem
+Maskierung, falsche Identitaet/Besitzer, Callbackflight und Retention/Rueckbau.
+Das ist kein nativer SMP-/Geraetebeleg. SDK/Contract und fremde Helfer werden
+getrennt durch die bestehenden Zig/C/Rust-Pruefungen qualifiziert.
+
+Zwei echte KVM4-Gaeste mit realen QEMU-ACPI-Tabellen vergleichen die exakten
+alten/neuen SCI-Workerkörper. Die private Fixture ergaenzt nur Taskidentitaet,
+IRQ-Zaehler/Zeitstempel und einen echten Fixed-Power-Button-Empfaenger.
+Drei gemessene3-s-Intervalle liefern jeweils300->3Taskwechsel, etwa100->1Hz.
+Zwischen den passiven Stichproben0/2 sinken GPE-Status-/Enable-Byte-Reads
+von1200 auf12 in jeweils etwa6Sekunden, etwa200->2/s. QEMU stellt fuer PM1
+keinen entsprechenden Tracepunkt bereit; die Zahl bezeichnet diese GPE-Reads.
+Zwei system_powerdown-Aufrufe erzeugen echte SCI-IRQs; ihre beiden Button-
+Quittungen folgen nach114976/177459ns. Beide Gaeste enden regulaer.
+Die Fixture installiert ihren Buttonempfaenger nur fuer diesen Test; es wurde
+keine neue produktive automatische Poweroff-Policy hinzugefuegt. Physische
+Firmware, Verbrauch und die physische Freigabe der aeusseren Probe nach
+Monitorende sind nicht durch diese Messung qualifiziert.
+Vollstaendige Originale, fruehe fehlgeschlagene Werkzeugversuche und genaue
+Quellen-/Artefaktbelege: ExFiles/Reports/Fable091/0.91.23/.
+
+Finaler STANDARD0.91.23: 792ddb93-743d-45ee-a6ca-0618431c6519, Suite3/Metric2/KVM4,
+overall126.593873. Alle30Samples mit4abgeschlossenenWorkern,5Metriken
+und6Scores gegen die unveraenderte Referenz28b326e2-4323-4a4c-a0d2-4c1bab4958c0
+lokal neu berechnet. Exakte normale Kernel486-/ACPIPLAT8-Bytes im finalen
+SYSTEM-/BOOT-Image zurueckgelesen. Original-SHA256:
+9ee16ce1918131d976cbb0fd983d4c746d199690be705aab61d58357f62ccc03
+Alle5vollstaendigen Originale: ExFiles/Reports/Benchmarks/792ddb93-743d-45ee-a6ca-0618431c6519/.
+Lokal validiert; R4OS Server ausstehend: Claim, Import, vollstaendiger GET
+und unabhaengige Serverwertung. Kein isolierter Leistungsgewinn aus diesem
+allgemeinen Systemscore abgeleitet.

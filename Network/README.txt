@@ -1,6 +1,38 @@
 ﻿R4OS Networking
 ===============
 
+0.91.12: Retain FIN until its acknowledgment
+-------------------------------------------
+
+Kernel0.1.484 and Recovery Kernel0.1.76 / Recovery0.1.77 keep FinWait and
+the retained FIN retransmit record after an old or duplicate ACK. The
+existing simplified close proceeds after acknowledgment of our FIN or an
+in-order payload-free peer FIN. The next-send equality covers the FIN's
+single sequence byte; the existing serial upper-ACK check still applies.
+This preserves the current close/drain contract without a state-machine
+expansion into the previously deferred FinWait2/LastAck redesign.
+
+The existing graceful-close LIMIT case injects the previous send edge twice
+after FIN and requires the same active identity, one pending FIN and exact
+retransmit token/sequence/tick/flags. The original final correct-ACK close
+and retained peer/listener assertions remain in place. Original receive
+code with this oracle fails LIMIT, demonstrating the prematurely lost FIN.
+Exact source, original outcomes and ELF bindings: ExFiles/Reports/Fable091/0.91.12/.
+
+The corrected normal ELF passes that same LIMIT10, original CORPUS27/R4P8/8,
+NETIOD/NETR4P and actual DHCP, ICMP3/3, independent DNS and exact4KB HTTP/SFTP
+on KVM4/RTL8139. Recovery passes the existing three-case SMP4 matrix:
+BIOS/VirtioNet36.209s, UEFI/RTL813933.558s and offline10.586s; both online
+runs include LIMIT10/CORPUS25 and all previous transport/file/menu/reset
+predicates. These are virtual functional proofs; no hardware claim.
+
+Finaler STANDARD6ddc235e-4d7c-4e72-bfc4-470a9e1e69d0 / Kernel0.1.484 /
+KVM4:30 Rohsamples, fuenf metric-v2-Metriken und sechs Scores gegen die feste
+Originalreferenz nachgerechnet; Gesamtindex132.487299. Status: lokal
+validiert; R4OS Server ausstehend. Rest: Claim, Import, voller GET-Readback
+und unabhaengige Serverauswertung. Normaler Gesamtsystemlauf, kein isolierter
+TCP- oder Recovery-Durchsatznachweis.
+
 0.91.11: Validate TCP acknowledgments before send-state updates
 -------------------------------------------------------------
 

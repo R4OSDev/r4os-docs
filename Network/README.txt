@@ -1,6 +1,41 @@
 ﻿R4OS Networking
 ===============
 
+0.91.11: Validate TCP acknowledgments before send-state updates
+-------------------------------------------------------------
+
+Kernel0.1.483 and Recovery Kernel0.1.75 / Recovery0.1.76 validate ACK segment
+sequence numbers in Established/FinWait and reject acknowledgments beyond
+the actual next send sequence using serial arithmetic. Send catalog, tx_ack,
+send window and sequence edges are retained on rejection. An existing
+immediate ACK intent is published; ordinary transport sends the current ACK
+after state processing. ACK-only input may consume that pending intent;
+ordinary valid pure ACKs do not create replies. RTO observes accepted tx_ack,
+so rejected wire ACK values cannot retire data or create an RTT sample.
+
+The existing LIMIT performance-contract probe checks invalid future ACKs,
+stale/future pure-ACK sequence numbers, exact retained retransmit bytes/token,
+send/receive edges and reply plans, followed by valid partial/full ACKs.
+Both ordinary and u32-wrap send sequences are covered without copying the
+large send catalog. Its original ten categories and earlier assertions stay
+in place. The original receive code plus this exact oracle fails LIMIT;
+the corrected normal ELF passes LIMIT10 and the original CORPUS27/R4P8/8,
+NETIOD, NETR4P, DHCP, ICMP3/3, independent DNS and byte-exact4KB HTTP/SFTP
+on KVM4/RTL8139. These are local virtual-network state/functional proofs.
+
+The native kernel owns the connection state; NetTcp R4P remains the codec.
+Public wire layouts/Query2 and embedded Recovery module bodies retain their
+identities. The separate stale-FIN-ACK close finding remains step0.91.12.
+Specification: https://www.rfc-editor.org/rfc/rfc9293.html#section-3.10.7.4
+Originals, exact ELF/source bindings and scope: ExFiles/Reports/Fable091/0.91.11/.
+
+Finaler STANDARD e5f207dc-aabb-4602-abe3-a34c549041ca / Kernel0.1.483 /
+KVM4:30 Rohsamples, fuenf metric-v2-Werte und sechs Scores gegen die feste
+Originalreferenz nachgerechnet; Gesamtindex127.071962. Status: lokal
+validiert; R4OS Server ausstehend. Rest: Claim, Import, voller GET-Readback
+und unabhaengige Serverauswertung. Dieser normale Gesamtsystemlauf misst
+keinen isolierten Netzwerk- oder Recovery-Durchsatz.
+
 0.91.10: Caller-retained receive operations
 ------------------------------------------
 

@@ -1,6 +1,58 @@
 ﻿R4OS Networking
 ===============
 
+0.91.10: Caller-retained receive operations
+------------------------------------------
+
+Kernel0.1.482 reuses the EtherType reported by Ethernet HANDLE_RX. ARP reply
+construction also reuses that accepted classification; both private callers
+retain their exact input bytes. IPv4 and UDP decode into operations retained
+by the receive activation, whose bounded payloads are consumed before those
+operations leave scope. App/UDP queues still copy and own their messages.
+Legacy private C owned-message records and TX copies, public Query2 tables,
+R4P wire layouts and protocol module versions remain unchanged.
+
+ICMP protocol gating was fixed in0.91.9; UDP already rejected non-UDP before
+constructing an operation. These original subclaims are no longer pending.
+Fixed-array operations remain fully initialized: uninitialized u8 tails are
+not a valid substitute for the existing wire contract. A future borrowed
+module-input ABI is outside this bounded optimization.
+
+The same temporary fixed transfer drains32768 accepted UDP messages of1024
+bytes each, checks exact payload/metadata, and counts reader dispatches and
+explicit kernel staging/owned-message payload copies. Per packet:4->3
+reader dispatches and6286->3164 counted bytes. Single instrumented A/B times:
+624->514ms for32MB. One caller runs in KVM4; operation moves, zeroing,
+provider-internal and asynchronous queue/caller copies are outside this
+counter. This is no uninstrumented or physical-NIC throughput claim.
+
+The normal uninstrumented ELF passes original CORPUS27 and full R4P8/8 on
+KVM4/RTL8139, original NETIOD including independent typed UDP echo,
+NETR4P /SELFTEST, actual DHCP binding, ICMP3/3 and an independent fixed DNS
+A-answer. HTTPGET downloads an exact4096-byte binary, read back through
+SFTP and checked against the independent host SHA256. Its8192-byte total
+response limit is retained; the oversized64KB fixture is preserved as a
+correct rejection. Two new queued UDP cases overwrite decoder inputs before
+draining; the other25 corpus assertions remain byte-identical. Full apps
+are explicitly uploaded temporarily to the private Test guest; its normal
+profile does not install them. Ordinary external shell redirection is
+intentionally rejected, so command results use normal SSH launch I/O.
+
+All source/ELF bindings, original exports, peer bytes, host-fixture failures
+(redirection, inactive Virtio, executable resolution and missing Full apps),
+shutdown and immutable-source readback: ExFiles/Reports/Fable091/0.91.10/.
+No physical-NIC or frozen Recovery optimization is claimed.
+
+Finaler STANDARD a998e28d-dfb7-4dfc-bdce-df5984ae9493 / Kernel0.1.482 /
+KVM4:30 Rohsamples, fuenf metric-v2-Werte und sechs Scores vollstaendig gegen
+die feste Originalreferenz nachgerechnet; Gesamtindex130.155056. Status:
+lokal validiert; R4OS Server ausstehend. Rest: Claim, Import, voller GET-
+Readback und unabhaengige Serverauswertung. Normaler Gesamtsystemlauf;
+der separate instrumentierte Empfangsvergleich ist keine STANDARD-Metrik.
+
+0.91.9: Final STANDARD
+----------------------
+
 Finaler STANDARD e2d044cf-dff5-475b-acbd-4a1f450c1125 / Kernel0.1.481 / KVM4:30 Rohsamples, fuenf metric-v2-Werte und sechs Scores vollstaendig gegen die feste Originalreferenz nachgerechnet. Status: lokal validiert; R4OS Server ausstehend. Rest: Claim, Import, voller GET-Readback und unabhaengige Serverauswertung. Er misst das normale Gesamtsystem, keinen isolierten Netzwerkgewinn.
 
 0.91.9: IPv4 Echo admission

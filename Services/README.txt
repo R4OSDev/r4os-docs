@@ -144,3 +144,50 @@ the configured auto start. Original command tests, retained old
 service completion, stale restart rejection, SSH ancestry refusal,
 malformed configuration and normal shutdown have separate records
 under Research/API-ABI/Migration/0.90.64.
+
+
+Window-service timing and current Fable scope (0.91.26)
+-----------------------------------------------------
+WINSVC 0.1.39 defines its owner-liveness interval as 500 ms and converts it
+through the current logical clock when arming a new deadline. Ordinary
+requests preserve that deadline. Its registration budget is 1000 ms and
+diagnostic service calls use 1200 ms. Owner interest arms/disarms the sweep;
+the next pending tray, graphics, launch, evidence, action or diagnostic
+deadline still wins independently. An unavailable clock retains owners
+without inventing a frequency or entering an immediate deadline loop.
+The two bounded one-tick registration/open retries remain scheduler
+cooperation, rather than periodic idle work.
+
+Fable 0026 is partially stale after the API migration: RegEdit already uses
+EventLoop with Forever; UpdateCenter was retired and SysUpdate now enters
+the terminal update engine. R4STD already exposes WritebackPolicy.forHz
+with millisecond defaults (lazy 150/1000 ms, soon 50/500 ms, sync 0/250 ms).
+An actual-source host witness checks these at 100/1000 Hz. Its explicit tick
+fields/defaults remain a compatibility surface; no current audited app uses
+the old implicit policy. The SDK, Contract, Kernel and Library artifacts
+remain unchanged.
+
+The existing WINSVC tests retain original owner/generation/error/independent
+deadline assertions, including the original 100 Hz case, and add 1000 Hz and
+unknown-frequency retention to that same case. Full owner target 10/10 and
+existing repository target 51/51 pass. Native evidence uses the original 38
+and corrected 39 source bodies with identical passive counters, an actual
+minimal GUI process declaring the existing Desktop-host role, real tray
+sync/upsert/remove, cooperative close and exact terminal reaping. It does
+not claim product Desktop presentation, physical graphics or Windows tests.
+Over the paired three-second KVM4 samples, live-owner sweeps and process
+checks fall from 19.99/s to 2.00/s; timer wakes fall from 19.99/s to 6.00/s.
+The empty service performs zero owner work on both versions; its separate
+200 ms central stop check remains. Both original runtime selftests, tray
+operations, exact child reaping, owner retirement and normal shutdown pass.
+Sources, raw setup failures, exact installed bytes and results:
+ExFiles/Reports/Fable091/0.91.26/.
+
+Final STANDARD b4d8f63f-c42d-469e-92ee-619db775d99b (Suite 3, KVM4) completed with
+overall 133.764579. All 30 raw samples, five metrics and six scores
+were independently recomputed against the frozen reference. The normal
+WINSVC 39 payload and Kernel 486 were read back from the actual source image;
+private actors and the unchanged browser were absent. Full original records:
+ExFiles/Reports/Benchmarks/b4d8f63f-c42d-469e-92ee-619db775d99b/
+Status: lokal validiert; R4OS Server ausstehend (Claim, import, full GET
+readback and independent server scoring).

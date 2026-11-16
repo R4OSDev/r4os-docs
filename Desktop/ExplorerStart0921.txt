@@ -1,0 +1,153 @@
+﻿Explorer: Computer-Start (R4OS 0.92.1)
+======================================
+
+Abnahmeumfang
+-------------
+Userentscheid16.11.2026: Hardwareabnahmen fuer die gesamte Roadmap0.92.X
+sind verworfen. Weitere Abnahme ausschliesslich QEMU/KVM mit vier CPUs.
+Die zuvor erhobenen OssiPC-Werte bleiben Analysebelege; es gibt keine
+native Nachmessung und keine Hardwarefreigabe dieses Releases.
+
+Vorherige Startphasen auf OssiPC
+------------------------------
+Ausgangsstand Release0.91.40, Kernel0.1.490, Explorer0.1.37. Explorer,
+Desktop0.1.217 und WINSVC0.1.39 wurden komplett zurueckgelesen und gegen die
+lokalen Artefakte verglichen. Eine ausschliesslich temporaere Explorerkopie
+setzt monotone Zeitmarken; sie schreibt ihr Ergebnis erst nach dem ersten
+Laufwerksframe. Die gleiche Messkopie bleibt fuer die Folgeprobe erhalten.
+
+Phase                                      B1 (ms)       B2 (ms)
+Modullader                                   0.543         0.485
+Ladeende bis R4XStart                     29670.430     28968.328
+Explorer-Einstieg bis erster Frame             5.229         5.773
+Explorer-Einstieg bis Laufwerksframe           8.813         8.607
+ASSOC/Subsystemkatalog                         3.039         3.825
+Toolbar-Symbole                               1.334         1.299
+Dateisymbole                                  0.526         0.262
+Laufwerksaufzaehlung                           0.169         0.242
+
+B1 ist der erste neue Messprozess, B2 dessen Wiederholung. Beide hatten
+bereits gelesene Eingabedateien; dies ist kein Kaltstartvergleich. Der
+ordentliche Desktop-Linkpfad wurde extern ausgeloest. Seine rund29s sind
+nicht mit den vom User beim Mausklick beobachteten rund5s gleichzusetzen.
+Weitere Starts ohne regulaere Aufrufquittung sind keine Latenzstichproben.
+
+Computer verwendet bereits driveInfoGeometry ohne freie-Platz-Berechnung.
+Die genaue Platzabfrage erfolgt separat im geoeffneten Laufwerksordner
+nach dessen Inhaltsframe. Konfigurations- und Symbolzugriffe begrenzen die
+beobachtete lange Vorlaufphase ebenfalls nicht.
+
+Ein begrenzter Task-Sampler beobachtete den noch nicht angebundenen
+GUI-Haupttask ueber mehrere Sekunden durchgehend Running; seine run_ticks
+stiegen mit der gesamten Beobachtungsdauer. Andere Diensttasks warteten
+zunehmend an einem gemeinsamen Mutex. Dessen konkrete Identitaet ist durch
+diese Messung nicht bewiesen. Der Quellpfad wartet vor R4XStart auf
+start_attach_pending und rief dabei ohne lokalen Konkurrenten immer wieder
+Yield auf. Dadurch blieb dieser Task aktiv und belastete den SMP-Runtimepfad.
+
+Aenderung
+---------
+Kernel0.1.492 parkt diesen Haupttask auf dem bereits residenten
+GUI-Aktivitaetskanal. Runtime prueft Pending/Close/done/Kanalschluss und
+meldet den Waiter atomar an. Die Fensteranbindung loescht Pending und weckt
+nach Freigabe der Registry-/Programmbesitzer auch bei unveraendertem
+Fensterpointer. Close/Kill und physisches Retirement behalten ihre Besitzer.
+Fremde GUI-Aktivitaet fuehrt nur zu erneuter Pruefung und weiterem Parken.
+Es entstehen weder ein Metadaten-Cache noch eine zweite Anbindungsqueue.
+Explorer und alle anderen Modulartefakte bleiben unveraendert.
+
+Die erste vernetzte QEMU-Probe mit Kandidatenkernel491 zeigte zusaetzlich
+einen Guardtreffer des 64-KB-Tasks net-rx-ap bei kalter NETTCP.R4P-Aktivierung.
+CR2/RSP lagen unter dem verpflichteten Stack; Serienlog und Stackabbild sind
+erhalten. Der tiefe NTFS-/VM-Freigabepfad lief dabei unter mehreren grossen
+TCP-Wirerecords. Kernel492 aktiviert dasselbe bedarfsgeladene Protokoll vor
+der getrennten RX/TX-Verarbeitung. Die bisherigen Decoder pruefen weiterhin
+alle Eingaben/Fehler; Stackgroesse und Protokollpolitik bleiben unveraendert.
+Dies ist ein QEMU-Befund; eine Gleichsetzung mit den nativen Bluescreens
+ist damit nicht bewiesen.
+
+Der Quick-Auswerter erwartete noch zehn NETWORK-LIMIT-Faelle, waehrend der
+bestehende Kernelvertrag elf meldet. Erwartung und vorhandene negative
+Selbsttest-Fixtures sind auf elf abgeglichen. Derselbe unveraenderte Quick-
+Gastlog besteht danach die vollstaendige Markerpruefung. Kein neues Dauergate.
+
+Finale QEMU-Abnahme
+------------------
+Normaler Full-Desktop, KVM4, 1GB RAM, Kernel0.1.492. Die Messkopie und ihre
+14 Messpunkte sind dieselben wie beim Vorbefund; A1 ist der erste neue
+Messprozess nach VM-Boot, A2 die Wiederholung nach Close und exaktem Reap.
+Cache-/CPU-/Storagekontexte unterscheiden sich vom nativen Vorbefund;
+aus beiden Rechnern wird kein Vorher/Nachher-Geschwindigkeitsfaktor gebildet.
+
+Phase                                      A1 (ms)       A2 (ms)
+Modullader                                  19.913        12.151
+Ladeende bis R4XStart                         7.363         7.249
+Explorer-Einstieg bis erster Frame            11.443         8.693
+Explorer-Einstieg bis Laufwerksframe          61.413        12.061
+Ladebeginn bis Laufwerksframe                 90.371        33.081
+Laufwerksaufzaehlung                          41.139         0.065
+
+Der unabhaengige Parktest sieht vor Anbindung den echten Taskzustand
+Blocked mit wait_reason=gui-attach und run_ticks=0. RequestClose liefert
+Exit0/Grund1, Hard Kill Exit-9/Grund2; beide exakten Handles haben eine
+Completion und bestaetigtes Reap. Beide Desktop-Linkauftraege wurden nach
+Close/Reap freigegeben. Der unveraenderte installierte Explorer bestaetigt
+/WAITFRAME und zeigt im Bild alle drei Laufwerke. Ein QMP-Mausversuch auf
+dem Computer-Symbol zeigt ebenfalls den fertigen Inhalt; die Bildschirm-
+stichprobe ist ein Sichtbeleg und keine exakte erste-Pixel-Zeitmessung.
+
+Die kalte TCP-Probe laedt NETTCP.R4P jetzt ohne Guardtreffer. Anschliessend
+funktionieren SSH und der komplett bytegleich zurueckgelesene570564-Byte-
+Diagnoseupload per FTP. Der normale Full-Gast endet durch POWEROFF mit
+QEMU-Exit0 und ohne CRASH-/STACKFAULT-/PANIC-Marker.
+
+Kernel-fmt, Clippy und normaler gepruefter Releasebau sind erfolgreich.
+Der vollstaendige491-Kandidatenlauf bestand die vorhandenen SMP4-
+Funktionsmarker. Auf492 besteht die finale STANDARD-Phase, und die separate
+Wiederholung der unveraenderten kompletten SMP4-Funktionstests besteht den
+strengen Originalvertrag samt BASIC-/GB-/SNES-Laufzeitberichten, Explorer-
+Selbsttest, API-Paritaet, Heap/TLB/Locks/Clock und regularem Poweroff.
+
+Ein vorheriger492-Gesamtlauf scheiterte generisch an desktop-check. Dadurch
+wurden GB-Testdateien nicht erzeugt; der spaetere Explorer-Zuordnungsfehler
+ist eine Folge dieses Abbruchs. Katalog, ASSOC und Konfiguration des
+kanonischen Images wurden bytegleich zu ihren vorgesehenen Eingaben geprueft.
+Der vorhandene Runner hatte das erste Arbeitsimage bereits bereinigt; dessen
+konkreter Desktop-Fehlergrund ist nicht gesichert. Er bleibt als eigener
+Folgepunkt0.92.2 zur Belegsicherung/Eingrenzung offen. Der strenge unveraenderte
+Wiederholungslauf samt Original-NDJSON ist erhalten; kein Fehlversuch wird
+als bestanden umgedeutet.
+
+Finaler STANDARD: 3654eb38-a4e1-46de-bdc6-fb0e4ebe14f4, Kernel0.1.492,
+30Rohsamples mit jeweils4 abgeschlossenen Workern,5Metriken,6gueltige Scores.
+Feste Referenz: 28b326e2-4323-4a4c-a0d2-4c1bab4958c0, spectra-standard-3.
+Scores: scheduler_sync38.215170, memory219.783328, ipc105.066503,
+lifecycle293.829139, filesystem_io138.125577, overall129.066269.
+Originalexport-SHA256:
+06afd589be3732f8bc0ed383f63d720d95f73dfe6bdcc62b4b691f9a5bbf5813.
+Status: lokal validiert; R4OS Server ausstehend. Rest: Originalimport,
+vollstaendiger GET-Readback und Serverreferenzauswertung. Der491-Lauf bleibt
+als Kandidatenbeleg erhalten; die492-Codeaenderung begruendet den finalen
+separaten Pflichtlauf, ohne Wiederholung fuer bessere Scores.
+
+Native Updategrenze
+------------------
+SYSUPD verifizierte PaketE921/Kernel491 und meldete Pending restart. Zuvor
+war die private Kernelstage an knappem BOOT-Platz gescheitert; nach Abbruch
+des vorbereitenden Batches erzeugte die bytegleiche SYSUPD-Neubestaetigung
+des vorhandenen STDCHILD1.0.1 bei unveraendertem Release0.91.40 ein gueltiges
+Transaktionsjournal. Die besitzergepruefte Archivierung eines alten Backups
+bewahrte dessen vollstaendige Daten und schuf Platz fuer den Kernelbatch.
+Nach COMMIT meldete der User einen Page Fault (Vector14, Error...02,
+RIP0xFFFFFFFF8001891A) und nach einmaligem Recovery-Start erneut Bluescreen.
+Aktiver Kernel und Post-Boot-Abschluss wurden nicht bestaetigt. Danach
+entzog der User OssiPC fuer diese Roadmap; seitdem keine Hardwareaktionen.
+Kernel492 wird im Rahmen dieses Auftrags ausschliesslich in QEMU geprueft.
+
+Belege
+------
+Lokale Rohdaten: ExFiles/Reports/Core/0.92.1-explorer-start/.
+Temporäre Messinstrumentierung und Aufrufe: Temp/Explorer092Run/.
+Benchmarkoriginale: ExFiles/Reports/Benchmarks/<run_id>/.
+Besitzer: Kernel/Rust/program/{entry,gui_activity,program_api}.rs und
+Kernel/Rust/net/{operations,tcp_wire}.rs; Explorerquellen unveraendert.

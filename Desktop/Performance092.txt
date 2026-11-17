@@ -658,3 +658,83 @@ rekonstruiert; Gesamt131.212713 ist allgemeiner Systemkontext. Genau ein
 finaler Lauf; lokal validiert; R4OS Server ausstehend (Originalimport,
 vollerGET-Readback und Serverreferenzauswertung). Keine native AMD-Messung.
 Originale: ExFiles/Reports/Benchmarks/8374504c-9cae-4629-8a60-0e1dc5089adc/.
+
+0.92.12: NVIDIA-Paketwrites und begrenzte Arbeitsscheiben
+------------------------------------------------------
+R4OS-0040 betrifft den Treiber NVIDIA339. Die Analyse enthaelt bereits
+ueberholte Teile: Drei residente Renderpakete mit eigenen CE-Belegen,
+A/B/A-Wiederverwendung und der Weg ohne erneuten CE-Upload sind vorhanden.
+Auch begrenztes Nachpolling (8Schritte/8us) vor dem Wait und ein endlicher
+Workcallback von8Schritten/250us bestehen seit0.91.8. GET ersetzt keine
+GPU-Fence. Ein zweiter laufender GR-Auftrag wuerde die gemeinsamen Borrow-,
+Permit-,VA- und Parameterlebensdauern veraendern; dafuer fehlt ein qualifizierter
+Geraetevertrag. Ohne NVIDIA-Hardware ist auch keine konkrete CE-/GR-IRQquelle
+nachgewiesen. Beide Erweiterungen werden deshalb nicht zugelassen.
+
+NVIDIA340 behaelt den privaten WB-Pushbuffer und seine bisherigen GPFIFO-/
+Semaphorgrenzen. Der Encoder validiert weiterhin das vollstaendige Paket;
+vor Publikation prueft die Admission saemtliche wirklichen Paketbytes.
+Nur identische32Bit-Graphicsworte brauchen keinen erneuten Store. Verglichen
+wird der echte, nicht mehr laufende private Slot, kein CPU-Schatteneintrag.
+Geaenderte oder beschaedigte Worte werden geschrieben. Releasepunkt, exaktes
+Ticket, mfence/PUT, Stop, Reset und Freigaben bleiben beim bisherigen Besitzer.
+Copy-,Video- und native Batchpakete behalten ihre bisherigen Writes.
+
+Die acht vorhandenen Workplaetze erhalten eine begrenzte Groessenwahl ohne
+neue Allokationen. Ein einzelner Producer behaelt bis1MB/1MP je Abschnitt;
+der Rest des Auftrags begrenzt die tatsaechliche Auswahl. Verschiedene
+konkurrierende Producer teilen diesen Hoechstwert. Innerhalb der letzten
+250us der Auftragsdeadline wird dieser Anteil nochmals halbiert. Das ist
+ein Schedulinghinweis unter Verwendung des vorhandenen Workbudgets, keine
+Schaetzung der GPU-Dauer oder Zusage, die Deadline zu schaffen. Derselbe
+Producer mit mehreren Jobs erhaelt keinen mehrfachen Anteil. Eine4KB-/4096-
+Pixel-Untergrenze gilt nur oberhalb expliziter kleiner konfigurierter Werte;
+512Byte/128Pixel bleiben gleich. Die alten1MB-/1MP-Hoechstwerte werden nie
+erhoeht. Producerturns wechseln weiterhin erst nach wirklichem Semaphor.
+
+CopyJob haelt die gewaehlte Grenze gemeinsam mit seinem Teilende; die echte
+Port-Admission rekonstruiert genau diesen Transfer statt mit spaeterer Uhr
+oder Konkurrenz neu zu entscheiden. Renderjobs halten ihre gewaehlte Grenze
+ueber CE-Upload, Operandpruefung und GR-Beleg. Erst vor einem neuen Abschnitt
+wird erneut entschieden. Nach Deadlineablauf und bestaetigtem GR-Ende kann
+ein unvollstaendiger Job fehlschlagen; eine abgelaufene Uhr gibt niemals
+laufende GPU-Arbeit oder ihre Aliase frei.
+
+Vor/nach funktionaler Aenderung gelten dieselben sauberen SDK229/Contract99/
+Library69-Pins. Der private alte Algorithmus und sein normal gebautes Artefakt
+sind erhalten. Final14/14Buildschritte und54/54urspruengliche Tests bestehen:
+31Owner,11echte Driver-Lifecycle,10Firmware-/Storagegruppen,2Firmwaretests.
+Der originale RM-Formatpeer bestaetigt6588Checks/5833Vergleiche/10Records mit
+aktiven Guardseiten. Paket-, Pixel-, Farb-, CE-/GR-, Video-, Nativebatch-,
+Cursor-, Pacing-, Stop-, Reset- und physische Retirementorakel bleiben.
+Keine neue Dauertestgruppe.
+
+Im echten Graphicsringmodell schreibt die naechste physische Barrier genau
+ein von elf Commandworten. Erneutes Vorbereiten nach exakt bestaetigtem
+unpubliziertem Abort braucht null; ein beschaedigtes Wort genau eine Reparatur.
+Alle wirklichen Paketbytes bestehen danach die urspruengliche Port-Admission.
+Das sind Storezaehler, keine gemessene Hardwarezeit; die erforderlichen
+Vergleichsloads und zwei gebuendelten Statistikupdates je Paket bleiben.
+Die bestehende1080p-Abdeckung ist mit einem Producer bei zwei Abschnitten,
+mit zwei Producern bei vier und nahe der Deadline bei acht lueckenlos.
+2MB+17Byte-Copy ist in fuenf/neun Abschnitten lueckenlos. Die alten kleinen
+512Byte-/128Pixel-Grenzen und der echte CE6/GR6-Fall mit Cursoraufnahme
+zwischen tatsaechlichen Abschluessen bestehen unveraendert.
+
+Finales normales NVIDIA340-Artefakt:108064228Bytes, SHA256:
+704309a776505df42c1fc02e9dcb4a3d064c55edb44c6a9f13bb8e3786b8f1cd.
+Private Vorher-/Nachherartefakte, Quellen, unveraenderte Originalorakel und
+Qualifikation: ExFiles/Reports/Desktop/0.92.12. Kernel493 bleibt unveraendert.
+Diese CPU/MMIO-Modelle belegen weder physische CE-/GR-Ausfuehrung noch
+Interruptquelle, Kohärenz, Scanout oder GPU-Latenzwirkung. Der folgende
+STANDARD ist ausschliesslich allgemeine Systemregression in KVM4.
+
+Genau ein finaler STANDARD/SMP4:29f5ec5f-9426-4e1a-ac5a-e6b568fd540f,
+Overall124.533382. Alle30Messungen, je4fertige Worker,5Metriken/6Scores,
+Original-Gastdateien und die fest gepinnte Referenz sind lokal validiert.
+Kernel493 wurde wirklich aus BOOT zurueckgelesen; SHA256:
+95f3624d37ce39fe6b8ae0a690172ac2eb70ffd744da07e2a1f6853bd4b2ac3b.
+Der Score wird unveraendert aufbewahrt und belegt keine NVIDIA-Beschleunigung.
+Status: lokal validiert; R4OS Server ausstehend. Rest: Originalimport,
+vollstaendiger GET-Readback und serverseitige Referenzauswertung. Originale
+unter ExFiles/Reports/Benchmarks/29f5ec5f-9426-4e1a-ac5a-e6b568fd540f.

@@ -298,14 +298,14 @@ function Test-InventoryMatchesFiles($Inventory, [string[]]$DocumentFiles) {
     }
 }
 
-function Write-InventoryAtomic([object[]]$Entries) {
+function Write-InventoryAtomic([object[]]$Entries, [string[]]$DocumentFiles) {
     $temporaryPath = $inventoryPath + '.tmp.' + [Diagnostics.Process]::GetCurrentProcess().Id
     $backupPath = $inventoryPath + '.backup.' + [Diagnostics.Process]::GetCurrentProcess().Id
     try {
         $text = ConvertTo-InventoryText $Entries
         [IO.File]::WriteAllText($temporaryPath, $text, $utf8NoBom)
         $temporaryInventory = Read-Inventory $temporaryPath
-        Test-InventoryMatchesFiles $temporaryInventory (Get-DocumentFiles)
+        Test-InventoryMatchesFiles $temporaryInventory $DocumentFiles
 
         if (Test-Path -LiteralPath $inventoryPath -PathType Leaf) {
             if (Test-Path -LiteralPath $backupPath -PathType Leaf) {
@@ -327,12 +327,11 @@ function Invoke-InitialBuild {
     $documentFiles = @(Get-DocumentFiles)
     $descriptions = Read-PreviousDescriptions $inventoryPath
     $entries = @(New-InventoryEntries $documentFiles $descriptions -InitialMode)
-    Write-InventoryAtomic $entries
+    Write-InventoryAtomic $entries $documentFiles
     Write-Host ('Docs-Inventar initial aufgebaut: ' + $entries.Count + ' Dokumente, Status New.')
 }
 
-function Invoke-IncrementalUpdate {
-    $documentFiles = @(Get-DocumentFiles)
+function Invoke-IncrementalUpdate([string[]]$DocumentFiles) {
     $inventory = Read-Inventory $inventoryPath
     $actualKeys = [Collections.Generic.HashSet[string]]::new($keyComparer)
     foreach ($relativePath in $documentFiles) {
@@ -356,13 +355,12 @@ function Invoke-IncrementalUpdate {
     foreach ($key in $added) { Write-Host ('NEU: ' + $key) }
     foreach ($key in $removed) { Write-Host ('ENTFERNT: ' + $key) }
     $entries = @(New-InventoryEntries $documentFiles $inventory.ByKey)
-    Write-InventoryAtomic $entries
+    Write-InventoryAtomic $entries $documentFiles
     Write-Host ('Docs-Inventar aktualisiert: +' + $added.Count + ', -' + $removed.Count +
         ', gesamt ' + $entries.Count + '.')
 }
 
-function Invoke-Gate {
-    $documentFiles = @(Get-DocumentFiles)
+function Invoke-Gate([string[]]$DocumentFiles) {
     $inventory = Read-Inventory $inventoryPath
     Test-InventoryMatchesFiles $inventory $documentFiles
     Write-Host ('Docs-Inventar-Gate erfolgreich: ' + $inventory.Entries.Count + ' Dokumente.')
@@ -371,10 +369,10 @@ function Invoke-Gate {
 try {
     if ($Initial.IsPresent) {
         Invoke-InitialBuild
-    } elseif ($Check.IsPresent) {
-        Invoke-Gate
     } else {
-        Invoke-IncrementalUpdate
+        $documentFiles = @(Get-DocumentFiles)
+        if (!$Check.IsPresent) { Invoke-IncrementalUpdate $documentFiles }
+        Invoke-Gate $documentFiles
     }
     exit 0
 } catch {

@@ -562,3 +562,99 @@ Virtio-/GPU- oder Latenzscore. Genau ein finaler Lauf. Lokal validiert;
 R4OS Server ausstehend: Originalimport, vollerGET-Readback und unabhaengige
 Serverreferenzauswertung. Original samt Kontext und SHA256:
 ExFiles/Reports/Benchmarks/a713fcf7-7fb0-4628-9ed4-ed8adb849138/.
+
+0.92.11: AMDGPU-Mappings und Parameterbereich
+-------------------------------------------
+AMDGPU99 verwendet im regulaeren Renderer begrenzte abgeleitete Mappings und
+Bildviews erneut. Der aktuelle gemeinsame Bildpfad verlangt geraetelokale
+BOs: dort gibt es keine System-Segmentabfragen. Der vorherige Zeilen-/SG-
+Hinweis betrifft SDMA-/Systemmappingpfade. Bestaetigt sind pro gemeinsamem
+Renderjob Layoutberechnung, neue PTEs und beidseitige Hubinvalidierung bei
+Publikation/Abbau sowie4096einzelne Parameterbyte-Stores. Explizite native
+VA-Bindings besitzen schon ihre eigene persistente Lebensdauer; diese wird
+nicht ersetzt. SDMA-/Displayaufnahme und deren feste Kapazitaeten bleiben.
+
+Die acht bestehenden Renderplaetze behalten zusammen hoechstens32MB an
+abgeleiteten Mappings. Schluessel: BO/Generation, vollstaendiger Descriptor,
+Seitenrechte und Filter, feste Platz-VA, Speicher- und Backendepoch sowie
+Producer-Timeline. Die neue kanonische Queueleihe erlaubt jede Ausfuehrung;
+ein behaltenes Mapping allein erlaubt sie nicht. Erst exakter Fenceabschluss
+oder bestaetigter Stop erlaubt das Ende seiner Uses. Closing/gone Producer,
+Identitaetswechsel, Budget und Rendererclose entfernen idle PTEs, bestaetigen
+beide TLBs und geben dann GPU-VA-Leihe/Alias frei. Gescheiterte Freigaben
+behalten den alten Alias; dessen Platz bleibt bis zur Bereinigung gesperrt.
+
+Vor neuen nativen Allokationen werden idle abgeleitete Mappings verworfen
+und freigewordene UMA-Extents beim physischen Besitzer eingesammelt. Aktive
+Fences bleiben erhalten. Das Ziel wird bei einem zu grossen Quell-/Zielpaar
+fuer die Retention bevorzugt; der verworfene Quellcachekandidat behaelt sein
+aktives Mapping bis zum echten Drawabschluss. Bei fehlender optionaler
+Owner-Info-Abfrage bleibt das alte jobbezogene Mappingverhalten erhalten.
+Die echte SDK-Query fordert die vollstaendige aktuelle Tabelle an. Der neue
+positive Hostpeer deklariert ebenfalls ihre echte Laenge; die erste Probe
+mit dem alten128Byte-Praefix wurde korrekt abgelehnt. Kernel493 bleibt gleich.
+
+Gemeinsame und YUV-Parameterwrites umfassen den kompletten shaderlesbaren
+Bereich:1024Bytes Descriptor/Farbe/Plane plus160Bytes je gemeinsamem Push,
+bei YUV ein Push. Ein bis sechzehn Befehle ergeben1184bis3584Bytes statt
+pauschal4096. Ausgerichtete volatile32Bit-Stores ersetzen die Byte-Schleife;
+HDP-Barriere, unveraenderlicher Slot und exakte Fence bleiben. Clipped-empty
+Draws brauchen weiterhin keinen Parameterupload. Native PM4-Auftraege behalten
+ihre vorhandene direkte Behandlung.
+
+Gleicher SDK229/Contract99/Library69-Stand vor/nach funktionaler Aenderung:
+Das Originalartefakt und43originale Besitzergruppen sind erhalten. Im
+bestehenden echten Render-/Memory-/PM4-/Timeline-Peer arbeiten drei256x128-
+Fills auf einem131072Byte-BO mit verschiedenen Fences und frischen Aliasen.
+Ergebnis: ein Layout/eine Mappingpublikation, zwei Hits und32behaltene
+Leaf-PTEs statt jeweils drei Aufbauten. Nach realem Modellabbau sind PTEs,
+GPU-VA-Leihe, Aliase, physische Charge und MMIOfenster wieder frei. Alter
+vollstaendiger Lebenszyklus:192Leaf-Schreib-/Loeschvorgaenge, sechs Controller-
+Flushes/zwölf Hubinvalidierungen; neu64/2/4. Diese Zahlen sind aus den echten
+Aufbau-/Abbaupfaden hergeleitet, keine GPU-Messwerte; gleiche Programminitiali-
+sierung bleibt ausserhalb dieses Vergleichs. Neue Counts und PTElookup im
+Peer bestaetigen die Wiederverwendung.
+
+Die drei Jobs schreiben3552Bytes/888Dword-Stores statt12288Bytes/12288Byte-
+Stores. Jeder shaderlesbare Bytewert stimmt mit dem originalen Encoderoutput
+ueberein; der unreferenzierte Rest des4096Byte-Slots bleibt als Guard gleich.
+Die vorhandene Besitzergruppe prueft ausserdem Closing, Budget0, Allokations-
+Druck, Backendepoch-Fehler, Freigabefehler mit retained Alias und kompletten
+Close. Alle43urspruenglichen Memory-/Queue-/SDMA-/Display-/Reset-/Lifecycle-
+Gruppen bestehen, einschliesslich ihrer bisherigen Hardwarefeld-/Original-
+paket-/Pixelorakel. Keine neue Dauertestgruppe. Diese CPU/MMIO-Modelle
+bestaetigen weder AMD-Hardwareleistung noch echte TLB-,Kohärenz-/IRQwirkung.
+
+Die anderen aktuellen Besitzer wurden getrennt geprueft: SDMA mappt zwei
+BOs je Auftrag; bei zwei128KB-System-BOs sind das64Segmentabfragen,
+128Leaf-Schreib-/Loeschvorgaenge und4Controller-/8Hubinvalidierungen.
+Ein zusammenhaengender128KB-Copy nutzt7SDMA-Worte plusNOP, keine4KB-Parameter-
+Schleife. Bis64MB werden bereits in begrenzte4MB-Pakete innerhalb eines
+IBs/einer Fence zerlegt. AchtJobplaetze bleiben. Ein weiteres Zusammenlegen
+kanonischer Jobs ist ohne belegten Doorbellengpass und passende geteilte
+Lebensdauer nicht begruendet; die Aufnahme wird nicht erweitert.
+
+Present haelt beide Ziel-Scanoutmappings schon ueber Frames. Die temporaere
+128KB-Systemquelle erfordert32Segmentabfragen,64Leaf-Vorgaenge und2Controller-
+/4Hubinvalidierungen je Frame; eine native Quelle hat keine System-SG-Abfrage.
+Diese Quelle und SDMA behalten ihren konservativen bisherigen Abbau. Die
+neue Retention betrifft regulaere Renderjobs; explizite native VA-/YUV-Bindings
+besassen bereits eine eigene Wiederverwendung. Herleitungen stehen getrennt
+von Modellzaehlern und von nicht ausgefuehrten Hardwaremessungen.
+
+Regulaerer AMDGPU99 mitSDK229/Contract99/Library69: finale43Besitzergruppen,
+urspruengliche Shader-, Register-,39C-/Bridge- und27Ressourcen-Audits bestehen.
+Artefakt19490622Bytes, SHA256:
+921d021d1d8a7e1cb486505a2834559820a98bf163e79a63cafa8c92576d02a3.
+Der alte Algorithmus ist als normal gebautes privates Vergleichsartefakt
+auf demselben SDK-Stand erhalten. Source-Hashes des finalen Standes stimmen.
+AMDGPU besitzt IMAGE_SCOPE=none und wird durch diese Modelle/Builds getrennt
+qualifiziert; der allgemeine QEMU-Benchmark fuehrt keine AMD-GPU-Befehle aus.
+
+Finaler STANDARD8374504c-9cae-4629-8a60-0e1dc5089adc: Release0.92.11,
+Kernel493/KVM/SMP4, spectra-standard-3.30Originalsamples mit je vier fertigen
+Workern, fuenf Metriken/sechs Scores gegen dieselbe Referenz lokal
+rekonstruiert; Gesamt131.212713 ist allgemeiner Systemkontext. Genau ein
+finaler Lauf; lokal validiert; R4OS Server ausstehend (Originalimport,
+vollerGET-Readback und Serverreferenzauswertung). Keine native AMD-Messung.
+Originale: ExFiles/Reports/Benchmarks/8374504c-9cae-4629-8a60-0e1dc5089adc/.

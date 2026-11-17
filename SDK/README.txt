@@ -1,35 +1,35 @@
-﻿Current published SDK set (14 November 2026)
+﻿Current published SDK set (17 November 2026)
 ============================================
-SDK 0.64.218 / Contract 0.64.95 / Libraries 0.64.64 is publicly available:
-https://github.com/R4OSDev/r4os-sdk/releases/tag/v0.64.218
-Release ID: 445521259; published: 2026-11-14T19:01:16Z.
-This is the SDK source/profile set used by R4OS 0.90.92 / Kernel 0.1.479.
-The SDK commit is 624c0359329011f7e574aa0943e5bb10249f3a73; its three original
-profile files remain unchanged. SDK-Release.json and SHA256SUMS.txt bind all
-eleven assets: four source archives, matched host tools, twelve exact normal
-Runtime-R4Ls, capabilities, qualification, README and the package manifest.
+SDK 0.64.230 / Contract 0.64.99 / Libraries 0.64.69 is publicly available:
+https://github.com/R4OSDev/r4os-sdk/releases/tag/v0.64.230
+Release ID: 448387638; source commit:
+f92d512788512d3031de37aada39bdf2be870f6d.
+This is the matching SDK/profile set for R4OS 0.92.12 / Kernel 0.1.493.
+SDK-Release.json and SHA256SUMS.txt bind the complete eleven-asset delivery.
+All public assets were fully downloaded anonymously and checked by size/SHA256;
+the canonical Package.ps1 Verify accepted the public payload.
 
-All assets were completely downloaded anonymously and checked by size and
-SHA256. The canonical SDK Package.ps1 verifier accepted the public payload.
-Fresh extracted sources passed both component-set guards, all 167 exported
-tool/runtime file hashes, compiler-free capabilities, the existing language
-parity review and one real normal Zig/C/Rust console build each. These are
-host builds; previous whole SDK/native results retain their actual scope.
-Windows binaries are included; new Windows/hardware/guest/benchmark execution
-is not claimed. Technical platform generation2 is the only normal path;
-independent Library-V1 interfaces remain valid.
+Fresh separate source/tool extraction passed sixteen profiles, both component
+sets, all 167 exported file bindings, capabilities and language-parity review.
+One new normal Zig, C and Rust console consumer was built from this package.
+SDK 230 also corrects the stale parity inventory rejected by the fresh SDK 229
+check. Previous ABI/callback executions retain their actual source identities.
+Linux/Windows host tools are supplied; no Windows, hardware or new consumer
+guest execution is inferred from cross-build or packaging.
 
-Components.json deliberately selects Recovery source snapshot 0.1.73 at
-5f5e180d94aa3e727a89c2aef59e4797880c4c5d, with its frozen SDK218/Contract95/
-Library64 source trees. This is distinct from public Recovery binary 0.1.74.
-Do not replace these SDK component roots with a different latest checkout.
-The current 16 profile definitions come from Describe and SDK-Release.json;
-older eleven-profile examples below retain their dated source identity.
-Package.ps1 requires a fully qualified ToolsRoot; resolve the extracted
-Tools directory with (Resolve-Path Tools).Path before passing it.
-Current exact package instructions and qualification: release README.txt,
-SDK-Release.json and SDK-Qualification.json. Publication evidence remains
-under Research/ReleasePublication/20261114/SDK/ in the project workspace.
+The twelve Runtime-R4Ls contain qualified R4GFX 0.1.44 plus eleven exact retained
+published identities. Components.json deliberately selects Recovery source
+snapshot 0.1.73 at 5f5e180d94aa3e727a89c2aef59e4797880c4c5d with frozen
+SDK218/Contract95/Library64 trees. This differs from the current independent
+Recovery 0.1.78 binary, which is included in the R4OS images. Do not replace
+these selected SDK source roots with another latest checkout.
+
+Profiles/Build.json, Tools.json and Components.json alone select system policy.
+Use absolute SdkRoot/ContractRoot/LibraryRoot/ToolsRoot and payload paths for
+Package.ps1 and follow the release README.txt, SDK-Release.json and
+SDK-Qualification.json. Exact publication and qualification:
+Deployment/Release09212.txt; ExFiles/Reports/Releases/0.92.12/.
+The following versioned notes preserve their original evidence and limits.
 
 Historical ownership and release notes
 --------------------------------------

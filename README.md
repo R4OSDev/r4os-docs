@@ -17,12 +17,28 @@ with the component that owns the corresponding contract or source code.
 The thematic directories describe current contracts and identify the scope
 of older evidence. Complete release roadmaps remain in `Changelogs/`.
 
+## Current release and archived roadmap
+
+[R4OS 0.92.12](Deployment/Release09212.txt) is published as Slim and Full,
+with Kernel 0.1.493, SDK 0.64.230 / Contract 0.64.99 / Libraries 0.64.69 and the
+unchanged independent Recovery 0.1.78 package. The source/tool/package checks,
+complete anonymous download verification and exact-image KVM4 boots retain
+the scope recorded in that report.
+
+Release family 0.92.X is complete: eleven subversions completed, 0.92.2
+intentionally discarded. The full roadmap is archived in
+[V0.92.X.txt](Changelogs/V0.92.X.txt). Active planning remains in the roadmap
+API. [ExplorerStart0921.txt](Desktop/ExplorerStart0921.txt) and
+[Performance092.txt](Desktop/Performance092.txt) describe implementation,
+measurements and limits. Hardware acceptance was discarded; the original
+STANDARD records are locally validated with R4OS Server processing pending.
+
 ## Completed graphics and responsiveness work
 
 Release family 0.87.X is complete through 0.87.66: 66 subversions,
 280 tasks (279 completed, one intentionally discarded) and 212 acceptances. Its full roadmap is archived in
-[V0.87.X.txt](Changelogs/V0.87.X.txt). Planning continues in the separate,
-initially empty 0.88.X roadmap; the installed R4OS release remains 0.87.66.
+[V0.87.X.txt](Changelogs/V0.87.X.txt). At that checkpoint, planning moved to the separate,
+initially empty 0.88.X roadmap and the installed release remained 0.87.66.
 
 The final implementation and acceptance limits are documented in
 [Parallelitaet.txt](Core/Parallelitaet.txt),

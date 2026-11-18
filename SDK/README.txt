@@ -1,35 +1,22 @@
-﻿Current published SDK set (17 November 2026)
-============================================
-SDK 0.64.230 / Contract 0.64.99 / Libraries 0.64.69 is publicly available:
-https://github.com/R4OSDev/r4os-sdk/releases/tag/v0.64.230
-Release ID: 448387638; source commit:
-f92d512788512d3031de37aada39bdf2be870f6d.
-This is the matching SDK/profile set for R4OS 0.92.12 / Kernel 0.1.493.
-SDK-Release.json and SHA256SUMS.txt bind the complete eleven-asset delivery.
-All public assets were fully downloaded anonymously and checked by size/SHA256;
-the canonical Package.ps1 Verify accepted the public payload.
+﻿Current published R4OS SDK
+==========================
 
-Fresh separate source/tool extraction passed sixteen profiles, both component
-sets, all 167 exported file bindings, capabilities and language-parity review.
-One new normal Zig, C and Rust console consumer was built from this package.
-SDK 230 also corrects the stale parity inventory rejected by the fresh SDK 229
-check. Previous ABI/callback executions retain their actual source identities.
-Linux/Windows host tools are supplied; no Windows, hardware or new consumer
-guest execution is inferred from cross-build or packaging.
+SDK 0.64.237, Contract 0.64.101 and Libraries 0.64.72 are the published SDK set
+for R4OS 0.94.26 with Kernel 0.1.506. GitHub release 450410106 points to
+SDK commit c5871c461d6fa322ade20955c5a9ddfe7743c0e5.
+https://github.com/R4OSDev/r4os-sdk/releases/tag/v0.64.237
 
-The twelve Runtime-R4Ls contain qualified R4GFX 0.1.44 plus eleven exact retained
-published identities. Components.json deliberately selects Recovery source
-snapshot 0.1.73 at 5f5e180d94aa3e727a89c2aef59e4797880c4c5d with frozen
-SDK218/Contract95/Library64 trees. This differs from the current independent
-Recovery 0.1.78 binary, which is included in the R4OS images. Do not replace
-these selected SDK source roots with another latest checkout.
+SDK-Release.json and SHA256SUMS.txt identify the eleven public assets. The
+release checks covered 16 build profiles, the selected component sets,
+167 exported tool and runtime files, and 12 system libraries. Fresh
+Zig, C and Rust console projects built on Linux from the extracted package.
+Package.ps1 Verify also passed on the complete anonymous downloads.
 
-Profiles/Build.json, Tools.json and Components.json alone select system policy.
-Use absolute SdkRoot/ContractRoot/LibraryRoot/ToolsRoot and payload paths for
-Package.ps1 and follow the release README.txt, SDK-Release.json and
-SDK-Qualification.json. Exact publication and qualification:
-Deployment/Release09212.txt; ExFiles/Reports/Releases/0.92.12/.
-The following versioned notes preserve their original evidence and limits.
+Profiles/Components.json selects Recovery source 0.1.78 at
+e2899fce393a735fe82e35cd2208c607096db42a. The official R4OS images use the separately released
+Recovery 0.1.86. Profiles/Build.json, Tools.json and Components.json define the
+selection. Use Tools/Package.ps1 to verify an SDK payload against its manifest,
+source roots and tools. Details and checksums are in Deployment/Release09426.txt.
 
 Historical ownership and release notes
 --------------------------------------

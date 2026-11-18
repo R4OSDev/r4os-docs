@@ -19,13 +19,18 @@ of older evidence. Complete release roadmaps remain in `Changelogs/`.
 
 ## Current release and archived roadmap
 
+R4OS 0.94.26 is available as Slim and Full with Kernel 0.1.506, Recovery 0.1.86
+and SDK 0.64.237 (Contract 0.64.101, Libraries 0.64.72). Both installation images
+booted in four-CPU KVM guests. The release report lists the official downloads,
+source identities and verified SHA-256 values. [Release report](Deployment/Release09426.txt)
+
 The 0.93.X roadmap closed at distribution source version 0.93.17 with Kernel
 0.1.496, SDK 0.64.234 and Libraries 0.64.71. Fourteen subversions with 28
 tasks were completed. The three Studio entries (0.93.14 through 0.93.16)
 and their six tasks were discarded. The roadmap API holds the active plan.
 [Full 0.93.X roadmap](Changelogs/V0.93.X.txt)
 
-[R4OS 0.92.12](Deployment/Release09212.txt) is published as Slim and Full,
+[R4OS 0.92.12](Deployment/Release09212.txt) was published as Slim and Full,
 with Kernel 0.1.493, SDK 0.64.230 / Contract 0.64.99 / Libraries 0.64.69 and the
 unchanged independent Recovery 0.1.78 package. The source/tool/package checks,
 complete anonymous download verification and exact-image KVM4 boots retain

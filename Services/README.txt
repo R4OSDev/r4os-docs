@@ -191,3 +191,8 @@ private actors and the unchanged browser were absent. Full original records:
 ExFiles/Reports/Benchmarks/b4d8f63f-c42d-469e-92ee-619db775d99b/
 Status: lokal validiert; R4OS Server ausstehend (Claim, import, full GET
 readback and independent server scoring).
+
+0.94.9 - Idle service endpoints
+TIMESVC and other services using ServiceLoop wait for a request, cooperative
+process close or their own deadline when R4XStart advertises endpoint_stop_wake.
+Older providers keep the configured finite stop interval (default 200 ms).

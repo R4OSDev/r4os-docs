@@ -19,6 +19,12 @@ of older evidence. Complete release roadmaps remain in `Changelogs/`.
 
 ## Current release and archived roadmap
 
+The 0.93.X roadmap closed at distribution source version 0.93.17 with Kernel
+0.1.496, SDK 0.64.234 and Libraries 0.64.71. Fourteen subversions with 28
+tasks were completed. The three Studio entries (0.93.14 through 0.93.16)
+and their six tasks were discarded. The roadmap API holds the active plan.
+[Full 0.93.X roadmap](Changelogs/V0.93.X.txt)
+
 [R4OS 0.92.12](Deployment/Release09212.txt) is published as Slim and Full,
 with Kernel 0.1.493, SDK 0.64.230 / Contract 0.64.99 / Libraries 0.64.69 and the
 unchanged independent Recovery 0.1.78 package. The source/tool/package checks,
@@ -27,8 +33,7 @@ the scope recorded in that report.
 
 Release family 0.92.X is complete: eleven subversions completed, 0.92.2
 intentionally discarded. The full roadmap is archived in
-[V0.92.X.txt](Changelogs/V0.92.X.txt). Active planning remains in the roadmap
-API. [ExplorerStart0921.txt](Desktop/ExplorerStart0921.txt) and
+[V0.92.X.txt](Changelogs/V0.92.X.txt). [ExplorerStart0921.txt](Desktop/ExplorerStart0921.txt) and
 [Performance092.txt](Desktop/Performance092.txt) describe implementation,
 measurements and limits. Hardware acceptance was discarded; the original
 STANDARD records are locally validated with R4OS Server processing pending.

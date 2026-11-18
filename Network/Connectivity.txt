@@ -142,12 +142,14 @@ same port cannot adopt a stale accept or let its late cleanup close the new
 listener. Incoming connections retain the listener generation that admitted
 them, so a new listener cannot accept an old unclaimed connection.
 
-The existing waitable TCP task owner captures copied readiness at release.
-Runtime admission then publishes the atomics and matching wakes together.
-Scheduler predicates read only that projection and never acquire the TCP
-owner. No table pointer or TCP/runtime owner spans sleep. Only positive
-readiness and exact identity retirement signal the corresponding condition
-queues; unchanged ACK traffic does not broadcast to unrelated connections.
+TCP mutations mark the affected connection and listener slots. Before releasing
+the TCP owner, the kernel publishes readiness for those slots and wakes the
+matching waiters under runtime admission. A read-only query or an idle timer
+pass with no marked slots skips publication. Scheduler predicates read only
+that projection and never acquire the TCP owner. No table pointer or
+TCP/runtime owner spans sleep. Positive readiness transitions and identity
+retirement signal the corresponding condition queues. An unchanged ACK leaves
+unrelated connection waiters asleep.
 Readable waiters also recheck a changed terminal state, while the original
 read predicate, read results, 250-ms fallback slices and deadlines remain.
 

@@ -6,6 +6,15 @@ window composition, focus, z-order, taskbar, desktop items and user-facing
 input dispatch. The kernel provides the privileged display and event
 mechanisms but does not own desktop policy.
 
+Control Center (0.95.3)
+-----------------------
+Open Control Center from its desktop shortcut or with Ctrl+Alt+Delete. Its
+Tasks tab shows the desktop windows, active window, program instances and
+render counters. Desktop supplies its render snapshot and owns window and
+process lifetime. Existing menu files can keep their other configured items
+when the retired Tasks action is ignored. On startup Desktop adds the missing
+Control Center shortcut when CTRLCTR.R4X is installed.
+
 Bulk layer RAM clearing (0.91.5)
 ---------------------------------------------------------------
 Fable R4OS-0005 is confirmed in Desktop216. Desktop217 replaces volatile

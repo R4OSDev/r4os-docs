@@ -1,0 +1,299 @@
+R4OS 0.95.6 – CPU-Last beim Fensterverschieben
+===============================================
+
+Entwurf vom 22.11.2026. R4DESK soll gültige Fensterpixel beim Verschieben
+wiederverwenden und die Ausgabe bei schnellen Mausmeldungen am Ausgabetakt
+ausrichten. Auf OssiPC erreichte die stärkste physische Kernkachel beim Ziehen
+von Control Center 16,39 % bei 60 und 43,19 % bei 240 Mausmeldungen/s.
+Strecke und Geschwindigkeit waren gleich. Das leere Notepad verursachte bei
+60 Hz dieselbe Größenordnung, während es keinen neuen App-Frame einreichte.
+
+Ausgangsmessung auf OssiPC
+--------------------------
+
+Release 0.95.5, Kernel 0.1.508, R4DESK 0.1.231 und Control Center 0.1.2.
+DISPLAYD meldete bootfb, Softwareausgabe bei 1920 × 1080. Die AMD-CPU hat
+acht physische Kerne mit je zwei SMT-Threads. Gesamtlast wird aus der Summe
+der beschäftigten Zeit über alle 16 logischen CPUs berechnet, die Kernkachel
+aus beiden Threads des jeweiligen Kerns. Ein Prozentpunkt Gesamtlast und ein
+Prozentpunkt auf einer Kachel haben damit unterschiedliche Bezugsgrößen.
+
+Beide Fenster standen bei (1258, 148) und maßen 574 × 370. Ein temporäres
+Userland-Programm bewegte den Zeiger an der Titelleiste um 48 Pixel nach
+rechts und zurück, gleichmäßig mit 240 Pixeln/s. Es nutzte die normale
+absolute Desktop-Eingabe ohne RDP-Bildstrom. Damit ist die Eingabefolge
+reproduzierbar. Der Versuch erfasst den lokalen Softwareausgabepfad und
+modelliert die Eingabe ab der Desktop-Warteschlange. Die wirkliche USB-Rate
+und die Eingabe-bis-Photon-Latenz der Handbewegung bleiben offen.
+
+Bei 60 Hz wurden je App Ruhe, freie Zeigerbewegung und Ziehen in wechselnder
+Reihenfolge je dreimal über sechs Sekunden gemessen. Die Eingabeerzeugung
+wachte in den Ruhekontrollen im gleichen Takt auf. Nach dem Warmlauf wurden
+CPU-, GUI- und Displayzähler an den Grenzen gelesen. Die Ausgabe des
+Messprogramms erfolgte danach. Für die Bildabstände gab es je App und Zustand
+einen separaten Lauf mit Abtastung der abgeschlossenen Ausgabe alle 4 ms.
+Bei 120 und 240 Hz gab es für Control Center je zwei Messungen pro
+Bewegungsart. Vier, zwei bzw. ein Pixel je Eingabe ergeben dieselbe Bahn.
+Alle 32 Messfenster hatten 5,999 bis 6,001 Sekunden Dauer, 16 gültige
+CPU-Paare derselben Epoche und keine verlorenen Eingaben in der Warteschlange.
+
+Mediane der Messungen mit Zählerablesung an den Grenzen. Ausgaben/s sind
+angenommene Framebuffer-Aktualisierungen einschließlich Cursor und Teilflächen.
+
+App             Eingaben/s  Bewegung   Gesamt %   stärkster Kern %   Ausgaben/s
+Control Center         60   Ruhe           0,34              2,42          0,33
+Control Center         60   Zeiger         0,51              3,30         60,33
+Control Center         60   Ziehen         2,20             16,39         60,66
+Notepad                60   Ruhe           0,33              2,40          0,00
+Notepad                60   Zeiger         0,50              3,27         59,83
+Notepad                60   Ziehen         2,23             16,53         59,84
+Control Center        120   Zeiger         0,64              4,07        120,00
+Control Center        120   Ziehen         3,91             29,45        120,58
+Control Center        240   Zeiger         0,89              5,62        240,17
+Control Center        240   Ziehen         5,74             43,19        197,57
+
+Bei 240 Hz lagen die beiden Ziehläufe auf der stärksten Kachel bei 43,14
+und 43,23 %. Der Benutzer sah an der Maschine während der Ziehversuche über
+40 %. Die abschließende Zeigerkontrolle lief ohne gedrückte Taste. Die
+frühere Beobachtung von ungefähr 50 % bei freier Handbewegung ist damit
+plausibel. Für sie liegt keine reproduzierte Mausfrequenz vor.
+
+In beiden 60-Hz-Ziehspuren wurden 359 Ausgaben mit 578 × 370 Pixeln an
+zwölf verschiedenen linken Schadensgrenzen beobachtet. Das entspricht der
+Vereinigung von alter und neuer Fensterfläche bei vier Pixeln Verschiebung.
+In den gleichartigen Zeigerkontrollen kam dieses Muster keinmal vor. Vor
+jedem Ziehlauf wurden die tatsächliche Verschiebung um 48 Pixel sowie die
+Rückkehr über WINSVC verifiziert. Nach Loslassen wurde die Endgeometrie
+erneut verglichen. Es gab in allen Versuchen zusammen null Vollbildausgaben.
+
+Das p50/p95 der beobachteten Abstände aufeinanderfolgender abgeschlossener
+Softwareausgaben beim Ziehen betrug 16,16/20,52 ms für Control Center und
+16,33/20,40 ms für Notepad. Der Beobachter ordnet Ablesezeitpunkte bei
+Zähleränderung zu. Das längste Abtastintervall lag bei 8,76 ms oder weniger.
+Eine abschließende Control-Center-Ausgabe lag hinter der letzten Abtastung,
+war aber im Endzähler enthalten. In diesen Ziehspuren sprang der Zähler
+zwischen zwei Ablesungen jeweils um eins. Die gesonderte Abtastung ergab
+2,19 bzw. 2,22 % Gesamtlast. Für die CPU-Vergleiche gilt die Tabelle oben.
+
+Bei 60 Hz setzte Control Center in sechs Sekunden 4–6 neue App-Frames ab,
+Notepad null. Trotzdem übertrug der Desktop beim Ziehen für beide rund
+48,8 MB/s. Bei 240 Hz stieg die Menge bei Control Center auf 160,2 MB/s.
+MB bezeichnet hier 1024 × 1024 Byte. Der Kernel zählte im gemessenen
+Ausgabeteil bei Control Center im Median 3,83, 8,50 und 15,75 ms je Sekunde
+bei 60, 120 und 240 Hz. Für Notepad waren es bei 60 Hz 4,67 ms/s.
+Damit sind erneute Inhaltsaufnahme und Komposition die ersten Messstellen
+für die Umsetzung. Numerische Zeitanteile der beiden Schritte im laufenden
+Fenster lassen sich aus den öffentlichen Zählern allein nicht trennen.
+
+Das bereits vorhandene SPECTRA BENCH DESKTOP trennte auf demselben OssiPC
+neun Phasen an einer statischen SDR-Szene im RAM. Bei 414 × 224 Clientpixeln
+dauerten Vergleich/Kopie der Fensterebene im warmen Median 0,130 ms und die
+abschließende Komposition 0,023 ms. Bei 1904 × 1010 waren es 2,716 ms und
+2,046 ms. Jeweils vier warme Durchläufe mit regulärer Verdeckungsprüfung,
+bestätigte Pixelhashes, 20 Originaldatensätze insgesamt. Diese Diagnose
+nutzt andere Inhalte und führt keine Framebuffer-Ausgabe aus.
+
+Im gesonderten KVM-Vergleich mit vier vCPUs lagen bei 60 Eingaben/s die
+von außen beobachteten Laufzeiten der aktivsten vCPU für Control Center
+bei 42–45 % für den Zeiger und 55–56 % beim Ziehen, bei Notepad bei
+45–47 % bzw. 57–58 %. Der reproduzierte Effekt ist appübergreifend.
+Wegen anderer Auflösung, Grundlast, CPU-Topologie und Zählmethode wird
+die Hardwareabnahme ausschließlich mit dem OssiPC-Ausgangsstand verglichen.
+
+Zeichenweg in R4OS
+------------------
+
+Der Desktop liest je Durchlauf bis zu 16 Fernereignisse und 32 physische
+Tastaturereignisse sowie je eine Legacy-Tastatur- und Mausabfrage. Für jedes
+relevante Mausereignis berechnet der Fenstercontroller die neue Position.
+Er meldet alte Geometrie und neues Fenster als beschädigt. Eine reine Bewegung
+löst im Client kein Resize aus. Die normalisierte Fensterinfo wird publiziert,
+die separate WINSVC-Geometriespiegelung hat bereits eine Warteschlange.
+Der Desktop verarbeitet eine Eingabegruppe, sammelt Schäden und rendert einmal
+für diesen Durchlauf. Schnell aufeinanderfolgende Durchläufe können trotzdem
+je ein Bild ausgeben. Kontrolle über Down, Up und Capture bleibt im Eingabeweg.
+
+Die Schadensliste vereinigt sich überschneidende Rechtecke und fasst bei
+Platzmangel bis auf acht Bereiche zusammen. Bei vier Pixeln Bewegung umfasst
+die Vereinigung praktisch das ganze Fenster. Auf dem primären Softwarepfad
+ruft compositor::draw die Fensterdarstellung und bei klassischen Clients die
+Wiedergabe der letzten bestätigten Zeichenbefehle auf. Der Ebenenspeicher
+vergleicht raster und capture_bounds einschließlich Bildschirmposition. Eine
+neue Position setzt initialized zurück. Der Desktop leert und malt dann die
+ganze sichtbare Ebene, verarbeitet die Pixel im Ebenenspeicher, setzt die
+sichtbaren Ebenen zusammen und übergibt die betroffenen Ausgaberegionen.
+Die Softwareausgabe zählt die abgeschlossene Kopierarbeit in Kernel-Ticks.
+Die unabhängigen Generationen von App-Inhalt, Fenstergeometrie und fertigem
+Ausgabebild erlauben eine Optimierung im Desktop.
+
+Die CPU-Kernzeit umfasst alle Systemarbeit. Die Zeit im Kopierabschnitt ist
+verstrichene Zeit bei 1-ms-Auflösung und endet vor dem abschließenden
+Speicherzaun. Rates pro Bild lassen sich daraus nur über viele Bilder schätzen.
+Der normale Desktop legt keine getrennten Zeiten für Befehlswiedergabe und
+Mischen der Ebenen offen. Die vorhandene Detailmessung in Frames::render zählt
+beides unter Komposition und wird für ausgewählte Diagnoseszenen aktiviert.
+Das gesonderte SDR-RAM-Profil verwendet eigene, feste Bildinhalte. Seine
+Phasen erklären die Arbeitsschritte, seine Anteile lassen sich nicht als
+Zeitanteile eines echten Ziehframes ausgeben.
+
+Quellstand Desktop e8de797, Kernel 422fba8, Control Center 40c5e8d.
+Desktop/src/rust/runtime/desktop.rs (poll_input, render und wait),
+windows/controller.rs (pointer_motion, pointer_release), hosted/runtime.rs
+(changes), hosted/model.rs (announce), render/geometry.rs (append_damage_region),
+render/compositor.rs (compose und draw), hosted/window_view.rs (paint),
+render/layers.rs (paint_inner), render/software.rs (Capture::finish) und
+render/runtime.rs (Frames). Beim Kernel siehe Rust/display/manager/presentation.rs
+und Rust/display/manager.rs (record_present_aggregate und record_timing_at).
+
+Was sich aus Weston und Windows übernehmen lässt
+------------------------------------------------
+
+Wayland trennt den lokalen Inhalt einer Oberfläche von ihrer Platzierung.
+Ein Commit übernimmt Puffer und geänderte Bereiche zusammen. Die Freigabe
+eines Puffers regelt, wann sein Erzeuger diesen wiederverwenden darf.
+Frame-Callbacks geben einem animierenden Client einen geeigneten Zeitpunkt
+für den nächsten Inhalt. Die Taktung von Fensterbewegungen gehört weiterhin
+dem Compositor. Wayland-Protokoll, wl_surface und wl_buffer.
+https://wayland.freedesktop.org/docs/html/apa.html
+
+Im Pixman-Renderer von Weston 14.0.2 schneidet draw_paint_node den Schaden mit
+der sichtbaren Region eines Knotens. Der reine Verschiebefall behandelt deckende
+und zu mischende Flächen separat, transformiert sie in Ausgabekoordinaten und
+liest aus dem Oberflächenbild. weston_view_update_transform berücksichtigt die
+alte und die neue Lage. Die Ausgabe besitzt ihren eigenen Repaint-Zeitpunkt.
+Das passt zur vorhandenen Trennung von R4OS-Fensterinhalt und Ausgabe.
+https://gitlab.freedesktop.org/wayland/weston/-/blob/14.0.2/libweston/pixman-renderer.c
+https://gitlab.freedesktop.org/wayland/weston/-/blob/14.0.2/libweston/compositor.c
+https://wayland.pages.freedesktop.org/weston/toc/libweston/output.html
+
+Windows DWM setzt umgeleitete Fensterinhalte zum Desktop zusammen.
+DirectComposition hält einen visuellen Baum, dessen Inhaltsquelle und
+Positionsoffset separat gesetzt werden können. Ein Commit übernimmt mehrere
+Änderungen gemeinsam. Für R4OS eignen sich diese Lebensdauer- und
+Platzierungsregeln auch im CPU-Pfad. Microsofts GPU-Ausführungsmodell liefert
+keinen Durchsatzwert für OssiPC.
+https://learn.microsoft.com/en-us/windows/win32/dwm/dwm-overview
+https://learn.microsoft.com/en-us/windows/win32/directcomp/architecture-and-components
+https://learn.microsoft.com/en-us/windows/win32/api/dcomp/nf-dcomp-idcompositionvisual-setoffsetx%28float%29
+
+Entscheidung und Grenzen
+------------------------
+
+1. Die vorhandenen Pixel einer klassischen Fensterebene in Fensterkoordinaten
+   verwalten. Der Inhaltsschlüssel bindet Fensterinstanz und Generation,
+   bestätigten App-Frame, Clientgröße, Stil, Schrift-/Skalierungsrevision und
+   relevante Dekoration. Bildschirmposition, Z-Reihenfolge und Sichtbarkeit
+   bestimmen die Platzierung und den Ausgabeschaden. Eine neue Position
+   allein löst keine erneute Wiedergabe derselben Zeichenbefehle aus.
+   Bei Fokus, Titel, Hover oder gedrücktem Knopf den betroffenen Rahmen
+   erneuern. Neue App-Frames während des Ziehens beim nächsten zulässigen
+   Bild übernehmen, einschließlich Cursor im Text, Uhr und CPU-Kacheln.
+
+2. Zunächst den nachweislich vollständigen CPU-Puffer bei unveränderter
+   Rastergröße verwenden. Den Quellbereich lokal inklusive Versatz beim
+   Bildschirmbeschnitt führen. Bei teilweise gefüllten Flächen nur bekannte
+   gültige Pixel verwenden oder konservativ neu aufbauen. Verdeckten Inhalt
+   einer anderen Ebene, Cursor, Menüs und Überlagerungen separat in
+   Z-Reihenfolge zeichnen. Freilegungen aus der letzten akzeptierten und der
+   neuen Lage ableiten. Ein Fenster, das den Bildschirm verlässt und wieder
+   eintritt, darf ausschließlich gültige Pixel zurückbringen. Größenwechsel,
+   unbekannte Schäden, geänderte Skalierung, Ausgabegeneration, Slot-Neubelegung,
+   Geräteverlust und ungültige externe Puffer führen zum bestehenden Zeichenweg.
+   CPU-Lesesperren, Grafik-Fences und Freigabe externer Bilder bleiben beim
+   jeweiligen Besitzer. Erst nach erfolgreicher Ausgabe den Schaden quittieren.
+   Bei Fehlern alte Freilegung und neue Position für den nächsten Versuch halten.
+
+3. Eingabe sofort für Hit-Test und Fenstermodell übernehmen. Für dasselbe
+   gezogene Fenster nur die neueste noch ausstehende Position je fälligem
+   Ausgabebild verwenden. Zwischenpositionen, die nie ausgegeben wurden,
+   brauchen keine Freilegung. Down, Up, Fokus-/Capture-Wechsel und andere
+   geordnete Aktionen bilden Grenzen. Die endgültige Up-Koordinate sofort
+   übernehmen und ihre Ausgabe auch beim Ausbleiben weiterer Eingaben sichern.
+   Den lokalen und den RDP-Eingabeweg am gemeinsamen Desktop behandeln.
+   Präsentationsfeedback nur bei gültigem Ziel und belastbarer Zeitbasis
+   nutzen. Für bootfb ohne Sichtbarkeitsquittung einen begrenzten
+   ereignisgetriebenen Ausgabetakt erproben. 60 Hz sind der gemessene
+   Vergleichspunkt. Ein wartender Desktop braucht keine weiteren Weckereignisse,
+   sobald der letzte Schaden quittiert ist.
+
+4. Das logische Fenster umfasst 574 × 370 Pixel. Ein 32-Bit-Fensterbild
+   belegt 849.520 Byte. Den vorhandenen 128-MB-Etat des primären
+   Software-Ebenenspeichers einschließlich temporärer Vergrößerungen einhalten.
+   Im warmen Verschiebefall vorhandene Speicherflächen verwenden. Bei knapper
+   Kapazität hat korrekte Ausgabe mit dem bisherigen Weg Vorrang.
+
+Ein Verschieben per Kopie aus dem fertigen Bildschirm würde auch fremde
+Fensteranteile, Überlagerungen und den Cursor mitnehmen. Ein Konturfenster
+würde die Rückmeldung beim Ziehen verändern. Ein Bildschirmvergleich nach
+jedem Bild kostet zusätzliche Lesezugriffe und spart die bereits geleistete
+Befehlswiedergabe nicht ein. Einen Umbau des Kopierers oder eine zusätzliche
+GPU-Abhängigkeit rechtfertigt der Ausgangsbefund nicht. Eine reine Begrenzung
+der Bilder pro Sekunde ließe die nachgewiesene Mehrarbeit bei 60 Hz bestehen.
+Deshalb werden Pixelwiederverwendung und Ausgabetakt getrennt umgesetzt und
+mit identischen Eingaben einzeln bewertet.
+
+Folgeunterversionen und Abnahme
+-------------------------------
+
+0.95.7 gehört dem Desktop. Zunächst die drei Phasen und die Zeit einer
+zugeordneten Eingabe bis zur akzeptierten Ausgabe am bisherigen Pfad erfassen.
+Die Zusatzmessung auf einen expliziten Lauf begrenzen, ausreichend große
+Puffer nutzen und danach auslesen. Im normalen Betrieb entstehen dadurch
+keine zusätzlichen Uhrabfragen oder Timer. Den bisherigen vollständigen
+Zeichenweg als Pixelreferenz bei gleicher Szene verwenden. Damit bekommt der
+Vorher-Nachher-Vergleich auch für die tatsächliche Eingabeverzögerung einen
+Ausgangswert.
+
+0.95.8 gehört dem Desktop und verwendet diese Referenz für den
+fensterlokalen CPU-Puffer. Bei 60 Hz soll die zusätzliche Gesamtlast gegenüber
+reiner Zeigerbewegung für beide Apps um mindestens 30 % sinken. Heute
+beträgt sie 1,685 bzw. 1,731 Prozentpunkte. Die Zielgrenzen sind somit
+1,179 bzw. 1,212 Prozentpunkte bei gleichem Ausgabetakt. Die Streuung der
+drei ursprünglichen Ziehläufe betrug je App weniger als 0,03 Prozentpunkte
+Gesamtlast. Das Ziel liegt deutlich über dieser Streuung. Es ist eine
+Abnahmeschwelle, keine vorab gemessene Einsparung.
+
+0.95.9 gehört dem Desktop. Nach der Pixelwiederverwendung folgt die
+ausgabegerechte Bündelung. Bei 240 Eingaben/s soll der Zusatzaufwand
+gegenüber der Zeigerkontrolle um mindestens die Hälfte sinken. Ausgangswerte
+sind 4,848 Prozentpunkte gesamt und 37,573 auf der heißesten physischen
+Kernkachel. Zielwerte sind höchstens 2,424 bzw. 18,787 Prozentpunkte
+Zusatzlast. Die 240-Hz-Messung zeigte rund 198 Ausgaben/s derselben
+Fensterfläche bei gleichem Weg und Tempo. Das begründet ein eigenes
+Hochfrequenzziel. Der Anzeigetakt von OssiPC wurde nicht optisch gemessen.
+
+0.95.10 gehört der Distribution zusammen mit dem Desktop. Vergleich auf
+OssiPC mit denselben Apps, Eingaben, getrennten Messmodi und vollständigen
+Kernwerten wiederholen. Bei 60 Eingaben/s mindestens 57 unterscheidbare
+akzeptierte Fensterpositionen pro Sekunde während der Bewegung, p95 der
+Bildintervalle höchstens 25 ms. Jede neue Position im Verlauf zählt,
+auch beim wiederholten Durchlaufen derselben Bahn. Das p95 Eingabe bis
+Softwareausgabe darf sich gegenüber dem Referenzlauf aus 0.95.7 höchstens
+um 4 ms verschlechtern. Beide Grenzen beziehen sich auf die Softwareausgabe.
+Den visuellen Verlauf und die endgültige Position auf dem Monitor gesondert
+bestätigen. Für den Vergleich die maximalen Abtastlücken, Wiederholungen und
+Streuung ausweisen. Die Ruhephase muss nach Loslassen wieder erreicht werden.
+
+Für die Bildprüfung die vorhandenen Desktop-Referenzfälle in
+Tests/RustNative/scene_pixels.rs, software.rs und frame_timing.rs sowie
+die Fälle für die letzte Release-Koordinate in windows/controller.rs nutzen.
+Zielgerichtet dieselbe Bewegung mit vollständiger Referenz und optimiertem
+Pfad vergleichen. Dazu gehören ein Live-Update während des Ziehens, ein
+unverändertes Editorfenster, ein teilweise verdeckter Hintergrund, Cursor und
+überlagernde Menüs, Rückkehr vom Bildschirmrand, Resize, geändertes Ziel
+oder Maßstab und ein abgelehntes Present mit erfolgreicher Wiederholung.
+Auf Hardware nur vorhandene Konfigurationen prüfen, andere Ausgabefälle
+im vorhandenen Desktop-Modell abdecken.
+
+Reproduktionsdaten und Abgrenzung
+---------------------------------
+
+Die lokalen Originale und die auswertbaren CPU-Werte pro logischem Thread
+und physischem Kern liegen unter ExFiles/Reports/Desktop/0.95.6/.
+Dort stehen OssiPC-Rohdaten, gesonderte Ausgabespuren, das SDR-RAM-Profil,
+die KVM-Vergleichswerte, Quellen der temporären Messprogramme sowie die
+Auswertungsanleitung. Das Realgerät blieb beim Ausgangsrelease 0.95.5.
+0.95.6 ändert die Distributions-Versionsangabe und dokumentiert die
+Untersuchung. Die produktiven Artefakte haben deshalb ihre bisherigen
+Versionen. Ein erneuter STANDARD-Lauf ist bei diesem Analyseschritt ohne
+Laufzeitwirkung gemäß Agents/Benchmark.txt entbehrlich.

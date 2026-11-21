@@ -1,0 +1,112 @@
+Control Center und CPU-Zeit
+===========================
+
+Control Center startet über CTRLCTR.LNK oder Strg+Alt+Entf. Ein erneuter Aufruf
+holt das vorhandene Fenster in den Vordergrund. Auslastung zeigt den Gesamtwert
+und eine Kachel je erkanntem physischen Kern. Tasks zeigt Fenster, laufende
+R4X-Instanzen, Exitstatus und Renderzähler.
+
+Messgröße
+---------
+
+Ein Kern kann arbeiten, auf ein Ereignis warten oder eine Unterbrechung
+bearbeiten. Ein allgemein verfügbarer Hardware-Prozentwert für diese Einteilung
+existiert auf x86 nicht. APERF/MPERF vergleichen Taktverhalten. PMU-Ereignisse
+und Hardware-Residenzzeiten hängen vom Prozessormodell ab. R4OS' ältere
+CpuIdleInfo zählt HLT-Eintritte und zugelassene MWAIT-Versuche. Ihre Zeitmessung
+rund um die MWAIT-Zulassung umfasst auch abgebrochene Versuche.
+
+Linux veröffentlicht kumulative CPU-Zeiten in /proc/stat. Anwendungen bilden
+Differenzen zwischen zwei Ablesungen. Interruptarbeit wird getrennt von idle
+geführt. iowait beschreibt wartende I/O und ist laut Kernel-Dokumentation pro
+CPU nur eingeschränkt interpretierbar. NO_HZ_IDLE erlaubt das Aussetzen des
+periodischen Scheduler-Ticks im Leerlauf.
+https://docs.kernel.org/filesystems/proc.html
+https://docs.kernel.org/timers/no_hz.html
+
+Windows gibt mit GetSystemTimes Idle-, Kernel- und Userzeit aus. Die Kernelzeit
+enthält die Idlezeit. Aus zwei Ablesungen ergibt sich die Beschäftigung aus
+(Delta Kernel + Delta User - Delta Idle) / (Delta Kernel + Delta User).
+https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getsystemtimes
+
+Erfassung in R4OS
+-----------------
+
+Der Kernel erfasst Anfang und Ende der vom Scheduler zugelassenen HLT- und
+MWAIT-Intervalle mit der vorhandenen monotonen Uhr. Beim HLT schließt schon
+der Eintritt in den IRQ- oder IPI-Handler den Leerlauf. Unterbrechungen,
+Kernelarbeit und Programmausführung zählen zur Beschäftigung. Ein aktiver
+Kern führt im IRQ-Pfad nur die Prüfung auf ein offenes Warteintervall aus.
+Die Erfassung braucht keinen periodischen Messtick, eigenen Worker oder
+Messinterrupt. Die qualifizierte Zeitquelle kann TSC, HPET oder die vorhandene
+periodische Rückfallebene sein. Der messende Aufruf programmiert keine Uhr um.
+
+R4DEV.cpu_time_info kopiert für eine logische CPU online_ns, idle_ns,
+wake_count, die aktuelle Verfügbarkeitsepoche und die Uhrgeneration.
+Die Rückgabe schließt die bisherige Dauer eines laufenden Warteintervalls
+ein. Der Leser prüft atomare Sequenzen und benötigt dafür keine Nachricht
+an den betreffenden Kern. Nur die lokale CPU schreibt ihre Idle-Zeiten.
+Eine erneute Aufnahme in die Menge der schedulierbaren CPUs startet eine neue
+Zeitreihe, auch nach logischem Parken innerhalb derselben Hardware-Epoche.
+
+Anzeige
+-------
+
+Ein gültiges Intervall liefert busy = Delta online_ns - Delta idle_ns.
+Die Gesamtanzeige ist 100 * Summe(busy) / Summe(Delta online_ns). Die
+Kernkacheln verwenden dieselbe Rechnung für alle SMT-Threads mit gleichem
+package_id und core_id. Neu aufgenommene CPUs und eine geänderte Uhrgeneration
+brauchen wieder zwei passende Ablesungen. Fehlt die bestätigte physische
+Zuordnung, weist die Oberfläche darauf hin. Der Wert der ersten Stichprobe
+bleibt bis zur nächsten Ablesung offen.
+
+Die aktive Auslastungsansicht liest einmal pro Sekunde. Die Kernzuordnung wird
+beim Wechsel der CPU-Epoche aktualisiert. Gleiche Anzeigen werden nicht neu
+gezeichnet. Ein Tab- oder Fokuswechsel verwirft die Differenzbasis. Schließen
+oder Minimieren beendet die Abfrage der CPU-Zeiten.
+
+
+Vergleichsmessung im KVM-Gast
+----------------------------
+
+QEMU/KVM mit vier vCPUs auf zwei Kernen mit je zwei SMT-Threads. Die CPU-Zeit
+ist die Summe der Laufzeiten der vier vCPU-Threads in Prozent eines Hostkerns.
+Das entspricht bei 100 % einem von vier ausgelasteten vCPUs. Die letzte
+Spalte zählt HLT-Weckvorgänge des Gastes pro Sekunde (KVM halt_wakeup).
+
+Kontrollierter Vergleich mit demselben 0.95.4-Userland und denselben
+VM-Einstellungen. Der Kontrollkernel verwendet die bisherigen HLT-/MWAIT-
+und IRQ-Pfade ohne Zeitbuchung. Mittelwerte aus zwei 10-s-Fenstern.
+
+Kernel                 Fenster       CPU-Zeit (%)    HLT-Weckvorgänge/s
+ohne Zeitbuchung       geschlossen       37,84             1168,9
+ohne Zeitbuchung       offen             40,89             1209,2
+mit Zeitbuchung        geschlossen       37,50             1176,3
+mit Zeitbuchung        offen             40,16             1205,7
+
+Das Öffnen der Anzeige mit aktiver Erfassung kostete in diesem Vergleich
+2,66 Prozentpunkte eines Hostkerns, rund 0,66 % der vier vCPUs.
+Bei geschlossenem Fenster lag die CPU-Zeit beider Kernel innerhalb eines
+halben Prozentpunkts. Die kurzen Läufe erlauben keine feinere Kostenschätzung.
+
+Zusätzliche Aufzeichnungen aus den zwei Release-Images. Je Zustand zwei
+15-s-Fenster. In 0.95.3 waren die angezeigten Werte statisch. Aufgrund
+der unterschiedlichen Grundlast zwischen den Release-Läufen dient der
+Vergleich mit demselben Userland oben zur Abschätzung des Eigenaufwands.
+
+Release   Fenster       CPU-Zeit (%)        HLT-Weckvorgänge/s
+0.95.3    geschlossen  11,66 / 10,63       1188,4 / 1186,3
+0.95.3    offen        11,26 / 11,41       1192,2 / 1201,2
+0.95.4    geschlossen  38,26 / 37,62       1179,6 / 1177,0
+0.95.4    offen        40,30 / 40,37       1194,0 / 1194,5
+
+Laststufen mit CPU-Bindung. Die Werte stammen aus einem 4-s-Intervall.
+
+Beschäftigte Threads               Gesamt (%)    Kern 1 (%)    Kern 2 (%)
+keine zusätzliche Last                  10,61         17,76          3,46
+ein Thread                              27,98         54,54          1,41
+je ein Thread auf beiden Kernen         50,79         51,06         50,52
+alle vier Threads                      100,00        100,00        100,00
+
+Rohwerte, Bildschirmfotos und STANDARD-Benchmark liegen im Projektworkspace
+unter ExFiles/Reports/ControlCenter/0.95.4/.

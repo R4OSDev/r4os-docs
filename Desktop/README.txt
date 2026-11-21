@@ -6,14 +6,16 @@ window composition, focus, z-order, taskbar, desktop items and user-facing
 input dispatch. The kernel provides the privileged display and event
 mechanisms but does not own desktop policy.
 
-Control Center (0.95.3)
+Control Center (0.95.4)
 -----------------------
 Open Control Center from its desktop shortcut or with Ctrl+Alt+Delete. Its
 Tasks tab shows the desktop windows, active window, program instances and
 render counters. Desktop supplies its render snapshot and owns window and
 process lifetime. Existing menu files can keep their other configured items
 when the retired Tasks action is ignored. On startup Desktop adds the missing
-Control Center shortcut when CTRLCTR.R4X is installed.
+Control Center shortcut when CTRLCTR.R4X is installed. The Auslastung tab shows
+total CPU use and one tile for each physical core. The counters, sampling
+interval and measurement results are documented in ControlCenter.txt.
 
 Bulk layer RAM clearing (0.91.5)
 ---------------------------------------------------------------

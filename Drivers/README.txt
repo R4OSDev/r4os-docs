@@ -50,6 +50,10 @@ DriverApi v22 lends its callback the kernel-owned linear target, one XRGB32
 source and at most eight validated regions. It retains no address or fence;
 owner cleanup closes callback admission first. Unsupported targets, absence
 and every callback error use the complete kernel boot-framebuffer fallback.
+On load, DISPBLIT validates the API and registers its callback.
+DISPLAYD /BLITCHECK exercises it in private RAM. It checks 25 copied pixels
+inside two rectangles and 71 untouched pixels outside. The kernel sets
+SELF_TESTED for that registration after a successful comparison.
 This is CPU copy acceleration and does not claim modeset, pageflip or GPU
 ownership.
 

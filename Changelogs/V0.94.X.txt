@@ -1,0 +1,719 @@
+# 0.94.X GPT 6.2 Astra B
+
+**Status:** Abgeschlossen
+
+## Leitbild
+—
+
+## Notizen
+Grundlage ist die statische Analyse GPT_6.2_Astra_B.json vom 18.11.2026. Die 120 Fundstellen passen zu den angegebenen Ständen der 20 betroffenen Repositories. 0.94.1 bis 0.94.6 behandeln die sechs Funktionsfehler, 0.94.7 bis 0.94.22 die 16 Performancebefunde und 0.94.23 bis 0.94.24 die beiden Bereinigungen. Die Ursprungs-ID steht jeweils in der Beschreibung. Die gezielten Prüfaufgaben liefern den noch ausstehenden Funktions- oder Leistungsnachweis. Bei eingebetteten Recovery-Modulen gehören das gebaute Laufzeitartefakt und sein Herkunftsnachweis zur jeweiligen Änderung.
+Die lokalen STANDARD-Belege der Reihe verwenden den im Hostprofil vorgegebenen Host hetzner-qemu. Die Registrierung am konfigurierten R4OS Server war erfolgreich. Der HTTPS-Abruf dieses Hosts ergab host_not_found. Die unveränderten Original-Runs bleiben lokal validiert. Serverimport, Rücklesen der Runs und serverseitige Referenzwertung stehen aus.
+Alle 22 Befunde und beide Bereinigungen aus GPT_6.2_Astra_B.json sind den 24 abgeschlossenen Arbeitsunterversionen zugeordnet. Die 24 Vier-CPU-STANDARD-Läufe wurden mit ihren Originaldaten lokal validiert. Alle 27 Unterversionen mit 57 Aufgaben sind erledigt. Offizielle Veröffentlichungen sind Recovery 0.1.86, R4OS 0.94.26 (Slim und Full) und SDK 0.64.237. Alle 18 Originaldateien wurden vollständig öffentlich zurückgelesen und mit SHA-256 geprüft. Zuordnung und Prüfsummen stehen in Docs/Deployment/Release09426.txt. Benchmark-Import und Serverauswertung für hetzner-qemu sind ausstehend.
+
+## 0.94.1 Dateikopie im Haupt- und Recovery-Kernel – vorhandenes Ziel beim Ersetzen sichern
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+R4OS-ASTRA-B-0013. Beim Überschreiben kann ein Fehler die bisherige Zieldatei kosten. Der Kopieraufruf muss am Ziel entweder die bisherige Datei oder die vollständig geschriebene neue Fassung wiederherstellen können.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Im Rust-Kernel den Zielaustausch samt FAT-Verzeichnisänderungen absichern. Im Zig-Recovery-Kernel erst die vollständige Kopie in einer separaten Datei schreiben und abschließen. Temporäre Datei und Sicherung bei unklarem Ausgang anhand ihrer Identität behandeln.
+  - Notizen: Rust-Kernel 0.1.497 und Recovery 0.1.79 mit Kernel 0.1.78 schreiben zuerst eine separate Datei. Im Zielverzeichnis erfolgt die Veröffentlichung erst nach geprüftem Abschluss. Eine Sicherung bindet die alte Datei bis zur erfolgreichen Ersetzung. Nach unklarem Ausgang entscheidet der gespeicherte Dateinachweis über Wiederholung oder Wiederherstellung.
+- [Erledigt] #2 Über die von Explorer und Terminal genutzten Kopiereinstiege in Hauptsystem und Recovery Erfolg sowie Lese-, Schreib-, Veröffentlichungs- und Flushfehler prüfen. Nach Fehlerbehandlung und erneutem Aufruf Namen und Inhalt mit der vollständigen alten oder neuen Datei abgleichen.
+  - Notizen: Je 26 modellierte Kopier- und Folgeaufrufe am produktiven Rust- bzw. Zig-Kopierpfad bestanden. Die KVM4-Gäste lasen die per Terminal-COPY ersetzten NTFS- und FAT32-Langnamenziele bytegleich zurück, mit je 96.503 Bytes im Hauptsystem und 131.073 Bytes im eigenständigen Recovery.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Funktionsfehler mit Schweregrad hoch. Fundstellen unter `Repositories/Kernel/Rust/program/system/copy.rs:437`, `Repositories/Kernel/Rust/fs/fat_mutation.rs:239`, `Repositories/Recovery/Kernel/program/r4sys.zig:3226`.
+0013 behoben. Fehlermodelle prüfen Lesen, Schreiben, Flush und mehrstufige Veröffentlichung. Die Gastprüfungen belegen erfolgreiche Ersetzung und Datenintegrität auf beiden Dateisystemen. KVM4-STANDARD 9169314c-c801-4842-9902-61483f8e122f lokal mit aktuellem Artefaktstand, 30 Samples, fünf Metriken und sechs Scores validiert. R4OS Server ausstehend (Import, Readback und Serverauswertung). Sammelpush erfolgreich. Belege unter ExFiles/Reports/Core/0.94.1/.
+
+## 0.94.2 Pager – beim Suchumlauf auch Seiten vor dem Startcursor berücksichtigen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+R4OS-ASTRA-B-0004. Liegt die einzige freigebbare Seite vor dem Cursor im Startbereich, kann die aktuelle Speicheranforderung mit Speichermangel enden. Eine ergebnislose Suchrunde soll alle prüfbaren Seiten genau einmal erfassen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Den Startpunkt als Bereich und Seite festhalten. Nach dem Ende des letzten Bereichs den fehlenden Anfang des Startbereichs bis zur ursprünglichen Seite prüfen und die nächste Cursorposition korrekt hinter dem Fund ablegen.
+  - Notizen: Der Pager begrenzt jeden Teilbesuch auf ein halboffenes Seitenintervall. Nach einem Umlauf untersucht er den ausgelassenen Anfang des Startbereichs. Nur ein gefundener Kandidat versetzt den dauerhaften Cursor hinter die betreffende Seite.
+- [Erledigt] #2 Eine einzelne freigebbare Seite vor dem Cursor muss im ersten Reclaim gefunden werden. Einen Start an der Bereichsgrenze, mehrere Bereiche und einen vollständig ungeeigneten Bestand auf Reihenfolge und begrenztes Ende prüfen.
+  - Notizen: Neun native Aufrufe der produktiven Suchfunktionen prüfen Opfer, Besuchsfolge, Cursor, Bereichsschritte und Umläufe. Enthalten sind der einzige Kandidat im Präfix, drei Bereiche, Bereichsanfang, gefilterte Owner, verkürzter Bereich, aufeinanderfolgende Treffer und der leere Index.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Funktionsfehler mit Schweregrad hoch. Fundstellen unter `Repositories/Kernel/Rust/memory/vm_pager.rs:1360`, `Repositories/Kernel/Rust/memory/vm_pager.rs:1486`, `Repositories/Kernel/Rust/memory/vm_frames.rs:125`.
+0004 behoben. Dieselbe Speicheranforderung erreicht auch den einzigen Kandidaten vor dem Startcursor. Eine erfolglose Runde prüft jede zulässige gemappte oder ungemappte Seite höchstens einmal. KVM4-STANDARD f1bceca7-2a43-4c0a-9364-56ba3df23289 lokal mit aktuellem Artefaktstand, 30 Samples, fünf Metriken und sechs Scores validiert. R4OS Server ausstehend (Import, Readback und Serverauswertung). Sammelpush erfolgreich. Belege unter ExFiles/Reports/Core/0.94.2/.
+
+## 0.94.3 Recovery-VirtioNet – Sendepuffer bei Geräteabschluss genau einmal freigeben
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+R4OS-ASTRA-B-0022. Im eingebetteten VIRTNET.R4D greifen Poll- und Sendepfad gleichzeitig auf den TX-Abschlussindex und die Freimaske zu. Je Deskriptor darf erst der bestätigte Abschluss eine erneute Vergabe erlauben.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Im eingebetteten Treiber TX-Abschlüsse aus Poll und Transmit unter derselben TX-Sperre verarbeiten. Bei belegter Sperre den TX-Anteil des Polls vertagen und den Empfang weiter bedienen. Den Haupttreiber als Referenz verwenden.
+  - Notizen: Das eingebettete VIRTNET benutzt im Poll und beim Senden dieselbe TX-Sperre. Ein belegter TX-Pfad vertagt dessen Completion, während RX weiterläuft. Poll-Eintritt und TX-Zähler sind ebenfalls atomar. Der neue Treiber ist aus der zugehörigen Recovery-Quelle gebaut und mit Manifest und Herkunft im Runtime-Inventar hinterlegt.
+- [Erledigt] #2 Mit dem aus der geänderten Quelle gebauten Recovery-Treiber überlappende Poll- und Sendevorgänge prüfen. Abschlussindex, Freimaske und Wiedervergabe müssen pro Deskriptor zusammenpassen, der Empfang muss bei belegter Sendesperre vorankommen.
+  - Notizen: Die Ringprobe ruft den produktiven Poll während einer laufenden Übertragung auf. Sie prüft RX-Fortschritt, vollen Ring, verzögerten und einmaligen Abschluss, Wiedervergabe des bestätigten Deskriptors und den 16-Bit-Indexüberlauf. Der getrennte BIOS/KVM4-Gast sendet und empfängt über den eingebetteten Treiber eine Datei mit identischem SHA-256.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Funktionsfehler mit Schweregrad hoch. Fundstellen unter `Repositories/Recovery/RecoveryTools/Embedded/Drivers-VirtioNet/src/main.zig:498`, `Repositories/Recovery/RecoveryTools/Embedded/Drivers-VirtioNet/src/main.zig:525`, `Repositories/Drivers/VirtioNet/src/main.zig:592`.
+0022 behoben und im eigenständigen Recovery geprüft. Das neue Recovery-Artefakt ist für die Veröffentlichung am Ende der Familie vorgemerkt. KVM4-STANDARD 5b144ff8-daaf-4ec2-8147-8f4357ce1467 lokal mit aktuellem Artefaktstand, 30 Samples, fünf Metriken und sechs Scores validiert. R4OS Server ausstehend (Import, Readback und Serverauswertung). Sammelpush erfolgreich. Belege unter ExFiles/Reports/Drivers/0.94.3/.
+
+## 0.94.4 AudioService – Aufnahmeframes erst nach angenommener IPC-Antwort verbuchen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+R4OS-ASTRA-B-0021. Der Aufnahme-Lesepfad bewegt den Ringcursor, bevor der Endpunkt die Antwort angenommen hat. Ein abgebrochener Leseauftrag kann dadurch Frames unbemerkt verlieren.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Im AudioService die Leseantwort vorbereiten und den entnommenen Bereich erst nach bestätigter Antwort als geliefert verbuchen. Bei Ablehnung die Frames für den nächsten Abruf verfügbar halten und tatsächlich verlorene Frames über gap_frames ausweisen.
+  - Notizen: AUDSVC meldet die Daten und die verbleibende Warteschlangenlänge in einer vorbereiteten Antwort. Erst das erfolgreiche Ende von serviceEndpointReply übernimmt die Entnahme in den Ring. Bei abgelehnter Antwort bleiben auch Framenummer und Hardwarezeitstempel verfügbar.
+- [Erledigt] #2 Zwei aufeinanderfolgende Leseaufträge an derselben offenen Sitzung auswerten. Für angenommene und abgebrochene Antworten sowie einen echten Ringüberlauf erste Framenummer, Anzahl, Inhalt und gap_frames über die SDK-Schnittstelle vergleichen.
+  - Notizen: Der neue Besitzerfall führt Aufrufe über audio_capture.Client.readPoll aus. Er vergleicht Empfangsbytes, erste Framenummer, Länge und Lücke nach Ablehnung, bestätigtem Wiederholungsaufruf, einer zweiten Ablehnung und echtem Überlauf. Weitere akzeptierte Frames folgen ohne erneute Lücke.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Funktionsfehler mit Schweregrad mittel. Fundstellen unter `Repositories/Services/AudioService/src/capture.zig:300`, `Repositories/Services/AudioService/src/main.zig:296`, `Repositories/Kernel/Rust/service/endpoint.rs:691`.
+0021 behoben. Die Regression ist Teil der vorhandenen AudioService-Tests und benutzt den SDK-Lesepfad mit kontrolliertem Endpunkt und Aufnahmegerät. KVM4-STANDARD d7370dbf-2c92-45a9-b1b6-a27461e5cbde lokal mit aktuellem Artefaktstand, 30 Samples, fünf Metriken und sechs Scores validiert. R4OS Server ausstehend (Import, Readback und Serverauswertung). Sammelpush erfolgreich. Belege unter ExFiles/Reports/Audio/0.94.4/.
+
+## 0.94.5 DNS-Dienst – die Restfrist für synchrone IPv4-Abfragen korrekt berechnen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+R4OS-ASTRA-B-0015. Im synchronen A-Resolver kann die Frist zwischen zwei Uhrabfragen verstreichen. Der Dienst und seine eingebettete Recovery-Fassung sollen auch an der Fristgrenze zuverlässig Timeout melden.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 In beiden Resolvern pro Warteentscheidung den Tickstand einmal lesen. Eine erreichte Frist sofort behandeln und die an udpRecvFromWait übergebene Restzeit aus derselben Probe berechnen.
+  - Notizen: Beide DNSSVC-Fassungen messen die seit dem Start verstrichenen Ticks mit modularer Differenz. Ein einziger Tickwert entscheidet je Schleifendurchlauf sowohl über den Ablauf als auch über das an UDP weitergegebene Restbudget.
+- [Erledigt] #2 Den synchronen SDK-Aufruf mit rechtzeitiger Antwort sowie unmittelbar vor, genau auf und nach der Frist in beiden Fassungen prüfen. Jede Empfangswartezeit muss in das verbleibende Budget passen.
+  - Notizen: Je sieben synchrone Aufrufe des SDK durchlaufen den echten Resolver und dessen DNS-Kodierung mit kontrollierter Uhr und UDP-Gegenstelle. Die Prüfungen umfassen rechtzeitige Antworten, die letzte zulässige Tickposition, exakte und überschrittene Frist, weitere Datagramme und Ticküberlauf. Empfangsbudgets und Rückgabedaten stimmen in beiden Fassungen.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Funktionsfehler mit Schweregrad mittel. Fundstellen unter `Repositories/Services/DnsService/src/main.zig:288`, `Repositories/SDK/r4os/program.zig:3926`, `Repositories/Recovery/RecoveryTools/Embedded/Services-DnsService/src/main.zig:288`.
+0015 behoben. Eine erreichte Frist beendet die Namensauflösung vor dem nächsten Empfangsaufruf. KVM4-STANDARD 6c7db3c5-8bde-47dc-a2fd-80fb7e241a14 lokal mit aktuellem Artefaktstand, 30 Samples, fünf Metriken und sechs Scores validiert. R4OS Server ausstehend (Import, Readback und Serverauswertung). Sammelpush erfolgreich. Belege unter ExFiles/Reports/Network/0.94.5/.
+
+## 0.94.6 SERVMAN BOOT – fehlgeschlagene Autostarts im Prozessstatus melden
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+R4OS-ASTRA-B-0002. Die Zusammenfassung von SERVMAN zählt fehlgeschlagene Dienststarts. Der Prozessstatus meldet anschließend auch für eine fehlgeschlagene Serie Erfolg. Aufrufer in Hauptsystem und Recovery brauchen den Ausgang der gesamten Startserie.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 In ServiceManager und seiner eingebetteten Recovery-Fassung alle konfigurierten Autostarts versuchen und die vollständige Zusammenfassung ausgeben. Bei mindestens einem Fehler einen passenden Fehlerstatus, möglichst den ersten konkreten Startfehler, zurückgeben.
+  - Notizen: Beide ServiceManager bewahren den ersten konkreten Startfehler bis zum Prozessende auf. Sie versuchen alle verbleibenden Autostarts und schreiben anschließend die vollständige Statistik.
+- [Erledigt] #2 Eine erfolgreiche Serie und eine gemischte Serie mit fehlgeschlagenem Start in beiden Fassungen prüfen. Auch der nachfolgende Dienst muss versucht werden. Bericht, Fehlerzahl und ERRORLEVEL müssen übereinstimmen.
+  - Notizen: Im Haupt- und Recovery-Gast sind die tatsächlichen Terminalberichte und das jeweils folgende SET zurückgelesen. Bei Erfolg lautet ERRORLEVEL 0. Eine gemischte Reihe mit fehlender Programmdatei meldet den konkreten Fehler bei passender Fehlerzahl. Der nachfolgende TIMESVC wurde im Hauptsystem als laufend bestätigt.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Funktionsfehler mit Schweregrad mittel. Fundstellen unter `Repositories/Apps/ServiceManager/src/main.zig:775`, `Repositories/Recovery/RecoveryTools/Embedded/Apps-ServiceManager/src/main.zig:578`.
+0002 behoben. Der Aufrufer kann anhand des Prozessstatus zwischen erfolgreicher und teilweise fehlgeschlagener Startserie unterscheiden. KVM4-STANDARD 5dab38fc-e8aa-4992-a03c-618d8c0e1d54 lokal mit aktuellem Artefaktstand, 30 Samples, fünf Metriken und sechs Scores validiert. R4OS Server ausstehend (Import, Readback und Serverauswertung). Sammelpush erfolgreich. Belege unter ExFiles/Reports/Core/0.94.6/.
+
+## 0.94.7 Pager – vollständig ausgeschlossene Seitenspannen in einem Schritt überspringen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+R4OS-ASTRA-B-0005. Unter der VM-Sperre werden nicht residente oder gepinnte Spannen Seite für Seite gezählt. Die Optimierung baut auf dem vollständigen Suchumlauf aus 0.94.2 auf.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Spannen mit einheitlichem Ausschlussgrund innerhalb der aktuellen Suchgrenzen zusammenfassen. Cursor, übersprungene Seiten und Diagnosestatistik gesammelt fortschreiben und Überschneidungen mit Guard-Bereichen berücksichtigen.
+  - Notizen: Der Pager schneidet das begrenzte Seitenintervall einmal mit dem Guard. Nicht residente, gepinnte, beschäftigte oder fehlerhafte Spannen werden gesammelt gezählt. Einzelne Seiten prüft er nur in geeigneten Intervallen außerhalb des Guards. Die Priorität der Ausschlussgründe bleibt erhalten.
+- [Erledigt] #2 Bei Start mitten in einer Spanne, gemischten Spannen und Guard-Übergängen Kandidatenfolge, Zähler und Suchende vergleichen. Für eine lange vollständig ausgeschlossene Spanne die Zahl der Cursorfortschreibungen prüfen.
+  - Notizen: Der Produktionsscanner behält in den neun Cursorfällen Reihenfolge und Umlauf bei. Die zusätzlichen Fälle messen unter anderem Guard-Anfang und -Ende innerhalb einer Seite, gemischte Spannen und Treffer vor und nach dem Guard. Für eine Million ausgeschlossener Seiten mit Start im Inneren genügen je zwei Spannenbesuche und 15 Zugriffe auf den Pagerzustand.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Performancebefund mit Schweregrad mittel. Fundstellen unter `Repositories/Kernel/Rust/memory/vm_pager.rs:1380`, `Repositories/Kernel/Rust/memory/vm_pager.rs:1486`.
+0005 behoben. Die Prüfzähler erfassen die übersprungenen Seiten weiterhin vollständig, der Aufwand für eine homogene ausgeschlossene Spanne ist unabhängig von ihrer Seitenzahl. KVM4-STANDARD 4e1909ff-4153-499a-b797-2cb5458caf89 lokal mit aktuellem Artefaktstand, 30 Samples, fünf Metriken und sechs Scores validiert. R4OS Server ausstehend (Import, Readback und Serverauswertung). Sammelpush erfolgreich. Belege unter ExFiles/Reports/Core/0.94.7/.
+
+## 0.94.8 VirtioNet – bei vollem Senderring erneute Slotsuche an Freigaben binden
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+R4OS-ASTRA-B-0009. Haupttreiber und Recovery-Treiber suchen unter der Sendesperre wiederholt in derselben leeren Freimaske. Die Änderung im Recovery-Treiber setzt die gemeinsame TX-Sperre aus 0.94.3 voraus.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Bei leerer Maske die Slotsuche sofort beenden, sonst den ersten freien Slot anhand der gesetzten Bits wählen. Innerhalb des bestehenden Wartebudgets Abschlüsse weiter einsammeln und die Vergabe erst bei neu freiem Platz wiederholen.
+  - Notizen: Die Nullmaske beendet die Slotwahl sofort. Bei einer nichtleeren Maske gibt ctz die niedrigste freie Position an. Während eines vollen Rings werden nur Abschlüsse abgefragt. Nach dem unveränderten Wartebudget erfolgt genau eine Slotentscheidung.
+- [Erledigt] #2 In Hauptsystem und Recovery einen vollen Ring, einen eintreffenden Abschluss und mehrere Sender prüfen. Slotreihenfolge, Busy-Rückgabe und Wiederverwendung müssen stimmen. Bei unveränderter Nullmaske darf keine erneute Suche über alle Slots stattfinden.
+  - Notizen: Für beide Treiber wurden alle 65.536 möglichen Freimasken auf Reihenfolge und verbleibende Bits geprüft. Die produktiven Sendepfade durchlaufen den vollen Ring, die Busy-Rückgabe, einen verspäteten Used-Eintrag, einen überlappenden zweiten Sender sowie Poll und Indexüberlauf.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Performancebefund mit Schweregrad mittel. Fundstellen unter `Repositories/Drivers/VirtioNet/src/main.zig:84`, `Repositories/Drivers/VirtioNet/src/main.zig:556`, `Repositories/Recovery/RecoveryTools/Embedded/Drivers-VirtioNet/src/main.zig:498`.
+0009 behoben. Derselbe bestätigte freie Slot wird im Hauptsystem und Recovery gewählt, ohne bei einer unveränderten Nullmaske die 16 Positionen wiederholt zu durchsuchen. KVM4-STANDARD 903dc2ef-7557-48c6-a2d7-1e96781d646b lokal mit aktuellem Artefaktstand, 30 Samples, fünf Metriken und sechs Scores validiert. R4OS Server ausstehend (Import, Readback und Serverauswertung). Sammelpush erfolgreich. Belege unter ExFiles/Reports/Drivers/0.94.8/.
+
+## 0.94.9 SDK und Kernel – ruhende Endpunktdienste bei Stop gezielt wecken
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+R4OS-ASTRA-B-0023. ServiceLoop begrenzt die Wartezeit ruhender Dienste standardmäßig auf 200 ms, um das Stopflag zu prüfen. Anfragen, Stopanforderungen und fachliche Fristen sollen den Dienst auch bei längerem Warten zuverlässig erreichen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Die Stopanforderung im Kernel mit der Endpunktwartebedingung verbinden und vor dem Einschlafen erneut prüfen. Im SDK bis Nachricht, Stop oder eigener Frist warten. Für unterstützte Anbieter ohne verlässliches Stop-Wecksignal den endlichen Rückfall erhalten.
+  - Notizen: Der Hauptkernel veröffentlicht das Stopflag vor dem gezielten Wecken der eigenen Service-Endpunkte. Die Wartebedingung prüft das Flag bei der Einreihung. Das R4X-Startflag signalisiert diese Unterstützung. Die gemeinsame SDK-Schleife wartet bis Anfrage, eigener Frist oder Stop, ältere Anbieter verwenden den endlichen Rückfall.
+- [Erledigt] #2 Am TimeService ohne Fachfrist die Leerlauf-Wakes prüfen. Nachricht an der Wartegrenze, direkter Prozess-Stop, regulärer SERVMAN-Stop und fälliger Fachtimer müssen jeweils den vorgesehenen Rückgabepfad auslösen.
+  - Notizen: Der echte TIMESVC im SMP4-Gast behielt im Leerlauf seinen Blockierbeginn und seine Switch-Anzahl, bediente sechs Statusaufrufe und quittierte den direkten Prozess-Stop regulär. SERVMAN-Stop und Neustart sind im Gast geprüft. Kontrollierte Anbieteraufrufe prüfen Anfragen beim Warteeintritt, direkte und fällige Fristen, Stop vor und während des Wartens sowie die endliche Altanbieterfrist.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Performancebefund mit Schweregrad mittel. Fundstellen unter `Repositories/SDK/r4os/app_services.zig:410`, `Repositories/Services/TimeService/src/main.zig:59`, `Repositories/Kernel/Rust/program/process.rs:119`.
+0023 behoben. Die SDK-Funktion steht den 16 neu gebauten Endpunktdiensten über das ausgehandelte Startflag zur Verfügung. KVM4-STANDARD 9771f98c-c8f4-4af5-8703-97b5b5472f43 lokal mit aktuellem Artefaktstand, 30 Samples, fünf Metriken und sechs Scores validiert. R4OS Server ausstehend (Import, Readback und Serverauswertung). Sammelpush erfolgreich. Belege unter ExFiles/Reports/Core/0.94.9/.
+
+## 0.94.10 Desktop – getrennte Bildänderungen bis zur CPU-Komposition erhalten
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+R4OS-ASTRA-B-0003. Die CPU-Ausgabe zeichnet bei zwei weit entfernten Änderungen auch die Fläche dazwischen neu. Jeder Ausgabepuffer benötigt die seit seinem letzten gültigen Bild entstandenen Änderungen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Die begrenzte Liste der geänderten Rechtecke bis zur CPU-Komposition und in die Reparaturhistorie je Puffer übernehmen. Bei Erstbild, Moduswechsel oder wenn das Zusammenfassen weniger Arbeit verursacht, eine größere Reparaturfläche verwenden.
+  - Notizen: Die CPU-Ausgabe übernimmt die begrenzte Liste aus dem Szenenschaden. Jeder der drei Puffer führt seine eigenen offenen Rechtecke. Die CPU-Komposition, Orientierung und Farbkorrektur verarbeiten die tatsächlich erforderlichen Flächen. Eine zusammenhängende Präsentationsgrenze wird erst am bestehenden Ausgabevertrag gebildet.
+- [Erledigt] #2 Bei zwei weit auseinanderliegenden Änderungen auf gültigem Puffer die komponierten Regionen und das Ergebnisbild prüfen. Pufferwechsel, verworfene Präsentation und Moduswechsel müssen jeweils wieder ein vollständiges korrektes Bild ergeben.
+  - Notizen: Die native Desktopprüfung vergleicht vollständige Pixelbilder bei Pufferwechsel, Verwerfen und Rücksetzen. Auf gültigen Puffern werden für die beiden getrennten Änderungen genau zehn Pixel repariert. Ein verworfener Puffer sowie eine neue Modushistorie erhalten eine vollständige Reparatur.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Performancebefund mit Schweregrad mittel. Fundstellen unter `Repositories/Apps/Desktop/src/rust/render/runtime.rs:271`, `Repositories/Apps/Desktop/src/rust/outputs/cpu_frame.rs:83`, `Repositories/Apps/Desktop/src/rust/render/output_damage.rs:11`.
+0003 behoben. Angrenzende Rechtecke mit gleicher Pixelarbeit können in einem Malvorgang verarbeitet werden. KVM4-STANDARD 699f3d03-99d8-41f7-974b-f41d2c4c8e5f lokal mit aktuellem Artefaktstand, 30 Samples, fünf Metriken und sechs Scores validiert. R4OS Server ausstehend (Import, Readback und Serverauswertung). Sammelpush erfolgreich. Belege unter ExFiles/Reports/Desktop/0.94.10/.
+
+## 0.94.11 Desktop – Bildschirmaufnahme nach Bildtermin und Worker-Abschluss wecken
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+R4OS-ASTRA-B-0008. Bei laufender oder stoppender Bildschirmaufnahme verkürzt der Desktop jede Wartezeit auf einen Tick. Ein ruhendes Bild soll bis zum nächsten Bildtermin oder Ereignis warten können.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Den nächsten Aufnahmetermin in die Desktop-Wartezeit einbeziehen und den Abschluss des Aufnahmeworkers an die Ereignisschleife melden. Kurze Rückfallfristen an einen konkreten ausstehenden Vorgang binden.
+  - Notizen: Der Recorder veröffentlicht seinen nächsten echten Bildtermin und meldet eine neue frühere Frist sowie das fertige Worker-Ergebnis über die Desktop-Aktivitätsbenachrichtigung. Hauptschleife und Bildaufnahme verwenden die verbleibende Zeit. Ein freigegebener Abschluss, eine ausstehende Ressourcenfreigabe oder ein Stop auf einem Anbieter ohne Signal bleiben begrenzte Rückfallfälle.
+- [Erledigt] #2 Bei ruhigem Desktop und aktivem Recorder eine mehrere Ticks entfernte Bildfrist prüfen. Eingabe, fälliges Bild und Abschluss beim Stoppen müssen rechtzeitig bedient werden. Weitere vorhandene Weckgründe unabhängig berücksichtigen.
+  - Notizen: Die native Prüfung deckt eine 31-Tick-Bildfrist, das kleinere unabhängige Eingabebudget, einen fälligen Termin und das Ende nach Stop ab. Beim Worker sind Frist und Abschluss vor dem Aktivitätssignal sichtbar. Die vorhandenen übrigen Weckgründe bleiben wirksam.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Performancebefund mit Schweregrad mittel. Fundstellen unter `Repositories/Apps/Desktop/src/rust/runtime/desktop.rs:1996`, `Repositories/Apps/Desktop/src/rust/capture/runtime.rs:35`, `Repositories/Apps/Desktop/src/rust/outputs/manager.rs:983`.
+0008 behoben. Eine laufende Bildschirmaufnahme allein begrenzt den ruhenden Desktop nicht mehr auf einen Tick. KVM4-STANDARD 7554d9ef-9090-4127-88af-a38e65278951 lokal mit aktuellem Artefaktstand, 30 Samples, fünf Metriken und sechs Scores validiert. R4OS Server ausstehend (Import, Readback und Serverauswertung). Sammelpush erfolgreich. Belege unter ExFiles/Reports/Desktop/0.94.11/.
+
+## 0.94.12 Registry – Batchänderungen beim Aufbau eines Hives einmal indizieren
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+R4OS-ASTRA-B-0020. Unter dem Registry-Mutex wird jeder bestehende Wert mit sämtlichen Batchoperationen verglichen. Bis zu 32 Änderungen lassen sich für den Durchlauf über die Bestandswerte vorab nach Schlüssel und Wertname erschließen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Im Kernel die validierten Batchoperationen einmal in begrenztem Arbeitsraum indizieren. Für die Übernahme der Bestandswerte dieselbe Pfad- und Namensgleichheit wie heute verwenden und die ursprüngliche Operationsreihenfolge für Ergebnis und Fehlerindex erhalten.
+  - Notizen: Der validierte Batch führt einen sortierten, auf 32 Ziele begrenzten Index. Pfadtrennzeichen und ASCII-Großschreibung entsprechen den bisherigen Identitätsregeln. Die Hive-Kopie sucht darin binär. Validierung, Löschfehler und Übernahme der neuen Werte folgen der ursprünglichen Operationsreihenfolge.
+- [Erledigt] #2 Am öffentlichen Registry-Batch-Aufruf Setzen, Löschen, gemischte Schreibweisen und unveränderte Werte prüfen. Hive-Inhalt, Reihenfolge und Fehlerindex vergleichen, den Migrationsaufruf in REG.R4X einbeziehen und den Wegfall der vollständigen Suche je Bestandswert belegen.
+  - Notizen: Der öffentliche Batch-Aufruf hat Setzen, Löschen, gemischte Schreibweise, unveränderte Nachbarwerte und Fehlerindex 1 im Gast bestätigt. REG APITEST und die Migration der drei Dokumente laufen über die ausgelieferte REG.R4X. Bei 32 Operationen benötigten 1.024 Suchvorgänge im produktiven Index jeweils höchstens sechs Vergleiche.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Performancebefund mit Schweregrad mittel. Fundstellen unter `Repositories/Kernel/Rust/program/system/registry_build.rs:129`, `Repositories/Kernel/Rust/program/system/registry_batch.rs:119`, `Repositories/Apps/RegistryTool/src/main.zig:999`.
+0020 behoben. Der einmal aufgebaute Batchindex dient der Duplikaterkennung und der Übernahme der Bestandswerte. KVM4-STANDARD 3b3dffec-15fb-42f3-8812-1a1b8c605cef lokal mit aktuellem Artefaktstand, 30 Samples, fünf Metriken und sechs Scores validiert. R4OS Server ausstehend (Import, Readback und Serverauswertung). Sammelpush erfolgreich. Belege unter ExFiles/Reports/Core/0.94.12/.
+
+## 0.94.13 Bootprotokoll – zusammenhängende Meldungen mit einer Ringsperre schreiben
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+R4OS-ASTRA-B-0001. Der normale Bootlog-Hook zerlegt einen bereits zusammenhängenden Text in einzelne Bytes und sperrt für jedes Byte erneut. Der Ringschreiber kann den Text als Block übernehmen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Für den Bootlog-Hook einen Blockschreibweg bis zum Ringschreiber verwenden. Die bestehende Ausgaberoute für serielle Ausgabe, Konsole und benutzerdefinierte Zeichen-Hooks berücksichtigen.
+  - Notizen: Die Bootumleitung ist ein ausdrückliches Ausgabeziel. Ein Textblock läuft gesammelt über die serielle Ausgabe und einmal unter der Ringsperre in den Bootlog. Farbkonsole und benutzerdefinierte Zeichen-Hooks behalten ihre jeweilige Abfangreihenfolge.
+- [Erledigt] #2 Eine mehrbyteige Bootmeldung auch über das Ringende verfolgen. Bytereihenfolge und Ausgabeziele müssen stimmen, für den Bootlog-Textblock soll eine einzige Sperrübernahme genügen.
+  - Notizen: Der produktive Schreiber und die Routen wurden mit gezählter Sperre geprüft. Block über Ringende, mehr als zwei Ringkapazitäten, exakte Ausgabe- und Überlaufzähler, serielle Kopie, Konsole und benutzerdefinierte Hooks vor sowie nach der seriellen Ausgabe waren korrekt.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Performancebefund mit Schweregrad mittel. Fundstellen unter `Repositories/Kernel/Rust/boot/log_route.rs:144`, `Repositories/Kernel/Rust/boot/foundation.rs:101`, `Repositories/Kernel/Rust/boot/log.rs:63`.
+0001 behoben. Ein Bootlog-Textblock benötigt einen Ringzugriff unter der Sperre. KVM4-STANDARD 99628ab1-5175-4486-9e05-d46b4abd8df7 lokal mit aktuellem Artefaktstand, 30 Samples, fünf Metriken und sechs Scores validiert. R4OS Server ausstehend (Import, Readback und Serverauswertung). Sammelpush erfolgreich. Belege unter ExFiles/Reports/Core/0.94.13/.
+
+## 0.94.14 R4IMG – das SVG-Prüfergebnis beim allgemeinen Dekodieren wiederverwenden
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+R4OS-ASTRA-B-0017. Die allgemeine Dekodierung prüft eine SVG-Struktur und ruft anschließend den öffentlichen SVG-Einstieg mit derselben Prüfung auf. Beide öffentlichen Einstiege müssen die Eingabe jeweils einmal eigenständig absichern.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Das bei der allgemeinen Formaterkennung geprüfte Bildformat und seine Abmessungen direkt an den internen SVG-Dekodierer weiterreichen. Beim direkten öffentlichen SVG-Aufruf die eigenständige Strukturprüfung beibehalten.
+  - Notizen: Der allgemeine SVG-Dekodierzweig gibt die bereits geprüfte Formatinformation an denselben internen Rasterpfad wie der direkte API-Aufruf. Direkte SVG-Aufrufe führen ihre eigene Strukturprüfung durch.
+- [Erledigt] #2 Allgemeinen und direkten SVG-Einstieg mit gültigen und ungültigen Daten sowie knappem Scratch-Speicher vergleichen. Bildmaße, Pixel und Fehlerwerte müssen passen. Im allgemeinen SVG-Pfad nur einen Struktur-Probeaufruf zählen.
+  - Notizen: Beide Einstiege liefern identische Bildmaße und Pixel sowie dieselben Fehler bei unvollständiger Struktur, kleinem Pixelpuffer und um ein Byte zu kleinem Scratch. Der gezählte Parser meldete im allgemeinen und im direkten Pfad je einen Struktur-Probeaufruf. Die bestehenden R4IMG-Besitzertests und der Verbraucherbau sind abgeschlossen.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Performancebefund mit Schweregrad mittel. Fundstellen unter `Repositories/Libraries/R4IMG/Source/codec.zig:147`, `Repositories/Libraries/R4IMG/Source/codec.zig:263`, `Repositories/Libraries/R4IMG/Source/svg.zig:405`.
+0017 behoben. R4IMG 0.3.10 ist im SDK-Profil gebunden. KVM4-STANDARD f2be3913-7acf-4e2d-8de0-7ee932457382 lokal mit aktuellem Artefaktstand, 30 Samples, fünf Metriken und sechs Scores validiert. R4OS Server ausstehend (Import, Readback und Serverauswertung). Sammelpush erfolgreich. Belege unter ExFiles/Reports/Libraries/0.94.14/.
+
+## 0.94.15 Recovery-Download – SHA-256 und Cache-Prüfsumme im selben Durchlauf bilden
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+R4OS-ASTRA-B-0019. Beim Übernehmen eines System- oder Recovery-Archivs durchläuft das Menü die lokalen Paketbytes zweimal. SHA-256 und die zusätzliche Cache-Prüfsumme werden für unterschiedliche Prüfungen gebraucht.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Beide Prüfsummen beim Übernehmen blockweise über dieselben Archivbytes aktualisieren. Erst nach vollständiger Paketprüfung den Cache aktivieren. Für reine Vorschauaufrufe die bisher benötigte SHA-256-Prüfung verwenden.
+  - Notizen: Der Session-Leser berechnet SHA-256 und bei Cacheübernahme die FNV-Prüfsumme beim selben blockweisen Lesen. Vorschau und lokale Installationsprüfung brauchen nur SHA-256. Die Aktivierung folgt erst nach vollständiger Paket- und Assetprüfung.
+- [Erledigt] #2 Für beide Paketarten die Hashwerte mit den bisherigen Werten vergleichen und einen gemeinsamen Datendurchlauf nachweisen. Fortschrittsanzeige, Abbruch und geänderte Quelldaten prüfen. Nur ein gültiges vollständiges Paket darf aktiv werden.
+  - Notizen: Die beiden Archivgrößen durchlaufen je einen Lese- und Fortschrittsschritt pro 128-KB-Block. SHA-256 und FNV stimmen mit unabhängigen Referenzwerten überein. Vorschau, Abbruch, verkürzte Leseantwort und geänderte Dateigröße sind geprüft. Die bestehende Recovery-Downloadabnahme prüft beide tatsächlichen Paketarten und die Cacheübernahme.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Performancebefund mit Schweregrad mittel. Fundstellen unter `Repositories/Recovery/RecoveryTools/Menu/src/package_session.zig:90`, `Repositories/Recovery/RecoveryTools/Menu/src/download.zig:152`.
+0019 behoben. Der Download benötigt keinen eigenen zweiten Durchlauf für die Cache-Prüfsumme. Die Hostprüfung bemisst die Frist vollständiger Übertragungen und Cacheprüfungen anhand der tatsächlichen ZIP-Größe. Die Testpartition wird aus Bootpaar, beiden vorhandenen ZIPs und dem größten neuen ZIP dimensioniert. KVM4-STANDARD 7799f18b-6186-4e32-aac1-3aeb2960f3bf lokal mit aktuellem Artefaktstand, 30 Samples, fünf Metriken und sechs Scores validiert. R4OS Server ausstehend (Import, Readback und Serverauswertung). Sammelpush erfolgreich. Belege unter ExFiles/Reports/Recovery/0.94.15/.
+
+## 0.94.16 Kernelstart – Scheduler-Diagnose nur bei gewählter Testoption aktivieren
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+R4OS-ASTRA-B-0007. Der normale Bootpfad fordert selbst ohne gewählte Task-Registry-Diagnose eine ProbeLease an. Nach dem Rücksprung aus der Prüfung fragt er zusätzlich nach verbliebenen Testressourcen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Die Auswahl der unterstützten Task-Registry-Testoptionen vor die Diagnosemeldung und die Anforderung der ProbeLease legen. Besitz, Freigabe und Fehlerbehandlung für tatsächlich angeforderte Tests erhalten.
+  - Notizen: Die konfigurierten acht Varianten werden vor Bootmeldung und ProbeLease ausgewählt. Der bisherige Besitzerpfad führt gewählte Diagnosen aus und hält die Probe bei Fehler oder offenen Ressourcen.
+- [Erledigt] #2 Den normalen Boot ohne Diagnoseoption sowie die vorhandenen expliziten Varianten vergleichen. Im normalen Boot entfallen ProbeLease und Ressourcenabfrage. Ausgewählte Diagnosen müssen weiterhin laufen und ihren tatsächlichen Ausgang melden.
+  - Notizen: Im regulären Boot lief das System ohne TaskRegistry-Probe bis zum Poweroff. Separate Vier-CPU-Gäste haben die Idle-Deadline- und FPU-Guard-Berichte geliefert. Im gezählten Besitzerpfad wurden acht Varianten, unbekannte und fehlende Optionen, die belegte Probe, Ressourcenretention und Fehler geprüft. Beim ersten Idle-Lauf wachte der Schläfer am Fälligkeitstick vor dem nächsten Timer-IRQ auf. Die Diagnose erfasst den Weckzeitpunkt separat und prüft die anschließende echte IRQ-Zustellung in einem begrenzten Fenster.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Performancebefund mit Schweregrad niedrig. Fundstellen unter `Repositories/Kernel/Rust/boot/entry.rs:89`, `Repositories/Kernel/Rust/sched/task_probe/mod.rs:32`, `Repositories/Kernel/Rust/sched/kernel_check/mod.rs:57`.
+0007 behoben. Ein normaler Start erfüllt die Diagnoseauswahl ohne ProbeLease und Ressourcenabfrage. KVM4-STANDARD 7f9e2a07-74f7-4ba1-b1b5-5a4f0bfbc652 lokal mit aktuellem Artefaktstand, 30 Samples, fünf Metriken und sechs Scores validiert. R4OS Server ausstehend (Import, Readback und Serverauswertung). Sammelpush erfolgreich. Belege unter ExFiles/Reports/Core/0.94.16/.
+
+## 0.94.17 DisplayBlit – den festen Pixelkopiertest in die Grafikdiagnose verlegen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+R4OS-ASTRA-B-0010. DISPBLIT.R4D prüft bei jeder Initialisierung ein festes Kopiermuster mit 96 Pixeln. Beim Laden genügen die API-Prüfung und die reguläre Backendanmeldung. Der feste Pixelvergleich gehört in die angeforderte Grafikdiagnose.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Den Kopiertest aus der Initialisierung lösen und über die explizite Grafikdiagnose mit derselben Backendfunktion erreichbar machen. Bereitschaftsmeldung und Selbsttest-Kennzeichen an die tatsächlich ausgeführte Prüfung anpassen.
+  - Notizen: DISPBLIT prüft und registriert seine API beim Laden. DISPLAYD /BLITCHECK führt den festen RAM-Test über den tatsächlich registrierten Present-Callback aus. Der Kernel setzt oder entfernt SELF_TESTED für die geprüfte Registrierungsidentität.
+- [Erledigt] #2 Beim normalen Laden API-Prüfung, Backendregistrierung und deren Fehlerpfade prüfen. Die explizite Diagnose muss beide Zielrechtecke sowie sämtliche unberührten Pixel kontrollieren.
+  - Notizen: Die native Treiberprüfung deckt API-Ablehnung, fehlschlagende und erfolgreiche Registrierung und Abmeldung ab. Alle 96 einzeln verfälschten Pixel wurden erkannt. Die explizite Diagnose im Vier-CPU-Gast bestätigte 25 kopierte und 71 unberührte Pixel. Die generierten C-, Rust- und Zig-Bindungen stimmen mit der erweiterten R4DEV2-Tabelle überein. Alle bisherigen Inline-Funktionen der GUI- und Subsystem-Fassaden sind enthalten.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Performancebefund mit Schweregrad niedrig. Fundstellen unter `Repositories/Drivers/DisplayBlit/src/main.zig:25`, `Repositories/Drivers/DisplayBlit/src/main.zig:123`.
+0010 behoben. Der normale Start führt den festen Pixeltest erst auf ausdrücklichen Diagnoseaufruf aus. KVM4-STANDARD 3fd289b3-66bc-4f35-b4c7-0fdcfd1f3dcd lokal mit aktuellem Artefaktstand, 30 Samples, fünf Metriken und sechs Scores validiert. R4OS Server ausstehend (Import, Readback und Serverauswertung). Sammelpush erfolgreich. Belege unter ExFiles/Reports/Graphics/0.94.17/.
+
+## 0.94.18 DHCP – bekannte Antwortoptionen in einem Durchlauf lesen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+R4OS-ASTRA-B-0011. NetDhcp und der eingebettete Recovery-Decoder durchsuchen die DHCP-Optionen für acht Felder wiederholt. Ein Durchlauf soll dieselben Adress-, Nachrichtentyp- und Lease-Informationen liefern.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Die benötigten Optionswerte in einem Durchlauf erfassen und anschließend wie bisher auswerten. Für doppelte Codes die erste Fundstelle verwenden und Standardwerte sowie die Behandlung unvollständiger Optionen in beiden Decodern erhalten.
+  - Notizen: NETDHCP liest die acht bekannten Optionen in einem Durchlauf. Jedes Feld hält die erste vollständige Option dieses Codes, einschließlich eines für den Typ zu kurzen Werts. Die Auswertung behält alle bisherigen Standardwerte.
+- [Erledigt] #2 Vollständige und teilweise belegte Antworten, PAD, END, doppelte Codes sowie abgeschnittene Felder vergleichen. Haupt- und Recovery-Decoder müssen dieselben Ergebnisse wie bisher mit einem Optionsdurchlauf erzeugen.
+  - Notizen: Der Vergleich gegen den bisherigen vollständigen HandleMessage-Ausgabesatz umfasst alle Präfixe von vier Antwortfolgen mit PAD, END, Duplikaten, fehlenden Feldern, kurzen Daten, Antworttypen und Lease-Fristen. Beide Protokollfassungen durchlaufen die Optionen genau einmal.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Performancebefund mit Schweregrad niedrig. Fundstellen unter `Repositories/Protocols/NetDhcp/src/main.zig:173`, `Repositories/Protocols/NetDhcp/src/main.zig:256`, `Repositories/Recovery/RecoveryTools/Embedded/Protocols-NetDhcp/src/main.zig:269`.
+0011 behoben. Hauptsystem und Recovery verwenden einen einzigen Optionsdurchlauf. KVM4-STANDARD cdc58d8d-c472-4a62-9c3f-f8b503b3d412 lokal mit aktuellem Artefaktstand, 30 Samples, fünf Metriken und sechs Scores validiert. R4OS Server ausstehend (Import, Readback und Serverauswertung). Sammelpush erfolgreich. Belege unter ExFiles/Reports/Network/0.94.18/.
+
+## 0.94.19 Geräteverwaltung – die Anzeige über stabile Geräteindizes sortieren
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+R4OS-ASTRA-B-0012. Beim Aktualisieren des Geräteinventars verschiebt die Ansicht für jede Vertauschung ganze Datensätze. Eine stabile Reihenfolge über Indizes kann die Originaldaten am Platz belassen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Die Sortierreihenfolge auf Indizes für Bindungsstatus und Busgruppe berechnen. Filter, Auswahl, Detailansicht und Konsolenausgabe auf die zugehörigen Snapshot-Einträge abbilden und die Eingangsreihenfolge bei gleichen Schlüsseln bewahren.
+  - Notizen: Die Anzeige sortiert Snapshot-Indizes stabil nach Bindung und Bus. Filter, Export, Konsolenliste und Detailansicht verwenden die zugehörigen Originaleinträge. Beim Aktualisieren wird das ausgewählte Gerät im neuen Snapshot gesucht.
+- [Erledigt] #2 Bereits sortierte Geräte, umgekehrte Gruppen und gleiche Schlüssel über erneutes Laden und Filtern vergleichen. Sichtbare Reihenfolge, ausgewähltes Gerät und Detaildaten müssen stimmen. Die Sortierung soll nur Indizes bewegen.
+  - Notizen: Der Besitzerprüflauf erfasst 160 Datensätze und die stabile Reihenfolge bei gleichen Schlüsseln, bereits sortierte Einträge, umgruppierte Eingänge, den aktiven Netzwerkfilter und die Adapterzuordnung nach erneutem Laden.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Performancebefund mit Schweregrad niedrig. Fundstellen unter `Repositories/Apps/DeviceManager/src/main.zig:317`, `Repositories/Apps/DeviceManager/src/main.zig:348`, `Repositories/Apps/DeviceManager/src/main.zig:423`.
+0012 behoben. Die Sortierung verschiebt nur Geräteindizes. KVM4-STANDARD 5bdd111f-94e1-4737-9de9-310db49fb1c3 lokal mit aktuellem Artefaktstand, 30 Samples, fünf Metriken und sechs Scores validiert. R4OS Server ausstehend (Import, Readback und Serverauswertung). Sammelpush erfolgreich. Belege unter ExFiles/Reports/Devices/0.94.19/.
+
+## 0.94.20 xHCI – Ereignisse eines abgemeldeten Geräts in einem Durchlauf entfernen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+R4OS-ASTRA-B-0014. Beim Abmelden eines USB-Geräts verschiebt die Mailbox nach jeder Einzellöschung alle nachfolgenden Ereignisse. Die Reihenfolge für andere Geräte lässt sich mit einem einzigen Durchlauf erhalten.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Im xHCI-Ereignisrouter die Mailbox für den abgemeldeten Slot in einem stabilen Durchlauf verdichten, das frei gewordene Ende einmal leeren und die Statistik um die Anzahl entfernter Ereignisse erhöhen.
+  - Notizen: Der Ereignisrouter liest jeden belegten Eintrag einmal, rückt überlebende Ereignisse höchstens einmal vor und leert das freigewordene Ende zusammenhängend. Die Purge-Statistik erhält die tatsächliche Zahl entfernter Ereignisse.
+- [Erledigt] #2 Keinen Treffer, gemischte Slot-IDs und eine vollständig zu leerende Mailbox prüfen. Reihenfolge, Belegung, Statistik und geleertes Ende müssen stimmen. Jeder verbleibende Eintrag wird höchstens einmal verschoben.
+  - Notizen: Der Besitzerselbsttest sowie 24 Belegungs- und Treffermuster bis zur vollen Mailbox bestätigen Reihenfolge, Nullung, Belegung, Statistik und wiederholtes Abmelden.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Performancebefund mit Schweregrad niedrig. Fundstellen unter `Repositories/Kernel/Rust/usb/event_router.rs:273`, `Repositories/Kernel/Rust/usb/event_router.rs:291`, `Repositories/Kernel/Rust/usb/xhci_runtime.rs:474`.
+0014 behoben. Das Entfernen eines Slots hat linearen Aufwand. KVM4-STANDARD 50768251-0a41-434f-9aaf-22b3b09f0fd4 lokal mit aktuellem Artefaktstand, 30 Samples, fünf Metriken und sechs Scores validiert. R4OS Server ausstehend (Import, Readback und Serverauswertung). Sammelpush erfolgreich. Belege unter ExFiles/Reports/Drivers/0.94.20/.
+
+## 0.94.21 Appearance – drei Desktopeinstellungen aus demselben Dateistand lesen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+R4OS-ASTRA-B-0018. Für Hintergrundfarbe, Symboltextfarbe und Hintergrundbild liest und validiert Appearance dieselbe Konfiguration dreimal. Die Ansicht soll die drei Werte aus einer zusammenhängenden Fassung beziehen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Das Konfigurationsdokument einmal laden und validieren. DESKTOP_BG, DESKTOP_ICON_TEXT und WALLPAPER mit den R4STD-Regeln für Typen, Standardwerte und Fehler aus diesem Stand lesen.
+  - Notizen: Appearance liest die Desktopkonfiguration einmal und validiert den gemeinsamen Dokumentstand mit R4STD. Farben, Bildpfad, Standardwerte und sichtbarer Fehlerzustand stammen aus dieser Fassung.
+- [Erledigt] #2 Bei gültigen, fehlenden und fehlerhaften Werten Farben, Bildpfad und sichtbaren Fehlerstatus vergleichen. Pro Laden einen logischen Dateizugriff prüfen. Nach einer Dateiänderung muss der nächste Ladevorgang die neue Fassung gemeinsam übernehmen.
+  - Notizen: Vollständige, fehlende, leere, ungültige, überlange und zwischen zwei Zugriffen geänderte Einstellungen wurden mit den drei originalen R4STD-Einzelzugriffen verglichen. Die gezählte Fassung benötigt genau einen Dateizugriff pro Laden.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Performancebefund mit Schweregrad niedrig. Fundstellen unter `Repositories/Apps/Appearance/src/main.zig:141`, `Repositories/Libraries/R4STD/Source/config.zig:72`, `Repositories/Libraries/R4STD/Source/config.zig:234`.
+0018 behoben. Ein erneutes Laden übernimmt Farben und Bildpfad gemeinsam. KVM4-STANDARD 11f66691-2214-4c5c-a132-9de4284319e2 lokal mit aktuellem Artefaktstand, 30 Samples, fünf Metriken und sechs Scores validiert. R4OS Server ausstehend (Import, Readback und Serverauswertung). Sammelpush erfolgreich. Belege unter ExFiles/Reports/Desktop/0.94.21/.
+
+## 0.94.22 Recovery-Menü – auf Eingabe, Kindprozess und die nächste Frist warten
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+R4OS-ASTRA-B-0024. Das Recovery-Menü wacht auf unveränderter Seite alle 20 ms auf. Der Menüprozess soll bei einer Taste, Aktivität seines Kindprozesses oder Stop sowie zur nächsten Status- oder Blinkfrist weiterlaufen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Die Menüschleife mit den Weckquellen für Eingabe, Kindprozess und Stop verbinden. Bei Bedarf die Benachrichtigung am Recovery-Eingabepuffer ergänzen. Die nächste tatsächlich fällige Frist und bereits anstehende Eingaben vor dem Schlafen berücksichtigen.
+  - Notizen: Das Recovery-Menü verwendet die sequenzgesicherte Desktop-Aktivität. Tastatur, angenommene Konsoleneingabe, sichtbare Terminalausgabe, Kindprozessabschluss und kooperativer Stop wecken die Schleife. Die nächste Status- oder Blinkfrist begrenzt die einzelne Einreihung.
+- [Erledigt] #2 Ruhende Menüseite, erste Taste nach Leerlauf, neue Terminalausgabe, Kindprozessende und Stop prüfen. Das Limit von 64 Tasten pro Runde, die Statusfrist von 1000 ms und das Blinken auf der Terminalseite nach 500 ms müssen erhalten bleiben.
+  - Notizen: Die echte Menüschleife wurde mit kontrollierter Uhr, 65 Tasten, neuer Terminalausgabe, Kindabschluss und Stop durchlaufen. Das Budget blieb 64, Status und Terminalblinken bei 1000 bzw. 500 ms. Der originale Recovery-UI-Test bestätigt die Bedienung, den Terminalrücklauf und die Framebufferbilder im Gast. Alle vier BIOS-Auflösungen und UEFI-USB lieferten je 28 Bildvergleiche. Der erste UEFI-Start blieb im OVMF-Splash vor Limine stehen. Der separate UEFI-Lauf mit frischen Firmwarevariablen bestand auf demselben SHA-256-geprüften USB-Image. GPT, FAT32 und die EFI-Startdatei wurden geprüft.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Performancebefund mit Schweregrad niedrig. Fundstellen unter `Repositories/Recovery/RecoveryTools/Menu/src/main.zig:704`, `Repositories/Recovery/RecoveryTools/Menu/src/main.zig:813`.
+0024 behoben. Ein ruhendes Menü wartet bis zur nächsten Frist oder einer Aktivitätsmeldung. KVM4-STANDARD 58b8ef79-8365-4735-b4d0-b4edba4dec5b lokal mit aktuellem Artefaktstand, 30 Samples, fünf Metriken und sechs Scores validiert. R4OS Server ausstehend (Import, Readback und Serverauswertung). Sammelpush erfolgreich. Belege unter ExFiles/Reports/Recovery/0.94.22/.
+
+## 0.94.23 PCM-Mixer – den produktiven Mischpfad auf MAX_SOURCES begrenzen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+R4OS-ASTRA-B-0006. Der einzige produktive Aufrufer kann höchstens MAX_SOURCES Streams liefern. Ein zweiter Mischalgorithmus für größere Eingaben verdoppelt die Pflege des Mixers.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Den produktiven Mixer und seinen Aufrufer auf dieselbe abgesicherte Quellenobergrenze ausrichten und den unerreichbaren Zweig entfernen. Einen weiterhin benötigten unabhängigen Referenzalgorithmus in der Testfassung führen.
+  - Notizen: Playback begrenzt die Quellen über das feste Array MAX_STREAMS = mixer::MAX_SOURCES. Der Mixer verwendet für deren Werte den Direktpfad oder laufende Ringcursor. Die private Fassade lehnt größere Anzahlen vor jedem Zugriff ab. Der Offset-Referenzmischer wird ausschließlich in Rust-Tests übersetzt.
+- [Erledigt] #2 Produktive Aufrufer und Testfassade abgleichen. PCM-Ausgaben für einen Stream, mehrere Streams bis zur Grenze und Samples über das Ringende mit den bisherigen Ergebnissen vergleichen.
+  - Notizen: Alle Belegungen von null bis acht, Voll- und Teilpegel, ungerade Ringpositionen und Samples über das Ringende wurden gegen die unabhängige Referenz verglichen. Arbeitszähler und die Obergrenze der privaten Fassade sind geprüft.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Bereinigung mit Schweregrad niedrig. Fundstellen unter `Repositories/Kernel/Rust/audio/core/streams.rs:657`, `Repositories/Kernel/Rust/audio/mixer.rs:70`, `Repositories/Kernel/Rust/audio/mixer.rs:219`.
+0006 bereinigt. Der produktive Mixer benötigt nur die im Playback reservierbaren Quellen. KVM4-STANDARD d6c591a7-7bd8-47e5-931f-0e06c6439d4a lokal mit aktuellem Artefaktstand, 30 Samples, fünf Metriken und sechs Scores validiert. R4OS Server ausstehend (Import, Readback und Serverauswertung). Sammelpush erfolgreich. Belege unter ExFiles/Reports/Audio/0.94.23/.
+
+## 0.94.24 SYSUPD – den einmaligen Migrationsbefehl für UpdateCenter 0.2.8 entfernen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+R4OS-ASTRA-B-0016. Der stillgelegte GUI-Updater UPDATE.R4X besitzt noch einen eigenen Migrationsdispatcher, Hilfetext und Puffer in der regulären SYSUPD-CLI.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Aktuelle Distributionsinventare und Aufrufer mit dem früheren Migrationspfad abgleichen. RETIRE-UPDATE-CENTER mit Dispatcher, Hilfetext und ausschließlich dafür genutzten Puffern aus SYSUPD entfernen und die Bedienungsdokumentation aktualisieren.
+  - Notizen: Die aktuelle Distribution und das manuelle Modulinventar enthalten SYSUPD und den Desktopdialog. Der einmalige Dispatcher, seine Hilfetexte, Puffer und das Feature-Metadatum wurden entfernt. Die Bedienungsdokumentation nennt den aktuellen Einstieg und datiert den historischen Migrationsbericht.
+- [Erledigt] #2 Im aktuellen Modulinventar die Auslieferung ohne UPDATE.R4X bestätigen. Regulären SYSUPD-Einstieg, Hilfe, Update- und Recovery-Journale einschließlich Wiederanlauf nach der Bereinigung gezielt prüfen.
+  - Notizen: Die reguläre Hilfe und STATUS liefen im Gast. Zwei Original-Transaktionsslots und zwei Original-Batchslots wurden im privaten Gast eingelesen. Der bereits installierte Batch meldete nach wiederholtem RESUME-BATCH denselben Endzustand, alle vier gespeicherten Dateien blieben bytegenau. Die bestehenden Update-/Recovery-Besitzertests decken zusätzlich den eigenen Replaypfad ab.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Bereinigung mit Schweregrad niedrig. Fundstellen unter `Repositories/Apps/SysUpdate/src/main.zig:1`, `Repositories/Apps/SysUpdate/src/retire_update_center.zig:7`, `Repositories/Apps/UpdateCenter/Build.ps1:1`.
+0016 bereinigt. SYSUPD übergibt reguläre Befehle direkt an den gemeinsamen Update-Engine. KVM4-STANDARD f41f6825-a1c4-415c-83c2-3bcfc27a8111 lokal mit aktuellem Artefaktstand, 30 Samples, fünf Metriken und sechs Scores validiert. R4OS Server ausstehend (Import, Readback und Serverauswertung). Sammelpush erfolgreich. Belege unter ExFiles/Reports/Deployment/0.94.24/.
+
+## 0.94.25 Recovery-Release bei Änderungen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Nach den Befundkorrekturen den Recovery-Stand mit dem zuletzt öffentlich freigegebenen Paket vergleichen. Bei releasewirksamen Änderungen das eigenständige Recovery-Release vor dem offiziellen R4OS-Release bereitstellen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Recovery-Kernel, Menü, eingebettete Module, eingefrorene Komponenten und die daraus gebauten Artefakte mit dem letzten öffentlichen Recovery-Release abgleichen. Bei identischem Stand die vorhandene Paketidentität für die Distribution bestätigen und den Schritt abschließen.
+  - Notizen: Der öffentliche Vorgänger und sein Paket-Hash wurden mit dem neuen Quellstand verglichen. Recovery 0.1.86 enthält Änderungen an Dateiersatz, Netzwerkprotokollen und -treibern, Dienststart und Menü.
+- [Erledigt] #2 Bei Änderungen das Recovery-Paket aus dem freigegebenen Quellstand vorbereiten. Das zusammengehörige Kernel- und Runtime-Paar, die Herkunft der eingebetteten Module und die in 0.94.X geänderten Funktionen mit den vorhandenen einschlägigen Prüfungen bestätigen.
+  - Notizen: Boot- und Netzwerkprüfung, Originalinventar, Quellbelege, ELF und RAM-Runtime des Recovery-Kernels 0.1.85 sind gegen das vorbereitete Paket geprüft.
+- [Erledigt] #3 Bei Änderungen die geprüften Originaldateien regulär in r4os-recovery veröffentlichen. Die öffentlichen Dateien vollständig abrufen und anhand von Größe und SHA-256 abgleichen. Release-ID und bestätigte Paketidentität in den Distributionspin übernehmen.
+  - Notizen: Alle drei öffentlichen Originalassets wurden vollständig heruntergeladen und geprüft. Release-ID 450376295 und Paket-SHA-256 0cfe28a67b7952834043827cbbc5359dbba7ea663a87a2aeab10abfece4f5a5b stehen in RecoveryPin.json.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Das Ergebnis bestimmt den RecoveryPin.json der Distribution für 0.94.26. Der Paket- und Veröffentlichungsablauf steht in Repositories/Recovery/README.md.
+Recovery 0.1.86 mit Kernel 0.1.85 offiziell veröffentlicht und gebunden. https://github.com/R4OSDev/r4os-recovery/releases/tag/v0.1.86 Sammelpush erfolgreich. Belege unter ExFiles/Reports/Recovery/0.94.25/.
+
+## 0.94.26 Offizielles R4OS-Release
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Die abgeschlossenen Korrekturen der Familie 0.94.X als reguläres R4OS-Release für Slim und Full veröffentlichen. Beide Profile verwenden den in 0.94.25 bestätigten öffentlichen Recovery-Stand.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 Nach Abschluss der Befundkorrekturen RELEASE_VERSION für das offizielle Release auf 0.94.26 setzen. Den öffentlichen Recovery-Pin aus 0.94.25, die Modulversionen und die verwendeten Quellstände für Slim und Full abgleichen.
+  - Notizen: RELEASE_VERSION 0.94.26, Kernel 0.1.506, SDK 0.64.237 und der öffentliche Recovery-Pin 0.1.86 sind mit den vollständigen, gepushten Quellidentitäten abgeglichen. Direkt in den installierten Images stimmen die Versionen und die SHA-256 aller 61 Slim- und 113 Full-Module mit dem Imageplan und den Besitzerartefakten überein.
+- [Erledigt] #2 Mit dem Standard-Releaseweg der Distribution beide Profilpakete vorbereiten. Die tatsächlichen Slim- und Full-Images, ihren Start, das Quellenmanifest, die enthaltene Recovery und die SHA-256-Prüfsummen gegen den freizugebenden Stand prüfen.
+  - Notizen: Beide Standardpakete wurden vollständig gelesen. Die enthaltenen Originalimages wurden mit ihren GPT-, BOOT- und Recovery-Partitionen geprüft. Slim und Full starteten je in einem privaten KVM4-Snapshot bis zum Desktop.
+- [Erledigt] #3 Die geprüften Originalpakete, das Quellenmanifest und die Prüfsummen als offizielles GitHub-Release in r4os-distribution veröffentlichen. Öffentliche Downloads vollständig gegen Namen, Längen und SHA-256 der vorbereiteten Dateien prüfen und den Release-Link festhalten.
+  - Notizen: Die vier Originalassets sind als reguläres Release veröffentlicht und vollständig anonym zurückgelesen. Dateinamen, Längen und SHA-256 stimmen mit der Vorbereitung überein.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Der Standard-Releaseweg gehört Repositories/Distribution. Das Quellenmanifest hält auch den SDK-Stand für den Abgleich in 0.94.27 fest.
+Offizielles R4OS 0.94.26 für Slim und Full. https://github.com/R4OSDev/r4os-distribution/releases/tag/v0.94.26 Sammelpush erfolgreich. Belege unter ExFiles/Reports/Releases/0.94.26/.
+
+## 0.94.27 SDK-Release bei Änderungen
+
+**Status:** Abgeschlossen
+
+### Beschreibung
+Nach dem offiziellen R4OS-Release den dazugehörigen SDK-Stand mit dem letzten öffentlichen SDK-Paket vergleichen. Bei Änderungen an den ausgelieferten SDK-Bestandteilen ein passendes eigenständiges SDK-Release veröffentlichen.
+
+### Offene Aufgaben
+- Keine offenen Aufgaben.
+
+### Abgeschlossene Aufgaben
+- [Erledigt] #1 SDK-Quellen, Contract, Libraries, Werkzeuge und die Build-, Werkzeug- und Komponentenprofile von 0.94.26 mit dem letzten öffentlichen SDK-Satz abgleichen. Deckt das bestehende Paket den Stand bereits ab, dessen Version festhalten und den Schritt abschließen.
+  - Notizen: Öffentliches SDK 0.64.237 mit seinem Vorgänger 0.64.230 verglichen. Originalprofile, Contract 0.64.101, Libraries 0.64.72, ausgewählte Recovery-Quelle und sämtliche Systembibliotheken sind an die tatsächlich herangezogenen Commits und Prüfsummen gebunden.
+- [Erledigt] #2 Bei Änderungen den zusammengehörigen SDK-Satz mit seinen Originalprofilen und dem Release-Manifest aus den zugehörigen Repository-Ständen vorbereiten. Den Paketinhalt mit Package.ps1 und passenden bestehenden Verbraucherprüfungen für Zig, C und Rust prüfen.
+  - Notizen: Normaler Werkzeugsatz, 12 Systembibliotheken und Quellarchive separat entpackt. Package.ps1 sowie die bestehenden Capabilities-, Sprachparitäts- und normalen Zig-/C-/Rust-Verbraucherbauten bestanden.
+- [Erledigt] #3 Bei Änderungen die geprüften Originaldateien als reguläres Release in r4os-sdk veröffentlichen. Die öffentlichen Downloads vollständig gegen Manifest, Größen und SHA-256 abgleichen und die Zuordnung zum offiziellen R4OS-Release dokumentieren.
+  - Notizen: Alle 11 öffentlichen Originaldateien vollständig anonym geprüft. Der Paketvalidator bestätigte den öffentlichen Satz. Docs/Deployment/Release09426.txt ordnet das SDK 0.64.237 dem offiziellen R4OS 0.94.26 zu.
+
+### Verworfene Aufgaben
+- Keine verworfenen Aufgaben.
+
+### Abnahmen
+- Keine Abnahmen.
+
+### Notizen
+Maßgeblich sind die in 0.94.26 verwendeten Quellen und SDK-Profile. Der Paketvergleich folgt Repositories/SDK/Tools/Package.ps1 und Docs/SDK/Profiles.txt.
+SDK 0.64.237 veröffentlicht und auf seinen öffentlichen Dateien verifiziert. https://github.com/R4OSDev/r4os-sdk/releases/tag/v0.64.237 Sammelpush erfolgreich. Belege unter ExFiles/Reports/SDK/0.94.27/.

@@ -15,7 +15,8 @@ with the component that owns the corresponding contract or source code.
     Changelogs/   Historical release roadmaps
 
 The thematic directories describe current contracts and identify the scope
-of older evidence. Complete release roadmaps remain in `Changelogs/`.
+of older evidence. The roadmap API holds the active plan. Complete release
+roadmaps are archived in `Changelogs/`.
 
 ## Current release and archived roadmap
 
@@ -24,10 +25,14 @@ and SDK 0.64.237 (Contract 0.64.101, Libraries 0.64.72). Both installation image
 booted in four-CPU KVM guests. The release report lists the official downloads,
 source identities and verified SHA-256 values. [Release report](Deployment/Release09426.txt)
 
+All 27 subversions and 57 tasks in 0.94.X are complete. The first 24
+addressed 22 findings and two cleanups. The SDK release closed the family
+at distribution source version 0.94.27. [Full 0.94.X roadmap](Changelogs/V0.94.X.txt)
+
 The 0.93.X roadmap closed at distribution source version 0.93.17 with Kernel
 0.1.496, SDK 0.64.234 and Libraries 0.64.71. Fourteen subversions with 28
 tasks were completed. The three Studio entries (0.93.14 through 0.93.16)
-and their six tasks were discarded. The roadmap API holds the active plan.
+and their six tasks were discarded.
 [Full 0.93.X roadmap](Changelogs/V0.93.X.txt)
 
 [R4OS 0.92.12](Deployment/Release09212.txt) was published as Slim and Full,

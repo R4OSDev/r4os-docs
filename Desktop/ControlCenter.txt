@@ -167,3 +167,69 @@ Die mittlere systemweite CPU-Auslastung der beiden sichtbaren Leerlauf-Fenster l
 Desktop-Verknüpfung und Strg+Alt+Entf öffneten eigenständige Instanzen nacheinander. Ein zweiter Messleser erhielt während der Auslastungsansicht busy. In Tasks, bei Fokusverlust und nach Schließen konnte er die Hardware direkt ausleihen. Der Titelleistendrag bewegte das Fenster von (620, 110) nach (700, 166). Belegungsbalken und Durchsatz erschienen auch dort. Die RDP-Aufnahmen zeigen 7 unterschiedliche Durchsatzbilder während eines weiteren Lese-/Schreiblaufs. Die Pixel der regulären Anzeige ergeben 31 MB/s in der Aufnahme und bis 14,5 GB/s in der separaten Lastreihe. Die Abnahme korrigierte einen leeren Balken bei positiver Belegung unter 1 %. Control Center 0.1.5 berechnet ihn in Hundertstelprozent und zeigt hier 2 grüne Pixel mit der Beschriftung <1%.
 
 Messreihen und Originalaufnahme liegen in ExFiles/Reports/ControlCenter/0.95.15/.
+
+Netzwerk und Datenträger – Messquellen und QEMU-Referenz (0.95.16)
+-----------------------------------------------------------------
+
+Netzwerk
+  Linux veröffentlicht RX/TX-Oktette je Schnittstelle. Windows MIB_IF_ROW2
+  trennt InOctets und OutOctets sowie Empfangs- und Senderate des Links.
+  R4OS zählt Ethernet-Rahmenbytes bei RX-Annahme und erfolgreicher Übergabe
+  an den TX-Treiber. FCS, Präambel und Leitungspausen fehlen. Die Zähler
+  umfassen dieselbe Schicht bei VirtioNet und RTL8139. Der aktuelle
+  NetDetailSnapshot umfasst 2752 Byte samt TCP-Verbindungen und ruft
+  Treiberstatus ab. Für die Anzeige genügt eine maßbegrenzte Kopie aus dem
+  geschützten Adapterbestand. Deren Ablesung braucht keine Paketverarbeitung.
+
+  VirtioNet kann Geschwindigkeit und Duplex in seiner Gerätekonfiguration
+  anbieten (VIRTIO_NET_F_SPEED_DUPLEX). Das eingesetzte QEMU hat speed=-1
+  als Vorgabe. Ein geplanter Probelauf setzt speed=1000,duplex=full explizit.
+  Beim RTL8139 sind die vom PHY ausgehandelten Fähigkeiten maßgeblich, eine
+  Typenbezeichnung allein liefert keine Rate. Ein Abschnitt mit ungewisser
+  Rate zeigt weiter RX/TX in Byte/s. Vollduplex hat zwei Richtungsanteile.
+  Keines dieser emulierten Geräte liefert eine bessere gemeinsame Quelle
+  für erfolgreiche Ethernet-Bytes als die bereits geführten Adapterzähler.
+
+Datenträger
+  Linux unterscheidet gelesene/geschriebene Sektoren, Zeit mit laufender I/O
+  und gewichtete Zeit. Windows DISK_PERFORMANCE trennt Bytes, Zeiten und
+  Warteschlangentiefe. R4OS bucht erfolgreiche Teilaufträge am Blockabschluss.
+  Synchrone und Worker-Ausführung benutzen denselben Auftragszustand.
+  Umfang = erfolgreich abgeschlossene Sektoren mal logische Gerätesektorgröße.
+  Dateicache-Treffer und reine Flush-Aufträge tragen keine Transferbytes bei.
+  AHCI hat Befehls-Slotmasken, die eine Abfrage zwischen zwei Befehlen
+  verpasst. NVMe-SMART zählt Daten in groben Einheiten und Controller-Busy in
+  Minuten. Eine sekündliche administrative Abfrage würde selbst Arbeit auslösen.
+  Für beide Busse verwenden wir die Geräteübergabe und den Abschluss im
+  Blockpfad. Für die aktive Zeit genügt die Vereinigung offener Intervalle,
+  einschließlich eines über die Stichprobengrenze laufenden Auftrags.
+
+  Jede Stichprobe verwendet monotone Zeit und die Identität des ganzen
+  Geräts. Nach Reset, Wiedereinsetzen, neuer Uhrbasis oder rückläufigem
+  Zähler beginnen die Differenzen neu. Gültige unveränderte Zähler liefern
+  Null. Nicht verfügbare Einzelwerte erhalten einen Strich.
+
+Vergleich vor der Implementierung
+  QEMU/KVM, q35, vier vCPUs (2 Kerne x 2 SMT), 2 GB RAM, lokale
+  Benutzer-Netzgegenstelle, VirtioNet, AHCI-Boot-Overlay und private
+  96-MB-NVMe-Testplatte. Gemessen werden die aufsummierten vCPU-Laufzeiten
+  in Prozent eines Hostkerns und KVM halt_wakeup pro Sekunde.
+  0.95.15 / Kernel 0.1.510 / Control Center 0.1.5. Drei Fenster zu rund 7 s.
+  Geschlossen: 36,49–37,88 %, 1175–1177 Weckvorgänge/s.
+  Auslastung fokussiert: 40,91–42,83 %, 1212–1233 Weckvorgänge/s.
+  Je zwei SFTP-Rundläufe (256 KB hin und zurück) und zwei lokale Kopien
+  (256 KB) pro Zustand. Transferdauer geschlossen 2,13–2,62 s, offen
+  2,29–2,43 s. Kopierdauer geschlossen 0,66–0,68 s, offen 0,77 s.
+  SFTP misst den gesamten lokalen Gastpfad einschließlich SSH und Dateisystem.
+  Für den Endvergleich je Zustand gleiche Last und Profil verwenden. Eine
+  wiederholbare Verschiebung über die Referenzspannweite kontrolliert
+  nachmessen und ihre Ursache bewerten. Im ruhenden Fenster müssen die
+  neuen Zählerabfragen null Netzwerkrahmen und null Blockaufträge erzeugen.
+  Reproduktion und Rohdaten unter ExFiles/Reports/ControlCenter/0.95.16/.
+
+  https://docs.kernel.org/networking/statistics.html
+  https://docs.kernel.org/admin-guide/iostats.html
+  https://learn.microsoft.com/en-us/windows/win32/api/netioapi/ns-netioapi-mib_if_row2
+  https://learn.microsoft.com/en-us/windows/win32/api/winioctl/ns-winioctl-disk_performance
+  https://docs.oasis-open.org/virtio/virtio/v1.4/virtio-v1.4.html
+  https://learn.microsoft.com/en-us/windows/win32/api/nvme/ns-nvme-nvme_health_info_log

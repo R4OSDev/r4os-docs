@@ -6,6 +6,15 @@ window composition, focus, z-order, taskbar, desktop items and user-facing
 input dispatch. The kernel provides the privileged display and event
 mechanisms but does not own desktop policy.
 
+Taskbar redraw on window close (0.95.46)
+---------------------------------------
+When a hosted application exits, the Desktop waits for its graphics resources
+to retire. It then removes the window and schedules its former frame, the
+frame receiving focus and the primary output's taskbar for repaint. Direct
+shell actions and the hosted window lifecycle use the same damage calculation.
+The repaint is event-driven, including when the pointer stays over the close
+button. The taskbar follows the primary output in a multi-display layout.
+
 Control Center (0.95.4)
 -----------------------
 Open Control Center from its desktop shortcut or with Ctrl+Alt+Delete. Its

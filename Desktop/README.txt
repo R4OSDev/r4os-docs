@@ -2944,3 +2944,20 @@ bevor er einen weiteren Start annimmt. Frei gewordene Plätze lassen sich mit
 einer neuen Lebenszeitkennung wiederverwenden. Der erste Tastendruck legt den
 Eingabepuffer der jeweiligen Konsole an. Beim Wechsel der Prozessgeneration
 werden ausstehende Eingaben verworfen und ihr Speicher freigegeben.
+
+Taskleiste und Fensterwechsel ab 0.95.58
+---------------------------------------
+Bei Platzmangel erscheinen zwei Pfeile in der Taskleiste. Sie blättern durch
+die geöffneten Fenster. Ein Klick auf einen Eintrag oder Alt+Tab aktiviert
+das Fenster. Der Fensterdienst erhält dabei dieselbe Fokusänderung wie die
+Benutzungsoberfläche. Die sichtbare Seite folgt dem neuen aktiven Fenster.
+Trefferprüfung und Überdeckung beim Zeichnen verwenden die Stapelreihenfolge.
+Jede Fensterebene besitzt einen eigenen Schlüssel. Wenn das Speicherbudget
+für zwischengespeicherte Fensterbilder erschöpft ist, kann der Desktop
+weiter direkt zeichnen.
+
+Der Vergleich für acht und 20 Fenster verwendet QEMU mit vier vCPUs, 2 GB
+RAM, 1280 × 720 Pixeln und Softwareausgabe. Control Center steht teilweise
+sichtbar hinter Portex. Die gleichen Eingabefolgen mit 60 Meldungen je
+Sekunde prüfen Verschieben und Größenänderung. Die Auswertung verwendet
+sichtbar bestätigte Änderungen und summierte Gast-CPU-Zeit je Änderung.

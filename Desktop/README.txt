@@ -2923,3 +2923,14 @@ einen gültigen Fokus bezeichnet. Ein gültiger Routingwert kann dort null sein.
 Die QEMU-Referenz für 0.95.54 mit Explorer, Notepad, Control Center, zusätzlichem
 Terminal und abgelehntem Rechnerstart liegt unter ExFiles/Reports/Desktop/0.95.55/.
 Dort sind auch die Prüfungen der verzögerten Ereignisse aus 0.95.55 verzeichnet.
+
+Fensterlisten ab 0.95.56
+-----------------------
+WINSVC liefert je Abfrage bis zu acht Fenster mit demselben Stand der
+Registrierung. Der Folgeaufruf enthält Cursor, Revision und Dienstgeneration.
+Ändert sich die Liste unterwegs, beginnen Desktop und Control Center erneut.
+Control Center behält bis zum vollständigen Abschluss die vorherige Ansicht.
+Alte Clients erhalten bis zu 16 Einträge im bisherigen Snapshotformat. Darüber
+liefert der Dienst BUFFER_TOO_SMALL. Der Statusaufruf liefert die tatsächliche
+Anzahl in beiden Versionen. DESKRUN handelt erweiterte Startquittungen über
+STATUS oder WAIT aus. Ein Rückfall auf den alten Dienst startet keine zweite App.

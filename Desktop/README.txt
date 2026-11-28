@@ -2971,3 +2971,21 @@ und den Startbefehl. Die Shell verwaltet Arbeitsverzeichnis und Umgebung je
 Instanz. EXIT, das Schließfeld und Strg+C wirken auf das gewählte Terminal.
 Terminal Mode öffnet eine eigene Vollbildsitzung. DESKTOP beendet diese
 Sitzung und kehrt zu den zuvor geöffneten Fenstern zurück.
+
+QEMU-Abnahme der dynamischen Fensterverwaltung
+----------------------------------------------
+0.95.60 lief mit fünf GUI-Fenstern und drei Terminals gleichzeitig. Die
+Taskleiste, der Fensterdienst und die Ansicht Tasks in Control Center wurden
+mit den acht gestarteten Instanzen abgeglichen, auch nach Schließen und
+Wiederverwenden eines Fensterplatzes. Nach dem Start übernimmt der Fensterdienst
+auch die von der App gemeldeten Titel und Fenstermaße. Die Kontrolle der GUI-Starts wartete
+auf den ersten Inhalt, die Kontrolle der Terminals auf den jeweiligen Prompt.
+
+Mit vier vCPUs, 2 GB RAM und 1280 × 720 Pixeln wurden im Median bei 60
+Eingabemeldungen je Sekunde 59,83 sichtbare Größenänderungen und
+59,75 Verschiebungen je Sekunde bestätigt. Die summierte CPU-Zeit
+je Änderung betrug 9,92 bzw. 10,42 ms. Im Leerlauf mit
+teilweise sichtbarem Control Center wurden in sechs Sekunden
+18 Bildausgaben vor und 7 nach der Korrektur für vollständig
+verdeckte Terminalcursor gezählt. Die Messreihen stehen unter
+ExFiles/Reports/Desktop/0.95.60/Vergleich.json.

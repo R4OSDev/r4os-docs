@@ -2961,3 +2961,13 @@ RAM, 1280 × 720 Pixeln und Softwareausgabe. Control Center steht teilweise
 sichtbar hinter Portex. Die gleichen Eingabefolgen mit 60 Meldungen je
 Sekunde prüfen Verschieben und Größenänderung. Die Auswertung verwendet
 sichtbar bestätigte Änderungen und summierte Gast-CPU-Zeit je Änderung.
+
+Terminalfenster ab 0.95.59
+--------------------------
+Jeder Start über die Desktop-Verknüpfung, Programs → Terminal oder DESKRUN
+öffnet eine eigene Sitzung. Der Desktop startet die interaktive Shell mit
+/NOAUTOEXEC. Ein Fenster behält seine Eingabe, den angezeigten Ausschnitt
+und den Startbefehl. Die Shell verwaltet Arbeitsverzeichnis und Umgebung je
+Instanz. EXIT, das Schließfeld und Strg+C wirken auf das gewählte Terminal.
+Terminal Mode öffnet eine eigene Vollbildsitzung. DESKTOP beendet diese
+Sitzung und kehrt zu den zuvor geöffneten Fenstern zurück.

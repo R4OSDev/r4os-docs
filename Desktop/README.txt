@@ -2900,3 +2900,26 @@ UTF8-Clipboardtransport sowie genaues Close/Reap. Die Replayoption verlangt
 einen nativen GR-Owner. Der volle Loader-Kaltladebefund steht bei0.90.83.
 Versionen, Rohbelege, Scope und finaler STANDARD stehen in
 API/ConsumerMigration.txt und Research/API-ABI/Migration/0.90.65/Abnahme.json.
+
+Dynamische Fensterverwaltung ab 0.95.55
+--------------------------------------
+Ein angenommenes Fenster erhält vor dem ersten Bild eine eigene Lebenszeitkennung.
+Der Loader bindet das fertige Fenster an diese Kennung. Eine neue Belegung
+derselben Tabellenzelle erhält eine neue Kennung, auch bei gleicher Prozessnummer.
+Mausdruck, Loslassen und Fenstermenü prüfen die ursprüngliche Lebenszeit. Für
+asynchrone Starts gilt das genaue Ticket und für App-Eingabe die Prozessgeneration
+mit dem zugeordneten Eingabe-Epochennachweis. Der Fensterdienst prüft bei einer
+vollständigen Änderungsnachricht die registrierte Prozessinstanz. Der Desktop
+entfernt beim Platzwechsel zuerst den quittierten Vorgänger.
+
+Die RDL1-Startquittung verwendet null für ein fehlendes Fenster und Platz plus eins
+für ein angenommenes Fenster. Die native GUI-Zuordnung verwendet einen nullbasierten
+Routingwert und einen separaten Prozesshandle mit Generation. Minus eins bezeichnet
+eine fehlende native Zuordnung. Bei Vollbild-, Grafik- und delegierten Fensteraktionen
+kommen die Desktop- und Dienstgeneration sowie die vom Dienst vergebene Seriennummer
+hinzu. In der bisherigen Fensterliste zeigt focused_instance an, ob focused_window
+einen gültigen Fokus bezeichnet. Ein gültiger Routingwert kann dort null sein.
+
+Die QEMU-Referenz für 0.95.54 mit Explorer, Notepad, Control Center, zusätzlichem
+Terminal und abgelehntem Rechnerstart liegt unter ExFiles/Reports/Desktop/0.95.55/.
+Dort sind auch die Prüfungen der verzögerten Ereignisse aus 0.95.55 verzeichnet.

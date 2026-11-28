@@ -2934,3 +2934,13 @@ Alte Clients erhalten bis zu 16 Einträge im bisherigen Snapshotformat. Darüber
 liefert der Dienst BUFFER_TOO_SMALL. Der Statusaufruf liefert die tatsächliche
 Anzahl in beiden Versionen. DESKRUN handelt erweiterte Startquittungen über
 STATUS oder WAIT aus. Ein Rückfall auf den alten Dienst startet keine zweite App.
+
+Desktopfenster ab 0.95.57
+------------------------
+Jedes geöffnete Fenster verwendet einen eigenen Eintrag für den Client,
+seine Fensterkennung, Eingabe und die Zuordnung beim Fensterdienst. Wenn alle
+bisherigen Plätze belegt sind, reserviert der Desktop die benötigten Tabellen,
+bevor er einen weiteren Start annimmt. Frei gewordene Plätze lassen sich mit
+einer neuen Lebenszeitkennung wiederverwenden. Der erste Tastendruck legt den
+Eingabepuffer der jeweiligen Konsole an. Beim Wechsel der Prozessgeneration
+werden ausstehende Eingaben verworfen und ihr Speicher freigegeben.

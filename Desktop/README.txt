@@ -2989,3 +2989,38 @@ teilweise sichtbarem Control Center wurden in sechs Sekunden
 18 Bildausgaben vor und 7 nach der Korrektur für vollständig
 verdeckte Terminalcursor gezählt. Die Messreihen stehen unter
 ExFiles/Reports/Desktop/0.95.60/Vergleich.json.
+
+0.95.61 wiederholte dieselbe Szene mit 17 GUI-Fenstern und drei Terminals.
+WINSVC lieferte die 20 Einträge auf drei Seiten. Alle Einträge wurden
+auch in der Taskleiste und in Control Center anhand der Instanz überprüft.
+Zusätzliche Messungen mit acht und zwei weiterhin geöffneten Fenstern liefen
+im selben Gast nach dem Schließen der übrigen Fenster.
+Beim Größenändern auf dem CPU-komponierten Primärbildschirm übernimmt der Desktop
+zwischen zwei Bildintervallen sofort neue Inhalte des gezogenen Fensters. Er
+übermittelt Fenstermaße und Sichtbarkeit beim ersten Binden, bei Änderungen
+und zur Reparatur einer abweichenden Zuordnung. Eine fehlgeschlagene Meldung
+wird wiederholt. Alle anderen Fenster und die Dienste werden währenddessen
+pro Bildintervall bedient.
+Vor den beiden Optimierungen wurden im selben Versuch im Median 58,50 Größenänderungen/s
+bei 13,23 ms summierter Gast-CPU-Zeit je Änderung gemessen.
+Im Median wurden bei 60 Eingabemeldungen je Sekunde 59,84 Größenänderungen und
+59,83 Verschiebungen je Sekunde bestätigt. Die summierte CPU-Zeit
+betrug 9,81 bzw. 10,60 ms je bestätigter Änderung. Speicherverlauf,
+Vergleichsreihen und die getrennte QEMU-Probe mit absichtlich fehlgeschlagener
+Reservierung stehen unter ExFiles/Reports/Desktop/0.95.61/. Bei Speichermangel
+werden die neuen Fensterindizes erst nach erfolgreicher Reservierung aller
+Tabellen sichtbar. Der Gast verarbeitete nach dem abgewiesenen 21. Fenster einen
+Fokuswechsel und öffnete beim nächsten Start ein Fenster mit Bildinhalt. Nach
+jeder der drei Öffnungs- und Schließrunden mit je 20 Notepads belegte der
+Gast 143,14 MB.
+Während der Größenänderung von Portex aktualisierte Control Center seine
+CPU-Anzeige im sichtbaren Teil des Hintergrundfensters.
+
+Median der sechssekündigen Portex-Läufe auf dem Desktop 0.1.254
+Fenster | Größenänderungen/s | CPU-ms je Änderung | Bildabstand p95 | Verschiebungen/s
+20 | 59,84 | 9,81 | 18,44 ms | 59,83
+8 | 59,83 | 9,66 | 18,32 ms | 59,84
+2 | 59,84 | 9,66 | 18,29 ms | 59,84
+Bei 20 Fenstern gehen sechs Läufe je Geste aus zwei QEMU-Gästen mit
+bytegleichem Desktop ein. Bei acht und zwei Fenstern sind es jeweils drei
+Läufe je Geste. Die CPU-Zeit umfasst alle vier vCPUs.
